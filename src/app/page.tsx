@@ -12,8 +12,17 @@ import {
   CalendarDaysIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline'
+import type { Metadata } from 'next'
 import Image from 'next/image'
 import type { JSX, SVGProps } from 'react'
+
+export const metadata: Metadata = {
+  title: {
+    template: '%s | Corelive',
+    default: 'Corelive',
+  },
+  description: 'Gamification your task and expriece.',
+}
 
 const primaryFeatures = [
   {

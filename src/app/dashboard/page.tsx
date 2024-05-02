@@ -10,7 +10,10 @@ const page = async () => {
 
   return (
     <div>
-      dashboard: {user.id} <SignOutButton />
+      dashboard: {user.id}{' '}
+      <SignOutButton>
+        <button className="btn btn-primary">Sign Out</button>
+      </SignOutButton>
     </div>
   )
 }
