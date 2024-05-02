@@ -1,6 +1,13 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
+  theme: {
+    extend: {
+      screens: {
+        xs: { min: '0px', max: '639px' },
+      },
+    },
+  },
   daisyui: {
     themes: [
       'light',
