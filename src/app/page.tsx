@@ -18,8 +18,8 @@ import type { JSX, SVGProps } from 'react'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Corelive',
-    default: 'Corelive',
+    template: '%s | Unfare',
+    default: 'Unfare',
   },
   description: 'Gamification your task and expriece.',
 }
