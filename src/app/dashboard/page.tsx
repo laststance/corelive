@@ -1,4 +1,3 @@
-import { SignOutButton } from '@clerk/nextjs'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import React from 'react'
 
@@ -8,14 +7,7 @@ const page = async () => {
   const user = await clerkClient.users.getUser(userId)
   if (!user) return null
 
-  return (
-    <div>
-      dashboard: {user.id}{' '}
-      <SignOutButton>
-        <button className="btn btn-primary">Sign Out</button>
-      </SignOutButton>
-    </div>
-  )
+  return <div className="">dashboard: {user.id} </div>
 }
 
 export default page

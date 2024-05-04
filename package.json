@@ -1,5 +1,5 @@
 {
-  "name": "corelive",
+  "name": "unfare",
   "version": "0.1.0",
   "private": true,
   "lint-staged": {
@@ -48,6 +48,6 @@
     "typescript": "^5.4.5"
   },
   "volta": {
-    "node": "22.0.0"
+    "node": "22.1.0"
   }
 }
