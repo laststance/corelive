@@ -7,12 +7,16 @@ import { cn } from '@/lib/utils'
 
 const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
   return (
-    <div className={cn('drawer min-h-screen w-9', className)}>
+    <div className={cn('drawer min-h-screen w-9 pl-2 pt-3', className)}>
       <input id="sidebar" type="checkbox" className="drawer-toggle" />
-      <div className="drawer-content h-full place-content-center">
+      <div className="drawer-content h-full place-content-start">
         {/* Page content here */}
         <label htmlFor="sidebar" className="drawer-button">
-          <Image src={panelLeftOpen} alt="Open sidebar" />
+          <Image
+            className="hover:bg-neutral-content rounded-md"
+            src={panelLeftOpen}
+            alt="Open sidebar"
+          />
         </label>
       </div>
       <div className="drawer-side">
@@ -29,6 +33,7 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
           <li>
             <a>Sidebar Item 2</a>
           </li>
+          <div className="divider" />
           <li>
             <SignoutButton />
           </li>
