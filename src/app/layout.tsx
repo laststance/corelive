@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Corelive',
+  title: 'Unfarely',
   description: 'Corelive convert your leafy tasks to solid experiences.',
 }
 
