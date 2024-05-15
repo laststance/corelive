@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Unfarely',
-  description: 'Corelive convert your leafy tasks to solid experiences.',
+  description: 'Unfarely convert your leafy tasks to solid experiences.',
 }
 
 export interface LayoutProps {
@@ -15,9 +15,6 @@ const RootLayout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <ClerkProvider>
       <html lang="en">
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-        </head>
         <body>{children}</body>
       </html>
     </ClerkProvider>
