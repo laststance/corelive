@@ -1,9 +1,9 @@
 import React from 'react'
 
-import type { LayoutProps } from '@/app/layout'
+import type { RootLayoutProps } from '@/app/layout'
 import Sidebar from '@/components/Sidebar'
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
     <div>
       <Sidebar className="absolute" />

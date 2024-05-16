@@ -1,6 +1,8 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import React from 'react'
 
+import { EditorDefault } from './EditorDefault'
+
 const Page = async () => {
   const { userId } = auth().protect()
 
@@ -9,7 +11,7 @@ const Page = async () => {
 
   return (
     <>
-      <div>dashboard: {user.id}</div>
+      <EditorDefault />
     </>
   )
 }

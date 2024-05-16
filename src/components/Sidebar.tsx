@@ -1,7 +1,6 @@
-import Image from 'next/image'
+import { PanelLeftOpen } from 'lucide-react'
 import React, { type ComponentProps } from 'react'
 
-import panelLeftOpen from '@/components/icons/panel-left-open.svg'
 import { SignoutButton } from '@/components/SignoutButton'
 import { cn } from '@/lib/utils'
 
@@ -12,11 +11,7 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
       <div className="drawer-content h-full place-content-start">
         {/* Page content here */}
         <label htmlFor="sidebar" className="drawer-button">
-          <Image
-            className="hover:bg-neutral-content rounded-md"
-            src={panelLeftOpen}
-            alt="Open sidebar"
-          />
+          <PanelLeftOpen className="hover:bg-neutral-content rounded-md" />
         </label>
       </div>
       <div className="drawer-side">
