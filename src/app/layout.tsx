@@ -1,7 +1,8 @@
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
-import './globals.css'
+import '@/styles/globals.css'
 
+import { cn } from '@/lib/utils'
 export const metadata: Metadata = {
   title: 'Unfarely',
   description: 'Unfarely convert your leafy tasks to solid experiences.',
@@ -14,8 +15,8 @@ export interface LayoutProps {
 const RootLayout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <body>{children}</body>
+      <html lang="en" suppressHydrationWarning>
+        <body className={cn('min-h-screen antialiased')}>{children}</body>
       </html>
     </ClerkProvider>
   )
