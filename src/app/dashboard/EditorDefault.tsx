@@ -16,7 +16,7 @@ export function EditorDefault() {
   )
 
   return (
-    <div className="mt-[72px] p-10">
+    <div className="mt-[72px] py-10">
       <Plate plugins={plugins}>
         <Editor placeholder="Type your message here." />
 

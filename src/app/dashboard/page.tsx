@@ -10,9 +10,9 @@ const Page = async () => {
   if (!user) return null
 
   return (
-    <>
+    <div className="grid grid-cols-2 gap-4">
       <EditorDefault />
-    </>
+    </div>
   )
 }
 
