@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar'
 const Layout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
     <div>
-      <Sidebar className="absolute" />
+      <Sidebar className="absolute z-50" />
       <main className="mx-auto container min-h-screen">{children}</main>
     </div>
   )
