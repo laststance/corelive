@@ -5,7 +5,10 @@ import '@/styles/globals.css'
 import { TooltipProvider } from '@/components/plate-ui/tooltip'
 import { cn } from '@/lib/utils'
 export const metadata: Metadata = {
-  title: '%s | Unfarely',
+  title: {
+    template: '%s | Unfarely',
+    default: 'Unfarely',
+  },
   description: 'Unfarely convert your leafy tasks to solid experiences.',
 }
 
