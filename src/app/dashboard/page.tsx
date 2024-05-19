@@ -11,9 +11,7 @@ const Page = async () => {
 
   return (
     <div className="grid grid-cols-2 gap-4">
-      <div>
-        <PlateEditor />
-      </div>
+      <PlateEditor />
     </div>
   )
 }

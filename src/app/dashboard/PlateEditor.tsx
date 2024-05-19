@@ -131,7 +131,6 @@ import { KbdLeaf } from '@/components/plate-ui/kbd-leaf'
 import { LinkElement } from '@/components/plate-ui/link-element'
 import { LinkFloatingToolbar } from '@/components/plate-ui/link-floating-toolbar'
 import { MediaEmbedElement } from '@/components/plate-ui/media-embed-element'
-import { MentionCombobox } from '@/components/plate-ui/mention-combobox'
 import { MentionElement } from '@/components/plate-ui/mention-element'
 import { MentionInputElement } from '@/components/plate-ui/mention-input-element'
 import { ParagraphElement } from '@/components/plate-ui/paragraph-element'
@@ -358,23 +357,22 @@ const initialValue = [
 
 export function PlateEditor() {
   return (
-    <div>
-      <TooltipProvider>
-        <DndProvider backend={HTML5Backend}>
+    <TooltipProvider>
+      <DndProvider backend={HTML5Backend}>
+        <section>
           <Plate plugins={plugins} initialValue={initialValue}>
             <FixedToolbar>
               <FixedToolbarButtons />
             </FixedToolbar>
 
-            <Editor />
+            <Editor className="min-h-[300px] pt-16 text-xl" />
 
             <FloatingToolbar>
               <FloatingToolbarButtons />
             </FloatingToolbar>
-            <MentionCombobox items={[]} />
           </Plate>
-        </DndProvider>
-      </TooltipProvider>
-    </div>
+        </section>
+      </DndProvider>
+    </TooltipProvider>
   )
 }
