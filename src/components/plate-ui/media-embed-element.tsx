@@ -1,7 +1,3 @@
-import React from 'react'
-import LiteYouTubeEmbed from 'react-lite-youtube-embed'
-import { Tweet } from 'react-tweet'
-
 import { cn, withRef } from '@udecode/cn'
 import { PlateElement, withHOC } from '@udecode/plate-common'
 import {
@@ -11,6 +7,9 @@ import {
   useMediaState,
 } from '@udecode/plate-media'
 import { ResizableProvider, useResizableStore } from '@udecode/plate-resizable'
+import React from 'react'
+import LiteYouTubeEmbed from 'react-lite-youtube-embed'
+import { Tweet } from 'react-tweet'
 
 import { Caption, CaptionTextarea } from './caption'
 import { MediaPopover } from './media-popover'

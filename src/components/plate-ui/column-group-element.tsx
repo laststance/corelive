@@ -1,5 +1,3 @@
-import React from 'react'
-
 import { cn, withRef } from '@udecode/cn'
 import {
   PlateElement,
@@ -12,6 +10,7 @@ import {
   useColumnState,
   useDebouncePopoverOpen,
 } from '@udecode/plate-layout'
+import React from 'react'
 import { useReadOnly } from 'slate-react'
 
 import { Icons } from '@/components/icons'

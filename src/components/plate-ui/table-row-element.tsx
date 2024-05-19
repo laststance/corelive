@@ -1,7 +1,6 @@
-import React from 'react'
-
 import { cn, withRef } from '@udecode/cn'
 import { PlateElement } from '@udecode/plate-common'
+import React from 'react'
 
 export const TableRowElement = withRef<
   typeof PlateElement,

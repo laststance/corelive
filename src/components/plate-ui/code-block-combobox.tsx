@@ -1,7 +1,5 @@
 'use client'
 
-import React, { useState } from 'react'
-
 import { cn } from '@udecode/cn'
 import {
   CODE_BLOCK_LANGUAGES,
@@ -9,6 +7,7 @@ import {
   useCodeBlockCombobox,
   useCodeBlockComboboxState,
 } from '@udecode/plate-code-block'
+import React, { useState } from 'react'
 
 import { Icons } from '@/components/icons'
 

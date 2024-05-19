@@ -1,5 +1,3 @@
-import type { FC } from 'react'
-
 import { ELEMENT_BLOCKQUOTE } from '@udecode/plate-block-quote'
 import { ELEMENT_CODE_BLOCK } from '@udecode/plate-code-block'
 import { createNodesWithHOC } from '@udecode/plate-common'
@@ -17,6 +15,7 @@ import {
 } from '@udecode/plate-heading'
 import { ELEMENT_OL, ELEMENT_UL } from '@udecode/plate-list'
 import { ELEMENT_PARAGRAPH } from '@udecode/plate-paragraph'
+import type { FC } from 'react'
 
 import { Draggable, type DraggableProps } from './draggable'
 

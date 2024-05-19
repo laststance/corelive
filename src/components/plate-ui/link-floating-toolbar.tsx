@@ -1,7 +1,5 @@
 'use client'
 
-import React from 'react'
-
 import { cn } from '@udecode/cn'
 import {
   type UseVirtualFloatingOptions,
@@ -17,6 +15,7 @@ import {
   useFloatingLinkInsert,
   useFloatingLinkInsertState,
 } from '@udecode/plate-link'
+import React from 'react'
 
 import { Icons } from '@/components/icons'
 

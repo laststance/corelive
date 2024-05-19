@@ -1,5 +1,3 @@
-import React from 'react'
-
 import { cn } from '@udecode/cn'
 import {
   type PlaceholderProps,
@@ -9,6 +7,7 @@ import {
 } from '@udecode/plate-common'
 import { ELEMENT_H1 } from '@udecode/plate-heading'
 import { ELEMENT_PARAGRAPH } from '@udecode/plate-paragraph'
+import React from 'react'
 
 export const Placeholder = (props: PlaceholderProps) => {
   const { children, nodeProps, placeholder } = props

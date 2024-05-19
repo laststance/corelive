@@ -1,7 +1,5 @@
 'use client'
 
-import React, { useEffect } from 'react'
-
 import * as Popover from '@radix-ui/react-popover'
 import { cn, withRef } from '@udecode/cn'
 import {
@@ -26,6 +24,7 @@ import {
   createVirtualRef,
   getBoundingClientRect,
 } from '@udecode/plate-floating'
+import React, { useEffect } from 'react'
 
 export const ComboboxItem = withRef<'div', ComboboxContentItemProps>(
   ({ className, combobox, index, item, onRenderItem, ...rest }, ref) => {

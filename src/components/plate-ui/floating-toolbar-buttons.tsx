@@ -1,5 +1,3 @@
-import React from 'react'
-
 import {
   MARK_BOLD,
   MARK_CODE,
@@ -8,6 +6,7 @@ import {
   MARK_UNDERLINE,
 } from '@udecode/plate-basic-marks'
 import { useEditorReadOnly } from '@udecode/plate-common'
+import React from 'react'
 
 import { Icons } from '@/components/icons'
 
