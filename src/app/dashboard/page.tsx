@@ -1,7 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import React from 'react'
 
-import { EditorDefault } from './EditorDefault'
+import { PlateEditor } from './PlateEditor'
 
 const Page = async () => {
   const { userId } = auth().protect()
@@ -11,7 +11,9 @@ const Page = async () => {
 
   return (
     <div className="grid grid-cols-2 gap-4">
-      <EditorDefault />
+      <div>
+        <PlateEditor />
+      </div>
     </div>
   )
 }

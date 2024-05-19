@@ -1,8 +1,10 @@
+import React from 'react'
+
+import type { TColumnElement } from '@udecode/plate-layout'
+
 import { cn, withRef } from '@udecode/cn'
 import { PlateElement, useElement, withHOC } from '@udecode/plate-common'
-import type { TColumnElement } from '@udecode/plate-layout'
 import { ResizableProvider } from '@udecode/plate-resizable'
-import React from 'react'
 import { useReadOnly } from 'slate-react'
 
 export const ColumnElement = withHOC(
