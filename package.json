@@ -96,7 +96,8 @@
     "svix": "^1.24.0",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
-    "theme-change": "^2.5.0"
+    "theme-change": "^2.5.0",
+    "use-context-menu": "^0.4.13"
   },
   "devDependencies": {
     "@clerk/types": "^4.3.1",
@@ -126,6 +127,6 @@
     "typescript": "^5.4.5"
   },
   "volta": {
-    "node": "22.1.0"
+    "node": "20.14.0"
   }
 }
