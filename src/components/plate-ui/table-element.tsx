@@ -208,7 +208,7 @@ export const TableElement = withHOC(
           <PlateElement
             asChild
             className={cn(
-              'my-4 ml-px mr-0 table h-px w-full table-fixed border-collapse',
+              'table my-4 ml-px mr-0 h-px w-full table-fixed border-collapse',
               isSelectingCell && '[&_*::selection]:bg-none',
               className,
             )}

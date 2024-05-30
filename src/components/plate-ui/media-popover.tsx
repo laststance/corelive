@@ -57,7 +57,7 @@ export function MediaPopover({ children, pluginKey }: MediaPopoverProps) {
         {isEditing ? (
           <div className="flex w-[330px] flex-col">
             <div className="flex items-center">
-              <div className="flex items-center pl-3 text-muted-foreground">
+              <div className="text-muted-foreground flex items-center pl-3">
                 <Icons.link className="size-4" />
               </div>
 

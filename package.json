@@ -97,6 +97,7 @@
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
     "theme-change": "^2.5.0",
+    "ts-pattern": "^5.1.2",
     "use-context-menu": "^0.4.13"
   },
   "devDependencies": {

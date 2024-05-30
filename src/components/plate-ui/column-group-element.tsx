@@ -60,7 +60,7 @@ export function ColumnFloatingToolbar({ children }: React.PropsWithChildren) {
         side="top"
         sideOffset={10}
       >
-        <div className="box-content flex h-9 items-center gap-1 [&_svg]:size-4 [&_svg]:text-muted-foreground">
+        <div className="[&_svg]:text-muted-foreground box-content flex h-9 items-center gap-1 [&_svg]:size-4">
           <Button onClick={setDoubleColumn} size="sms" variant="ghost">
             <Icons.doubleColumn />
           </Button>

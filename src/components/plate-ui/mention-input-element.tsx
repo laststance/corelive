@@ -18,8 +18,8 @@ export const MentionInputElement = withRef<
     <PlateElement
       asChild
       className={cn(
-        'inline-block rounded-md bg-muted px-1.5 py-0.5 align-baseline text-sm',
-        selected && focused && 'ring-2 ring-ring',
+        'bg-muted inline-block rounded-md px-1.5 py-0.5 align-baseline text-sm',
+        selected && focused && 'ring-ring ring-2',
         className,
       )}
       data-slate-value={element.value}

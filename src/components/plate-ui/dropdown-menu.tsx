@@ -55,7 +55,7 @@ export const DropdownMenuSubContent = withCn(
 
 const DropdownMenuContentVariants = withProps(DropdownMenuPrimitive.Content, {
   className: cn(
-    'z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+    'bg-popover text-popover-foreground z-50 min-w-32 overflow-hidden rounded-md border p-1 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
   ),
   sideOffset: 4,
 })
@@ -71,7 +71,7 @@ export const DropdownMenuContent = withRef<
 const menuItemVariants = cva(
   cn(
     'relative flex h-9 cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors',
-    'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+    'focus:text-accent-foreground focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
   ),
   {
     variants: {
@@ -93,7 +93,7 @@ export const DropdownMenuCheckboxItem = withRef<
 >(({ children, className, ...props }, ref) => (
   <DropdownMenuPrimitive.CheckboxItem
     className={cn(
-      'relative flex select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'focus:text-accent-foreground relative flex select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       'cursor-pointer',
       className,
     )}
@@ -117,8 +117,8 @@ export const DropdownMenuRadioItem = withRef<
 >(({ children, className, hideIcon, ...props }, ref) => (
   <DropdownMenuPrimitive.RadioItem
     className={cn(
-      'relative flex select-none items-center rounded-sm pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      'h-9 cursor-pointer px-2 data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground',
+      'focus:text-accent-foreground relative flex select-none items-center rounded-sm pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'data-[state=checked]:text-accent-foreground h-9 cursor-pointer px-2 data-[state=checked]:bg-accent',
       className,
     )}
     ref={ref}

@@ -359,19 +359,17 @@ export function PlateEditor() {
   return (
     <TooltipProvider>
       <DndProvider backend={HTML5Backend}>
-        <section>
-          <Plate plugins={plugins} initialValue={initialValue}>
-            <FixedToolbar>
-              <FixedToolbarButtons />
-            </FixedToolbar>
+        <Plate plugins={plugins} initialValue={initialValue}>
+          <FixedToolbar>
+            <FixedToolbarButtons />
+          </FixedToolbar>
 
-            <Editor className="min-h-[300px] pt-16 text-xl" />
+          <Editor className="min-h-[300px] text-xl" />
 
-            <FloatingToolbar>
-              <FloatingToolbarButtons />
-            </FloatingToolbar>
-          </Plate>
-        </section>
+          <FloatingToolbar>
+            <FloatingToolbarButtons />
+          </FloatingToolbar>
+        </Plate>
       </DndProvider>
     </TooltipProvider>
   )

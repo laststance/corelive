@@ -69,7 +69,7 @@ export interface DraggableProps
 const dragHandle = (
   <Tooltip>
     <TooltipTrigger>
-      <Icons.dragHandle className="size-4 text-muted-foreground" />
+      <Icons.dragHandle className="text-muted-foreground size-4" />
     </TooltipTrigger>
     <TooltipContent>Drag to move</TooltipContent>
   </Tooltip>

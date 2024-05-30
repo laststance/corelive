@@ -2,26 +2,23 @@ import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
 export interface EditorSlice {
-  editorMode: 'Simple' | 'Plate'
+  mode: 'Simple' | 'Plate'
 }
 
 const initialState: EditorSlice = {
-  editorMode: 'Simple',
+  mode: 'Simple',
 }
 
 export const editorSlice = createSlice({
   name: 'Editor',
   initialState,
   reducers: {
-    updateEditorMode: (
-      state,
-      action: PayloadAction<EditorSlice['editorMode']>,
-    ) => {
-      state.editorMode = action.payload
+    updateEditorMode: (state, action: PayloadAction<EditorSlice['mode']>) => {
+      state.mode = action.payload
     },
   },
   selectors: {
-    selectEditorMode: (state: EditorSlice) => state.editorMode,
+    selectEditorMode: (state: EditorSlice) => state.mode,
   },
 })
 
