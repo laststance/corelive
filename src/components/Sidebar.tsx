@@ -7,6 +7,7 @@ import { SignoutButton } from '@/components/SignoutButton'
 import { cn } from '@/lib/utils'
 import { selectEditorMode, updateEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
+import { toggleDrawer } from '@/redux/sideMenuSlice'
 
 const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
   const dispatch = useAppDispatch()
@@ -48,7 +49,10 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
                 <li>
                   <div
                     className={cn({ active: editorMode === 'Simple' })}
-                    onClick={() => dispatch(updateEditorMode('Simple'))}
+                    onClick={() => {
+                      dispatch(updateEditorMode('Simple'))
+                      dispatch(toggleDrawer())
+                    }}
                   >
                     Simple
                   </div>
@@ -56,7 +60,10 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
                 <li>
                   <div
                     className={cn({ active: editorMode === 'Plate' })}
-                    onClick={() => dispatch(updateEditorMode('Plate'))}
+                    onClick={() => {
+                      dispatch(updateEditorMode('Plate'))
+                      dispatch(toggleDrawer())
+                    }}
                   >
                     Plate
                   </div>
