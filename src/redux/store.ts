@@ -5,13 +5,13 @@ import {
   createListenerMiddleware,
 } from '@reduxjs/toolkit'
 
+import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
-import { sideMenuSlice, toggleDrawer } from '@/redux/sideMenuSlice'
-import { toggleSideMenu } from '@/redux/toggleSideMenu'
+import { toggleDrawerOpen } from '@/redux/toggleDrawerOpen'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(editorSlice, sideMenuSlice)
+const rootReducer = combineSlices(editorSlice, drawerSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
 
@@ -20,7 +20,7 @@ const listenerMiddleware = createListenerMiddleware()
 listenerMiddleware.startListening({
   actionCreator: toggleDrawer,
   effect: () => {
-    toggleSideMenu()
+    toggleDrawerOpen()
   },
 })
 

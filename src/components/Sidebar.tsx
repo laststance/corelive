@@ -7,7 +7,7 @@ import { SignoutButton } from '@/components/SignoutButton'
 import { cn } from '@/lib/utils'
 import { selectEditorMode, updateEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
-import { toggleDrawer } from '@/redux/sideMenuSlice'
+import { toggleDrawer } from '@/redux/drawerSlice'
 
 const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
   const dispatch = useAppDispatch()
