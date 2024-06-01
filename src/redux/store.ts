@@ -4,6 +4,8 @@ import {
   configureStore,
   createListenerMiddleware,
 } from '@reduxjs/toolkit'
+import { persistReducer } from 'redux-persist'
+import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 
 import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
@@ -14,6 +16,13 @@ import { toggleDrawerOpen } from '@/redux/toggleDrawerOpen'
 const rootReducer = combineSlices(editorSlice, drawerSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
+
+const persistConfig = {
+  key: 'unfarly',
+  storage: createWebStorage('local'),
+  whitelist: ['Editor'],
+}
+const persistedReducer = persistReducer(persistConfig, rootReducer)
 
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
@@ -30,7 +39,7 @@ listenerMiddleware.startListening({
 // are needed for each request to prevent cross-request state pollution.
 export const makeStore = () => {
   return configureStore({
-    reducer: rootReducer,
+    reducer: persistedReducer,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware().concat(listenerMiddleware.middleware),
   })

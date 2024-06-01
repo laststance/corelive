@@ -90,6 +90,7 @@
     "react-lite-youtube-embed": "^2.4.0",
     "react-redux": "^9.1.2",
     "react-tweet": "^3.2.1",
+    "redux-persist": "^6.0.0",
     "slate": "^0.103.0",
     "slate-history": "^0.100.0",
     "slate-hyperscript": "^0.100.0",

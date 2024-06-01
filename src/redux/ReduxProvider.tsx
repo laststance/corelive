@@ -1,8 +1,8 @@
 'use client'
-import { setupListeners } from '@reduxjs/toolkit/query'
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 import { Provider } from 'react-redux'
+import { persistStore } from 'redux-persist'
 
 import type { AppStore } from './store'
 import { makeStore } from './store'
@@ -21,10 +21,7 @@ export const ReduxProvider = ({ children }: Props) => {
 
   useEffect(() => {
     if (storeRef.current !== null) {
-      // configure listeners using the provided defaults
-      // optional, but required for `refetchOnFocus`/`refetchOnReconnect` behaviors
-      const unsubscribe = setupListeners(storeRef.current.dispatch)
-      return unsubscribe
+      persistStore(storeRef.current)
     }
   }, [])
 
