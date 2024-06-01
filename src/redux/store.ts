@@ -9,7 +9,7 @@ import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 
 import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
-import { toggleDrawerOpen } from '@/redux/toggleDrawerOpen'
+import { toggleDrawerState } from '@/redux/toggleDrawerState'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
@@ -29,7 +29,7 @@ const listenerMiddleware = createListenerMiddleware()
 listenerMiddleware.startListening({
   actionCreator: toggleDrawer,
   effect: () => {
-    toggleDrawerOpen()
+    toggleDrawerState()
   },
 })
 
