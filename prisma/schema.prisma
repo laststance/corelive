@@ -14,27 +14,41 @@ datasource db {
 }
 
 model Task {
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  title        String   @db.VarChar(255)
+  accomplished Boolean  @default(false)
+  author       User     @relation(fields: [authorId], references: [id])
+  genre        Genre    @relation(fields: [genreId], references: [id])
+  authorId     Int
+  genreId      Int
+}
+
+model Genre {
   id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(255)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  title     String   @db.VarChar(255)
-  accomplished Boolean  @default(false)
-  author    User     @relation(fields: [authorId], references: [id])
-  authorId  Int
+  Task      Task[]
 }
 
 model Profile {
-  id     Int     @id @default(autoincrement())
-  bio    String?
-  user   User    @relation(fields: [userId], references: [id])
-  userId Int     @unique
+  id        Int      @id @default(autoincrement())
+  bio       String?
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int      @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model User {
-  id      Int      @id @default(autoincrement())
-  clerkId String   @unique
-  email   String?   @unique
-  name    String?
-  tasks   Task[]
-  profile Profile?
+  id        Int      @id @default(autoincrement())
+  clerkId   String   @unique
+  email     String?  @unique
+  name      String?
+  tasks     Task[]
+  profile   Profile?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
