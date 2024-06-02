@@ -54,6 +54,7 @@ export async function POST(req: Request) {
   // Do something with the payload
   // For this guide, you simply log the payload to the console
   if (evt.type === 'user.created') {
+    // TODO replace Logger library
     console.log('New user created')
     await prisma.user.create({
       data: {
@@ -61,9 +62,12 @@ export async function POST(req: Request) {
         name: evt.data.username
           ? evt.data.username
           : evt.data.first_name + ' ' + evt.data.last_name,
+        email: evt.data.email_addresses[0].email_address,
       },
     })
   }
+
+  // @TODO: Add user.updated event
 
   return new Response('', { status: 201 })
 }
