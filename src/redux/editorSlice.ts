@@ -3,10 +3,12 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 
 export interface EditorSlice {
   mode: 'Simple' | 'Plate'
+  content: string
 }
 
 const initialState: EditorSlice = {
   mode: 'Simple',
+  content: '',
 }
 
 export const editorSlice = createSlice({
