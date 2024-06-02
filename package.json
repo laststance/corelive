@@ -15,6 +15,10 @@
     "lint:fix": "eslint . --ext .ts,.tsx,.js,jsx,cjs,mjs --fix",
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:status": "prisma migrate status",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio"
   },
