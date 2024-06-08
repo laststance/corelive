@@ -10,16 +10,14 @@ function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
   event.preventDefault()
 
   const textarea = event.target as HTMLTextAreaElement
-
+  const text = textarea.value
   const cursorPosition = textarea.selectionStart
-  const textBeforeCursor = textarea.value.substring(0, cursorPosition)
-  const linesBeforeCursor = textBeforeCursor.split('\n')
-  const lineNumber = linesBeforeCursor.length
-  const currentLineContent = linesBeforeCursor[lineNumber - 1]!
 
-  // Calculate the start and end positions of the current line
-  const startPos = textBeforeCursor.lastIndexOf('\n') + 1
-  const endPos = startPos + currentLineContent.length
+  // Find the start of the current line
+  const startPos = text.lastIndexOf('\n', cursorPosition - 1) + 1
+  // Find the end of the current line
+  let endPos = text.indexOf('\n', cursorPosition)
+  if (endPos === -1) endPos = text.length
 
   // Select the current line content
   textarea.setSelectionRange(startPos, endPos)
