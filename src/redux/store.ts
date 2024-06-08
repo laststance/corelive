@@ -6,7 +6,6 @@ import {
 } from '@reduxjs/toolkit'
 import {
   persistReducer,
-  persistStore,
   FLUSH,
   REHYDRATE,
   PAUSE,
@@ -16,9 +15,9 @@ import {
 } from 'redux-persist'
 import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 
-import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
+import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
-import { toggleDrawerState } from '@/redux/toggleDrawerState'
+import { drawerListener } from '@/redux/listener/performToggleDrawerEffect'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
@@ -35,12 +34,7 @@ const persistedReducer = persistReducer(persistConfig, rootReducer)
 
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
-listenerMiddleware.startListening({
-  actionCreator: toggleDrawer,
-  effect: () => {
-    toggleDrawerState()
-  },
-})
+listenerMiddleware.startListening(drawerListener)
 
 // `makeStore` encapsulates the store configuration to allow
 // creating unique store instances, which is particularly important for
