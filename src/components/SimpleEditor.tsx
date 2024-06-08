@@ -5,11 +5,11 @@ import { toast } from 'sonner'
 import { ContextMenuItem, useContextMenu } from 'use-context-menu'
 
 import { cn } from '@/lib/utils'
-function selectSingleLineText() {
-  const textarea = document.getElementById(
-    'SimpleEditor',
-  )! as HTMLTextAreaElement
-  if (textarea.value === '') return
+
+function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
+  event.preventDefault()
+
+  const textarea = event.target as HTMLTextAreaElement
 
   const cursorPosition = textarea.selectionStart
   const textBeforeCursor = textarea.value.substring(0, cursorPosition)
@@ -25,10 +25,7 @@ function selectSingleLineText() {
   textarea.setSelectionRange(startPos, endPos)
   textarea.focus() // Focus the textarea to show the selection
 
-  // Optional: Highlight the selection for a brief moment
-  setTimeout(() => {
-    textarea.setSelectionRange(cursorPosition, cursorPosition) // Reset selection to cursor position
-  }, 2000)
+  // TODO keep selection while context menu is open
 }
 
 function taskCompleted() {
@@ -42,9 +39,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 }) => {
   const { contextMenu, onContextMenu } = useContextMenu(
     <>
-      <ContextMenuItem onSelect={selectSingleLineText}>
-        Completed
-      </ContextMenuItem>
+      <ContextMenuItem onSelect={taskCompleted}>Completed</ContextMenuItem>
     </>,
   )
   // @TODO convert selectSingleLineText Promise and then call onContextMenu
@@ -54,6 +49,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       <textarea
         {...rest}
         id="SimpleEditor"
+        onClick={selectSingleLineText}
         onContextMenu={onContextMenu}
         placeholder="Write your task step by step here..."
         className={cn(
