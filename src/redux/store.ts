@@ -4,7 +4,16 @@ import {
   configureStore,
   createListenerMiddleware,
 } from '@reduxjs/toolkit'
-import { persistReducer } from 'redux-persist'
+import {
+  persistReducer,
+  persistStore,
+  FLUSH,
+  REHYDRATE,
+  PAUSE,
+  PERSIST,
+  PURGE,
+  REGISTER,
+} from 'redux-persist'
 import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 
 import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
@@ -41,7 +50,11 @@ export const makeStore = () => {
   return configureStore({
     reducer: persistedReducer,
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(listenerMiddleware.middleware),
+      getDefaultMiddleware({
+        serializableCheck: {
+          ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
+        },
+      }).concat(listenerMiddleware.middleware),
   })
 }
 

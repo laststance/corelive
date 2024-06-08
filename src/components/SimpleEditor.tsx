@@ -5,6 +5,11 @@ import { toast } from 'sonner'
 import { ContextMenuItem, useContextMenu } from 'use-context-menu'
 
 import { cn } from '@/lib/utils'
+import {
+  selectSimpleEditorText,
+  setSimpleEditorText,
+} from '@/redux/editorSlice'
+import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 
 function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
   event.preventDefault()
@@ -35,6 +40,8 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   className,
   ...rest
 }) => {
+  const dispatch = useAppDispatch()
+  const simpleEditorText = useAppSelector(selectSimpleEditorText)
   const { contextMenu, onContextMenu } = useContextMenu(
     <>
       <ContextMenuItem onSelect={taskCompleted}>Completed</ContextMenuItem>
@@ -47,8 +54,10 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       <textarea
         {...rest}
         id="SimpleEditor"
+        value={simpleEditorText}
         onClick={selectSingleLineText}
         onContextMenu={onContextMenu}
+        onChange={(e) => dispatch(setSimpleEditorText(e.target.value))}
         placeholder="Write your task step by step here..."
         className={cn(
           'textarea textarea-bordered textarea-lg h-full w-full max-w-xs',
