@@ -21,9 +21,9 @@ export const MentionElement = withRef<
       className={cn(
         'bg-muted inline-block cursor-pointer rounded-md px-1.5 py-0.5 align-baseline text-sm font-medium',
         selected && focused && 'ring-ring ring-2',
-        element.children[0].bold === true && 'font-bold',
-        element.children[0].italic === true && 'italic',
-        element.children[0].underline === true && 'underline',
+        element.children[0]?.bold === true && 'font-bold',
+        element.children[0]?.italic === true && 'italic',
+        element.children[0]?.underline === true && 'underline',
         className,
       )}
       contentEditable={false}
