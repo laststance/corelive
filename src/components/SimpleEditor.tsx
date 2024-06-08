@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { ContextMenuItem, useContextMenu } from 'use-context-menu'
 
 import { cn } from '@/lib/utils'
-function taskCompleted() {
+function selectSingleLineText() {
   const textarea = document.getElementById(
     'SimpleEditor',
   )! as HTMLTextAreaElement
@@ -29,6 +29,10 @@ function taskCompleted() {
   setTimeout(() => {
     textarea.setSelectionRange(cursorPosition, cursorPosition) // Reset selection to cursor position
   }, 2000)
+}
+
+function taskCompleted() {
+  // TODO change task state to completed
   toast.success('Task completed')
 }
 
@@ -38,9 +42,12 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 }) => {
   const { contextMenu, onContextMenu } = useContextMenu(
     <>
-      <ContextMenuItem onSelect={taskCompleted}>Completed</ContextMenuItem>
+      <ContextMenuItem onSelect={selectSingleLineText}>
+        Completed
+      </ContextMenuItem>
     </>,
   )
+  // @TODO convert selectSingleLineText Promise and then call onContextMenu
 
   return (
     <>
