@@ -20,21 +20,17 @@ export interface RootLayoutProps {
 
 const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
-    <>
-      <ReduxProvider>
-        <ClerkProvider>
-          <TooltipProvider delayDuration={500} skipDelayDuration={0}>
-            <html lang="en" suppressHydrationWarning>
-              <body
-                className={cn('min-h-screen overflow-x-hidden antialiased')}
-              >
-                {children}
-              </body>
-            </html>
-          </TooltipProvider>
-        </ClerkProvider>
-      </ReduxProvider>
-    </>
+    <ReduxProvider>
+      <ClerkProvider>
+        <TooltipProvider delayDuration={500} skipDelayDuration={0}>
+          <html lang="en" suppressHydrationWarning>
+            <body className={cn('min-h-screen overflow-x-hidden antialiased')}>
+              {children}
+            </body>
+          </html>
+        </TooltipProvider>
+      </ClerkProvider>
+    </ReduxProvider>
   )
 }
 
