@@ -1,0 +1,15 @@
+# Use folllowing project wide tech stack
+
+# Tech Stack
+
+- Next.js App Router
+
+## Unit/Component Testing
+- vitest
+- @testing-library/dom
+- @testing-library/react
+- @testing-library/user-event
+- happy-dom
+- @testing-library/jest-dom/vitest
+- never use @testing-library/react-hooks. It's not maintained and has a lot of issues. Use @testing-library/react instead
+

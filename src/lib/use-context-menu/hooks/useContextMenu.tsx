@@ -86,7 +86,7 @@ export function useContextMenu(
       state.event.type === 'contextmenu' || state.event.type === 'click'
 
     let focusIndex = isMouseEvent ? -1 : 0
-    if (focusIndex >= 0) {
+    if (focusIndex >= 0 && menuItems[0]) {
       menuItems[0].focus()
     } else {
       target.blur()
@@ -94,8 +94,8 @@ export function useContextMenu(
     }
 
     const focus = () => {
-      const index = enabledMenuItems[focusIndex]
-      const menuItem = menuItems[index]
+      const index = enabledMenuItems[focusIndex]!
+      const menuItem = menuItems[index]!
       menuItem.focus()
     }
 
@@ -118,8 +118,8 @@ export function useContextMenu(
           break
         }
         case 'Enter': {
-          const index = enabledMenuItems[focusIndex]
-          const menuItem = menuItems[index]
+          const index = enabledMenuItems[focusIndex]!
+          const menuItem = menuItems[index]!
           menuItem.click()
           break
         }

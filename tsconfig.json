@@ -26,11 +26,12 @@
       "@/*": ["./src/*"]
     },
     "lib": ["dom", "dom.iterable", "esnext"],
-    "incremental": true
+    "incremental": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
     "./**.js",
-    "./**.ts",
+    ".**.ts",
     "./**.cjs",
     "./**.mjs",
     "next-env.d.ts",
