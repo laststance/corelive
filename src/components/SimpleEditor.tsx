@@ -1,6 +1,6 @@
 'use client'
 
-import React, { type ComponentProps } from 'react'
+import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
@@ -10,26 +10,6 @@ import {
   setSimpleEditorText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
-
-function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
-  event.preventDefault()
-
-  const textarea = event.target as HTMLTextAreaElement
-  const text = textarea.value
-  const cursorPosition = textarea.selectionStart
-
-  // Find the start of the current line
-  const startPos = text.lastIndexOf('\n', cursorPosition - 1) + 1
-  // Find the end of the current line
-  let endPos = text.indexOf('\n', cursorPosition)
-  if (endPos === -1) endPos = text.length
-
-  // Select the current line content
-  textarea.setSelectionRange(startPos, endPos)
-  textarea.focus() // Focus the textarea to show the selection
-
-  // TODO keep selection while context menu is open
-}
 
 function taskCompleted() {
   // TODO change task state to completed
@@ -42,18 +22,40 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 }) => {
   const dispatch = useAppDispatch()
   const simpleEditorText = useAppSelector(selectSimpleEditorText)
+  const selectedRef = useRef<string>()
+  // TODO change to CSS based implementation
+  function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
+    event.preventDefault()
+
+    const textarea = event.target as HTMLTextAreaElement
+    const text = textarea.value
+    const cursorPosition = textarea.selectionStart
+
+    // Find the start of the current line
+    const startPos = text.lastIndexOf('\n', cursorPosition - 1) + 1
+    // Find the end of the current line
+    let endPos = text.indexOf('\n', cursorPosition)
+    if (endPos === -1) endPos = text.length
+
+    // Get the selected text and assign it to 'selected' variable
+    selectedRef.current = textarea.value.substring(startPos, endPos)
+    // TODO dispatch to CompletedSlice
+
+    // Select the current line content
+    textarea.setSelectionRange(startPos, endPos)
+    textarea.focus() // Focus the textarea to show the selection
+  }
+
   const { contextMenu, onContextMenu } = useContextMenu(
     <>
       <ContextMenuItem onSelect={taskCompleted}>Completed</ContextMenuItem>
     </>,
   )
-  // @TODO convert selectSingleLineText Promise and then call onContextMenu
 
   return (
     <>
       <textarea
         {...rest}
-        id="SimpleEditor"
         value={simpleEditorText}
         onClick={selectSingleLineText}
         onContextMenu={onContextMenu}

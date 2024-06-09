@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "lint-staged": {
-    "*": "prettier --ignore-unknown --write"
+    "*": "prettier --ignore-unknown --write",
+    "*.{js,ts,jsx,tsx,cjs,mjs}": [
+      "eslint --fix --max-warnings=0"
+    ]
   },
   "scripts": {
     "dev": "next dev --turbo",
