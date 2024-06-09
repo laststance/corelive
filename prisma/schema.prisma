@@ -13,12 +13,11 @@ datasource db {
   url      = env("POSTGRES_PRISMA_URL")
 }
 
-model Task {
+model Completed {
   id           Int      @id @default(autoincrement())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   title        String   @db.VarChar(255)
-  accomplished Boolean  @default(false)
   author       User     @relation(fields: [authorId], references: [id])
   genre        Genre    @relation(fields: [genreId], references: [id])
   authorId     Int
@@ -30,7 +29,7 @@ model Genre {
   name      String   @unique @db.VarChar(255)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  Task      Task[]
+  completed Completed[]
 }
 
 model Profile {
@@ -47,7 +46,7 @@ model User {
   clerkId   String   @unique
   email     String?  @unique
   name      String?
-  tasks     Task[]
+  completed Completed[]
   profile   Profile?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
