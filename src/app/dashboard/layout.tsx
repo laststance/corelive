@@ -1,6 +1,7 @@
 import React from 'react'
 import { Toaster } from 'sonner'
-import 'use-context-menu/styles.css'
+// TODO Use this way https://react.dev/blog/2024/04/25/react-19#support-for-stylesheets
+import '@/lib/use-context-menu/styles.css'
 
 import type { RootLayoutProps } from '@/app/layout'
 import Sidebar from '@/components/Sidebar'

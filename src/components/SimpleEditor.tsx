@@ -2,8 +2,8 @@
 
 import React, { type ComponentProps } from 'react'
 import { toast } from 'sonner'
-import { ContextMenuItem, useContextMenu } from 'use-context-menu'
 
+import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
   selectSimpleEditorText,
