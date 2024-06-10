@@ -1,4 +1,5 @@
 'use client'
+import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 import { Provider } from 'react-redux'
@@ -13,6 +14,8 @@ interface Props {
 
 export const ReduxProvider = ({ children }: Props) => {
   const storeRef = useRef<AppStore | null>(null)
+  // TODO more organized bootstrap
+  const pathname = usePathname()
 
   if (!storeRef.current) {
     // Create the store instance the first time this renders
@@ -22,6 +25,9 @@ export const ReduxProvider = ({ children }: Props) => {
   useEffect(() => {
     if (storeRef.current !== null) {
       persistStore(storeRef.current)
+      if (pathname === '/dashboard') {
+        storeRef.current.dispatch({ type: 'Run/InitListener' })
+      }
     }
   }, [])
 

@@ -19,6 +19,7 @@ import { completedSlice } from '@/redux/completedSlice'
 import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
+import { initListener } from '@/redux/initListener'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
@@ -36,6 +37,7 @@ const persistedReducer = persistReducer(persistConfig, rootReducer)
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
 listenerMiddleware.startListening(drawerListener)
+listenerMiddleware.startListening(initListener)
 
 // `makeStore` encapsulates the store configuration to allow
 // creating unique store instances, which is particularly important for
