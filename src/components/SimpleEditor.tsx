@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
+import { setCompleted } from '@/redux/completedSlice'
 import {
   selectSimpleEditorText,
   setSimpleEditorText,
@@ -40,6 +41,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     // Get the selected text and assign it to 'selected' variable
     selectedRef.current = textarea.value.substring(startPos, endPos)
     // TODO dispatch to CompletedSlice
+    dispatch(setCompleted(selectedRef.current))
 
     // Select the current line content
     textarea.setSelectionRange(startPos, endPos)
