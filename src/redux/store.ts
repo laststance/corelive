@@ -15,7 +15,6 @@ import {
 } from 'redux-persist'
 import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 
-import { completedSlice } from '@/redux/completedSlice'
 import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
@@ -23,14 +22,14 @@ import { initListener } from '@/redux/initListener'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(editorSlice, drawerSlice, completedSlice)
+const rootReducer = combineSlices(editorSlice, drawerSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
 
 const persistConfig = {
   key: 'unfarly',
   storage: createWebStorage('local'),
-  whitelist: ['Editor', 'Completed'],
+  whitelist: ['Editor'],
 }
 const persistedReducer = persistReducer(persistConfig, rootReducer)
 

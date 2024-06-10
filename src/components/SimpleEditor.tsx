@@ -5,17 +5,12 @@ import { toast } from 'sonner'
 
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
-import { setCompleted } from '@/redux/completedSlice'
 import {
+  setCompleted,
   selectSimpleEditorText,
   setSimpleEditorText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
-
-function taskCompleted() {
-  // TODO change task state to completed
-  toast.success('Task completed')
-}
 
 export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   className,
@@ -40,12 +35,15 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 
     // Get the selected text and assign it to 'selected' variable
     selectedRef.current = textarea.value.substring(startPos, endPos)
-    // TODO dispatch to CompletedSlice
-    dispatch(setCompleted(selectedRef.current))
 
     // Select the current line content
     textarea.setSelectionRange(startPos, endPos)
     textarea.focus() // Focus the textarea to show the selection
+  }
+
+  function taskCompleted() {
+    dispatch(setCompleted(selectedRef.current))
+    toast.success('Task Completed! 🎉')
   }
 
   const { contextMenu, onContextMenu } = useContextMenu(
