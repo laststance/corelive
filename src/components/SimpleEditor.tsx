@@ -43,6 +43,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 
   function taskCompleted() {
     dispatch(setCompleted(selectedRef.current))
+    // TODO add _.defer() to toast
     toast.success('Task Completed! 🎉')
   }
 
@@ -58,6 +59,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
         {...rest}
         value={simpleEditorText}
         onClick={selectSingleLineText}
+        onDoubleClick={onContextMenu}
         onContextMenu={onContextMenu}
         onChange={(e) => dispatch(setSimpleEditorText(e.target.value))}
         placeholder="Write your task step by step here..."
