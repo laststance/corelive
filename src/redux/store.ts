@@ -16,9 +16,9 @@ import {
 import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 
 import { completedSlice } from '@/redux/completedSlice'
+import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
-import { drawerListener } from '@/redux/listener/performToggleDrawerEffect'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
