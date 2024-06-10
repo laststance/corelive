@@ -42,7 +42,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   }
 
   function taskCompleted() {
-    dispatch(setCompleted(selectedRef.current))
+    dispatch(setCompleted(selectedRef.current!))
     // TODO add _.defer() to toast
     toast.success('Task Completed! 🎉')
   }
@@ -52,6 +52,25 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       <ContextMenuItem onSelect={taskCompleted}>Completed</ContextMenuItem>
     </>,
   )
+
+  if (!simpleEditorText) {
+    return (
+      <div
+        className={cn(
+          `textarea textarea-bordered textarea-lg flex h-full w-full max-w-xs flex-col gap-4`,
+          className,
+        )}
+      >
+        <div className="skeleton h-32 w-full"></div>
+        <div className="skeleton h-4 w-28"></div>
+        <div className="skeleton h-4 w-full"></div>
+        <div className="skeleton h-4 w-full"></div>
+        <div className="skeleton h-4 w-28"></div>
+        <div className="skeleton h-4 w-full"></div>
+        <div className="skeleton h-4 w-full"></div>
+      </div>
+    )
+  }
 
   return (
     <>

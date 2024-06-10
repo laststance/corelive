@@ -9,3 +9,4 @@ dist
 .husky
 storybook-static
 **/mockServiceWorker.js
+html

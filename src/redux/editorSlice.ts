@@ -6,7 +6,7 @@ import type { EditorContent } from '@/zod/schema'
 export interface EditorSlice {
   mode: 'Simple' | 'Plate'
   simpleEditorText: EditorContent
-  completed: string[] & TODO
+  completed: string[]
 }
 
 const initialState: EditorSlice = {
@@ -28,7 +28,7 @@ export const editorSlice = createSlice({
     ) => {
       state.simpleEditorText = action.payload
     },
-    setCompleted: (state, action: PayloadAction<EditorSlice['completed']>) => {
+    setCompleted: (state, action: PayloadAction<string>) => {
       // Add to completed task
       state.completed.push(action.payload)
       // remove completed item from simpleEditorText
