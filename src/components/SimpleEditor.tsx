@@ -3,6 +3,7 @@
 import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
+import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
@@ -11,14 +12,15 @@ import {
   setSimpleEditorText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
-
 export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   className,
   ...rest
 }) => {
   const dispatch = useAppDispatch()
   const simpleEditorText = useAppSelector(selectSimpleEditorText)
+  const firstRender = useIsFirstRender()
   const selectedRef = useRef<string>()
+
   // TODO change to CSS based implementation
   function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
     event.preventDefault()
@@ -53,7 +55,7 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     </>,
   )
 
-  if (!simpleEditorText) {
+  if (firstRender && !simpleEditorText) {
     return (
       <div
         className={cn(
