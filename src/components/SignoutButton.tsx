@@ -1,7 +1,7 @@
 import { SignOutButton } from '@clerk/nextjs'
 import React from 'react'
 
-export const SignoutButton = () => {
+export function SignoutButton() {
   return (
     <SignOutButton>
       <button className="btn btn-neutral">Sign Out</button>

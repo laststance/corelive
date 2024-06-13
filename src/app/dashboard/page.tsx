@@ -1,9 +1,13 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
+import dynamic from 'next/dynamic'
 import React from 'react'
 
 import { CompletedView } from './CompletedView'
 import { EditorView } from './EditorView'
-import { HeatmapView } from './HeatmapView'
+
+const HeatmapView = dynamic(async () => import('./HeatmapView'), {
+  ssr: false,
+})
 
 const Page = async () => {
   const { userId } = auth().protect()
