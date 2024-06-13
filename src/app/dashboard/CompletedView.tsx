@@ -11,10 +11,10 @@ export const CompletedView: React.FC<Props> = () => {
   const completed = useAppSelector(selectCompleted)
   return (
     <>
-      <h2 className="text-primary-content">Completed</h2>
-      <ul className="text-primary-content">
+      <h2 className="mb-6 text-primary-content">Completed</h2>
+      <ul className="flex flex-col gap-0 text-primary-content">
         {completed.map((item, i) => (
-          <li key={i} className="flex items-center gap-2">
+          <li key={i} className="my-0 flex items-center gap-2">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
