@@ -17,6 +17,6 @@ export const EditorView: React.FC<Props> = () => {
     .with('Simple', () => (
       <SimpleEditor className="mt-8 h-[calc(100%-4rem)] w-full max-w-xl text-xl" />
     ))
-    .with('Plate', () => <PlateEditor />)
+    .with('Plate', () => <PlateEditor className="mt-8 flex items-center" />)
     .exhaustive()
 }
