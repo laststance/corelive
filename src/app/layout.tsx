@@ -2,7 +2,6 @@ import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
 import '@/styles/globals.css'
 
-import { TooltipProvider } from '@/components/plate-ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ReduxProvider } from '@/redux/ReduxProvider'
 
@@ -22,13 +21,11 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
     <ReduxProvider>
       <ClerkProvider>
-        <TooltipProvider delayDuration={500} skipDelayDuration={0}>
-          <html lang="en" suppressHydrationWarning>
-            <body className={cn('min-h-screen overflow-x-hidden antialiased')}>
-              {children}
-            </body>
-          </html>
-        </TooltipProvider>
+        <html lang="en" suppressHydrationWarning>
+          <body className={cn('min-h-screen overflow-x-hidden antialiased')}>
+            {children}
+          </body>
+        </html>
       </ClerkProvider>
     </ReduxProvider>
   )
