@@ -17,9 +17,9 @@ model Completed {
   id        Int      @id @default(autoincrement())
   archived  Boolean  @default(false)
   title     String   @db.VarChar(255)
-  author    User     @relation(fields: [authorId], references: [id])
-  genre     Genre    @relation(fields: [genreId], references: [id])
-  authorId  Int
+  user      User     @relation(fields: [userId], references: [id])
+  genre     Genre?    @relation(fields: [genreId], references: [id])
+  userId  Int
   genreId   Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
