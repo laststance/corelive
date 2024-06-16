@@ -7,7 +7,7 @@ import { EditorView } from './EditorView'
 
 const HeatmapView = dynamic(async () => import('./HeatmapView'), {
   ssr: true,
-  loading: () => <div className="text-red-500">Loading...</div>,
+  loading: () => <span className="loading loading-spinner loading-lg"></span>,
 })
 
 const Page = async () => {
@@ -25,7 +25,7 @@ const Page = async () => {
       <section className="prose prose-xl prose-slate flex h-[48vh] flex-col items-center rounded-md bg-neutral-content p-4">
         <CompletedView />
       </section>
-      <section className="h-[48vh] rounded-md bg-neutral-content p-4">
+      <section className="grid h-[48vh] place-content-center rounded-md border-neutral-content p-4">
         <HeatmapView />
       </section>
     </div>
