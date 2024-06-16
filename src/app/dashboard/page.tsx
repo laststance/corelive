@@ -6,7 +6,8 @@ import { CompletedView } from './CompletedView'
 import { EditorView } from './EditorView'
 
 const HeatmapView = dynamic(async () => import('./HeatmapView'), {
-  ssr: false,
+  ssr: true,
+  loading: () => <div className="text-red-500">Loading...</div>,
 })
 
 const Page = async () => {
