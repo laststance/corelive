@@ -14,23 +14,32 @@ datasource db {
 }
 
 model Completed {
-  id           Int      @id @default(autoincrement())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  archived     Boolean  @default(false)
-  title        String   @db.VarChar(255)
-  author       User     @relation(fields: [authorId], references: [id])
-  genre        Genre    @relation(fields: [genreId], references: [id])
-  authorId     Int
-  genreId      Int
+  id        Int      @id @default(autoincrement())
+  archived  Boolean  @default(false)
+  title     String   @db.VarChar(255)
+  author    User     @relation(fields: [authorId], references: [id])
+  genre     Genre    @relation(fields: [genreId], references: [id])
+  authorId  Int
+  genreId   Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Editor {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Genre {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique @db.VarChar(255)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        Int         @id @default(autoincrement())
+  name      String      @unique @db.VarChar(255)
   completed Completed[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
 
 // TODO Merge User table
@@ -44,12 +53,14 @@ model Profile {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  clerkId   String   @unique
-  email     String?  @unique
+  id        Int         @id @default(autoincrement())
+  clerkId   String      @unique
+  email     String?     @unique
   name      String?
   completed Completed[]
   profile   Profile?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  editor    Editor?
+  editorId  Int?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
