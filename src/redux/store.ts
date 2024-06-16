@@ -23,7 +23,7 @@ import { RTKQuery } from '@/redux/RTKQuery'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(editorSlice, drawerSlice)
+const rootReducer = combineSlices(RTKQuery, editorSlice, drawerSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
 
@@ -45,7 +45,7 @@ listenerMiddleware.startListening(initListener)
 // are needed for each request to prevent cross-request state pollution.
 export const makeStore = () => {
   return configureStore({
-    reducer: { [RTKQuery.reducerPath]: RTKQuery.reducer, persistedReducer },
+    reducer: persistedReducer,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: {
