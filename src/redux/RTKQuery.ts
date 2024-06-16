@@ -22,7 +22,6 @@ export const RTKQuery = createApi({
   }),
   keepUnusedDataFor: 180,
   reducerPath: 'RTK_Query',
-  tagTypes: ['Posts'],
 })
 
 // Export hooks for usage in functional components, which are

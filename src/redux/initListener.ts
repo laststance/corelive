@@ -19,10 +19,10 @@ async function save(_action: Action, listenerApi: TODO): Promise<void> {
       const store = listenerApi.getState()
       const simpleEditorText = selectSimpleEditorText(store.Editor)
       const completed = selectCompleted(store.Editor)
-      await store.dispatch(
+      const { data } = await store.dispatch(
         RTKQuery.endpoints.save.initiate({ simpleEditorText, completed }),
       )
-      toast.success('Saved')
+      toast.success(data.message)
     },
   })
 

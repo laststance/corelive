@@ -45,7 +45,7 @@ listenerMiddleware.startListening(initListener)
 // are needed for each request to prevent cross-request state pollution.
 export const makeStore = () => {
   return configureStore({
-    reducer: { persistedReducer, [RTKQuery.reducerPath]: RTKQuery.reducer },
+    reducer: { [RTKQuery.reducerPath]: RTKQuery.reducer, persistedReducer },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: {

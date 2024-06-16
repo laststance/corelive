@@ -5,7 +5,7 @@ const prisma = new PrismaClient()
 // TODO
 export async function POST(req: Request) {
   const { simpleEditorText, completed } = await req.json()
-
+  console.table({ simpleEditorText, completed })
   // Start a transaction to ensure data consistency
   // const result = await prisma.$transaction(async (prisma) => {
   //   // Create an entry in the 'Editor' table
