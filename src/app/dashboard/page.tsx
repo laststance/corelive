@@ -6,7 +6,7 @@ import { CompletedView } from './CompletedView'
 import { EditorView } from './EditorView'
 
 const HeatmapView = dynamic(async () => import('./HeatmapView'), {
-  ssr: true,
+  ssr: false,
   loading: () => <span className="loading loading-spinner loading-lg"></span>,
 })
 

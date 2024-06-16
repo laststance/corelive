@@ -3,7 +3,6 @@
 import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
-import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
@@ -12,13 +11,13 @@ import {
   setSimpleEditorText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
-export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
+
+const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   className,
   ...rest
 }) => {
   const dispatch = useAppDispatch()
   const simpleEditorText = useAppSelector(selectSimpleEditorText)
-  const firstRender = useIsFirstRender()
   const selectedRef = useRef<string>()
 
   // TODO change to CSS based implementation
@@ -55,25 +54,6 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     </>,
   )
 
-  if (firstRender && !simpleEditorText) {
-    return (
-      <div
-        className={cn(
-          `textarea textarea-bordered textarea-lg flex h-full w-full max-w-xs flex-col gap-4`,
-          className,
-        )}
-      >
-        <div className="skeleton h-32 w-full"></div>
-        <div className="skeleton h-4 w-28"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-28"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-full"></div>
-      </div>
-    )
-  }
-
   return (
     <>
       <textarea
@@ -93,3 +73,5 @@ export const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     </>
   )
 }
+
+export default SimpleEditor
