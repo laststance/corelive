@@ -7,7 +7,8 @@ import { match } from 'ts-pattern'
 import { PlateEditor } from '@/components/PlateEditor'
 import { cn } from '@/lib/utils'
 import { selectEditorMode } from '@/redux/editorSlice'
-import { useAppSelector } from '@/redux/hooks'
+import { useAppDispatch, useAppSelector } from '@/redux/hooks'
+import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 
 export const SimpleEditor = dynamic(
   async () => import('@/components/SimpleEditor'),
@@ -35,7 +36,13 @@ export const SimpleEditor = dynamic(
 interface Props {}
 
 export const EditorView: React.FC<Props> = () => {
+  const dispatch = useAppDispatch()
+  const firstRender = useIsFirstRender()
   const editorMode = useAppSelector(selectEditorMode)
+
+  if (firstRender) {
+    dispatch({ type: 'Run/InitListener' })
+  }
 
   return match(editorMode)
     .with('Simple', () => (

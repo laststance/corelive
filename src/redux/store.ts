@@ -19,11 +19,10 @@ import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
 import { initListener } from '@/redux/initListener'
-import { RTKQuery } from '@/redux/RTKQuery'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(RTKQuery, editorSlice, drawerSlice)
+const rootReducer = combineSlices(editorSlice, drawerSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
 
@@ -51,7 +50,7 @@ export const makeStore = () => {
         serializableCheck: {
           ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
         },
-      }).concat([listenerMiddleware.middleware, RTKQuery.middleware]),
+      }).concat(listenerMiddleware.middleware),
   })
 }
 

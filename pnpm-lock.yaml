@@ -18,7 +18,7 @@ importers:
         specifier: ^2.2.5
         version: 2.2.5(react-redux@9.1.2(@types/react@18.3.3)(react@19.0.0-rc-6d3110b4d9-20240531)(redux@5.0.1))(react@19.0.0-rc-6d3110b4d9-20240531)
       axios:
-        specifier: ^1.6.8
+        specifier: ^1.7.2
         version: 1.7.2
       babel-plugin-react-compiler:
         specifier: 0.0.0-experimental-938cd9a-20240601
