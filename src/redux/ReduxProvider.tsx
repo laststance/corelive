@@ -1,4 +1,5 @@
 'use client'
+import { setupListeners } from '@reduxjs/toolkit/query'
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
@@ -25,6 +26,7 @@ export const ReduxProvider = ({ children }: Props) => {
   useEffect(() => {
     if (storeRef.current !== null) {
       persistStore(storeRef.current)
+      setupListeners(storeRef.current.dispatch)
       if (pathname === '/dashboard') {
         storeRef.current.dispatch({ type: 'Run/InitListener' })
       }

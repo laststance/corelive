@@ -19,6 +19,7 @@ import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
 import { initListener } from '@/redux/initListener'
+import { RTKQuery } from '@/redux/RTKQuery'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
@@ -44,13 +45,13 @@ listenerMiddleware.startListening(initListener)
 // are needed for each request to prevent cross-request state pollution.
 export const makeStore = () => {
   return configureStore({
-    reducer: persistedReducer,
+    reducer: { persistedReducer, [RTKQuery.reducerPath]: RTKQuery.reducer },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: {
           ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
         },
-      }).concat(listenerMiddleware.middleware),
+      }).concat([listenerMiddleware.middleware, RTKQuery.middleware]),
   })
 }
 

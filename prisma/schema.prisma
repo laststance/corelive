@@ -17,6 +17,7 @@ model Completed {
   id           Int      @id @default(autoincrement())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  archived     Boolean  @default(false)
   title        String   @db.VarChar(255)
   author       User     @relation(fields: [authorId], references: [id])
   genre        Genre    @relation(fields: [genreId], references: [id])
@@ -32,6 +33,7 @@ model Genre {
   completed Completed[]
 }
 
+// TODO Merge User table
 model Profile {
   id        Int      @id @default(autoincrement())
   bio       String?
