@@ -8,8 +8,9 @@ export const initListener = {
 }
 
 const handler = createKeybindingsHandler({
-  '$mod+S': (e: KeyboardEvent) => {
+  '$mod+S': async (e: KeyboardEvent) => {
     e.preventDefault()
+
     toast.success('Saved')
   },
 })
