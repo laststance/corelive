@@ -18,7 +18,6 @@ model Completed {
   archived   Boolean  @default(false)
   title      String   @db.VarChar(255)
   user       User     @relation(fields: [userId], references: [id])
-  category   Category @relation(fields: [categoryId], references: [id])
   userId     Int
   categoryId Int
   createdAt  DateTime @default(now())
@@ -26,25 +25,13 @@ model Completed {
 }
 
 model Editor {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  categoryId Int      @unique
-  user       User     @relation(fields: [userId], references: [id])
-  category   Category @relation(fields: [categoryId], references: [id])
-  text       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
-model Category {
-  id        Int         @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   userId    Int
-  name      String      @unique @db.VarChar(255)
-  user      User        @relation(fields: [userId], references: [id])
-  completed Completed[]
-  editor    Editor?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  category  String   @db.VarChar(255)
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model User {
@@ -55,7 +42,6 @@ model User {
   bio       String?
   completed Completed[]
   editor    Editor[]
-  category  Category[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
