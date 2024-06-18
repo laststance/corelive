@@ -17,7 +17,7 @@ const Page = async () => {
   if (!user) return null
 
   return (
-    <div className="grid min-h-screen grid-cols-2 gap-4">
+    <div className="grid min-h-screen grid-cols-1 gap-4 lg:grid-cols-2">
       <section className="h-[49vh]">
         <EditorView />
       </section>
