@@ -4,8 +4,6 @@ import { toast } from 'sonner'
 // @ts-expect-error TODO replace @laststance version package later
 import { createKeybindingsHandler } from 'tinykeys'
 
-import { selectCompleted, selectSimpleEditorText } from '@/redux/editorSlice'
-
 export const initListener = {
   type: 'Run/InitListener',
   effect: save,
