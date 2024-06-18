@@ -14,30 +14,35 @@ datasource db {
 }
 
 model Completed {
-  id         Int       @id @default(autoincrement())
-  archived   Boolean   @default(false)
-  title      String    @db.VarChar(255)
-  user       User      @relation(fields: [userId], references: [id])
-  category   Category? @relation(fields: [categoryId], references: [id])
+  id         Int      @id @default(autoincrement())
+  archived   Boolean  @default(false)
+  title      String   @db.VarChar(255)
+  user       User     @relation(fields: [userId], references: [id])
+  category   Category @relation(fields: [categoryId], references: [id])
   userId     Int
   categoryId Int
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Editor {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id])
-  text      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  categoryId Int      @unique
+  user       User     @relation(fields: [userId], references: [id])
+  category   Category @relation(fields: [categoryId], references: [id])
+  text       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Category {
   id        Int         @id @default(autoincrement())
+  userId    Int
   name      String      @unique @db.VarChar(255)
+  user      User        @relation(fields: [userId], references: [id])
   completed Completed[]
+  editor    Editor?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
@@ -49,8 +54,8 @@ model User {
   name      String?
   bio       String?
   completed Completed[]
-  editor    Editor?
-  editorId  Int?
+  editor    Editor[]
+  category  Category[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
