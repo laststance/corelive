@@ -1,19 +1,20 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { Editor, EditorList } from '@/types/app'
+import type { CompletedList, Editor, EditorList } from '@/types/app'
 
 export interface EditorSlice {
-  mode: 'Simple' | 'Plate' | 'Todo'
+  mode: 'Simple' | 'Plate'
+  currentCategory: Editor['category']
   editorList: EditorList
-  // TODO map Prisma type
-  completed: string[]
+  completedList: CompletedList
 }
 
 const initialState: EditorSlice = {
   mode: 'Simple',
+  currentCategory: 'general',
   editorList: [{ category: 'general', text: '' }],
-  completed: [],
+  completedList: [],
 }
 
 export const editorSlice = createSlice({
@@ -35,9 +36,12 @@ export const editorSlice = createSlice({
       const { category, text } = action.payload
 
       // Add to completed task
-      state.completed.push(ac)
+      state.completedList.push({ category, title: text, archived: false })
       // remove completed item from editorList
-      const ref = state.s.split(action.payload)
+      const cureentEditor = state.editorList.find(
+        (editor) => editor.category === category,
+      )!
+      const ref = cureentEditor?.text.split(text)
       // Non duplicate scenario
       if (
         Array.isArray(ref) &&
@@ -45,7 +49,7 @@ export const editorSlice = createSlice({
         typeof ref[0] === 'string' &&
         typeof ref[1] === 'string'
       ) {
-        state.simpleEditorText = ref[0] + ref[1]
+        cureentEditor.text = ref[0] + ref[1]
       }
 
       // TODO Duplicate scenario
@@ -53,13 +57,21 @@ export const editorSlice = createSlice({
   },
   selectors: {
     selectEditorMode: (state: EditorSlice) => state.mode,
-    selectSimpleEditorText: (state: EditorSlice) => state.simpleEditorText,
-    selectCompleted: (state: EditorSlice) => state.completed,
+    selectCurrentCategory: (state: EditorSlice) => state.currentCategory,
+    selectCurrenteEditorText: (state: EditorSlice) =>
+      state.editorList?.find(
+        (editor) => editor.category === state.currentCategory,
+      )?.text,
+    selectCompleted: (state: EditorSlice) => state.completedList,
   },
 })
 
 export const { updateEditorMode, setEditorText, setCompleted } =
   editorSlice.actions
 
-export const { selectEditorMode, selectSimpleEditorText, selectCompleted } =
-  editorSlice.selectors
+export const {
+  selectCurrentCategory,
+  selectEditorMode,
+  selectCurrenteEditorText,
+  selectCompleted,
+} = editorSlice.selectors

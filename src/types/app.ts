@@ -17,6 +17,10 @@ export type Category = PrismaCategory
 
 export type CategoryList = Category[]
 
-export type Completed = PrismaCompleted
+export type Completed = Expand<
+  StripDBFields<PrismaCompleted> & {
+    category: Category['name']
+  }
+>
 
 export type CompletedList = Completed[]

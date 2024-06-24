@@ -9,6 +9,15 @@ interface Props {}
 
 export const CompletedView: React.FC<Props> = () => {
   const completed = useAppSelector(selectCompleted)
+  debugger
+  if (!completed) {
+    return (
+      <div className="grid place-content-center text-primary-content">
+        No completed items
+      </div>
+    )
+  }
+
   return (
     <>
       <h2 className="mb-6 text-primary-content">Completed</h2>
@@ -27,7 +36,9 @@ export const CompletedView: React.FC<Props> = () => {
                 clipRule="evenodd"
               />
             </svg>
-            <div className="text-balance">{item}</div>
+            <div className="text-balance">
+              {item.title} - {item.category}
+            </div>
           </li>
         ))}
       </ul>

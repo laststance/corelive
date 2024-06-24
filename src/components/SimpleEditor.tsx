@@ -7,8 +7,9 @@ import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
   setCompleted,
-  selectSimpleEditorText,
+  selectCurrenteEditorText,
   setEditorText,
+  selectCurrentCategory,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 
@@ -17,7 +18,8 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   ...rest
 }) => {
   const dispatch = useAppDispatch()
-  const simpleEditorText = useAppSelector(selectSimpleEditorText)
+  const currentCategory = useAppSelector(selectCurrentCategory)
+  const editorText = useAppSelector(selectCurrenteEditorText)
   const selectedRef = useRef<string>()
 
   // TODO change to CSS based implementation
@@ -43,7 +45,12 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   }
 
   function taskCompleted() {
-    dispatch(setCompleted(selectedRef.current!))
+    dispatch(
+      setCompleted({
+        text: selectedRef.current!,
+        category: currentCategory,
+      }),
+    )
     // TODO add _.defer() to toast
     toast.success('Task Completed! 🎉')
   }
@@ -58,11 +65,15 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     <>
       <textarea
         {...rest}
-        value={simpleEditorText}
+        value={editorText}
         onClick={selectSingleLineText}
         onDoubleClick={onContextMenu}
         onContextMenu={onContextMenu}
-        onChange={(e) => dispatch(setEditorText(e.target.value))}
+        onChange={(e) =>
+          dispatch(
+            setEditorText({ text: e.target.value, category: currentCategory }),
+          )
+        }
         placeholder="Write your task step by step here..."
         className={cn(
           'textarea textarea-bordered textarea-lg h-full w-full max-w-xs',
