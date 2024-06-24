@@ -1,17 +1,18 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { EditorContent } from '@/zod/schema'
+import type { Editor, EditorList } from '@/types/app'
 
 export interface EditorSlice {
-  mode: 'Simple' | 'Plate'
-  simpleEditorText: EditorContent
+  mode: 'Simple' | 'Plate' | 'Todo'
+  editorList: EditorList
+  // TODO map Prisma type
   completed: string[]
 }
 
 const initialState: EditorSlice = {
   mode: 'Simple',
-  simpleEditorText: '',
+  editorList: [{ category: 'general', text: '' }],
   completed: [],
 }
 
@@ -22,17 +23,21 @@ export const editorSlice = createSlice({
     updateEditorMode: (state, action: PayloadAction<EditorSlice['mode']>) => {
       state.mode = action.payload
     },
-    setSimpleEditorText: (
-      state,
-      action: PayloadAction<EditorSlice['simpleEditorText']>,
-    ) => {
-      state.simpleEditorText = action.payload
+    setEditorText: (state, action: PayloadAction<Editor>) => {
+      state.editorList = state.editorList.map((editor) => {
+        if (editor.category === action.payload.category) {
+          editor.text = action.payload.text
+        }
+        return editor
+      })
     },
-    setCompleted: (state, action: PayloadAction<string>) => {
+    setCompleted: (state, action: PayloadAction<Editor>) => {
+      const { category, text } = action.payload
+
       // Add to completed task
-      state.completed.push(action.payload)
-      // remove completed item from simpleEditorText
-      const ref = state.simpleEditorText.split(action.payload)
+      state.completed.push(ac)
+      // remove completed item from editorList
+      const ref = state.s.split(action.payload)
       // Non duplicate scenario
       if (
         Array.isArray(ref) &&
@@ -53,7 +58,7 @@ export const editorSlice = createSlice({
   },
 })
 
-export const { updateEditorMode, setSimpleEditorText, setCompleted } =
+export const { updateEditorMode, setEditorText, setCompleted } =
   editorSlice.actions
 
 export const { selectEditorMode, selectSimpleEditorText, selectCompleted } =

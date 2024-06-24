@@ -5,10 +5,10 @@ import React from 'react'
 import { match } from 'ts-pattern'
 
 import { PlateEditor } from '@/components/PlateEditor'
+import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 import { cn } from '@/lib/utils'
 import { selectEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
-import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 
 export const SimpleEditor = dynamic(
   async () => import('@/components/SimpleEditor'),

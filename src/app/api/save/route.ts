@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   //   // Create an entry in the 'Editor' table
   //   const editor = await prisma.editor.create({
   //     data: {
-  //       text: simpleEditorText,
+  //       text: editorList,
   //       // Assuming 'completed' is a relation to another table
   //       completed: {
   //         create: completed.map(item => ({ title: item })),

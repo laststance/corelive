@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import {
   setCompleted,
   selectSimpleEditorText,
-  setSimpleEditorText,
+  setEditorText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 
@@ -62,7 +62,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
         onClick={selectSingleLineText}
         onDoubleClick={onContextMenu}
         onContextMenu={onContextMenu}
-        onChange={(e) => dispatch(setSimpleEditorText(e.target.value))}
+        onChange={(e) => dispatch(setEditorText(e.target.value))}
         placeholder="Write your task step by step here..."
         className={cn(
           'textarea textarea-bordered textarea-lg h-full w-full max-w-xs',
