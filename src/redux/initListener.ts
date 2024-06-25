@@ -9,7 +9,7 @@ import { createKeybindingsHandler } from 'tinykeys'
 import type { TODO } from '@/types/utility'
 
 export const initListener = {
-  type: 'Run/InitListener',
+  type: 'Emit/InitializeListener',
   effect: save,
 }
 

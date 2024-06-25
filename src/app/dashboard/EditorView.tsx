@@ -41,7 +41,7 @@ export const EditorView: React.FC<Props> = () => {
   const editorMode = useAppSelector(selectEditorMode)
 
   if (firstRender) {
-    dispatch({ type: 'Run/InitListener' })
+    dispatch({ type: 'Emit/InitializeListener' })
   }
 
   return match(editorMode)
