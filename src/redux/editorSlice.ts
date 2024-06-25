@@ -1,20 +1,18 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { CompletedList, Editor, EditorList } from '@/types/app'
+import type { Editor, EditorList } from '@/types/app'
 
 export interface EditorSlice {
   mode: 'Simple' | 'Plate'
   currentCategory: Editor['category']
   editorList: EditorList
-  completedList: CompletedList
 }
 
 const initialState: EditorSlice = {
   mode: 'Simple',
   currentCategory: 'general',
   editorList: [{ category: 'general', text: '' }],
-  completedList: [],
 }
 
 export const editorSlice = createSlice({
@@ -32,11 +30,9 @@ export const editorSlice = createSlice({
         return editor
       })
     },
-    setCompleted: (state, action: PayloadAction<Editor>) => {
+    removeConplatedFromText: (state, action: PayloadAction<Editor>) => {
       const { category, text } = action.payload
 
-      // Add to completed task
-      state.completedList.push({ category, title: text, archived: false })
       // remove completed item from editorList
       const cureentEditor = state.editorList.find(
         (editor) => editor.category === category,
@@ -62,16 +58,14 @@ export const editorSlice = createSlice({
       state.editorList?.find(
         (editor) => editor.category === state.currentCategory,
       )?.text,
-    selectCompleted: (state: EditorSlice) => state.completedList,
   },
 })
 
-export const { updateEditorMode, setEditorText, setCompleted } =
+export const { updateEditorMode, setEditorText, removeConplatedFromText } =
   editorSlice.actions
 
 export const {
   selectCurrentCategory,
   selectEditorMode,
   selectCurrenteEditorText,
-  selectCompleted,
 } = editorSlice.selectors

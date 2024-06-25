@@ -3,10 +3,10 @@
 import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
+import { completeTask } from '@/actions/completeTask'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
-  setCompleted,
   selectCurrenteEditorText,
   setEditorText,
   selectCurrentCategory,
@@ -44,15 +44,13 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     textarea.focus() // Focus the textarea to show the selection
   }
 
-  function taskCompleted() {
-    dispatch(
-      setCompleted({
-        text: selectedRef.current!,
-        category: currentCategory,
-      }),
-    )
-    // TODO add _.defer() to toast
-    toast.success('Task Completed! 🎉')
+  async function taskCompleted() {
+    try {
+      await completeTask(selectedRef.current!, currentCategory)
+      toast.success('Task Completed! 🎉')
+    } catch (error) {
+      toast.error('Failed to complete task')
+    }
   }
 
   const { contextMenu, onContextMenu } = useContextMenu(

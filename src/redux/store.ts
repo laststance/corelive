@@ -18,7 +18,7 @@ import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
 import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
-import { initListener } from '@/redux/initListener'
+import { InitializeListener } from '@/redux/InitializeListener'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
@@ -36,7 +36,7 @@ const persistedReducer = persistReducer(persistConfig, rootReducer)
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
 listenerMiddleware.startListening(drawerListener)
-listenerMiddleware.startListening(initListener)
+listenerMiddleware.startListening(InitializeListener)
 
 // `makeStore` encapsulates the store configuration to allow
 // creating unique store instances, which is particularly important for

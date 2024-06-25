@@ -2,21 +2,10 @@
 
 import React from 'react'
 
-import { selectCompleted } from '@/redux/editorSlice'
-import { useAppSelector } from '@/redux/hooks'
-
 interface Props {}
 
 export const CompletedView: React.FC<Props> = () => {
-  const completed = useAppSelector(selectCompleted)
-  debugger
-  if (!completed) {
-    return (
-      <div className="grid place-content-center text-primary-content">
-        No completed items
-      </div>
-    )
-  }
+  const completed = [{ title: 'todo', category: 'cagagory' }]
 
   return (
     <>

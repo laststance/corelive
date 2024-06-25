@@ -1,7 +1,7 @@
 'use client'
-import { usePathname } from 'next/navigation'
+
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
-import { useEffect, useRef } from 'react'
 import { Provider } from 'react-redux'
 import { persistStore } from 'redux-persist'
 
