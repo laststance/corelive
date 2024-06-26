@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: '%s | Unfarely',
     default: 'Unfarely',
   },
-  description: 'Unfarely convert your leafy tasks to solid experiences.',
+  description: 'Unfarely convert your leafy tasks to solid engagement.',
 }
 
 export interface RootLayoutProps {
