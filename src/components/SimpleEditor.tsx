@@ -13,6 +13,10 @@ import {
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 
+function removeCompletedTaskFromEditor() {
+  console.log('todo')
+}
+
 const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   className,
   ...rest
@@ -47,6 +51,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   async function taskCompleted() {
     try {
       await completeTask(selectedRef.current!, currentCategory)
+      removeCompletedTaskFromEditor()
       toast.success('Task Completed! 🎉')
     } catch (error) {
       toast.error('Failed to complete task')
