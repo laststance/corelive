@@ -7,20 +7,22 @@ const prisma = new PrismaClient()
 
 export async function completeTask(text: string, category: string) {
   try {
-    // Upsert the category
-    const categoryRecord = await prisma.category.upsert({
-      where: { name: category },
-      update: {},
-      create: { name: category },
-    })
+    console.log('completeTask', text, category)
 
-    // Insert the completed task
-    await prisma.completed.create({
-      data: {
-        title: text,
-        categoryId: categoryRecord.id,
-      },
-    })
+    // Upsert the category
+    // const categoryRecord = await prisma.category.upsert({
+    //   where: { name: category },
+    //   update: {},
+    //   create: { name: category },
+    // })
+
+    // // Insert the completed task
+    // await prisma.completed.create({
+    //   data: {
+    //     title: text,
+    //     categoryId: categoryRecord.id,
+    //   },
+    // })
 
     // Revalidate the path to update the UI
     revalidatePath('/dashboard')
