@@ -30,12 +30,15 @@ export const editorSlice = createSlice({
         return editor
       })
     },
-    removeConplatedFromText: (state, action: PayloadAction<Editor>) => {
-      const { category, text } = action.payload
+    removeCompletedTaskFromEditorText: (
+      state,
+      action: PayloadAction<Editor['text']>,
+    ) => {
+      const text = action.payload
 
       // remove completed item from editorList
       const cureentEditor = state.editorList.find(
-        (editor) => editor.category === category,
+        (editor) => editor.category === state.currentCategory,
       )!
       const ref = cureentEditor?.text.split(text)
       // Non duplicate scenario
@@ -61,8 +64,11 @@ export const editorSlice = createSlice({
   },
 })
 
-export const { updateEditorMode, setEditorText, removeConplatedFromText } =
-  editorSlice.actions
+export const {
+  updateEditorMode,
+  setEditorText,
+  removeCompletedTaskFromEditorText,
+} = editorSlice.actions
 
 export const {
   selectCurrentCategory,
