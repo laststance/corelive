@@ -5,11 +5,11 @@ import type {
   User as PrismaUser,
 } from '@prisma/client'
 
-import type { Expand, StripDBFields } from './utility'
+import type { Expand, ConvertDateToString } from './utility'
 
 export type User = Omit<PrismaUser, 'createdAt' | 'updatedAt'>
 export type Editor = Expand<
-  StripDBFields<PrismaEditor> & {
+  ConvertDateToString<PrismaEditor> & {
     category: Category['name']
   }
 >
@@ -19,10 +19,6 @@ export type Category = PrismaCategory
 
 export type CategoryList = Category[]
 
-export type Completed = Expand<
-  StripDBFields<PrismaCompleted> & {
-    category: Category['name']
-  }
->
+export type Completed = PrismaCompleted
 
 export type CompletedList = Completed[]

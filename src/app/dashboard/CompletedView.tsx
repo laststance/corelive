@@ -2,16 +2,18 @@
 
 import React from 'react'
 
-interface Props {}
+import type { TODO } from '@/types/utility'
 
-export const CompletedView: React.FC<Props> = () => {
-  const completed = [{ title: 'todo', category: 'cagagory' }]
+interface Props {
+  completedTasks: TODO
+}
 
+export const CompletedView: React.FC<Props> = ({ completedTasks }) => {
   return (
     <>
       <h2 className="mb-6 text-primary-content">Completed</h2>
       <ul className="flex flex-col gap-0 text-primary-content">
-        {completed.map((item, i) => (
+        {completedTasks.map((item, i) => (
           <li key={i} className="my-0 flex items-center gap-2">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -26,7 +28,7 @@ export const CompletedView: React.FC<Props> = () => {
               />
             </svg>
             <div className="text-balance">
-              {item.title} - {item.category}
+              {item.title} - {item.category.name}
             </div>
           </li>
         ))}

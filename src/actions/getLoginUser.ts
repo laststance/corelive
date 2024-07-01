@@ -12,7 +12,6 @@ export async function getLoginUser() {
       where: { clerkId: clerkId as string },
     })
     return user
-    console.log(user)
   } catch (error) {
     console.error(error)
     return null

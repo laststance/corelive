@@ -7,7 +7,6 @@ export type Expand<T> = T extends (...args: infer A) => infer R
     ? { [K in keyof O]: O[K] }
     : never
 
-export type StripDBFields<T> = Omit<
-  T,
-  'createdAt' | 'updatedAt' | 'id' | 'userId' | 'categoryId'
->
+export type ConvertDateToString<T> = {
+  [K in keyof T]: K extends 'createdAt' | 'updatedAt' ? string : T[K]
+}

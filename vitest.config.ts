@@ -10,6 +10,7 @@ export default defineConfig({
       'src/**/*.{spec,test}.{js,jsx,ts,tsx}',
       'src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     ],
+    exclude: ['src/types/__tests__'],
     setupFiles: ['setupTests.ts'],
   },
   resolve: {
