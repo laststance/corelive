@@ -6,8 +6,24 @@ import { revalidatePath } from 'next/cache'
 const prisma = new PrismaClient()
 
 export async function completeTask(text: string, category: string) {
+  // TODO get user from cler
   try {
     console.log('completeTask', text, category)
+
+    // const categoryRecord = await prisma.category.findFirst({
+    //   where: { name: category },
+    // })
+
+    // insert new category
+    // if (categoryRecord === null) {
+    //   await prisma.category.create({
+    //     data: {
+    //       name: category,
+    //     },
+    //   })
+    // } else {
+    //   console.log('categoryRecord', categoryRecord)
+    // }
 
     // Upsert the category
     // const categoryRecord = await prisma.category.upsert({
