@@ -2,10 +2,12 @@ import type {
   Editor as PrismaEditor,
   Category as PrismaCategory,
   Completed as PrismaCompleted,
+  User as PrismaUser,
 } from '@prisma/client'
 
 import type { Expand, StripDBFields } from './utility'
 
+export type User = Omit<PrismaUser, 'createdAt' | 'updatedAt'>
 export type Editor = Expand<
   StripDBFields<PrismaEditor> & {
     category: Category['name']

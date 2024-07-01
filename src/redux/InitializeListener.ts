@@ -29,5 +29,5 @@ async function save(_action: Action, listenerApi: TODO): Promise<void> {
     },
   })
 
-  window.addEventListener('keydown', handler)
+  window?.addEventListener('keydown', handler)
 }

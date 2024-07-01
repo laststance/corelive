@@ -19,10 +19,11 @@ import { drawerListener } from '@/redux/drawerListener'
 import { drawerSlice } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
 import { InitializeListener } from '@/redux/InitializeListener'
+import { userSlice } from '@/redux/userSlice'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(editorSlice, drawerSlice)
+const rootReducer = combineSlices(editorSlice, drawerSlice, userSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
 
