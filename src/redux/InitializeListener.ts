@@ -28,6 +28,7 @@ async function save(_action: Action, listenerApi: TODO): Promise<void> {
       toast.success(data.message)
     },
   })
-
-  window?.addEventListener('keydown', handler)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handler)
+  }
 }
