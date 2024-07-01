@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { prisma } from '@/lib/prisma'
 import type { Category, User, Editor } from '@/types/app'
 
 export async function completeTask(
@@ -10,37 +11,28 @@ export async function completeTask(
   userId: User['id'],
 ) {
   try {
-    console.log('completeTask', text, category, userId)
-    // const categoryRecord = await prisma.category.findFirst({
-    //   where: { name: category },
-    // })
+    let categoryRecord = await prisma.category.findFirst({
+      where: { name: category },
+    })
 
-    // insert new category
-    // if (categoryRecord === null) {
-    //   await prisma.category.create({
-    //     data: {
-    //       name: category,
-    //     },
-    //   })
-    // } else {
-    //   console.log('categoryRecord', categoryRecord)
-    // }
+    //insert new category
+    if (categoryRecord === null) {
+      categoryRecord = await prisma.category.create({
+        data: {
+          name: category,
+          userId: userId,
+        },
+      })!
+    }
 
-    // Upsert the category
-    // const categoryRecord = await prisma.category.upsert({
-    //   where: { name: category },
-    //   update: {},
-    //   create: { name: category },
-    // })
-
-    // // Insert the completed task
-    // await prisma.completed.create({
-    //   data: {
-    //     title: text,
-    //     categoryId: categoryRecord.id,
-    //   },
-    // })
-
+    // insert new completed task
+    await prisma.completed.create({
+      data: {
+        title: text,
+        categoryId: categoryRecord.id,
+        userId: userId,
+      },
+    })
     // Revalidate the path to update the UI
     revalidatePath('/dashboard')
   } catch (error) {
