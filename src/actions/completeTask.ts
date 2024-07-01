@@ -2,11 +2,15 @@
 
 import { revalidatePath } from 'next/cache'
 
-export async function completeTask(text: string, category: string) {
-  // TODO get user from cler
-  try {
-    console.log('completeTask', text, category)
+import type { Category, User, Editor } from '@/types/app'
 
+export async function completeTask(
+  text: Editor['text'],
+  category: Category['name'],
+  userId: User['id'],
+) {
+  try {
+    console.log('completeTask', text, category, userId)
     // const categoryRecord = await prisma.category.findFirst({
     //   where: { name: category },
     // })

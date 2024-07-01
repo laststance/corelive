@@ -12,6 +12,7 @@ import {
   selectCurrentCategory,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
+import { selectUser } from '@/redux/userSlice'
 
 function removeCompletedTaskFromEditor() {
   console.log('todo')
@@ -24,6 +25,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const dispatch = useAppDispatch()
   const currentCategory = useAppSelector(selectCurrentCategory)
   const editorText = useAppSelector(selectCurrenteEditorText)
+  const user = useAppSelector(selectUser)!
   const selectedRef = useRef<string>()
 
   // TODO change to CSS based implementation
@@ -50,7 +52,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 
   async function taskCompleted() {
     try {
-      await completeTask(selectedRef.current!, currentCategory)
+      await completeTask(selectedRef.current!, currentCategory, user.id)
       removeCompletedTaskFromEditor()
       toast.success('Task Completed! 🎉')
     } catch (error) {
