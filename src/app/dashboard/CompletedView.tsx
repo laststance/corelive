@@ -2,10 +2,10 @@
 
 import React from 'react'
 
-import type { TODO } from '@/types/utility'
+import type { CompletedWithCategory } from '@/types/app'
 
 interface Props {
-  completedTasks: TODO
+  completedTasks: CompletedWithCategory[]
 }
 
 export const CompletedView: React.FC<Props> = ({ completedTasks }) => {

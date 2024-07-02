@@ -5,20 +5,18 @@ import type {
   User as PrismaUser,
 } from '@prisma/client'
 
-import type { Expand, ConvertDateToString } from './utility'
+import type { ConvertDateToString } from '@/types/utility'
 
-export type User = Omit<PrismaUser, 'createdAt' | 'updatedAt'>
-export type Editor = Expand<
-  ConvertDateToString<PrismaEditor> & {
-    category: Category['name']
-  }
->
+export type User = ConvertDateToString<PrismaUser>
+export type Editor = ConvertDateToString<PrismaEditor> & { category: Category }
 export type EditorList = Editor[]
 
-export type Category = PrismaCategory
+export type Category = ConvertDateToString<PrismaCategory>
 
 export type CategoryList = Category[]
 
-export type Completed = PrismaCompleted
+export type Completed = ConvertDateToString<PrismaCompleted>
+
+export type CompletedWithCategory = Completed & { category: Category }
 
 export type CompletedList = Completed[]

@@ -5,14 +5,16 @@ import type { Editor, EditorList } from '@/types/app'
 
 export interface EditorSlice {
   mode: 'Simple' | 'Plate'
-  currentCategory: Editor['category']
+  currentText: Editor['text']
+  currentCategory: Editor['category']['name']
   editorList: EditorList
 }
 
 const initialState: EditorSlice = {
   mode: 'Simple',
   currentCategory: 'general',
-  editorList: [{ category: 'general', text: '' }],
+  currentText: '',
+  editorList: [],
 }
 
 export const editorSlice = createSlice({
@@ -22,13 +24,11 @@ export const editorSlice = createSlice({
     updateEditorMode: (state, action: PayloadAction<EditorSlice['mode']>) => {
       state.mode = action.payload
     },
-    setEditorText: (state, action: PayloadAction<Editor>) => {
-      state.editorList = state.editorList.map((editor) => {
-        if (editor.category === action.payload.category) {
-          editor.text = action.payload.text
-        }
-        return editor
-      })
+    setCurrentText: (
+      state,
+      action: PayloadAction<EditorSlice['currentText']>,
+    ) => {
+      state.currentText = action.payload
     },
     removeCompletedTaskFromEditorText: (
       state,
@@ -36,11 +36,7 @@ export const editorSlice = createSlice({
     ) => {
       const text = action.payload
 
-      // remove completed item from editorList
-      const cureentEditor = state.editorList.find(
-        (editor) => editor.category === state.currentCategory,
-      )!
-      const ref = cureentEditor?.text.split(text)
+      const ref = state.currentText.split(text)
       // Non duplicate scenario
       if (
         Array.isArray(ref) &&
@@ -48,7 +44,7 @@ export const editorSlice = createSlice({
         typeof ref[0] === 'string' &&
         typeof ref[1] === 'string'
       ) {
-        cureentEditor.text = ref[0] + ref[1]
+        state.currentText = ref[0] + ref[1]
       }
 
       // TODO Duplicate scenario
@@ -57,21 +53,15 @@ export const editorSlice = createSlice({
   selectors: {
     selectEditorMode: (state: EditorSlice) => state.mode,
     selectCurrentCategory: (state: EditorSlice) => state.currentCategory,
-    selectCurrenteEditorText: (state: EditorSlice) =>
-      state.editorList?.find(
-        (editor) => editor.category === state.currentCategory,
-      )?.text,
+    selectCurrentText: (state: EditorSlice) => state.currentText,
   },
 })
 
 export const {
   updateEditorMode,
-  setEditorText,
+  setCurrentText,
   removeCompletedTaskFromEditorText,
 } = editorSlice.actions
 
-export const {
-  selectCurrentCategory,
-  selectEditorMode,
-  selectCurrenteEditorText,
-} = editorSlice.selectors
+export const { selectCurrentCategory, selectEditorMode, selectCurrentText } =
+  editorSlice.selectors

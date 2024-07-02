@@ -1,15 +1,24 @@
-# Use folllowing project wide tech stack
+- Use English for all Copilot++ suggenstion, code, comments, and documentation
+- Never use Japanese for Copilot++ suggenstion
+- Use folllowing project wide tech stack
 
-# Tech Stack
+- Tech Stack
+  - Next.js App Router
+  - Prisma ORM
+  - PostgreSQL
+  - Tailwind CSS
+  - Daisy UI
+  - TypeScript
+  - ESLint
+  - Prettier
+  - Vercel
 
-- Next.js App Router
-
-## Unit/Component Testing
-- vitest
-- @testing-library/dom
-- @testing-library/react
-- @testing-library/user-event
-- happy-dom
-- @testing-library/jest-dom/vitest
-- never use @testing-library/react-hooks. It's not maintained and has a lot of issues. Use @testing-library/react instead
+- Unit/Component Testing
+  - vitest
+  - @testing-library/dom
+  - @testing-library/react
+  - @testing-library/user-event
+  - happy-dom
+  - @testing-library/jest-dom
+  - never use @testing-library/react-hooks. It's not maintained and has a lot of issues. Use @testing-library/react instead
 

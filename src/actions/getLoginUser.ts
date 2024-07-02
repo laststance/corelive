@@ -3,14 +3,15 @@
 import { auth } from '@clerk/nextjs/server'
 
 import { prisma } from '@/lib/prisma'
+import type { User } from '@/types/app'
 
-export async function getLoginUser() {
+export async function getLoginUser(): Promise<User | null> {
   try {
     const { userId: clerkId } = auth()
     const user = await prisma.user.findFirst({
-      omit: { createdAt: true, updatedAt: true },
       where: { clerkId: clerkId as string },
     })
+    // @ts-ignore
     return user
   } catch (error) {
     console.error(error)

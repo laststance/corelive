@@ -7,8 +7,8 @@ import { completeTask } from '@/actions/completeTask'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
-  selectCurrenteEditorText,
-  setEditorText,
+  selectCurrentText,
+  setCurrentText,
   selectCurrentCategory,
   removeCompletedTaskFromEditorText,
 } from '@/redux/editorSlice'
@@ -21,7 +21,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 }) => {
   const dispatch = useAppDispatch()
   const currentCategory = useAppSelector(selectCurrentCategory)
-  const editorText = useAppSelector(selectCurrenteEditorText)
+  const editorText = useAppSelector(selectCurrentText)
   const user = useAppSelector(selectUser)!
   const selectedRef = useRef<string>()
 
@@ -71,11 +71,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
         onClick={selectSingleLineText}
         onDoubleClick={onContextMenu}
         onContextMenu={onContextMenu}
-        onChange={(e) =>
-          dispatch(
-            setEditorText({ text: e.target.value, category: currentCategory }),
-          )
-        }
+        onChange={(e) => dispatch(setCurrentText(e.target.value))}
         placeholder="Write your task step by step here..."
         className={cn(
           'textarea textarea-bordered textarea-lg h-full w-full max-w-xs',
