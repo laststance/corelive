@@ -6,7 +6,19 @@ export type Expand<T> = T extends (...args: infer A) => infer R
   : T extends infer O
     ? { [K in keyof O]: O[K] }
     : never
-
 export type ConvertDateToString<T> = {
-  [K in keyof T]: K extends 'createdAt' | 'updatedAt' ? string : T[K]
+  [K in keyof T]: T[K] extends Date
+    ? string
+    : T[K] extends object
+      ? ConvertDateToString<Exclude<T[K], Date>>
+      : T[K]
+}
+export type TransformDateToString<T> = {
+  [K in keyof T]: T[K] extends Date
+    ? string
+    : T[K] extends Array<infer U>
+      ? Array<TransformDateToString<U>>
+      : T[K] extends object
+        ? TransformDateToString<T[K]>
+        : T[K]
 }
