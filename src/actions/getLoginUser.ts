@@ -1,9 +1,9 @@
 'use server'
 
 import { auth } from '@clerk/nextjs/server'
-import type { User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import type { User } from '@/types/app'
 
 export async function getLoginUser(): Promise<User | null> {
   try {
@@ -11,7 +11,7 @@ export async function getLoginUser(): Promise<User | null> {
     const user = await prisma.user.findFirst({
       where: { clerkId: clerkId as string },
     })
-    return user
+    return user as unknown as User
   } catch (error) {
     console.error(error)
     return null
