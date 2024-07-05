@@ -5,7 +5,7 @@ import React from 'react'
 import type { CompletedWithCategory } from '@/types/app'
 
 interface Props {
-  completedTasks: CompletedWithCategory[]
+  completedTasks: CompletedWithCategory
 }
 
 export const CompletedView: React.FC<Props> = ({ completedTasks }) => {
