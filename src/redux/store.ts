@@ -1,4 +1,4 @@
-import type { Action, ListenerEffectAPI, ThunkAction } from '@reduxjs/toolkit'
+import type { Action, ThunkAction } from '@reduxjs/toolkit'
 import {
   combineSlices,
   configureStore,
@@ -23,7 +23,6 @@ import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
 import { userSlice } from '@/redux/userSlice'
 
-type AppListenerEffectAPI = ListenerEffectAPI<RootState, AppDispatch, unknown>
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
 const rootReducer = combineSlices(editorSlice, drawerSlice, userSlice)
@@ -39,18 +38,22 @@ const persistedReducer = persistReducer(persistConfig, rootReducer)
 
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
+const startAppListening = listenerMiddleware.startListening.withTypes<
+  RootState,
+  AppDispatch
+>()
 
-listenerMiddleware.startListening({
+startAppListening({
   actionCreator: toggleDrawer,
-  effect: (_action: Action, listenerApi: AppListenerEffectAPI) => {
+  effect: (_action: Action, listenerApi) => {
     const checkbox = document.querySelector('#sidebar') as HTMLInputElement
     checkbox.checked = listenerApi.getState().Drawer.drawer
   },
 })
 
-listenerMiddleware.startListening({
+startAppListening({
   type: 'Emit/InitializeListener',
-  effect: async (_action: Action, listenerApi: AppListenerEffectAPI) => {
+  effect: async (_action: Action, listenerApi) => {
     const handler = createKeybindingsHandler({
       '$mod+S': async (e: KeyboardEvent) => {
         e.preventDefault()
