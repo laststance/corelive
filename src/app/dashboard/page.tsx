@@ -27,12 +27,18 @@ const Page = async () => {
     include: { category: true },
   })
 
+  const count = await prisma.completed.count({
+    where: { userId: userRecord?.id },
+  })
+
   return (
     <div className="grid min-h-screen grid-cols-1 gap-4 lg:grid-cols-2">
       <section className="h-[49vh]">
         <EditorView />
       </section>
-      <section className="prose prose-xl prose-slate h-[49vh] rounded-md border border-neutral-content p-4"></section>
+      <section className="prose prose-xl prose-slate grid h-[49vh] place-content-center rounded-md border border-neutral-content p-4">
+        <h1>{count} EXP</h1>
+      </section>
       <section className="prose prose-xl prose-slate flex h-[48vh] flex-col items-center rounded-md bg-neutral-content p-4">
         <CompletedView completedTasks={completedTasks} />
       </section>
