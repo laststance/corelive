@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 // @ts-expect-error TODO replace @laststance version package later
 import { createKeybindingsHandler } from 'tinykeys'
 
-import type { AppListenerEffectAPI, RootState } from '@/redux/store'
+import type { AppListenerEffectAPI } from '@/redux/store'
 
 export const InitializeListener = {
   type: 'Emit/InitializeListener',

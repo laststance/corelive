@@ -36,7 +36,9 @@ const persistedReducer = persistReducer(persistConfig, rootReducer)
 
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
+// @ts-ignore shouldn't resolved as require "predicate" overload pattern
 listenerMiddleware.startListening(drawerListener)
+// @ts-ignore shouldn't resolved as require "predicate" overload pattern
 listenerMiddleware.startListening(InitializeListener)
 
 // `makeStore` encapsulates the store configuration to allow
