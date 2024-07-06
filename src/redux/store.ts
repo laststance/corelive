@@ -4,6 +4,7 @@ import {
   configureStore,
   createListenerMiddleware,
 } from '@reduxjs/toolkit'
+import axios from 'axios'
 import {
   persistReducer,
   FLUSH,
@@ -14,13 +15,15 @@ import {
   REGISTER,
 } from 'redux-persist'
 import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
+import { toast } from 'sonner'
+// @ts-expect-error TODO replace @laststance version package later
+import { createKeybindingsHandler } from 'tinykeys'
 
-import { drawerListener } from '@/redux/drawerListener'
-import { drawerSlice } from '@/redux/drawerSlice'
+import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
 import { editorSlice } from '@/redux/editorSlice'
-import { InitializeListener } from '@/redux/InitializeListener'
 import { userSlice } from '@/redux/userSlice'
 
+type AppListenerEffectAPI = ListenerEffectAPI<RootState, AppDispatch, unknown>
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
 const rootReducer = combineSlices(editorSlice, drawerSlice, userSlice)
@@ -36,10 +39,38 @@ const persistedReducer = persistReducer(persistConfig, rootReducer)
 
 // Setup Listener Mddleware
 const listenerMiddleware = createListenerMiddleware()
-// @ts-ignore shouldn't resolved as require "predicate" overload pattern
-listenerMiddleware.startListening(drawerListener)
-// @ts-ignore shouldn't resolved as require "predicate" overload pattern
-listenerMiddleware.startListening(InitializeListener)
+
+listenerMiddleware.startListening({
+  actionCreator: toggleDrawer,
+  effect: (_action: Action, listenerApi: AppListenerEffectAPI) => {
+    const checkbox = document.querySelector('#sidebar') as HTMLInputElement
+    checkbox.checked = listenerApi.getState().Drawer.drawer
+  },
+})
+
+listenerMiddleware.startListening({
+  type: 'Emit/InitializeListener',
+  effect: async (_action: Action, listenerApi: AppListenerEffectAPI) => {
+    const handler = createKeybindingsHandler({
+      '$mod+S': async (e: KeyboardEvent) => {
+        e.preventDefault()
+        const store = listenerApi.getState()
+
+        const editorList = store.Editor.editorList
+        const completed = store.Editor.currentCategory
+
+        const { data } = await axios.post('/api/save', {
+          editorList,
+          completed,
+        })
+        toast.success(data.message)
+      },
+    })
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handler)
+    }
+  },
+})
 
 // `makeStore` encapsulates the store configuration to allow
 // creating unique store instances, which is particularly important for
@@ -66,10 +97,4 @@ export type AppThunk<ThunkReturnType = void> = ThunkAction<
   RootState,
   unknown,
   Action
->
-
-export type AppListenerEffectAPI = ListenerEffectAPI<
-  RootState,
-  AppDispatch,
-  unknown
 >
