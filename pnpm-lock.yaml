@@ -151,8 +151,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0(vitest@1.6.0)
       daisyui:
-        specifier: ^4.12.2
-        version: 4.12.2(postcss@8.4.38)
+        specifier: ^4.12.10
+        version: 4.12.10(postcss@8.4.38)
       eslint:
         specifier: ^8.56.0
         version: 8.57.0
@@ -1908,8 +1908,8 @@ packages:
     resolution: {integrity: sha512-e1U46jVP+w7Iut8Jt8ri1YsPOvFpg46k+K8TpCb0P+zjCkjkPnV7WzfDJzMHy1LnA+wj5pLT1wjO901gLXeEhA==}
     engines: {node: '>=12'}
 
-  daisyui@4.12.2:
-    resolution: {integrity: sha512-ed3EFwPRLN+9+/MYPRB1pYjk6plRCBMobfBdSeB3voAS81KdL2pCKtbwJfUUpDdOnJ0F8T6oRdVX02P6UCD0Hg==}
+  daisyui@4.12.10:
+    resolution: {integrity: sha512-jp1RAuzbHhGdXmn957Z2XsTZStXGHzFfF0FgIOZj3Wv9sH7OZgLfXTRZNfKVYxltGUOBsG1kbWAdF5SrqjebvA==}
     engines: {node: '>=16.9.0'}
 
   damerau-levenshtein@1.0.8:
@@ -5739,7 +5739,7 @@ snapshots:
       d3-transition: 3.0.1(d3-selection@3.0.0)
       d3-zoom: 3.0.0
 
-  daisyui@4.12.2(postcss@8.4.38):
+  daisyui@4.12.10(postcss@8.4.38):
     dependencies:
       css-selector-tokenizer: 0.8.0
       culori: 3.3.0
