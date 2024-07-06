@@ -4,19 +4,21 @@ import { toast } from 'sonner'
 // @ts-expect-error TODO replace @laststance version package later
 import { createKeybindingsHandler } from 'tinykeys'
 
-import type { RootState } from '@/redux/store'
-import type { TODO } from '@/types/utility'
+import type { AppListenerEffectAPI, RootState } from '@/redux/store'
 
 export const InitializeListener = {
   type: 'Emit/InitializeListener',
   effect: save,
 }
 
-async function save(_action: Action, listenerApi: TODO): Promise<void> {
+async function save(
+  _action: Action,
+  listenerApi: AppListenerEffectAPI,
+): Promise<void> {
   const handler = createKeybindingsHandler({
     '$mod+S': async (e: KeyboardEvent) => {
       e.preventDefault()
-      const store = listenerApi.getState() as RootState
+      const store = listenerApi.getState()
 
       const editorList = store.Editor.editorList
       const completed = store.Editor.currentCategory

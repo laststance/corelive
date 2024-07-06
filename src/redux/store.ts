@@ -1,4 +1,4 @@
-import type { Action, ThunkAction } from '@reduxjs/toolkit'
+import type { Action, ListenerEffectAPI, ThunkAction } from '@reduxjs/toolkit'
 import {
   combineSlices,
   configureStore,
@@ -64,4 +64,10 @@ export type AppThunk<ThunkReturnType = void> = ThunkAction<
   RootState,
   unknown,
   Action
+>
+
+export type AppListenerEffectAPI = ListenerEffectAPI<
+  RootState,
+  AppDispatch,
+  unknown
 >
