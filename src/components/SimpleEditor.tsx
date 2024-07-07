@@ -27,8 +27,6 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 
   // TODO change to CSS based implementation
   function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
-    event.preventDefault()
-
     const textarea = event.target as HTMLTextAreaElement
     const text = textarea.value
     const cursorPosition = textarea.selectionStart
@@ -63,14 +61,18 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     </>,
   )
 
+  function handleOnContextMenu(event: React.MouseEvent<HTMLTextAreaElement>) {
+    selectSingleLineText(event)
+    onContextMenu(event)
+  }
+
   return (
     <>
       <textarea
         {...rest}
         value={editorText}
-        onClick={selectSingleLineText}
-        onDoubleClick={onContextMenu}
-        onContextMenu={onContextMenu}
+        onDoubleClick={selectSingleLineText}
+        onContextMenu={handleOnContextMenu}
         onChange={(e) => dispatch(setCurrentText(e.target.value))}
         placeholder="Write your task step by step here..."
         className={cn(
