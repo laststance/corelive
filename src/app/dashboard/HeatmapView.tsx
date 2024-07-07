@@ -13,7 +13,9 @@ export default function HeatmapView() {
   if (firstRender && !document.getElementById('cal-heatmap')) {
     // @ts-ignore This expression is not constructable. Type 'typeof import("/Users/ryota.murakami/unfarely/node_modules/.pnpm/@types+cal-heatmap@3.5.39/node_modules/@types/cal-heatmap/index")' has no construct signatures.
     const cal = new CalHeatmap()
-    cal.paint({ theme: 'dark' }, [[Tooltip]])
+    cal.paint({ domain: { type: 'month' }, subDomain: { type: 'day' } }, [
+      [Tooltip],
+    ])
   }
 
   return <div id="cal-heatmap"></div>
