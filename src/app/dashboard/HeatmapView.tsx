@@ -15,7 +15,7 @@ export default function HeatmapView() {
     const cal = new CalHeatmap()
     cal.paint(
       {
-        domain: { type: 'month' },
+        domain: { type: 'month', sort: 'desc' },
         subDomain: { type: 'day' },
       },
       [[Tooltip]],
