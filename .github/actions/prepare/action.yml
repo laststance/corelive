@@ -16,4 +16,7 @@ runs:
     - name: Install dependencies
       run: pnpm install
       shell: bash
+    - name: Install Prisma Client
+      run: pnpm prisma generate
+      shell: bash
   using: composite
