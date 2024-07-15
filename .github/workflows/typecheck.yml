@@ -1,0 +1,14 @@
+name: Typecheck
+on:
+  pull_request: ~
+  push:
+    branches:
+      - main
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+      - name: Typecheck
+        run: pnpm typecheck
