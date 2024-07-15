@@ -3,7 +3,6 @@ import path from 'node:path'
 import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
-    reporters: ['html'],
     environment: 'happy-dom',
     globals: true,
     include: [

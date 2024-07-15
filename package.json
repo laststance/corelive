@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest",
+    "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
     "prettier": "prettier --ignore-unknown --write .",
     "lint": "eslint . --ext .ts,.tsx,.js,jsx,cjs,mjs",
