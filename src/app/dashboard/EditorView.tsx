@@ -1,14 +1,16 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import React from 'react'
+import React, { useEffect } from 'react'
 import { match } from 'ts-pattern'
 
+import { getLoginUser } from '@/actions/getLoginUser'
 import { PlateEditor } from '@/components/PlateEditor'
 import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 import { cn } from '@/lib/utils'
 import { selectEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
+import { setUser } from '@/redux/userSlice'
 
 const SimpleEditor = dynamic(async () => import('@/components/SimpleEditor'), {
   ssr: false,
@@ -34,12 +36,15 @@ interface Props {}
 
 export const EditorView: React.FC<Props> = () => {
   const dispatch = useAppDispatch()
-  const firstRender = useIsFirstRender()
   const editorMode = useAppSelector(selectEditorMode)
-
-  if (firstRender) {
+  useEffect(() => {
     dispatch({ type: 'Emit/InitializeListener' })
-  }
+    const fetchUser = async () => {
+      const user = await getLoginUser()
+      dispatch(setUser(user))
+    }
+    fetchUser()
+  }, [])
 
   return match(editorMode)
     .with('Simple', () => (

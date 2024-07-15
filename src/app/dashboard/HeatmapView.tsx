@@ -19,6 +19,9 @@ export default function HeatmapView() {
       },
       [[Tooltip]],
     )
+    return () => {
+      cal.destroy()
+    }
   }, [])
 
   return <div id="cal-heatmap"></div>
