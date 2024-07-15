@@ -69,9 +69,7 @@ startAppListening({
         toast.success(data.message)
       },
     })
-    if (typeof window !== 'undefined') {
-      window.addEventListener('keydown', handler)
-    }
+    window.addEventListener('keydown', handler)
   },
 })
 

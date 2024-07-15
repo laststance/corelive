@@ -16,7 +16,7 @@ interface Props {
   readonly children: ReactNode
 }
 
-export const ReduxProvider = ({ children }: Props) => {
+const ReduxProvider = ({ children }: Props) => {
   const storeRef = useRef<AppStore | null>(null)
   const pathname = usePathname()
 
@@ -38,3 +38,5 @@ export const ReduxProvider = ({ children }: Props) => {
 
   return <Provider store={storeRef.current}>{children}</Provider>
 }
+
+export default ReduxProvider

@@ -20,5 +20,11 @@ describe('useIsFirstRender', () => {
 
     // Now it should return false
     expect(result.current).toBe(false)
+
+    // Re-render the hook
+    rerender()
+
+    // Now it should return false
+    expect(result.current).toBe(false)
   })
 })
