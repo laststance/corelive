@@ -6,7 +6,6 @@ import { match } from 'ts-pattern'
 
 import { getLoginUser } from '@/actions/getLoginUser'
 import { PlateEditor } from '@/components/PlateEditor'
-import { useIsFirstRender } from '@/hooks/useIsFirstRender'
 import { cn } from '@/lib/utils'
 import { selectEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'

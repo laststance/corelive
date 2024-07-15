@@ -1,12 +1,9 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
 import { persistStore } from 'redux-persist'
-
-import { getLoginUser } from '@/actions/getLoginUser'
-import { setUser } from '@/redux/userSlice'
 
 import type { AppStore } from './store'
 import { makeStore } from './store'
