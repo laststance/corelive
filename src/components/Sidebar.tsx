@@ -4,7 +4,7 @@ import { PanelLeftOpen } from 'lucide-react'
 import React, { type ComponentProps } from 'react'
 
 import { SignoutButton } from '@/components/SignoutButton'
-import { cn } from '@/lib/utils'
+import { cn, getModalDOM } from '@/lib/utils'
 import { toggleDrawer } from '@/redux/drawerSlice'
 import { selectEditorMode, updateEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
@@ -72,26 +72,12 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
             </div>
           </li>
           <li>
-            <div className="dropdown dropdown-bottom">
-              <div
-                tabIndex={0}
-                role="button"
-                className="btn btn-neutral btn-wide"
-              >
-                Dropdown Item 2
-              </div>
-              <ul
-                tabIndex={0}
-                className="menu dropdown-content z-[1] w-52 rounded-box bg-base-100 p-2 shadow"
-              >
-                <li>
-                  <div>Item 1</div>
-                </li>
-                <li>
-                  <div>Item 2</div>
-                </li>
-              </ul>
-            </div>
+            <button
+              className="btn btn-neutral btn-md"
+              onClick={() => getModalDOM('new_category_modal').showModal()}
+            >
+              New Category
+            </button>
           </li>
           <div className="divider" />
           <li>
