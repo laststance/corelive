@@ -9,7 +9,7 @@ export const NewCategoryDialog: React.FC<Props> = () => {
     <dialog id="new_category_modal" className="modal">
       <div className="modal-box">
         <h1 className="text-xl font-bold">New Category</h1>
-        <Spacer size="3xs" />
+        <Spacer size="h-3xs" />
         <form>
           <input
             type="text"
