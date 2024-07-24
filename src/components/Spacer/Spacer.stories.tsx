@@ -9,7 +9,9 @@ const meta: Meta<typeof Spacer> = {
   decorators: [
     (Story) => (
       <div className="grid place-content-start">
-        <h1 className="text-4xl font-bold dark:text-white">Breaking News</h1>
+        <h1 className="flex text-4xl font-bold dark:text-white">
+          Breaking{<Story />} News
+        </h1>
         <Story />
         <p className="dark:text-white">News deitals article...</p>
       </div>
@@ -21,66 +23,131 @@ export default meta
 
 type Story = StoryObj<typeof Spacer>
 
-export const _4xs: Story = {
+export const H4xs: Story = {
   args: {
-    size: '4xs',
+    size: 'h-4xs',
+  },
+}
+export const H3xs: Story = {
+  args: {
+    size: 'h-3xs',
   },
 }
 
-export const _3xs: Story = {
+export const H2xs: Story = {
   args: {
-    size: '3xs',
+    size: 'h-2xs',
+  },
+}
+export const H_xs: Story = {
+  args: {
+    size: 'h-xs',
+  },
+}
+export const H_sm: Story = {
+  args: {
+    size: 'h-sm',
   },
 }
 
-export const _2xs: Story = {
+export const H_md: Story = {
   args: {
-    size: '2xs',
-  },
-}
-export const Xs: Story = {
-  args: {
-    size: 'xs',
-  },
-}
-export const Sm: Story = {
-  args: {
-    size: 'sm',
+    size: 'h-md',
   },
 }
 
-export const Md: Story = {
+export const H_lg: Story = {
   args: {
-    size: 'md',
+    size: 'h-lg',
   },
 }
 
-export const Lg: Story = {
+export const H_xl: Story = {
   args: {
-    size: 'lg',
+    size: 'h-xl',
   },
 }
 
-export const Xl: Story = {
+export const H_2xl: Story = {
   args: {
-    size: 'xl',
+    size: 'h-2xl',
   },
 }
 
-export const _2xl: Story = {
+export const H_3xl: Story = {
   args: {
-    size: '2xl',
+    size: 'h-3xl',
   },
 }
 
-export const _3xl: Story = {
+export const H_4xl: Story = {
   args: {
-    size: '3xl',
+    size: 'h-4xl',
   },
 }
 
-export const _4xl: Story = {
+export const W_4xs: Story = {
   args: {
-    size: '4xl',
+    size: 'w-4xs',
+  },
+}
+
+export const W_3xs: Story = {
+  args: {
+    size: 'w-3xs',
+  },
+}
+
+export const W_2xs: Story = {
+  args: {
+    size: 'w-2xs',
+  },
+}
+
+export const W_xs: Story = {
+  args: {
+    size: 'w-xs',
+  },
+}
+
+export const W_sm: Story = {
+  args: {
+    size: 'w-sm',
+  },
+}
+
+export const W_md: Story = {
+  args: {
+    size: 'w-md',
+  },
+}
+
+export const W_lg: Story = {
+  args: {
+    size: 'w-lg',
+  },
+}
+
+export const W_xl: Story = {
+  args: {
+    size: 'w-xl',
+  },
+}
+
+export const W_2xl: Story = {
+  args: {
+    size: 'w-2xl',
+  },
+}
+
+export const W_3xl: Story = {
+  args: {
+    size: 'w-3xl',
+  },
+}
+
+export const W_4xl: Story = {
+  args: {
+    size: 'w-4xl',
   },
 }

@@ -6,53 +6,97 @@ export const Spacer = function Spacer({
   /**
    * The size of the space
    *
-   * 4xs: h-4 (16px)
+   * h-4xs: h-4 (16px)
    *
-   * 3xs: h-8 (32px)
+   * h-3xs: h-8 (32px)
    *
-   * 2xs: h-12 (48px)
+   * h-2xs: h-12 (48px)
    *
-   * xs: h-16 (64px)
+   * h-xs: h-16 (64px)
    *
-   * sm: h-20 (80px)
+   * h-sm: h-20 (80px)
    *
-   * md: h-24 (96px)
+   * h-md: h-24 (96px)
    *
-   * lg: h-28 (112px)
+   * h-lg: h-28 (112px)
    *
-   * xl: h-32 (128px)
+   * h-xl: h-32 (128px)
    *
-   * 2xl: h-36 (144px)
+   * h-2xl: h-36 (144px)
    *
-   * 3xl: h-40 (160px)
+   * h-3xl: h-40 (160px)
    *
-   * 4xl: h-44 (176px)
+   * h-4xl: h-44 (176px)
+   *
+   * w-4xs: w-4 (16px)
+   *
+   * w-3xs: w-8 (32px)
+   *
+   * w-2xs: w-12 (48px)
+   *
+   * w-xs: w-16 (64px)
+   *
+   * w-sm: w-20 (80px)
+   *
+   * w-md: w-24 (96px)
+   *
+   * w-lg: w-28 (112px)
+   *
+   * w-xl: w-32 (128px)
+   *
+   * w-2xl: w-36 (144px)
+   *
+   * w-3xl: w-40 (160px)
+   *
+   * w-4xl: w-44 (176px)
    */
   size:
-    | '4xs'
-    | '3xs'
-    | '2xs'
-    | 'xs'
-    | 'sm'
-    | 'md'
-    | 'lg'
-    | 'xl'
-    | '2xl'
-    | '3xl'
-    | '4xl'
+    | 'h-4xs'
+    | 'h-3xs'
+    | 'h-2xs'
+    | 'h-xs'
+    | 'h-sm'
+    | 'h-md'
+    | 'h-lg'
+    | 'h-xl'
+    | 'h-2xl'
+    | 'h-3xl'
+    | 'h-4xl'
+    | 'w-4xs'
+    | 'w-3xs'
+    | 'w-2xs'
+    | 'w-xs'
+    | 'w-sm'
+    | 'w-md'
+    | 'w-lg'
+    | 'w-xl'
+    | 'w-2xl'
+    | 'w-3xl'
+    | 'w-4xl'
 }) {
   const options: Record<typeof size, string> = {
-    '4xs': 'h-4',
-    '3xs': 'h-8',
-    '2xs': 'h-12',
-    xs: 'h-16',
-    sm: 'h-20',
-    md: 'h-24',
-    lg: 'h-28',
-    xl: 'h-32',
-    '2xl': 'h-36',
-    '3xl': 'h-40',
-    '4xl': 'h-44',
+    'h-4xs': 'h-4',
+    'h-3xs': 'h-8',
+    'h-2xs': 'h-12',
+    'h-xs': 'h-16',
+    'h-sm': 'h-20',
+    'h-md': 'h-24',
+    'h-lg': 'h-28',
+    'h-xl': 'h-32',
+    'h-2xl': 'h-36',
+    'h-3xl': 'h-40',
+    'h-4xl': 'h-44',
+    'w-4xs': 'w-4',
+    'w-3xs': 'w-8',
+    'w-2xs': 'w-12',
+    'w-xs': 'w-16',
+    'w-sm': 'w-20',
+    'w-md': 'w-24',
+    'w-lg': 'w-28',
+    'w-xl': 'w-32',
+    'w-2xl': 'w-36',
+    'w-3xl': 'w-40',
+    'w-4xl': 'w-44',
   }
   const className = options[size]
   return <div className={className} />
