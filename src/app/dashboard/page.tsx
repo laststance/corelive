@@ -1,4 +1,4 @@
-import { auth, clerkClient } from '@clerk/nextjs/server'
+import { auth } from '@clerk/nextjs/server'
 import dynamic from 'next/dynamic'
 import React from 'react'
 
@@ -13,13 +13,8 @@ const HeatmapView = dynamic(async () => import('./HeatmapView'), {
 })
 
 const Page = async () => {
-  const { userId } = auth().protect()
-
-  const user = await clerkClient.users.getUser(userId)
-  if (!user) return null
-
   const userRecord = await prisma.user.findFirst({
-    where: { clerkId: userId },
+    where: { clerkId: auth().userId! },
   })
 
   const completedTasks = await prisma.completed.findMany({
