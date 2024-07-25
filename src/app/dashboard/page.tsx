@@ -17,14 +17,15 @@ const Page = async () => {
     where: { clerkId: auth().userId! },
   })
 
-  const completedTasks = await prisma.completed.findMany({
-    where: { userId: userRecord?.id },
-    include: { category: true },
-  })
-
-  const count = await prisma.completed.count({
-    where: { userId: userRecord?.id },
-  })
+  const [completedTasks, count] = await Promise.all([
+    prisma.completed.findMany({
+      where: { userId: userRecord?.id },
+      include: { category: true },
+    }),
+    prisma.completed.count({
+      where: { userId: userRecord?.id },
+    }),
+  ])
 
   return (
     <div className="grid min-h-screen grid-cols-1 gap-4 lg:grid-cols-2">
