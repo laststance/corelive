@@ -23,7 +23,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const currentCategory = useAppSelector(selectCurrentCategory)
   const editorText = useAppSelector(selectCurrentText)
   const user = useAppSelector(selectUser)!
-  const selectedRef = useRef<string>()
+  const selectedRef = useRef<string>('')
 
   // TODO change to CSS based implementation
   function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
