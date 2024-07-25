@@ -67,7 +67,8 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   }
 
   return (
-    <>
+    <div className="flex h-full flex-col">
+      <h2 className="mx-auto pt-2 text-2xl font-bold">{currentCategory}</h2>
       <textarea
         {...rest}
         value={editorText}
@@ -81,7 +82,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
         )}
       ></textarea>
       {contextMenu}
-    </>
+    </div>
   )
 }
 
