@@ -4,10 +4,11 @@ import dynamic from 'next/dynamic'
 import React, { useEffect } from 'react'
 import { match } from 'ts-pattern'
 
+import { getCategories } from '@/actions/category'
 import { getLoginUser } from '@/actions/getLoginUser'
 import { PlateEditor } from '@/components/PlateEditor'
 import { cn } from '@/lib/utils'
-import { selectEditorMode } from '@/redux/editorSlice'
+import { selectEditorMode, setCategories } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { setUser } from '@/redux/userSlice'
 
@@ -38,11 +39,13 @@ export const EditorView: React.FC<Props> = () => {
   const editorMode = useAppSelector(selectEditorMode)
   useEffect(() => {
     dispatch({ type: 'Emit/InitializeListener' })
-    const fetchUser = async () => {
+    const fetchUserAndCategories = async () => {
       const user = await getLoginUser()
+      const categories = await getCategories(user.id)
       dispatch(setUser(user))
+      dispatch(setCategories(categories))
     }
-    fetchUser()
+    fetchUserAndCategories()
   }, [])
 
   return match(editorMode)

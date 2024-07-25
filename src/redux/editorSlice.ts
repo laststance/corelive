@@ -1,13 +1,15 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { Editor, EditorList } from '@/types/app'
+import type { Category, Editor, EditorList } from '@/types/app'
 
 export interface EditorSlice {
   mode: 'Simple' | 'Plate'
   currentText: Editor['text']
   currentCategory: Editor['category']['name']
   editorList: EditorList
+
+  categories: Category[]
 }
 
 const initialState: EditorSlice = {
@@ -15,6 +17,7 @@ const initialState: EditorSlice = {
   currentCategory: 'general',
   currentText: '',
   editorList: [],
+  categories: [],
 }
 
 export const editorSlice = createSlice({
@@ -29,6 +32,9 @@ export const editorSlice = createSlice({
       action: PayloadAction<EditorSlice['currentText']>,
     ) => {
       state.currentText = action.payload
+    },
+    setCategories: (state, action: PayloadAction<Category[]>) => {
+      state.categories = action.payload
     },
     removeCompletedTaskFromEditorText: (
       state,
@@ -60,6 +66,7 @@ export const editorSlice = createSlice({
 export const {
   updateEditorMode,
   setCurrentText,
+  setCategories,
   removeCompletedTaskFromEditorText,
 } = editorSlice.actions
 
