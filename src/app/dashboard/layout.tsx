@@ -3,8 +3,8 @@ import { Toaster } from 'sonner'
 // TODO Use this way https://react.dev/blog/2024/04/25/react-19#support-for-stylesheets
 import '@/lib/use-context-menu/styles.css'
 
-import { NewCategoryDialog } from '@/app/dashboard/NewCategoryDialog'
 import type { RootLayoutProps } from '@/app/layout'
+import { NewCategoryDialog } from '@/components/NewCategoryDialog'
 import Sidebar from '@/components/Sidebar'
 
 export const metadata = {

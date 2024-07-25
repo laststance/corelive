@@ -21,9 +21,10 @@ export const userSlice = createSlice({
   },
   selectors: {
     selectUser: (state: UserSlice) => state.user,
+    selectUserId: (state: UserSlice) => state.user?.id,
   },
 })
 
 export const { setUser } = userSlice.actions
 
-export const { selectUser } = userSlice.selectors
+export const { selectUser, selectUserId } = userSlice.selectors
