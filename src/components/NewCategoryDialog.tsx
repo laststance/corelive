@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect } from 'react'
 import { useFormStatus } from 'react-dom'
+import { toast } from 'sonner'
 
 import { createCategory } from '@/actions/category'
 import { Spacer } from '@/components/Spacer'
@@ -18,6 +19,13 @@ export const NewCategoryDialog: React.FC<Props> = () => {
     errors: undefined,
   })
   const { pending } = useFormStatus()
+
+  useEffect(() => {
+    if (state.success) {
+      document.getElementById('close_category_modal')?.click()
+      toast.success('Category created successfully!')
+    }
+  }, [state.success])
 
   return (
     <dialog id="new_category_modal" className="modal">
@@ -48,7 +56,7 @@ export const NewCategoryDialog: React.FC<Props> = () => {
         </form>
       </div>
       <form method="dialog" className="modal-backdrop">
-        <button>close</button>
+        <button id="close_category_modal">close</button>
       </form>
     </dialog>
   )
