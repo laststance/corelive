@@ -45,7 +45,7 @@ export function ContextMenu({
     x: 0,
     y: 0,
   })
-
+  // @ts-ignore
   useModalDismissSignal(ref, hide, true)
 
   // Optimally position the popup within the viewport

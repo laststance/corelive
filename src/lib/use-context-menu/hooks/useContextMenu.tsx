@@ -50,6 +50,7 @@ export function useContextMenu(
 
   const [state, setState] = useState<State | null>(null)
 
+  // @ts-ignore
   const menuRef = useRef<HTMLDivElement>()
   const menuItemsRef = useRef<HTMLDivElement[]>([])
 
@@ -236,6 +237,7 @@ export function useContextMenu(
   if (state) {
     contextMenu = (
       <ContextMenuContext.Provider value={context}>
+        {/* @ts-ignore */}
         <ContextMenu
           alignTo={alignTo}
           className={className}
