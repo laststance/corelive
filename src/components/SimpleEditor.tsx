@@ -22,7 +22,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const dispatch = useAppDispatch()
   const currentCategory = useAppSelector(selectCurrentCategory)
   const editorText = useAppSelector(selectCurrentText)
-  const user = useAppSelector(selectUser)!
+  const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
 
   // TODO change to CSS based implementation
@@ -48,7 +48,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   async function taskCompleted() {
     try {
       dispatch(removeCompletedTaskFromEditorText(selectedRef.current!))
-      await completeTask(selectedRef.current!, currentCategory, user.id)
+      await completeTask(selectedRef.current!, currentCategory, user?.id)
       toast.success('Task Completed! 🎉')
     } catch (error) {
       toast.error('Failed to complete task')
