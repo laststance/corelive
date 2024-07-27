@@ -6,7 +6,7 @@ import { match } from 'ts-pattern'
 
 import { getCategories } from '@/actions/category'
 import { getLoginUser } from '@/actions/getLoginUser'
-import { PlateEditor } from '@/components/PlateEditor'
+import { TodoEditor } from '@/components/TodoEditor'
 import { cn } from '@/lib/utils'
 import { selectEditorMode, setCategories } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
@@ -52,6 +52,6 @@ export const EditorView: React.FC<Props> = () => {
     .with('Simple', () => (
       <SimpleEditor className="mt-8 h-[calc(100%-4rem)] w-full max-w-xl text-xl" />
     ))
-    .with('Plate', () => <PlateEditor className="mt-8 flex items-center" />)
+    .with('Todo', () => <TodoEditor className="mt-8 flex items-center" />)
     .exhaustive()
 }

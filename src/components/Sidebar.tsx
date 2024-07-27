@@ -1,6 +1,6 @@
 'use client'
 
-import { PanelLeftOpen } from 'lucide-react'
+import { DivideCircle, PanelLeftOpen } from 'lucide-react'
 import React, { type ComponentProps } from 'react'
 
 import { SignoutButton } from '@/components/SignoutButton'
@@ -35,13 +35,9 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
           <hr className="divider mb-0" />
           <li className="grid place-content-center">
             <div className="dropdown dropdown-bottom">
-              <div
-                tabIndex={0}
-                role="button"
-                className="btn btn-neutral btn-wide"
-              >
+              <button tabIndex={0} className="btn btn-neutral btn-wide">
                 Editor Mode
-              </div>
+              </button>
               <ul
                 tabIndex={0}
                 className="menu dropdown-content z-[1] w-52 rounded-box bg-base-100 p-2 shadow"
@@ -59,13 +55,13 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
                 </li>
                 <li>
                   <div
-                    className={cn({ active: editorMode === 'Plate' })}
+                    className={cn({ active: editorMode === 'Todo' })}
                     onClick={() => {
-                      dispatch(updateEditorMode('Plate'))
+                      dispatch(updateEditorMode('Todo'))
                       dispatch(toggleDrawer())
                     }}
                   >
-                    Plate
+                    Todo
                   </div>
                 </li>
               </ul>

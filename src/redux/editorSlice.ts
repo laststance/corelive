@@ -4,7 +4,7 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 import type { Category, Editor, EditorList } from '@/types/app'
 
 export interface EditorSlice {
-  mode: 'Simple' | 'Plate'
+  mode: 'Simple' | 'Todo'
   currentText: Editor['text']
   currentCategory: Editor['category']['name']
   editorList: EditorList
