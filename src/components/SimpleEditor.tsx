@@ -47,8 +47,9 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 
   async function taskCompleted() {
     try {
+      if (user === null) throw new Error('User not found')
       dispatch(removeCompletedTaskFromEditorText(selectedRef.current!))
-      await completeTask(selectedRef.current!, currentCategory, user?.id)
+      await completeTask(selectedRef.current!, currentCategory, user.id)
       toast.success('Task Completed! 🎉')
     } catch (error) {
       toast.error('Failed to complete task')
