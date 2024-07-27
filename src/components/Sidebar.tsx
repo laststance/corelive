@@ -1,6 +1,6 @@
 'use client'
 
-import { DivideCircle, PanelLeftOpen } from 'lucide-react'
+import { PanelLeftOpen } from 'lucide-react'
 import React, { type ComponentProps } from 'react'
 
 import { SignoutButton } from '@/components/SignoutButton'
