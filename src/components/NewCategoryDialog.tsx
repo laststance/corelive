@@ -32,7 +32,7 @@ export const NewCategoryDialog: React.FC<Props> = () => {
       <div className="modal-box">
         <h1 className="text-xl font-bold">New Category</h1>
         <Spacer size="h-3xs" />
-        <form method="dialog" action={action}>
+        <form action={action}>
           <input
             type="text"
             name="category"
