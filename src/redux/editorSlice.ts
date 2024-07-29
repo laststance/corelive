@@ -59,6 +59,7 @@ export const editorSlice = createSlice({
   selectors: {
     selectEditorMode: (state: EditorSlice) => state.mode,
     selectCurrentCategory: (state: EditorSlice) => state.currentCategory,
+    selectCategories: (state: EditorSlice) => state.categories,
     selectCurrentText: (state: EditorSlice) => state.currentText,
   },
 })
@@ -70,5 +71,9 @@ export const {
   removeCompletedTaskFromEditorText,
 } = editorSlice.actions
 
-export const { selectCurrentCategory, selectEditorMode, selectCurrentText } =
-  editorSlice.selectors
+export const {
+  selectCurrentCategory,
+  selectEditorMode,
+  selectCurrentText,
+  selectCategories,
+} = editorSlice.selectors

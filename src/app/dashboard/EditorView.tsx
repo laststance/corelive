@@ -50,8 +50,8 @@ export const EditorView: React.FC<Props> = () => {
 
   return match(editorMode)
     .with('Simple', () => (
-      <SimpleEditor className="mt-8 h-[calc(100%-4rem)] w-full max-w-xl text-xl" />
+      <SimpleEditor className="h-full w-full max-w-xl text-xl" />
     ))
-    .with('Todo', () => <TodoEditor className="mt-8 flex items-center" />)
+    .with('Todo', () => <TodoEditor />)
     .exhaustive()
 }

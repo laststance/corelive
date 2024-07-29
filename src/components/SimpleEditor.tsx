@@ -1,15 +1,23 @@
 'use client'
 
+import { ChevronsUpDown } from 'lucide-react'
 import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
 import { completeTask } from '@/actions/completeTask'
+import {
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownToggle,
+} from '@/components/Dropdown'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
   selectCurrentText,
   setCurrentText,
   selectCurrentCategory,
+  selectCategories,
   removeCompletedTaskFromEditorText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
@@ -21,6 +29,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 }) => {
   const dispatch = useAppDispatch()
   const currentCategory = useAppSelector(selectCurrentCategory)
+  const categories = useAppSelector(selectCategories)
   const editorText = useAppSelector(selectCurrentText)
   const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
@@ -68,8 +77,23 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   }
 
   return (
-    <div className="flex h-full flex-col items-center">
-      <h2 className="pt-2 text-2xl font-bold">{currentCategory}</h2>
+    <section className="flex h-full flex-col items-center gap-2">
+      <div className="flex items-center gap-4">
+        <h2 className="text-2xl font-bold">{currentCategory}</h2>
+        <Dropdown>
+          <DropdownToggle
+            button={false}
+            className="btn btn-ghost btn-xs h-8 border border-base-content/20"
+          >
+            <ChevronsUpDown size={16} />
+          </DropdownToggle>
+          <DropdownMenu className="w-44">
+            {categories.map((category) => (
+              <DropdownItem key={category.id}>{category.name}</DropdownItem>
+            ))}
+          </DropdownMenu>
+        </Dropdown>
+      </div>
       <textarea
         {...rest}
         value={editorText}
@@ -83,7 +107,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
         )}
       ></textarea>
       {contextMenu}
-    </div>
+    </section>
   )
 }
 
