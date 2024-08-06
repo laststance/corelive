@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Styles the main scrollbar track */
+::-webkit-scrollbar {
+  width: 4px; /* Width of the scrollbar */
+  height: 4px;
+}
+
+/* Styles the scrollbar handle */
+::-webkit-scrollbar-thumb {
+  background: rgb(128, 128, 128);
+  border-radius: 7.5px; /* Makes the thumb rounded */
+}
+
+/* Styles the scrollbar track */
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0); /* Black background for the track */
+  border-radius: 7.5px; /* Makes the track rounded */
+}
+
+/* Handle on hover - making it a bit lighter to simulate hover effect */
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(128, 128, 128);
+}
