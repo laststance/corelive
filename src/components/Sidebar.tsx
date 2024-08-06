@@ -75,6 +75,14 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
               New Category
             </button>
           </li>
+          <li>
+            <button
+              className="btn btn-neutral btn-md"
+              onClick={() => getModalDOM('edit_category_modal').showModal()}
+            >
+              Edit Category
+            </button>
+          </li>
           <div className="divider" />
           <li>
             <SignoutButton />

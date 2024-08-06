@@ -4,6 +4,7 @@ import { Toaster } from 'sonner'
 import '@/lib/use-context-menu/styles.css'
 
 import type { RootLayoutProps } from '@/app/layout'
+import { EditCategoryDialog } from '@/components/EditCategoryDialog'
 import { NewCategoryDialog } from '@/components/NewCategoryDialog'
 import Sidebar from '@/components/Sidebar'
 
@@ -18,6 +19,7 @@ const Layout: React.FC<RootLayoutProps> = ({ children }) => {
       <Sidebar className="absolute z-[1]" />
       <main className="container mx-auto ml-40 min-h-screen">{children}</main>
       <NewCategoryDialog />
+      <EditCategoryDialog />
     </>
   )
 }
