@@ -5,7 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["omitApi"]
 }
 
@@ -26,24 +26,13 @@ model Completed {
   updatedAt  DateTime @updatedAt
 }
 
-model Editor {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  category   Category @relation(fields: [categoryId], references: [id])
-  categoryId Int
-  text       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
 model Category {
   id        Int         @id @default(autoincrement())
   name      String      @db.VarChar(255)
   User      User?       @relation(fields: [userId], references: [id])
   userId    Int?
   completed Completed[]
-  Editor    Editor[]
+  text      String      @default("")
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
@@ -55,7 +44,6 @@ model User {
   name      String?
   bio       String?
   completed Completed[]
-  editor    Editor[]
   category  Category[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
