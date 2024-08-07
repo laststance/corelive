@@ -19,13 +19,13 @@ import { toast } from 'sonner'
 // @ts-expect-error TODO replace @laststance version package later
 import { createKeybindingsHandler } from 'tinykeys'
 
+import { categorySlice } from '@/redux/categorySlice'
 import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
-import { editorSlice } from '@/redux/editorSlice'
 import { userSlice } from '@/redux/userSlice'
 
 // `combineSlices` automatically combines the reducers using
 // their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(editorSlice, drawerSlice, userSlice)
+const rootReducer = combineSlices(categorySlice, drawerSlice, userSlice)
 // Infer the `RootState` type from the root reducer
 export type RootState = ReturnType<typeof rootReducer>
 
@@ -59,12 +59,12 @@ startAppListening({
         e.preventDefault()
         const store = listenerApi.getState()
 
-        const editorList = store.Editor.editorList
-        const completed = store.Editor.currentCategory
+        const LSRecord = store.Category.LSRecord
+        const currentCategory = store.Category.currentCategory
 
         const { data } = await axios.post('/api/save', {
-          editorList,
-          completed,
+          LSRecord,
+          currentCategory,
         })
         toast.success(data.message)
       },

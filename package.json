@@ -59,7 +59,7 @@
   "devDependencies": {
     "@chromatic-com/storybook": "^1.6.1",
     "@clerk/types": "^4.9.0",
-    "@prisma/client": "5.17.0",
+    "@prisma/client": "5.18.0",
     "@storybook/addon-essentials": "^8.2.6",
     "@storybook/addon-interactions": "^8.2.6",
     "@storybook/addon-links": "^8.2.6",
@@ -102,7 +102,7 @@
     "postcss": "^8.4.40",
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.5",
-    "prisma": "^5.17.0",
+    "prisma": "^5.18.0",
     "rimraf": "^6.0.1",
     "storybook": "^8.2.6",
     "tailwindcss": "^3.4.6",

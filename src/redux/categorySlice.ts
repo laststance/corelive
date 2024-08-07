@@ -1,35 +1,35 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { Category, Editor, EditorList } from '@/types/app'
+import type { Category, Text } from '@/types/app'
 
-export interface EditorSlice {
+export interface CategorySlice {
   mode: 'Simple' | 'Todo'
-  currentText: Editor['text']
-  currentCategory: Editor['category']['name']
-  editorList: EditorList
+  currentText: Text['text']
+  currentCategory: Category['name']
+  LSRecord: Record<Category['name'], Text['text']>
 
   categories: Category[]
 }
 
-const initialState: EditorSlice = {
+const initialState: CategorySlice = {
   mode: 'Simple',
   currentCategory: 'general',
   currentText: '',
-  editorList: [],
+  LSRecord: {},
   categories: [],
 }
 
-export const editorSlice = createSlice({
-  name: 'Editor',
+export const categorySlice = createSlice({
+  name: 'Category',
   initialState,
   reducers: {
-    updateEditorMode: (state, action: PayloadAction<EditorSlice['mode']>) => {
+    updateEditorMode: (state, action: PayloadAction<CategorySlice['mode']>) => {
       state.mode = action.payload
     },
     setCurrentText: (
       state,
-      action: PayloadAction<EditorSlice['currentText']>,
+      action: PayloadAction<CategorySlice['currentText']>,
     ) => {
       state.currentText = action.payload
     },
@@ -43,7 +43,7 @@ export const editorSlice = createSlice({
     },
     removeCompletedTaskFromEditorText: (
       state,
-      action: PayloadAction<Editor['text']>,
+      action: PayloadAction<Text['text']>,
     ) => {
       const text = action.payload
 
@@ -62,10 +62,10 @@ export const editorSlice = createSlice({
     },
   },
   selectors: {
-    selectEditorMode: (state: EditorSlice) => state.mode,
-    selectCurrentCategory: (state: EditorSlice) => state.currentCategory,
-    selectCategories: (state: EditorSlice) => state.categories,
-    selectCurrentText: (state: EditorSlice) => state.currentText,
+    selectEditorMode: (state: CategorySlice) => state.mode,
+    selectCurrentCategory: (state: CategorySlice) => state.currentCategory,
+    selectCategories: (state: CategorySlice) => state.categories,
+    selectCurrentText: (state: CategorySlice) => state.currentText,
   },
 })
 
@@ -75,11 +75,11 @@ export const {
   setCategories,
   removeCompletedTaskFromEditorText,
   removeCategory,
-} = editorSlice.actions
+} = categorySlice.actions
 
 export const {
   selectCurrentCategory,
   selectEditorMode,
   selectCurrentText,
   selectCategories,
-} = editorSlice.selectors
+} = categorySlice.selectors

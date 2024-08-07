@@ -8,7 +8,7 @@ import { getCategories } from '@/actions/category'
 import { getLoginUser } from '@/actions/getLoginUser'
 import { TodoEditor } from '@/components/TodoEditor'
 import { cn } from '@/lib/utils'
-import { selectEditorMode, setCategories } from '@/redux/editorSlice'
+import { selectEditorMode, setCategories } from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { setUser } from '@/redux/userSlice'
 

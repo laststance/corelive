@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import { deleteCategory } from '@/actions/deleteCategory'
 import { Spacer } from '@/components/Spacer'
-import { removeCategory, selectCategories } from '@/redux/editorSlice'
+import { removeCategory, selectCategories } from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUserId } from '@/redux/userSlice'
 

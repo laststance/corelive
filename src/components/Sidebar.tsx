@@ -6,7 +6,7 @@ import React, { type ComponentProps } from 'react'
 import { SignoutButton } from '@/components/SignoutButton'
 import { cn, getModalDOM } from '@/lib/utils'
 import { toggleDrawer } from '@/redux/drawerSlice'
-import { selectEditorMode, updateEditorMode } from '@/redux/editorSlice'
+import { selectEditorMode, updateEditorMode } from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 
 const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {

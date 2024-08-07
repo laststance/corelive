@@ -19,7 +19,7 @@ import {
   selectCurrentCategory,
   selectCategories,
   removeCompletedTaskFromEditorText,
-} from '@/redux/editorSlice'
+} from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUser } from '@/redux/userSlice'
 
