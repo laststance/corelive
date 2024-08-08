@@ -37,7 +37,6 @@
     "cal-heatmap": "^4.2.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "cmdk": "^1.0.0",
     "d3": "^7.9.0",
     "dayjs": "^1.11.12",
     "next": "15.0.0-rc.0",
