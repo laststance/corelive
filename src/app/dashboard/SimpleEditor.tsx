@@ -4,7 +4,7 @@ import { ChevronsUpDown } from 'lucide-react'
 import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
-import { completeTask } from '@/actions/completeTask'
+import { createCompleted } from '@/actions/createCompleted'
 import {
   Dropdown,
   DropdownItem,
@@ -62,7 +62,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     try {
       if (user === null) throw new Error('User not found')
       dispatch(removeCompletedTaskFromEditorText(selectedRef.current!))
-      await completeTask(selectedRef.current!, currentCategory, user.id)
+      await createCompleted(selectedRef.current!, currentCategory, user.id)
       toast.success('Task Completed! 🎉')
     } catch (error) {
       toast.error('Failed to complete task')
