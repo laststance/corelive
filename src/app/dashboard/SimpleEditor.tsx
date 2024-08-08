@@ -30,9 +30,13 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const dispatch = useAppDispatch()
   const currentCategory = useAppSelector(selectCurrentCategory)
   const categories = useAppSelector(selectCategories)
-  const editorText = useAppSelector(selectCurrentText)
+  const currentText = useAppSelector(selectCurrentText)
   const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
+
+  function handleClickCategory() {
+    console.log('TODO')
+  }
 
   // TODO change to CSS based implementation
   function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
@@ -89,14 +93,16 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
           </DropdownToggle>
           <DropdownMenu className="w-44">
             {categories.map((category) => (
-              <DropdownItem key={category.id}>{category.name}</DropdownItem>
+              <DropdownItem onClick={handleClickCategory} key={category.id}>
+                {category.name}
+              </DropdownItem>
             ))}
           </DropdownMenu>
         </Dropdown>
       </div>
       <textarea
         {...rest}
-        value={editorText}
+        value={currentText}
         onDoubleClick={selectSingleLineText}
         onContextMenu={handleOnContextMenu}
         onChange={(e) => dispatch(setCurrentText(e.target.value))}

@@ -23,8 +23,8 @@ export const EditCategoryDialog: React.FC<Props> = () => {
         <Spacer size="h-3xs" />
         <section className="grid grid-cols-2 gap-2 p-4">
           {categories.map((category) => (
-            <>
-              <div key={category.id}>{category.name}</div>
+            <div key={category.id}>
+              <div>{category.name}</div>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={async () => {
@@ -35,7 +35,7 @@ export const EditCategoryDialog: React.FC<Props> = () => {
               >
                 <Trash2 />
               </button>
-            </>
+            </div>
           ))}
         </section>
 

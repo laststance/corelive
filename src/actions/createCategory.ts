@@ -5,7 +5,7 @@ import type { ZodError } from 'zod'
 import z from 'zod'
 
 import { prisma } from '@/lib/prisma'
-import type { Category, User } from '@/types/app'
+import type { User } from '@/types/app'
 
 const schema = z.object({
   category: z
@@ -34,7 +34,7 @@ export async function createCategory(
     })
 
     if (!categoryRecord) {
-      throw new Error('DB Error creating category')
+      throw new Error('DB Error when creating category')
     }
     revalidatePath('/dashboard')
     return {
@@ -46,14 +46,4 @@ export async function createCategory(
       errors: validatedFields.error.flatten().fieldErrors,
     }
   }
-}
-
-export async function getCategories(userId: User['id']): Promise<Category[]> {
-  const categories = await prisma.category.findMany({
-    where: {
-      userId: userId,
-    },
-  })
-
-  return categories as unknown as Category[]
 }

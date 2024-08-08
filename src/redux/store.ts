@@ -32,7 +32,7 @@ export type RootState = ReturnType<typeof rootReducer>
 const persistConfig = {
   key: 'unfarly',
   storage: createWebStorage('local'),
-  whitelist: ['Editor'],
+  whitelist: ['Category'],
 }
 const persistedReducer = persistReducer(persistConfig, rootReducer)
 
@@ -58,12 +58,9 @@ startAppListening({
       '$mod+S': async (e: KeyboardEvent) => {
         e.preventDefault()
         const store = listenerApi.getState()
-
-        const LSRecord = store.Category.LSRecord
         const currentCategory = store.Category.currentCategory
 
         const { data } = await axios.post('/api/save', {
-          LSRecord,
           currentCategory,
         })
         toast.success(data.message)

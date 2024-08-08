@@ -7,8 +7,6 @@ export interface CategorySlice {
   mode: 'Simple' | 'Todo'
   currentText: Text['text']
   currentCategory: Category['name']
-  LSRecord: Record<Category['name'], Text['text']>
-
   categories: Category[]
 }
 
@@ -16,7 +14,6 @@ const initialState: CategorySlice = {
   mode: 'Simple',
   currentCategory: 'general',
   currentText: '',
-  LSRecord: {},
   categories: [],
 }
 
@@ -37,9 +34,9 @@ export const categorySlice = createSlice({
       state.categories = action.payload
     },
     removeCategory: (state, action: PayloadAction<Category['id']>) => {
-      state.categories = state.categories.filter(
-        (category) => category.id !== action.payload,
-      )
+      state.categories = state.categories.filter((category) => {
+        return category.id !== action.payload
+      })
     },
     removeCompletedTaskFromEditorText: (
       state,

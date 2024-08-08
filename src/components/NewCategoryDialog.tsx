@@ -4,14 +4,16 @@ import { useActionState, useEffect } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
 
-import { createCategory } from '@/actions/category'
+import { createCategory } from '@/actions/createCategory'
 import { Spacer } from '@/components/Spacer'
-import { useAppSelector } from '@/redux/hooks'
+import { toggleDrawer } from '@/redux/drawerSlice'
+import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUserId } from '@/redux/userSlice'
 
 interface Props {}
 
 export const NewCategoryDialog: React.FC<Props> = () => {
+  const dispatch = useAppDispatch()
   const id = useAppSelector(selectUserId)!
   const createCategoryWithUserId = createCategory.bind(null, id)
   const [state, action] = useActionState(createCategoryWithUserId, {
@@ -23,6 +25,7 @@ export const NewCategoryDialog: React.FC<Props> = () => {
   useEffect(() => {
     if (state.success) {
       document.getElementById('close_category_modal')?.click()
+      dispatch(toggleDrawer())
       toast.success('Category created successfully!')
     }
   }, [state.success])

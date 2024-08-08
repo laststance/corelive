@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 // TODO
 export async function POST(req: Request) {
-  const { editorList, completed } = await req.json()
+  const reqBody = await req.json()
 
   // Start a transaction to ensure data consistency
   // const result = await prisma.$transaction(async (prisma) => {
