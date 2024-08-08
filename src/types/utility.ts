@@ -22,3 +22,14 @@ export type TransformDateToString<T> = {
         ? TransformDateToString<T[K]>
         : T[K]
 }
+
+export namespace ToastMessage {
+  export type Success = {
+    message: string
+    type: 'success'
+  }
+  export type Error = {
+    message: string
+    type: 'error'
+  }
+}

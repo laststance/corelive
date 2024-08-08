@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
-import type { Category, User, Text } from '@/types/app'
+import type { Category, User } from '@/types/prisma'
 
 export async function createCompleted(
-  text: Text['text'],
+  text: Category['text'],
   category: Category['name'],
   userId: User['id'],
 ) {

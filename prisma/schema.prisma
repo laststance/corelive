@@ -32,20 +32,10 @@ model Category {
   User      User?       @relation(fields: [userId], references: [id])
   userId    Int?
   completed Completed[]
-  text      Text?
+  text      String      @default("")
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
-
-model Text {
-  id        Int         @id @default(autoincrement())
-  text      String      @db.VarChar(255)
-  Category  Category    @relation(fields: [categoryId], references: [id])
-  categoryId Int        @unique
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-}
-
 model User {
   id        Int         @id @default(autoincrement())
   clerkId   String      @unique

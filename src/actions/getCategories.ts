@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import type { User, Category } from '@/types/app'
+import type { User, Category } from '@/types/prisma'
 
 export async function getCategories(userId: User['id']): Promise<Category[]> {
   const categories = await prisma.category.findMany({

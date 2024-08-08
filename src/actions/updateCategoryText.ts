@@ -1,25 +1,29 @@
 'use server'
-
 import { revalidatePath } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
-import type { Category, User } from '@/types/prisma'
+import type { User, Category } from '@/types/prisma'
 import type { ToastMessage } from '@/types/utility'
 
-export async function deleteCategory(
+export async function updateCategoryText(
   userId: User['id'],
   categoryId: Category['id'],
+  categoryText: Category['text'],
 ): Promise<ToastMessage.Success> {
-  await prisma.category.delete({
+  await prisma.category.update({
     where: {
       id: categoryId,
       userId: userId,
     },
+    data: {
+      text: categoryText,
+    },
   })
 
   revalidatePath('/dashboard')
+
   return {
-    message: 'Category deleted',
+    message: 'Category text updated',
     type: 'success',
   }
 }

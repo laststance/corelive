@@ -5,7 +5,7 @@ import type { ZodError } from 'zod'
 import z from 'zod'
 
 import { prisma } from '@/lib/prisma'
-import type { User } from '@/types/app'
+import type { User } from '@/types/prisma'
 
 const schema = z.object({
   category: z

@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { User } from '@/types/app'
+import type { User } from '@/types/prisma'
 
 export interface UserSlice {
   user: User | null

@@ -1,5 +1,4 @@
 import type {
-  Text as PrismaText,
   Category as PrismaCategory,
   Completed as PrismaCompleted,
   User as PrismaUser,
@@ -8,9 +7,7 @@ import type {
 import type { ConvertDateToString } from '@/types/utility'
 
 export type User = ConvertDateToString<PrismaUser>
-export type Text = ConvertDateToString<PrismaText>
 export type Category = ConvertDateToString<PrismaCategory>
-
 export type CategoryList = Category[]
 
 export type Completed = ConvertDateToString<PrismaCompleted>

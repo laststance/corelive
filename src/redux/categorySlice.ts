@@ -1,11 +1,11 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-import type { Category, Text } from '@/types/app'
+import type { Category } from '@/types/prisma'
 
 export interface CategorySlice {
   mode: 'Simple' | 'Todo'
-  currentText: Text['text']
+  currentText: Category['text']
   currentCategory: Category['name']
   categories: Category[]
 }
@@ -40,7 +40,7 @@ export const categorySlice = createSlice({
     },
     removeCompletedTaskFromEditorText: (
       state,
-      action: PayloadAction<Text['text']>,
+      action: PayloadAction<Category['text']>,
     ) => {
       const text = action.payload
 

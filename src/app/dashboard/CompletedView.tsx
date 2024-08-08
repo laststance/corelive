@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-import type { CompletedWithCategory } from '@/types/app'
+import type { CompletedWithCategory } from '@/types/prisma'
 
 interface Props {
   completedTasks: CompletedWithCategory

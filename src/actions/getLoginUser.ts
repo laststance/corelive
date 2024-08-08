@@ -3,7 +3,7 @@
 import { auth } from '@clerk/nextjs/server'
 
 import { prisma } from '@/lib/prisma'
-import type { User } from '@/types/app'
+import type { User } from '@/types/prisma'
 
 export async function getLoginUser(): Promise<User> {
   const { userId: clerkId } = auth()
