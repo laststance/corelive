@@ -4,7 +4,7 @@ import { useActionState, useEffect } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
 
-import { createCategory } from '@/actions/createCategory'
+import { createCategoryFormAction } from '@/actions/createCategoryFormAction'
 import { Spacer } from '@/components/Spacer'
 import { toggleDrawer } from '@/redux/drawerSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
@@ -15,7 +15,7 @@ interface Props {}
 export const NewCategoryDialog: React.FC<Props> = () => {
   const dispatch = useAppDispatch()
   const id = useAppSelector(selectUserId)!
-  const createCategoryWithUserId = createCategory.bind(null, id)
+  const createCategoryWithUserId = createCategoryFormAction.bind(null, id)
   const [state, action] = useActionState(createCategoryWithUserId, {
     success: false,
     errors: undefined,

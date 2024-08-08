@@ -4,11 +4,16 @@ import dynamic from 'next/dynamic'
 import React, { useEffect } from 'react'
 import { match } from 'ts-pattern'
 
+import { createCategory } from '@/actions/createCategory'
 import { getCategories } from '@/actions/getCategories'
 import { getLoginUser } from '@/actions/getLoginUser'
 import { TodoEditor } from '@/components/TodoEditor'
 import { cn } from '@/lib/utils'
-import { selectEditorMode, setCategories } from '@/redux/categorySlice'
+import {
+  selectCurrentCategory,
+  selectEditorMode,
+  setCategories,
+} from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { setUser } from '@/redux/userSlice'
 
@@ -40,11 +45,16 @@ interface Props {}
 export const EditorView: React.FC<Props> = () => {
   const dispatch = useAppDispatch()
   const editorMode = useAppSelector(selectEditorMode)
+  const currentCategory = useAppSelector(selectCurrentCategory)
   useEffect(() => {
     dispatch({ type: 'Emit/InitializeListener' })
     const fetchUserAndCategories = async () => {
       const user = await getLoginUser()
       const categories = await getCategories(user.id)
+      if (categories.length === 0) {
+        const defaultCategory = await createCategory(user.id, currentCategory)
+        categories.push(defaultCategory)
+      }
       dispatch(setUser(user))
       dispatch(setCategories(categories))
     }

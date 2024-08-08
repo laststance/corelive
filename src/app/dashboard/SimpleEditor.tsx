@@ -1,5 +1,6 @@
 'use client'
 
+import { ChevronsUpDown } from 'lucide-react'
 import React, { type ComponentProps, useRef } from 'react'
 import { toast } from 'sonner'
 
@@ -76,8 +77,18 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       <div className="flex items-center gap-4">
         <h2 className="text-2xl font-bold">{currentCategory}</h2>
         <Dropdown
-          Button={<summary className="btn m-1">Icon</summary>}
-          List={categories.map((category) => category.name)}
+          Button={
+            <summary className="btn btn-circle btn-ghost m-1">
+              <ChevronsUpDown />
+            </summary>
+          }
+          MenuList={categories.map((category) => {
+            return (
+              <li className="cursor-pointer text-lg" key={category.id}>
+                <a>{category.name}</a>
+              </li>
+            )
+          })}
         />
       </div>
       <textarea

@@ -33,3 +33,7 @@ export namespace ToastMessage {
     type: 'error'
   }
 }
+
+export namespace ServerAction {
+  export type Result = 'success' | 'error'
+}

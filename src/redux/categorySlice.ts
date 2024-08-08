@@ -21,6 +21,16 @@ export const categorySlice = createSlice({
   name: 'Category',
   initialState,
   reducers: {
+    switchCategory: (
+      state,
+      action: PayloadAction<{
+        currentCategory: CategorySlice['currentCategory']
+        currentText: CategorySlice['currentText']
+      }>,
+    ) => {
+      state.currentCategory = action.payload.currentCategory
+      state.currentText = action.payload.currentText
+    },
     updateEditorMode: (state, action: PayloadAction<CategorySlice['mode']>) => {
       state.mode = action.payload
     },
@@ -29,6 +39,12 @@ export const categorySlice = createSlice({
       action: PayloadAction<CategorySlice['currentText']>,
     ) => {
       state.currentText = action.payload
+    },
+    setCurrentCategory: (
+      state,
+      action: PayloadAction<CategorySlice['currentCategory']>,
+    ) => {
+      state.currentCategory = action.payload
     },
     setCategories: (state, action: PayloadAction<Category[]>) => {
       state.categories = action.payload

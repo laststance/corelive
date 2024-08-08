@@ -59,7 +59,7 @@ startAppListening({
         e.preventDefault()
         const store = listenerApi.getState()
         const currentCategory = store.Category.currentCategory
-
+        // @TODO convert to server actions from rest api
         const { data } = await axios.post('/api/save', {
           currentCategory,
         })
