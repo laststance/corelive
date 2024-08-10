@@ -16,6 +16,7 @@ import {
 } from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { setUser } from '@/redux/userSlice'
+import type { Category, User } from '@/types/prisma'
 
 const SimpleEditor = dynamic(
   async () => import('@/app/dashboard/SimpleEditor'),
@@ -40,25 +41,19 @@ const SimpleEditor = dynamic(
   },
 )
 
-interface Props {}
+interface Props {
+  user: User
+  categories: Category[]
+}
 
-export const EditorView: React.FC<Props> = () => {
+export const EditorView: React.FC<Props> = ({ user, categories }) => {
   const dispatch = useAppDispatch()
   const editorMode = useAppSelector(selectEditorMode)
-  const currentCategory = useAppSelector(selectCurrentCategory)
+  dispatch(setUser(user))
+  dispatch(setCategories(categories))
+
   useEffect(() => {
     dispatch({ type: 'Emit/InitializeListener' })
-    const fetchUserAndCategories = async () => {
-      const user = await getLoginUser()
-      const categories = await getCategories(user.id)
-      if (categories.length === 0) {
-        const defaultCategory = await createCategory(user.id, currentCategory)
-        categories.push(defaultCategory)
-      }
-      dispatch(setUser(user))
-      dispatch(setCategories(categories))
-    }
-    fetchUserAndCategories()
   }, [])
 
   return match(editorMode)

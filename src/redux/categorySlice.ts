@@ -12,7 +12,7 @@ export interface CategorySlice {
 
 const initialState: CategorySlice = {
   mode: 'Simple',
-  currentCategory: 'general',
+  currentCategory: '',
   currentText: '',
   categories: [],
 }
