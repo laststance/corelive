@@ -5,14 +5,13 @@ import { toast } from 'sonner'
 
 import { deleteCategory } from '@/actions/deleteCategory'
 import { Spacer } from '@/components/Spacer'
-import { removeCategory, selectCategories } from '@/redux/categorySlice'
-import { useAppDispatch, useAppSelector } from '@/redux/hooks'
+import { selectCategories } from '@/redux/categorySlice'
+import { useAppSelector } from '@/redux/hooks'
 import { selectUserId } from '@/redux/userSlice'
 
 interface Props {}
 
 export const EditCategoryDialog: React.FC<Props> = () => {
-  const dispatch = useAppDispatch()
   const id = useAppSelector(selectUserId)!
   const categories = useAppSelector(selectCategories)
 
@@ -29,7 +28,6 @@ export const EditCategoryDialog: React.FC<Props> = () => {
                 className="btn btn-ghost btn-sm"
                 onClick={async () => {
                   const res = await deleteCategory(id, category.id)
-                  dispatch(removeCategory(category.id))
                   toast.success(res.message)
                 }}
               >

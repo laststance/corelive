@@ -49,11 +49,6 @@ export const categorySlice = createSlice({
     setCategories: (state, action: PayloadAction<Category[]>) => {
       state.categories = action.payload
     },
-    removeCategory: (state, action: PayloadAction<Category['id']>) => {
-      state.categories = state.categories.filter((category) => {
-        return category.id !== action.payload
-      })
-    },
     removeCompletedTaskFromEditorText: (
       state,
       action: PayloadAction<Category['text']>,
@@ -87,7 +82,6 @@ export const {
   setCurrentText,
   setCategories,
   removeCompletedTaskFromEditorText,
-  removeCategory,
 } = categorySlice.actions
 
 export const {
