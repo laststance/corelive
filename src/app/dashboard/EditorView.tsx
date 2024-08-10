@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import React, { useEffect } from 'react'
+import React from 'react'
 import { match } from 'ts-pattern'
 
 import { TodoEditor } from '@/components/TodoEditor'
