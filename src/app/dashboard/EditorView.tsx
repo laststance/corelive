@@ -45,10 +45,6 @@ export const EditorView: React.FC<Props> = ({ user, categories }) => {
   dispatch(setUser(user))
   dispatch(setCategories(categories))
 
-  useEffect(() => {
-    dispatch({ type: 'Emit/InitializeListener' })
-  }, [])
-
   return match(editorMode)
     .with('Simple', () => (
       <SimpleEditor className="h-full w-full max-w-xl text-xl" />
