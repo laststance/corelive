@@ -4,7 +4,6 @@ import {
   configureStore,
   createListenerMiddleware,
 } from '@reduxjs/toolkit'
-import axios from 'axios'
 import {
   persistReducer,
   FLUSH,
@@ -15,9 +14,6 @@ import {
   REGISTER,
 } from 'redux-persist'
 import createWebStorage from 'redux-persist/lib/storage/createWebStorage'
-import { toast } from 'sonner'
-// @ts-expect-error TODO replace @laststance version package later
-import { createKeybindingsHandler } from 'tinykeys'
 
 import { categorySlice } from '@/redux/categorySlice'
 import { drawerSlice, toggleDrawer } from '@/redux/drawerSlice'
@@ -48,25 +44,6 @@ startAppListening({
   effect: (_action: Action, listenerApi) => {
     const checkbox = document.querySelector('#sidebar') as HTMLInputElement
     checkbox.checked = listenerApi.getState().Drawer.drawer
-  },
-})
-
-startAppListening({
-  type: 'Emit/InitializeListener',
-  effect: async (_action: Action, listenerApi) => {
-    const handler = createKeybindingsHandler({
-      '$mod+S': async (e: KeyboardEvent) => {
-        e.preventDefault()
-        const store = listenerApi.getState()
-        const currentCategory = store.Category.currentCategory
-        // @TODO convert to server actions from rest api
-        const { data } = await axios.post('/api/save', {
-          currentCategory,
-        })
-        toast.success(data.message)
-      },
-    })
-    window.addEventListener('keydown', handler)
   },
 })
 
