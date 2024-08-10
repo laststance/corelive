@@ -4,16 +4,9 @@ import dynamic from 'next/dynamic'
 import React, { useEffect } from 'react'
 import { match } from 'ts-pattern'
 
-import { createCategory } from '@/actions/createCategory'
-import { getCategories } from '@/actions/getCategories'
-import { getLoginUser } from '@/actions/getLoginUser'
 import { TodoEditor } from '@/components/TodoEditor'
 import { cn } from '@/lib/utils'
-import {
-  selectCurrentCategory,
-  selectEditorMode,
-  setCategories,
-} from '@/redux/categorySlice'
+import { selectEditorMode, setCategories } from '@/redux/categorySlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { setUser } from '@/redux/userSlice'
 import type { Category, User } from '@/types/prisma'
