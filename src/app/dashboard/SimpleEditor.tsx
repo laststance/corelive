@@ -14,7 +14,7 @@ import {
   selectCurrentCategory,
   removeCompletedTaskFromEditorText,
   selectCategories,
-} from '@/redux/categorySlice'
+} from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUser } from '@/redux/userSlice'
 
@@ -28,7 +28,6 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const currentText = useAppSelector(selectCurrentText)
   const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
-  // function handleClickCategory() {}
 
   // TODO change to CSS based implementation
   function selectSingleLineText(event: React.MouseEvent<HTMLTextAreaElement>) {
@@ -84,7 +83,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
           }
           MenuList={categories.map((category) => {
             return (
-              <li className="cursor-pointer text-lg" key={category.id}>
+              <li className="cursor-pointer text-lg" key={category.name}>
                 <a>{category.name}</a>
               </li>
             )

@@ -6,10 +6,10 @@ import { match } from 'ts-pattern'
 
 import { TodoEditor } from '@/components/TodoEditor'
 import { cn } from '@/lib/utils'
-import { selectEditorMode, setCategories } from '@/redux/categorySlice'
+import { selectEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { setUser } from '@/redux/userSlice'
-import type { Category, User } from '@/types/prisma'
+import type { User } from '@/types/prisma'
 
 const SimpleEditor = dynamic(
   async () => import('@/app/dashboard/SimpleEditor'),
@@ -36,14 +36,12 @@ const SimpleEditor = dynamic(
 
 interface Props {
   user: User
-  categories: Category[]
 }
 
-export const EditorView: React.FC<Props> = ({ user, categories }) => {
+export const EditorView: React.FC<Props> = ({ user }) => {
   const dispatch = useAppDispatch()
   const editorMode = useAppSelector(selectEditorMode)
   dispatch(setUser(user))
-  dispatch(setCategories(categories))
 
   return match(editorMode)
     .with('Simple', () => (

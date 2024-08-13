@@ -3,16 +3,14 @@
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { deleteCategory } from '@/actions/deleteCategory'
 import { Spacer } from '@/components/Spacer'
-import { selectCategories } from '@/redux/categorySlice'
-import { useAppSelector } from '@/redux/hooks'
-import { selectUserId } from '@/redux/userSlice'
+import { selectCategories, removeCategory } from '@/redux/editorSlice'
+import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 
 interface Props {}
 
 export const EditCategoryDialog: React.FC<Props> = () => {
-  const id = useAppSelector(selectUserId)!
+  const dispatch = useAppDispatch()
   const categories = useAppSelector(selectCategories)
 
   return (
@@ -22,13 +20,14 @@ export const EditCategoryDialog: React.FC<Props> = () => {
         <Spacer size="h-3xs" />
         <section className="grid grid-cols-2 gap-2 p-4">
           {categories.map((category) => (
-            <div key={category.id}>
+            <div key={category.name}>
               <div>{category.name}</div>
+              {/* @TODO replace <Button /> */}
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={async () => {
-                  const res = await deleteCategory(id, category.id)
-                  toast.success(res.message)
+                onClick={() => {
+                  dispatch(removeCategory(category.name))
+                  toast.success('Category removed')
                 }}
               >
                 <Trash2 />
@@ -38,6 +37,7 @@ export const EditCategoryDialog: React.FC<Props> = () => {
         </section>
 
         <div className="modal-action">
+          {/* @TODO replace <Button /> */}
           <button
             className="btn btn-success"
             onClick={() => {

@@ -14,6 +14,9 @@ importers:
       '@heroicons/react':
         specifier: ^2.1.5
         version: 2.1.5(react@19.0.0-rc-ab2135c7-20240724)
+      '@hookform/resolvers':
+        specifier: ^3.9.0
+        version: 3.9.0(react-hook-form@7.52.2(react@19.0.0-rc-ab2135c7-20240724))
       '@reduxjs/toolkit':
         specifier: ^2.2.6
         version: 2.2.6(react-redux@9.1.2(react@19.0.0-rc-ab2135c7-20240724)(redux@5.0.1)(types-react@19.0.0-rc.1))(react@19.0.0-rc-ab2135c7-20240724)
@@ -50,6 +53,9 @@ importers:
       react-dom:
         specifier: 19.0.0-rc-ab2135c7-20240724
         version: 19.0.0-rc-ab2135c7-20240724(react@19.0.0-rc-ab2135c7-20240724)
+      react-hook-form:
+        specifier: ^7.52.2
+        version: 7.52.2(react@19.0.0-rc-ab2135c7-20240724)
       react-redux:
         specifier: ^9.1.2
         version: 9.1.2(react@19.0.0-rc-ab2135c7-20240724)(redux@5.0.1)(types-react@19.0.0-rc.1)
@@ -1106,6 +1112,11 @@ packages:
     resolution: {integrity: sha512-FuzFN+BsHa+7OxbvAERtgBTNeZpUjgM/MIizfVkSCL2/edriN0Hx/DWRCR//aPYwO5QX/YlgLGXk+E3PcfZwjA==}
     peerDependencies:
       react: '>= 16'
+
+  '@hookform/resolvers@3.9.0':
+    resolution: {integrity: sha512-bU0Gr4EepJ/EQsH/IwEzYLsT/PEj5C0ynLQ4m+GSHS+xKH4TfSelhluTgOaoc4kA5s7eCsQbM4wvZLzELmWzUg==}
+    peerDependencies:
+      react-hook-form: ^7.0.0
 
   '@humanwhocodes/config-array@0.11.14':
     resolution: {integrity: sha512-3T8LkOmg45BV5FICb15QQMsyUSWrQ8AygVfC7ZG32zOalnqrilm018ZVCw0eapXux8FtA33q8PSRSstjee3jSg==}
@@ -5117,6 +5128,12 @@ packages:
       react: ^0.14.8 || ^15.0.1 || ^16.0.0 || ^17.0.1 || ^18.0.0
       react-dom: ^0.14.8 || ^15.0.1 || ^16.0.0 || ^17.0.1 || ^18.0.0
 
+  react-hook-form@7.52.2:
+    resolution: {integrity: sha512-pqfPEbERnxxiNMPd0bzmt1tuaPcVccywFDpyk2uV5xCIBphHV5T8SVnX9/o3kplPE1zzKt77+YIoq+EMwJp56A==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^16.8.0 || ^17 || ^18 || ^19
+
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
@@ -7318,6 +7335,10 @@ snapshots:
   '@heroicons/react@2.1.5(react@19.0.0-rc-ab2135c7-20240724)':
     dependencies:
       react: 19.0.0-rc-ab2135c7-20240724
+
+  '@hookform/resolvers@3.9.0(react-hook-form@7.52.2(react@19.0.0-rc-ab2135c7-20240724))':
+    dependencies:
+      react-hook-form: 7.52.2(react@19.0.0-rc-ab2135c7-20240724)
 
   '@humanwhocodes/config-array@0.11.14':
     dependencies:
@@ -12066,6 +12087,10 @@ snapshots:
       react: 19.0.0-rc-ab2135c7-20240724
       react-dom: 19.0.0-rc-ab2135c7-20240724(react@19.0.0-rc-ab2135c7-20240724)
       react-is: 18.1.0
+
+  react-hook-form@7.52.2(react@19.0.0-rc-ab2135c7-20240724):
+    dependencies:
+      react: 19.0.0-rc-ab2135c7-20240724
 
   react-is@16.13.1: {}
 
