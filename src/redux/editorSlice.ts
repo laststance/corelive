@@ -1,64 +1,58 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
-
+import { nanoid } from 'nanoid/non-secure'
+export type CategoryId = ReturnType<typeof nanoid>
 export interface Category {
   text: string
   name: string
 }
 
 export interface EditorSlice {
-  currentCategory: Category
-  categories: Category[]
+  currentCategoryId: CategoryId
+  categories: Record<CategoryId, Category>
 }
 
+const defaultCategoryId = nanoid()
+
 const initialState: EditorSlice = {
-  currentCategory: { text: '', name: 'General' },
-  categories: [
-    { text: '', name: 'General' },
-    { text: '', name: 'SubCategory' },
-  ],
+  currentCategoryId: defaultCategoryId,
+  categories: {
+    [defaultCategoryId]: { text: '', name: 'General' },
+    [nanoid()]: { text: '', name: 'SubCategory' },
+  },
 }
 
 export const editorSlice = createSlice({
   name: 'Editor',
   initialState,
   reducers: {
-    switchCategory: (state, action: PayloadAction<Category>) => {
-      state.categories = state.categories.map((category) => {
-        if (category.name === state.currentCategory.name) {
-          category.text = state.currentCategory.text
-        }
-        return category
-      })
-
-      state.currentCategory = action.payload
+    switchCategory: (state, action: PayloadAction<CategoryId>) => {
+      state.currentCategoryId = action.payload
     },
-    setCurrentCategory: (
+    setCurrentCategoryId: (
       state,
-      action: PayloadAction<EditorSlice['currentCategory']>,
+      action: PayloadAction<EditorSlice['currentCategoryId']>,
     ) => {
-      state.currentCategory = action.payload
+      state.currentCategoryId = action.payload
     },
     setCurrentCategoryText: (
       state,
-      action: PayloadAction<Category['text']>,
+      action: PayloadAction<EditorSlice['categories'][CategoryId]['text']>,
     ) => {
-      state.currentCategory.text = action.payload
+      state.categories[state.currentCategoryId]!.text = action.payload
     },
     addCategory: (state, action: PayloadAction<Category['name']>) => {
-      state.categories.push({ text: '', name: action.payload })
+      state.categories[nanoid()] = { text: '', name: action.payload }
     },
-    removeCategory: (state, action: PayloadAction<Category['name']>) => {
-      state.categories = state.categories.filter(
-        (category) => category.name !== action.payload,
-      )
+    removeCategory: (state, action: PayloadAction<CategoryId>) => {
+      delete state.categories[action.payload]
     },
     removeCompletedTaskFromEditorText: (
       state,
       action: PayloadAction<Category['text']>,
     ) => {
       const text = action.payload
-      const ref = state.currentCategory.text.split(text)
+      const ref = state.categories[state.currentCategoryId]?.text.split(text)
       // Non duplicate scenario
       if (
         Array.isArray(ref) &&
@@ -66,26 +60,26 @@ export const editorSlice = createSlice({
         typeof ref[0] === 'string' &&
         typeof ref[1] === 'string'
       ) {
-        state.currentCategory.text = ref[0] + ref[1]
+        state.categories[state.currentCategoryId]!.text = ref[0] + ref[1]
       }
 
       // TODO Duplicate scenario
     },
   },
   selectors: {
-    selectCurrentCategory: (state: EditorSlice) => state.currentCategory,
+    selectCurrentCategoryId: (state: EditorSlice) => state.currentCategoryId,
     selectCategories: (state: EditorSlice) => state.categories,
   },
 })
 
 export const {
   switchCategory,
-  setCurrentCategory,
-  setCurrentCategoryText,
+  setCurrentCategoryId,
   addCategory,
   removeCategory,
+  setCurrentCategoryText,
   removeCompletedTaskFromEditorText,
 } = editorSlice.actions
 
-export const { selectCurrentCategory, selectEditorMode, selectCategories } =
+export const { selectCurrentCategoryId, selectCategories } =
   editorSlice.selectors

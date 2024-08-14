@@ -19,14 +19,14 @@ export const EditCategoryDialog: React.FC<Props> = () => {
         <h1 className="text-xl font-bold">Edit Category</h1>
         <Spacer size="h-3xs" />
         <section className="grid grid-cols-2 gap-2 p-4">
-          {categories.map((category) => (
-            <div key={category.name}>
+          {Object.entries(categories).map(([id, category]) => (
+            <div key={id}>
               <div>{category.name}</div>
               {/* @TODO replace <Button /> */}
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
-                  dispatch(removeCategory(category.name))
+                  dispatch(removeCategory(id))
                   toast.success('Category removed')
                 }}
               >

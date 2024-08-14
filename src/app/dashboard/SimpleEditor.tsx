@@ -9,11 +9,11 @@ import { Dropdown } from '@/components/Dropdown'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
-  selectCurrentCategory,
+  selectCurrentCategoryId,
+  setCurrentCategoryText,
   removeCompletedTaskFromEditorText,
   selectCategories,
   switchCategory,
-  setCurrentCategoryText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUser } from '@/redux/userSlice'
@@ -23,7 +23,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   ...rest
 }) => {
   const dispatch = useAppDispatch()
-  const currentCategory = useAppSelector(selectCurrentCategory)
+  const currentCategoryId = useAppSelector(selectCurrentCategoryId)
   const categories = useAppSelector(selectCategories)
   const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
@@ -73,19 +73,21 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   return (
     <section className="flex h-full flex-col items-center gap-2">
       <div className="flex items-center gap-4">
-        <h2 className="text-2xl font-bold">{currentCategory.name}</h2>
+        <h2 className="text-2xl font-bold">
+          {categories[currentCategoryId]?.name}
+        </h2>
         <Dropdown
           Button={
             <summary className="btn btn-circle btn-ghost m-1">
               <ChevronsUpDown />
             </summary>
           }
-          MenuList={categories.map((category) => {
+          MenuList={Object.entries(categories).map(([id, category]) => {
             return (
               <li
-                onClick={() => dispatch(switchCategory(category))}
+                onClick={() => dispatch(switchCategory(id))}
                 className="cursor-pointer text-lg"
-                key={category.name}
+                key={id}
               >
                 <a>{category.name}</a>
               </li>
@@ -95,7 +97,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       </div>
       <textarea
         {...rest}
-        value={currentCategory.text}
+        value={categories[currentCategoryId]?.text}
         onDoubleClick={selectSingleLineText}
         onContextMenu={handleOnContextMenu}
         onChange={(e) => dispatch(setCurrentCategoryText(e.target.value))}
