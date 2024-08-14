@@ -2,9 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import React from 'react'
-import { match } from 'ts-pattern'
 
-import { TodoEditor } from '@/components/TodoEditor'
 import { cn } from '@/lib/utils'
 import { selectEditorMode } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
@@ -40,13 +38,7 @@ interface Props {
 
 export const EditorView: React.FC<Props> = ({ user }) => {
   const dispatch = useAppDispatch()
-  const editorMode = useAppSelector(selectEditorMode)
   dispatch(setUser(user))
 
-  return match(editorMode)
-    .with('Simple', () => (
-      <SimpleEditor className="h-full w-full max-w-xl text-xl" />
-    ))
-    .with('Todo', () => <TodoEditor />)
-    .exhaustive()
+  return <SimpleEditor className="h-full w-full max-w-xl text-xl" />
 }

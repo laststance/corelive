@@ -7,16 +7,12 @@ export interface Category {
 }
 
 export interface EditorSlice {
-  mode: 'Simple' | 'Todo'
-  currentText: Category['text']
-  currentCategory: Category['name']
+  currentCategory: Category
   categories: Category[]
 }
 
 const initialState: EditorSlice = {
-  mode: 'Simple',
-  currentCategory: 'General',
-  currentText: '',
+  currentCategory: { text: '', name: 'General' },
   categories: [
     { text: '', name: 'General' },
     { text: '', name: 'SubCategory' },
@@ -27,34 +23,27 @@ export const editorSlice = createSlice({
   name: 'Editor',
   initialState,
   reducers: {
-    switchCategory: (
-      state,
-      action: PayloadAction<{
-        nextCategory: Category['name']
-      }>,
-    ) => {
-      for (const category of state.categories) {
-        if (category.name === action.payload.nextCategory) {
-          state.currentCategory = action.payload.nextCategory
-          state.currentText = category.text
-          break
+    switchCategory: (state, action: PayloadAction<Category>) => {
+      state.categories = state.categories.map((category) => {
+        if (category.name === state.currentCategory.name) {
+          category.text = state.currentCategory.text
         }
-      }
-    },
-    updateEditorMode: (state, action: PayloadAction<EditorSlice['mode']>) => {
-      state.mode = action.payload
-    },
-    setCurrentText: (
-      state,
-      action: PayloadAction<EditorSlice['currentText']>,
-    ) => {
-      state.currentText = action.payload
+        return category
+      })
+
+      state.currentCategory = action.payload
     },
     setCurrentCategory: (
       state,
       action: PayloadAction<EditorSlice['currentCategory']>,
     ) => {
       state.currentCategory = action.payload
+    },
+    setCurrentCategoryText: (
+      state,
+      action: PayloadAction<Category['text']>,
+    ) => {
+      state.currentCategory.text = action.payload
     },
     addCategory: (state, action: PayloadAction<Category['name']>) => {
       state.categories.push({ text: '', name: action.payload })
@@ -69,7 +58,7 @@ export const editorSlice = createSlice({
       action: PayloadAction<Category['text']>,
     ) => {
       const text = action.payload
-      const ref = state.currentText.split(text)
+      const ref = state.currentCategory.text.split(text)
       // Non duplicate scenario
       if (
         Array.isArray(ref) &&
@@ -77,32 +66,26 @@ export const editorSlice = createSlice({
         typeof ref[0] === 'string' &&
         typeof ref[1] === 'string'
       ) {
-        state.currentText = ref[0] + ref[1]
+        state.currentCategory.text = ref[0] + ref[1]
       }
 
       // TODO Duplicate scenario
     },
   },
   selectors: {
-    selectEditorMode: (state: EditorSlice) => state.mode,
     selectCurrentCategory: (state: EditorSlice) => state.currentCategory,
     selectCategories: (state: EditorSlice) => state.categories,
-    selectCurrentText: (state: EditorSlice) => state.currentText,
   },
 })
 
 export const {
-  updateEditorMode,
-  setCurrentText,
+  switchCategory,
   setCurrentCategory,
+  setCurrentCategoryText,
   addCategory,
   removeCategory,
   removeCompletedTaskFromEditorText,
 } = editorSlice.actions
 
-export const {
-  selectCurrentCategory,
-  selectEditorMode,
-  selectCurrentText,
-  selectCategories,
-} = editorSlice.selectors
+export const { selectCurrentCategory, selectEditorMode, selectCategories } =
+  editorSlice.selectors

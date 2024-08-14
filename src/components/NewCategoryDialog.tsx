@@ -23,7 +23,7 @@ export const NewCategoryDialog: React.FC = () => {
 
   const onSubmit: SubmitHandler<z.infer<typeof schema>> = (data) => {
     dispatch(addCategory(data.category))
-    document.getElementById('new_category_modal')?.click()
+    document.getElementById('close_category_modal')?.click()
     dispatch(toggleDrawer())
     toast.success('Category created')
   }

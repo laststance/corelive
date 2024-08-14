@@ -16,7 +16,7 @@ export const EditCategoryDialog: React.FC<Props> = () => {
   return (
     <dialog id="edit_category_modal" className="modal">
       <div className="modal-box">
-        <h1 className="text-xl font-bold">New Category</h1>
+        <h1 className="text-xl font-bold">Edit Category</h1>
         <Spacer size="h-3xs" />
         <section className="grid grid-cols-2 gap-2 p-4">
           {categories.map((category) => (

@@ -41,9 +41,9 @@ const startAppListening = listenerMiddleware.startListening.withTypes<
 
 startAppListening({
   actionCreator: toggleDrawer,
-  effect: (_action: Action, listenerApi) => {
+  effect: (_action: Action) => {
     const checkbox = document.querySelector('#sidebar') as HTMLInputElement
-    checkbox.checked = listenerApi.getState().Drawer.drawer
+    checkbox.checked = !checkbox.checked
   },
 })
 

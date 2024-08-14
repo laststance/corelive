@@ -9,11 +9,11 @@ import { Dropdown } from '@/components/Dropdown'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
-  selectCurrentText,
-  setCurrentText,
   selectCurrentCategory,
   removeCompletedTaskFromEditorText,
   selectCategories,
+  switchCategory,
+  setCurrentCategoryText,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUser } from '@/redux/userSlice'
@@ -25,7 +25,6 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const dispatch = useAppDispatch()
   const currentCategory = useAppSelector(selectCurrentCategory)
   const categories = useAppSelector(selectCategories)
-  const currentText = useAppSelector(selectCurrentText)
   const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
 
@@ -53,7 +52,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     try {
       if (user === null) throw new Error('User not found')
       dispatch(removeCompletedTaskFromEditorText(selectedRef.current!))
-      await createCompleted(selectedRef.current!, currentCategory, user.id)
+      await createCompleted(selectedRef.current!, currentCategory.name, user.id)
       toast.success('Task Completed! 🎉')
     } catch (error) {
       toast.error('Failed to complete task')
@@ -74,7 +73,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   return (
     <section className="flex h-full flex-col items-center gap-2">
       <div className="flex items-center gap-4">
-        <h2 className="text-2xl font-bold">{currentCategory}</h2>
+        <h2 className="text-2xl font-bold">{currentCategory.name}</h2>
         <Dropdown
           Button={
             <summary className="btn btn-circle btn-ghost m-1">
@@ -83,7 +82,11 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
           }
           MenuList={categories.map((category) => {
             return (
-              <li className="cursor-pointer text-lg" key={category.name}>
+              <li
+                onClick={() => dispatch(switchCategory(category))}
+                className="cursor-pointer text-lg"
+                key={category.name}
+              >
                 <a>{category.name}</a>
               </li>
             )
@@ -92,10 +95,10 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       </div>
       <textarea
         {...rest}
-        value={currentText}
+        value={currentCategory.text}
         onDoubleClick={selectSingleLineText}
         onContextMenu={handleOnContextMenu}
-        onChange={(e) => dispatch(setCurrentText(e.target.value))}
+        onChange={(e) => dispatch(setCurrentCategoryText(e.target.value))}
         placeholder="Write your task step by step here..."
         className={cn(
           'textarea textarea-bordered textarea-lg h-full w-full max-w-xs',
