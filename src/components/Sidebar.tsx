@@ -10,6 +10,10 @@ import { useAppDispatch } from '@/redux/hooks'
 
 const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
   const dispatch = useAppDispatch()
+  function toggleSidebar(e: React.MouseEvent<HTMLLabelElement>) {
+    e.preventDefault()
+    dispatch(toggleDrawer())
+  }
 
   return (
     <div className={cn('drawer min-h-screen w-9 pl-2 pt-3', className)}>
@@ -19,7 +23,7 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
         <label
           htmlFor="sidebar"
           className="drawer-button"
-          onClick={() => dispatch(toggleDrawer())}
+          onClick={toggleSidebar}
         >
           <PanelLeftOpen className="rounded-md hover:bg-neutral-content" />
         </label>

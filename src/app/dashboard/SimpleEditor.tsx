@@ -49,14 +49,13 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   }
 
   async function taskCompleted() {
-    try {
-      if (user === null) throw new Error('User not found')
-      dispatch(removeCompletedTaskFromEditorText(selectedRef.current!))
-      await createCompleted(selectedRef.current!, currentCategory.name, user.id)
-      toast.success('Task Completed! 🎉')
-    } catch (error) {
-      toast.error('Failed to complete task')
-    }
+    dispatch(removeCompletedTaskFromEditorText(selectedRef.current!))
+    await createCompleted(
+      selectedRef.current!,
+      categories[currentCategoryId]!.name,
+      user?.id!,
+    )
+    toast.success('Task Completed! 🎉')
   }
 
   const { contextMenu, onContextMenu } = useContextMenu(
@@ -74,7 +73,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
     <section className="flex h-full flex-col items-center gap-2">
       <div className="flex items-center gap-4">
         <h2 className="text-2xl font-bold">
-          {categories[currentCategoryId]?.name}
+          {categories[currentCategoryId]!.name}
         </h2>
         <Dropdown
           Button={
@@ -97,7 +96,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
       </div>
       <textarea
         {...rest}
-        value={categories[currentCategoryId]?.text}
+        value={categories[currentCategoryId]!.text}
         onDoubleClick={selectSingleLineText}
         onContextMenu={handleOnContextMenu}
         onChange={(e) => dispatch(setCurrentCategoryText(e.target.value))}
