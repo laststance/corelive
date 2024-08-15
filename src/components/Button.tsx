@@ -1,4 +1,3 @@
-/* eslint-disable no-redeclare */
 import { cn } from '@/lib/utils'
 
 export namespace Button {

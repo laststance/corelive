@@ -7,12 +7,14 @@ import React, {
   useEffect,
 } from 'react'
 
-interface Props {
-  Button: ReactElement<ComponentProps<'summary'>, 'summary'>
-  MenuList: ReactElement<ComponentProps<'li'>, 'li'>[]
+namespace Dropdown {
+  export interface Props {
+    Button: ReactElement<ComponentProps<'summary'>, 'summary'>
+    MenuList: ReactElement<ComponentProps<'li'>, 'li'>[]
+  }
 }
 
-export const Dropdown: React.FC<Props> = ({ Button, MenuList }) => {
+export function Dropdown({ Button, MenuList }: Dropdown.Props) {
   const id = useId()
 
   function closeDropdown() {
