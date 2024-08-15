@@ -4,6 +4,7 @@ import { PanelLeftOpen } from 'lucide-react'
 import React, { type ComponentProps } from 'react'
 
 import { SignoutButton } from '@/components/SignoutButton'
+import { Spacer } from '@/components/Spacer'
 import { cn, getModalDOM } from '@/lib/utils'
 import { toggleDrawer } from '@/redux/drawerSlice'
 import { useAppDispatch } from '@/redux/hooks'
@@ -47,6 +48,7 @@ const Sidebar: React.FC<ComponentProps<'div'>> = ({ className }) => {
               New Category
             </button>
           </li>
+          <Spacer size="h-5xs" />
           <li>
             <button
               className="btn btn-neutral btn-md"

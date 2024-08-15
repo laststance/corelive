@@ -6,6 +6,8 @@ export const Spacer = function Spacer({
   /**
    * The size of the space
    *
+   * h-5xs: h-2 (8px)
+   *
    * h-4xs: h-4 (16px)
    *
    * h-3xs: h-8 (32px)
@@ -27,6 +29,8 @@ export const Spacer = function Spacer({
    * h-3xl: h-40 (160px)
    *
    * h-4xl: h-44 (176px)
+   *
+   * w-5xs: w-2 (8px)
    *
    * w-4xs: w-4 (16px)
    *
@@ -51,6 +55,7 @@ export const Spacer = function Spacer({
    * w-4xl: w-44 (176px)
    */
   size:
+    | 'h-5xs'
     | 'h-4xs'
     | 'h-3xs'
     | 'h-2xs'
@@ -62,6 +67,7 @@ export const Spacer = function Spacer({
     | 'h-2xl'
     | 'h-3xl'
     | 'h-4xl'
+    | 'w-5xs'
     | 'w-4xs'
     | 'w-3xs'
     | 'w-2xs'
@@ -74,7 +80,8 @@ export const Spacer = function Spacer({
     | 'w-3xl'
     | 'w-4xl'
 }) {
-  const options: Record<typeof size, string> = {
+  const options = {
+    'h-5xs': 'h-2',
     'h-4xs': 'h-4',
     'h-3xs': 'h-8',
     'h-2xs': 'h-12',
@@ -86,6 +93,7 @@ export const Spacer = function Spacer({
     'h-2xl': 'h-36',
     'h-3xl': 'h-40',
     'h-4xl': 'h-44',
+    'w-5xs': 'w-2',
     'w-4xs': 'w-4',
     'w-3xs': 'w-8',
     'w-2xs': 'w-12',
@@ -97,7 +105,7 @@ export const Spacer = function Spacer({
     'w-2xl': 'w-36',
     'w-3xl': 'w-40',
     'w-4xl': 'w-44',
-  }
+  } as const
   const className = options[size]
   return <div className={className} />
 }
