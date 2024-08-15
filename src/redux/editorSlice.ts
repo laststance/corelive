@@ -69,6 +69,11 @@ export const editorSlice = createSlice({
   selectors: {
     selectCurrentCategoryId: (state: EditorSlice) => state.currentCategoryId,
     selectCategories: (state: EditorSlice) => state.categories,
+    selectSwitchDropdownCategories: (state: EditorSlice) => {
+      const copy = { ...state.categories }
+      delete copy[state.currentCategoryId]
+      return copy
+    },
   },
 })
 
@@ -81,5 +86,8 @@ export const {
   removeCompletedTaskFromEditorText,
 } = editorSlice.actions
 
-export const { selectCurrentCategoryId, selectCategories } =
-  editorSlice.selectors
+export const {
+  selectCurrentCategoryId,
+  selectCategories,
+  selectSwitchDropdownCategories,
+} = editorSlice.selectors

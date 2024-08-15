@@ -14,6 +14,7 @@ import {
   removeCompletedTaskFromEditorText,
   selectCategories,
   switchCategory,
+  selectSwitchDropdownCategories,
 } from '@/redux/editorSlice'
 import { useAppDispatch, useAppSelector } from '@/redux/hooks'
 import { selectUser } from '@/redux/userSlice'
@@ -25,6 +26,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
   const dispatch = useAppDispatch()
   const currentCategoryId = useAppSelector(selectCurrentCategoryId)
   const categories = useAppSelector(selectCategories)
+  const dropdownCategories = useAppSelector(selectSwitchDropdownCategories)
   const user = useAppSelector(selectUser)
   const selectedRef = useRef<string>('')
 
@@ -81,7 +83,7 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
               <ChevronsUpDown />
             </summary>
           }
-          MenuList={Object.entries(categories).map(([id, category]) => {
+          MenuList={Object.entries(dropdownCategories).map(([id, category]) => {
             return (
               <li
                 onClick={() => dispatch(switchCategory(id))}
