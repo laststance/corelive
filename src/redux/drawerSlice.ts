@@ -1,11 +1,11 @@
 import { createSlice } from '@reduxjs/toolkit'
 
 export interface DrawerSlice {
-  drawer: boolean
+  open: boolean
 }
 
 const initialState: DrawerSlice = {
-  drawer: false,
+  open: false,
 }
 
 export const drawerSlice = createSlice({
@@ -13,11 +13,11 @@ export const drawerSlice = createSlice({
   initialState,
   reducers: {
     toggleDrawer: (state) => {
-      state.drawer = !state.drawer
+      state.open = !state.open
     },
   },
   selectors: {
-    selectDrawer: (state: DrawerSlice) => state.drawer,
+    selectDrawer: (state: DrawerSlice) => state.open,
   },
 })
 
