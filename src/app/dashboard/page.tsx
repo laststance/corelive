@@ -16,7 +16,6 @@ const HeatmapView = dynamic(async () => import('./HeatmapView'), {
 
 const Page = async () => {
   const user = await getLoginUser()
-
   const [completedList, count] = await Promise.all([
     getAllCompleted(user),
     getCompletedCount(user),

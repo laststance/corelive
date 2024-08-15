@@ -52,7 +52,7 @@ export const editorSlice = createSlice({
       action: PayloadAction<Category['text']>,
     ) => {
       const text = action.payload
-      const ref = state.categories[state.currentCategoryId]?.text.split(text)
+      const ref = state.categories[state.currentCategoryId]!.text.split(text)
       // Non duplicate scenario
       if (
         Array.isArray(ref) &&

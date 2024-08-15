@@ -27,7 +27,7 @@ export const EditCategoryDialog: React.FC<Props> = () => {
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
                   dispatch(removeCategory(id))
-                  toast.success('Category removed')
+                  toast.success('Category removed 🗑️')
                 }}
               >
                 <Trash2 />
