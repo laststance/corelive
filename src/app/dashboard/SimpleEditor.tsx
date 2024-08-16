@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { createCompleted } from '@/actions/createCompleted'
 import { Dropdown } from '@/components/Dropdown'
+import { Flex } from '@/components/Flex'
 import { ContextMenuItem, useContextMenu } from '@/lib/use-context-menu'
 import { cn } from '@/lib/utils'
 import {
@@ -73,9 +74,11 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
 
   return (
     <section className="flex h-full flex-col items-center gap-2">
-      <div className="flex items-center gap-4">
+      <Flex className="items-center gap-4">
         <h2 className="text-2xl font-bold">
-          {categories[currentCategoryId]!.name}
+          {categories[currentCategoryId]
+            ? categories[currentCategoryId]!.name
+            : ''}
         </h2>
         <Dropdown
           Button={
@@ -95,14 +98,23 @@ const SimpleEditor: React.FC<ComponentProps<'textarea'>> = ({
             )
           })}
         />
-      </div>
+      </Flex>
       <textarea
         {...rest}
-        value={categories[currentCategoryId]!.text}
+        disabled={!categories[currentCategoryId]}
+        value={
+          categories[currentCategoryId]
+            ? categories[currentCategoryId]?.text
+            : ''
+        }
         onDoubleClick={selectSingleLineText}
         onContextMenu={handleOnContextMenu}
         onChange={(e) => dispatch(setCurrentCategoryText(e.target.value))}
-        placeholder="Write your task step by step here..."
+        placeholder={
+          categories[currentCategoryId]
+            ? 'Write your task step by step here...'
+            : 'No category selected'
+        }
         className={cn(
           'textarea textarea-bordered textarea-lg h-full w-full max-w-xs',
           className,

@@ -8,13 +8,13 @@ import React, {
 } from 'react'
 
 namespace Dropdown {
-  export interface Props {
+  export type Props = {
     Button: ReactElement<ComponentProps<'summary'>, 'summary'>
     MenuList: ReactElement<ComponentProps<'li'>, 'li'>[]
-  }
+  } & ComponentProps<'details'>
 }
 
-export function Dropdown({ Button, MenuList }: Dropdown.Props) {
+export function Dropdown({ Button, MenuList, ...props }: Dropdown.Props) {
   const id = useId()
 
   function closeDropdown() {
@@ -27,7 +27,7 @@ export function Dropdown({ Button, MenuList }: Dropdown.Props) {
   }, [])
 
   return (
-    <details className="dropdown" id={id}>
+    <details data-react-name="Dropdown" className="dropdown" id={id} {...props}>
       {Button}
       <ul className="menu dropdown-content z-[1] w-52 rounded-box bg-base-100 p-2 shadow">
         {MenuList}

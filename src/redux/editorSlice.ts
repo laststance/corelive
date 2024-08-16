@@ -46,6 +46,7 @@ export const editorSlice = createSlice({
     },
     removeCategory: (state, action: PayloadAction<CategoryId>) => {
       delete state.categories[action.payload]
+      state.currentCategoryId = ''
     },
     removeCompletedTaskFromEditorText: (
       state,
