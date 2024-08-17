@@ -30,7 +30,7 @@ export const CompletedView: React.FC<Props> = ({ completedList }) => {
                   />
                 </svg>
                 <div className="text-balance">
-                  {completed.title} - {completed.category}
+                  {completed.title} - {completed.category.name}
                 </div>
               </li>
             ))}

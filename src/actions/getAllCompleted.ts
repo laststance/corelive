@@ -1,8 +1,9 @@
 import { prisma } from '@/lib/prisma'
-import type { CompletedList, User } from '@/types/prisma'
+import type { User } from '@/types/prisma'
 
-export async function getAllCompleted(user: User): Promise<CompletedList> {
+export async function getAllCompleted(user: User) {
   return prisma.completed.findMany({
     where: { userId: user?.id },
-  }) as unknown as CompletedList
+    include: { category: true },
+  })
 }

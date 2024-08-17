@@ -8,14 +8,27 @@ import type { User } from '@/types/prisma'
 
 export async function createCompleted(
   text: Category['text'],
-  category: Category['name'],
+  categoryName: Category['name'],
   userId: User['id'],
 ) {
+  let category = await prisma.category.findFirst({
+    where: { name: categoryName, userId: userId },
+  })
+
+  if (!category) {
+    category = await prisma.category.create({
+      data: {
+        name: categoryName,
+        userId: userId,
+      },
+    })
+  }
+
   // insert new completed task
   await prisma.completed.create({
     data: {
       title: text,
-      category: category,
+      categoryId: category.id,
       userId: userId,
     },
   })
