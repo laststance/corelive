@@ -9,14 +9,147 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- [Node.js](https://nodejs.org/) (recommended version 18+)
+- [pnpm](https://pnpm.io/) (recommended) or npm
+
+### Database Setup
+
+This project uses PostgreSQL v17 as the database, managed through Docker Compose for local development.
+
+#### Quick Setup
+
+Run our automated setup script:
 
 ```bash
+./scripts/dev-setup.sh
+```
+
+**What the script does:**
+
+The `dev-setup.sh` script is a comprehensive development database setup tool that automates the entire PostgreSQL configuration process. Here's how it works:
+
+1. **Prerequisites Validation**
+
+   - Checks if Docker is running and exits with a helpful error if not
+   - Detects whether to use `docker compose` (modern) or `docker-compose` (legacy)
+   - Verifies that necessary tools are available
+
+2. **Database Container Management**
+
+   - Starts the PostgreSQL v17 container in detached mode using Docker Compose
+   - Implements a robust health check that waits up to 60 seconds for the database to be ready
+   - Shows container logs if startup fails for easier debugging
+
+3. **Prisma Schema Setup**
+
+   - Automatically pushes the Prisma schema to create all necessary tables and relationships
+   - Generates the Prisma client for type-safe database operations
+   - Supports both pnpm and npm package managers
+
+4. **Developer Guidance**
+   - Provides a comprehensive list of useful database management commands
+   - Shows optional pgAdmin setup instructions for GUI database access
+   - Displays all connection details for manual database access
+
+**Key Benefits:**
+
+- **One-command setup**: Perfect for new team members or setting up on a new machine
+- **Robust error handling**: Clear error messages and automatic fallbacks
+- **Cross-platform compatibility**: Works with different Docker Compose versions
+- **Educational**: Shows all the commands you need for ongoing development
+
+#### Manual Setup
+
+If you prefer to set up manually:
+
+```bash
+# Start the PostgreSQL database
+docker compose up -d postgres
+
+# Push the database schema
+pnpm prisma db push
+
+# Generate Prisma client
+pnpm prisma generate
+```
+
+#### Database Management
+
+**Basic Commands:**
+
+```bash
+# Start database
+docker compose up -d postgres
+
+# Stop database
+docker compose down
+
+# View database logs
+docker compose logs postgres
+
+# Access database directly
+docker compose exec postgres psql -U postgres -d corelive
+```
+
+**Optional pgAdmin (Database GUI):**
+
+```bash
+# Start pgAdmin
+docker compose --profile pgadmin up -d
+
+# Access at http://localhost:5050
+# Login: admin@corelive.dev / admin
+```
+
+**Database Connection Details:**
+
+- Host: `localhost`
+- Port: `5432`
+- Database: `corelive`
+- Username: `postgres`
+- Password: `password`
+
+#### Database Initialization
+
+The project includes a PostgreSQL initialization script at `prisma/init.sql` that runs automatically when the database container starts for the first time.
+
+**What the init.sql script does:**
+
+1. **Extension Setup**
+
+   - Enables `uuid-ossp` extension for UUID generation functions
+   - Enables `pg_trgm` extension for trigram-based text similarity and indexing
+   - These extensions are recommended for PostgreSQL 17 and enhance database functionality
+
+2. **Configuration**
+
+   - Sets the database timezone to UTC for consistent timestamp handling across different environments
+   - Ensures all datetime operations use a standardized timezone
+
+3. **Integration with Prisma**
+   - Handles only the basic database setup and extensions
+   - Leaves schema creation to Prisma migrations for better version control and consistency
+   - Works seamlessly with the Prisma workflow used in the `dev-setup.sh` script
+
+**Benefits:**
+
+- **Automatic setup**: Extensions and configurations are applied automatically on first container startup
+- **Consistency**: Ensures all development environments have the same database configuration
+- **Performance**: Pre-installed extensions improve UUID generation and text search capabilities
+
+### Development Server
+
+After setting up the database, run the development server:
+
+```bash
+pnpm dev
+# or
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
 # or
 bun dev
 ```
@@ -26,18 +159,3 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
