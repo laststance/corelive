@@ -31,17 +31,23 @@
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
-    "./**.js",
-    "./**.ts",
-    "./**.cjs",
-    "./**.mjs",
-    "src/**/*.ts",
-    "src/**/*.tsx",
+    "./*.js",
+    "./*.ts",
+    "./*.cjs",
+    "./*.mjs",
+    "./*.mts",
+    "./**/*.js",
+    "./**/*.ts",
+    "./**/*.tsx",
+    "./**/*.jsx",
+    "./**/*.cjs",
+    "./**/*.mjs",
+    "./**/*.mts",
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
     ".next/types/**/*.ts",
-    "vitest.config.ts"
+    ".storybook/*.js",
+    ".storybook/*.ts",
+    ".storybook/*.tsx"
   ],
   "exclude": ["node_modules", ".next"]
 }
