@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.12.1",
   "lint-staged": {
     "*": "prettier --ignore-unknown --write",
     "*.{js,ts,jsx,tsx,cjs,mjs}": [
