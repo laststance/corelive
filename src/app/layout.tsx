@@ -1,6 +1,6 @@
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
-import '@/styles/globals.css'
+import '@/globals.css'
 
 import { cn } from '@/lib/utils'
 
