@@ -1,0 +1,56 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Project Structure Guide
+
+## Architecture Overview
+
+This is a **Next.js 15** project using the **App Router** with TypeScript, Tailwind CSS, Prisma, and Clerk authentication.
+
+## Key Configuration Files
+
+- [package.json](mdc:package.json) - Dependencies and scripts
+- [next.config.mjs](mdc:next.config.mjs) - Next.js configuration
+- [tailwind.config.ts](mdc:tailwind.config.ts) - Tailwind CSS configuration
+- [tsconfig.json](mdc:tsconfig.json) - TypeScript configuration with strict settings
+- [prisma/schema.prisma](mdc:prisma/schema.prisma) - Database schema
+- [src/env.mjs](mdc:src/env.mjs) - Environment variables validation with Zod
+
+## Directory Structure
+
+### `/src/app/` - Next.js App Router
+- [layout.tsx](mdc:src/app/layout.tsx) - Root layout with Clerk provider
+- [page.tsx](mdc:src/app/page.tsx) - Homepage
+- `dashboard/` - Protected dashboard routes
+- `sign-in/[[...sign-in]]/` - Clerk authentication routes
+- `sign-up/[[...sign-up]]/` - Clerk authentication routes
+- `api/` - API routes including webhooks
+
+### `/src/components/` - Reusable UI Components
+- [SignoutButton.tsx](mdc:src/components/SignoutButton.tsx) - Authentication component
+
+### `/src/lib/` - Utility Libraries
+- [prisma.ts](mdc:src/lib/prisma.ts) - Prisma client instance
+- [utils.ts](mdc:src/lib/utils.ts) - Utility functions (includes cn helper)
+
+### `/src/hooks/` - Custom React Hooks
+- [useIsFirstRender.tsx](mdc:src/hooks/useIsFirstRender.tsx) - First render detection hook
+
+### `/src/types/` - Type Definitions
+- [utility.ts](mdc:src/types/utility.ts) - Custom utility types
+
+### `/src/styles/` - Global Styles
+- [globals.css](mdc:src/styles/globals.css) - Global CSS with Tailwind imports
+
+## Key Dependencies
+
+- **Next.js 15** with App Router
+- **React 19** with concurrent features
+- **TypeScript 5.5** with strict configuration
+- **Tailwind CSS v4** with plugins
+- **Prisma** for database ORM
+- **Clerk** for authentication
+- **Vitest** for testing
+- **Zod** for runtime validation

@@ -1,0 +1,74 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Coding Standards
+
+## General Guidelines
+
+### TypeScript
+- Use **strict TypeScript** configuration as defined in [tsconfig.json](mdc:tsconfig.json)
+- Prefer `interface` over `type` for object shapes
+- Use proper type annotations, especially for function parameters and return types
+- Leverage `noUncheckedIndexedAccess` for safer array/object access
+
+### Code Style
+- Follow **Prettier** configuration in [.prettierrc](mdc:.prettierrc)
+- Use **ESLint** rules as defined in [eslint.config.js](mdc:eslint.config.js)
+- Prefer named exports over default exports (except for page components)
+- Use descriptive variable and function names
+
+## Next.js Specific Rules
+
+### App Router Only
+- **NEVER** use Pages Router patterns
+- Use App Router file conventions (page.tsx, layout.tsx, loading.tsx, etc.)
+- Place server components in app directory without `'use client'`
+
+### Client vs Server Components
+- Use `'use client'` **only** at the top of boundary components that need client-side features
+- Use `'use server'` for server actions and API utilities
+- Prefer server components by default for better performance
+
+### File Naming
+- Use lowercase with hyphens for route segments (`/sign-in/`, `/sign-up/`)
+- Use PascalCase for component files (`SignoutButton.tsx`)
+- Use camelCase for utility files (`utils.ts`)
+
+## Component Standards
+
+### React Components
+- Use functional components with TypeScript interfaces for props
+- Define prop interfaces above the component
+- Use proper JSX formatting with Prettier
+- Example structure:
+```typescript
+export interface ComponentProps {
+  title: string
+  children?: React.ReactNode
+}
+
+const Component: React.FC<ComponentProps> = ({ title, children }) => {
+  return (
+    <div className="...">
+      <h1>{title}</h1>
+      {children}
+    </div>
+  )
+}
+
+export default Component
+```
+
+## Styling Guidelines
+
+### Tailwind CSS
+- Use [tailwind.config.ts](mdc:tailwind.config.ts) configuration
+- Prefer Tailwind utility classes over custom CSS
+- Use the `cn()` helper from [src/lib/utils.ts](mdc:src/lib/utils.ts) for conditional classes
+- Follow responsive design with defined breakpoints
+
+### Class Organization
+- Order classes: layout → spacing → colors → typography → effects
+- Use `clsx` and `tailwind-merge` for dynamic classes via `cn()` helper

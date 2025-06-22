@@ -1,0 +1,125 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Testing Patterns
+
+## Testing Framework
+
+### Vitest Configuration
+- [vitest.config.ts](mdc:vitest.config.ts) - Main configuration
+- [setupTests.ts](mdc:setupTests.ts) - Test setup file
+- **happy-dom** for DOM simulation
+- **@testing-library/react** for component testing
+
+### Test Scripts
+- `pnpm test` - Run all tests
+- `pnpm test:watch` - Watch mode for development
+- `pnpm test:ui` - Visual test interface
+
+## Test File Patterns
+
+### File Naming
+- Component tests: `ComponentName.test.tsx`
+- Hook tests: `useHookName.test.ts`
+- Utility tests: `utilityName.test.ts`
+- Type tests: `TypeName.test.ts`
+
+### Test Location
+- Place tests next to the code they test
+- Examples:
+  - [src/hooks/useIsFirstRender.test.ts](mdc:src/hooks/useIsFirstRender.test.ts)
+  - [src/types/__tests__/ConvertDatesToString.test.ts](mdc:src/types/__tests__/ConvertDatesToString.test.ts)
+
+## Component Testing
+
+### Basic Component Test
+```typescript
+import { render, screen } from '@testing-library/react'
+import { expect, test } from 'vitest'
+import Component from './Component'
+
+test('renders component correctly', () => {
+  render(<Component title="Test" />)
+  expect(screen.getByText('Test')).toBeInTheDocument()
+})
+```
+
+### User Interaction Testing
+```typescript
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { expect, test } from 'vitest'
+
+test('handles user interaction', async () => {
+  const user = userEvent.setup()
+  render(<Button onClick={handleClick} />)
+  
+  await user.click(screen.getByRole('button'))
+  expect(handleClick).toHaveBeenCalled()
+})
+```
+
+## Hook Testing
+
+### Example from codebase:
+```typescript
+import { renderHook } from '@testing-library/react'
+import { expect, test } from 'vitest'
+import { useIsFirstRender } from './useIsFirstRender'
+
+test('returns true on first render', () => {
+  const { result } = renderHook(() => useIsFirstRender())
+  expect(result.current).toBe(true)
+})
+```
+
+## Type Testing
+
+### Using ts-expect
+```typescript
+import { expectType } from 'ts-expect'
+import type { ConvertDatesToString } from '../utility'
+
+test('converts Date properties to strings', () => {
+  type Input = { date: Date; name: string }
+  type Expected = { date: string; name: string }
+  
+  expectType<ConvertDatesToString<Input>>().toEqual<Expected>()
+})
+```
+
+## Testing Best Practices
+
+### Test Structure
+1. **Arrange** - Set up test data and environment
+2. **Act** - Execute the code being tested
+3. **Assert** - Verify the expected behavior
+
+### Test Naming
+- Use descriptive test names that explain the behavior
+- Format: `should [expected behavior] when [condition]`
+
+### Mocking
+- Mock external dependencies
+- Use `vi.mock()` for module mocking
+- Mock API calls and database operations
+
+### Authentication Testing
+- Mock Clerk authentication in tests
+- Test both authenticated and unauthenticated states
+- Use test utilities for user context
+
+## End-to-End Testing
+
+### Playwright Integration
+- After implementing features, use Playwright for E2E testing
+- Generate test code automatically after manual testing
+- Include visual regression testing for UI changes
+- Test on port 3000 (ensure no conflicts)
+
+### Test Coverage
+- Aim for high test coverage on critical paths
+- Focus on user-facing functionality
+- Test error states and edge cases

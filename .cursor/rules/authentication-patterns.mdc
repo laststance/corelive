@@ -1,0 +1,63 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Authentication Patterns
+
+## Clerk Integration
+
+### Configuration
+- **Clerk** is configured in [src/app/layout.tsx](mdc:src/app/layout.tsx) with `ClerkProvider`
+- Middleware protection in [src/middleware.ts](mdc:src/middleware.ts)
+- Environment variables managed in [src/env.mjs](mdc:src/env.mjs)
+
+### Protected Routes
+- `/dashboard` and all sub-routes are protected
+- Middleware uses `createRouteMatcher` for route protection
+- Authentication check: `auth().protect()` in middleware
+
+### Authentication Pages
+- Sign in: `/sign-in/[[...sign-in]]/page.tsx`
+- Sign up: `/sign-up/[[...sign-up]]/page.tsx`
+- Uses Clerk's catch-all route pattern
+
+## User Management
+
+### Database Integration
+- User model in [prisma/schema.prisma](mdc:prisma/schema.prisma)
+- `clerkId` field links Clerk user to database user
+- Optional fields: `email`, `name`, `bio`
+- Relations: `categories` and `completed` tasks
+
+### Typical User Flow
+1. User signs up/in via Clerk
+2. Webhook creates database user record
+3. User accesses protected dashboard
+4. User data synchronized between Clerk and database
+
+## Security Patterns
+
+### Middleware Protection
+```typescript
+const isProtectedRoute = createRouteMatcher(['/dashboard(.*)'])
+export default clerkMiddleware((auth, req) => {
+  if (isProtectedRoute(req)) auth().protect()
+})
+```
+
+### Environment Variables
+- Server-side: `CLERK_SECRET_KEY`, `WEBHOOK_SECRET`
+- Client-side: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- Validated with Zod schemas in [src/env.mjs](mdc:src/env.mjs)
+
+## Component Patterns
+
+### Sign Out
+- [SignoutButton.tsx](mdc:src/components/SignoutButton.tsx) - Dedicated sign out component
+- Use Clerk's `useClerk` hook for authentication actions
+
+### Accessing User Data
+- Use Clerk's `useUser()` hook in client components
+- Use `auth()` helper in server components and middleware
+- Database queries use `clerkId` to fetch user-specific data

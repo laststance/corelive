@@ -1,0 +1,299 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# UI Component Patterns
+
+## Design System
+
+### Styling Principles
+- Use [tailwind.config.ts](mdc:tailwind.config.ts) for consistent design tokens
+- Follow responsive-first approach with custom breakpoints
+- Create modern, Instagram-inspired UIs with clean aesthetics
+
+### Breakpoint System
+```typescript
+// From tailwind.config.ts
+screens: {
+  xs: { min: '0px', max: '639px' },
+  sm: '640px',
+  md: '768px', 
+  lg: '1024px',
+  xl: '1280px',
+  '2xl': '1536px',
+}
+```
+
+## Component Architecture
+
+### Base Component Structure
+```typescript
+import { cn } from '@/lib/utils'
+
+export interface ComponentProps {
+  className?: string
+  children?: React.ReactNode
+  variant?: 'primary' | 'secondary'
+}
+
+const Component: React.FC<ComponentProps> = ({ 
+  className, 
+  children, 
+  variant = 'primary' 
+}) => {
+  return (
+    <div 
+      className={cn(
+        'base-classes',
+        variant === 'primary' && 'primary-variant-classes',
+        variant === 'secondary' && 'secondary-variant-classes',
+        className
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+export default Component
+```
+
+### Client vs Server Components
+
+#### Server Components (Default)
+```typescript
+// No 'use client' directive needed
+// Can fetch data directly
+interface ServerComponentProps {
+  userId: string
+}
+
+const ServerComponent: React.FC<ServerComponentProps> = async ({ userId }) => {
+  const userData = await prisma.user.findUnique({
+    where: { clerkId: userId }
+  })
+
+  return (
+    <div>
+      <h1>Welcome, {userData?.name}</h1>
+    </div>
+  )
+}
+```
+
+#### Client Components
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+
+const ClientComponent: React.FC = () => {
+  const [state, setState] = useState<string>('')
+
+  useEffect(() => {
+    // Client-side effects
+  }, [])
+
+  return (
+    <button onClick={() => setState('clicked')}>
+      {state || 'Click me'}
+    </button>
+  )
+}
+```
+
+## Common UI Patterns
+
+### Loading States
+```typescript
+interface LoadingSpinnerProps {
+  size?: 'sm' | 'md' | 'lg'
+  className?: string
+}
+
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ 
+  size = 'md', 
+  className 
+}) => {
+  return (
+    <div 
+      className={cn(
+        'animate-spin rounded-full border-2 border-gray-300 border-t-blue-600',
+        size === 'sm' && 'h-4 w-4',
+        size === 'md' && 'h-8 w-8',
+        size === 'lg' && 'h-12 w-12',
+        className
+      )}
+    />
+  )
+}
+```
+
+### Form Components
+```typescript
+'use client'
+
+import { useState } from 'react'
+
+interface FormInputProps {
+  label: string
+  name: string
+  type?: 'text' | 'email' | 'password'
+  required?: boolean
+  className?: string
+}
+
+const FormInput: React.FC<FormInputProps> = ({ 
+  label, 
+  name, 
+  type = 'text', 
+  required = false,
+  className 
+}) => {
+  const [value, setValue] = useState('')
+
+  return (
+    <div className={cn('mb-4', className)}>
+      <label 
+        htmlFor={name}
+        className="block text-sm font-medium text-gray-700 mb-2"
+      >
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+      <input
+        id={name}
+        name={name}
+        type={type}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        required={required}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      />
+    </div>
+  )
+}
+```
+
+### Card Components
+```typescript
+interface CardProps {
+  title?: string
+  children: React.ReactNode
+  className?: string
+  onClick?: () => void
+}
+
+const Card: React.FC<CardProps> = ({ title, children, className, onClick }) => {
+  return (
+    <div 
+      className={cn(
+        'bg-white rounded-lg shadow-md p-6 border border-gray-200',
+        onClick && 'cursor-pointer hover:shadow-lg transition-shadow',
+        className
+      )}
+      onClick={onClick}
+    >
+      {title && (
+        <h3 className="text-lg font-semibold mb-4 text-gray-900">
+          {title}
+        </h3>
+      )}
+      {children}
+    </div>
+  )
+}
+```
+
+## Authentication UI Patterns
+
+### Protected Component Wrapper
+```typescript
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
+
+interface ProtectedProps {
+  children: React.ReactNode
+}
+
+const Protected: React.FC<ProtectedProps> = ({ children }) => {
+  const { userId } = auth()
+  
+  if (!userId) {
+    redirect('/sign-in')
+  }
+
+  return <>{children}</>
+}
+```
+
+### Sign Out Button Pattern
+```typescript
+'use client'
+
+import { useClerk } from '@clerk/nextjs'
+import { cn } from '@/lib/utils'
+
+interface SignOutButtonProps {
+  className?: string
+}
+
+const SignOutButton: React.FC<SignOutButtonProps> = ({ className }) => {
+  const { signOut } = useClerk()
+
+  return (
+    <button
+      onClick={() => signOut()}
+      className={cn(
+        'px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors',
+        className
+      )}
+    >
+      Sign Out
+    </button>
+  )
+}
+```
+
+## Layout Patterns
+
+### Dashboard Layout
+```typescript
+interface DashboardLayoutProps {
+  children: React.ReactNode
+}
+
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow-sm border-b border-gray-200">
+        {/* Navigation content */}
+      </nav>
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {children}
+      </main>
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+### Accessibility
+- Use semantic HTML elements
+- Include proper ARIA labels
+- Ensure keyboard navigation works
+- Maintain color contrast ratios
+
+### Performance
+- Use React.memo for expensive components
+- Implement proper loading states
+- Optimize images with Next.js Image component
+- Use Suspense boundaries appropriately
+
+### Styling Guidelines
+- Use the `cn()` helper from [src/lib/utils.ts](mdc:src/lib/utils.ts)
+- Order Tailwind classes: layout → spacing → colors → typography → effects
+- Create consistent spacing and sizing scales
+- Use CSS custom properties for theme values

@@ -1,0 +1,228 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Error Handling Patterns
+
+## TypeScript Error Handling
+
+### General Rules
+- **ONLY** fix TypeScript errors in code that is valid JavaScript and runs correctly at runtime
+- **NEVER** change runtime behavior during type fixes
+- Use strict TypeScript configuration from [tsconfig.json](mdc:tsconfig.json)
+
+### Common Patterns
+
+#### Safe Array/Object Access
+```typescript
+// Use noUncheckedIndexedAccess for safer access
+const item = items[0] // Type: Item | undefined
+if (item) {
+  // Safe to use item here
+  console.log(item.name)
+}
+
+// Or use optional chaining
+const name = items[0]?.name
+```
+
+#### Zod Validation
+```typescript
+import { z } from 'zod'
+
+const schema = z.object({
+  name: z.string(),
+  age: z.number().min(0),
+})
+
+try {
+  const result = schema.parse(data)
+  // result is fully typed and validated
+} catch (error) {
+  if (error instanceof z.ZodError) {
+    console.error('Validation failed:', error.errors)
+  }
+}
+```
+
+## Database Error Handling
+
+### Prisma Errors
+```typescript
+import { Prisma } from '@prisma/client'
+
+try {
+  const user = await prisma.user.create({
+    data: { clerkId, email }
+  })
+} catch (error) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') {
+      // Unique constraint violation
+      throw new Error('User already exists')
+    }
+  }
+  throw error
+}
+```
+
+### Connection Errors
+```typescript
+try {
+  await prisma.$connect()
+  // Database operations
+} catch (error) {
+  console.error('Database connection failed:', error)
+  throw new Error('Unable to connect to database')
+}
+```
+
+## API Error Handling
+
+### Server Actions
+```typescript
+'use server'
+
+import { redirect } from 'next/navigation'
+
+export async function createItem(data: FormData) {
+  try {
+    // Validate input
+    const title = data.get('title')?.toString()
+    if (!title) {
+      throw new Error('Title is required')
+    }
+
+    // Database operation
+    await prisma.completed.create({
+      data: { title, userId, categoryId }
+    })
+    
+    redirect('/dashboard')
+  } catch (error) {
+    console.error('Failed to create item:', error)
+    throw error
+  }
+}
+```
+
+### API Routes
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    
+    // Process request
+    const result = await processData(body)
+    
+    return NextResponse.json(result)
+  } catch (error) {
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+## Client-Side Error Handling
+
+### Component Error Boundaries
+```typescript
+'use client'
+
+import { Component, ReactNode } from 'react'
+
+interface Props {
+  children: ReactNode
+  fallback?: ReactNode
+}
+
+interface State {
+  hasError: boolean
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): State {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || <div>Something went wrong.</div>
+    }
+
+    return this.props.children
+  }
+}
+```
+
+### Async Operations
+```typescript
+'use client'
+
+import { useState } from 'react'
+
+export function useAsyncOperation<T>() {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const execute = async (operation: () => Promise<T>) => {
+    try {
+      setLoading(true)
+      setError(null)
+      return await operation()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      setError(message)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { execute, loading, error }
+}
+```
+
+## Environment Variable Errors
+
+### Using env.mjs validation
+```typescript
+import { env } from '@/env.mjs'
+
+// This will throw at build time if variables are missing
+const clerkKey = env.CLERK_SECRET_KEY
+const dbUrl = env.POSTGRES_PRISMA_URL
+```
+
+## Best Practices
+
+### Error Logging
+- Log errors with sufficient context
+- Use structured logging for production
+- Don't log sensitive information
+- Include request IDs for tracing
+
+### User-Friendly Messages
+- Show generic error messages to users
+- Log detailed errors for developers
+- Provide actionable feedback when possible
+
+### Recovery Strategies
+- Implement retry logic for transient errors
+- Provide fallback UI states
+- Allow users to retry failed operations

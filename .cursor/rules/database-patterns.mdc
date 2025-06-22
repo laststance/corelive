@@ -1,0 +1,147 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Database Patterns
+
+## Prisma Configuration
+
+### Schema Location
+- [prisma/schema.prisma](mdc:prisma/schema.prisma) - Main schema file
+- PostgreSQL database provider
+- Prisma client generated to `@prisma/client`
+
+### Client Instance
+- [src/lib/prisma.ts](mdc:src/lib/prisma.ts) - Singleton Prisma client
+- Import and use this instance throughout the application
+
+## Data Models
+
+### User Model
+```prisma
+model User {
+  id        Int         @id @default(autoincrement())
+  clerkId   String      @unique
+  email     String?     @unique
+  name      String?
+  bio       String?
+  categories Category[]
+  completed Completed[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+```
+
+### Category Model
+```prisma
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  completed Completed[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+```
+
+### Completed Model
+```prisma
+model Completed {
+  id        Int      @id @default(autoincrement())
+  archived  Boolean  @default(false)
+  title     String   @db.VarChar(255)
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  category  Category @relation(fields: [categoryId], references: [id])
+  categoryId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+```
+
+## Query Patterns
+
+### User Queries
+```typescript
+// Get user by Clerk ID
+const user = await prisma.user.findUnique({
+  where: { clerkId: clerkUserId },
+  include: {
+    categories: true,
+    completed: true,
+  }
+})
+
+// Create user from webhook
+const newUser = await prisma.user.create({
+  data: {
+    clerkId: clerkUserId,
+    email: userEmail,
+    name: userName,
+  }
+})
+```
+
+### Category Operations
+```typescript
+// Get user's categories
+const categories = await prisma.category.findMany({
+  where: { userId: user.id },
+  include: { completed: true }
+})
+
+// Create category
+const category = await prisma.category.create({
+  data: {
+    name: categoryName,
+    userId: user.id,
+  }
+})
+```
+
+### Completed Items
+```typescript
+// Get completed items with relations
+const completed = await prisma.completed.findMany({
+  where: { 
+    userId: user.id,
+    archived: false 
+  },
+  include: {
+    category: true,
+    user: true,
+  },
+  orderBy: { createdAt: 'desc' }
+})
+```
+
+## Migration Management
+
+### Development Workflow
+1. Modify schema in [prisma/schema.prisma](mdc:prisma/schema.prisma)
+2. Run `pnpm prisma:migrate` to create migration
+3. Run `pnpm prisma:generate` to update client
+4. Migrations stored in `prisma/migrations/`
+
+### Environment Variables
+- `POSTGRES_PRISMA_URL` - Database connection string
+- Validated in [src/env.mjs](mdc:src/env.mjs)
+
+## Best Practices
+
+### Connection Management
+- Use the singleton client from [src/lib/prisma.ts](mdc:src/lib/prisma.ts)
+- Prisma handles connection pooling automatically
+- No need to manually close connections
+
+### Error Handling
+- Use try-catch blocks for database operations
+- Handle unique constraint violations
+- Provide meaningful error messages
+
+### Performance
+- Use `include` for related data to avoid N+1 queries
+- Use `select` to limit returned fields when needed
+- Consider pagination for large datasets

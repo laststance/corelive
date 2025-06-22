@@ -1,0 +1,86 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Development Workflow
+
+## Package Manager
+- Use **pnpm** exclusively (configured with Volta in [package.json](mdc:package.json))
+- Use Fish shell instead of Bash for commands
+- Ensure Volta is configured for Node.js 22.16.0
+
+## Development Scripts
+
+### Core Development
+- `pnpm dev` - Start development server with Turbo
+- `pnpm build` - Build for production
+- `pnpm start` - Start production server
+- `pnpm lint` - Run ESLint
+- `pnpm lint:fix` - Fix ESLint issues automatically
+
+### Testing
+- `pnpm test` - Run tests with Vitest
+- `pnpm test:watch` - Run tests in watch mode
+- `pnpm test:ui` - Run tests with UI interface
+- Testing framework: **Vitest** with **Testing Library**
+
+### Database Operations
+- `pnpm prisma:migrate` - Run database migrations
+- `pnpm prisma:status` - Check migration status
+- `pnpm prisma:generate` - Generate Prisma client
+- `pnpm prisma:studio` - Open Prisma Studio
+
+### Code Quality
+- `pnpm prettier` - Format code with Prettier
+- `pnpm typecheck` - Type check without emitting
+
+## Environment Setup
+
+### Required Environment Variables
+See [src/env.mjs](mdc:src/env.mjs) for complete validation schema:
+
+**Server-side:**
+- `POSTGRES_PRISMA_URL` - Database connection string
+- `WEBHOOK_SECRET` - Webhook secret for API security
+- `CLERK_SECRET_KEY` - Clerk authentication secret
+
+**Client-side:**
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` - Clerk public key
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL` - Sign in URL
+- `NEXT_PUBLIC_CLERK_SIGN_UP_URL` - Sign up URL
+
+## Git Workflow
+
+### Pre-commit Hooks
+- **Husky** configured for git hooks
+- **lint-staged** runs Prettier on all staged files
+- Ensure code is formatted before committing
+
+### Branch Strategy
+- Work on feature branches
+- Ensure tests pass before merging
+- Use conventional commit messages
+
+## UI Development Process
+
+### After implementing features or fixing bugs:
+1. Start local development server on port 3000
+2. Use Playwright for end-to-end testing
+3. Generate Playwright test code automatically
+4. Take screenshots for visual verification of style changes
+5. Ensure responsive design across breakpoints
+
+## Database Workflow
+
+### Schema Changes
+1. Modify [prisma/schema.prisma](mdc:prisma/schema.prisma)
+2. Run `pnpm prisma:migrate` to create and apply migration
+3. Run `pnpm prisma:generate` to update Prisma client
+4. Update types if needed
+
+### Database Models
+Current models in schema:
+- `User` - User accounts linked to Clerk
+- `Category` - Task categories
+- `Completed` - Completed tasks/items
