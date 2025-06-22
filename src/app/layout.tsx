@@ -20,9 +20,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className={cn('min-h-screen overflow-x-hidden antialiased')}>
-          {children}
-        </body>
+        <body className={cn('min-h-screen antialiased')}>{children}</body>
       </html>
     </ClerkProvider>
   )

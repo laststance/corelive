@@ -5,7 +5,7 @@ export const metadata: Metadata = {
     template: '%s | Corelive',
     default: 'Corelive',
   },
-  description: 'Gamification your task and expriece.',
+  description: 'Task navigator for you.',
 }
 
 export default function Home() {
