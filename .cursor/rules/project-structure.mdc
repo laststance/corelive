@@ -1,56 +1,60 @@
 ---
-description: 
-globs: 
 alwaysApply: true
 ---
+
 # Project Structure Guide
 
 ## Architecture Overview
+This is a Next.js 15 project using the App Router architecture with TypeScript, Tailwind CSS, Prisma, and Clerk authentication.
 
-This is a **Next.js 15** project using the **App Router** with TypeScript, Tailwind CSS, Prisma, and Clerk authentication.
-
-## Key Configuration Files
-
-- [package.json](mdc:package.json) - Dependencies and scripts
-- [next.config.mjs](mdc:next.config.mjs) - Next.js configuration
-- [tailwind.config.ts](mdc:tailwind.config.ts) - Tailwind CSS configuration
-- [tsconfig.json](mdc:tsconfig.json) - TypeScript configuration with strict settings
-- [prisma/schema.prisma](mdc:prisma/schema.prisma) - Database schema
-- [src/env.mjs](mdc:src/env.mjs) - Environment variables validation with Zod
-
-## Directory Structure
+## Key Directories
 
 ### `/src/app/` - Next.js App Router
-- [layout.tsx](mdc:src/app/layout.tsx) - Root layout with Clerk provider
-- [page.tsx](mdc:src/app/page.tsx) - Homepage
-- `dashboard/` - Protected dashboard routes
-- `sign-in/[[...sign-in]]/` - Clerk authentication routes
-- `sign-up/[[...sign-up]]/` - Clerk authentication routes
-- `api/` - API routes including webhooks
+- **Root Layout**: [src/app/layout.tsx](mdc:src/app/layout.tsx) - Main layout with ClerkProvider
+- **Pages**: Each directory represents a route
+- **API Routes**: [src/app/api/](mdc:src/app/api/) for backend endpoints
+- **Route Groups**: Use `(name)` for organization without affecting URL structure
+- **Dynamic Routes**: Use `[param]` for dynamic segments
+- **Catch-all Routes**: Use `[[...param]]` for optional catch-all routes
 
 ### `/src/components/` - Reusable UI Components
-- [SignoutButton.tsx](mdc:src/components/SignoutButton.tsx) - Authentication component
+- Shared components used across multiple pages
+- Follow component naming conventions (PascalCase)
+- Export components as default exports
 
 ### `/src/lib/` - Utility Libraries
-- [prisma.ts](mdc:src/lib/prisma.ts) - Prisma client instance
-- [utils.ts](mdc:src/lib/utils.ts) - Utility functions (includes cn helper)
+- [src/lib/utils.ts](mdc:src/lib/utils.ts) - Shared utility functions
+- [src/lib/prisma.ts](mdc:src/lib/prisma.ts) - Prisma client configuration
+- Database helpers and shared business logic
 
 ### `/src/hooks/` - Custom React Hooks
-- [useIsFirstRender.tsx](mdc:src/hooks/useIsFirstRender.tsx) - First render detection hook
+- Custom hooks for shared stateful logic
+- Name with `use` prefix (e.g., `useIsFirstRender`)
+- Include corresponding test files
 
-### `/src/types/` - Type Definitions
-- [utility.ts](mdc:src/types/utility.ts) - Custom utility types
+### `/src/types/` - TypeScript Type Definitions
+- Shared type definitions and interfaces
+- Utility types for the application
 
-### `/src/styles/` - Global Styles
-- [globals.css](mdc:src/styles/globals.css) - Global CSS with Tailwind imports
+### `/prisma/` - Database Schema and Migrations
+- [prisma/schema.prisma](mdc:prisma/schema.prisma) - Database schema
+- Migration files in `prisma/migrations/`
 
-## Key Dependencies
+## File Naming Conventions
+- **Pages**: `page.tsx` for route components
+- **Layouts**: `layout.tsx` for layout components
+- **Components**: PascalCase (e.g., `SignoutButton.tsx`)
+- **Hooks**: camelCase with `use` prefix
+- **Utils**: camelCase
+- **Types**: camelCase or PascalCase for interfaces
 
-- **Next.js 15** with App Router
-- **React 19** with concurrent features
-- **TypeScript 5.5** with strict configuration
-- **Tailwind CSS v4** with plugins
-- **Prisma** for database ORM
-- **Clerk** for authentication
-- **Vitest** for testing
-- **Zod** for runtime validation
+## Import Patterns
+- Use `@/` alias for imports from the root directory
+- Organize imports: external packages first, then internal modules
+- Use default exports for components and pages
+- Use named exports for utilities and types
+
+## Environment Configuration
+- Environment variables defined in [src/env.mjs](mdc:src/env.mjs) using T3 env pattern
+- Server-side variables in `server` object
+- Client-side variables in `client` object (must be prefixed with `NEXT_PUBLIC_`)

@@ -1,56 +1,49 @@
----
-description: 
-globs: src/**/*.*
-alwaysApply: false
----
 # UI Component Patterns
 
 ## Design System
 
-### Styling Principles
-- Use [tailwind.config.ts](mdc:tailwind.config.ts) for consistent design tokens
-- Follow responsive-first approach with custom breakpoints
-- Create modern, Instagram-inspired UIs with clean aesthetics
+This project uses Tailwind CSS for styling with a focus on modern, clean, and accessible design inspired by platforms like Instagram.
 
-### Breakpoint System
+### Tailwind Configuration
+
+Tailwind CSS is configured with:
+- **Version**: 4.x (latest)
+- **PostCSS**: For processing styles
+- **Prettier Plugin**: For automatic class sorting
+- **Custom Plugins**: Forms plugin for enhanced form styling
+
+### Color Palette
+
+Use Tailwind's default color palette with semantic naming:
 ```typescript
-// From tailwind.config.ts
-screens: {
-  xs: { min: '0px', max: '639px' },
-  sm: '640px',
-  md: '768px', 
-  lg: '1024px',
-  xl: '1280px',
-  '2xl': '1536px',
-}
+// Primary colors
+'bg-blue-600 hover:bg-blue-700'  // Primary buttons
+'bg-gray-100 hover:bg-gray-200'  // Secondary buttons
+'bg-red-600 hover:bg-red-700'    // Destructive actions
+
+// Text colors
+'text-gray-900'    // Primary text
+'text-gray-600'    // Secondary text
+'text-gray-400'    // Muted text
 ```
 
 ## Component Architecture
 
-### Base Component Structure
+### Component Structure
 ```typescript
-import { cn } from '@/lib/utils'
-
-export interface ComponentProps {
-  className?: string
+interface ComponentProps {
   children?: React.ReactNode
-  variant?: 'primary' | 'secondary'
+  className?: string
+  // Other specific props
 }
 
 const Component: React.FC<ComponentProps> = ({ 
-  className, 
   children, 
-  variant = 'primary' 
+  className,
+  ...props 
 }) => {
   return (
-    <div 
-      className={cn(
-        'base-classes',
-        variant === 'primary' && 'primary-variant-classes',
-        variant === 'secondary' && 'secondary-variant-classes',
-        className
-      )}
-    >
+    <div className={cn('base-styles', className)} {...props}>
       {children}
     </div>
   )
@@ -59,54 +52,263 @@ const Component: React.FC<ComponentProps> = ({
 export default Component
 ```
 
-### Client vs Server Components
+### Class Name Utilities
 
-#### Server Components (Default)
+Use the `cn` utility from [src/lib/utils.ts](mdc:src/lib/utils.ts) for conditional classes:
+
 ```typescript
-// No 'use client' directive needed
-// Can fetch data directly
-interface ServerComponentProps {
-  userId: string
-}
+import { cn } from '@/lib/utils'
 
-const ServerComponent: React.FC<ServerComponentProps> = async ({ userId }) => {
-  const userData = await prisma.user.findUnique({
-    where: { clerkId: userId }
-  })
-
+const Button: React.FC<ButtonProps> = ({ 
+  variant = 'primary', 
+  size = 'md',
+  className,
+  children,
+  ...props 
+}) => {
   return (
-    <div>
-      <h1>Welcome, {userData?.name}</h1>
-    </div>
-  )
-}
-```
-
-#### Client Components
-```typescript
-'use client'
-
-import { useState, useEffect } from 'react'
-
-const ClientComponent: React.FC = () => {
-  const [state, setState] = useState<string>('')
-
-  useEffect(() => {
-    // Client-side effects
-  }, [])
-
-  return (
-    <button onClick={() => setState('clicked')}>
-      {state || 'Click me'}
+    <button
+      className={cn(
+        // Base styles
+        'inline-flex items-center justify-center rounded-md font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+        
+        // Variant styles
+        {
+          'bg-blue-600 text-white hover:bg-blue-700': variant === 'primary',
+          'bg-gray-100 text-gray-900 hover:bg-gray-200': variant === 'secondary',
+          'bg-transparent text-blue-600 hover:bg-blue-50': variant === 'ghost',
+        },
+        
+        // Size styles
+        {
+          'h-8 px-3 text-sm': size === 'sm',
+          'h-10 px-4': size === 'md',
+          'h-12 px-6 text-lg': size === 'lg',
+        },
+        
+        className
+      )}
+      {...props}
+    >
+      {children}
     </button>
   )
 }
 ```
 
-## Common UI Patterns
+## Component Patterns
+
+### Button Components
+
+#### Base Button
+```typescript
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive'
+  size?: 'sm' | 'md' | 'lg'
+  isLoading?: boolean
+  leftIcon?: React.ReactNode
+  rightIcon?: React.ReactNode
+}
+
+const Button: React.FC<ButtonProps> = ({
+  variant = 'primary',
+  size = 'md',
+  isLoading = false,
+  leftIcon,
+  rightIcon,
+  children,
+  className,
+  disabled,
+  ...props
+}) => {
+  return (
+    <button
+      className={cn(
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+        'disabled:pointer-events-none disabled:opacity-50',
+        buttonVariants({ variant, size }),
+        className
+      )}
+      disabled={disabled || isLoading}
+      {...props}
+    >
+      {isLoading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        leftIcon
+      )}
+      {children}
+      {!isLoading && rightIcon}
+    </button>
+  )
+}
+```
+
+#### Icon Button
+```typescript
+interface IconButtonProps extends Omit<ButtonProps, 'leftIcon' | 'rightIcon' | 'children'> {
+  icon: React.ReactNode
+  'aria-label': string
+}
+
+const IconButton: React.FC<IconButtonProps> = ({
+  icon,
+  size = 'md',
+  className,
+  ...props
+}) => {
+  return (
+    <Button
+      size={size}
+      className={cn(
+        'aspect-square p-0',
+        {
+          'h-8 w-8': size === 'sm',
+          'h-10 w-10': size === 'md',
+          'h-12 w-12': size === 'lg',
+        },
+        className
+      )}
+      {...props}
+    >
+      {icon}
+    </Button>
+  )
+}
+```
+
+### Card Components
+
+```typescript
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  children: React.ReactNode
+}
+
+const Card: React.FC<CardProps> = ({ children, className, ...props }) => {
+  return (
+    <div
+      className={cn(
+        'rounded-lg border border-gray-200 bg-white shadow-sm',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+}
+
+const CardHeader: React.FC<CardProps> = ({ children, className, ...props }) => {
+  return (
+    <div
+      className={cn('flex flex-col space-y-1.5 p-6', className)}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+}
+
+const CardContent: React.FC<CardProps> = ({ children, className, ...props }) => {
+  return (
+    <div className={cn('p-6 pt-0', className)} {...props}>
+      {children}
+    </div>
+  )
+}
+```
+
+### Form Components
+
+#### Input Component
+```typescript
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string
+  error?: string
+  helperText?: string
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ label, error, helperText, className, id, ...props }, ref) => {
+    const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`
+    
+    return (
+      <div className="space-y-1">
+        {label && (
+          <label
+            htmlFor={inputId}
+            className="block text-sm font-medium text-gray-700"
+          >
+            {label}
+          </label>
+        )}
+        <input
+          id={inputId}
+          ref={ref}
+          className={cn(
+            'flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2',
+            'text-sm placeholder:text-gray-400',
+            'focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            error && 'border-red-500 focus:border-red-500 focus:ring-red-500',
+            className
+          )}
+          {...props}
+        />
+        {error && (
+          <p className="text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
+        {helperText && !error && (
+          <p className="text-sm text-gray-500">{helperText}</p>
+        )}
+      </div>
+    )
+  }
+)
+```
 
 ### Loading States
+
+#### Skeleton Component
 ```typescript
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+  className?: string
+}
+
+const Skeleton: React.FC<SkeletonProps> = ({ className, ...props }) => {
+  return (
+    <div
+      className={cn(
+        'animate-pulse rounded-md bg-gray-200',
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+// Usage examples
+const UserCardSkeleton = () => (
+  <Card className="p-6">
+    <div className="flex items-center space-x-4">
+      <Skeleton className="h-12 w-12 rounded-full" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-[200px]" />
+        <Skeleton className="h-4 w-[150px]" />
+      </div>
+    </div>
+  </Card>
+)
+```
+
+#### Loading Spinner
+```typescript
+import { Loader2 } from 'lucide-react'
+
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg'
   className?: string
@@ -117,12 +319,14 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   className 
 }) => {
   return (
-    <div 
+    <Loader2
       className={cn(
-        'animate-spin rounded-full border-2 border-gray-300 border-t-blue-600',
-        size === 'sm' && 'h-4 w-4',
-        size === 'md' && 'h-8 w-8',
-        size === 'lg' && 'h-12 w-12',
+        'animate-spin',
+        {
+          'h-4 w-4': size === 'sm',
+          'h-6 w-6': size === 'md',
+          'h-8 w-8': size === 'lg',
+        },
         className
       )}
     />
@@ -130,170 +334,232 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 }
 ```
 
-### Form Components
+## Layout Patterns
+
+### Container Layout
 ```typescript
-'use client'
-
-import { useState } from 'react'
-
-interface FormInputProps {
-  label: string
-  name: string
-  type?: 'text' | 'email' | 'password'
-  required?: boolean
-  className?: string
+interface ContainerProps extends React.HTMLAttributes<HTMLDivElement> {
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
 }
 
-const FormInput: React.FC<FormInputProps> = ({ 
-  label, 
-  name, 
-  type = 'text', 
-  required = false,
-  className 
+const Container: React.FC<ContainerProps> = ({
+  size = 'lg',
+  className,
+  children,
+  ...props
 }) => {
-  const [value, setValue] = useState('')
-
   return (
-    <div className={cn('mb-4', className)}>
-      <label 
-        htmlFor={name}
-        className="block text-sm font-medium text-gray-700 mb-2"
-      >
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </label>
-      <input
-        id={name}
-        name={name}
-        type={type}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        required={required}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-      />
-    </div>
-  )
-}
-```
-
-### Card Components
-```typescript
-interface CardProps {
-  title?: string
-  children: React.ReactNode
-  className?: string
-  onClick?: () => void
-}
-
-const Card: React.FC<CardProps> = ({ title, children, className, onClick }) => {
-  return (
-    <div 
+    <div
       className={cn(
-        'bg-white rounded-lg shadow-md p-6 border border-gray-200',
-        onClick && 'cursor-pointer hover:shadow-lg transition-shadow',
+        'mx-auto px-4 sm:px-6 lg:px-8',
+        {
+          'max-w-2xl': size === 'sm',
+          'max-w-4xl': size === 'md',
+          'max-w-6xl': size === 'lg',
+          'max-w-7xl': size === 'xl',
+          'max-w-none': size === 'full',
+        },
         className
       )}
-      onClick={onClick}
+      {...props}
     >
-      {title && (
-        <h3 className="text-lg font-semibold mb-4 text-gray-900">
-          {title}
-        </h3>
-      )}
       {children}
     </div>
   )
 }
 ```
 
-## Authentication UI Patterns
-
-### Protected Component Wrapper
+### Grid Layouts
 ```typescript
-import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
+// Auto-responsive grid
+const AutoGrid: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className
+}) => (
+  <div
+    className={cn(
+      'grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+      className
+    )}
+  >
+    {children}
+  </div>
+)
 
-interface ProtectedProps {
+// Stack layout
+const Stack: React.FC<{
   children: React.ReactNode
-}
-
-const Protected: React.FC<ProtectedProps> = ({ children }) => {
-  const { userId } = auth()
-  
-  if (!userId) {
-    redirect('/sign-in')
-  }
-
-  return <>{children}</>
-}
-```
-
-### Sign Out Button Pattern
-```typescript
-'use client'
-
-import { useClerk } from '@clerk/nextjs'
-import { cn } from '@/lib/utils'
-
-interface SignOutButtonProps {
+  spacing?: 'sm' | 'md' | 'lg'
   className?: string
-}
-
-const SignOutButton: React.FC<SignOutButtonProps> = ({ className }) => {
-  const { signOut } = useClerk()
-
-  return (
-    <button
-      onClick={() => signOut()}
-      className={cn(
-        'px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors',
-        className
-      )}
-    >
-      Sign Out
-    </button>
-  )
-}
+}> = ({ children, spacing = 'md', className }) => (
+  <div
+    className={cn(
+      'flex flex-col',
+      {
+        'space-y-2': spacing === 'sm',
+        'space-y-4': spacing === 'md',
+        'space-y-6': spacing === 'lg',
+      },
+      className
+    )}
+  >
+    {children}
+  </div>
+)
 ```
 
-## Layout Patterns
+## Responsive Design
 
-### Dashboard Layout
+### Breakpoint Usage
 ```typescript
-interface DashboardLayoutProps {
-  children: React.ReactNode
-}
-
-const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        {/* Navigation content */}
-      </nav>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {children}
-      </main>
-    </div>
-  )
-}
+// Mobile-first responsive design
+<div className="
+  grid grid-cols-1     // Mobile: 1 column
+  sm:grid-cols-2       // Small: 2 columns
+  md:grid-cols-3       // Medium: 3 columns
+  lg:grid-cols-4       // Large: 4 columns
+  xl:grid-cols-5       // Extra large: 5 columns
+">
 ```
 
-## Best Practices
+### Typography Scale
+```typescript
+// Headings
+'text-xs'      // 12px - Small captions
+'text-sm'      // 14px - Body text small
+'text-base'    // 16px - Body text
+'text-lg'      // 18px - Large body text
+'text-xl'      // 20px - Small headings
+'text-2xl'     // 24px - Section headings
+'text-3xl'     // 30px - Page headings
+'text-4xl'     // 36px - Hero headings
 
-### Accessibility
-- Use semantic HTML elements
-- Include proper ARIA labels
-- Ensure keyboard navigation works
-- Maintain color contrast ratios
+// Responsive typography
+'text-lg md:text-xl lg:text-2xl'
+```
 
-### Performance
-- Use React.memo for expensive components
-- Implement proper loading states
-- Optimize images with Next.js Image component
-- Use Suspense boundaries appropriately
+## Accessibility Patterns
 
-### Styling Guidelines
-- Use the `cn()` helper from [src/lib/utils.ts](mdc:src/lib/utils.ts)
-- Order Tailwind classes: layout → spacing → colors → typography → effects
-- Create consistent spacing and sizing scales
-- Use CSS custom properties for theme values
+### Focus Management
+```typescript
+// Proper focus styles
+'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+
+// Skip to main content
+const SkipToMain = () => (
+  <a
+    href="#main-content"
+    className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 
+               z-50 bg-blue-600 text-white px-4 py-2 rounded-md"
+  >
+    Skip to main content
+  </a>
+)
+```
+
+### ARIA Patterns
+```typescript
+// Button with loading state
+<button
+  disabled={isLoading}
+  aria-disabled={isLoading}
+  aria-describedby={error ? 'error-message' : undefined}
+>
+  {isLoading ? 'Loading...' : 'Submit'}
+</button>
+
+// Form with error message
+<input
+  aria-invalid={!!error}
+  aria-describedby={error ? 'field-error' : 'field-help'}
+/>
+{error && (
+  <div id="field-error" role="alert" className="text-red-600">
+    {error}
+  </div>
+)}
+```
+
+### Screen Reader Support
+```typescript
+// Visually hidden text for context
+const VisuallyHidden: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="sr-only">{children}</span>
+)
+
+// Loading announcements
+const [loading, setLoading] = useState(false)
+
+return (
+  <>
+    <div aria-live="polite" aria-atomic="true" className="sr-only">
+      {loading && 'Loading content...'}
+    </div>
+    <button onClick={() => setLoading(true)}>
+      Load content
+      {loading && <VisuallyHidden>Loading...</VisuallyHidden>}
+    </button>
+  </>
+)
+```
+
+## Animation Patterns
+
+### Tailwind Animations
+```typescript
+// Built-in animations
+'animate-spin'     // Loading spinners
+'animate-pulse'    // Skeleton loading
+'animate-bounce'   // Attention-grabbing
+'animate-ping'     // Notification badges
+
+// Custom transitions
+'transition-colors duration-200'    // Color changes
+'transition-transform duration-300' // Scale/move
+'transition-opacity duration-150'   // Fade in/out
+```
+
+### Hover and Active States
+```typescript
+// Interactive elements
+'hover:bg-gray-50 active:bg-gray-100'
+'hover:scale-105 active:scale-95'
+'hover:shadow-md transition-shadow'
+
+// Focus-visible for keyboard navigation
+'focus-visible:ring-2 focus-visible:ring-blue-500'
+```
+
+## Performance Optimization
+
+### Image Optimization
+```typescript
+import Image from 'next/image'
+
+// Optimized images
+<Image
+  src="/avatar.jpg"
+  alt="User avatar"
+  width={48}
+  height={48}
+  className="rounded-full"
+  priority={isAboveTheFold}
+/>
+```
+
+### Lazy Loading Components
+```typescript
+import { lazy, Suspense } from 'react'
+
+const HeavyComponent = lazy(() => import('./HeavyComponent'))
+
+const App = () => (
+  <Suspense fallback={<LoadingSpinner />}>
+    <HeavyComponent />
+  </Suspense>
+)
+```
+description:
+globs:
+alwaysApply: false
+---

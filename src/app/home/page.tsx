@@ -5,5 +5,5 @@ export const metadata: Metadata = {
 }
 
 export default function Dashboard() {
-  return <div>Dashboard</div>
+  return <div>Home</div>
 }

@@ -1,24 +1,18 @@
 ---
-description: 
-globs: 
-alwaysApply: true
+description: Database patterns using Prisma ORM
 ---
+
 # Database Patterns
 
-## Prisma Configuration
+## Prisma ORM Integration
 
-### Schema Location
-- [prisma/schema.prisma](mdc:prisma/schema.prisma) - Main schema file
-- PostgreSQL database provider
-- Prisma client generated to `@prisma/client`
+This project uses [Prisma](https://prisma.io) as the ORM with PostgreSQL database.
 
-### Client Instance
-- [src/lib/prisma.ts](mdc:src/lib/prisma.ts) - Singleton Prisma client
-- Import and use this instance throughout the application
+### Database Schema
 
-## Data Models
+The database schema is defined in [prisma/schema.prisma](mdc:prisma/schema.prisma) with the following models:
 
-### User Model
+#### User Model
 ```prisma
 model User {
   id        Int         @id @default(autoincrement())
@@ -33,7 +27,7 @@ model User {
 }
 ```
 
-### Category Model
+#### Category Model
 ```prisma
 model Category {
   id        Int      @id @default(autoincrement())
@@ -46,7 +40,7 @@ model Category {
 }
 ```
 
-### Completed Model
+#### Completed Model
 ```prisma
 model Completed {
   id        Int      @id @default(autoincrement())
@@ -61,87 +55,316 @@ model Completed {
 }
 ```
 
-## Query Patterns
+### Prisma Client Setup
 
-### User Queries
+The Prisma client is configured in [src/lib/prisma.ts](mdc:src/lib/prisma.ts):
+
 ```typescript
-// Get user by Clerk ID
+import { PrismaClient } from '@prisma/client'
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+```
+
+### Database Operations
+
+#### User Operations
+
+##### Create User
+```typescript
+import { prisma } from '@/lib/prisma'
+
+// Create new user from Clerk webhook
+const createUser = async (clerkId: string, email?: string, name?: string) => {
+  try {
+    const user = await prisma.user.create({
+      data: {
+        clerkId,
+        email,
+        name,
+      }
+    })
+    return user
+  } catch (error) {
+    console.error('Failed to create user:', error)
+    throw new Error('User creation failed')
+  }
+}
+```
+
+##### Get User with Relations
+```typescript
+// Get user with categories and completed tasks
+const getUserWithData = async (clerkId: string) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      include: {
+        categories: {
+          orderBy: { createdAt: 'desc' }
+        },
+        completed: {
+          where: { archived: false },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    })
+    return user
+  } catch (error) {
+    console.error('Failed to get user data:', error)
+    throw new Error('Failed to retrieve user data')
+  }
+}
+```
+
+#### Category Operations
+
+##### Create Category
+```typescript
+const createCategory = async (userId: number, name: string) => {
+  try {
+    const category = await prisma.category.create({
+      data: {
+        name,
+        userId,
+      }
+    })
+    return category
+  } catch (error) {
+    // Handle unique constraint violation
+    if (error.code === 'P2002') {
+      throw new Error('Category with this name already exists')
+    }
+    console.error('Failed to create category:', error)
+    throw new Error('Category creation failed')
+  }
+}
+```
+
+##### Get User Categories
+```typescript
+const getUserCategories = async (userId: number) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { userId },
+      include: {
+        completed: {
+          where: { archived: false }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    return categories
+  } catch (error) {
+    console.error('Failed to get categories:', error)
+    throw new Error('Failed to retrieve categories')
+  }
+}
+```
+
+#### Completed Task Operations
+
+##### Create Completed Task
+```typescript
+const createCompletedTask = async (
+  userId: number,
+  categoryId: number,
+  title: string
+) => {
+  try {
+    const completed = await prisma.completed.create({
+      data: {
+        title,
+        userId,
+        categoryId,
+      },
+      include: {
+        category: true,
+        user: true
+      }
+    })
+    return completed
+  } catch (error) {
+    console.error('Failed to create completed task:', error)
+    throw new Error('Task creation failed')
+  }
+}
+```
+
+##### Archive Completed Task
+```typescript
+const archiveCompletedTask = async (taskId: number, userId: number) => {
+  try {
+    const task = await prisma.completed.update({
+      where: {
+        id: taskId,
+        userId, // Ensure user owns the task
+      },
+      data: {
+        archived: true,
+      }
+    })
+    return task
+  } catch (error) {
+    console.error('Failed to archive task:', error)
+    throw new Error('Task archival failed')
+  }
+}
+```
+
+### Database Best Practices
+
+#### Query Optimization
+
+##### Use Select for Specific Fields
+```typescript
+// Only select needed fields
 const user = await prisma.user.findUnique({
-  where: { clerkId: clerkUserId },
-  include: {
-    categories: true,
-    completed: true,
-  }
-})
-
-// Create user from webhook
-const newUser = await prisma.user.create({
-  data: {
-    clerkId: clerkUserId,
-    email: userEmail,
-    name: userName,
+  where: { clerkId },
+  select: {
+    id: true,
+    name: true,
+    email: true,
   }
 })
 ```
 
-### Category Operations
+##### Use Include Wisely
 ```typescript
-// Get user's categories
-const categories = await prisma.category.findMany({
-  where: { userId: user.id },
-  include: { completed: true }
-})
-
-// Create category
-const category = await prisma.category.create({
-  data: {
-    name: categoryName,
-    userId: user.id,
+// Include related data when needed
+const userWithCategories = await prisma.user.findUnique({
+  where: { clerkId },
+  include: {
+    categories: {
+      take: 10, // Limit number of categories
+      orderBy: { createdAt: 'desc' }
+    }
   }
 })
 ```
 
-### Completed Items
+#### Transaction Handling
+
+##### Use Transactions for Multiple Operations
 ```typescript
-// Get completed items with relations
-const completed = await prisma.completed.findMany({
-  where: { 
-    userId: user.id,
-    archived: false 
-  },
-  include: {
-    category: true,
-    user: true,
-  },
-  orderBy: { createdAt: 'desc' }
-})
+const createCategoryWithTask = async (
+  userId: number,
+  categoryName: string,
+  taskTitle: string
+) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Create category
+      const category = await tx.category.create({
+        data: {
+          name: categoryName,
+          userId,
+        }
+      })
+
+      // Create completed task
+      const completed = await tx.completed.create({
+        data: {
+          title: taskTitle,
+          userId,
+          categoryId: category.id,
+        }
+      })
+
+      return { category, completed }
+    })
+    
+    return result
+  } catch (error) {
+    console.error('Transaction failed:', error)
+    throw new Error('Failed to create category and task')
+  }
+}
 ```
 
-## Migration Management
+#### Error Handling
 
-### Development Workflow
-1. Modify schema in [prisma/schema.prisma](mdc:prisma/schema.prisma)
-2. Run `pnpm prisma:migrate` to create migration
-3. Run `pnpm prisma:generate` to update client
-4. Migrations stored in `prisma/migrations/`
+##### Handle Prisma Errors
+```typescript
+import { Prisma } from '@prisma/client'
 
-### Environment Variables
-- `POSTGRES_PRISMA_URL` - Database connection string
-- Validated in [src/env.mjs](mdc:src/env.mjs)
+const handlePrismaError = (error: unknown) => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    switch (error.code) {
+      case 'P2002':
+        // Unique constraint violation
+        return 'A record with this information already exists'
+      case 'P2025':
+        // Record not found
+        return 'Record not found'
+      case 'P2003':
+        // Foreign key constraint violation
+        return 'Related record not found'
+      default:
+        console.error('Database error:', error)
+        return 'Database operation failed'
+    }
+  }
+  
+  console.error('Unexpected error:', error)
+  return 'An unexpected error occurred'
+}
+```
 
-## Best Practices
+### Migration Patterns
 
-### Connection Management
-- Use the singleton client from [src/lib/prisma.ts](mdc:src/lib/prisma.ts)
-- Prisma handles connection pooling automatically
-- No need to manually close connections
+#### Development Migrations
+```bash
+# Create and apply migration
+pnpm prisma migrate dev --name <migration_name>
 
-### Error Handling
-- Use try-catch blocks for database operations
-- Handle unique constraint violations
-- Provide meaningful error messages
+# Generate Prisma client
+pnpm prisma generate
+```
 
-### Performance
-- Use `include` for related data to avoid N+1 queries
-- Use `select` to limit returned fields when needed
-- Consider pagination for large datasets
+#### Production Migrations
+```bash
+# Apply migrations in production
+pnpm prisma migrate deploy
+
+# Check migration status
+pnpm prisma migrate status
+```
+
+### Data Validation
+
+#### Use Zod for Input Validation
+```typescript
+import { z } from 'zod'
+
+const CreateCategorySchema = z.object({
+  name: z.string().min(1).max(255),
+  userId: z.number().positive(),
+})
+
+const createCategoryFromInput = async (input: unknown) => {
+  try {
+    const validatedInput = CreateCategorySchema.parse(input)
+    return await createCategory(validatedInput.userId, validatedInput.name)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error('Invalid input data')
+    }
+    throw error
+  }
+}
+```
+
+### Performance Considerations
+
+- Use connection pooling (handled by Prisma)
+- Implement proper indexing in schema
+- Use pagination for large result sets
+- Consider caching for frequently accessed data
+- Monitor query performance in production
+

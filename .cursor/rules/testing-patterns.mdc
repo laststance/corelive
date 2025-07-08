@@ -1,125 +1,418 @@
 ---
-description: 
-globs: *.test.*
-alwaysApply: false
+description: Testing patterns using Vitest and React Testing Library
 ---
+
 # Testing Patterns
 
-## Testing Framework
+## Testing Stack
 
-### Vitest Configuration
-- [vitest.config.ts](mdc:vitest.config.ts) - Main configuration
-- [setupTests.ts](mdc:setupTests.ts) - Test setup file
-- **happy-dom** for DOM simulation
-- **@testing-library/react** for component testing
+This project uses:
+- **Vitest** - Test runner and framework
+- **React Testing Library** - Component testing utilities
+- **Happy DOM** - Lightweight DOM implementation
+- **Testing Library User Event** - User interaction testing
 
-### Test Scripts
-- `pnpm test` - Run all tests
-- `pnpm test:watch` - Watch mode for development
-- `pnpm test:ui` - Visual test interface
+## Test Configuration
 
-## Test File Patterns
+### Vitest Setup
+Configuration in [vitest.config.ts](mdc:vitest.config.ts):
 
-### File Naming
-- Component tests: `ComponentName.test.tsx`
-- Hook tests: `useHookName.test.ts`
-- Utility tests: `utilityName.test.ts`
-- Type tests: `TypeName.test.ts`
-
-### Test Location
-- Place tests next to the code they test
-- Examples:
-  - [src/hooks/useIsFirstRender.test.ts](mdc:src/hooks/useIsFirstRender.test.ts)
-  - [src/types/__tests__/ConvertDatesToString.test.ts](mdc:src/types/__tests__/ConvertDatesToString.test.ts)
-
-## Component Testing
-
-### Basic Component Test
 ```typescript
-import { render, screen } from '@testing-library/react'
-import { expect, test } from 'vitest'
-import Component from './Component'
+import { defineConfig } from 'vitest/config'
 
-test('renders component correctly', () => {
-  render(<Component title="Test" />)
-  expect(screen.getByText('Test')).toBeInTheDocument()
+export default defineConfig({
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    include: [
+      'src/**/*.{spec,test}.{js,jsx,ts,tsx}',
+      'src/**/__tests__/**/*.{js,jsx,ts,tsx}',
+    ],
+    exclude: ['src/types/__tests__'],
+    setupFiles: ['setupTests.ts'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './'),
+    },
+  },
 })
 ```
 
-### User Interaction Testing
+### Test Setup
+Global test setup in [setupTests.ts](mdc:setupTests.ts):
+
 ```typescript
-import { render, screen } from '@testing-library/react'
+import '@testing-library/jest-dom'
+// Additional global test setup
+```
+
+## Testing Commands
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Run tests with UI
+pnpm test:ui
+```
+
+## Test File Organization
+
+### File Naming Conventions
+- **Unit/Integration Tests**: `ComponentName.test.tsx` or `functionName.test.ts`
+- **Test Directories**: `__tests__/` folders for grouping related tests
+- **Hook Tests**: `useHookName.test.ts`
+
+### Test File Structure
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test } from 'vitest'
 
-test('handles user interaction', async () => {
-  const user = userEvent.setup()
-  render(<Button onClick={handleClick} />)
-  
-  await user.click(screen.getByRole('button'))
-  expect(handleClick).toHaveBeenCalled()
+import ComponentName from './ComponentName'
+
+describe('ComponentName', () => {
+  beforeEach(() => {
+    // Setup before each test
+  })
+
+  afterEach(() => {
+    // Cleanup after each test
+  })
+
+  it('should render correctly', () => {
+    // Test implementation
+  })
 })
 ```
 
-## Hook Testing
+## Component Testing Patterns
 
-### Example from codebase:
+### Basic Component Testing
+```typescript
+import { render, screen } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
+
+import Button from './Button'
+
+describe('Button', () => {
+  it('renders with correct text', () => {
+    render(<Button>Click me</Button>)
+    
+    expect(screen.getByRole('button', { name: 'Click me' })).toBeInTheDocument()
+  })
+
+  it('applies custom className', () => {
+    render(<Button className="custom-class">Test</Button>)
+    
+    expect(screen.getByRole('button')).toHaveClass('custom-class')
+  })
+
+  it('handles click events', async () => {
+    const handleClick = vi.fn()
+    const user = userEvent.setup()
+    
+    render(<Button onClick={handleClick}>Click me</Button>)
+    
+    await user.click(screen.getByRole('button'))
+    expect(handleClick).toHaveBeenCalledOnce()
+  })
+})
+```
+
+### Testing Components with Props
+```typescript
+interface UserCardProps {
+  user: {
+    id: string
+    name: string
+    email: string
+  }
+  onEdit?: (userId: string) => void
+}
+
+describe('UserCard', () => {
+  const mockUser = {
+    id: '1',
+    name: 'John Doe',
+    email: 'john@example.com'
+  }
+
+  it('displays user information', () => {
+    render(<UserCard user={mockUser} />)
+    
+    expect(screen.getByText('John Doe')).toBeInTheDocument()
+    expect(screen.getByText('john@example.com')).toBeInTheDocument()
+  })
+
+  it('calls onEdit when edit button is clicked', async () => {
+    const onEdit = vi.fn()
+    const user = userEvent.setup()
+    
+    render(<UserCard user={mockUser} onEdit={onEdit} />)
+    
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    expect(onEdit).toHaveBeenCalledWith('1')
+  })
+})
+```
+
+## Hook Testing Patterns
+
+### Testing Custom Hooks
+Example from [src/hooks/useIsFirstRender.test.ts](mdc:src/hooks/useIsFirstRender.test.ts):
+
 ```typescript
 import { renderHook } from '@testing-library/react'
-import { expect, test } from 'vitest'
+import { describe, it, expect } from 'vitest'
+
 import { useIsFirstRender } from './useIsFirstRender'
 
-test('returns true on first render', () => {
-  const { result } = renderHook(() => useIsFirstRender())
-  expect(result.current).toBe(true)
+describe('useIsFirstRender', () => {
+  it('should return true on first render and false on subsequent renders', () => {
+    const { result, rerender } = renderHook(() => useIsFirstRender())
+
+    // First render should return true
+    expect(result.current).toBe(true)
+
+    // Re-render the hook
+    rerender()
+
+    // Now it should return false
+    expect(result.current).toBe(false)
+
+    // Additional re-renders should still return false
+    rerender()
+    expect(result.current).toBe(false)
+  })
 })
 ```
 
-## Type Testing
-
-### Using ts-expect
+### Testing Hooks with State
 ```typescript
-import { expectType } from 'ts-expect'
-import type { ConvertDatesToString } from '../utility'
+import { renderHook, act } from '@testing-library/react'
 
-test('converts Date properties to strings', () => {
-  type Input = { date: Date; name: string }
-  type Expected = { date: string; name: string }
-  
-  expectType<ConvertDatesToString<Input>>().toEqual<Expected>()
+describe('useCounter', () => {
+  it('should increment count', () => {
+    const { result } = renderHook(() => useCounter(0))
+
+    expect(result.current.count).toBe(0)
+
+    act(() => {
+      result.current.increment()
+    })
+
+    expect(result.current.count).toBe(1)
+  })
 })
+```
+
+## API Route Testing
+
+### Testing API Handlers
+```typescript
+import { describe, it, expect, vi } from 'vitest'
+import { NextRequest } from 'next/server'
+
+import { POST } from './route'
+
+// Mock Prisma
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    user: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+    }
+  }
+}))
+
+describe('/api/users', () => {
+  it('creates a new user', async () => {
+    const request = new NextRequest('http://localhost/api/users', {
+      method: 'POST',
+      body: JSON.stringify({
+        clerkId: 'user_123',
+        email: 'test@example.com',
+        name: 'Test User'
+      })
+    })
+
+    const response = await POST(request)
+    const data = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(data).toMatchObject({
+      clerkId: 'user_123',
+      email: 'test@example.com',
+      name: 'Test User'
+    })
+  })
+})
+```
+
+## Testing with External Dependencies
+
+### Mocking Clerk Authentication
+```typescript
+import { vi } from 'vitest'
+
+// Mock Clerk hooks
+vi.mock('@clerk/nextjs', () => ({
+  useUser: () => ({
+    user: {
+      id: 'user_123',
+      emailAddresses: [{ emailAddress: 'test@example.com' }]
+    },
+    isLoaded: true,
+    isSignedIn: true
+  }),
+  useAuth: () => ({
+    userId: 'user_123',
+    sessionId: 'session_123'
+  }),
+  useClerk: () => ({
+    signOut: vi.fn()
+  })
+}))
+```
+
+### Mocking Prisma
+```typescript
+import { vi } from 'vitest'
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn()
+    },
+    category: {
+      findMany: vi.fn(),
+      create: vi.fn()
+    }
+  }
+}))
 ```
 
 ## Testing Best Practices
 
-### Test Structure
-1. **Arrange** - Set up test data and environment
-2. **Act** - Execute the code being tested
-3. **Assert** - Verify the expected behavior
+### Accessibility Testing
+```typescript
+import { render } from '@testing-library/react'
+import { axe, toHaveNoViolations } from 'jest-axe'
 
-### Test Naming
-- Use descriptive test names that explain the behavior
-- Format: `should [expected behavior] when [condition]`
+expect.extend(toHaveNoViolations)
 
-### Mocking
-- Mock external dependencies
-- Use `vi.mock()` for module mocking
-- Mock API calls and database operations
+describe('Button accessibility', () => {
+  it('should not have accessibility violations', async () => {
+    const { container } = render(<Button>Accessible button</Button>)
+    const results = await axe(container)
+    expect(results).toHaveNoViolations()
+  })
+})
+```
 
-### Authentication Testing
-- Mock Clerk authentication in tests
-- Test both authenticated and unauthenticated states
-- Use test utilities for user context
+### Testing Error States
+```typescript
+describe('ErrorBoundary', () => {
+  it('displays error message when child component throws', () => {
+    const ThrowError = () => {
+      throw new Error('Test error')
+    }
 
-## End-to-End Testing
+    render(
+      <ErrorBoundary>
+        <ThrowError />
+      </ErrorBoundary>
+    )
 
-### Playwright Integration
-- After implementing features, use Playwright for E2E testing
-- Generate test code automatically after manual testing
-- Include visual regression testing for UI changes
-- Test on port 3000 (ensure no conflicts)
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+  })
+})
+```
 
-### Test Coverage
-- Aim for high test coverage on critical paths
-- Focus on user-facing functionality
-- Test error states and edge cases
+### Testing Loading States
+```typescript
+describe('UserProfile', () => {
+  it('displays loading spinner while fetching user data', () => {
+    render(<UserProfile userId="123" />)
+    
+    expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
+  })
+
+  it('displays user data after loading', async () => {
+    render(<UserProfile userId="123" />)
+    
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument()
+    })
+  })
+})
+```
+
+## Test Data Management
+
+### Test Factories
+```typescript
+// test/factories/userFactory.ts
+export const createMockUser = (overrides = {}) => ({
+  id: '1',
+  clerkId: 'user_123',
+  name: 'Test User',
+  email: 'test@example.com',
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+  ...overrides
+})
+
+export const createMockCategory = (overrides = {}) => ({
+  id: 1,
+  name: 'Test Category',
+  userId: 1,
+  createdAt: new Date('2024-01-01'),
+  updatedAt: new Date('2024-01-01'),
+  ...overrides
+})
+```
+
+### Using Test Factories
+```typescript
+import { createMockUser, createMockCategory } from '@/test/factories'
+
+describe('UserDashboard', () => {
+  it('renders user categories', () => {
+    const user = createMockUser({ name: 'John Doe' })
+    const categories = [
+      createMockCategory({ name: 'Work' }),
+      createMockCategory({ name: 'Personal' })
+    ]
+
+    render(<UserDashboard user={user} categories={categories} />)
+    
+    expect(screen.getByText('Work')).toBeInTheDocument()
+    expect(screen.getByText('Personal')).toBeInTheDocument()
+  })
+})
+```
+
+## Coverage and Quality
+
+### Test Coverage Goals
+- Aim for >80% code coverage
+- Focus on critical business logic
+- Test happy paths and error cases
+- Include edge cases and boundary conditions
+
+### Test Quality Guidelines
+- Write descriptive test names
+- Use the AAA pattern (Arrange, Act, Assert)
+- Keep tests focused and independent
+- Mock external dependencies appropriately
+- Test behavior, not implementation details
+

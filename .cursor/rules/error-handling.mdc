@@ -1,129 +1,245 @@
----
-description:
-globs:
-alwaysApply: false
----
 # Error Handling Patterns
 
-## TypeScript Error Handling
+## Error Boundaries
 
-### General Rules
-- **ONLY** fix TypeScript errors in code that is valid JavaScript and runs correctly at runtime
-- **NEVER** change runtime behavior during type fixes
-- Use strict TypeScript configuration from [tsconfig.json](mdc:tsconfig.json)
-
-### Common Patterns
-
-#### Safe Array/Object Access
+### React Error Boundary
 ```typescript
-// Use noUncheckedIndexedAccess for safer access
-const item = items[0] // Type: Item | undefined
-if (item) {
-  // Safe to use item here
-  console.log(item.name)
+'use client'
+
+import React from 'react'
+
+interface ErrorBoundaryState {
+  hasError: boolean
+  error?: Error
+  errorInfo?: React.ErrorInfo
 }
 
-// Or use optional chaining
-const name = items[0]?.name
-```
-
-#### Zod Validation
-```typescript
-import { z } from 'zod'
-
-const schema = z.object({
-  name: z.string(),
-  age: z.number().min(0),
-})
-
-try {
-  const result = schema.parse(data)
-  // result is fully typed and validated
-} catch (error) {
-  if (error instanceof z.ZodError) {
-    console.error('Validation failed:', error.errors)
+class ErrorBoundary extends React.Component<
+  React.PropsWithChildren<{}>,
+  ErrorBoundaryState
+> {
+  constructor(props: React.PropsWithChildren<{}>) {
+    super(props)
+    this.state = { hasError: false }
   }
-}
-```
 
-## Database Error Handling
-
-### Prisma Errors
-```typescript
-import { Prisma } from '@prisma/client'
-
-try {
-  const user = await prisma.user.create({
-    data: { clerkId, email }
-  })
-} catch (error) {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === 'P2002') {
-      // Unique constraint violation
-      throw new Error('User already exists')
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return {
+      hasError: true,
+      error,
     }
   }
-  throw error
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Log error to monitoring service
+    console.error('Error Boundary caught an error:', error, errorInfo)
+    
+    this.setState({
+      error,
+      errorInfo,
+    })
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-[400px] flex-col items-center justify-center p-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              Something went wrong
+            </h2>
+            <p className="text-gray-600 mb-6">
+              We're sorry, but something unexpected happened.
+            </p>
+            <button
+              onClick={() => this.setState({ hasError: false })}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
 }
+
+export default ErrorBoundary
 ```
 
-### Connection Errors
+### Error Boundary Wrapper
 ```typescript
-try {
-  await prisma.$connect()
-  // Database operations
-} catch (error) {
-  console.error('Database connection failed:', error)
-  throw new Error('Unable to connect to database')
-}
+// Wrap components that might throw errors
+const SafeComponent: React.FC = () => (
+  <ErrorBoundary>
+    <RiskyComponent />
+  </ErrorBoundary>
+)
 ```
 
 ## API Error Handling
 
-### Server Actions
+### API Response Types
 ```typescript
-'use server'
+// Standard API response types
+interface ApiResponse<T> {
+  data?: T
+  error?: {
+    message: string
+    code: string
+    details?: unknown
+  }
+  success: boolean
+}
 
-import { redirect } from 'next/navigation'
+interface ApiError {
+  message: string
+  status: number
+  code?: string
+}
+```
 
-export async function createItem(data: FormData) {
+### Fetch Wrapper with Error Handling
+```typescript
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+async function apiRequest<T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> {
   try {
-    // Validate input
-    const title = data.get('title')?.toString()
-    if (!title) {
-      throw new Error('Title is required')
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new ApiError(
+        errorData.message || `HTTP error! status: ${response.status}`,
+        response.status,
+        errorData.code
+      )
     }
 
-    // Database operation
-    await prisma.completed.create({
-      data: { title, userId, categoryId }
-    })
-    
-    redirect('/dashboard')
+    return response.json()
   } catch (error) {
-    console.error('Failed to create item:', error)
-    throw error
+    if (error instanceof ApiError) {
+      throw error
+    }
+
+    // Network or other errors
+    console.error('API request failed:', error)
+    throw new ApiError(
+      'Network error occurred',
+      0,
+      'NETWORK_ERROR'
+    )
   }
 }
 ```
 
-### API Routes
+### API Route Error Handling
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 
+// Standard error response format
+function createErrorResponse(
+  message: string,
+  status: number,
+  code?: string
+) {
+  return NextResponse.json(
+    {
+      error: {
+        message,
+        code,
+      },
+      success: false,
+    },
+    { status }
+  )
+}
+
+// API route with comprehensive error handling
 export async function POST(request: NextRequest) {
   try {
+    // Validate request body
     const body = await request.json()
-    
-    // Process request
-    const result = await processData(body)
-    
-    return NextResponse.json(result)
+    const validatedData = CreateUserSchema.parse(body)
+
+    // Check authentication
+    const { userId } = await auth()
+    if (!userId) {
+      return createErrorResponse('Unauthorized', 401, 'UNAUTHORIZED')
+    }
+
+    // Perform database operation
+    const user = await prisma.user.create({
+      data: validatedData,
+    })
+
+    return NextResponse.json({
+      data: user,
+      success: true,
+    })
   } catch (error) {
-    console.error('API error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+    // Log error for debugging
+    console.error('API Error:', error)
+
+    // Zod validation error
+    if (error instanceof z.ZodError) {
+      return createErrorResponse(
+        'Invalid request data',
+        400,
+        'VALIDATION_ERROR'
+      )
+    }
+
+    // Prisma error
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      switch (error.code) {
+        case 'P2002':
+          return createErrorResponse(
+            'Record already exists',
+            409,
+            'DUPLICATE_RECORD'
+          )
+        case 'P2025':
+          return createErrorResponse(
+            'Record not found',
+            404,
+            'NOT_FOUND'
+          )
+        default:
+          return createErrorResponse(
+            'Database error',
+            500,
+            'DATABASE_ERROR'
+          )
+      }
+    }
+
+    // Generic error
+    return createErrorResponse(
+      'Internal server error',
+      500,
+      'INTERNAL_ERROR'
     )
   }
 }
@@ -131,98 +247,388 @@ export async function POST(request: NextRequest) {
 
 ## Client-Side Error Handling
 
-### Component Error Boundaries
+### React Query Error Handling
 ```typescript
-'use client'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
-import { Component, ReactNode } from 'react'
-
-interface Props {
-  children: ReactNode
-  fallback?: ReactNode
+// Query with error handling
+const useUser = (userId: string) => {
+  return useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => apiRequest<User>(`/api/users/${userId}`),
+    onError: (error: ApiError) => {
+      console.error('Failed to fetch user:', error)
+      toast.error('Failed to load user data')
+    },
+    retry: (failureCount, error) => {
+      // Don't retry on 404 or 401 errors
+      if (error instanceof ApiError && [404, 401].includes(error.status)) {
+        return false
+      }
+      return failureCount < 3
+    },
+  })
 }
 
-interface State {
-  hasError: boolean
-}
-
-class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props)
-    this.state = { hasError: false }
-  }
-
-  static getDerivedStateFromError(): State {
-    return { hasError: true }
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo)
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback || <div>Something went wrong.</div>
-    }
-
-    return this.props.children
-  }
+// Mutation with error handling
+const useCreateUser = () => {
+  return useMutation({
+    mutationFn: (userData: CreateUserData) =>
+      apiRequest<User>('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(userData),
+      }),
+    onSuccess: () => {
+      toast.success('User created successfully')
+    },
+    onError: (error: ApiError) => {
+      console.error('Failed to create user:', error)
+      
+      switch (error.code) {
+        case 'DUPLICATE_RECORD':
+          toast.error('User already exists')
+          break
+        case 'VALIDATION_ERROR':
+          toast.error('Please check your input')
+          break
+        default:
+          toast.error('Failed to create user')
+      }
+    },
+  })
 }
 ```
 
-### Async Operations
+### Form Error Handling
 ```typescript
-'use client'
-
 import { useState } from 'react'
+import { z } from 'zod'
 
-export function useAsyncOperation<T>() {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+const CreateUserSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email format'),
+})
 
-  const execute = async (operation: () => Promise<T>) => {
+type FormErrors = Partial<Record<keyof z.infer<typeof CreateUserSchema>, string>>
+
+const UserForm: React.FC = () => {
+  const [formData, setFormData] = useState({ name: '', email: '' })
+  const [errors, setErrors] = useState<FormErrors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrors({})
+    setIsSubmitting(true)
+
     try {
-      setLoading(true)
-      setError(null)
-      return await operation()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      setError(message)
-      throw err
+      // Validate form data
+      const validatedData = CreateUserSchema.parse(formData)
+      
+      // Submit to API
+      await apiRequest('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(validatedData),
+      })
+
+      toast.success('User created successfully')
+      setFormData({ name: '', email: '' })
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        // Handle validation errors
+        const fieldErrors: FormErrors = {}
+        error.errors.forEach((err) => {
+          if (err.path[0]) {
+            fieldErrors[err.path[0] as keyof FormErrors] = err.message
+          }
+        })
+        setErrors(fieldErrors)
+      } else if (error instanceof ApiError) {
+        // Handle API errors
+        toast.error(error.message)
+      } else {
+        // Handle unexpected errors
+        console.error('Unexpected error:', error)
+        toast.error('An unexpected error occurred')
+      }
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
-  return { execute, loading, error }
+  return (
+    <form onSubmit={handleSubmit}>
+      <Input
+        label="Name"
+        value={formData.name}
+        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        error={errors.name}
+      />
+      <Input
+        label="Email"
+        type="email"
+        value={formData.email}
+        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+        error={errors.email}
+      />
+      <Button type="submit" isLoading={isSubmitting}>
+        Create User
+      </Button>
+    </form>
+  )
 }
 ```
 
-## Environment Variable Errors
+## User Feedback Patterns
 
-### Using env.mjs validation
+### Toast Notifications
 ```typescript
-import { env } from '@/env.mjs'
+import { toast } from 'sonner'
 
-// This will throw at build time if variables are missing
-const clerkKey = env.CLERK_SECRET_KEY
-const dbUrl = env.POSTGRES_PRISMA_URL
+// Success notifications
+toast.success('Settings saved successfully')
+
+// Error notifications
+toast.error('Failed to save settings')
+
+// Info notifications
+toast.info('Changes will take effect after refresh')
+
+// Warning notifications
+toast.warning('This action cannot be undone')
+
+// Custom toast with action
+toast.error('Failed to delete item', {
+  action: {
+    label: 'Retry',
+    onClick: () => retryDelete(),
+  },
+})
 ```
 
-## Best Practices
+### Error States in Components
+```typescript
+interface DataComponentProps {
+  userId: string
+}
+
+const DataComponent: React.FC<DataComponentProps> = ({ userId }) => {
+  const { data, error, isLoading, refetch } = useUser(userId)
+
+  if (isLoading) {
+    return <LoadingSpinner />
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center p-8">
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Failed to load data
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {error.message || 'Something went wrong'}
+          </p>
+          <Button onClick={() => refetch()}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return <div>{/* Render data */}</div>
+}
+```
+
+### Empty States
+```typescript
+const EmptyState: React.FC<{
+  title: string
+  description: string
+  action?: {
+    label: string
+    onClick: () => void
+  }
+}> = ({ title, description, action }) => (
+  <div className="flex flex-col items-center justify-center p-12">
+    <div className="text-center">
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        {title}
+      </h3>
+      <p className="text-gray-600 mb-6 max-w-sm">
+        {description}
+      </p>
+      {action && (
+        <Button onClick={action.onClick}>
+          {action.label}
+        </Button>
+      )}
+    </div>
+  </div>
+)
+
+// Usage
+const UserList: React.FC = () => {
+  const { data: users, isLoading } = useUsers()
+
+  if (isLoading) return <LoadingSpinner />
+
+  if (!users?.length) {
+    return (
+      <EmptyState
+        title="No users found"
+        description="Get started by creating your first user."
+        action={{
+          label: 'Create User',
+          onClick: () => setShowCreateModal(true),
+        }}
+      />
+    )
+  }
+
+  return <div>{/* Render users */}</div>
+}
+```
+
+## Error Monitoring
 
 ### Error Logging
-- Log errors with sufficient context
-- Use structured logging for production
-- Don't log sensitive information
-- Include request IDs for tracing
+```typescript
+// Centralized error logging
+class ErrorLogger {
+  static log(error: Error, context?: Record<string, unknown>) {
+    console.error('Error occurred:', {
+      message: error.message,
+      stack: error.stack,
+      context,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+    })
 
-### User-Friendly Messages
-- Show generic error messages to users
-- Log detailed errors for developers
-- Provide actionable feedback when possible
+    // Send to monitoring service in production
+    if (process.env.NODE_ENV === 'production') {
+      // Example: Send to error monitoring service
+      // this.sendToMonitoringService(error, context)
+    }
+  }
 
-### Recovery Strategies
-- Implement retry logic for transient errors
-- Provide fallback UI states
-- Allow users to retry failed operations
+  static logApiError(error: ApiError, context?: Record<string, unknown>) {
+    this.log(error, {
+      ...context,
+      status: error.status,
+      code: error.code,
+      type: 'API_ERROR',
+    })
+  }
+}
+
+// Usage in components
+try {
+  await riskyOperation()
+} catch (error) {
+  ErrorLogger.log(error as Error, { 
+    component: 'UserProfile',
+    action: 'updateProfile',
+    userId 
+  })
+  toast.error('Failed to update profile')
+}
+```
+
+### Performance Error Boundaries
+```typescript
+// Monitor performance issues
+const PerformanceErrorBoundary: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  useEffect(() => {
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.entryType === 'measure' && entry.duration > 1000) {
+          ErrorLogger.log(new Error('Performance issue detected'), {
+            type: 'PERFORMANCE',
+            duration: entry.duration,
+            name: entry.name,
+          })
+        }
+      }
+    })
+
+    observer.observe({ entryTypes: ['measure'] })
+
+    return () => observer.disconnect()
+  }, [])
+
+  return <ErrorBoundary>{children}</ErrorBoundary>
+}
+```
+
+## Testing Error Handling
+
+### Testing Error Boundaries
+```typescript
+import { render, screen } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
+
+const ThrowError = ({ shouldThrow }: { shouldThrow: boolean }) => {
+  if (shouldThrow) {
+    throw new Error('Test error')
+  }
+  return <div>No error</div>
+}
+
+describe('ErrorBoundary', () => {
+  it('catches and displays error', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowError shouldThrow={true} />
+      </ErrorBoundary>
+    )
+
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+    expect(screen.getByText(/try again/i)).toBeInTheDocument()
+  })
+
+  it('renders children when no error', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowError shouldThrow={false} />
+      </ErrorBoundary>
+    )
+
+    expect(screen.getByText('No error')).toBeInTheDocument()
+  })
+})
+```
+
+### Testing API Error Handling
+```typescript
+import { vi } from 'vitest'
+
+describe('API Error Handling', () => {
+  it('handles 404 errors correctly', async () => {
+    // Mock fetch to return 404
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({ message: 'User not found' }),
+    })
+
+    await expect(apiRequest('/api/users/123')).rejects.toThrow('User not found')
+  })
+
+  it('handles network errors correctly', async () => {
+    // Mock fetch to throw network error
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
+
+    await expect(apiRequest('/api/users')).rejects.toThrow('Network error occurred')
+  })
+})
+```
+description:
+globs:
+alwaysApply: false
+---

@@ -1,86 +1,403 @@
 ---
-description:
-globs:
-alwaysApply: false
+description: Development workflow patterns and best practices
 ---
+
 # Development Workflow
 
-## Package Manager
-- Use **pnpm** exclusively (configured with Volta in [package.json](mdc:package.json))
-- Use Fish shell instead of Bash for commands
-- Ensure Volta is configured for Node.js 22.16.0
+## Package Management
 
-## Development Scripts
+### pnpm Usage
+This project uses **pnpm** as the package manager. Always use pnpm commands:
 
-### Core Development
-- `pnpm dev` - Start development server with Turbo
-- `pnpm build` - Build for production
-- `pnpm start` - Start production server
-- `pnpm lint` - Run ESLint
-- `pnpm lint:fix` - Fix ESLint issues automatically
+```bash
+# Install dependencies
+pnpm install
 
-### Testing
-- `pnpm test` - Run tests with Vitest
-- `pnpm test:watch` - Run tests in watch mode
-- `pnpm test:ui` - Run tests with UI interface
-- Testing framework: **Vitest** with **Testing Library**
+# Add new dependency
+pnpm add <package-name>
 
-### Database Operations
-- `pnpm prisma:migrate` - Run database migrations
-- `pnpm prisma:status` - Check migration status
-- `pnpm prisma:generate` - Generate Prisma client
-- `pnpm prisma:studio` - Open Prisma Studio
+# Add dev dependency
+pnpm add -D <package-name>
 
-### Code Quality
-- `pnpm prettier` - Format code with Prettier
-- `pnpm typecheck` - Type check without emitting
+# Run scripts
+pnpm dev          # Start development server
+pnpm build        # Build for production
+pnpm test         # Run tests
+pnpm lint         # Run linting
+pnpm typecheck    # Type checking
+```
 
-## Environment Setup
+### Volta Configuration
+Node.js version is managed by Volta as specified in [package.json](mdc:package.json):
+```json
+{
+  "volta": {
+    "node": "22.16.0"
+  }
+}
+```
 
-### Required Environment Variables
-See [src/env.mjs](mdc:src/env.mjs) for complete validation schema:
+Setup for new developers:
+```fish
+# Install Volta
+curl https://get.volta.sh | bash
 
-**Server-side:**
-- `POSTGRES_PRISMA_URL` - Database connection string
-- `WEBHOOK_SECRET` - Webhook secret for API security
-- `CLERK_SECRET_KEY` - Clerk authentication secret
+# Install and use project Node.js version
+volta install node
+volta install pnpm
 
-**Client-side:**
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` - Clerk public key
-- `NEXT_PUBLIC_CLERK_SIGN_IN_URL` - Sign in URL
-- `NEXT_PUBLIC_CLERK_SIGN_UP_URL` - Sign up URL
+# In project directory, versions are automatically used
+cd /path/to/project
+node --version  # Should show 22.16.0
+pnpm --version  # Should show 10.12.1
+```
 
 ## Git Workflow
 
+### Branch Naming Conventions
+```bash
+# Feature branches
+feature/add-user-authentication
+feature/implement-dashboard
+
+# Bug fixes
+fix/resolve-login-issue
+fix/correct-typo-in-header
+
+# Hotfixes
+hotfix/critical-security-patch
+
+# Chores/maintenance
+chore/update-dependencies
+chore/improve-error-handling
+```
+
+### Commit Message Format
+Follow conventional commits:
+```bash
+# Format: type(scope): description
+
+# Types:
+feat: add new feature
+fix: bug fix
+docs: documentation changes
+style: formatting, missing semicolons, etc.
+refactor: code change that neither fixes a bug nor adds a feature
+test: adding missing tests
+chore: maintain
+
+# Examples:
+feat(auth): add user login functionality
+fix(dashboard): resolve data loading issue
+docs(readme): update installation instructions
+style(components): format button component
+refactor(api): extract user service logic
+test(hooks): add tests for useIsFirstRender
+chore(deps): update next.js to v15.3.5
+```
+
 ### Pre-commit Hooks
-- **Husky** configured for git hooks
-- **lint-staged** runs Prettier on all staged files
-- Ensure code is formatted before committing
+Configured with Husky and lint-staged in [package.json](mdc:package.json):
 
-### Branch Strategy
-- Work on feature branches
-- Ensure tests pass before merging
-- Use conventional commit messages
+```json
+{
+  "lint-staged": {
+    "*": "prettier --ignore-unknown --write",
+    "*.{js,ts,jsx,tsx,cjs,mjs}": [
+      "eslint --fix"
+    ]
+  }
+}
+```
 
-## UI Development Process
+This automatically:
+1. Formats code with Prettier
+2. Fixes ESLint issues
+3. Runs type checking
+4. Runs tests for changed files
 
-### After implementing features or fixing bugs:
-1. Start local development server on port 3000
-2. Use Playwright for end-to-end testing
-3. Generate Playwright test code automatically
-4. Take screenshots for visual verification of style changes
-5. Ensure responsive design across breakpoints
+## Development Environment
 
-## Database Workflow
+### Required Tools
+- **Node.js**: 22.16.0 (managed by Volta)
+- **pnpm**: 10.12.1 (managed by Volta)
+- **Fish Shell**: For scripts and commands
+- **Docker**: For database (PostgreSQL)
 
-### Schema Changes
-1. Modify [prisma/schema.prisma](mdc:prisma/schema.prisma)
-2. Run `pnpm prisma:migrate` to create and apply migration
-3. Run `pnpm prisma:generate` to update Prisma client
-4. Update types if needed
+### Environment Setup
+1. Clone repository
+2. Install Volta and Node.js
+3. Run setup script:
+```fish
+# Make script executable and run
+chmod +x scripts/dev-setup.sh
+./scripts/dev-setup.sh
+```
 
-### Database Models
-Current models in schema:
-- `User` - User accounts linked to Clerk
-- `Category` - Task categories
-- `Completed` - Completed tasks/items
+4. Copy environment variables:
+```bash
+cp .env.example .env.local
+# Edit .env.local with your values
+```
+
+5. Start development services:
+```fish
+# Start database
+docker-compose up -d
+
+# Install dependencies
+pnpm install
+
+# Run database migrations
+pnpm prisma migrate dev
+
+# Start development server
+pnpm dev
+```
+
+## Development Scripts
+
+### Common Development Tasks
+```fish
+# Development server with turbo
+pnpm dev
+
+# Database operations
+pnpm prisma:migrate      # Create and apply migration
+pnpm prisma:generate     # Generate Prisma client
+pnpm prisma:studio       # Open Prisma Studio
+pnpm prisma:deploy       # Deploy migrations (production)
+
+# Code quality
+pnpm lint               # Run ESLint
+pnpm lint:fix           # Fix ESLint issues
+pnpm prettier           # Format all files
+pnpm typecheck          # TypeScript checking
+
+# Testing
+pnpm test               # Run all tests
+pnpm test:watch         # Run tests in watch mode
+pnpm test:ui            # Run tests with UI
+
+# Build and deployment
+pnpm build              # Build for production
+pnpm start              # Start production server
+pnpm clean              # Clean build artifacts
+```
+
+### Custom Scripts for Development
+Create project-specific scripts in `scripts/` directory:
+
+```bash
+#!/usr/bin/env fish
+# scripts/reset-db.fish
+
+echo "Resetting database..."
+pnpm prisma migrate reset --force
+pnpm prisma generate
+echo "Database reset complete!"
+```
+
+## Code Quality Workflow
+
+### Pre-Development Checklist
+- [ ] Pull latest changes from main branch
+- [ ] Create feature branch with descriptive name
+- [ ] Ensure development environment is set up
+- [ ] Run tests to ensure everything works
+
+### During Development
+1. **Write code following project standards**
+   - Use TypeScript strictly
+   - Follow naming conventions
+   - Add proper error handling
+   - Include JSDoc comments for complex functions
+
+2. **Test your changes**
+   ```fish
+   # Run relevant tests
+   pnpm test src/components/NewComponent.test.tsx
+   
+   # Run type checking
+   pnpm typecheck
+   
+   # Check for linting issues
+   pnpm lint
+   ```
+
+3. **Regular commits**
+   - Make small, focused commits
+   - Use conventional commit messages
+   - Include tests with new features
+
+### Pre-Merge Checklist
+- [ ] All tests pass (`pnpm test`)
+- [ ] No TypeScript errors (`pnpm typecheck`)
+- [ ] No linting errors (`pnpm lint`)
+- [ ] Code is properly formatted (`pnpm prettier`)
+- [ ] New features have tests
+- [ ] Documentation is updated if needed
+- [ ] Manual testing completed
+
+## Database Development
+
+### Migration Workflow
+```fish
+# 1. Make schema changes in prisma/schema.prisma
+# 2. Create migration
+pnpm prisma migrate dev --name add_user_preferences
+
+# 3. The migration will:
+#    - Generate SQL migration file
+#    - Apply migration to development database
+#    - Regenerate Prisma client
+
+# 4. Commit migration files
+git add prisma/migrations/
+git commit -m "feat(db): add user preferences table"
+```
+
+### Database Seed Data
+```fish
+# Create seed script in prisma/seed.ts
+pnpm prisma db seed
+
+# Reset database with seed data
+pnpm prisma migrate reset
+```
+
+## Environment-Specific Workflows
+
+### Development Environment
+```fish
+# Start with hot reloading
+pnpm dev
+
+# Open multiple terminals for parallel work:
+# Terminal 1: Development server
+pnpm dev
+
+# Terminal 2: Test watcher
+pnpm test:watch
+
+# Terminal 3: Prisma Studio
+pnpm prisma:studio
+
+# Terminal 4: General commands
+```
+
+### Production Deployment
+```fish
+# Build application
+pnpm build
+
+# Run production server locally for testing
+pnpm start
+
+# Deploy database migrations
+pnpm prisma:deploy
+
+# Verify deployment
+curl -f http://localhost:3000/api/health || exit 1
+```
+
+## Debugging Workflow
+
+### Client-Side Debugging
+```typescript
+// Use proper debugging techniques
+console.log('Debug info:', { userId, timestamp: new Date() })
+
+// For React components
+import { useEffect } from 'react'
+
+const DebugComponent = () => {
+  useEffect(() => {
+    console.log('Component mounted')
+    return () => console.log('Component unmounted')
+  }, [])
+}
+
+// Use React Developer Tools
+// Use browser devtools for performance profiling
+```
+
+### Server-Side Debugging
+```typescript
+// API route debugging
+export async function GET(request: NextRequest) {
+  console.log('API called:', {
+    url: request.url,
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+  })
+
+  try {
+    // Your code here
+  } catch (error) {
+    console.error('API Error:', error)
+    // Proper error response
+  }
+}
+```
+
+### Database Debugging
+```fish
+# Check database connection
+pnpm prisma db execute --command "SELECT 1"
+
+# View generated SQL queries
+DEBUG="prisma:query" pnpm dev
+
+# Use Prisma Studio for data inspection
+pnpm prisma:studio
+```
+
+## Performance Monitoring
+
+### Development Performance
+```fish
+# Bundle analyzer
+npx @next/bundle-analyzer
+
+# Lighthouse CI
+npx lhci autorun
+
+# Performance profiling in development
+# Use React DevTools Profiler
+# Use Next.js built-in performance metrics
+```
+
+### Code Quality Metrics
+```fish
+# TypeScript strict mode compliance
+pnpm typecheck --noEmit
+
+# Test coverage
+pnpm test -- --coverage
+
+# Bundle size analysis
+pnpm build && npx bundlesize
+```
+
+## Collaboration Workflow
+
+### Code Reviews
+- Create detailed pull request descriptions
+- Include screenshots for UI changes
+- Link related issues
+- Request specific reviewers
+- Address feedback promptly
+
+### Documentation Updates
+- Update README for new setup requirements
+- Add JSDoc comments for new APIs
+- Update architecture docs for significant changes
+- Include migration guides for breaking changes
+
+### Knowledge Sharing
+- Document complex solutions in team wiki
+- Share useful debugging techniques
+- Conduct code review sessions
+- Maintain decision logs for architecture choices
+
