@@ -1,3 +1,8 @@
+---
+description: UI component patterns and best practices
+globs: src/app/**/*.{ts,tsx},src/components/**/*.{ts,tsx}
+---
+
 # UI Component Patterns
 
 ## Design System
@@ -559,7 +564,3 @@ const App = () => (
   </Suspense>
 )
 ```
-description:
-globs:
-alwaysApply: false
----

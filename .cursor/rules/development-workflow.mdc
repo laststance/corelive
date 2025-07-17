@@ -38,7 +38,7 @@ Node.js version is managed by Volta as specified in [package.json](mdc:package.j
 ```
 
 Setup for new developers:
-```fish
+```bash
 # Install Volta
 curl https://get.volta.sh | bash
 
@@ -121,14 +121,13 @@ This automatically:
 ### Required Tools
 - **Node.js**: 22.16.0 (managed by Volta)
 - **pnpm**: 10.12.1 (managed by Volta)
-- **Fish Shell**: For scripts and commands
 - **Docker**: For database (PostgreSQL)
 
 ### Environment Setup
 1. Clone repository
 2. Install Volta and Node.js
 3. Run setup script:
-```fish
+```bash
 # Make script executable and run
 chmod +x scripts/dev-setup.sh
 ./scripts/dev-setup.sh
@@ -141,7 +140,7 @@ cp .env.example .env.local
 ```
 
 5. Start development services:
-```fish
+```bash
 # Start database
 docker-compose up -d
 
@@ -158,7 +157,7 @@ pnpm dev
 ## Development Scripts
 
 ### Common Development Tasks
-```fish
+```bash
 # Development server with turbo
 pnpm dev
 
@@ -189,8 +188,8 @@ pnpm clean              # Clean build artifacts
 Create project-specific scripts in `scripts/` directory:
 
 ```bash
-#!/usr/bin/env fish
-# scripts/reset-db.fish
+#!/usr/bin/env bash
+# scripts/reset-db.bash
 
 echo "Resetting database..."
 pnpm prisma migrate reset --force
@@ -214,7 +213,7 @@ echo "Database reset complete!"
    - Include JSDoc comments for complex functions
 
 2. **Test your changes**
-   ```fish
+   ```bash
    # Run relevant tests
    pnpm test src/components/NewComponent.test.tsx
    
@@ -242,7 +241,7 @@ echo "Database reset complete!"
 ## Database Development
 
 ### Migration Workflow
-```fish
+```bash
 # 1. Make schema changes in prisma/schema.prisma
 # 2. Create migration
 pnpm prisma migrate dev --name add_user_preferences
@@ -258,7 +257,7 @@ git commit -m "feat(db): add user preferences table"
 ```
 
 ### Database Seed Data
-```fish
+```bash
 # Create seed script in prisma/seed.ts
 pnpm prisma db seed
 
@@ -269,7 +268,7 @@ pnpm prisma migrate reset
 ## Environment-Specific Workflows
 
 ### Development Environment
-```fish
+```bash
 # Start with hot reloading
 pnpm dev
 
@@ -287,7 +286,7 @@ pnpm prisma:studio
 ```
 
 ### Production Deployment
-```fish
+```bash
 # Build application
 pnpm build
 
@@ -342,7 +341,7 @@ export async function GET(request: NextRequest) {
 ```
 
 ### Database Debugging
-```fish
+```bash
 # Check database connection
 pnpm prisma db execute --command "SELECT 1"
 
@@ -352,52 +351,3 @@ DEBUG="prisma:query" pnpm dev
 # Use Prisma Studio for data inspection
 pnpm prisma:studio
 ```
-
-## Performance Monitoring
-
-### Development Performance
-```fish
-# Bundle analyzer
-npx @next/bundle-analyzer
-
-# Lighthouse CI
-npx lhci autorun
-
-# Performance profiling in development
-# Use React DevTools Profiler
-# Use Next.js built-in performance metrics
-```
-
-### Code Quality Metrics
-```fish
-# TypeScript strict mode compliance
-pnpm typecheck --noEmit
-
-# Test coverage
-pnpm test -- --coverage
-
-# Bundle size analysis
-pnpm build && npx bundlesize
-```
-
-## Collaboration Workflow
-
-### Code Reviews
-- Create detailed pull request descriptions
-- Include screenshots for UI changes
-- Link related issues
-- Request specific reviewers
-- Address feedback promptly
-
-### Documentation Updates
-- Update README for new setup requirements
-- Add JSDoc comments for new APIs
-- Update architecture docs for significant changes
-- Include migration guides for breaking changes
-
-### Knowledge Sharing
-- Document complex solutions in team wiki
-- Share useful debugging techniques
-- Conduct code review sessions
-- Maintain decision logs for architecture choices
-
