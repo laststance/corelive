@@ -1,9 +1,9 @@
-import { SignIn } from '@clerk/nextjs'
+import { SignIn as Login } from '@clerk/nextjs'
 
 export default function Page() {
   return (
     <div className="grid h-screen place-items-center">
-      <SignIn path="/sign-in" forceRedirectUrl="/dashboard" />
+      <Login path="/sign-in" forceRedirectUrl="/home" />
     </div>
   )
 }
