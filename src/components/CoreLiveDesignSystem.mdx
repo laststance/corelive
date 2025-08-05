@@ -1,0 +1,346 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="CoreLive Design System/Overview" />
+
+# CoreLive Design System v2.0
+
+A comprehensive, hierarchical design system built for scalability, accessibility, and theme customization.
+
+## 🎯 Key Features
+
+### **4-Level Token Architecture**
+
+- **Primitive Tokens (Level 0)**: Raw, foundational values
+- **System Tokens (Level 1)**: Semantic mappings for global patterns
+- **Component Tokens (Level 2)**: Component-specific design tokens
+- **Theme Tokens (Level 3)**: Theme-specific overrides
+
+### **11 Color Families**
+
+- **Brand**: Primary, Secondary, Accent
+- **Semantic**: Success, Warning, Danger, Info, Discovery
+- **UI**: Neutral, Surface, Border
+
+### **Built-in Accessibility**
+
+- WCAG 2.1 AAA compliant color contrasts
+- Automatic high-contrast mode support
+- Reduced motion preferences
+- Screen reader optimized
+
+### **TailwindCSS v4 Integration**
+
+- Seamless integration with existing TailwindCSS workflows
+- Dynamic utility generation
+- Theme-aware CSS custom properties
+
+---
+
+## 🎨 Design Token System
+
+### Primitive Tokens (Level 0)
+
+Raw foundational values that never change across themes.
+
+```css
+/* Color Primitives */
+--primitive-color-brand-500: #0ea5e9;
+--primitive-color-success-500: #22c55e;
+--primitive-color-danger-500: #ef4444;
+
+/* Spacing Primitives */
+--primitive-space-1: 0.25rem; /* 4px */
+--primitive-space-4: 1rem; /* 16px */
+--primitive-space-8: 3rem; /* 48px */
+
+/* Typography Primitives */
+--primitive-font-size-3: 1rem; /* 16px */
+--primitive-font-weight-semibold: 600;
+--primitive-line-height-normal: 1.5;
+```
+
+### System Tokens (Level 1)
+
+Semantic tokens that provide meaning and context.
+
+```css
+/* Color System Tokens */
+--system-color-primary: var(--primitive-color-brand-500);
+--system-color-primary-container: var(--primitive-color-brand-50);
+--system-color-primary-on: var(--primitive-color-neutral-50);
+
+/* Spacing System Tokens */
+--system-space-component-md: var(--primitive-space-4);
+--system-space-layout-lg: var(--primitive-space-8);
+
+/* Typography System Tokens */
+--system-typography-heading-1: 700 var(--primitive-font-size-6) / 1.3;
+--system-typography-body-1: 400 var(--primitive-font-size-3) / 1.5;
+```
+
+### Component Tokens (Level 2)
+
+Component-specific tokens for fine-grained control.
+
+```css
+/* Button Component Tokens */
+--component-button-primary-background: var(--system-color-primary);
+--component-button-primary-background-hover: var(--system-color-primary-hover);
+--component-button-primary-text: var(--system-color-primary-on);
+--component-button-primary-border: var(--system-color-primary-outline);
+
+/* Input Component Tokens */
+--component-input-background: var(--system-color-background-default);
+--component-input-border-focus: var(--system-color-primary);
+--component-input-border-error: var(--system-color-danger);
+```
+
+---
+
+## 🎭 Theme System
+
+### Theme Hierarchy
+
+```typescript
+interface ThemeHierarchy {
+  foundation: FoundationTokens // Immutable primitives
+  archetype: ArchetypeTheme // light | dark | high-contrast
+  brand: BrandTheme // Industry/org specific
+  context?: ContextTheme // Device/print specific
+  custom?: CustomOverrides // User/app specific
+}
+```
+
+### Creating Custom Themes
+
+#### 1. Basic Theme Creation
+
+```css
+/* Custom Healthcare Theme */
+:root[data-theme='healthcare'] {
+  --primitive-color-brand-500: #10b981; /* Medical green */
+  --primitive-color-accent-500: #3b82f6; /* Trust blue */
+  --system-color-primary: var(--primitive-color-brand-500);
+}
+```
+
+#### 2. Advanced Theme with Component Overrides
+
+```css
+/* Enterprise Theme */
+:root[data-theme='enterprise'] {
+  /* Brand colors */
+  --primitive-color-brand-500: #1e40af;
+  --primitive-color-secondary-500: #64748b;
+
+  /* Component customizations */
+  --component-button-primary-border-radius: var(--primitive-radius-sm);
+  --component-input-background: var(--primitive-color-surface-100);
+
+  /* Typography adjustments */
+  --system-typography-heading-1: 600 var(--primitive-font-size-6) / 1.2;
+}
+```
+
+#### 3. Dynamic Theme Loading
+
+```typescript
+class ThemeManager {
+  private themeCache = new Map<string, CSSStyleSheet>()
+
+  async switchTheme(themeId: string): Promise<void> {
+    if (!this.themeCache.has(themeId)) {
+      const stylesheet = new CSSStyleSheet()
+      await stylesheet.replace(await this.loadThemeCSS(themeId))
+      this.themeCache.set(themeId, stylesheet)
+    }
+
+    document.adoptedStyleSheets = [this.themeCache.get(themeId)!]
+  }
+
+  createTheme(config: ThemeConfig): Theme {
+    return {
+      id: config.name,
+      archetype: config.archetype,
+      tokens: this.generateTokens(config),
+      components: this.generateComponentTokens(config),
+    }
+  }
+}
+```
+
+---
+
+## 🛠️ Usage with TailwindCSS
+
+### Available Utility Classes
+
+```html
+<!-- Color utilities -->
+<div class="bg-primary text-on-primary">Primary Button</div>
+<div class="bg-primary-container text-primary">Primary Container</div>
+<div class="border-primary-outline">Primary Outlined</div>
+
+<!-- Semantic colors -->
+<div class="bg-success text-white">Success Message</div>
+<div class="bg-warning text-black">Warning Alert</div>
+<div class="bg-danger text-white">Error State</div>
+
+<!-- Component patterns -->
+<button class="btn-primary">Primary Button</button>
+<div class="card">Card Component</div>
+
+<!-- Spacing -->
+<div class="p-md m-lg">Medium padding, large margin</div>
+<div class="space-y-component-sm">Small component spacing</div>
+```
+
+### Custom Component Creation
+
+```tsx
+import { cn } from '@/lib/utils'
+
+interface AlertProps {
+  variant?: 'success' | 'warning' | 'danger' | 'info'
+  children: React.ReactNode
+}
+
+export function Alert({ variant = 'info', children }: AlertProps) {
+  return (
+    <div
+      className={cn('rounded-lg border p-4', {
+        'bg-success-container text-success border-success-outline':
+          variant === 'success',
+        'bg-warning-container text-warning border-warning-outline':
+          variant === 'warning',
+        'bg-danger-container text-danger border-danger-outline':
+          variant === 'danger',
+        'bg-info-container text-info border-info-outline': variant === 'info',
+      })}
+    >
+      {children}
+    </div>
+  )
+}
+```
+
+---
+
+## ♿ Accessibility Features
+
+### Automatic Contrast Adjustment
+
+```css
+@media (prefers-contrast: high) {
+  :root {
+    --system-color-primary-on: white;
+    --system-color-primary-outline: var(--primitive-color-brand-800);
+  }
+}
+```
+
+### Reduced Motion Support
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --system-motion-duration-fast: 0ms;
+    --system-motion-duration-normal: 0ms;
+    --system-motion-duration-slow: 0ms;
+  }
+}
+```
+
+### Screen Reader Considerations
+
+- All interactive elements have proper focus states
+- Color information is never the only way to convey meaning
+- Text alternatives are provided for visual content
+- Semantic HTML structure is maintained
+
+---
+
+## 📱 Responsive Design
+
+### Breakpoint System
+
+```css
+@theme {
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+}
+```
+
+### Responsive Spacing
+
+```html
+<!-- Responsive padding -->
+<div class="p-2 md:p-4 lg:p-6">Responsive padding</div>
+
+<!-- Responsive text sizes -->
+<h1 class="text-2xl md:text-3xl lg:text-4xl">Responsive heading</h1>
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Installation
+
+The CoreLive Design System is already integrated into this project through:
+
+- `/src/styles/corelive-design-system.css` - Complete token system
+- `/src/globals.css` - TailwindCSS integration
+- Storybook configuration for theme switching
+
+### 2. Using Design Tokens
+
+```tsx
+// Direct CSS custom property usage
+const CustomComponent = () => (
+  <div
+    style={{
+      backgroundColor: 'var(--system-color-primary)',
+      color: 'var(--system-color-primary-on)',
+      padding: 'var(--system-space-component-md)',
+      borderRadius: 'var(--primitive-radius-lg)',
+    }}
+  >
+    Custom styled component
+  </div>
+)
+
+// TailwindCSS utility classes
+const TailwindComponent = () => (
+  <div className="bg-primary text-on-primary p-md rounded-lg">
+    TailwindCSS styled component
+  </div>
+)
+```
+
+### 3. Theme Switching
+
+Use the theme switcher in the Storybook toolbar to see components in different themes.
+
+---
+
+## 📋 Best Practices
+
+1. **Always prefer system tokens over primitives** in component implementations
+2. **Use component tokens for component-specific styling** when available
+3. **Follow the semantic naming conventions** for consistency
+4. **Test themes in both light and dark modes** before deployment
+5. **Validate accessibility** using the built-in contrast checkers
+6. **Document custom theme modifications** for team collaboration
+
+---
+
+## 🔗 Related Resources
+
+- [TailwindCSS v4 Documentation](https://tailwindcss.com/docs)
+- [WCAG 2.1 Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
+- [CSS Custom Properties](https://developer.mozilla.org/en-US/docs/Web/CSS/--*)
+- [Design Tokens Community Group](https://design-tokens.github.io/community-group/)

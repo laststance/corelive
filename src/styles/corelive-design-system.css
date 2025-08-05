@@ -1,0 +1,603 @@
+/* CoreLive Design System v2.0 - Global CSS Variables */
+
+/* ========================================
+   1. PRIMITIVE TOKENS (Level 0)
+   Raw foundational values
+======================================== */
+
+:root {
+  /* Color Primitives - Brand Family */
+  --primitive-color-brand-50: #f0f9ff;
+  --primitive-color-brand-100: #e0f2fe;
+  --primitive-color-brand-200: #bae6fd;
+  --primitive-color-brand-300: #7dd3fc;
+  --primitive-color-brand-400: #38bdf8;
+  --primitive-color-brand-500: #0ea5e9;
+  --primitive-color-brand-600: #0284c7;
+  --primitive-color-brand-700: #0369a1;
+  --primitive-color-brand-800: #075985;
+  --primitive-color-brand-900: #0c4a6e;
+  --primitive-color-brand-950: #082f49;
+
+  /* Color Primitives - Secondary Family */
+  --primitive-color-secondary-50: #f8fafc;
+  --primitive-color-secondary-100: #f1f5f9;
+  --primitive-color-secondary-200: #e2e8f0;
+  --primitive-color-secondary-300: #cbd5e1;
+  --primitive-color-secondary-400: #94a3b8;
+  --primitive-color-secondary-500: #64748b;
+  --primitive-color-secondary-600: #475569;
+  --primitive-color-secondary-700: #334155;
+  --primitive-color-secondary-800: #1e293b;
+  --primitive-color-secondary-900: #0f172a;
+  --primitive-color-secondary-950: #020617;
+
+  /* Color Primitives - Accent Family */
+  --primitive-color-accent-50: #fefce8;
+  --primitive-color-accent-100: #fef9c3;
+  --primitive-color-accent-200: #fef08a;
+  --primitive-color-accent-300: #fde047;
+  --primitive-color-accent-400: #facc15;
+  --primitive-color-accent-500: #eab308;
+  --primitive-color-accent-600: #ca8a04;
+  --primitive-color-accent-700: #a16207;
+  --primitive-color-accent-800: #854d0e;
+  --primitive-color-accent-900: #713f12;
+  --primitive-color-accent-950: #422006;
+
+  /* Color Primitives - Success Family */
+  --primitive-color-success-50: #f0fdf4;
+  --primitive-color-success-100: #dcfce7;
+  --primitive-color-success-200: #bbf7d0;
+  --primitive-color-success-300: #86efac;
+  --primitive-color-success-400: #4ade80;
+  --primitive-color-success-500: #22c55e;
+  --primitive-color-success-600: #16a34a;
+  --primitive-color-success-700: #15803d;
+  --primitive-color-success-800: #166534;
+  --primitive-color-success-900: #14532d;
+  --primitive-color-success-950: #052e16;
+
+  /* Color Primitives - Warning Family */
+  --primitive-color-warning-50: #fffbeb;
+  --primitive-color-warning-100: #fef3c7;
+  --primitive-color-warning-200: #fde68a;
+  --primitive-color-warning-300: #fcd34d;
+  --primitive-color-warning-400: #fbbf24;
+  --primitive-color-warning-500: #f59e0b;
+  --primitive-color-warning-600: #d97706;
+  --primitive-color-warning-700: #b45309;
+  --primitive-color-warning-800: #92400e;
+  --primitive-color-warning-900: #78350f;
+  --primitive-color-warning-950: #451a03;
+
+  /* Color Primitives - Danger Family */
+  --primitive-color-danger-50: #fef2f2;
+  --primitive-color-danger-100: #fee2e2;
+  --primitive-color-danger-200: #fecaca;
+  --primitive-color-danger-300: #fca5a5;
+  --primitive-color-danger-400: #f87171;
+  --primitive-color-danger-500: #ef4444;
+  --primitive-color-danger-600: #dc2626;
+  --primitive-color-danger-700: #b91c1c;
+  --primitive-color-danger-800: #991b1b;
+  --primitive-color-danger-900: #7f1d1d;
+  --primitive-color-danger-950: #450a0a;
+
+  /* Color Primitives - Info Family */
+  --primitive-color-info-50: #eff6ff;
+  --primitive-color-info-100: #dbeafe;
+  --primitive-color-info-200: #bfdbfe;
+  --primitive-color-info-300: #93c5fd;
+  --primitive-color-info-400: #60a5fa;
+  --primitive-color-info-500: #3b82f6;
+  --primitive-color-info-600: #2563eb;
+  --primitive-color-info-700: #1d4ed8;
+  --primitive-color-info-800: #1e40af;
+  --primitive-color-info-900: #1e3a8a;
+  --primitive-color-info-950: #172554;
+
+  /* Color Primitives - Discovery Family */
+  --primitive-color-discovery-50: #faf5ff;
+  --primitive-color-discovery-100: #f3e8ff;
+  --primitive-color-discovery-200: #e9d5ff;
+  --primitive-color-discovery-300: #d8b4fe;
+  --primitive-color-discovery-400: #c084fc;
+  --primitive-color-discovery-500: #a855f7;
+  --primitive-color-discovery-600: #9333ea;
+  --primitive-color-discovery-700: #7c3aed;
+  --primitive-color-discovery-800: #6b21a8;
+  --primitive-color-discovery-900: #581c87;
+  --primitive-color-discovery-950: #3b0764;
+
+  /* Color Primitives - Neutral Family */
+  --primitive-color-neutral-50: #fafafa;
+  --primitive-color-neutral-100: #f4f4f5;
+  --primitive-color-neutral-200: #e4e4e7;
+  --primitive-color-neutral-300: #d4d4d8;
+  --primitive-color-neutral-400: #a1a1aa;
+  --primitive-color-neutral-500: #71717a;
+  --primitive-color-neutral-600: #52525b;
+  --primitive-color-neutral-700: #3f3f46;
+  --primitive-color-neutral-800: #27272a;
+  --primitive-color-neutral-900: #18181b;
+  --primitive-color-neutral-950: #09090b;
+
+  /* Color Primitives - Surface Family */
+  --primitive-color-surface-50: #ffffff;
+  --primitive-color-surface-100: #fcfcfc;
+  --primitive-color-surface-200: #f8f8f8;
+  --primitive-color-surface-300: #f0f0f0;
+  --primitive-color-surface-400: #e8e8e8;
+  --primitive-color-surface-500: #d0d0d0;
+  --primitive-color-surface-600: #a8a8a8;
+  --primitive-color-surface-700: #808080;
+  --primitive-color-surface-800: #585858;
+  --primitive-color-surface-900: #303030;
+  --primitive-color-surface-950: #181818;
+
+  /* Color Primitives - Border Family */
+  --primitive-color-border-50: #f9fafb;
+  --primitive-color-border-100: #f3f4f6;
+  --primitive-color-border-200: #e5e7eb;
+  --primitive-color-border-300: #d1d5db;
+  --primitive-color-border-400: #9ca3af;
+  --primitive-color-border-500: #6b7280;
+  --primitive-color-border-600: #4b5563;
+  --primitive-color-border-700: #374151;
+  --primitive-color-border-800: #1f2937;
+  --primitive-color-border-900: #111827;
+  --primitive-color-border-950: #030712;
+
+  /* Spacing Primitives */
+  --primitive-space-1: 0.25rem; /* 4px */
+  --primitive-space-2: 0.5rem; /* 8px */
+  --primitive-space-3: 0.75rem; /* 12px */
+  --primitive-space-4: 1rem; /* 16px */
+  --primitive-space-5: 1.5rem; /* 24px */
+  --primitive-space-6: 2rem; /* 32px */
+  --primitive-space-7: 2.5rem; /* 40px */
+  --primitive-space-8: 3rem; /* 48px */
+  --primitive-space-9: 4rem; /* 64px */
+  --primitive-space-10: 5rem; /* 80px */
+  --primitive-space-12: 6rem; /* 96px */
+  --primitive-space-16: 8rem; /* 128px */
+  --primitive-space-20: 10rem; /* 160px */
+
+  /* Border Radius Primitives */
+  --primitive-radius-none: 0;
+  --primitive-radius-xs: 0.125rem; /* 2px */
+  --primitive-radius-sm: 0.25rem; /* 4px */
+  --primitive-radius-md: 0.375rem; /* 6px */
+  --primitive-radius-lg: 0.5rem; /* 8px */
+  --primitive-radius-xl: 0.75rem; /* 12px */
+  --primitive-radius-2xl: 1rem; /* 16px */
+  --primitive-radius-3xl: 1.5rem; /* 24px */
+  --primitive-radius-full: 9999px;
+
+  /* Shadow Primitives */
+  --primitive-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --primitive-shadow-2:
+    0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --primitive-shadow-3:
+    0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --primitive-shadow-4:
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --primitive-shadow-5:
+    0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --primitive-shadow-6: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+
+  /* Font Size Primitives */
+  --primitive-font-size-1: 0.75rem; /* 12px */
+  --primitive-font-size-2: 0.875rem; /* 14px */
+  --primitive-font-size-3: 1rem; /* 16px */
+  --primitive-font-size-4: 1.125rem; /* 18px */
+  --primitive-font-size-5: 1.25rem; /* 20px */
+  --primitive-font-size-6: 1.5rem; /* 24px */
+  --primitive-font-size-7: 2rem; /* 32px */
+  --primitive-font-size-8: 2.5rem; /* 40px */
+  --primitive-font-size-9: 3rem; /* 48px */
+
+  /* Font Weight Primitives */
+  --primitive-font-weight-thin: 100;
+  --primitive-font-weight-extralight: 200;
+  --primitive-font-weight-light: 300;
+  --primitive-font-weight-normal: 400;
+  --primitive-font-weight-medium: 500;
+  --primitive-font-weight-semibold: 600;
+  --primitive-font-weight-bold: 700;
+  --primitive-font-weight-extrabold: 800;
+  --primitive-font-weight-black: 900;
+
+  /* Line Height Primitives */
+  --primitive-line-height-none: 1;
+  --primitive-line-height-tight: 1.25;
+  --primitive-line-height-snug: 1.375;
+  --primitive-line-height-normal: 1.5;
+  --primitive-line-height-relaxed: 1.625;
+  --primitive-line-height-loose: 2;
+}
+
+/* ========================================
+   2. SYSTEM TOKENS (Level 1)
+   Semantic tokens mapped to primitives
+======================================== */
+
+:root {
+  /* System Color Tokens - Brand */
+  --system-color-primary: var(--primitive-color-brand-500);
+  --system-color-primary-container: var(--primitive-color-brand-50);
+  --system-color-primary-on: var(--primitive-color-neutral-50);
+  --system-color-primary-on-container: var(--primitive-color-brand-900);
+  --system-color-primary-outline: var(--primitive-color-brand-300);
+  --system-color-primary-surface: var(--primitive-color-brand-25);
+  --system-color-primary-inverse: var(--primitive-color-brand-950);
+  --system-color-primary-hover: var(--primitive-color-brand-600);
+  --system-color-primary-active: var(--primitive-color-brand-700);
+  --system-color-primary-focus: var(--primitive-color-brand-400);
+  --system-color-primary-disabled: var(--primitive-color-neutral-300);
+
+  --system-color-secondary: var(--primitive-color-secondary-500);
+  --system-color-secondary-container: var(--primitive-color-secondary-50);
+  --system-color-secondary-on: var(--primitive-color-neutral-50);
+  --system-color-secondary-on-container: var(--primitive-color-secondary-900);
+  --system-color-secondary-outline: var(--primitive-color-secondary-300);
+  --system-color-secondary-surface: var(--primitive-color-secondary-25);
+  --system-color-secondary-inverse: var(--primitive-color-secondary-950);
+  --system-color-secondary-hover: var(--primitive-color-secondary-600);
+  --system-color-secondary-active: var(--primitive-color-secondary-700);
+  --system-color-secondary-focus: var(--primitive-color-secondary-400);
+  --system-color-secondary-disabled: var(--primitive-color-neutral-300);
+
+  --system-color-accent: var(--primitive-color-accent-500);
+  --system-color-accent-container: var(--primitive-color-accent-50);
+  --system-color-accent-on: var(--primitive-color-neutral-900);
+  --system-color-accent-on-container: var(--primitive-color-accent-900);
+  --system-color-accent-outline: var(--primitive-color-accent-300);
+  --system-color-accent-surface: var(--primitive-color-accent-25);
+  --system-color-accent-inverse: var(--primitive-color-accent-950);
+  --system-color-accent-hover: var(--primitive-color-accent-600);
+  --system-color-accent-active: var(--primitive-color-accent-700);
+  --system-color-accent-focus: var(--primitive-color-accent-400);
+  --system-color-accent-disabled: var(--primitive-color-neutral-300);
+
+  /* System Color Tokens - Semantic */
+  --system-color-success: var(--primitive-color-success-500);
+  --system-color-success-container: var(--primitive-color-success-50);
+  --system-color-success-on: var(--primitive-color-neutral-50);
+  --system-color-success-on-container: var(--primitive-color-success-900);
+  --system-color-success-outline: var(--primitive-color-success-300);
+  --system-color-success-surface: var(--primitive-color-success-25);
+  --system-color-success-inverse: var(--primitive-color-success-950);
+  --system-color-success-hover: var(--primitive-color-success-600);
+  --system-color-success-active: var(--primitive-color-success-700);
+  --system-color-success-focus: var(--primitive-color-success-400);
+  --system-color-success-disabled: var(--primitive-color-neutral-300);
+
+  --system-color-warning: var(--primitive-color-warning-500);
+  --system-color-warning-container: var(--primitive-color-warning-50);
+  --system-color-warning-on: var(--primitive-color-neutral-900);
+  --system-color-warning-on-container: var(--primitive-color-warning-900);
+  --system-color-warning-outline: var(--primitive-color-warning-300);
+  --system-color-warning-surface: var(--primitive-color-warning-25);
+  --system-color-warning-inverse: var(--primitive-color-warning-950);
+  --system-color-warning-hover: var(--primitive-color-warning-600);
+  --system-color-warning-active: var(--primitive-color-warning-700);
+  --system-color-warning-focus: var(--primitive-color-warning-400);
+  --system-color-warning-disabled: var(--primitive-color-neutral-300);
+
+  --system-color-danger: var(--primitive-color-danger-500);
+  --system-color-danger-container: var(--primitive-color-danger-50);
+  --system-color-danger-on: var(--primitive-color-neutral-50);
+  --system-color-danger-on-container: var(--primitive-color-danger-900);
+  --system-color-danger-outline: var(--primitive-color-danger-300);
+  --system-color-danger-surface: var(--primitive-color-danger-25);
+  --system-color-danger-inverse: var(--primitive-color-danger-950);
+  --system-color-danger-hover: var(--primitive-color-danger-600);
+  --system-color-danger-active: var(--primitive-color-danger-700);
+  --system-color-danger-focus: var(--primitive-color-danger-400);
+  --system-color-danger-disabled: var(--primitive-color-neutral-300);
+
+  --system-color-info: var(--primitive-color-info-500);
+  --system-color-info-container: var(--primitive-color-info-50);
+  --system-color-info-on: var(--primitive-color-neutral-50);
+  --system-color-info-on-container: var(--primitive-color-info-900);
+  --system-color-info-outline: var(--primitive-color-info-300);
+  --system-color-info-surface: var(--primitive-color-info-25);
+  --system-color-info-inverse: var(--primitive-color-info-950);
+  --system-color-info-hover: var(--primitive-color-info-600);
+  --system-color-info-active: var(--primitive-color-info-700);
+  --system-color-info-focus: var(--primitive-color-info-400);
+  --system-color-info-disabled: var(--primitive-color-neutral-300);
+
+  --system-color-discovery: var(--primitive-color-discovery-500);
+  --system-color-discovery-container: var(--primitive-color-discovery-50);
+  --system-color-discovery-on: var(--primitive-color-neutral-50);
+  --system-color-discovery-on-container: var(--primitive-color-discovery-900);
+  --system-color-discovery-outline: var(--primitive-color-discovery-300);
+  --system-color-discovery-surface: var(--primitive-color-discovery-25);
+  --system-color-discovery-inverse: var(--primitive-color-discovery-950);
+  --system-color-discovery-hover: var(--primitive-color-discovery-600);
+  --system-color-discovery-active: var(--primitive-color-discovery-700);
+  --system-color-discovery-focus: var(--primitive-color-discovery-400);
+  --system-color-discovery-disabled: var(--primitive-color-neutral-300);
+
+  /* System Color Tokens - UI */
+  --system-color-background-default: var(--primitive-color-surface-50);
+  --system-color-background-subtle: var(--primitive-color-surface-100);
+  --system-color-background-muted: var(--primitive-color-surface-200);
+  --system-color-surface-default: var(--primitive-color-surface-50);
+  --system-color-surface-raised: var(--primitive-color-surface-100);
+  --system-color-surface-overlay: var(--primitive-color-surface-50);
+  --system-color-border-default: var(--primitive-color-border-200);
+  --system-color-border-muted: var(--primitive-color-border-100);
+  --system-color-border-strong: var(--primitive-color-border-300);
+
+  /* System Spacing Tokens */
+  --system-space-component-xs: var(--primitive-space-1);
+  --system-space-component-sm: var(--primitive-space-2);
+  --system-space-component-md: var(--primitive-space-4);
+  --system-space-component-lg: var(--primitive-space-6);
+  --system-space-component-xl: var(--primitive-space-8);
+  --system-space-layout-xs: var(--primitive-space-2);
+  --system-space-layout-sm: var(--primitive-space-4);
+  --system-space-layout-md: var(--primitive-space-6);
+  --system-space-layout-lg: var(--primitive-space-8);
+  --system-space-layout-xl: var(--primitive-space-12);
+
+  /* System Typography Tokens */
+  --system-typography-display-1: var(--primitive-font-weight-bold)
+    var(--primitive-font-size-9) / 1.1;
+  --system-typography-display-2: var(--primitive-font-weight-bold)
+    var(--primitive-font-size-8) / 1.2;
+  --system-typography-display-3: var(--primitive-font-weight-bold)
+    var(--primitive-font-size-7) / 1.2;
+  --system-typography-heading-1: var(--primitive-font-weight-bold)
+    var(--primitive-font-size-6) / 1.3;
+  --system-typography-heading-2: var(--primitive-font-weight-semibold)
+    var(--primitive-font-size-5) / 1.4;
+  --system-typography-heading-3: var(--primitive-font-weight-semibold)
+    var(--primitive-font-size-4) / 1.4;
+  --system-typography-body-1: var(--primitive-font-weight-normal)
+    var(--primitive-font-size-3) / 1.5;
+  --system-typography-body-2: var(--primitive-font-weight-normal)
+    var(--primitive-font-size-2) / 1.5;
+  --system-typography-caption: var(--primitive-font-weight-normal)
+    var(--primitive-font-size-1) / 1.4;
+
+  /* System Motion Tokens */
+  --system-motion-duration-fast: 150ms;
+  --system-motion-duration-normal: 300ms;
+  --system-motion-duration-slow: 500ms;
+  --system-motion-easing-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --system-motion-easing-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --system-motion-easing-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* System Elevation Tokens */
+  --system-elevation-flat: var(--primitive-shadow-1);
+  --system-elevation-raised: var(--primitive-shadow-2);
+  --system-elevation-floating: var(--primitive-shadow-3);
+  --system-elevation-overlay: var(--primitive-shadow-4);
+  --system-elevation-modal: var(--primitive-shadow-5);
+  --system-elevation-popover: var(--primitive-shadow-6);
+}
+
+/* ========================================
+   3. COMPONENT TOKENS (Level 2)
+   Component-specific design tokens
+======================================== */
+
+:root {
+  /* Button Component Tokens */
+  --component-button-primary-background: var(--system-color-primary);
+  --component-button-primary-background-hover: var(
+    --system-color-primary-hover
+  );
+  --component-button-primary-background-active: var(
+    --system-color-primary-active
+  );
+  --component-button-primary-background-disabled: var(
+    --system-color-primary-disabled
+  );
+  --component-button-primary-text: var(--system-color-primary-on);
+  --component-button-primary-text-disabled: var(--primitive-color-neutral-500);
+  --component-button-primary-border: var(--system-color-primary-outline);
+  --component-button-primary-border-focus: var(--system-color-primary-focus);
+  --component-button-primary-shadow: var(--system-elevation-raised);
+
+  --component-button-secondary-background: var(--system-color-secondary);
+  --component-button-secondary-background-hover: var(
+    --system-color-secondary-hover
+  );
+  --component-button-secondary-background-active: var(
+    --system-color-secondary-active
+  );
+  --component-button-secondary-background-disabled: var(
+    --system-color-secondary-disabled
+  );
+  --component-button-secondary-text: var(--system-color-secondary-on);
+  --component-button-secondary-text-disabled: var(
+    --primitive-color-neutral-500
+  );
+  --component-button-secondary-border: var(--system-color-secondary-outline);
+  --component-button-secondary-border-focus: var(
+    --system-color-secondary-focus
+  );
+  --component-button-secondary-shadow: var(--system-elevation-raised);
+
+  /* Input Component Tokens */
+  --component-input-background: var(--system-color-background-default);
+  --component-input-background-focus: var(--system-color-background-default);
+  --component-input-background-disabled: var(--system-color-background-muted);
+  --component-input-text: var(--primitive-color-neutral-900);
+  --component-input-text-placeholder: var(--primitive-color-neutral-500);
+  --component-input-text-disabled: var(--primitive-color-neutral-400);
+  --component-input-border: var(--system-color-border-default);
+  --component-input-border-focus: var(--system-color-primary);
+  --component-input-border-error: var(--system-color-danger);
+  --component-input-border-success: var(--system-color-success);
+  --component-input-shadow: var(--system-elevation-flat);
+  --component-input-shadow-focus: var(--system-elevation-raised);
+
+  /* Card Component Tokens */
+  --component-card-background: var(--system-color-surface-default);
+  --component-card-background-hover: var(--system-color-surface-raised);
+  --component-card-border: var(--system-color-border-muted);
+  --component-card-border-hover: var(--system-color-border-default);
+  --component-card-shadow: var(--system-elevation-raised);
+  --component-card-shadow-hover: var(--system-elevation-floating);
+  --component-card-radius: var(--primitive-radius-lg);
+
+  /* Modal Component Tokens */
+  --component-modal-background: var(--system-color-surface-overlay);
+  --component-modal-backdrop: rgb(0 0 0 / 0.5);
+  --component-modal-border: var(--system-color-border-muted);
+  --component-modal-shadow: var(--system-elevation-modal);
+  --component-modal-radius: var(--primitive-radius-xl);
+
+  /* Navigation Component Tokens */
+  --component-nav-background: var(--system-color-surface-default);
+  --component-nav-border: var(--system-color-border-muted);
+  --component-nav-item-background-hover: var(--system-color-background-subtle);
+  --component-nav-item-background-active: var(--system-color-primary-container);
+  --component-nav-item-text: var(--primitive-color-neutral-700);
+  --component-nav-item-text-active: var(--system-color-primary);
+  --component-nav-shadow: var(--system-elevation-raised);
+}
+
+/* ========================================
+   4. DARK THEME OVERRIDES
+   Dark mode adaptations
+======================================== */
+
+.dark {
+  /* System Color Overrides for Dark Mode */
+  --system-color-background-default: var(--primitive-color-neutral-900);
+  --system-color-background-subtle: var(--primitive-color-neutral-800);
+  --system-color-background-muted: var(--primitive-color-neutral-700);
+  --system-color-surface-default: var(--primitive-color-neutral-800);
+  --system-color-surface-raised: var(--primitive-color-neutral-700);
+  --system-color-surface-overlay: var(--primitive-color-neutral-800);
+  --system-color-border-default: var(--primitive-color-neutral-700);
+  --system-color-border-muted: var(--primitive-color-neutral-800);
+  --system-color-border-strong: var(--primitive-color-neutral-600);
+
+  /* Component overrides for dark mode */
+  --component-input-background: var(--primitive-color-neutral-800);
+  --component-input-text: var(--primitive-color-neutral-100);
+  --component-input-text-placeholder: var(--primitive-color-neutral-400);
+  --component-input-border: var(--primitive-color-neutral-600);
+
+  --component-card-background: var(--primitive-color-neutral-800);
+  --component-card-background-hover: var(--primitive-color-neutral-700);
+  --component-card-border: var(--primitive-color-neutral-700);
+
+  --component-nav-background: var(--primitive-color-neutral-800);
+  --component-nav-border: var(--primitive-color-neutral-700);
+  --component-nav-item-background-hover: var(--primitive-color-neutral-700);
+  --component-nav-item-text: var(--primitive-color-neutral-300);
+}
+
+/* ========================================
+   5. ACCESSIBILITY FEATURES
+   High contrast and reduced motion support
+======================================== */
+
+/* High contrast mode adjustments */
+@media (prefers-contrast: high) {
+  :root {
+    --system-color-primary-on: white;
+    --system-color-primary-outline: var(--primitive-color-brand-800);
+    --system-color-border-default: var(--primitive-color-neutral-800);
+    --system-color-border-strong: var(--primitive-color-neutral-900);
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --system-motion-duration-fast: 0ms;
+    --system-motion-duration-normal: 0ms;
+    --system-motion-duration-slow: 0ms;
+  }
+}
+
+/* ========================================
+   6. UTILITY CLASSES
+   Common patterns for quick usage
+======================================== */
+
+/* Typography utility classes */
+.text-display-1 {
+  font: var(--system-typography-display-1);
+}
+.text-display-2 {
+  font: var(--system-typography-display-2);
+}
+.text-display-3 {
+  font: var(--system-typography-display-3);
+}
+.text-heading-1 {
+  font: var(--system-typography-heading-1);
+}
+.text-heading-2 {
+  font: var(--system-typography-heading-2);
+}
+.text-heading-3 {
+  font: var(--system-typography-heading-3);
+}
+.text-body-1 {
+  font: var(--system-typography-body-1);
+}
+.text-body-2 {
+  font: var(--system-typography-body-2);
+}
+.text-caption {
+  font: var(--system-typography-caption);
+}
+
+/* Component utility classes */
+.btn-primary {
+  background: var(--component-button-primary-background);
+  color: var(--component-button-primary-text);
+  border: 1px solid var(--component-button-primary-border);
+  border-radius: var(--primitive-radius-md);
+  padding: var(--system-space-component-sm) var(--system-space-component-md);
+  box-shadow: var(--component-button-primary-shadow);
+  transition: all var(--system-motion-duration-fast)
+    var(--system-motion-easing-ease-out);
+}
+
+.btn-primary:hover {
+  background: var(--component-button-primary-background-hover);
+}
+
+.btn-primary:active {
+  background: var(--component-button-primary-background-active);
+}
+
+.btn-primary:focus {
+  outline: 2px solid var(--component-button-primary-border-focus);
+  outline-offset: 2px;
+}
+
+.btn-primary:disabled {
+  background: var(--component-button-primary-background-disabled);
+  color: var(--component-button-primary-text-disabled);
+  cursor: not-allowed;
+}
+
+.card {
+  background: var(--component-card-background);
+  border: 1px solid var(--component-card-border);
+  border-radius: var(--component-card-radius);
+  box-shadow: var(--component-card-shadow);
+  transition: all var(--system-motion-duration-fast)
+    var(--system-motion-easing-ease-out);
+}
+
+.card:hover {
+  background: var(--component-card-background-hover);
+  border-color: var(--component-card-border-hover);
+  box-shadow: var(--component-card-shadow-hover);
+}

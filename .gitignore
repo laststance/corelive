@@ -37,3 +37,4 @@ yarn-error.log*
 # Vitest
 html
 *storybook.log
+storybook-static
