@@ -64,7 +64,7 @@ const meta: Meta<typeof Tooltip> = {
   },
   tags: ['autodocs'],
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <TooltipProvider>
         <Story />
       </TooltipProvider>

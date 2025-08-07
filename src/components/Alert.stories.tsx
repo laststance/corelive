@@ -58,7 +58,7 @@ export const Destructive: Story = {
   args: {
     variant: 'destructive',
   },
-  render: (args) => (
+  render: (args: Story['args']) => (
     <Alert {...args}>
       <AlertCircle className="h-4 w-4" />
       <AlertTitle>Error</AlertTitle>

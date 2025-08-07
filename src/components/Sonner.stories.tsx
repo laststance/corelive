@@ -65,7 +65,7 @@ const meta: Meta<typeof Toaster> = {
     },
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div>
         <Story />
         <Toaster />
