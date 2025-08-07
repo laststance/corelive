@@ -38,3 +38,5 @@ yarn-error.log*
 html
 *storybook.log
 storybook-static
+
+.serena
