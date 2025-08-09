@@ -31,6 +31,10 @@ export default defineConfig({
     },
   ],
 
+  // One-time hooks
+  globalSetup: './tests/global-setup.ts',
+  globalTeardown: './tests/global-teardown.ts',
+
   /* Run your local dev server before starting the tests */
   webServer: {
     // Use production build to satisfy requirement and ensure MSW can be enabled in prod
