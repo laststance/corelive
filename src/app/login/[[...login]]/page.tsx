@@ -18,7 +18,8 @@ export default function Page() {
       if (button && text.includes('google')) {
         e.stopPropagation()
         e.preventDefault()
-        window.location.href = '/api/mock-auth'
+        // Without real OAuth, skip to the protected area during mocks
+        window.location.href = '/home'
       }
     }
 

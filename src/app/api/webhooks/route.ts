@@ -2,6 +2,7 @@ import type { WebhookEvent } from '@clerk/nextjs/server'
 import { PrismaClient } from '@prisma/client'
 import { headers } from 'next/headers'
 import { Webhook } from 'svix'
+export const runtime = 'nodejs'
 
 import { env } from '@/env.mjs'
 

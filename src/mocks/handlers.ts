@@ -1,5 +1,7 @@
 import { http, HttpResponse } from 'msw'
 
+let webhookSent = false
+
 // Google OAuth Mock Handlers
 export const handlers = [
   // Mock Google OAuth v3 signin identifier endpoint (newer endpoint)
@@ -353,38 +355,48 @@ export const handlers = [
   // Mock Clerk client-side auth check endpoint
   http.get('https://*.clerk.accounts.dev/v1/client', ({ request }) => {
     console.log('[MSW] Intercepted Clerk client auth check')
-    const authHeader = request.headers.get('authorization')
-    const cookies = request.headers.get('cookie')
-    
-    // Check for session cookie
-    if (cookies?.includes('__session=') || cookies?.includes('clerk-session=')) {
-      return HttpResponse.json({
-        response: {
-          id: 'client_mock_123',
-          sessions: [{
-            id: 'sess_mock_123',
-            status: 'active',
-            user: {
-              id: 'user_mock_123',
-              email_addresses: [{
-                email_address: 'testuser@example.com',
-                verification: { status: 'verified' }
-              }],
-              first_name: 'Test',
-              last_name: 'User',
-              profile_image_url: 'https://lh3.googleusercontent.com/a/default-user'
-            }
-          }],
-          sign_in: null,
-          sign_up: null
-        }
+    if (!webhookSent) {
+      webhookSent = true
+      // Fire a mock Clerk webhook to our Next.js endpoint to create a test user in Postgres
+      fetch('http://localhost:3000/api/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-MSW-Mock': 'true',
+        },
+        body: JSON.stringify({
+          type: 'user.created',
+          data: {
+            id: 'user_mock_123',
+            username: 'test.user',
+            first_name: 'Test',
+            last_name: 'User',
+            email_addresses: [
+              { id: 'email_mock_123', email_address: 'testuser@example.com' },
+            ],
+          },
+        }),
+      }).catch((err) => {
+        console.warn('[MSW] Failed to post mock webhook to /api/webhooks from client handler', err)
       })
     }
-    
     return HttpResponse.json({
       response: {
         id: 'client_mock_123',
-        sessions: [],
+        sessions: [{
+          id: 'sess_mock_123',
+          status: 'active',
+          user: {
+            id: 'user_mock_123',
+            email_addresses: [{
+              email_address: 'testuser@example.com',
+              verification: { status: 'verified' }
+            }],
+            first_name: 'Test',
+            last_name: 'User',
+            profile_image_url: 'https://lh3.googleusercontent.com/a/default-user'
+          }
+        }],
         sign_in: null,
         sign_up: null
       }

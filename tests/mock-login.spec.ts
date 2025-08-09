@@ -1,10 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 async function waitForUserInserted() {
-  // Poll the API webhook endpoint indirectly by calling a helper endpoint or
-  // simply wait for a short time as insertion happens on callback.
-  // For now, just wait a bit to allow the webhook to complete.
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  await new Promise((resolve) => setTimeout(resolve, 800))
 }
 
 test.describe('Mock Google OAuth login (MSW enabled)', () => {
@@ -24,7 +21,7 @@ test.describe('Mock Google OAuth login (MSW enabled)', () => {
     await expect(page).toHaveURL(/\/home$/)
     await expect(page.getByText('Home')).toBeVisible()
 
-    // Give some time for the webhook to insert the user
+    // Give some time for MSW to post the webhook and the server to insert the user
     await waitForUserInserted()
   })
 })
