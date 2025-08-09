@@ -3,6 +3,14 @@ import type { Metadata } from 'next'
 import '@/globals.css'
 
 import { cn } from '@/lib/utils'
+import { MSWProvider } from './msw-provider'
+
+// Initialize MSW for Node.js (server-side) when mocking is enabled
+if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.NEXT_PUBLIC_ENABLE_MSW_MOCK === 'true') {
+  const { server } = require('@/mocks/node')
+  server.listen()
+  console.log('[MSW] Server-side mocking enabled via NEXT_PUBLIC_ENABLE_MSW_MOCK')
+}
 
 export const metadata: Metadata = {
   title: {
@@ -21,7 +29,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={cn('mx-auto min-h-screen antialiased')}>
-          {children}
+          <MSWProvider>{children}</MSWProvider>
         </body>
       </html>
     </ClerkProvider>

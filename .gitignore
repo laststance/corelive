@@ -40,3 +40,9 @@ html
 storybook-static
 
 .serena
+examples-with-next
+test-results
+playwright-report
+screenshots
+.claude
+.cursor

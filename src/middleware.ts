@@ -1,10 +1,20 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
+import { env } from '@/env.mjs'
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)'])
+const isProtectedRoute = createRouteMatcher(['/home(.*)'])
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) await auth.protect()
-})
+// When mocking is enabled we bypass Clerk completely to avoid JWT parsing
+const middleware =
+  env.NEXT_PUBLIC_ENABLE_MSW_MOCK === 'true'
+    ? (async () => NextResponse.next())
+    : clerkMiddleware(async (auth, req) => {
+        if (isProtectedRoute(req)) {
+          await auth.protect()
+        }
+      })
+
+export default middleware
 
 export const config = {
   matcher: [

@@ -21,7 +21,7 @@ export default function Home() {
           </h1>
           <div className="mt-8 flex justify-center gap-4">
             <Button asChild>
-              <Link href="/sign-in">Login</Link>
+              <Link href="/login">Login</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/sign-up">Sign Up</Link>

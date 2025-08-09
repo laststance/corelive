@@ -20,6 +20,7 @@ export const env = createEnv({
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().trim().min(1),
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().trim().min(1),
     NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().trim().min(1),
+    NEXT_PUBLIC_ENABLE_MSW_MOCK: z.enum(['true', 'false']).optional(),
   },
   /*
    * Due to how Next.js bundles environment variables on Edge and Client,
@@ -35,5 +36,6 @@ export const env = createEnv({
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL,
     NEXT_PUBLIC_CLERK_SIGN_UP_URL: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL,
+    NEXT_PUBLIC_ENABLE_MSW_MOCK: process.env.NEXT_PUBLIC_ENABLE_MSW_MOCK,
   },
 })
