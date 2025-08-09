@@ -37,8 +37,8 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    // Use production build to satisfy requirement and ensure MSW can be enabled in prod
-    command: 'NEXT_PUBLIC_ENABLE_MSW_MOCK=true pnpm build && NEXT_PUBLIC_ENABLE_MSW_MOCK=true pnpm start',
+    // Only start the server; build happens in globalSetup to avoid race conditions
+    command: 'NEXT_PUBLIC_ENABLE_MSW_MOCK=true pnpm start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

@@ -5,10 +5,6 @@ async function waitForUserInserted() {
 }
 
 test.describe('Mock Google OAuth login (MSW enabled)', () => {
-  test.beforeAll(async () => {
-    process.env.NEXT_PUBLIC_ENABLE_MSW_MOCK = 'true'
-  })
-
   test('click Google and land on /home without external redirect', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('link', { name: 'Login' }).click()

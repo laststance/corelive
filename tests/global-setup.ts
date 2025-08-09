@@ -33,6 +33,13 @@ export default async function globalSetup(_config: FullConfig) {
   } catch {
     // ignore
   }
+
+  // Build the Next.js app once before tests (required by our workflow rules)
+  try {
+    execSync('NEXT_PUBLIC_ENABLE_MSW_MOCK=true pnpm build', { stdio: 'inherit' })
+  } catch {
+    // Let Playwright still attempt; failures will be visible in test logs
+  }
 }
 
 
