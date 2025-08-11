@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { beforeAll, afterEach, afterAll } from 'vitest'
 
-import { server } from './src/mocks/node'
+import { server } from './mocks/node'
 
 // Start server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))

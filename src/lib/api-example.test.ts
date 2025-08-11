@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, it, expect } from 'vitest'
 
-import { server } from '../mocks/node'
+import { server } from '../../mocks/node'
 
 // Example function that makes an API call
 async function fetchUserData(userId: string) {

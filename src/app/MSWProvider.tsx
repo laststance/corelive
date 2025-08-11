@@ -1,11 +1,12 @@
 'use client'
 
 import { Suspense, use } from 'react'
+
 import { env } from '@/env.mjs'
 
 const mockingEnabledPromise =
   typeof window !== 'undefined' && env.NEXT_PUBLIC_ENABLE_MSW_MOCK === 'true'
-    ? import('@/mocks/browser').then(async ({ worker }) => {
+    ? import('../../mocks/browser').then(async ({ worker }) => {
         await worker.start({
           onUnhandledRequest(request, print) {
             // Ignore Next.js internal requests
@@ -19,9 +20,21 @@ const mockingEnabledPromise =
             print.warning()
           },
         })
-        console.log('[MSW] Mock Service Worker enabled via NEXT_PUBLIC_ENABLE_MSW_MOCK')
+        console.log(
+          '[MSW] Mock Service Worker enabled via NEXT_PUBLIC_ENABLE_MSW_MOCK',
+        )
       })
     : Promise.resolve()
+
+// eslint-disable-next-line @typescript-eslint/promise-function-async
+export function MSWProviderWrapper({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  use(mockingEnabledPromise)
+  return children
+}
 
 export function MSWProvider({
   children,
@@ -35,13 +48,4 @@ export function MSWProvider({
       <MSWProviderWrapper>{children}</MSWProviderWrapper>
     </Suspense>
   )
-}
-
-function MSWProviderWrapper({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
-  use(mockingEnabledPromise)
-  return children
 }

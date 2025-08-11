@@ -14,7 +14,7 @@ beforeAll(async () => {
   if (typeof window !== 'undefined') {
     try {
       const { setupWorker } = await import('msw/browser')
-      const { handlers } = await import('../src/mocks/handlers')
+      const { handlers } = await import('../mocks/handlers')
 
       const worker = setupWorker(...handlers)
       await worker.start({

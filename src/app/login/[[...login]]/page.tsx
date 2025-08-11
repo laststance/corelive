@@ -1,6 +1,7 @@
-"use client"
+'use client'
 import { SignIn as Login } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
+
 import { env } from '@/env.mjs'
 
 export default function Page() {
