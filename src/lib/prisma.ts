@@ -1,38 +1,57 @@
-import { PrismaClient as OriginalPrismaClient } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 
 import type { TransformDateToString } from '@/types/utility'
-// Override the Prisma client types
 
-class PrismaClient extends OriginalPrismaClient {
-  // Custom Prisma client implementation if needed
-}
-
-type CustomPrismaClient = {
-  [K in keyof PrismaClient]: PrismaClient[K] extends (
-    ...args: infer A
-  ) => infer R
-    ? (
-        ...args: A
-      ) => R extends Promise<infer P>
-        ? Promise<TransformDateToString<P>>
-        : TransformDateToString<R>
-    : PrismaClient[K]
-}
-export const prisma: CustomPrismaClient = new PrismaClient() as any
-
-prisma.$use(async (params, next) => {
-  const result = await next(params)
-  if (result && typeof result === 'object') {
-    convertDatesToISO(result)
+function convertDatesToISO(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
   }
-  return result
-})
-function convertDatesToISO(obj: { [x: string]: any }) {
-  for (const key in obj) {
-    if (obj[key] instanceof Date) {
-      obj[key] = obj[key].toISOString()
-    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-      convertDatesToISO(obj[key])
+
+  if (obj instanceof Date) {
+    return obj.toISOString()
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(convertDatesToISO)
+  }
+
+  if (typeof obj === 'object') {
+    const converted: any = {}
+    for (const key in obj) {
+      converted[key] = convertDatesToISO(obj[key])
     }
+    return converted
   }
+
+  return obj
 }
+
+const prismaClient = new PrismaClient().$extends({
+  result: {
+    $allModels: {
+      // Apply date transformation to all models
+    },
+  },
+  query: {
+    $allModels: {
+      async $allOperations({ args, query }) {
+        const result = await query(args)
+        return convertDatesToISO(result)
+      },
+    },
+  },
+})
+
+type CustomPrismaClient = typeof prismaClient & {
+  [K in keyof PrismaClient]: K extends `$${string}`
+    ? PrismaClient[K]
+    : PrismaClient[K] extends (...args: infer A) => infer R
+      ? (
+          ...args: A
+        ) => R extends Promise<infer P>
+          ? Promise<TransformDateToString<P>>
+          : TransformDateToString<R>
+      : PrismaClient[K]
+}
+
+export const prisma = prismaClient as CustomPrismaClient
