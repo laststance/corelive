@@ -66,6 +66,14 @@ export const handlers = [
       console.log('[MSW] Authentication state reset')
     }
 
+    // Check if this is a set auth request
+    if (url.searchParams.has('__MSW_SET_AUTH__')) {
+      isAuthenticated = true
+      console.log(
+        '[MSW] 🔐 Authentication state SET to true via Clerk client endpoint',
+      )
+    }
+
     console.log(
       '[MSW] Intercepting Clerk client request - authenticated:',
       isAuthenticated,

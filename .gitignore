@@ -45,5 +45,5 @@ test-results
 playwright-report
 screenshots
 .claude
-.cursor
+!.cursor
 clerk-playwright-nextjs
