@@ -1,9 +1,23 @@
 import { http, HttpResponse } from 'msw'
 
-// Track authentication state
+// =============================================================================
+// AUTHENTICATION STATE MANAGEMENT
+// =============================================================================
+
+/**
+ * Global authentication state tracker
+ * Used by all handlers to determine if user is authenticated
+ */
 let isAuthenticated = false
 
-// Mock successful Google OAuth sign-in response for Clerk
+// =============================================================================
+// MOCK DATA FACTORIES
+// =============================================================================
+
+/**
+ * Creates a mock sign-in attempt response for Clerk
+ * Used when OAuth flow completes successfully
+ */
 const createMockSignInResponse = () => ({
   object: 'sign_in_attempt',
   id: 'sia_mock_signin_attempt_id',
@@ -30,7 +44,10 @@ const createMockSignInResponse = () => ({
   abandon_at: null,
 })
 
-// Mock successful session response for Clerk
+/**
+ * Creates a mock active session response for Clerk
+ * Used to represent authenticated user session state
+ */
 const createMockSessionResponse = () => ({
   object: 'session',
   id: 'sess_mock_session_id',
@@ -56,150 +73,253 @@ const createMockSessionResponse = () => ({
   last_active_at: Date.now(),
 })
 
-export const handlers = [
-  // Mock Clerk client endpoint - returns session based on auth state
-  http.get('https://*.clerk.accounts.dev/v1/client', ({ request }) => {
-    // Check if this is a reset request
+// =============================================================================
+// CLERK CORE API HANDLERS
+// =============================================================================
+
+/**
+ * Main Clerk client endpoint handler
+ * WHEN: Called by Clerk's client-side SDK on page load and state changes
+ * PURPOSE: Returns current authentication state and active sessions
+ * SUPPORTS: Test utilities for auth state management via URL parameters
+ */
+const clerkClientHandler = http.get(
+  'https://*.clerk.accounts.dev/v1/client',
+  ({ request }) => {
     const url = new URL(request.url)
+
+    // Test utility: Reset authentication state
     if (url.searchParams.has('__MSW_RESET_AUTH__')) {
       isAuthenticated = false
-      console.log('[MSW] Authentication state reset')
+      console.log('[MSW] Authentication state reset for testing')
     }
 
-    // Check if this is a set auth request
+    // Test utility: Set authentication state
     if (url.searchParams.has('__MSW_SET_AUTH__')) {
       isAuthenticated = true
-      console.log(
-        '[MSW] 🔐 Authentication state SET to true via Clerk client endpoint',
-      )
+      console.log('[MSW] 🔐 Authentication state SET to true for testing')
     }
 
-    console.log(
-      '[MSW] Intercepting Clerk client request - authenticated:',
-      isAuthenticated,
-    )
+    console.log('[MSW] Clerk client request - authenticated:', isAuthenticated)
+
     return HttpResponse.json({
       sessions: isAuthenticated ? [createMockSessionResponse()] : [],
       sign_in: null,
       sign_up: null,
     })
-  }),
+  },
+)
 
-  // Mock Clerk sign-in endpoint for Google OAuth
-  http.post(
-    'https://*.clerk.accounts.dev/v1/client/sign_ins',
-    ({ request }) => {
-      console.log('[MSW] Intercepting Clerk sign-in request:', request.url)
-      isAuthenticated = true // Set authentication state on login
-      return HttpResponse.json(createMockSignInResponse())
-    },
-  ),
-
-  // Mock Clerk session endpoint
-  http.get('https://*.clerk.accounts.dev/v1/client/sessions', () => {
+/**
+ * Clerk sessions collection endpoint handler
+ * WHEN: Called when checking for active user sessions
+ * PURPOSE: Returns list of active sessions for authenticated users
+ */
+const clerkSessionsHandler = http.get(
+  'https://*.clerk.accounts.dev/v1/client/sessions',
+  () => {
     console.log(
-      '[MSW] Intercepting Clerk sessions request - authenticated:',
+      '[MSW] Clerk sessions request - authenticated:',
       isAuthenticated,
     )
     return HttpResponse.json({
       data: isAuthenticated ? [createMockSessionResponse()] : [],
     })
-  }),
+  },
+)
 
-  // Mock Clerk session by ID endpoint
-  http.get(
-    'https://*.clerk.accounts.dev/v1/client/sessions/:sessionId',
-    ({ params }) => {
-      console.log(
-        '[MSW] Intercepting Clerk session by ID request:',
-        params.sessionId,
-      )
-      if (!isAuthenticated) {
-        return new HttpResponse(null, { status: 404 })
-      }
-      return HttpResponse.json(createMockSessionResponse())
-    },
-  ),
-
-  // Mock Clerk user endpoint
-  http.get('https://*.clerk.accounts.dev/v1/me', () => {
-    console.log(
-      '[MSW] Intercepting Clerk user info request - authenticated:',
-      isAuthenticated,
-    )
+/**
+ * Clerk individual session endpoint handler
+ * WHEN: Called when fetching specific session details by ID
+ * PURPOSE: Returns session data or 404 if not authenticated
+ */
+const clerkSessionByIdHandler = http.get(
+  'https://*.clerk.accounts.dev/v1/client/sessions/:sessionId',
+  ({ params }) => {
+    console.log('[MSW] Clerk session by ID request:', params.sessionId)
     if (!isAuthenticated) {
-      return new HttpResponse(null, { status: 401 })
+      return new HttpResponse(null, { status: 404 })
     }
-    return HttpResponse.json({
-      id: 'user_mock_user_id',
-      email_addresses: [
-        {
-          email_address: 'test@example.com',
-          verification: {
-            status: 'verified',
-          },
+    return HttpResponse.json(createMockSessionResponse())
+  },
+)
+
+/**
+ * Clerk user profile endpoint handler
+ * WHEN: Called when fetching authenticated user's profile information
+ * PURPOSE: Returns user data or 401 if not authenticated
+ */
+const clerkUserHandler = http.get('https://*.clerk.accounts.dev/v1/me', () => {
+  console.log('[MSW] Clerk user info request - authenticated:', isAuthenticated)
+  if (!isAuthenticated) {
+    return new HttpResponse(null, { status: 401 })
+  }
+  return HttpResponse.json({
+    id: 'user_mock_user_id',
+    email_addresses: [
+      {
+        email_address: 'test@example.com',
+        verification: {
+          status: 'verified',
         },
-      ],
-      first_name: 'Test',
-      last_name: 'User',
-      image_url: 'https://via.placeholder.com/150',
-      created_at: Date.now(),
-      updated_at: Date.now(),
+      },
+    ],
+    first_name: 'Test',
+    last_name: 'User',
+    image_url: 'https://via.placeholder.com/150',
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  })
+})
+
+/**
+ * Clerk sign-out endpoint handler
+ * WHEN: Called when user signs out of their session
+ * PURPOSE: Ends the session and updates authentication state
+ */
+const clerkSignOutHandler = http.post(
+  'https://*.clerk.accounts.dev/v1/client/sessions/:sessionId/end',
+  ({ params }) => {
+    console.log('[MSW] Clerk sign out request:', params.sessionId)
+    isAuthenticated = false
+    return HttpResponse.json({
+      object: 'session',
+      id: params.sessionId,
+      status: 'ended',
     })
-  }),
+  },
+)
 
-  // Additional OAuth callback endpoints that might be needed
-  http.post(
-    'https://*.clerk.accounts.dev/v1/client/sign_ins/:signInId/attempt_third_party',
-    ({ params }) => {
-      console.log(
-        '[MSW] Intercepting Clerk third-party attempt request:',
-        params.signInId,
-      )
+// =============================================================================
+// CLERK OAUTH FLOW HANDLERS
+// =============================================================================
+
+/**
+ * Clerk sign-in creation endpoint handler
+ * WHEN: Called when user initiates OAuth sign-in (e.g., clicks "Continue with Google")
+ * PURPOSE: Creates a new sign-in attempt and sets authenticated state
+ */
+const clerkSignInHandler = http.post(
+  'https://*.clerk.accounts.dev/v1/client/sign_ins',
+  ({ request }) => {
+    console.log('[MSW] Clerk sign-in creation request:', request.url)
+    isAuthenticated = true
+    return HttpResponse.json(createMockSignInResponse())
+  },
+)
+
+/**
+ * Clerk third-party OAuth attempt handler
+ * WHEN: Called during OAuth flow when handling third-party provider response
+ * PURPOSE: Processes OAuth callback and completes authentication
+ */
+const clerkThirdPartyAttemptHandler = http.post(
+  'https://*.clerk.accounts.dev/v1/client/sign_ins/:signInId/attempt_third_party',
+  ({ params }) => {
+    console.log(
+      '[MSW] Clerk third-party OAuth attempt request:',
+      params.signInId,
+    )
+    isAuthenticated = true
+    return HttpResponse.json(createMockSignInResponse())
+  },
+)
+
+/**
+ * Clerk OAuth callback handler (primary pattern)
+ * WHEN: Called when OAuth provider redirects back to Clerk with authorization code
+ * PURPOSE: Completes OAuth flow and redirects to application home page
+ */
+const clerkOAuthCallbackHandler = http.get(
+  'https://*.clerk.shared.lcl.dev/v1/oauth_callback',
+  ({ request }) => {
+    console.log('[MSW] 🎯 Clerk OAuth callback intercepted!')
+    const url = new URL(request.url)
+    const code = url.searchParams.get('code')
+    const state = url.searchParams.get('state')
+
+    console.log('[MSW] OAuth callback - code:', code, 'state:', state)
+
+    if (code) {
       isAuthenticated = true
-      return HttpResponse.json(createMockSignInResponse())
-    },
-  ),
+      console.log('[MSW] ✅ OAuth callback successful - user authenticated')
+      console.log('[MSW] ↪️ Redirecting to home page')
+      return HttpResponse.redirect('http://localhost:3000/home', 302)
+    }
 
-  // Mock sign out endpoint
-  http.post(
-    'https://*.clerk.accounts.dev/v1/client/sessions/:sessionId/end',
-    ({ params }) => {
-      console.log(
-        '[MSW] Intercepting Clerk sign out request:',
-        params.sessionId,
-      )
-      isAuthenticated = false
-      return HttpResponse.json({
-        object: 'session',
-        id: params.sessionId,
-        status: 'ended',
-      })
-    },
-  ),
+    console.log('[MSW] ❌ OAuth callback failed - missing authorization code')
+    return new HttpResponse(null, { status: 400 })
+  },
+)
 
-  // Mock Google OAuth endpoints to prevent actual redirection to Google
-  http.get('https://accounts.google.com/o/oauth2/v2/auth', ({ request }) => {
-    console.log('[MSW] Intercepting Google OAuth authorization request')
+/**
+ * Clerk OAuth callback handler (alternative pattern)
+ * WHEN: Called for alternative Clerk OAuth callback URL patterns
+ * PURPOSE: Same as primary callback handler, handles different URL formats
+ */
+const clerkOAuthCallbackAlternativeHandler = http.get(
+  'https://clerk.shared.lcl.dev/v1/oauth_callback',
+  ({ request }) => {
+    console.log('[MSW] 🎯 Clerk OAuth callback (alternative URL) intercepted!')
+    const url = new URL(request.url)
+    const code = url.searchParams.get('code')
+    const state = url.searchParams.get('state')
+
+    console.log('[MSW] OAuth callback - code:', code, 'state:', state)
+
+    if (code) {
+      isAuthenticated = true
+      console.log('[MSW] ✅ OAuth callback successful - user authenticated')
+      console.log('[MSW] ↪️ Redirecting to home page')
+      return HttpResponse.redirect('http://localhost:3000/home', 302)
+    }
+
+    console.log('[MSW] ❌ OAuth callback failed - missing authorization code')
+    return new HttpResponse(null, { status: 400 })
+  },
+)
+
+// =============================================================================
+// GOOGLE OAUTH API HANDLERS (Prevent Real OAuth Redirects)
+// =============================================================================
+
+/**
+ * Google OAuth authorization endpoint handler
+ * WHEN: Called when user is redirected to Google for OAuth authorization
+ * PURPOSE: Prevents actual redirect to Google, simulates successful OAuth callback
+ */
+const googleOAuthAuthorizationHandler = http.get(
+  'https://accounts.google.com/o/oauth2/v2/auth',
+  ({ request }) => {
+    console.log('[MSW] Google OAuth authorization request intercepted')
     const url = new URL(request.url)
     const redirectUri = url.searchParams.get('redirect_uri')
     const state = url.searchParams.get('state')
 
     if (redirectUri && state) {
-      // Simulate successful OAuth callback
+      // Simulate successful OAuth callback with authorization code
       const callbackUrl = `${redirectUri}?code=mock_auth_code_12345&state=${state}`
-      console.log('[MSW] Redirecting to callback URL:', callbackUrl)
-
-      // Return a redirect response to the callback URL
+      console.log(
+        '[MSW] Simulating OAuth success, redirecting to:',
+        callbackUrl,
+      )
       return HttpResponse.redirect(callbackUrl, 302)
     }
 
+    console.log('[MSW] Invalid OAuth request - missing required parameters')
     return new HttpResponse(null, { status: 400 })
-  }),
+  },
+)
 
-  // Mock Google OAuth token exchange
-  http.post('https://oauth2.googleapis.com/token', () => {
-    console.log('[MSW] Intercepting Google token exchange')
+/**
+ * Google OAuth token exchange endpoint handler
+ * WHEN: Called when exchanging authorization code for access tokens
+ * PURPOSE: Returns mock tokens instead of making real API calls to Google
+ */
+const googleTokenExchangeHandler = http.post(
+  'https://oauth2.googleapis.com/token',
+  () => {
+    console.log('[MSW] Google token exchange request intercepted')
     return HttpResponse.json({
       access_token: 'mock_access_token',
       refresh_token: 'mock_refresh_token',
@@ -207,11 +327,18 @@ export const handlers = [
       token_type: 'Bearer',
       id_token: 'mock_id_token.payload.signature',
     })
-  }),
+  },
+)
 
-  // Mock Google userinfo endpoint
-  http.get('https://www.googleapis.com/oauth2/v2/userinfo', () => {
-    console.log('[MSW] Intercepting Google userinfo request')
+/**
+ * Google user info endpoint handler
+ * WHEN: Called when fetching user profile information from Google
+ * PURPOSE: Returns mock user data instead of making real API calls to Google
+ */
+const googleUserInfoHandler = http.get(
+  'https://www.googleapis.com/oauth2/v2/userinfo',
+  () => {
+    console.log('[MSW] Google userinfo request intercepted')
     return HttpResponse.json({
       id: 'mock_google_user_id',
       email: 'test@example.com',
@@ -221,61 +348,23 @@ export const handlers = [
       family_name: 'User',
       picture: 'https://via.placeholder.com/150',
     })
-  }),
+  },
+)
 
-  // Mock Clerk OAuth callback handling - ENHANCED with better logging
-  http.get(
-    'https://*.clerk.shared.lcl.dev/v1/oauth_callback',
-    ({ request }) => {
-      console.log('[MSW] 🎯 Intercepting Clerk OAuth callback!')
-      const url = new URL(request.url)
-      const code = url.searchParams.get('code')
-      const state = url.searchParams.get('state')
+// =============================================================================
+// TEST UTILITY HANDLERS
+// =============================================================================
 
-      console.log('[MSW] 📋 OAuth callback - code:', code, 'state:', state)
-
-      if (code) {
-        isAuthenticated = true
-        console.log(
-          '[MSW] ✅ OAuth callback successful - setting authenticated=true',
-        )
-        console.log('[MSW] ↪️ Redirecting to home page')
-        // Redirect back to the application home page
-        return HttpResponse.redirect('http://localhost:3000/home', 302)
-      }
-
-      console.log('[MSW] ❌ OAuth callback failed - missing code parameter')
-      return new HttpResponse(null, { status: 400 })
-    },
-  ),
-
-  // Also handle the alternative callback URL pattern
-  http.get('https://clerk.shared.lcl.dev/v1/oauth_callback', ({ request }) => {
-    console.log(
-      '[MSW] 🎯 Intercepting Clerk OAuth callback (alternative pattern)!',
-    )
-    const url = new URL(request.url)
-    const code = url.searchParams.get('code')
-    const state = url.searchParams.get('state')
-
-    console.log('[MSW] 📋 OAuth callback - code:', code, 'state:', state)
-
-    if (code) {
-      isAuthenticated = true
-      console.log(
-        '[MSW] ✅ OAuth callback successful - setting authenticated=true',
-      )
-      console.log('[MSW] ↪️ Redirecting to home page')
-      return HttpResponse.redirect('http://localhost:3000/home', 302)
-    }
-
-    console.log('[MSW] ❌ OAuth callback failed - missing code parameter')
-    return new HttpResponse(null, { status: 400 })
-  }),
-
-  // DIRECT AUTH STATE SETTER - for Playwright tests to set authentication directly
-  http.post('http://localhost:3000/__msw_set_auth__', async ({ request }) => {
-    console.log('[MSW] 🎯 Direct auth state setter called!')
+/**
+ * Direct auth state setter handler for testing
+ * WHEN: Called by test code to manually set authentication state
+ * PURPOSE: Allows tests to bypass OAuth flow and directly set auth state
+ * USAGE: POST to /__msw_set_auth__ with { authenticated: boolean }
+ */
+const testAuthStateSetterHandler = http.post(
+  'http://localhost:3000/__msw_set_auth__',
+  async ({ request }) => {
+    console.log('[MSW] 🧪 Test auth state setter called!')
 
     try {
       const body = await request.json()
@@ -296,5 +385,32 @@ export const handlers = [
         { status: 400 },
       )
     }
-  }),
+  },
+)
+
+// =============================================================================
+// EXPORTED HANDLERS ARRAY
+// =============================================================================
+
+export const handlers = [
+  // Clerk Core API Handlers
+  clerkClientHandler,
+  clerkSessionsHandler,
+  clerkSessionByIdHandler,
+  clerkUserHandler,
+  clerkSignOutHandler,
+
+  // Clerk OAuth Flow Handlers
+  clerkSignInHandler,
+  clerkThirdPartyAttemptHandler,
+  clerkOAuthCallbackHandler,
+  clerkOAuthCallbackAlternativeHandler,
+
+  // Google OAuth API Handlers (Prevent Real Redirects)
+  googleOAuthAuthorizationHandler,
+  googleTokenExchangeHandler,
+  googleUserInfoHandler,
+
+  // Test Utility Handlers
+  testAuthStateSetterHandler,
 ]
