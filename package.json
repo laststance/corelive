@@ -18,6 +18,7 @@
     "lint": "next lint",
     "lint:fix": "eslint . --fix",
     "test": "pnpm test:unit && pnpm test:storybook",
+    "test:ci": "pnpm test:unit",
     "test:unit": "vitest run",
     "test:storybook": "vitest run --config vitest.config.storybook.ts",
     "test:watch": "vitest --watch",

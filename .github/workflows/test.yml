@@ -13,7 +13,5 @@ jobs:
           timezoneLinux: 'Asia/Tokyo'
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium
       - name: Test
-        run: pnpm test
+        run: pnpm test:ci
