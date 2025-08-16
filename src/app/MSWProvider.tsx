@@ -9,7 +9,7 @@ export function MSWProvider({
 }: Readonly<{
   children: ReactNode
 }>): ReactNode {
-  const [isMSWReady, setIsMSWReady] = useState(() => {
+  const [isMSWReady, setIsMSWReady] = useState<boolean>(() => {
     // If MSW is disabled, we're immediately ready
     return env.NEXT_PUBLIC_ENABLE_MSW_MOCK !== 'true'
   })

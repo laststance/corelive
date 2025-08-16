@@ -1,0 +1,93 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  e2e-tests:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository 🔄
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.17.1'
+          cache: 'pnpm'
+
+      - name: Setup pnpm 📦
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.14.0'
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache 💾
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies 📥
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client 🗄️
+        run: pnpm prisma generate
+
+      - name: Build Next.js application 🏗️
+        run: pnpm build
+        env:
+          # Add any required build-time environment variables here
+          NODE_ENV: production
+
+      - name: Install Playwright Browsers 🎭
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests 🧪
+        run: pnpm exec playwright test --reporter=list
+        env:
+          # Environment variables for tests
+          CI: true
+          NODE_ENV: test
+          NEXT_PUBLIC_ENABLE_MSW_MOCK: true
+          # Add your Clerk test environment variables
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY_TEST }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY_TEST }}
+          # Database URL for tests (if needed)
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+
+      - name: Upload Playwright Report 📊
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload Test Screenshots 📸
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-screenshots
+          path: e2e/screenshots/
+          retention-days: 30
+
+      - name: Upload Test Results 📋
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 30
