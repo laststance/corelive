@@ -14,4 +14,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
       - name: Test
-        run: pnpm test:ci
+        run: pnpm test
