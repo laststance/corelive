@@ -5,6 +5,21 @@ import * as RechartsPrimitive from 'recharts'
 
 import { cn } from '@/lib/utils'
 
+// Local minimal types matching the subset of Recharts payload shape we consume.
+type TooltipItem = {
+  value?: number | string
+  name?: string
+  dataKey?: string
+  color?: string
+  payload: { [key: string]: unknown; fill?: string }
+}
+
+type LegendItem = {
+  value?: string
+  dataKey?: string
+  color?: string
+}
+
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: '', dark: '.dark' } as const
 
@@ -118,14 +133,29 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-  React.ComponentProps<'div'> & {
-    hideLabel?: boolean
-    hideIndicator?: boolean
-    indicator?: 'line' | 'dot' | 'dashed'
-    nameKey?: string
-    labelKey?: string
-  }) {
+}: React.HTMLAttributes<HTMLDivElement> & {
+  active?: boolean
+  payload?: TooltipItem[]
+  label?: unknown
+  labelFormatter?: (
+    label: React.ReactNode,
+    payload?: TooltipItem[],
+  ) => React.ReactNode
+  labelClassName?: string
+  formatter?: (
+    value: number | string,
+    name: string,
+    item: TooltipItem,
+    index: number,
+    raw?: unknown,
+  ) => React.ReactNode
+  color?: string
+  nameKey?: string
+  labelKey?: string
+  hideLabel?: boolean
+  hideIndicator?: boolean
+  indicator?: 'line' | 'dot' | 'dashed'
+}) {
   const { config } = useChart()
 
   const tooltipLabel = React.useMemo(() => {
@@ -164,7 +194,7 @@ function ChartTooltipContent({
     labelKey,
   ])
 
-  if (!active || !payload?.length) {
+  if (!active || !payload || payload.length === 0) {
     return null
   }
 
@@ -256,14 +286,15 @@ function ChartLegendContent({
   payload,
   verticalAlign = 'bottom',
   nameKey,
-}: React.ComponentProps<'div'> &
-  Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> & {
-    hideIcon?: boolean
-    nameKey?: string
-  }) {
+}: React.HTMLAttributes<HTMLDivElement> & {
+  payload?: LegendItem[]
+  verticalAlign?: 'top' | 'middle' | 'bottom'
+  hideIcon?: boolean
+  nameKey?: string
+}) {
   const { config } = useChart()
 
-  if (!payload?.length) {
+  if (!payload || payload.length === 0) {
     return null
   }
 
