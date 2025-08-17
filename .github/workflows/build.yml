@@ -33,5 +33,4 @@ jobs:
           echo "WEBHOOK_SECRET=${WEBHOOK_SECRET}" >> .env
           echo "POSTGRES_PRISMA_URL=${POSTGRES_PRISMA_URL}" >> .env
       - name: Build
-        if: ${{ github.event_name == 'push' || (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' && secrets.WEBHOOK_SECRET != '' && secrets.POSTGRES_PRISMA_URL != '') }}
         run: pnpm build

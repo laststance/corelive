@@ -46,14 +46,12 @@ jobs:
         run: pnpm prisma generate
 
       - name: Build Next.js application 🏗️
-        if: ${{ github.event_name == 'push' || (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' && secrets.WEBHOOK_SECRET != '' && secrets.POSTGRES_PRISMA_URL != '') }}
         run: pnpm build
 
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright tests 🧪
-        if: ${{ github.event_name == 'push' || (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' && secrets.WEBHOOK_SECRET != '' && secrets.POSTGRES_PRISMA_URL != '') }}
         run: pnpm exec playwright test --reporter=list
         env:
           CI: true
