@@ -1,0 +1,54 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Input } from './input'
+
+<Meta title="UI/Input/Docs" component={Input} />
+
+### Input
+
+Text input with Tailwind styling. Supports invalid/disabled states and common types.
+
+#### Examples
+
+<Canvas>
+  <Story name="Placeholder">
+    <Input placeholder="Enter your name" className="w-64" />
+  </Story>
+</Canvas>
+
+<Canvas>
+  <Story name="Disabled">
+    <Input placeholder="Disabled" disabled className="w-64" />
+  </Story>
+</Canvas>
+
+<Canvas>
+  <Story name="Invalid">
+    <Input placeholder="Invalid" aria-invalid className="w-64" />
+  </Story>
+</Canvas>
+
+<Canvas>
+  <Story name="Types">
+    <div className="flex w-72 flex-col gap-3">
+      <Input type="email" placeholder="email@example.com" />
+      <Input type="password" placeholder="password" />
+      <Input type="file" />
+    </div>
+  </Story>
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Input } from '@/components/ui/input'
+
+export default function Example() {
+  return (
+    <div className='flex flex-col gap-3 w-72'>
+      <Input placeholder='Name' />
+      <Input placeholder='Disabled' disabled />
+      <Input placeholder='Invalid' aria-invalid />
+    </div>
+  )
+}
+`} />

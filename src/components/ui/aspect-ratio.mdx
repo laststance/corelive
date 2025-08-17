@@ -1,0 +1,44 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as AspectRatioStories from './aspect-ratio.stories'
+
+<Meta of={AspectRatioStories} />
+
+### AspectRatio
+
+Keeps content constrained to a given width-to-height ratio.
+
+#### Examples
+
+<Canvas>
+  <Story of={AspectRatioStories.Ratio16x9} />
+</Canvas>
+
+<Canvas>
+  <Story of={AspectRatioStories.Ratio3x4} />
+</Canvas>
+
+<Canvas>
+  <Story of={AspectRatioStories.Ratio1x1} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { AspectRatio } from '@/components/ui/aspect-ratio'
+
+export default function Example() {
+  return (
+    <div className="w-[360px] border rounded-md overflow-hidden">
+      <AspectRatio ratio={16/9}>
+        <img src="https://picsum.photos/800/450" alt="16:9" className="h-full w-full object-cover" />
+      </AspectRatio>
+    </div>
+  )
+}`} />
+
+#### Props
+
+<Description>
+  Accepts all props of Radix AspectRatio.Root. Commonly used: - `ratio`: number
+  — width / height aspect ratio.
+</Description>

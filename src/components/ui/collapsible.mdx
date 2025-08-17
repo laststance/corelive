@@ -1,0 +1,36 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as CollapsibleStories from './collapsible.stories'
+
+<Meta of={CollapsibleStories} />
+
+### Collapsible
+
+Disclosure that toggles content visibility.
+
+#### Examples
+
+<Canvas>
+  <Story of={CollapsibleStories.Closed} />
+</Canvas>
+
+<Canvas>
+  <Story of={CollapsibleStories.Open} />
+</Canvas>
+
+<Canvas>
+  <Story of={CollapsibleStories.Controlled} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
+
+export function Example() {
+  return (
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger>Toggle</CollapsibleTrigger>
+      <CollapsibleContent>Content</CollapsibleContent>
+    </Collapsible>
+  )
+}`} />

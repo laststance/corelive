@@ -1,0 +1,27 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as ProgressStories from './progress.stories'
+
+<Meta of={ProgressStories} />
+
+### Progress
+
+Determinate progress indicator.
+
+#### Examples
+
+<Canvas>
+  <Story of={ProgressStories.Value30} />
+</Canvas>
+
+<Canvas>
+  <Story of={ProgressStories.Value70} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Progress } from '@/components/ui/progress'
+
+export default function Example() {
+  return <Progress value={50} className="w-64" />
+}`} />

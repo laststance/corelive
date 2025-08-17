@@ -1,0 +1,46 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from './resizable'
+import * as ResizableStories from './resizable.stories'
+
+<Meta of={ResizableStories} />
+
+### Resizable
+
+Resizable panel layout with draggable handles.
+
+#### Examples
+
+<Canvas>
+  <Story of={ResizableStories.HorizontalPanels} />
+</Canvas>
+
+<Canvas>
+  <Story of={ResizableStories.VerticalPanels} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+
+export default function Example() {
+  return (
+    <ResizablePanelGroup direction="horizontal" className="h-[300px] max-w-md rounded-lg border">
+      <ResizablePanel defaultSize={50}>
+        <div className="flex h-full items-center justify-center p-6">
+          <span className="font-medium">Left panel</span>
+        </div>
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={50}>
+        <div className="flex h-full items-center justify-center p-6">
+          <span className="font-medium">Right panel</span>
+        </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  )
+}`} />

@@ -1,0 +1,36 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Label } from './label'
+import { Input } from './input'
+
+<Meta title="UI/Label/Docs" component={Label} />
+
+### Label
+
+Text label associated with form controls.
+
+#### Example
+
+<Canvas>
+  <Story name="WithInput">
+    <div className="flex w-72 flex-col gap-2">
+      <Label htmlFor="email">Email</Label>
+      <Input id="email" type="email" placeholder="you@example.com" />
+    </div>
+  </Story>
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+
+export default function Example() {
+  return (
+    <div className='flex flex-col gap-2 w-72'>
+      <Label htmlFor='email'>Email</Label>
+      <Input id='email' type='email' placeholder='you@example.com' />
+    </div>
+  )
+}
+`} />

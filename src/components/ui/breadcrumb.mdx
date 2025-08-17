@@ -1,0 +1,53 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as BreadcrumbStories from './breadcrumb.stories'
+
+<Meta of={BreadcrumbStories} />
+
+### Breadcrumb
+
+Navigation trail component.
+
+#### Examples
+
+<Canvas>
+  <Story of={BreadcrumbStories.DefaultTrail} />
+</Canvas>
+
+<Canvas>
+  <Story of={BreadcrumbStories.WithEllipsis} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from '@/components/ui/breadcrumb'
+
+export default function Example() {
+  return (
+    <Breadcrumb>
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink href="#">Home</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbPage>Current</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
+  )
+}`} />
+
+#### Props
+
+<Description>
+  All pieces are simple elements with styling hooks; typical usage composes the
+  provided slots.
+</Description>

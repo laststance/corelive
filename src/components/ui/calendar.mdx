@@ -1,0 +1,30 @@
+import { Meta, Story, Canvas, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as CalendarStories from './calendar.stories'
+
+<Meta of={CalendarStories} />
+
+### Calendar
+
+React Day Picker styled via Tailwind with accessible keyboard navigation.
+
+#### Examples
+
+<Canvas>
+  <Story of={CalendarStories.Basic} />
+</Canvas>
+
+<Canvas>
+  <Story of={CalendarStories.GhostNavButtons} />
+</Canvas>
+
+<Canvas>
+  <Story of={CalendarStories.LabelCaption} />
+</Canvas>
+
+#### Props
+
+<Description>
+  Use `buttonVariant` to style nav buttons, `captionLayout` to switch between
+  label and dropdown. All other props are passed to `react-day-picker`.
+</Description>

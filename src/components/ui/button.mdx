@@ -1,0 +1,49 @@
+import { Meta, Story, Canvas, Description, Source } from '@storybook/blocks'
+import * as React from 'react'
+import * as ButtonStories from './button.stories'
+
+<Meta of={ButtonStories} />
+
+### Button
+
+Interactive button built with Tailwind CSS. It supports multiple visual variants and sizes.
+
+#### Usage
+
+<Source
+  language="tsx"
+  code={`import { Button } from '@/components/ui/button'
+
+export default function Example() {
+  return (
+    <div className="flex gap-3">
+      <Button>Default</Button>
+      <Button variant="secondary">Secondary</Button>
+      <Button variant="outline">Outline</Button>
+    </div>
+  )
+}`}
+/>
+
+#### Variants
+
+<Canvas>
+  <Story of={ButtonStories.Variants} />
+</Canvas>
+
+#### Sizes
+
+<Canvas>
+  <Story of={ButtonStories.Sizes} />
+</Canvas>
+
+#### Props
+
+<Description>
+Properties are inferred from the TypeScript signature of `Button`. Key props:
+
+- `variant`: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
+- `size`: 'sm' | 'default' | 'lg' | 'icon'
+- `asChild`: boolean — renders as Slot for custom elements
+- All native button attributes are forwarded
+  </Description>

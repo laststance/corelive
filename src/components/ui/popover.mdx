@@ -1,0 +1,29 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Popover, PopoverTrigger, PopoverContent } from './popover'
+import * as PopoverStories from './popover.stories'
+
+<Meta of={PopoverStories} />
+
+### Popover
+
+Small overlay positioned relative to a trigger element.
+
+#### Example
+
+<Canvas>
+  <Story of={PopoverStories.Default} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+
+export default function Example() {
+  return (
+    <Popover>
+      <PopoverTrigger>Open</PopoverTrigger>
+      <PopoverContent>Content</PopoverContent>
+    </Popover>
+  )
+}`} />

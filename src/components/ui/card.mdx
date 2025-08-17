@@ -1,0 +1,68 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardAction,
+  CardContent,
+  CardFooter,
+} from './card'
+
+<Meta title="UI/Card/Docs" component={Card} />
+
+### Card
+
+Surface container with header, content, and footer slots.
+
+#### Example
+
+<Canvas>
+  <Story name="Example">
+    <Card className="w-[360px]">
+      <CardHeader>
+        <CardTitle>Card title</CardTitle>
+        <CardDescription>Short description goes here.</CardDescription>
+        <CardAction>
+          <button className="rounded-md border px-2 py-1 text-sm">
+            Action
+          </button>
+        </CardAction>
+      </CardHeader>
+      <CardContent>Content area with arbitrary elements.</CardContent>
+      <CardFooter>
+        <button className="bg-secondary text-secondary-foreground rounded-md px-2 py-1 text-sm">
+          Secondary
+        </button>
+      </CardFooter>
+    </Card>
+  </Story>
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter
+} from '@/components/ui/card'
+
+export default function Example() {
+  return (
+    <Card className="w-[360px]">
+      <CardHeader>
+        <CardTitle>Title</CardTitle>
+        <CardDescription>Optional description</CardDescription>
+        <CardAction>{/* secondary action here */}</CardAction>
+      </CardHeader>
+      <CardContent>Body</CardContent>
+      <CardFooter>Footer</CardFooter>
+    </Card>
+  )
+}`} />
+
+#### Props
+
+<Description>
+  Card and subcomponents accept standard div props with styling hooks on
+  `data-slot`.
+</Description>

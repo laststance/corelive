@@ -1,0 +1,24 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as AlertDialogStories from './alert-dialog.stories'
+
+<Meta of={AlertDialogStories} />
+
+### AlertDialog
+
+Modal dialog for critical confirmations.
+
+#### Example
+
+<Canvas>
+  <Story of={AlertDialogStories.Basic} />
+</Canvas>
+
+#### Props
+
+<Description>
+  AlertDialog composes Radix AlertDialog primitives. You can pass through their
+  props via our wrappers. - `AlertDialogTrigger` supports `asChild` to use a
+  custom trigger. - `AlertDialogContent` accepts standard `div` props. - Actions
+  are regular buttons; wire any handler you need.
+</Description>

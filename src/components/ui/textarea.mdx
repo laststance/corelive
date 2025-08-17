@@ -1,0 +1,61 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Textarea } from './textarea'
+import * as TextareaStories from './textarea.stories'
+
+<Meta of={TextareaStories} />
+
+### Textarea
+
+Multi-line text input field with Tailwind styling.
+
+#### Examples
+
+<Canvas>
+  <Story of={TextareaStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={TextareaStories.Disabled} />
+</Canvas>
+
+<Canvas>
+  <Story of={TextareaStories.WithLabel} />
+</Canvas>
+
+<Canvas>
+  <Story of={TextareaStories.Invalid} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Textarea } from '@/components/ui/textarea'
+
+export default function Example() {
+  return (
+    <div className="grid w-full gap-1.5">
+      <label htmlFor="message" className="text-sm font-medium">
+        Your message
+      </label>
+      <Textarea placeholder="Type your message here." id="message" />
+      <p className="text-xs text-muted-foreground">
+        Your message will be sent to our team.
+      </p>
+    </div>
+  )
+}
+`} />
+
+#### Props
+
+The Textarea component accepts all standard HTML textarea attributes:
+
+- `placeholder` - Placeholder text
+- `disabled` - Disables the textarea
+- `required` - Makes the textarea required
+- `aria-invalid` - Indicates an invalid state
+- `rows` - Number of visible text lines
+- `value` - Controlled value
+- `defaultValue` - Default uncontrolled value
+- `onChange` - Change event handler
+- `className` - Additional CSS classes

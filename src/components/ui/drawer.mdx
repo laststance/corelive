@@ -1,0 +1,36 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as DrawerStories from './drawer.stories'
+
+<Meta of={DrawerStories} />
+
+### Drawer
+
+Slide-over panel from edges of the viewport.
+
+#### Example
+
+<Canvas>
+  <Story of={DrawerStories.Bottom} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Drawer, DrawerTrigger, DrawerContent,
+  DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter
+} from '@/components/ui/drawer'
+
+export default function Example() {
+  return (
+    <Drawer>
+      <DrawerTrigger>Open</DrawerTrigger>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Title</DrawerTitle>
+          <DrawerDescription>Details</DrawerDescription>
+        </DrawerHeader>
+      </DrawerContent>
+    </Drawer>
+  )
+}`} />

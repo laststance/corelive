@@ -1,0 +1,59 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Slider } from './slider'
+import * as SliderStories from './slider.stories'
+
+<Meta of={SliderStories} />
+
+### Slider
+
+Interactive range input with customizable values and steps.
+
+#### Examples
+
+<Canvas>
+  <Story of={SliderStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={SliderStories.Range} />
+</Canvas>
+
+<Canvas>
+  <Story of={SliderStories.Steps} />
+</Canvas>
+
+<Canvas>
+  <Story of={SliderStories.Disabled} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Slider } from '@/components/ui/slider'
+
+export default function Example() {
+  return (
+    <div className="w-[300px]">
+      {/* Single value slider */}
+      <Slider defaultValue={[50]} />
+      
+      {/* Range slider */}
+      <Slider defaultValue={[25, 75]} />
+      
+      {/* With steps */}
+      <Slider defaultValue={[40]} step={20} />
+    </div>
+  )
+}
+`} />
+
+#### Props
+
+- `defaultValue` - Default slider value(s) as an array
+- `value` - Controlled slider value(s) as an array
+- `min` - Minimum slider value (default: 0)
+- `max` - Maximum slider value (default: 100)
+- `step` - Step increment value
+- `orientation` - 'horizontal' or 'vertical'
+- `disabled` - Disable the slider
+- `onValueChange` - Callback when value changes

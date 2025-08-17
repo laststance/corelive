@@ -47,3 +47,4 @@ screenshots
 .claude
 !.cursor
 clerk-playwright-nextjs
+.playwright-mcp

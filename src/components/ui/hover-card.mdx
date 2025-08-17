@@ -1,0 +1,36 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { HoverCard, HoverCardTrigger, HoverCardContent } from './hover-card'
+
+<Meta title="UI/HoverCard/Docs" component={HoverCard} />
+
+### HoverCard
+
+Context panel that appears on hover.
+
+#### Example
+
+<Canvas>
+  <Story name="Default">
+    <HoverCard open>
+      <HoverCardTrigger className="rounded border px-3 py-1 text-sm">
+        Hover me
+      </HoverCardTrigger>
+      <HoverCardContent>Details</HoverCardContent>
+    </HoverCard>
+  </Story>
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
+
+export default function Example() {
+  return (
+    <HoverCard>
+      <HoverCardTrigger>Hover me</HoverCardTrigger>
+      <HoverCardContent>Details</HoverCardContent>
+    </HoverCard>
+  )
+}
+`} />

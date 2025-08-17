@@ -1,0 +1,40 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as CommandStories from './command.stories'
+
+<Meta of={CommandStories} />
+
+### Command
+
+Command palette for quick actions.
+
+#### Examples
+
+<Canvas>
+  <Story of={CommandStories.Palette} />
+</Canvas>
+
+<Canvas>
+  <Story of={CommandStories.Dialog} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Command, CommandInput, CommandList,
+  CommandGroup, CommandItem, CommandShortcut
+} from '@/components/ui/command'
+
+export default function Example() {
+  return (
+    <Command>
+      <CommandInput placeholder="Search" />
+      <CommandList>
+        <CommandGroup heading="Suggestions">
+          <CommandItem>Open</CommandItem>
+          <CommandItem>Save</CommandItem>
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  )
+}`} />

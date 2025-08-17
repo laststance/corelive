@@ -1,0 +1,85 @@
+import { Meta } from '@storybook/blocks'
+
+<Meta title="Design Tokens/Globals" />
+
+## Tailwind tokens enabled by shadcn/ui globals.css
+
+The following utility classes are powered by CSS variables defined in `src/globals.css`. Use them directly in JSX or MDX examples.
+
+### Core surface and text
+
+- `bg-background` / `text-foreground`
+- `bg-card` / `text-card-foreground`
+- `bg-popover` / `text-popover-foreground`
+
+### Brand and emphasis
+
+- `bg-primary` / `text-primary-foreground`
+- `bg-secondary` / `text-secondary-foreground`
+- `bg-muted` / `text-muted-foreground`
+- `bg-accent` / `text-accent-foreground`
+- `bg-destructive` (destructive foreground is handled per-component)
+
+### Borders, inputs, focus
+
+- `border-border`
+- `border-input`
+- `ring-ring`
+
+### Charts (theme extension)
+
+- `bg-[var(--chart-1)]`
+- `bg-[var(--chart-2)]`
+- `bg-[var(--chart-3)]`
+- `bg-[var(--chart-4)]`
+- `bg-[var(--chart-5)]`
+
+### Sidebar (theme extension)
+
+- `bg-sidebar` / `text-sidebar-foreground`
+- `bg-sidebar-primary` / `text-sidebar-primary-foreground`
+- `bg-sidebar-accent` / `text-sidebar-accent-foreground`
+
+### Radii tokens
+
+- `rounded-[var(--radius-sm)]`
+- `rounded-[var(--radius-md)]`
+- `rounded-[var(--radius-lg)]`
+- `rounded-[var(--radius-xl)]`
+
+These classes map to OKLCH/HSL variables defined in `:root` and `.dark` within `src/globals.css`.
+
+### Example
+
+```tsx
+export function TokenPreview() {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="bg-background text-foreground rounded-md p-3">
+        background
+      </div>
+      <div className="bg-card text-card-foreground rounded-md p-3">card</div>
+      <div className="bg-popover text-popover-foreground rounded-md p-3">
+        popover
+      </div>
+      <div className="bg-primary text-primary-foreground rounded-md p-3">
+        primary
+      </div>
+      <div className="bg-secondary text-secondary-foreground rounded-md p-3">
+        secondary
+      </div>
+      <div className="bg-muted text-muted-foreground rounded-md p-3">muted</div>
+      <div className="bg-accent text-accent-foreground rounded-md p-3">
+        accent
+      </div>
+      <div className="bg-destructive rounded-md p-3 text-white">
+        destructive
+      </div>
+      <div className="border-border rounded-md border p-3">border</div>
+      <div className="border-input rounded-md border p-3">input</div>
+      <div className="ring-ring rounded-md p-3 ring">ring</div>
+      <div className="rounded-md bg-[var(--chart-1)] p-3">chart-1</div>
+    </div>
+  )
+}
+```

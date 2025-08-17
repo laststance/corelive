@@ -1,0 +1,72 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Toggle } from './toggle'
+import * as ToggleStories from './toggle.stories'
+import { Bold, Italic } from 'lucide-react'
+
+<Meta of={ToggleStories} />
+
+### Toggle
+
+Two-state button that can be either on or off.
+
+#### Examples
+
+<Canvas>
+  <Story of={ToggleStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleStories.WithIcon} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleStories.WithIconAndText} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleStories.Outline} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleStories.Sizes} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleStories.Pressed} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleStories.Disabled} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Toggle } from '@/components/ui/toggle'
+import { Bold, Italic } from 'lucide-react'
+
+export default function Example() {
+  return (
+    <div className="flex items-center space-x-2">
+      <Toggle>
+        <Bold className="size-4" />
+        <span>Bold</span>
+      </Toggle>
+      <Toggle variant="outline">
+        <Italic className="size-4" />
+        <span>Italic</span>
+      </Toggle>
+    </div>
+  )
+}
+`} />
+
+#### Props
+
+- `variant` - Controls the visual style: `"default"` or `"outline"`
+- `size` - Controls the size: `"sm"`, `"default"`, or `"lg"`
+- `pressed` - Whether the toggle is pressed or not
+- `defaultPressed` - The default pressed state when initially rendered
+- `onPressedChange` - Event handler called when the pressed state changes
+- `disabled` - When true, prevents the user from interacting with the toggle
+- `asChild` - Change the component to the HTML tag or custom component of the only child

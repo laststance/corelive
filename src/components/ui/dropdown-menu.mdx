@@ -1,0 +1,35 @@
+import { Meta, Story, Canvas, Description, Source } from '@storybook/blocks'
+import * as React from 'react'
+import * as DropdownStories from './dropdown-menu.stories'
+
+<Meta of={DropdownStories} />
+
+### DropdownMenu
+
+Menu anchored to a trigger with groups, submenus, and selection items.
+
+#### Example
+
+<Canvas>
+  <Story of={DropdownStories.Menu} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu'
+
+export default function Example() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        <DropdownMenuItem>Open</DropdownMenuItem>
+        <DropdownMenuItem>Save</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}`} />

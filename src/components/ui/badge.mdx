@@ -1,0 +1,37 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as BadgeStories from './badge.stories'
+
+<Meta of={BadgeStories} />
+
+### Badge
+
+Status/lozenge element with multiple variants.
+
+#### Variants
+
+<Canvas>
+  <Story of={BadgeStories.Variants} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Badge } from '@/components/ui/badge'
+
+export default function Example() {
+  return (
+    <div className="flex gap-2">
+      <Badge>Default</Badge>
+      <Badge variant="secondary">Secondary</Badge>
+      <Badge variant="outline">Outline</Badge>
+      <Badge variant="destructive">Destructive</Badge>
+    </div>
+  )
+}`} />
+
+#### Props
+
+<Description>
+  Variant options: 'default' | 'secondary' | 'outline' | 'destructive'. Other
+  props are forwarded to a span or composed Slot.
+</Description>

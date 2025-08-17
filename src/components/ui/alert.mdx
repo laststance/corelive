@@ -1,0 +1,26 @@
+import { Meta, Story, Canvas, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as AlertStories from './alert.stories'
+
+<Meta of={AlertStories} />
+
+### Alert
+
+Non-intrusive message container for contextual feedback.
+
+#### Examples
+
+<Canvas>
+  <Story of={AlertStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={AlertStories.Destructive} />
+</Canvas>
+
+#### Props
+
+<Description>
+  Alert accepts `variant` prop: 'default' | 'destructive'. Use `AlertTitle` and
+  `AlertDescription` slots inside.
+</Description>

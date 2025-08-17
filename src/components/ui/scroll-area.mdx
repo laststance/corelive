@@ -1,0 +1,39 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { ScrollArea } from './scroll-area'
+import * as ScrollAreaStories from './scroll-area.stories'
+
+<Meta of={ScrollAreaStories} />
+
+### ScrollArea
+
+Custom scrollable area with native scroll behavior.
+
+#### Examples
+
+<Canvas>
+  <Story of={ScrollAreaStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={ScrollAreaStories.Horizontal} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { ScrollArea } from '@/components/ui/scroll-area'
+
+export default function Example() {
+  return (
+    <ScrollArea className="h-72 w-48 rounded-md border p-4">
+      <div>
+        <h4 className="mb-4 text-sm font-medium leading-none">Tags</h4>
+        {Array.from({ length: 50 }).map((_, i) => (
+          <div key={i} className="text-sm mb-2">
+            Tag {i + 1}
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  )
+}`} />

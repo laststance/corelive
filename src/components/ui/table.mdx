@@ -1,0 +1,85 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from './table'
+import * as TableStories from './table.stories'
+
+<Meta of={TableStories} />
+
+### Table
+
+Responsive table component with customizable header, body, footer, and caption.
+
+#### Examples
+
+<Canvas>
+  <Story of={TableStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={TableStories.WithZebraStripes} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from "@/components/ui/table"
+
+export default function Example() {
+  return (
+    <Table>
+      <TableCaption>A list of your recent invoices.</TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Invoice</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Method</TableHead>
+          <TableHead className="text-right">Amount</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow>
+          <TableCell className="font-medium">INV001</TableCell>
+          <TableCell>Paid</TableCell>
+          <TableCell>Credit Card</TableCell>
+          <TableCell className="text-right">$250.00</TableCell>
+        </TableRow>
+        {/* More rows... */}
+      </TableBody>
+      <TableFooter>
+        <TableRow>
+          <TableCell colSpan={3}>Total</TableCell>
+          <TableCell className="text-right">$725.00</TableCell>
+        </TableRow>
+      </TableFooter>
+    </Table>
+  )
+}
+`} />
+
+#### Components
+
+- `Table` - The root table container component
+- `TableHeader` - The table header (`<thead>`)
+- `TableBody` - The table body (`<tbody>`)
+- `TableFooter` - The table footer (`<tfoot>`)
+- `TableHead` - The table column header cell (`<th>`)
+- `TableRow` - The table row (`<tr>`)
+- `TableCell` - The table cell (`<td>`)
+- `TableCaption` - The table caption (`<caption>`)

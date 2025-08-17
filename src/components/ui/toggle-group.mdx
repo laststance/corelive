@@ -1,0 +1,74 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { ToggleGroup, ToggleGroupItem } from './toggle-group'
+import * as ToggleGroupStories from './toggle-group.stories'
+import { Bold, Italic, Underline } from 'lucide-react'
+
+<Meta of={ToggleGroupStories} />
+
+### ToggleGroup
+
+A set of two-state buttons that can be toggled on or off.
+
+#### Examples
+
+<Canvas>
+  <Story of={ToggleGroupStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleGroupStories.Multiple} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleGroupStories.WithText} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleGroupStories.Outline} />
+</Canvas>
+
+<Canvas>
+  <Story of={ToggleGroupStories.Sizes} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Bold, Italic, Underline } from 'lucide-react'
+
+export default function Example() {
+  return (
+    <ToggleGroup type="single">
+      <ToggleGroupItem value="bold" aria-label="Toggle bold">
+        <Bold className="size-4" />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="italic" aria-label="Toggle italic">
+        <Italic className="size-4" />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="underline" aria-label="Toggle underline">
+        <Underline className="size-4" />
+      </ToggleGroupItem>
+    </ToggleGroup>
+  )
+}
+`} />
+
+#### Props
+
+ToggleGroup Props:
+
+- `type` - Either `"single"` or `"multiple"`. Determines whether one or multiple items can be pressed at a time
+- `defaultValue` - The value of the item(s) to show as pressed when initially rendered
+- `value` - The controlled value of the pressed item(s)
+- `onValueChange` - Event handler called when the value changes
+- `variant` - Controls the visual style: `"default"` or `"outline"`
+- `size` - Controls the size: `"sm"`, `"default"`, or `"lg"`
+- `disabled` - When true, prevents the user from interacting with the toggle group
+
+ToggleGroupItem Props:
+
+- `value` - A unique value for the item
+- `disabled` - When true, prevents the user from interacting with the item
+- `variant` - Override the visual style inherited from the parent ToggleGroup
+- `size` - Override the size inherited from the parent ToggleGroup

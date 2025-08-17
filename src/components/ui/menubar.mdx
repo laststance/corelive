@@ -1,0 +1,34 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as MenubarStories from './menubar.stories'
+
+<Meta of={MenubarStories} />
+
+### Menubar
+
+Top-level application menu with groups, submenus, and various item types.
+
+#### Example
+
+<Canvas>
+  <Story of={MenubarStories.AppMenu} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Menubar, MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem
+} from '@/components/ui/menubar'
+
+export default function Example() {
+  return (
+    <Menubar>
+      <MenubarMenu>
+        <MenubarTrigger>File</MenubarTrigger>
+        <MenubarContent>
+          <MenubarItem>New</MenubarItem>
+        </MenubarContent>
+      </MenubarMenu>
+    </Menubar>
+  )
+}`} />

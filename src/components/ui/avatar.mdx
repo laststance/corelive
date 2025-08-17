@@ -1,0 +1,44 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as AvatarStories from './avatar.stories'
+
+<Meta of={AvatarStories} />
+
+### Avatar
+
+User avatar with image and fallback.
+
+#### Examples
+
+<Canvas>
+  <Story of={AvatarStories.Image} />
+</Canvas>
+
+<Canvas>
+  <Story of={AvatarStories.Fallback} />
+</Canvas>
+
+<Canvas>
+  <Story of={AvatarStories.Sizes} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+
+export default function Example() {
+  return (
+    <Avatar className="size-12">
+      <AvatarImage src="/user.jpg" alt="User" />
+      <AvatarFallback>JD</AvatarFallback>
+    </Avatar>
+  )
+}`} />
+
+#### Props
+
+<Description>
+  Composes Radix Avatar primitives. Common props: - `className`: string — size
+  and shape control - `src` (on `AvatarImage`): string — image source -
+  `children` (on `AvatarFallback`): fallback initials or icon
+</Description>

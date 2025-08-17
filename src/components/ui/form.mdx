@@ -1,0 +1,85 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from './form'
+import { Input } from './input'
+
+<Meta title="UI/Form/Docs" component={Form} />
+
+### Form
+
+react-hook-form bindings with labeled controls and messages.
+
+#### Example
+
+<Canvas>
+  <Story name="RHFExample">
+    {(() => {
+      const React = require('react')
+      const { useForm } = require('react-hook-form')
+      const methods = useForm({ defaultValues: { email: '' } })
+      return (
+        <Form {...methods}>
+          <form
+            className="flex w-80 flex-col gap-3"
+            onSubmit={methods.handleSubmit(() => {})}
+          >
+            <FormField
+              control={methods.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </form>
+        </Form>
+      )
+    })()}
+  </Story>
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { useForm } from 'react-hook-form'
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+
+export default function Example() {
+  const methods = useForm<{ email: string }>({ defaultValues: { email: '' } })
+  return (
+    <Form {...methods}>
+      <form onSubmit={methods.handleSubmit(() => {})}>
+        <FormField
+          control={methods.control}
+          name='email'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input type='email' placeholder='you@example.com' {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </form>
+    </Form>
+  )
+}
+`} />

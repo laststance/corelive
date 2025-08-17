@@ -1,0 +1,77 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from './sheet'
+import * as SheetStories from './sheet.stories'
+
+<Meta of={SheetStories} />
+
+### Sheet
+
+Dialog that slides in from the edge of the screen.
+
+#### Examples
+
+<Canvas>
+  <Story of={SheetStories.Right} />
+</Canvas>
+
+<Canvas>
+  <Story of={SheetStories.Left} />
+</Canvas>
+
+<Canvas>
+  <Story of={SheetStories.Top} />
+</Canvas>
+
+<Canvas>
+  <Story of={SheetStories.Bottom} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+
+export default function Example() {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline">Open Sheet</Button>
+      </SheetTrigger>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>Edit profile</SheetTitle>
+          <SheetDescription>
+            Make changes to your profile here.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="grid gap-4 py-4">
+          {/* Content */}
+        </div>
+        <SheetFooter>
+          <SheetClose asChild>
+            <Button type="submit">Save changes</Button>
+          </SheetClose>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}`} />

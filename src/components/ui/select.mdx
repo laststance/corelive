@@ -1,0 +1,39 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as SelectStories from './select.stories'
+
+<Meta of={SelectStories} />
+
+### Select
+
+Dropdown list for choosing a single option.
+
+#### Example
+
+<Canvas>
+  <Story of={SelectStories.Default} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Select, SelectTrigger, SelectContent,
+  SelectItem, SelectGroup, SelectSeparator, SelectValue
+} from '@/components/ui/select'
+
+export default function Example() {
+  return (
+    <Select defaultValue="apple">
+      <SelectTrigger className="min-w-40">
+        <SelectValue placeholder="Select a fruit" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectItem value="apple">Apple</SelectItem>
+          <SelectItem value="banana">Banana</SelectItem>
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+}
+`} />

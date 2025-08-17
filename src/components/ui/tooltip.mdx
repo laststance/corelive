@@ -1,0 +1,28 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as TooltipStories from './tooltip.stories'
+
+<Meta of={TooltipStories} />
+
+### Tooltip
+
+Textual hint shown on hover/focus.
+
+#### Example
+
+<Canvas>
+  <Story of={TooltipStories.Default} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+
+export default function Example() {
+  return (
+    <Tooltip>
+      <TooltipTrigger>Hover me</TooltipTrigger>
+      <TooltipContent>Content</TooltipContent>
+    </Tooltip>
+  )
+}`} />

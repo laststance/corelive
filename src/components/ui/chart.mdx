@@ -1,0 +1,45 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as ChartStories from './chart.stories'
+
+<Meta of={ChartStories} />
+
+### Chart
+
+Recharts primitives composed with Tailwind tokens.
+
+#### Example
+
+<Canvas>
+  <Story of={ChartStories.LineExample} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent
+} from '@/components/ui/chart'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
+
+const data = [
+{ month: 'Jan', desktop: 186 },
+{ month: 'Feb', desktop: 305 },
+]
+
+export default function Example() {
+  return (
+    <ChartContainer config={{ desktop: { label: 'Desktop', color: 'hsl(var(--chart-1))' } }}>
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={data}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="month" tickLine={false} axisLine={false} />
+          <YAxis tickLine={false} axisLine={false} width={30} />
+          <Line dataKey="desktop" stroke="var(--color-desktop)" strokeWidth={2} dot={false} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <ChartLegend />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartContainer>
+  )
+}
+`} />

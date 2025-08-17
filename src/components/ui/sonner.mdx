@@ -1,0 +1,23 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as SonnerStories from './sonner.stories'
+
+<Meta of={SonnerStories} />
+
+### Sonner
+
+Toast notifications with theme-aware styling.
+
+#### Example
+
+<Canvas>
+  <Story of={SonnerStories.Default} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Toaster } from '@/components/ui/sonner'
+
+export default function Example() {
+  return <Toaster position="bottom-center" />
+}`} />

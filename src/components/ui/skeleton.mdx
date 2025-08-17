@@ -1,0 +1,56 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import { Skeleton } from './skeleton'
+import * as SkeletonStories from './skeleton.stories'
+
+<Meta of={SkeletonStories} />
+
+### Skeleton
+
+Placeholder loading state for UI elements with animated pulse effect.
+
+#### Examples
+
+<Canvas>
+  <Story of={SkeletonStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={SkeletonStories.Card} />
+</Canvas>
+
+<Canvas>
+  <Story of={SkeletonStories.List} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Skeleton } from '@/components/ui/skeleton'
+
+export default function Example() {
+  return (
+    <div className="flex items-center space-x-4">
+      <Skeleton className="h-12 w-12 rounded-full" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-[250px]" />
+        <Skeleton className="h-4 w-[200px]" />
+      </div>
+    </div>
+  )
+}
+`} />
+
+#### Customization
+
+Skeletons use Tailwind's `animate-pulse` class and can be customized with any width, height, and border radius classes:
+
+```tsx
+// Avatar skeleton
+<Skeleton className="h-12 w-12 rounded-full" />
+
+// Text line skeleton
+<Skeleton className="h-4 w-full" />
+
+// Card skeleton
+<Skeleton className="h-[200px] w-full rounded-xl" />
+```

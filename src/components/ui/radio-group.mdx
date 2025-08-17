@@ -1,0 +1,35 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as RadioStories from './radio-group.stories'
+
+<Meta of={RadioStories} />
+
+### RadioGroup
+
+Single-selection control with custom indicator.
+
+#### Example
+
+<Canvas>
+  <Story of={RadioStories.Horizontal} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+
+export default function Example() {
+  return (
+    <RadioGroup defaultValue="a" className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        <RadioGroupItem id="r1" value="a" />
+        <Label htmlFor="r1">A</Label>
+      </div>
+      <div className="flex items-center gap-2">
+        <RadioGroupItem id="r2" value="b" />
+        <Label htmlFor="r2">B</Label>
+      </div>
+    </RadioGroup>
+  )
+}`} />

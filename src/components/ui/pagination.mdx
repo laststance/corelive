@@ -1,0 +1,35 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as PaginationStories from './pagination.stories'
+
+<Meta of={PaginationStories} />
+
+### Pagination
+
+Page navigation with previous/next and page links.
+
+#### Example
+
+<Canvas>
+  <Story of={PaginationStories.Basic} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Pagination, PaginationContent, PaginationItem,
+  PaginationPrevious, PaginationNext, PaginationLink, PaginationEllipsis
+} from '@/components/ui/pagination'
+
+export default function Example() {
+  return (
+    <Pagination>
+      <PaginationContent>
+        <PaginationItem><PaginationPrevious href="#" /></PaginationItem>
+        <PaginationItem><PaginationLink href="#" isActive>1</PaginationLink></PaginationItem>
+        <PaginationItem><PaginationLink href="#">2</PaginationLink></PaginationItem>
+        <PaginationItem><PaginationNext href="#" /></PaginationItem>
+      </PaginationContent>
+    </Pagination>
+  )
+}`} />

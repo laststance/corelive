@@ -1,0 +1,35 @@
+import { Meta, Story, Canvas, Description, Source } from '@storybook/blocks'
+import * as React from 'react'
+import * as ContextMenuStories from './context-menu.stories'
+
+<Meta of={ContextMenuStories} />
+
+### ContextMenu
+
+Right-click menu with groups, submenus, checkboxes, and radio items.
+
+#### Example
+
+<Canvas>
+  <Story of={ContextMenuStories.Menu} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  ContextMenu, ContextMenuTrigger, ContextMenuContent,
+  ContextMenuItem, ContextMenuSeparator, ContextMenuLabel
+} from '@/components/ui/context-menu'
+
+export default function Example() {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger className="p-6 rounded bg-muted">Right click</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel>Actions</ContextMenuLabel>
+        <ContextMenuItem>Open</ContextMenuItem>
+        <ContextMenuItem>Rename</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}`} />

@@ -1,0 +1,106 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  Sidebar,
+  SidebarProvider,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarTrigger,
+} from './sidebar'
+import * as SidebarStories from './sidebar.stories'
+
+<Meta of={SidebarStories} />
+
+### Sidebar
+
+Responsive, collapsible sidebar navigation with mobile support.
+
+#### Examples
+
+<Canvas>
+  <Story of={SidebarStories.Default} />
+</Canvas>
+
+<Canvas>
+  <Story of={SidebarStories.Collapsed} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import {
+  Sidebar,
+  SidebarProvider,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarTrigger
+} from '@/components/ui/sidebar'
+import { HomeIcon, SettingsIcon, UserIcon } from 'lucide-react'
+
+export default function Example() {
+  return (
+    <SidebarProvider>
+      <Sidebar>
+        <SidebarHeader>
+          <div className="flex items-center gap-2 px-2">
+            <div className="h-6 w-6 rounded-md bg-primary"></div>
+            <span className="font-semibold">My App</span>
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive tooltip="Home">
+                    <HomeIcon />
+                    <span>Home</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip="Profile">
+                    <UserIcon />
+                    <span>Profile</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip="Settings">
+                    <SettingsIcon />
+                    <span>Settings</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-muted"></div>
+              <span className="text-sm">User Name</span>
+            </div>
+            <SidebarTrigger />
+          </div>
+        </SidebarFooter>
+      </Sidebar>
+      <div className="flex-1 p-4">
+        <h1 className="text-2xl font-bold">Main Content</h1>
+        <p className="text-muted-foreground">This is the main content area.</p>
+      </div>
+    </SidebarProvider>
+  )
+}`} />

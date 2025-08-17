@@ -1,0 +1,30 @@
+import { Meta, Story, Canvas, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as SwitchStories from './switch.stories'
+
+<Meta of={SwitchStories} />
+
+### Switch
+
+Toggle component with on/off/disabled states.
+
+#### Examples
+
+<Canvas>
+  <Story of={SwitchStories.Off} />
+</Canvas>
+
+<Canvas>
+  <Story of={SwitchStories.On} />
+</Canvas>
+
+<Canvas>
+  <Story of={SwitchStories.WithLabel} />
+</Canvas>
+
+#### Props
+
+<Description>
+  Forwards Radix Switch props. Common: `checked`, `defaultChecked`, `disabled`,
+  `onCheckedChange`.
+</Description>

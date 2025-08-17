@@ -1,0 +1,32 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as TabsStories from './tabs.stories'
+
+<Meta of={TabsStories} />
+
+### Tabs
+
+Switch between related views.
+
+#### Example
+
+<Canvas>
+  <Story of={TabsStories.Horizontal} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+
+export default function Example() {
+  return (
+    <Tabs defaultValue="a">
+      <TabsList>
+        <TabsTrigger value="a">A</TabsTrigger>
+        <TabsTrigger value="b">B</TabsTrigger>
+      </TabsList>
+      <TabsContent value="a">A</TabsContent>
+      <TabsContent value="b">B</TabsContent>
+    </Tabs>
+  )
+}`} />

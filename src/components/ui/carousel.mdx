@@ -1,0 +1,27 @@
+import { Meta, Story, Canvas, Description } from '@storybook/blocks'
+import * as React from 'react'
+import * as CarouselStories from './carousel.stories'
+
+<Meta of={CarouselStories} />
+
+### Carousel
+
+Embla-powered carousel with keyboard navigation and previous/next controls.
+
+#### Examples
+
+<Canvas>
+  <Story of={CarouselStories.Basic} />
+</Canvas>
+
+<Canvas>
+  <Story of={CarouselStories.Vertical} />
+</Canvas>
+
+#### Props
+
+<Description>
+  Props include `orientation`, `opts`, `plugins`, and `setApi`. Use
+  `CarouselContent`, `CarouselItem`, `CarouselPrevious`, and `CarouselNext` to
+  compose UI.
+</Description>

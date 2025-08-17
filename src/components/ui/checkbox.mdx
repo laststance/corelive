@@ -1,0 +1,44 @@
+import { Meta, Story, Canvas, Description, Source } from '@storybook/blocks'
+import * as React from 'react'
+import * as CheckboxStories from './checkbox.stories'
+
+<Meta of={CheckboxStories} />
+
+### Checkbox
+
+Accessible checkbox with checked/unchecked/disabled states.
+
+#### Examples
+
+<Canvas>
+  <Story of={CheckboxStories.Unchecked} />
+</Canvas>
+
+<Canvas>
+  <Story of={CheckboxStories.Checked} />
+</Canvas>
+
+<Canvas>
+  <Story of={CheckboxStories.WithLabel} />
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+
+export default function Example() {
+  return (
+    <div className='flex items-center gap-2'>
+      <Checkbox id='optin' defaultChecked />
+      <Label htmlFor='optin'>Subscribe</Label>
+    </div>
+  )
+}`} />
+
+#### Props
+
+<Description>
+  Forwards Radix Checkbox props. Common: `checked`, `defaultChecked`,
+  `disabled`, `onCheckedChange`.
+</Description>

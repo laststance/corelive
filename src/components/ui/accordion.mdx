@@ -1,0 +1,55 @@
+import { Meta, Story, Canvas, Source, Description } from '@storybook/blocks'
+import * as React from 'react'
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from './accordion'
+
+<Meta title="UI/Accordion/Docs" component={Accordion} />
+
+### Accordion
+
+Disclosure component with keyboard-accessible interactions.
+
+#### Examples
+
+<Canvas>
+  <Story name="Example">
+    <div className="w-[420px]">
+      <Accordion type="single" collapsible>
+        <AccordionItem value="item-1">
+          <AccordionTrigger>Trigger</AccordionTrigger>
+          <AccordionContent>Content</AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </div>
+  </Story>
+</Canvas>
+
+#### Usage
+
+<Source language="tsx" code={`import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
+
+export default function Example() {
+  return (
+    <div className="w-[420px]">
+      <Accordion type="single" collapsible>
+        <AccordionItem value="item-1">
+          <AccordionTrigger>Trigger</AccordionTrigger>
+          <AccordionContent>Content</AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </div>
+  )
+}
+`} />
+
+#### Props
+
+<Description>
+  Accordion accepts all props of Radix Accordion.Root. Commonly used: - `type`:
+  'single' | 'multiple' - `collapsible`: boolean - `value` (on items): string
+  key for controlled usage
+</Description>
