@@ -133,7 +133,7 @@ test.describe('Clerk OAuth Authentication', () => {
 
     if (currentUrl.includes('/home')) {
       console.log('✅ [Simple Test] SUCCESS: Accessed home page directly!')
-      await expect(page.getByText('Home')).toBeVisible()
+      await expect(page.getByText('Todo List')).toBeVisible()
     } else if (currentUrl.includes('/login')) {
       console.log(
         '⚠️ [Simple Test] Redirected to login - MSW auth not working as expected',

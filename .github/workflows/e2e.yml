@@ -33,7 +33,7 @@ jobs:
           : "${NEXT_PUBLIC_CLERK_SIGN_UP_URL:=/sign-up}"
           : "${CLERK_SECRET_KEY:=sk_test_dummy}"
           : "${WEBHOOK_SECRET:=whsec_dummy}"
-          : "${POSTGRES_PRISMA_URL:=postgresql://user:pass@localhost:5432/db?schema=public}"
+          : "${POSTGRES_PRISMA_URL:=postgresql://postgres:password@localhost:5432/corelive?schema=public}"
           echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}" >> .env
           echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}" >> .env
           echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}" >> .env
@@ -41,6 +41,19 @@ jobs:
           echo "WEBHOOK_SECRET=${WEBHOOK_SECRET}" >> .env
           echo "POSTGRES_PRISMA_URL=${POSTGRES_PRISMA_URL}" >> .env
           echo "NEXT_PUBLIC_ENABLE_MSW_MOCK=true" >> .env
+
+      - name: Start Postgres via Docker Compose 🐳
+        run: |
+          docker compose -f compose.yml -p corelive up -d postgres --wait
+          docker ps -a
+
+      - name: Show Postgres logs on failure 🪵
+        if: failure()
+        run: |
+          docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true
+
+      - name: Run Prisma migrations 📦
+        run: pnpm prisma migrate deploy
 
       - name: Generate Prisma Client 🗄️
         run: pnpm prisma generate
@@ -79,3 +92,8 @@ jobs:
           name: test-results
           path: test-results/
           retention-days: 30
+
+      - name: Shutdown Docker Compose 🧹
+        if: always()
+        run: |
+          docker compose -f compose.yml -p corelive down -v

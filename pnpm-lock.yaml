@@ -243,6 +243,9 @@ importers:
       msw:
         specifier: ^2.10.5
         version: 2.10.5(@types/node@24.3.0)(typescript@5.9.2)
+      playwright:
+        specifier: ^1.54.2
+        version: 1.54.2
       postcss:
         specifier: ^8.5.6
         version: 8.5.6
