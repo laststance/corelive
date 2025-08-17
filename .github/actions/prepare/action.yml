@@ -11,7 +11,10 @@ runs:
       with:
         node-version: '22.17.1'
         cache: 'pnpm'
+        cache-dependency-path: |
+          pnpm-lock.yaml
+          pnpm-workspace.yaml
     - name: Install dependencies
-      run: pnpm install
+      run: pnpm install --frozen-lockfile
       shell: bash
   using: composite

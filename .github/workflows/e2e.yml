@@ -19,26 +19,41 @@ jobs:
         uses: ./.github/actions/prepare
 
       - name: Set environment variables 🌍
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}
+          NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_UP_URL }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
         run: |
           touch .env
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=${{ secrets.NEXT_PUBLIC_CLERK_SIGN_UP_URL }}" >> .env
-          echo "CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}" >> .env
-          echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
-          echo "POSTGRES_PRISMA_URL=${{ secrets.POSTGRES_PRISMA_URL }}" >> .env
+          : "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:=pk_test_dummy}"
+          : "${NEXT_PUBLIC_CLERK_SIGN_IN_URL:=/login}"
+          : "${NEXT_PUBLIC_CLERK_SIGN_UP_URL:=/sign-up}"
+          : "${CLERK_SECRET_KEY:=sk_test_dummy}"
+          : "${WEBHOOK_SECRET:=whsec_dummy}"
+          : "${POSTGRES_PRISMA_URL:=postgresql://user:pass@localhost:5432/db?schema=public}"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}" >> .env
+          echo "CLERK_SECRET_KEY=${CLERK_SECRET_KEY}" >> .env
+          echo "WEBHOOK_SECRET=${WEBHOOK_SECRET}" >> .env
+          echo "POSTGRES_PRISMA_URL=${POSTGRES_PRISMA_URL}" >> .env
           echo "NEXT_PUBLIC_ENABLE_MSW_MOCK=true" >> .env
 
       - name: Generate Prisma Client 🗄️
         run: pnpm prisma generate
 
       - name: Build Next.js application 🏗️
+        if: ${{ github.event_name == 'push' || (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' && secrets.WEBHOOK_SECRET != '' && secrets.POSTGRES_PRISMA_URL != '') }}
         run: pnpm build
 
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright tests 🧪
+        if: ${{ github.event_name == 'push' || (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' && secrets.WEBHOOK_SECRET != '' && secrets.POSTGRES_PRISMA_URL != '') }}
         run: pnpm exec playwright test --reporter=list
         env:
           CI: true
