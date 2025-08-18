@@ -1,0 +1,10 @@
+{
+  "builds": [
+    {
+      "use": "@vercel/next",
+      "config": {
+        "command": "pnpm prisma:deploy"
+      }
+    }
+  ]
+}
