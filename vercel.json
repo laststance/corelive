@@ -1,10 +1,4 @@
 {
-  "builds": [
-    {
-      "use": "@vercel/next",
-      "config": {
-        "command": "pnpm prisma:deploy"
-      }
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm prisma:deploy && pnpm build"
 }
