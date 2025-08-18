@@ -1,6 +1,7 @@
 'use client'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -10,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useORPCUtils } from '@/lib/orpc/react-query'
 
 import { AddTodoForm } from './AddTodoForm'
 import { CompletedTodos } from './CompletedTodos'
@@ -17,66 +19,111 @@ import type { Todo } from './TodoItem'
 import { TodoItem } from './TodoItem'
 
 export function TodoList() {
-  const [todos, setTodos] = useState<Todo[]>([])
+  const orpc = useORPCUtils()
+  const queryClient = useQueryClient()
 
-  // Load todos from localStorage
-  useEffect(() => {
-    const savedTodos = localStorage.getItem('todos')
-    if (savedTodos) {
-      try {
-        const parsedTodos = JSON.parse(savedTodos).map((todo: any) => ({
-          ...todo,
-          createdAt: new Date(todo.createdAt),
-        }))
-        setTodos(parsedTodos)
-      } catch (error) {
-        console.error('Failed to parse todos from localStorage:', error)
-      }
-    }
-  }, [])
+  // Fetch pending todos
+  const { data: pendingData, isLoading: pendingLoading } = useQuery(
+    orpc.todo.list.queryOptions({
+      input: { completed: false, limit: 100, offset: 0 },
+    }),
+  )
 
-  // Save todos to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem('todos', JSON.stringify(todos))
-  }, [todos])
+  // Todo creation mutation
+  const createMutation = useMutation(
+    orpc.todo.create.mutationOptions({
+      onSuccess: () => {
+        // Invalidate cache
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
+
+  // Todo completion toggle mutation
+  const toggleMutation = useMutation(
+    orpc.todo.toggle.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
+
+  // Todo deletion mutation
+  const deleteMutation = useMutation(
+    orpc.todo.delete.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
+
+  // Todo update mutation
+  const updateMutation = useMutation(
+    orpc.todo.update.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
+
+  // Mutation to delete all completed todos
+  const clearCompletedMutation = useMutation(
+    orpc.todo.clearCompleted.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
 
   const addTodo = (text: string, notes?: string) => {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text,
-      completed: false,
-      createdAt: new Date(),
-      notes,
-    }
-    setTodos((prev) => [newTodo, ...prev])
+    createMutation.mutate({ text, notes })
   }
 
   const toggleComplete = (id: string) => {
-    setTodos((prev) =>
-      prev.map((todo) =>
-        todo.id === id ? { ...todo, completed: !todo.completed } : todo,
-      ),
-    )
+    const todoId = parseInt(id, 10)
+    if (!isNaN(todoId)) {
+      toggleMutation.mutate({ id: todoId })
+    }
   }
 
   const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id))
+    const todoId = parseInt(id, 10)
+    if (!isNaN(todoId)) {
+      deleteMutation.mutate({ id: todoId })
+    }
   }
 
   const updateNotes = (id: string, notes: string) => {
-    setTodos((prev) =>
-      prev.map((todo) => (todo.id === id ? { ...todo, notes } : todo)),
-    )
+    const todoId = parseInt(id, 10)
+    if (!isNaN(todoId)) {
+      updateMutation.mutate({ id: todoId, data: { notes } })
+    }
   }
 
   const deleteCompleted = () => {
-    setTodos((prev) => prev.filter((todo) => !todo.completed))
+    clearCompletedMutation.mutate({})
   }
 
-  const pendingTodos = todos.filter((todo) => !todo.completed)
-  const completedTodos = todos
-    .filter((todo) => todo.completed)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  // Transform data into Todo component format
+  const mapTodos = (todos: any[]): Todo[] => {
+    return todos.map((todo) => ({
+      id: todo.id.toString(),
+      text: todo.text,
+      completed: todo.completed,
+      createdAt: new Date(todo.createdAt),
+      notes: todo.notes,
+    }))
+  }
+
+  const pendingTodos = pendingData ? mapTodos(pendingData.todos) : []
+
+  if (pendingLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="grid h-full grid-cols-1 gap-8 lg:grid-cols-2">
@@ -125,7 +172,6 @@ export function TodoList() {
       {/* Right Column - Completed Tasks */}
       <div className="h-full">
         <CompletedTodos
-          completedTodos={completedTodos}
           onDelete={deleteTodo}
           onClearCompleted={deleteCompleted}
         />

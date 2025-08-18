@@ -16,7 +16,7 @@ export interface Todo {
   text: string
   completed: boolean
   createdAt: Date
-  notes?: string
+  notes?: string | null
 }
 
 interface TodoItemProps {
@@ -33,7 +33,7 @@ export function TodoItem({
   onUpdateNotes,
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
-  const [notes, setNotes] = useState(todo.notes || '')
+  const [notes, setNotes] = useState(todo.notes ?? '')
 
   const handleNotesChange = (value: string) => {
     setNotes(value)

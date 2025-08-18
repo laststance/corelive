@@ -1,5 +1,6 @@
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Trash2 } from 'lucide-react'
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,12 +12,12 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { useORPCUtils } from '@/lib/orpc/react-query'
 
 import { TodoItem } from './TodoItem'
 import type { Todo } from './TodoItem'
 
 interface CompletedTodosProps {
-  completedTodos: Todo[]
   onDelete: (id: string) => void
   onClearCompleted: () => void
 }
@@ -28,16 +29,46 @@ interface GroupedTodos {
 const ITEMS_PER_PAGE = 10
 
 export function CompletedTodos({
-  completedTodos,
   onDelete,
   onClearCompleted,
 }: CompletedTodosProps) {
-  const [displayedItems, setDisplayedItems] = useState(ITEMS_PER_PAGE)
-  const [isLoading, setIsLoading] = useState(false)
+  const orpc = useORPCUtils()
   const observerRef = useRef<HTMLDivElement>(null)
 
-  // Group todos by date
-  const groupedTodos: GroupedTodos = completedTodos.reduce((groups, todo) => {
+  // Infinite scroll query
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+  } = useInfiniteQuery(
+    orpc.todo.list.infiniteOptions({
+      input: (pageParam) => ({
+        completed: true,
+        limit: ITEMS_PER_PAGE,
+        offset: pageParam ?? 0,
+      }),
+      initialPageParam: 0,
+      getNextPageParam: (lastPage) => lastPage.nextOffset,
+    }),
+  )
+
+  // Flatten todos across all pages
+  const allTodos: Todo[] =
+    data?.pages.flatMap((page) =>
+      page.todos.map((todo) => ({
+        id: todo.id.toString(),
+        text: todo.text,
+        completed: todo.completed,
+        createdAt: new Date(todo.createdAt),
+        notes: todo.notes,
+      })),
+    ) ?? []
+
+  // Group by date
+  const groupedTodos: GroupedTodos = allTodos.reduce((groups, todo) => {
     const dateKey = todo.createdAt.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -51,39 +82,19 @@ export function CompletedTodos({
     return groups
   }, {} as GroupedTodos)
 
-  // Sort dates (most recent first)
+  // Sort by date (newest first)
   const sortedDates = Object.keys(groupedTodos).sort((a, b) => {
     const dateA = groupedTodos[a]?.[0]?.createdAt.getTime() ?? 0
     const dateB = groupedTodos[b]?.[0]?.createdAt.getTime() ?? 0
     return dateB - dateA
   })
 
-  // Flatten todos for pagination
-  const flattenedTodos = sortedDates.flatMap((date) => [
-    { type: 'date-header' as const, date, todos: groupedTodos[date]! },
-    ...groupedTodos[date]!.map((todo) => ({ type: 'todo' as const, todo })),
-  ])
-
-  const visibleItems = flattenedTodos.slice(0, displayedItems)
-  const hasMore = displayedItems < flattenedTodos.length
-
-  const loadMore = useCallback(() => {
-    if (isLoading || !hasMore) return
-
-    setIsLoading(true)
-    // Simulate loading delay
-    setTimeout(() => {
-      setDisplayedItems((prev) => prev + ITEMS_PER_PAGE)
-      setIsLoading(false)
-    }, 500)
-  }, [isLoading, hasMore])
-
   // Intersection Observer for infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && hasMore && !isLoading) {
-          loadMore()
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage()
         }
       },
       { threshold: 0.1 },
@@ -94,9 +105,43 @@ export function CompletedTodos({
     }
 
     return () => observer.disconnect()
-  }, [loadMore, hasMore, isLoading])
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
-  if (completedTodos.length === 0) {
+  if (isLoading) {
+    return (
+      <Card className="h-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5" />
+            Completed Tasks
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-1 items-center justify-center p-8">
+          <div className="text-muted-foreground">Loading...</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (isError) {
+    return (
+      <Card className="h-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5" />
+            Completed Tasks
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-1 items-center justify-center p-8">
+          <div className="text-muted-foreground text-center">
+            <p className="text-red-500">An error occurred</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (allTodos.length === 0) {
     return (
       <Card className="h-full">
         <CardHeader>
@@ -125,11 +170,11 @@ export function CompletedTodos({
             Completed Tasks
           </div>
           <Badge variant="secondary" className="flex items-center gap-1">
-            {completedTodos.length} completed
+            {data?.pages[0]?.total ?? 0} completed
           </Badge>
         </CardTitle>
         <CardDescription>Recently completed tasks</CardDescription>
-        {completedTodos.length > 0 && (
+        {allTodos.length > 0 && (
           <div className="flex justify-end pt-2">
             <Button
               variant="outline"
@@ -146,38 +191,38 @@ export function CompletedTodos({
 
       <CardContent className="flex-1 overflow-hidden">
         <div className="-mr-2 h-full space-y-4 overflow-y-auto pr-2">
-          {visibleItems.map((item) => {
-            if (item.type === 'date-header') {
-              return (
-                <div key={`date-${item.date}`} className="pt-4 first:pt-0">
-                  <Separator className="mb-3" />
-                  <h3 className="text-muted-foreground mb-3 text-sm font-medium">
-                    {item.date}
-                  </h3>
+          {sortedDates.map((date, dateIndex) => {
+            const todosForDate = groupedTodos[date]
+            return (
+              <div key={`date-${date}`}>
+                {dateIndex > 0 && <Separator className="mb-3" />}
+                <h3 className="text-muted-foreground mb-3 text-sm font-medium">
+                  {date}
+                </h3>
+                <div className="space-y-3">
+                  {todosForDate?.map((todo) => (
+                    <TodoItem
+                      key={todo.id}
+                      todo={todo}
+                      onToggleComplete={() => {}} // Completed todos do not require toggling
+                      onDelete={onDelete}
+                    />
+                  ))}
                 </div>
-              )
-            } else {
-              return (
-                <TodoItem
-                  key={item.todo.id}
-                  todo={item.todo}
-                  onToggleComplete={() => {}} // Completed todos don't need toggle
-                  onDelete={onDelete}
-                />
-              )
-            }
+              </div>
+            )
           })}
 
-          {isLoading && (
+          {isFetchingNextPage && (
             <div className="flex justify-center p-4">
               <div className="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"></div>
             </div>
           )}
 
           {/* Intersection observer target */}
-          {hasMore && <div ref={observerRef} className="h-1"></div>}
+          {hasNextPage && <div ref={observerRef} className="h-1"></div>}
 
-          {!hasMore && completedTodos.length > ITEMS_PER_PAGE && (
+          {!hasNextPage && allTodos.length > ITEMS_PER_PAGE && (
             <div className="text-muted-foreground p-4 text-center text-sm">
               All completed tasks loaded
             </div>

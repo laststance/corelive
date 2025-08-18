@@ -7,8 +7,20 @@ import { http, HttpResponse } from 'msw'
 /**
  * Global authentication state tracker
  * Used by all handlers to determine if user is authenticated
+ * Persisted in localStorage for development
  */
-let isAuthenticated = false
+let isAuthenticated =
+  typeof window !== 'undefined'
+    ? localStorage.getItem('msw_auth') === 'true'
+    : false
+
+// Helper function to persist auth state
+const setAuthState = (authenticated: boolean) => {
+  isAuthenticated = authenticated
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('msw_auth', authenticated.toString())
+  }
+}
 
 // =============================================================================
 // MOCK DATA FACTORIES
@@ -90,13 +102,13 @@ const clerkClientHandler = http.get(
 
     // Test utility: Reset authentication state
     if (url.searchParams.has('__MSW_RESET_AUTH__')) {
-      isAuthenticated = false
+      setAuthState(false)
       console.log('[MSW] Authentication state reset for testing')
     }
 
     // Test utility: Set authentication state
     if (url.searchParams.has('__MSW_SET_AUTH__')) {
-      isAuthenticated = true
+      setAuthState(true)
       console.log('[MSW] 🔐 Authentication state SET to true for testing')
     }
 
@@ -181,7 +193,7 @@ const clerkSignOutHandler = http.post(
   'https://*.clerk.accounts.dev/v1/client/sessions/:sessionId/end',
   ({ params }) => {
     console.log('[MSW] Clerk sign out request:', params.sessionId)
-    isAuthenticated = false
+    setAuthState(false)
     return HttpResponse.json({
       object: 'session',
       id: params.sessionId,
@@ -203,7 +215,7 @@ const clerkSignInHandler = http.post(
   'https://*.clerk.accounts.dev/v1/client/sign_ins',
   ({ request }) => {
     console.log('[MSW] Clerk sign-in creation request:', request.url)
-    isAuthenticated = true
+    setAuthState(true)
     return HttpResponse.json(createMockSignInResponse())
   },
 )
@@ -220,7 +232,7 @@ const clerkThirdPartyAttemptHandler = http.post(
       '[MSW] Clerk third-party OAuth attempt request:',
       params.signInId,
     )
-    isAuthenticated = true
+    setAuthState(true)
     return HttpResponse.json(createMockSignInResponse())
   },
 )
@@ -241,7 +253,7 @@ const clerkOAuthCallbackHandler = http.get(
     console.log('[MSW] OAuth callback - code:', code, 'state:', state)
 
     if (code) {
-      isAuthenticated = true
+      setAuthState(true)
       console.log('[MSW] ✅ OAuth callback successful - user authenticated')
       console.log('[MSW] ↪️ Redirecting to home page')
       return HttpResponse.redirect('http://localhost:3000/home', 302)
@@ -268,7 +280,7 @@ const clerkOAuthCallbackAlternativeHandler = http.get(
     console.log('[MSW] OAuth callback - code:', code, 'state:', state)
 
     if (code) {
-      isAuthenticated = true
+      setAuthState(true)
       console.log('[MSW] ✅ OAuth callback successful - user authenticated')
       console.log('[MSW] ↪️ Redirecting to home page')
       return HttpResponse.redirect('http://localhost:3000/home', 302)
@@ -371,7 +383,7 @@ const testAuthStateSetterHandler = http.post(
       const { authenticated } = body as { authenticated: boolean }
 
       console.log('[MSW] 🔐 Setting authentication state to:', authenticated)
-      isAuthenticated = authenticated
+      setAuthState(authenticated)
 
       console.log('[MSW] ✅ Authentication state updated successfully!')
       return HttpResponse.json({

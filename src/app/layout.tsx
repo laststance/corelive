@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import '@/globals.css'
 
 import { env } from '@/env.mjs'
+import { ORPCProvider } from '@/lib/orpc/react-query'
 import { cn } from '@/lib/utils'
 
 import { MSWProvider } from './MSWProvider'
@@ -36,7 +37,9 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={cn('mx-auto min-h-screen antialiased')}>
-          <MSWProvider>{children}</MSWProvider>
+          <ORPCProvider>
+            <MSWProvider>{children}</MSWProvider>
+          </ORPCProvider>
         </body>
       </html>
     </ClerkProvider>
