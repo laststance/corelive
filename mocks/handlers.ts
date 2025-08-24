@@ -114,11 +114,20 @@ const clerkClientHandler = http.get(
 
     console.log('[MSW] Clerk client request - authenticated:', isAuthenticated)
 
-    return HttpResponse.json({
+    const response = {
       sessions: isAuthenticated ? [createMockSessionResponse()] : [],
       sign_in: null,
       sign_up: null,
-    })
+      user: isAuthenticated ? createMockSessionResponse().user : null,
+      last_active_session_id: isAuthenticated ? 'sess_mock_session_id' : null,
+    }
+
+    // If authenticated, ensure Clerk knows about the authentication
+    if (isAuthenticated) {
+      console.log('[MSW] ✅ Returning authenticated session to Clerk')
+    }
+
+    return HttpResponse.json(response)
   },
 )
 
@@ -209,14 +218,26 @@ const clerkSignOutHandler = http.post(
 /**
  * Clerk sign-in creation endpoint handler
  * WHEN: Called when user initiates OAuth sign-in (e.g., clicks "Continue with Google")
- * PURPOSE: Creates a new sign-in attempt and sets authenticated state
+ * PURPOSE: Creates a new sign-in attempt in intermediate state to trigger prepare_third_party
  */
 const clerkSignInHandler = http.post(
   'https://*.clerk.accounts.dev/v1/client/sign_ins',
   ({ request }) => {
     console.log('[MSW] Clerk sign-in creation request:', request.url)
-    setAuthState(true)
-    return HttpResponse.json(createMockSignInResponse())
+    console.log('[MSW] 📝 Creating intermediate sign-in attempt')
+
+    // Return intermediate state to trigger prepare_third_party call
+    return HttpResponse.json({
+      object: 'sign_in_attempt',
+      id: 'sia_intermediate_signin_id',
+      status: 'needs_identifier',
+      supported_strategies: ['oauth_google'],
+      supported_external_accounts: [],
+      identifier: null,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      abandon_at: null,
+    })
   },
 )
 
@@ -229,11 +250,55 @@ const clerkThirdPartyAttemptHandler = http.post(
   'https://*.clerk.accounts.dev/v1/client/sign_ins/:signInId/attempt_third_party',
   ({ params }) => {
     console.log(
-      '[MSW] Clerk third-party OAuth attempt request:',
+      '[MSW] 🔐 Clerk third-party OAuth attempt request:',
       params.signInId,
     )
     setAuthState(true)
     return HttpResponse.json(createMockSignInResponse())
+  },
+)
+
+/**
+ * Clerk OAuth initiation handler
+ * WHEN: Called when user clicks "Continue with Google" in Clerk's SignIn component
+ * PURPOSE: Immediately completes OAuth flow and sets authentication state
+ */
+const clerkOAuthInitiationHandler = http.post(
+  'https://*.clerk.accounts.dev/v1/client/sign_ins/:signInId/prepare_third_party',
+  ({ params }) => {
+    console.log('[MSW] 🚀 Clerk OAuth initiation request:', params.signInId)
+    console.log('[MSW] 🎭 Simulating instant OAuth completion for testing')
+
+    // Immediately set authentication state to simulate successful OAuth
+    setAuthState(true)
+    console.log('[MSW] 🔐 Authentication state set to: true')
+
+    // Return completed sign-in attempt instead of redirect
+    return HttpResponse.json({
+      object: 'sign_in_attempt',
+      id: params.signInId,
+      status: 'complete',
+      supported_strategies: ['oauth_google'],
+      supported_external_accounts: [],
+      external_account: {
+        object: 'external_account',
+        id: 'ext_mock_google_account_id',
+        provider: 'google',
+        identification_id: 'idn_mock_identification_id',
+        provider_user_id: 'mock_google_user_id',
+        approved_scopes: 'email profile openid',
+        email_address: 'test@example.com',
+        first_name: 'Test',
+        last_name: 'User',
+        image_url: 'https://via.placeholder.com/150',
+        username: null,
+      },
+      created_session_id: 'sess_mock_session_id',
+      created_user_id: 'user_mock_user_id',
+      abandon_at: null,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
   },
 )
 
@@ -256,6 +321,8 @@ const clerkOAuthCallbackHandler = http.get(
       setAuthState(true)
       console.log('[MSW] ✅ OAuth callback successful - user authenticated')
       console.log('[MSW] ↪️ Redirecting to home page')
+
+      // Redirect to the home page as specified in forceRedirectUrl
       return HttpResponse.redirect('http://localhost:3000/home', 302)
     }
 
@@ -303,22 +370,50 @@ const clerkOAuthCallbackAlternativeHandler = http.get(
 const googleOAuthAuthorizationHandler = http.get(
   'https://accounts.google.com/o/oauth2/v2/auth',
   ({ request }) => {
-    console.log('[MSW] Google OAuth authorization request intercepted')
+    console.log('[MSW] 🚀 Google OAuth authorization request intercepted')
     const url = new URL(request.url)
     const redirectUri = url.searchParams.get('redirect_uri')
     const state = url.searchParams.get('state')
+    const clientId = url.searchParams.get('client_id')
+
+    console.log(
+      '[MSW] OAuth params - redirectUri:',
+      redirectUri,
+      'state:',
+      state,
+      'clientId:',
+      clientId,
+    )
+
+    // Check if user is already authenticated
+    if (isAuthenticated) {
+      console.log('[MSW] 🔐 User already authenticated, skipping OAuth flow')
+      if (redirectUri && state) {
+        const callbackUrl = `${redirectUri}?code=mock_auth_code_12345&state=${state}`
+        console.log(
+          '[MSW] ✅ Redirecting to callback with existing auth:',
+          callbackUrl,
+        )
+        return HttpResponse.redirect(callbackUrl, 302)
+      }
+    }
 
     if (redirectUri && state) {
+      // Simulate user clicking "Allow" on Google's OAuth consent screen
+      console.log('[MSW] 🎭 Simulating user consent to OAuth request')
+      setAuthState(true)
+
       // Simulate successful OAuth callback with authorization code
       const callbackUrl = `${redirectUri}?code=mock_auth_code_12345&state=${state}`
       console.log(
-        '[MSW] Simulating OAuth success, redirecting to:',
+        '[MSW] ✅ Simulating OAuth success, redirecting to:',
         callbackUrl,
       )
+
       return HttpResponse.redirect(callbackUrl, 302)
     }
 
-    console.log('[MSW] Invalid OAuth request - missing required parameters')
+    console.log('[MSW] ❌ Invalid OAuth request - missing required parameters')
     return new HttpResponse(null, { status: 400 })
   },
 )
@@ -414,6 +509,7 @@ export const handlers = [
 
   // Clerk OAuth Flow Handlers
   clerkSignInHandler,
+  clerkOAuthInitiationHandler,
   clerkThirdPartyAttemptHandler,
   clerkOAuthCallbackHandler,
   clerkOAuthCallbackAlternativeHandler,
