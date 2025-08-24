@@ -5,7 +5,7 @@ async function globalSetup() {
 
   // Database setup
   console.log('Running database seed...')
-  execSync('pnpm db:seed', { stdio: 'inherit' })
+  execSync('pnpm db:reset', { stdio: 'inherit' })
 }
 
 export default globalSetup

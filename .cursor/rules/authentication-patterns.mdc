@@ -1,7 +1,6 @@
 ---
-description: Authentication patterns using Clerk
+alwaysApply: true
 ---
-
 # Authentication Patterns
 
 ## Clerk Integration
