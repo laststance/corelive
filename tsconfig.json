@@ -47,8 +47,7 @@
     ".next/types/**/*.ts",
     ".storybook/*.js",
     ".storybook/*.ts",
-    ".storybook/*.tsx",
-    "e2e"
+    ".storybook/*.tsx"
   ],
   "exclude": ["node_modules", ".next", "examples-with-next"]
 }
