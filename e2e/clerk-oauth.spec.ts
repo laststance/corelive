@@ -60,10 +60,6 @@ test.describe('Login Flow E2E Test', () => {
     await expect(emptyMessage.or(todoItems.first())).toBeVisible({
       timeout: 10000,
     })
-
-    console.log(
-      '✅ Successfully navigated from top page Login button to TODO app!',
-    )
   })
 
   test('should display TODO app features correctly after login', async ({
@@ -90,7 +86,5 @@ test.describe('Login Flow E2E Test', () => {
     await expect(
       page.getByText('Completed', { exact: false }).first(),
     ).toBeVisible()
-
-    console.log('✅ TODO app features are displayed correctly!')
   })
 })
