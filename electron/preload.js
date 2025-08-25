@@ -1,40 +1,374 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+// Whitelist of allowed IPC channels for security
+const ALLOWED_CHANNELS = {
+  // Todo operations
+  'todo-get-all': true,
+  'todo-create': true,
+  'todo-update': true,
+  'todo-delete': true,
+  'todo-get-by-id': true,
+
+  // Window operations
+  'window-minimize': true,
+  'window-close': true,
+  'window-toggle-floating-navigator': true,
+  'window-show-floating-navigator': true,
+  'window-hide-floating-navigator': true,
+
+  // System operations
+  'tray-show-notification': true,
+  'tray-update-menu': true,
+  'tray-set-tooltip': true,
+
+  // App operations
+  'app-version': true,
+  'app-quit': true,
+
+  // Event channels
+  'window-focus': true,
+  'window-blur': true,
+  'app-update-available': true,
+  'app-update-downloaded': true,
+  'todo-updated': true,
+  'todo-created': true,
+  'todo-deleted': true,
+}
+
+/**
+ * Validate IPC channel for security
+ */
+function validateChannel(channel) {
+  return ALLOWED_CHANNELS[channel] === true
+}
+
+/**
+ * Sanitize data to prevent injection attacks
+ */
+function sanitizeData(data) {
+  if (typeof data === 'string') {
+    return data.trim()
+  }
+  if (typeof data === 'object' && data !== null) {
+    // Deep clone and sanitize object properties
+    const sanitized = {}
+    for (const [key, value] of Object.entries(data)) {
+      if (typeof value === 'string') {
+        sanitized[key] = value.trim()
+      } else if (typeof value === 'number' || typeof value === 'boolean') {
+        sanitized[key] = value
+      } else if (value === null || value === undefined) {
+        sanitized[key] = value
+      } else if (Array.isArray(value)) {
+        sanitized[key] = value.map((item) => sanitizeData(item))
+      } else if (typeof value === 'object') {
+        sanitized[key] = sanitizeData(value)
+      }
+    }
+    return sanitized
+  }
+  return data
+}
+
+// Expose secure API to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
-  // App information
-  getVersion: async () => ipcRenderer.invoke('app-version'),
+  // Todo operations - secure IPC channels for CRUD operations
+  todos: {
+    /**
+     * Get all todos
+     */
+    getTodos: async () => {
+      try {
+        return await ipcRenderer.invoke('todo-get-all')
+      } catch (error) {
+        console.error('Failed to get todos:', error)
+        throw new Error('Failed to retrieve todos')
+      }
+    },
 
-  // App controls
-  quit: async () => ipcRenderer.invoke('app-quit'),
+    /**
+     * Get todo by ID
+     */
+    getTodoById: async (id) => {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid todo ID')
+      }
+      try {
+        return await ipcRenderer.invoke('todo-get-by-id', sanitizeData(id))
+      } catch (error) {
+        console.error('Failed to get todo:', error)
+        throw new Error('Failed to retrieve todo')
+      }
+    },
 
-  // Event listeners (secure channel management)
+    /**
+     * Create new todo
+     */
+    createTodo: async (todoData) => {
+      if (!todoData || typeof todoData !== 'object') {
+        throw new Error('Invalid todo data')
+      }
+
+      const sanitizedData = sanitizeData(todoData)
+
+      // Validate required fields
+      if (!sanitizedData.title || typeof sanitizedData.title !== 'string') {
+        throw new Error('Todo title is required')
+      }
+
+      try {
+        return await ipcRenderer.invoke('todo-create', sanitizedData)
+      } catch (error) {
+        console.error('Failed to create todo:', error)
+        throw new Error('Failed to create todo')
+      }
+    },
+
+    /**
+     * Update existing todo
+     */
+    updateTodo: async (id, updates) => {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid todo ID')
+      }
+      if (!updates || typeof updates !== 'object') {
+        throw new Error('Invalid update data')
+      }
+
+      const sanitizedId = sanitizeData(id)
+      const sanitizedUpdates = sanitizeData(updates)
+
+      try {
+        return await ipcRenderer.invoke(
+          'todo-update',
+          sanitizedId,
+          sanitizedUpdates,
+        )
+      } catch (error) {
+        console.error('Failed to update todo:', error)
+        throw new Error('Failed to update todo')
+      }
+    },
+
+    /**
+     * Delete todo
+     */
+    deleteTodo: async (id) => {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid todo ID')
+      }
+
+      const sanitizedId = sanitizeData(id)
+
+      try {
+        return await ipcRenderer.invoke('todo-delete', sanitizedId)
+      } catch (error) {
+        console.error('Failed to delete todo:', error)
+        throw new Error('Failed to delete todo')
+      }
+    },
+  },
+
+  // Window control APIs
+  window: {
+    /**
+     * Minimize window to tray
+     */
+    minimize: async () => {
+      try {
+        return await ipcRenderer.invoke('window-minimize')
+      } catch (error) {
+        console.error('Failed to minimize window:', error)
+      }
+    },
+
+    /**
+     * Close window (minimize to tray)
+     */
+    close: async () => {
+      try {
+        return await ipcRenderer.invoke('window-close')
+      } catch (error) {
+        console.error('Failed to close window:', error)
+      }
+    },
+
+    /**
+     * Toggle floating navigator visibility
+     */
+    toggleFloatingNavigator: async () => {
+      try {
+        return await ipcRenderer.invoke('window-toggle-floating-navigator')
+      } catch (error) {
+        console.error('Failed to toggle floating navigator:', error)
+      }
+    },
+
+    /**
+     * Show floating navigator
+     */
+    showFloatingNavigator: async () => {
+      try {
+        return await ipcRenderer.invoke('window-show-floating-navigator')
+      } catch (error) {
+        console.error('Failed to show floating navigator:', error)
+      }
+    },
+
+    /**
+     * Hide floating navigator
+     */
+    hideFloatingNavigator: async () => {
+      try {
+        return await ipcRenderer.invoke('window-hide-floating-navigator')
+      } catch (error) {
+        console.error('Failed to hide floating navigator:', error)
+      }
+    },
+  },
+
+  // System integration APIs
+  system: {
+    /**
+     * Show native notification
+     */
+    showNotification: async (title, body, options = {}) => {
+      if (!title || typeof title !== 'string') {
+        throw new Error('Notification title is required')
+      }
+      if (!body || typeof body !== 'string') {
+        throw new Error('Notification body is required')
+      }
+
+      const sanitizedTitle = sanitizeData(title)
+      const sanitizedBody = sanitizeData(body)
+      const sanitizedOptions = sanitizeData(options)
+
+      try {
+        return await ipcRenderer.invoke(
+          'tray-show-notification',
+          sanitizedTitle,
+          sanitizedBody,
+          sanitizedOptions,
+        )
+      } catch (error) {
+        console.error('Failed to show notification:', error)
+        throw new Error('Failed to show notification')
+      }
+    },
+
+    /**
+     * Update system tray menu with tasks
+     */
+    updateTrayMenu: async (tasks = []) => {
+      if (!Array.isArray(tasks)) {
+        throw new Error('Tasks must be an array')
+      }
+
+      const sanitizedTasks = sanitizeData(tasks)
+
+      try {
+        return await ipcRenderer.invoke('tray-update-menu', sanitizedTasks)
+      } catch (error) {
+        console.error('Failed to update tray menu:', error)
+      }
+    },
+
+    /**
+     * Set system tray tooltip
+     */
+    setTrayTooltip: async (text) => {
+      if (!text || typeof text !== 'string') {
+        throw new Error('Tooltip text is required')
+      }
+
+      const sanitizedText = sanitizeData(text)
+
+      try {
+        return await ipcRenderer.invoke('tray-set-tooltip', sanitizedText)
+      } catch (error) {
+        console.error('Failed to set tray tooltip:', error)
+      }
+    },
+  },
+
+  // App information and controls
+  app: {
+    /**
+     * Get app version
+     */
+    getVersion: async () => {
+      try {
+        return await ipcRenderer.invoke('app-version')
+      } catch (error) {
+        console.error('Failed to get app version:', error)
+        return 'unknown'
+      }
+    },
+
+    /**
+     * Quit application
+     */
+    quit: async () => {
+      try {
+        return await ipcRenderer.invoke('app-quit')
+      } catch (error) {
+        console.error('Failed to quit app:', error)
+      }
+    },
+  },
+
+  // Secure event listener management
   on: (channel, callback) => {
-    // Whitelist of allowed channels
-    const validChannels = [
-      'window-focus',
-      'window-blur',
-      'app-update-available',
-      'app-update-downloaded',
-    ]
+    if (!validateChannel(channel)) {
+      console.error(`Attempted to listen to unauthorized channel: ${channel}`)
+      return
+    }
 
-    if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, callback)
+    if (typeof callback !== 'function') {
+      console.error('Callback must be a function')
+      return
+    }
+
+    // Wrap callback to sanitize incoming data
+    const wrappedCallback = (event, ...args) => {
+      try {
+        const sanitizedArgs = args.map((arg) => sanitizeData(arg))
+        callback(event, ...sanitizedArgs)
+      } catch (error) {
+        console.error('Error in event callback:', error)
+      }
+    }
+
+    ipcRenderer.on(channel, wrappedCallback)
+
+    // Return cleanup function
+    return () => {
+      ipcRenderer.removeListener(channel, wrappedCallback)
     }
   },
 
   removeListener: (channel, callback) => {
-    const validChannels = [
-      'window-focus',
-      'window-blur',
-      'app-update-available',
-      'app-update-downloaded',
-    ]
-
-    if (validChannels.includes(channel)) {
-      ipcRenderer.removeListener(channel, callback)
+    if (!validateChannel(channel)) {
+      console.error(
+        `Attempted to remove listener from unauthorized channel: ${channel}`,
+      )
+      return
     }
+
+    ipcRenderer.removeListener(channel, callback)
+  },
+
+  // Remove all listeners for a channel
+  removeAllListeners: (channel) => {
+    if (!validateChannel(channel)) {
+      console.error(
+        `Attempted to remove all listeners from unauthorized channel: ${channel}`,
+      )
+      return
+    }
+
+    ipcRenderer.removeAllListeners(channel)
   },
 })
 
@@ -42,5 +376,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 contextBridge.exposeInMainWorld('electronEnv', {
   isElectron: true,
   platform: process.platform,
-  versions: process.versions,
+  versions: {
+    node: process.versions.node,
+    chrome: process.versions.chrome,
+    electron: process.versions.electron,
+  },
 })

@@ -147,13 +147,99 @@ app.on('web-contents-created', (_event, contents) => {
   })
 })
 
-// Basic IPC handlers (will be expanded in later tasks)
+// Basic IPC handlers
 ipcMain.handle('app-version', () => {
   return app.getVersion()
 })
 
 ipcMain.handle('app-quit', () => {
   app.quit()
+})
+
+// Todo operation IPC handlers - these will connect to the existing ORPC API
+// For now, these are placeholder implementations that will be connected to the actual API in task 4
+ipcMain.handle('todo-get-all', async () => {
+  try {
+    // TODO: Connect to ORPC API in task 4.2
+    // For now, return empty array as placeholder
+    console.log('IPC: Getting all todos (placeholder)')
+    return []
+  } catch (error) {
+    console.error('Failed to get todos:', error)
+    throw new Error('Failed to retrieve todos')
+  }
+})
+
+ipcMain.handle('todo-get-by-id', async (event, id) => {
+  try {
+    // Validate input
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid todo ID')
+    }
+
+    // TODO: Connect to ORPC API in task 4.2
+    console.log('IPC: Getting todo by ID:', id, '(placeholder)')
+    return null
+  } catch (error) {
+    console.error('Failed to get todo:', error)
+    throw new Error('Failed to retrieve todo')
+  }
+})
+
+ipcMain.handle('todo-create', async (event, todoData) => {
+  try {
+    // Validate input
+    if (!todoData || typeof todoData !== 'object' || !todoData.title) {
+      throw new Error('Invalid todo data')
+    }
+
+    // TODO: Connect to ORPC API in task 4.2
+    console.log('IPC: Creating todo:', todoData, '(placeholder)')
+    return {
+      id: 'temp-id',
+      ...todoData,
+      completed: false,
+      createdAt: new Date().toISOString(),
+    }
+  } catch (error) {
+    console.error('Failed to create todo:', error)
+    throw new Error('Failed to create todo')
+  }
+})
+
+ipcMain.handle('todo-update', async (event, id, updates) => {
+  try {
+    // Validate input
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid todo ID')
+    }
+    if (!updates || typeof updates !== 'object') {
+      throw new Error('Invalid update data')
+    }
+
+    // TODO: Connect to ORPC API in task 4.2
+    console.log('IPC: Updating todo:', id, updates, '(placeholder)')
+    return { id, ...updates, updatedAt: new Date().toISOString() }
+  } catch (error) {
+    console.error('Failed to update todo:', error)
+    throw new Error('Failed to update todo')
+  }
+})
+
+ipcMain.handle('todo-delete', async (event, id) => {
+  try {
+    // Validate input
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid todo ID')
+    }
+
+    // TODO: Connect to ORPC API in task 4.2
+    console.log('IPC: Deleting todo:', id, '(placeholder)')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete todo:', error)
+    throw new Error('Failed to delete todo')
+  }
 })
 
 // Window management IPC handlers
@@ -205,3 +291,164 @@ ipcMain.handle('tray-set-tooltip', (event, text) => {
     systemTrayManager.setTrayTooltip(text)
   }
 })
+
+// Floating navigator specific IPC handlers
+ipcMain.handle('floating-window-close', () => {
+  if (windowManager) {
+    windowManager.hideFloatingNavigator()
+  }
+})
+
+ipcMain.handle('floating-window-minimize', () => {
+  if (windowManager && windowManager.hasFloatingNavigator()) {
+    const floatingWindow = windowManager.getFloatingNavigator()
+    if (floatingWindow) {
+      floatingWindow.minimize()
+    }
+  }
+})
+
+ipcMain.handle('floating-window-toggle-always-on-top', () => {
+  if (windowManager && windowManager.hasFloatingNavigator()) {
+    const floatingWindow = windowManager.getFloatingNavigator()
+    if (floatingWindow) {
+      const isAlwaysOnTop = floatingWindow.isAlwaysOnTop()
+      floatingWindow.setAlwaysOnTop(!isAlwaysOnTop)
+      return !isAlwaysOnTop
+    }
+  }
+  return false
+})
+
+ipcMain.handle('floating-window-get-bounds', () => {
+  if (windowManager && windowManager.hasFloatingNavigator()) {
+    const floatingWindow = windowManager.getFloatingNavigator()
+    if (floatingWindow) {
+      return floatingWindow.getBounds()
+    }
+  }
+  return null
+})
+
+ipcMain.handle('floating-window-set-bounds', (event, bounds) => {
+  if (windowManager && windowManager.hasFloatingNavigator()) {
+    const floatingWindow = windowManager.getFloatingNavigator()
+    if (floatingWindow && bounds) {
+      floatingWindow.setBounds(bounds)
+      return true
+    }
+  }
+  return false
+})
+
+ipcMain.handle('floating-window-is-always-on-top', () => {
+  if (windowManager && windowManager.hasFloatingNavigator()) {
+    const floatingWindow = windowManager.getFloatingNavigator()
+    if (floatingWindow) {
+      return floatingWindow.isAlwaysOnTop()
+    }
+  }
+  return false
+})
+
+ipcMain.handle('window-show-main', () => {
+  if (windowManager) {
+    windowManager.restoreFromTray()
+  }
+})
+
+// Quick todo operations for floating navigator
+ipcMain.handle('todo-quick-create', async (event, todoData) => {
+  try {
+    // Validate input
+    if (!todoData || typeof todoData !== 'object' || !todoData.title) {
+      throw new Error('Invalid todo data')
+    }
+
+    // TODO: Connect to ORPC API in task 4.2
+    // For now, use the same logic as regular create but optimized for quick creation
+    console.log('IPC: Quick creating todo:', todoData, '(placeholder)')
+    const quickTodo = {
+      id: 'quick-temp-id',
+      ...todoData,
+      completed: false,
+      createdAt: new Date().toISOString(),
+      source: 'floating-navigator',
+    }
+
+    // Notify main window of new todo
+    if (windowManager && windowManager.hasMainWindow()) {
+      windowManager.getMainWindow().webContents.send('todo-created', quickTodo)
+    }
+
+    return quickTodo
+  } catch (error) {
+    console.error('Failed to quick create todo:', error)
+    throw new Error('Failed to create todo')
+  }
+})
+
+ipcMain.handle('todo-toggle-complete', async (event, id) => {
+  try {
+    // Validate input
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid todo ID')
+    }
+
+    // TODO: Connect to ORPC API in task 4.2
+    // For now, simulate toggle operation
+    console.log('IPC: Toggling todo completion:', id, '(placeholder)')
+    const updatedTodo = {
+      id,
+      completed: true, // This would be toggled based on current state
+      updatedAt: new Date().toISOString(),
+      source: 'floating-navigator',
+    }
+
+    // Notify main window of todo update
+    if (windowManager && windowManager.hasMainWindow()) {
+      windowManager
+        .getMainWindow()
+        .webContents.send('todo-updated', updatedTodo)
+    }
+
+    return updatedTodo
+  } catch (error) {
+    console.error('Failed to toggle todo completion:', error)
+    throw new Error('Failed to toggle todo')
+  }
+})
+
+// Floating navigator shortcut management
+ipcMain.handle('floating-window-register-shortcuts', (event, shortcuts) => {
+  try {
+    // TODO: Implement shortcut registration in task 6.2
+    console.log(
+      'IPC: Registering floating navigator shortcuts:',
+      shortcuts,
+      '(placeholder)',
+    )
+    return true
+  } catch (error) {
+    console.error('Failed to register shortcuts:', error)
+    return false
+  }
+})
+
+ipcMain.handle(
+  'floating-window-unregister-shortcuts',
+  (event, shortcutKeys) => {
+    try {
+      // TODO: Implement shortcut unregistration in task 6.2
+      console.log(
+        'IPC: Unregistering floating navigator shortcuts:',
+        shortcutKeys,
+        '(placeholder)',
+      )
+      return true
+    } catch (error) {
+      console.error('Failed to unregister shortcuts:', error)
+      return false
+    }
+  },
+)
