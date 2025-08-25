@@ -37,7 +37,7 @@ This project uses PostgreSQL v17 as the database, managed through Docker Compose
 docker compose up -d postgres
 
 # Push the database schema
-pnpm prisma db push
+pnpm prisma:reset
 
 # Generate Prisma client
 pnpm prisma generate
