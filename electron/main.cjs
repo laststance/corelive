@@ -1,15 +1,19 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 
-const { APIBridge } = require('./api-bridge')
-const { NextServerManager } = require('./next-server')
-const SystemTrayManager = require('./SystemTrayManager')
-const WindowManager = require('./WindowManager')
+const { APIBridge } = require('./api-bridge.cjs')
+const { NextServerManager } = require('./next-server.cjs')
+const NotificationManager = require('./NotificationManager.cjs')
+const ShortcutManager = require('./ShortcutManager.cjs')
+const SystemTrayManager = require('./SystemTrayManager.cjs')
+const WindowManager = require('./WindowManager.cjs')
 // const { AuthManager } = require('./auth-manager')
 const isDev = process.env.NODE_ENV === 'development'
 
 // Keep a global reference of managers
 let windowManager
 let systemTrayManager
+let notificationManager
+let shortcutManager
 let apiBridge
 // let authManager
 let nextServerManager
@@ -74,6 +78,17 @@ async function createWindow() {
   // Initialize system tray manager
   systemTrayManager = new SystemTrayManager(windowManager)
 
+  // Initialize notification manager
+  notificationManager = new NotificationManager(
+    windowManager,
+    systemTrayManager,
+  )
+  await notificationManager.initialize()
+
+  // Initialize shortcut manager
+  shortcutManager = new ShortcutManager(windowManager, notificationManager)
+  shortcutManager.initialize()
+
   // Create main window using WindowManager
   const mainWindow = windowManager.createMainWindow()
 
@@ -126,6 +141,12 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async () => {
   if (systemTrayManager) {
     systemTrayManager.setQuitting(true)
+  }
+  if (shortcutManager) {
+    shortcutManager.cleanup()
+  }
+  if (notificationManager) {
+    notificationManager.cleanup()
   }
   if (windowManager) {
     windowManager.cleanup()
@@ -219,7 +240,14 @@ ipcMain.handle('todo-create', async (_event, todoData) => {
       throw new Error('API bridge not initialized')
     }
 
-    return await apiBridge.createTodo(todoData)
+    const newTodo = await apiBridge.createTodo(todoData)
+
+    // Show notification for task creation
+    if (notificationManager) {
+      notificationManager.showTaskCreatedNotification(newTodo)
+    }
+
+    return newTodo
   } catch (error) {
     console.error('Failed to create todo:', error)
     throw new Error('Failed to create todo')
@@ -240,7 +268,18 @@ ipcMain.handle('todo-update', async (_event, id, updates) => {
       throw new Error('API bridge not initialized')
     }
 
-    return await apiBridge.updateTodo(id, updates)
+    const updatedTodo = await apiBridge.updateTodo(id, updates)
+
+    // Show appropriate notification based on what was updated
+    if (notificationManager) {
+      if (updates.hasOwnProperty('completed')) {
+        notificationManager.showTaskCompletedNotification(updatedTodo)
+      } else {
+        notificationManager.showTaskUpdatedNotification(updatedTodo, updates)
+      }
+    }
+
+    return updatedTodo
   } catch (error) {
     console.error('Failed to update todo:', error)
     throw new Error('Failed to update todo')
@@ -258,7 +297,17 @@ ipcMain.handle('todo-delete', async (_event, id) => {
       throw new Error('API bridge not initialized')
     }
 
-    return await apiBridge.deleteTodo(id)
+    // Get todo before deletion for notification
+    const todoToDelete = await apiBridge.getTodoById(id)
+
+    const result = await apiBridge.deleteTodo(id)
+
+    // Show notification for task deletion
+    if (notificationManager && todoToDelete) {
+      notificationManager.showTaskDeletedNotification(todoToDelete)
+    }
+
+    return result
   } catch (error) {
     console.error('Failed to delete todo:', error)
     throw new Error('Failed to delete todo')
@@ -313,6 +362,123 @@ ipcMain.handle('tray-set-tooltip', (event, text) => {
   if (systemTrayManager) {
     systemTrayManager.setTrayTooltip(text)
   }
+})
+
+// Notification management IPC handlers
+ipcMain.handle('notification-show', (event, title, body, options) => {
+  if (notificationManager) {
+    return notificationManager.showNotification(title, body, options)
+  }
+})
+
+ipcMain.handle('notification-get-preferences', () => {
+  if (notificationManager) {
+    return notificationManager.getPreferences()
+  }
+  return null
+})
+
+ipcMain.handle('notification-update-preferences', (event, preferences) => {
+  if (notificationManager) {
+    notificationManager.updatePreferences(preferences)
+    return notificationManager.getPreferences()
+  }
+  return null
+})
+
+ipcMain.handle('notification-clear-all', () => {
+  if (notificationManager) {
+    notificationManager.clearAllNotifications()
+  }
+})
+
+ipcMain.handle('notification-clear', (event, tag) => {
+  if (notificationManager) {
+    notificationManager.clearNotification(tag)
+  }
+})
+
+ipcMain.handle('notification-is-enabled', () => {
+  if (notificationManager) {
+    return notificationManager.isEnabled()
+  }
+  return false
+})
+
+ipcMain.handle('notification-get-active-count', () => {
+  if (notificationManager) {
+    return notificationManager.getActiveNotificationCount()
+  }
+  return 0
+})
+
+// Keyboard shortcut management IPC handlers
+ipcMain.handle('shortcuts-get-registered', () => {
+  if (shortcutManager) {
+    return shortcutManager.getRegisteredShortcuts()
+  }
+  return {}
+})
+
+ipcMain.handle('shortcuts-get-defaults', () => {
+  if (shortcutManager) {
+    return shortcutManager.getDefaultShortcutsConfig()
+  }
+  return {}
+})
+
+ipcMain.handle('shortcuts-update', (event, shortcuts) => {
+  if (shortcutManager) {
+    return shortcutManager.updateShortcuts(shortcuts)
+  }
+  return false
+})
+
+ipcMain.handle('shortcuts-register', (event, accelerator, id) => {
+  if (shortcutManager) {
+    const handler = shortcutManager.getHandlerForShortcut(id)
+    if (handler) {
+      return shortcutManager.registerShortcut(accelerator, id, handler)
+    }
+  }
+  return false
+})
+
+ipcMain.handle('shortcuts-unregister', (event, id) => {
+  if (shortcutManager) {
+    return shortcutManager.unregisterShortcut(id)
+  }
+  return false
+})
+
+ipcMain.handle('shortcuts-is-registered', (event, accelerator) => {
+  if (shortcutManager) {
+    return shortcutManager.isShortcutRegistered(accelerator)
+  }
+  return false
+})
+
+ipcMain.handle('shortcuts-enable', () => {
+  if (shortcutManager) {
+    shortcutManager.enable()
+    return true
+  }
+  return false
+})
+
+ipcMain.handle('shortcuts-disable', () => {
+  if (shortcutManager) {
+    shortcutManager.disable()
+    return true
+  }
+  return false
+})
+
+ipcMain.handle('shortcuts-get-stats', () => {
+  if (shortcutManager) {
+    return shortcutManager.getStats()
+  }
+  return null
 })
 
 // Floating navigator specific IPC handlers
@@ -394,6 +560,11 @@ ipcMain.handle('todo-quick-create', async (_event, todoData) => {
 
     const quickTodo = await apiBridge.createTodo(todoData)
 
+    // Show notification for task creation
+    if (notificationManager) {
+      notificationManager.showTaskCreatedNotification(quickTodo)
+    }
+
     // Notify main window of new todo
     if (windowManager && windowManager.hasMainWindow()) {
       windowManager.getMainWindow().webContents.send('todo-created', quickTodo)
@@ -421,6 +592,11 @@ ipcMain.handle('todo-toggle-complete', async (_event, id, currentCompleted) => {
     const updatedTodo = await apiBridge.updateTodo(id, {
       completed: !currentCompleted,
     })
+
+    // Show notification for task completion
+    if (notificationManager) {
+      notificationManager.showTaskCompletedNotification(updatedTodo)
+    }
 
     // Notify main window of todo update
     if (windowManager && windowManager.hasMainWindow()) {

@@ -10,7 +10,7 @@
       "eslint --fix --max-warnings 0"
     ]
   },
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "homepage": "./",
   "scripts": {
     "postinstall": "pnpm prisma generate",
@@ -42,7 +42,7 @@
     "e2e:ui": "playwright test --ui",
     "e2e:debug": "playwright test --debug",
     "electron": "electron .",
-    "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://localhost:3000 && node electron/dev-runner.js\"",
+    "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://localhost:3000 && node electron/dev-runner.cjs\"",
     "electron:build": "pnpm build && electron-builder",
     "electron:build:win": "pnpm build && electron-builder --win",
     "electron:build:mac": "pnpm build && electron-builder --mac",

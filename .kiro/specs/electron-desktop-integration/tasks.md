@@ -65,13 +65,13 @@
     - _Requirements: 2.1, 2.2, 2.5, 6.1, 6.3_
 
 - [ ] 6. Add system integration features
-  - [ ] 6.1 Implement native notifications
+  - [x] 6.1 Implement native notifications
     - Create notification system for task creation, completion, and updates
     - Add user preference controls for notification types
     - Implement notification click handlers to focus relevant tasks
     - _Requirements: 3.1, 3.2, 3.3_
 
-  - [ ] 6.2 Implement keyboard shortcuts
+  - [x] 6.2 Implement keyboard shortcuts
     - Register global keyboard shortcuts for new task (Ctrl/Cmd+N), search (Ctrl/Cmd+F), and floating navigator toggle (Ctrl/Cmd+Shift+F)
     - Add shortcut handling in both main window and floating navigator
     - Implement OS-specific shortcut variations (Ctrl vs Cmd)

@@ -23,6 +23,16 @@ const ALLOWED_CHANNELS = {
   'todo-deleted': true,
   'floating-window-focus': true,
   'floating-window-blur': true,
+
+  // Notification management (limited for floating navigator)
+  'notification-show': true,
+  'notification-get-preferences': true,
+  'notification-is-enabled': true,
+
+  // Keyboard shortcuts (limited for floating navigator)
+  'shortcuts-get-registered': true,
+  'shortcuts-get-defaults': true,
+  'shortcuts-get-stats': true,
 }
 
 /**
@@ -320,6 +330,115 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
           error,
         )
         return false
+      }
+    },
+  },
+
+  // Limited notification support for floating navigator
+  notifications: {
+    /**
+     * Show notification from floating navigator
+     */
+    show: async (title, body, options = {}) => {
+      if (!title || typeof title !== 'string') {
+        throw new Error('Notification title is required')
+      }
+      if (!body || typeof body !== 'string') {
+        throw new Error('Notification body is required')
+      }
+
+      const sanitizedTitle = sanitizeData(title)
+      const sanitizedBody = sanitizeData(body)
+      const sanitizedOptions = sanitizeData(options)
+
+      try {
+        return await ipcRenderer.invoke(
+          'notification-show',
+          sanitizedTitle,
+          sanitizedBody,
+          sanitizedOptions,
+        )
+      } catch (error) {
+        console.error('Floating Navigator: Failed to show notification:', error)
+        throw new Error('Failed to show notification')
+      }
+    },
+
+    /**
+     * Check if notifications are enabled
+     */
+    isEnabled: async () => {
+      try {
+        return await ipcRenderer.invoke('notification-is-enabled')
+      } catch (error) {
+        console.error(
+          'Floating Navigator: Failed to check notification status:',
+          error,
+        )
+        return false
+      }
+    },
+
+    /**
+     * Get notification preferences (read-only for floating navigator)
+     */
+    getPreferences: async () => {
+      try {
+        return await ipcRenderer.invoke('notification-get-preferences')
+      } catch (error) {
+        console.error(
+          'Floating Navigator: Failed to get notification preferences:',
+          error,
+        )
+        return null
+      }
+    },
+  },
+
+  // Limited shortcut support for floating navigator
+  shortcuts: {
+    /**
+     * Get currently registered shortcuts (read-only)
+     */
+    getRegistered: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-get-registered')
+      } catch (error) {
+        console.error(
+          'Floating Navigator: Failed to get registered shortcuts:',
+          error,
+        )
+        return {}
+      }
+    },
+
+    /**
+     * Get default shortcuts configuration (read-only)
+     */
+    getDefaults: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-get-defaults')
+      } catch (error) {
+        console.error(
+          'Floating Navigator: Failed to get default shortcuts:',
+          error,
+        )
+        return {}
+      }
+    },
+
+    /**
+     * Get shortcut statistics (read-only)
+     */
+    getStats: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-get-stats')
+      } catch (error) {
+        console.error(
+          'Floating Navigator: Failed to get shortcut stats:',
+          error,
+        )
+        return null
       }
     },
   },

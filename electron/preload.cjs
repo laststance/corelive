@@ -28,6 +28,26 @@ const ALLOWED_CHANNELS = {
   'tray-update-menu': true,
   'tray-set-tooltip': true,
 
+  // Notification management
+  'notification-show': true,
+  'notification-get-preferences': true,
+  'notification-update-preferences': true,
+  'notification-clear-all': true,
+  'notification-clear': true,
+  'notification-is-enabled': true,
+  'notification-get-active-count': true,
+
+  // Keyboard shortcut management
+  'shortcuts-get-registered': true,
+  'shortcuts-get-defaults': true,
+  'shortcuts-update': true,
+  'shortcuts-register': true,
+  'shortcuts-unregister': true,
+  'shortcuts-is-registered': true,
+  'shortcuts-enable': true,
+  'shortcuts-disable': true,
+  'shortcuts-get-stats': true,
+
   // App operations
   'app-version': true,
   'app-quit': true,
@@ -41,6 +61,10 @@ const ALLOWED_CHANNELS = {
   'todo-created': true,
   'todo-deleted': true,
   'auth-state-changed': true,
+  'focus-task': true,
+  'mark-task-complete': true,
+  'shortcut-new-task': true,
+  'shortcut-search': true,
 }
 
 /**
@@ -296,6 +320,268 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await ipcRenderer.invoke('tray-set-tooltip', sanitizedText)
       } catch (error) {
         console.error('Failed to set tray tooltip:', error)
+      }
+    },
+  },
+
+  // Notification management APIs
+  notifications: {
+    /**
+     * Show custom notification
+     */
+    show: async (title, body, options = {}) => {
+      if (!title || typeof title !== 'string') {
+        throw new Error('Notification title is required')
+      }
+      if (!body || typeof body !== 'string') {
+        throw new Error('Notification body is required')
+      }
+
+      const sanitizedTitle = sanitizeData(title)
+      const sanitizedBody = sanitizeData(body)
+      const sanitizedOptions = sanitizeData(options)
+
+      try {
+        return await ipcRenderer.invoke(
+          'notification-show',
+          sanitizedTitle,
+          sanitizedBody,
+          sanitizedOptions,
+        )
+      } catch (error) {
+        console.error('Failed to show notification:', error)
+        throw new Error('Failed to show notification')
+      }
+    },
+
+    /**
+     * Get notification preferences
+     */
+    getPreferences: async () => {
+      try {
+        return await ipcRenderer.invoke('notification-get-preferences')
+      } catch (error) {
+        console.error('Failed to get notification preferences:', error)
+        return null
+      }
+    },
+
+    /**
+     * Update notification preferences
+     */
+    updatePreferences: async (preferences) => {
+      if (!preferences || typeof preferences !== 'object') {
+        throw new Error('Invalid preferences data')
+      }
+
+      const sanitizedPreferences = sanitizeData(preferences)
+
+      try {
+        return await ipcRenderer.invoke(
+          'notification-update-preferences',
+          sanitizedPreferences,
+        )
+      } catch (error) {
+        console.error('Failed to update notification preferences:', error)
+        throw new Error('Failed to update preferences')
+      }
+    },
+
+    /**
+     * Clear all active notifications
+     */
+    clearAll: async () => {
+      try {
+        return await ipcRenderer.invoke('notification-clear-all')
+      } catch (error) {
+        console.error('Failed to clear all notifications:', error)
+      }
+    },
+
+    /**
+     * Clear specific notification by tag
+     */
+    clear: async (tag) => {
+      if (!tag || typeof tag !== 'string') {
+        throw new Error('Notification tag is required')
+      }
+
+      const sanitizedTag = sanitizeData(tag)
+
+      try {
+        return await ipcRenderer.invoke('notification-clear', sanitizedTag)
+      } catch (error) {
+        console.error('Failed to clear notification:', error)
+      }
+    },
+
+    /**
+     * Check if notifications are enabled
+     */
+    isEnabled: async () => {
+      try {
+        return await ipcRenderer.invoke('notification-is-enabled')
+      } catch (error) {
+        console.error('Failed to check notification status:', error)
+        return false
+      }
+    },
+
+    /**
+     * Get count of active notifications
+     */
+    getActiveCount: async () => {
+      try {
+        return await ipcRenderer.invoke('notification-get-active-count')
+      } catch (error) {
+        console.error('Failed to get active notification count:', error)
+        return 0
+      }
+    },
+  },
+
+  // Keyboard shortcut management APIs
+  shortcuts: {
+    /**
+     * Get currently registered shortcuts
+     */
+    getRegistered: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-get-registered')
+      } catch (error) {
+        console.error('Failed to get registered shortcuts:', error)
+        return {}
+      }
+    },
+
+    /**
+     * Get default shortcuts configuration
+     */
+    getDefaults: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-get-defaults')
+      } catch (error) {
+        console.error('Failed to get default shortcuts:', error)
+        return {}
+      }
+    },
+
+    /**
+     * Update shortcuts configuration
+     */
+    update: async (shortcuts) => {
+      if (!shortcuts || typeof shortcuts !== 'object') {
+        throw new Error('Invalid shortcuts configuration')
+      }
+
+      const sanitizedShortcuts = sanitizeData(shortcuts)
+
+      try {
+        return await ipcRenderer.invoke('shortcuts-update', sanitizedShortcuts)
+      } catch (error) {
+        console.error('Failed to update shortcuts:', error)
+        throw new Error('Failed to update shortcuts')
+      }
+    },
+
+    /**
+     * Register a single shortcut
+     */
+    register: async (accelerator, id) => {
+      if (!accelerator || typeof accelerator !== 'string') {
+        throw new Error('Accelerator is required')
+      }
+      if (!id || typeof id !== 'string') {
+        throw new Error('Shortcut ID is required')
+      }
+
+      const sanitizedAccelerator = sanitizeData(accelerator)
+      const sanitizedId = sanitizeData(id)
+
+      try {
+        return await ipcRenderer.invoke(
+          'shortcuts-register',
+          sanitizedAccelerator,
+          sanitizedId,
+        )
+      } catch (error) {
+        console.error('Failed to register shortcut:', error)
+        throw new Error('Failed to register shortcut')
+      }
+    },
+
+    /**
+     * Unregister a shortcut
+     */
+    unregister: async (id) => {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Shortcut ID is required')
+      }
+
+      const sanitizedId = sanitizeData(id)
+
+      try {
+        return await ipcRenderer.invoke('shortcuts-unregister', sanitizedId)
+      } catch (error) {
+        console.error('Failed to unregister shortcut:', error)
+        throw new Error('Failed to unregister shortcut')
+      }
+    },
+
+    /**
+     * Check if shortcut is registered
+     */
+    isRegistered: async (accelerator) => {
+      if (!accelerator || typeof accelerator !== 'string') {
+        throw new Error('Accelerator is required')
+      }
+
+      const sanitizedAccelerator = sanitizeData(accelerator)
+
+      try {
+        return await ipcRenderer.invoke(
+          'shortcuts-is-registered',
+          sanitizedAccelerator,
+        )
+      } catch (error) {
+        console.error('Failed to check shortcut registration:', error)
+        return false
+      }
+    },
+
+    /**
+     * Enable shortcuts
+     */
+    enable: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-enable')
+      } catch (error) {
+        console.error('Failed to enable shortcuts:', error)
+        return false
+      }
+    },
+
+    /**
+     * Disable shortcuts
+     */
+    disable: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-disable')
+      } catch (error) {
+        console.error('Failed to disable shortcuts:', error)
+        return false
+      }
+    },
+
+    /**
+     * Get shortcut statistics
+     */
+    getStats: async () => {
+      try {
+        return await ipcRenderer.invoke('shortcuts-get-stats')
+      } catch (error) {
+        console.error('Failed to get shortcut stats:', error)
+        return null
       }
     },
   },

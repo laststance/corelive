@@ -17,6 +17,22 @@ export interface UpdateTodoInput {
   completed?: boolean
 }
 
+export interface NotificationPreferences {
+  enabled: boolean
+  taskCreated: boolean
+  taskCompleted: boolean
+  taskUpdated: boolean
+  taskDeleted: boolean
+  sound: boolean
+}
+
+export interface ShortcutStats {
+  totalRegistered: number
+  isEnabled: boolean
+  platform: string
+  shortcuts: Record<string, string>
+}
+
 export interface User {
   id: string
   email?: string
@@ -60,6 +76,32 @@ export interface ElectronAPI {
   system: {
     showNotification(title: string, body: string): void
     setTrayTooltip(text: string): void
+  }
+
+  // Notification management
+  notifications: {
+    show(title: string, body: string, options?: any): Promise<void>
+    getPreferences(): Promise<NotificationPreferences | null>
+    updatePreferences(
+      preferences: Partial<NotificationPreferences>,
+    ): Promise<NotificationPreferences | null>
+    clearAll(): Promise<void>
+    clear(tag: string): Promise<void>
+    isEnabled(): Promise<boolean>
+    getActiveCount(): Promise<number>
+  }
+
+  // Keyboard shortcut management
+  shortcuts: {
+    getRegistered(): Promise<Record<string, string>>
+    getDefaults(): Promise<Record<string, string>>
+    update(shortcuts: Record<string, string>): Promise<boolean>
+    register(accelerator: string, id: string): Promise<boolean>
+    unregister(id: string): Promise<boolean>
+    isRegistered(accelerator: string): Promise<boolean>
+    enable(): Promise<boolean>
+    disable(): Promise<boolean>
+    getStats(): Promise<ShortcutStats | null>
   }
 
   // Event listeners

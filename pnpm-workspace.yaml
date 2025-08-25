@@ -4,6 +4,8 @@ onlyBuiltDependencies:
   - '@prisma/engines'
   - '@tailwindcss/oxide'
   - core-js-pure
+  - electron
+  - electron-winstaller
   - esbuild
   - msw
   - prisma
