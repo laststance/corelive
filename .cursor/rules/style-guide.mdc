@@ -1,11 +1,11 @@
 ---
 description: Tailwind v4 tokens and UI component styling conventions for shadcn/ui-style wrappers in this repo. Applies to Tailwind config, globals, and all ui/*.tsx.
-globs: tailwind.config.ts, src/globals.css, src/components/ui/*.tsx
+globs: tailwind.config.ts, src/globals.css, src/components/ui/*.tsx, **/*.tsx
 ---
 
-# Corelive UI Style Guide
+# Corelive Design System Guide
 
-This rule records the shared Tailwind CSS tokens and component styling conventions used across UI components. It is intended for contributors creating or editing files under `src/components/ui`.
+This rule records the shared Tailwind CSS tokens and component styling conventions used across UI components. It is intended for contributors creating or editing files under `src/components`.
 
 Reference files: [tailwind.config.ts](mdc:tailwind.config.ts), [src/globals.css](mdc:src/globals.css), [src/components/Document.mdx](mdc:src/components/Document.mdx).
 
