@@ -49,4 +49,4 @@ screenshots
 clerk-playwright-nextjs
 .playwright-mcp
 # Playwright authentication state
-playwright/.auth
+e2e/.auth
