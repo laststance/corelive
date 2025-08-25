@@ -279,7 +279,7 @@ describe('FloatingNavigator Accessibility - Core Features', () => {
     it('should handle singular task count', () => {
       const singleTaskProps = {
         ...defaultProps,
-        todos: [mockTodos[0]], // Only one task
+        todos: [mockTodos[0]!], // Only one task
       }
 
       render(<FloatingNavigator {...singleTaskProps} />)

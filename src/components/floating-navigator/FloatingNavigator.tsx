@@ -143,15 +143,17 @@ export function FloatingNavigator({
         if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
           e.preventDefault()
           const task = allTodos[focusedTaskIndex]
-          if (e.key === ' ') {
-            // Toggle completion with spacebar
-            onTaskToggle(task.id)
-            announceToScreenReader(
-              `Task "${task.text}" ${task.completed ? 'uncompleted' : 'completed'}`,
-            )
-          } else if (e.key === 'Enter') {
-            // Start editing with Enter
-            startEditing(task)
+          if (task) {
+            if (e.key === ' ') {
+              // Toggle completion with spacebar
+              onTaskToggle(task.id)
+              announceToScreenReader(
+                `Task "${task.text}" ${task.completed ? 'uncompleted' : 'completed'}`,
+              )
+            } else if (e.key === 'Enter') {
+              // Start editing with Enter
+              startEditing(task)
+            }
           }
         }
         break
@@ -160,11 +162,13 @@ export function FloatingNavigator({
         if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
           e.preventDefault()
           const task = allTodos[focusedTaskIndex]
-          onTaskDelete(task.id)
-          announceToScreenReader(`Task "${task.text}" deleted`)
-          // Adjust focus after deletion
-          if (focusedTaskIndex >= allTodos.length - 1) {
-            setFocusedTaskIndex(Math.max(0, allTodos.length - 2))
+          if (task) {
+            onTaskDelete(task.id)
+            announceToScreenReader(`Task "${task.text}" deleted`)
+            // Adjust focus after deletion
+            if (focusedTaskIndex >= allTodos.length - 1) {
+              setFocusedTaskIndex(Math.max(0, allTodos.length - 2))
+            }
           }
         }
         break
