@@ -87,8 +87,12 @@ test.describe('TODO App E2E Tests', () => {
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
 
-    // Find and click the delete button - use the button's accessible name
-    const deleteButton = page.getByRole('button', { name: 'Delete' }).first()
+    // Find the delete button within the specific todo item container
+    // The container is the closest parent that contains both checkbox and buttons
+    const todoItemContainer = todoCheckbox.locator('..')
+    const deleteButton = todoItemContainer.getByRole('button', {
+      name: 'Delete',
+    })
     await expect(deleteButton).toBeVisible()
     await deleteButton.click()
 
