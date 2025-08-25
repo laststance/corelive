@@ -48,10 +48,16 @@
   "publish": {
     "provider": "github",
     "owner": "corelive",
-    "repo": "corelive-todo",
+    "repo": "corelive",
     "private": true,
     "releaseType": "release"
   },
+  "protocols": [
+    {
+      "name": "CoreLive TODO Protocol",
+      "schemes": ["corelive"]
+    }
+  ],
   "mac": {
     "category": "public.app-category.productivity",
     "target": [
@@ -116,7 +122,8 @@
     "createStartMenuShortcut": true,
     "shortcutName": "${productName}",
     "include": "build/installer.nsh",
-    "deleteAppDataOnUninstall": false
+    "deleteAppDataOnUninstall": false,
+    "perMachine": false
   },
   "portable": {
     "artifactName": "${productName}-${version}-portable.${ext}"
@@ -147,7 +154,8 @@
         "Name": "CoreLive TODO",
         "Comment": "A modern TODO application with desktop integration",
         "Keywords": "todo;task;productivity;electron;",
-        "StartupWMClass": "corelive-todo"
+        "StartupWMClass": "corelive",
+        "MimeType": "x-scheme-handler/corelive;"
       }
     },
     "maintainer": "CoreLive <support@corelive.com>",

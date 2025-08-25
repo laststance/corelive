@@ -129,6 +129,16 @@ interface ElectronAPI {
     quit: () => Promise<void>
   }
 
+  // Deep linking
+  deepLink?: {
+    generateUrl: (
+      action: string,
+      params?: Record<string, any>,
+    ) => Promise<string | null>
+    getExamples: () => Promise<Record<string, string>>
+    handleUrl: (url: string) => Promise<boolean>
+  }
+
   // Error handling
   errorHandling?: {
     getStats: () => Promise<any>

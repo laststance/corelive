@@ -50,6 +50,11 @@ class LazyLoadManager {
     this.componentFactories.set('SystemIntegrationErrorHandler', () => {
       return require('./SystemIntegrationErrorHandler.cjs')
     })
+
+    // Deep Link Manager - handles URL scheme registration and processing
+    this.componentFactories.set('DeepLinkManager', () => {
+      return require('./DeepLinkManager.cjs')
+    })
   }
 
   /**

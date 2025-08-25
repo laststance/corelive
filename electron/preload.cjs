@@ -36,6 +36,11 @@ const ALLOWED_CHANNELS = {
   // Menu actions
   'menu-action': true,
 
+  // Deep linking
+  'deep-link-generate': true,
+  'deep-link-get-examples': true,
+  'deep-link-handle-url': true,
+
   // Notification management
   'notification-show': true,
   'notification-get-preferences': true,
@@ -103,6 +108,11 @@ const ALLOWED_CHANNELS = {
   'mark-task-complete': true,
   'shortcut-new-task': true,
   'shortcut-search': true,
+  'deep-link-focus-task': true,
+  'deep-link-create-task': true,
+  'deep-link-task-created': true,
+  'deep-link-navigate': true,
+  'deep-link-search': true,
 }
 
 /**
@@ -1118,6 +1128,62 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await ipcRenderer.invoke('app-quit')
       } catch (error) {
         console.error('Failed to quit app:', error)
+      }
+    },
+  },
+
+  // Deep linking APIs
+  deepLink: {
+    /**
+     * Generate deep link URL
+     */
+    generateUrl: async (action, params = {}) => {
+      if (!action || typeof action !== 'string') {
+        throw new Error('Action is required')
+      }
+
+      const sanitizedAction = sanitizeData(action)
+      const sanitizedParams = sanitizeData(params)
+
+      try {
+        return await ipcRenderer.invoke(
+          'deep-link-generate',
+          sanitizedAction,
+          sanitizedParams,
+        )
+      } catch (error) {
+        console.error('Failed to generate deep link:', error)
+        return null
+      }
+    },
+
+    /**
+     * Get example deep link URLs
+     */
+    getExamples: async () => {
+      try {
+        return await ipcRenderer.invoke('deep-link-get-examples')
+      } catch (error) {
+        console.error('Failed to get deep link examples:', error)
+        return {}
+      }
+    },
+
+    /**
+     * Handle deep link URL manually
+     */
+    handleUrl: async (url) => {
+      if (!url || typeof url !== 'string') {
+        throw new Error('URL is required')
+      }
+
+      const sanitizedUrl = sanitizeData(url)
+
+      try {
+        return await ipcRenderer.invoke('deep-link-handle-url', sanitizedUrl)
+      } catch (error) {
+        console.error('Failed to handle deep link:', error)
+        return false
       }
     },
   },

@@ -164,7 +164,7 @@
     - _Requirements: 1.1, 1.3_
 
   - [ ] 12.3 Add deep linking and URL scheme support
-    - Register custom URL scheme (corelive-todo://) for the application
+    - Register custom URL scheme (corelive://) for the application
     - Implement URL parsing to open specific tasks or views
     - Add support for creating tasks from external applications
     - Handle multiple instances and focus existing window when opened via URL

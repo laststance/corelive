@@ -337,19 +337,19 @@ class MenuManager {
       {
         label: 'Learn More',
         click: () => {
-          shell.openExternal('https://github.com/corelive/corelive-todo')
+          shell.openExternal('https://github.com/corelive/corelive')
         },
       },
       {
         label: 'Documentation',
         click: () => {
-          shell.openExternal('https://github.com/corelive/corelive-todo/wiki')
+          shell.openExternal('https://github.com/corelive/corelive/wiki')
         },
       },
       {
         label: 'Report Issue',
         click: () => {
-          shell.openExternal('https://github.com/corelive/corelive-todo/issues')
+          shell.openExternal('https://github.com/corelive/corelive/issues')
         },
       },
       { type: 'separator' },

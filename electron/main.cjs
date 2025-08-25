@@ -36,6 +36,7 @@ let notificationManager
 let shortcutManager
 let systemIntegrationErrorHandler
 let menuManager
+let deepLinkManager
 
 // Content Security Policy for enhanced security
 const CSP_POLICY = [
@@ -187,6 +188,22 @@ async function createWindow() {
       const AutoUpdater = await lazyLoadManager.loadComponent('AutoUpdater')
       autoUpdater = new AutoUpdater()
       autoUpdater.setMainWindow(windowManager.getMainWindow())
+
+      // Initialize deep link manager
+      const DeepLinkManager = require('./DeepLinkManager.cjs')
+      deepLinkManager = new DeepLinkManager(
+        windowManager,
+        apiBridge,
+        notificationManager,
+      )
+      deepLinkManager.initialize()
+
+      // Process any pending deep link URL after initialization
+      setTimeout(() => {
+        if (deepLinkManager) {
+          deepLinkManager.processPendingUrl()
+        }
+      }, 1000)
 
       // Set up window close behavior after tray manager is loaded
       const mainWindow = windowManager.getMainWindow()
@@ -725,6 +742,29 @@ function setupIPCHandlers() {
     }
   })
 
+  // Deep linking IPC handlers
+  ipcMain.handle('deep-link-generate', (event, action, params) => {
+    if (deepLinkManager) {
+      return deepLinkManager.generateDeepLink(action, params)
+    }
+    return null
+  })
+
+  ipcMain.handle('deep-link-get-examples', () => {
+    if (deepLinkManager) {
+      return deepLinkManager.getExampleUrls()
+    }
+    return {}
+  })
+
+  ipcMain.handle('deep-link-handle-url', (event, url) => {
+    if (deepLinkManager) {
+      deepLinkManager.handleDeepLink(url)
+      return true
+    }
+    return false
+  })
+
   // Add other IPC handlers without error wrapping for simplicity
   ipcMain.handle('window-show-main', () => {
     if (windowManager) {
@@ -797,32 +837,39 @@ function setupIPCHandlers() {
   )
 }
 
-// Security: Set app security policies before ready
-app.whenReady().then(() => {
-  // Setup security policies
-  setupSecurity()
+// Ensure single instance
+const gotTheLock = app.requestSingleInstanceLock()
 
-  // Security: Remove default protocols that could be exploited
-  if (isDev) {
-    // Only install dev extensions in development
-    const {
-      default: installExtension,
-      REACT_DEVELOPER_TOOLS,
-    } = require('electron-devtools-installer')
-    installExtension(REACT_DEVELOPER_TOOLS)
-      .then((name) => console.log(`Added Extension: ${name}`))
-      .catch((err) => console.log('An error occurred: ', err))
-  }
+if (!gotTheLock) {
+  app.quit()
+} else {
+  // Security: Set app security policies before ready
+  app.whenReady().then(() => {
+    // Setup security policies
+    setupSecurity()
 
-  createWindow()
-
-  app.on('activate', () => {
-    // On macOS, re-create window when dock icon is clicked
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+    // Security: Remove default protocols that could be exploited
+    if (isDev) {
+      // Only install dev extensions in development
+      const {
+        default: installExtension,
+        REACT_DEVELOPER_TOOLS,
+      } = require('electron-devtools-installer')
+      installExtension(REACT_DEVELOPER_TOOLS)
+        .then((name) => console.log(`Added Extension: ${name}`))
+        .catch((err) => console.log('An error occurred: ', err))
     }
+
+    createWindow()
+
+    app.on('activate', () => {
+      // On macOS, re-create window when dock icon is clicked
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      }
+    })
   })
-})
+}
 
 // Quit when all windows are closed, except on macOS
 app.on('window-all-closed', () => {
@@ -839,6 +886,9 @@ app.on('before-quit', async () => {
   memoryProfiler.stopMonitoring()
 
   // Cleanup managers in reverse order of initialization
+  if (deepLinkManager) {
+    deepLinkManager.cleanup()
+  }
   if (systemTrayManager) {
     systemTrayManager.setQuitting(true)
   }
