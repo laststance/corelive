@@ -1,15 +1,19 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 
 const { APIBridge } = require('./api-bridge.cjs')
+const ConfigManager = require('./ConfigManager.cjs')
 const { NextServerManager } = require('./next-server.cjs')
 const NotificationManager = require('./NotificationManager.cjs')
 const ShortcutManager = require('./ShortcutManager.cjs')
 const SystemTrayManager = require('./SystemTrayManager.cjs')
 const WindowManager = require('./WindowManager.cjs')
+const WindowStateManager = require('./WindowStateManager.cjs')
 // const { AuthManager } = require('./auth-manager')
 const isDev = process.env.NODE_ENV === 'development'
 
 // Keep a global reference of managers
+let configManager
+let windowStateManager
 let windowManager
 let systemTrayManager
 let notificationManager
@@ -61,6 +65,12 @@ function setupSecurity() {
 }
 
 async function createWindow() {
+  // Initialize configuration manager
+  configManager = new ConfigManager()
+
+  // Initialize window state manager
+  windowStateManager = new WindowStateManager(configManager)
+
   // Initialize Next.js server
   nextServerManager = new NextServerManager()
   const serverUrl = await nextServerManager.start()
@@ -72,8 +82,12 @@ async function createWindow() {
   // Initialize authentication manager
   // authManager = new AuthManager(apiBridge)
 
-  // Initialize window manager with server URL
-  windowManager = new WindowManager(serverUrl)
+  // Initialize window manager with server URL and managers
+  windowManager = new WindowManager(
+    serverUrl,
+    configManager,
+    windowStateManager,
+  )
 
   // Initialize system tray manager
   systemTrayManager = new SystemTrayManager(windowManager)
@@ -82,11 +96,16 @@ async function createWindow() {
   notificationManager = new NotificationManager(
     windowManager,
     systemTrayManager,
+    configManager,
   )
   await notificationManager.initialize()
 
   // Initialize shortcut manager
-  shortcutManager = new ShortcutManager(windowManager, notificationManager)
+  shortcutManager = new ShortcutManager(
+    windowManager,
+    notificationManager,
+    configManager,
+  )
   shortcutManager.initialize()
 
   // Create main window using WindowManager
@@ -147,6 +166,9 @@ app.on('before-quit', async () => {
   }
   if (notificationManager) {
     notificationManager.cleanup()
+  }
+  if (windowStateManager) {
+    windowStateManager.cleanup()
   }
   if (windowManager) {
     windowManager.cleanup()
@@ -610,6 +632,165 @@ ipcMain.handle('todo-toggle-complete', async (_event, id, currentCompleted) => {
     console.error('Failed to toggle todo completion:', error)
     throw new Error('Failed to toggle todo')
   }
+})
+
+// Configuration management IPC handlers
+ipcMain.handle('config-get', (event, path, defaultValue) => {
+  if (configManager) {
+    return configManager.get(path, defaultValue)
+  }
+  return defaultValue
+})
+
+ipcMain.handle('config-set', (event, path, value) => {
+  if (configManager) {
+    return configManager.set(path, value)
+  }
+  return false
+})
+
+ipcMain.handle('config-get-all', () => {
+  if (configManager) {
+    return configManager.getAll()
+  }
+  return {}
+})
+
+ipcMain.handle('config-get-section', (event, section) => {
+  if (configManager) {
+    return configManager.getSection(section)
+  }
+  return {}
+})
+
+ipcMain.handle('config-update', (event, updates) => {
+  if (configManager) {
+    return configManager.update(updates)
+  }
+  return false
+})
+
+ipcMain.handle('config-reset', () => {
+  if (configManager) {
+    return configManager.reset()
+  }
+  return false
+})
+
+ipcMain.handle('config-reset-section', (event, section) => {
+  if (configManager) {
+    return configManager.resetSection(section)
+  }
+  return false
+})
+
+ipcMain.handle('config-validate', () => {
+  if (configManager) {
+    return configManager.validate()
+  }
+  return { isValid: false, errors: ['Configuration manager not available'] }
+})
+
+ipcMain.handle('config-export', (event, filePath) => {
+  if (configManager) {
+    return configManager.exportConfig(filePath)
+  }
+  return false
+})
+
+ipcMain.handle('config-import', (event, filePath) => {
+  if (configManager) {
+    return configManager.importConfig(filePath)
+  }
+  return false
+})
+
+ipcMain.handle('config-backup', () => {
+  if (configManager) {
+    return configManager.backup()
+  }
+  return null
+})
+
+ipcMain.handle('config-get-paths', () => {
+  if (configManager) {
+    return configManager.getConfigPaths()
+  }
+  return {}
+})
+
+// Window state management IPC handlers
+ipcMain.handle('window-state-get', (event, windowType) => {
+  if (windowStateManager) {
+    return windowStateManager.getWindowState(windowType)
+  }
+  return null
+})
+
+ipcMain.handle('window-state-set', (event, windowType, properties) => {
+  if (windowStateManager) {
+    return windowStateManager.setWindowState(windowType, properties)
+  }
+  return false
+})
+
+ipcMain.handle('window-state-reset', (event, windowType) => {
+  if (windowStateManager) {
+    return windowStateManager.resetWindowState(windowType)
+  }
+  return false
+})
+
+ipcMain.handle('window-state-get-stats', () => {
+  if (windowStateManager) {
+    return windowStateManager.getStats()
+  }
+  return {}
+})
+
+ipcMain.handle(
+  'window-state-move-to-display',
+  (event, windowType, displayId) => {
+    if (windowStateManager && windowManager) {
+      const browserWindow =
+        windowType === 'main'
+          ? windowManager.getMainWindow()
+          : windowManager.getFloatingNavigator()
+
+      return windowStateManager.moveWindowToDisplay(
+        windowType,
+        displayId,
+        browserWindow,
+      )
+    }
+    return false
+  },
+)
+
+ipcMain.handle('window-state-snap-to-edge', (event, windowType, edge) => {
+  if (windowStateManager && windowManager) {
+    const browserWindow =
+      windowType === 'main'
+        ? windowManager.getMainWindow()
+        : windowManager.getFloatingNavigator()
+
+    return windowStateManager.snapWindowToEdge(windowType, edge, browserWindow)
+  }
+  return false
+})
+
+ipcMain.handle('window-state-get-display', (event, windowType) => {
+  if (windowStateManager) {
+    return windowStateManager.getWindowDisplay(windowType)
+  }
+  return null
+})
+
+ipcMain.handle('window-state-get-all-displays', () => {
+  if (windowStateManager) {
+    return windowStateManager.getAllDisplays()
+  }
+  return []
 })
 
 // Floating navigator shortcut management

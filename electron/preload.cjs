@@ -48,6 +48,30 @@ const ALLOWED_CHANNELS = {
   'shortcuts-disable': true,
   'shortcuts-get-stats': true,
 
+  // Configuration management
+  'config-get': true,
+  'config-set': true,
+  'config-get-all': true,
+  'config-get-section': true,
+  'config-update': true,
+  'config-reset': true,
+  'config-reset-section': true,
+  'config-validate': true,
+  'config-export': true,
+  'config-import': true,
+  'config-backup': true,
+  'config-get-paths': true,
+
+  // Window state management
+  'window-state-get': true,
+  'window-state-set': true,
+  'window-state-reset': true,
+  'window-state-get-stats': true,
+  'window-state-move-to-display': true,
+  'window-state-snap-to-edge': true,
+  'window-state-get-display': true,
+  'window-state-get-all-displays': true,
+
   // App operations
   'app-version': true,
   'app-quit': true,
@@ -648,6 +672,370 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         console.error('Failed to sync auth from web:', error)
         throw new Error('Failed to sync authentication')
+      }
+    },
+  },
+
+  // Configuration management APIs
+  config: {
+    /**
+     * Get configuration value by path
+     */
+    get: async (path, defaultValue) => {
+      if (!path || typeof path !== 'string') {
+        throw new Error('Configuration path is required')
+      }
+
+      const sanitizedPath = sanitizeData(path)
+      const sanitizedDefault = sanitizeData(defaultValue)
+
+      try {
+        return await ipcRenderer.invoke(
+          'config-get',
+          sanitizedPath,
+          sanitizedDefault,
+        )
+      } catch (error) {
+        console.error('Failed to get config value:', error)
+        return defaultValue
+      }
+    },
+
+    /**
+     * Set configuration value by path
+     */
+    set: async (path, value) => {
+      if (!path || typeof path !== 'string') {
+        throw new Error('Configuration path is required')
+      }
+
+      const sanitizedPath = sanitizeData(path)
+      const sanitizedValue = sanitizeData(value)
+
+      try {
+        return await ipcRenderer.invoke(
+          'config-set',
+          sanitizedPath,
+          sanitizedValue,
+        )
+      } catch (error) {
+        console.error('Failed to set config value:', error)
+        throw new Error('Failed to update configuration')
+      }
+    },
+
+    /**
+     * Get entire configuration
+     */
+    getAll: async () => {
+      try {
+        return await ipcRenderer.invoke('config-get-all')
+      } catch (error) {
+        console.error('Failed to get all config:', error)
+        return {}
+      }
+    },
+
+    /**
+     * Get configuration section
+     */
+    getSection: async (section) => {
+      if (!section || typeof section !== 'string') {
+        throw new Error('Configuration section is required')
+      }
+
+      const sanitizedSection = sanitizeData(section)
+
+      try {
+        return await ipcRenderer.invoke('config-get-section', sanitizedSection)
+      } catch (error) {
+        console.error('Failed to get config section:', error)
+        return {}
+      }
+    },
+
+    /**
+     * Update multiple configuration values
+     */
+    update: async (updates) => {
+      if (!updates || typeof updates !== 'object') {
+        throw new Error('Configuration updates must be an object')
+      }
+
+      const sanitizedUpdates = sanitizeData(updates)
+
+      try {
+        return await ipcRenderer.invoke('config-update', sanitizedUpdates)
+      } catch (error) {
+        console.error('Failed to update config:', error)
+        throw new Error('Failed to update configuration')
+      }
+    },
+
+    /**
+     * Reset configuration to defaults
+     */
+    reset: async () => {
+      try {
+        return await ipcRenderer.invoke('config-reset')
+      } catch (error) {
+        console.error('Failed to reset config:', error)
+        throw new Error('Failed to reset configuration')
+      }
+    },
+
+    /**
+     * Reset specific section to defaults
+     */
+    resetSection: async (section) => {
+      if (!section || typeof section !== 'string') {
+        throw new Error('Configuration section is required')
+      }
+
+      const sanitizedSection = sanitizeData(section)
+
+      try {
+        return await ipcRenderer.invoke(
+          'config-reset-section',
+          sanitizedSection,
+        )
+      } catch (error) {
+        console.error('Failed to reset config section:', error)
+        throw new Error('Failed to reset configuration section')
+      }
+    },
+
+    /**
+     * Validate configuration
+     */
+    validate: async () => {
+      try {
+        return await ipcRenderer.invoke('config-validate')
+      } catch (error) {
+        console.error('Failed to validate config:', error)
+        return { isValid: false, errors: ['Validation failed'] }
+      }
+    },
+
+    /**
+     * Export configuration to file
+     */
+    export: async (filePath) => {
+      if (!filePath || typeof filePath !== 'string') {
+        throw new Error('File path is required')
+      }
+
+      const sanitizedPath = sanitizeData(filePath)
+
+      try {
+        return await ipcRenderer.invoke('config-export', sanitizedPath)
+      } catch (error) {
+        console.error('Failed to export config:', error)
+        throw new Error('Failed to export configuration')
+      }
+    },
+
+    /**
+     * Import configuration from file
+     */
+    import: async (filePath) => {
+      if (!filePath || typeof filePath !== 'string') {
+        throw new Error('File path is required')
+      }
+
+      const sanitizedPath = sanitizeData(filePath)
+
+      try {
+        return await ipcRenderer.invoke('config-import', sanitizedPath)
+      } catch (error) {
+        console.error('Failed to import config:', error)
+        throw new Error('Failed to import configuration')
+      }
+    },
+
+    /**
+     * Backup current configuration
+     */
+    backup: async () => {
+      try {
+        return await ipcRenderer.invoke('config-backup')
+      } catch (error) {
+        console.error('Failed to backup config:', error)
+        return null
+      }
+    },
+
+    /**
+     * Get configuration file paths
+     */
+    getPaths: async () => {
+      try {
+        return await ipcRenderer.invoke('config-get-paths')
+      } catch (error) {
+        console.error('Failed to get config paths:', error)
+        return {}
+      }
+    },
+  },
+
+  // Window state management APIs
+  windowState: {
+    /**
+     * Get window state
+     */
+    get: async (windowType) => {
+      if (!windowType || typeof windowType !== 'string') {
+        throw new Error('Window type is required')
+      }
+
+      const sanitizedType = sanitizeData(windowType)
+
+      try {
+        return await ipcRenderer.invoke('window-state-get', sanitizedType)
+      } catch (error) {
+        console.error('Failed to get window state:', error)
+        return null
+      }
+    },
+
+    /**
+     * Set window state properties
+     */
+    set: async (windowType, properties) => {
+      if (!windowType || typeof windowType !== 'string') {
+        throw new Error('Window type is required')
+      }
+      if (!properties || typeof properties !== 'object') {
+        throw new Error('Window properties must be an object')
+      }
+
+      const sanitizedType = sanitizeData(windowType)
+      const sanitizedProperties = sanitizeData(properties)
+
+      try {
+        return await ipcRenderer.invoke(
+          'window-state-set',
+          sanitizedType,
+          sanitizedProperties,
+        )
+      } catch (error) {
+        console.error('Failed to set window state:', error)
+        throw new Error('Failed to update window state')
+      }
+    },
+
+    /**
+     * Reset window state to defaults
+     */
+    reset: async (windowType) => {
+      if (!windowType || typeof windowType !== 'string') {
+        throw new Error('Window type is required')
+      }
+
+      const sanitizedType = sanitizeData(windowType)
+
+      try {
+        return await ipcRenderer.invoke('window-state-reset', sanitizedType)
+      } catch (error) {
+        console.error('Failed to reset window state:', error)
+        throw new Error('Failed to reset window state')
+      }
+    },
+
+    /**
+     * Get window state statistics
+     */
+    getStats: async () => {
+      try {
+        return await ipcRenderer.invoke('window-state-get-stats')
+      } catch (error) {
+        console.error('Failed to get window state stats:', error)
+        return {}
+      }
+    },
+
+    /**
+     * Move window to specific display
+     */
+    moveToDisplay: async (windowType, displayId) => {
+      if (!windowType || typeof windowType !== 'string') {
+        throw new Error('Window type is required')
+      }
+      if (!displayId || typeof displayId !== 'number') {
+        throw new Error('Display ID is required')
+      }
+
+      const sanitizedType = sanitizeData(windowType)
+      const sanitizedDisplayId = sanitizeData(displayId)
+
+      try {
+        return await ipcRenderer.invoke(
+          'window-state-move-to-display',
+          sanitizedType,
+          sanitizedDisplayId,
+        )
+      } catch (error) {
+        console.error('Failed to move window to display:', error)
+        throw new Error('Failed to move window to display')
+      }
+    },
+
+    /**
+     * Snap window to edge of current display
+     */
+    snapToEdge: async (windowType, edge) => {
+      if (!windowType || typeof windowType !== 'string') {
+        throw new Error('Window type is required')
+      }
+      if (!edge || typeof edge !== 'string') {
+        throw new Error('Edge is required')
+      }
+
+      const sanitizedType = sanitizeData(windowType)
+      const sanitizedEdge = sanitizeData(edge)
+
+      try {
+        return await ipcRenderer.invoke(
+          'window-state-snap-to-edge',
+          sanitizedType,
+          sanitizedEdge,
+        )
+      } catch (error) {
+        console.error('Failed to snap window to edge:', error)
+        throw new Error('Failed to snap window to edge')
+      }
+    },
+
+    /**
+     * Get display information for a window
+     */
+    getDisplay: async (windowType) => {
+      if (!windowType || typeof windowType !== 'string') {
+        throw new Error('Window type is required')
+      }
+
+      const sanitizedType = sanitizeData(windowType)
+
+      try {
+        return await ipcRenderer.invoke(
+          'window-state-get-display',
+          sanitizedType,
+        )
+      } catch (error) {
+        console.error('Failed to get window display:', error)
+        return null
+      }
+    },
+
+    /**
+     * Get all available displays
+     */
+    getAllDisplays: async () => {
+      try {
+        return await ipcRenderer.invoke('window-state-get-all-displays')
+      } catch (error) {
+        console.error('Failed to get all displays:', error)
+        return []
       }
     },
   },

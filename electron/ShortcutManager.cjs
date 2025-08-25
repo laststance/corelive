@@ -1,14 +1,29 @@
 const { globalShortcut, BrowserWindow } = require('electron')
 
 class ShortcutManager {
-  constructor(windowManager, notificationManager) {
+  constructor(windowManager, notificationManager, configManager = null) {
     this.windowManager = windowManager
     this.notificationManager = notificationManager
+    this.configManager = configManager
     this.registeredShortcuts = new Map()
-    this.isEnabled = true
 
-    // Default shortcuts - OS-specific
-    this.defaultShortcuts = this.getDefaultShortcuts()
+    // Load settings from configuration
+    this.loadSettings()
+  }
+
+  /**
+   * Load shortcut settings from configuration
+   */
+  loadSettings() {
+    if (this.configManager) {
+      const shortcutConfig = this.configManager.getSection('shortcuts')
+      this.isEnabled = shortcutConfig.enabled
+      this.shortcuts = { ...shortcutConfig }
+      delete this.shortcuts.enabled // Remove the enabled flag from shortcuts list
+    } else {
+      this.isEnabled = true
+      this.shortcuts = this.getDefaultShortcuts()
+    }
   }
 
   /**
@@ -45,10 +60,10 @@ class ShortcutManager {
   }
 
   /**
-   * Register all default shortcuts
+   * Register all shortcuts from configuration
    */
   registerDefaultShortcuts() {
-    const shortcuts = this.defaultShortcuts
+    const shortcuts = this.shortcuts
 
     // New task shortcut
     this.registerShortcut(shortcuts.newTask, 'newTask', () => {
@@ -301,11 +316,24 @@ class ShortcutManager {
       // Unregister all current shortcuts
       this.unregisterAllShortcuts()
 
+      // Update internal shortcuts
+      this.shortcuts = { ...this.shortcuts, ...newShortcuts }
+
+      // Save to configuration if available
+      if (this.configManager) {
+        for (const [key, value] of Object.entries(newShortcuts)) {
+          this.configManager.set(`shortcuts.${key}`, value)
+        }
+      }
+
       // Register new shortcuts
-      for (const [id, accelerator] of Object.entries(newShortcuts)) {
-        const handler = this.getHandlerForShortcut(id)
-        if (handler) {
-          this.registerShortcut(accelerator, id, handler)
+      for (const [id, accelerator] of Object.entries(this.shortcuts)) {
+        if (id !== 'enabled') {
+          // Skip the enabled flag
+          const handler = this.getHandlerForShortcut(id)
+          if (handler) {
+            this.registerShortcut(accelerator, id, handler)
+          }
         }
       }
 
@@ -348,7 +376,14 @@ class ShortcutManager {
    * Get default shortcuts
    */
   getDefaultShortcutsConfig() {
-    return { ...this.defaultShortcuts }
+    return { ...this.getDefaultShortcuts() }
+  }
+
+  /**
+   * Get current shortcuts configuration
+   */
+  getCurrentShortcuts() {
+    return { ...this.shortcuts }
   }
 
   /**
@@ -363,6 +398,12 @@ class ShortcutManager {
    */
   enable() {
     this.isEnabled = true
+
+    // Save to configuration if available
+    if (this.configManager) {
+      this.configManager.set('shortcuts.enabled', true)
+    }
+
     this.registerDefaultShortcuts()
   }
 
@@ -371,6 +412,12 @@ class ShortcutManager {
    */
   disable() {
     this.isEnabled = false
+
+    // Save to configuration if available
+    if (this.configManager) {
+      this.configManager.set('shortcuts.enabled', false)
+    }
+
     this.unregisterAllShortcuts()
   }
 

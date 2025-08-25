@@ -77,14 +77,14 @@
     - Implement OS-specific shortcut variations (Ctrl vs Cmd)
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 7. Implement configuration and persistence
-  - [ ] 7.1 Create application configuration system
+- [x] 7. Implement configuration and persistence
+  - [x] 7.1 Create application configuration system
     - Implement configuration file management for user preferences
     - Add settings for window positions, tray behavior, notifications, and shortcuts
     - Create configuration validation and migration system
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
 
-  - [ ] 7.2 Implement window state persistence
+  - [x] 7.2 Implement window state persistence
     - Save and restore window positions, sizes, and display assignments
     - Persist floating navigator preferences and position
     - Handle multi-monitor setups and display changes

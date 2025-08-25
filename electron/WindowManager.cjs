@@ -1,142 +1,51 @@
-const fs = require('fs')
 const path = require('path')
 
-const { BrowserWindow, screen } = require('electron')
+const { BrowserWindow } = require('electron')
 
 class WindowManager {
-  constructor(serverUrl = null) {
+  constructor(
+    serverUrl = null,
+    configManager = null,
+    windowStateManager = null,
+  ) {
     this.mainWindow = null
     this.floatingNavigator = null
-    this.configPath = path.join(__dirname, 'window-state.json')
     this.isDev = process.env.NODE_ENV === 'development'
     this.serverUrl = serverUrl
+    this.configManager = configManager
+    this.windowStateManager = windowStateManager
   }
 
   /**
-   * Load window state from persistent storage
-   */
-  loadWindowState() {
-    try {
-      if (fs.existsSync(this.configPath)) {
-        const data = fs.readFileSync(this.configPath, 'utf8')
-        return JSON.parse(data)
-      }
-    } catch (error) {
-      console.error('Failed to load window state:', error)
-    }
-
-    // Return default state if no saved state exists
-    return {
-      main: {
-        width: 1200,
-        height: 800,
-        x: undefined,
-        y: undefined,
-        isMaximized: false,
-      },
-      floating: {
-        width: 300,
-        height: 400,
-        x: undefined,
-        y: undefined,
-        isVisible: false,
-      },
-    }
-  }
-
-  /**
-   * Save window state to persistent storage
+   * Save window state using WindowStateManager
    */
   saveWindowState() {
-    try {
-      const state = {
-        main: this.getMainWindowState(),
-        floating: this.getFloatingNavigatorState(),
+    if (this.windowStateManager) {
+      if (this.mainWindow) {
+        this.windowStateManager.updateWindowState('main', this.mainWindow)
       }
-
-      fs.writeFileSync(this.configPath, JSON.stringify(state, null, 2))
-    } catch (error) {
-      console.error('Failed to save window state:', error)
-    }
-  }
-
-  /**
-   * Get current main window state
-   */
-  getMainWindowState() {
-    if (!this.mainWindow) return null
-
-    const bounds = this.mainWindow.getBounds()
-    return {
-      width: bounds.width,
-      height: bounds.height,
-      x: bounds.x,
-      y: bounds.y,
-      isMaximized: this.mainWindow.isMaximized(),
-    }
-  }
-
-  /**
-   * Get current floating navigator state
-   */
-  getFloatingNavigatorState() {
-    if (!this.floatingNavigator) return null
-
-    const bounds = this.floatingNavigator.getBounds()
-    return {
-      width: bounds.width,
-      height: bounds.height,
-      x: bounds.x,
-      y: bounds.y,
-      isVisible: this.floatingNavigator.isVisible(),
-    }
-  }
-
-  /**
-   * Ensure window is visible on screen
-   */
-  ensureVisibleOnSomeDisplay(windowState) {
-    const displays = screen.getAllDisplays()
-    let isVisible = false
-
-    for (const display of displays) {
-      const { x, y, width, height } = display.workArea
-      if (
-        windowState.x >= x &&
-        windowState.y >= y &&
-        windowState.x < x + width &&
-        windowState.y < y + height
-      ) {
-        isVisible = true
-        break
+      if (this.floatingNavigator) {
+        this.windowStateManager.updateWindowState(
+          'floating',
+          this.floatingNavigator,
+        )
       }
     }
-
-    if (!isVisible) {
-      // Reset to center of primary display
-      const primaryDisplay = screen.getPrimaryDisplay()
-      const { width, height } = primaryDisplay.workAreaSize
-      windowState.x = Math.round((width - windowState.width) / 2)
-      windowState.y = Math.round((height - windowState.height) / 2)
-    }
-
-    return windowState
   }
 
   /**
    * Create the main application window
    */
   createMainWindow() {
-    const savedState = this.loadWindowState()
-    const mainState = this.ensureVisibleOnSomeDisplay(savedState.main)
+    // Get window options from WindowStateManager
+    const windowOptions = this.windowStateManager
+      ? this.windowStateManager.getWindowOptions('main')
+      : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
+
+    // Configuration settings are handled by WindowStateManager
 
     this.mainWindow = new BrowserWindow({
-      width: mainState.width,
-      height: mainState.height,
-      x: mainState.x,
-      y: mainState.y,
-      minWidth: 800,
-      minHeight: 600,
+      ...windowOptions,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -147,7 +56,10 @@ class WindowManager {
         experimentalFeatures: false,
         sandbox: false,
         spellcheck: false,
-        devTools: this.isDev,
+        devTools:
+          this.isDev ||
+          (this.configManager &&
+            this.configManager.get('advanced.enableDevTools', false)),
       },
       icon: path.join(__dirname, '../public/favicon.ico'),
       show: false,
@@ -156,9 +68,9 @@ class WindowManager {
       autoHideMenuBar: true,
     })
 
-    // Restore maximized state
-    if (mainState.isMaximized) {
-      this.mainWindow.maximize()
+    // Apply saved window state
+    if (this.windowStateManager) {
+      this.windowStateManager.applyWindowState('main', this.mainWindow)
     }
 
     // Load the application
@@ -177,11 +89,39 @@ class WindowManager {
       }
     })
 
-    // Save state on window events
-    this.mainWindow.on('resize', () => this.saveWindowState())
-    this.mainWindow.on('move', () => this.saveWindowState())
-    this.mainWindow.on('maximize', () => this.saveWindowState())
-    this.mainWindow.on('unmaximize', () => this.saveWindowState())
+    // Save state on window events with debouncing
+    this.mainWindow.on('resize', () => {
+      if (this.windowStateManager) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'main',
+          this.mainWindow,
+        )
+      }
+    })
+    this.mainWindow.on('move', () => {
+      if (this.windowStateManager) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'main',
+          this.mainWindow,
+        )
+      }
+    })
+    this.mainWindow.on('maximize', () => {
+      if (this.windowStateManager) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'main',
+          this.mainWindow,
+        )
+      }
+    })
+    this.mainWindow.on('unmaximize', () => {
+      if (this.windowStateManager) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'main',
+          this.mainWindow,
+        )
+      }
+    })
 
     // Handle window close - will be overridden by SystemTrayManager
     this.mainWindow.on('close', () => {
@@ -202,17 +142,24 @@ class WindowManager {
       return this.floatingNavigator
     }
 
-    const savedState = this.loadWindowState()
-    const floatingState = this.ensureVisibleOnSomeDisplay(savedState.floating)
+    // Get window options from WindowStateManager
+    const windowOptions = this.windowStateManager
+      ? this.windowStateManager.getWindowOptions('floating')
+      : {
+          width: 300,
+          height: 400,
+          minWidth: 250,
+          minHeight: 300,
+          maxWidth: 400,
+        }
+
+    // Get configuration settings
+    const floatingConfig = this.configManager
+      ? this.configManager.getSection('window').floating
+      : { frame: false, alwaysOnTop: true, resizable: true }
 
     this.floatingNavigator = new BrowserWindow({
-      width: floatingState.width,
-      height: floatingState.height,
-      x: floatingState.x,
-      y: floatingState.y,
-      minWidth: 250,
-      minHeight: 300,
-      maxWidth: 400,
+      ...windowOptions,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -222,12 +169,15 @@ class WindowManager {
         allowRunningInsecureContent: false,
         experimentalFeatures: false,
         sandbox: false,
-        devTools: this.isDev,
+        devTools:
+          this.isDev ||
+          (this.configManager &&
+            this.configManager.get('advanced.enableDevTools', false)),
       },
-      frame: false,
-      alwaysOnTop: true,
+      frame: floatingConfig.frame,
+      alwaysOnTop: floatingConfig.alwaysOnTop,
       skipTaskbar: true,
-      resizable: true,
+      resizable: floatingConfig.resizable,
       show: false,
       backgroundColor: '#ffffff',
       transparent: false,
@@ -244,18 +194,35 @@ class WindowManager {
 
     this.floatingNavigator.loadURL(floatingUrl)
 
-    // Save state on window events
-    this.floatingNavigator.on('resize', () => this.saveWindowState())
-    this.floatingNavigator.on('move', () => this.saveWindowState())
+    // Save state on window events with debouncing
+    this.floatingNavigator.on('resize', () => {
+      if (this.windowStateManager) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'floating',
+          this.floatingNavigator,
+        )
+      }
+    })
+    this.floatingNavigator.on('move', () => {
+      if (this.windowStateManager) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'floating',
+          this.floatingNavigator,
+        )
+      }
+    })
 
     this.floatingNavigator.on('closed', () => {
       this.floatingNavigator = null
       this.saveWindowState()
     })
 
-    // Show if it was visible before
-    if (floatingState.isVisible) {
-      this.floatingNavigator.show()
+    // Apply saved window state
+    if (this.windowStateManager) {
+      this.windowStateManager.applyWindowState(
+        'floating',
+        this.floatingNavigator,
+      )
     }
 
     return this.floatingNavigator

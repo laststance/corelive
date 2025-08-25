@@ -3,18 +3,37 @@ const path = require('path')
 const { Notification, nativeImage } = require('electron')
 
 class NotificationManager {
-  constructor(windowManager, systemTrayManager) {
+  constructor(windowManager, systemTrayManager, configManager = null) {
     this.windowManager = windowManager
     this.systemTrayManager = systemTrayManager
-    this.preferences = {
-      enabled: true,
-      taskCreated: true,
-      taskCompleted: true,
-      taskUpdated: true,
-      taskDeleted: false, // Usually less important
-      sound: true,
-    }
+    this.configManager = configManager
     this.activeNotifications = new Map()
+
+    // Load preferences from config or use defaults
+    this.loadPreferences()
+  }
+
+  /**
+   * Load notification preferences from configuration
+   */
+  loadPreferences() {
+    if (this.configManager) {
+      this.preferences = this.configManager.getSection('notifications')
+    } else {
+      // Fallback to default preferences
+      this.preferences = {
+        enabled: true,
+        taskCreated: true,
+        taskCompleted: true,
+        taskUpdated: true,
+        taskDeleted: false,
+        sound: true,
+        showInTray: true,
+        autoHide: true,
+        autoHideDelay: 5000,
+        position: 'topRight',
+      }
+    }
   }
 
   /**
@@ -347,6 +366,13 @@ class NotificationManager {
     this.preferences = {
       ...this.preferences,
       ...newPreferences,
+    }
+
+    // Save to configuration if available
+    if (this.configManager) {
+      for (const [key, value] of Object.entries(newPreferences)) {
+        this.configManager.set(`notifications.${key}`, value)
+      }
     }
   }
 
