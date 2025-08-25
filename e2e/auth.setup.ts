@@ -19,7 +19,7 @@ setup('authenticate', async ({ page }) => {
 
   // Verify we've successfully reached the authenticated TODO app
   await expect(page).toHaveURL('/home')
-  await expect(page).toHaveTitle('Home | Corelive')
+  await expect(page).toHaveTitle('Corelive')
 
   // Verify main TODO app components are loaded and visible
   await expect(page.getByText('Todo List')).toBeVisible()

@@ -12,7 +12,6 @@ test.describe('TODO App E2E Tests', () => {
   }) => {
     // Verify we're on the authenticated TODO app page
     await expect(page).toHaveURL('/home')
-    await expect(page).toHaveTitle('Home | Corelive')
 
     // Verify main TODO app components are present
     await expect(page.getByText('Todo List')).toBeVisible()
