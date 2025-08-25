@@ -40,24 +40,301 @@ class NotificationManager {
    * Initialize notification manager and check permissions
    */
   async initialize() {
-    // Check if notifications are supported
-    if (!Notification.isSupported()) {
-      console.warn('Notifications are not supported on this system')
-      this.preferences.enabled = false
+    try {
+      // Check if notifications are supported
+      if (!Notification.isSupported()) {
+        console.warn('Notifications are not supported on this system')
+        this.handleNotificationUnavailable('not_supported')
+        return false
+      }
+
+      // Check platform-specific permission requirements
+      const permissionResult = await this.checkNotificationPermissions()
+      if (!permissionResult.granted) {
+        console.warn(
+          'Notification permissions denied:',
+          permissionResult.reason,
+        )
+        this.handleNotificationPermissionDenied(permissionResult.reason)
+        return false
+      }
+
+      // Test notification capability with comprehensive error handling
+      const testResult = await this.testNotificationCapability()
+      if (!testResult.success) {
+        console.warn('Notification test failed:', testResult.error)
+        this.handleNotificationTestFailure(testResult.error)
+        return false
+      }
+
+      console.log('✅ Notifications initialized successfully')
+      return true
+    } catch (error) {
+      console.error('❌ Failed to initialize notification manager:', error)
+      this.handleNotificationInitializationFailure(error)
       return false
     }
+  }
 
-    // On macOS, we might need to request permission
-    if (process.platform === 'darwin') {
-      try {
-        // Electron automatically handles notification permissions on macOS
-        console.log('Notification permissions handled by Electron on macOS')
-      } catch (error) {
-        console.error('Failed to check notification permissions:', error)
+  /**
+   * Check notification permissions across platforms
+   */
+  async checkNotificationPermissions() {
+    try {
+      // On Windows and Linux, notifications are generally available
+      if (process.platform === 'win32' || process.platform === 'linux') {
+        return { granted: true, reason: 'platform_default' }
       }
+
+      // On macOS, check if we can create notifications
+      if (process.platform === 'darwin') {
+        try {
+          // Try to create a silent test notification
+          const testNotification = new Notification({
+            title: 'Permission Test',
+            body: 'Testing notification permissions',
+            silent: true,
+          })
+
+          // If we get here, permissions are likely granted
+          testNotification.close()
+          return { granted: true, reason: 'test_successful' }
+        } catch (permissionError) {
+          // Check specific error types
+          if (
+            permissionError.message.includes('permission') ||
+            permissionError.message.includes('denied')
+          ) {
+            return { granted: false, reason: 'permission_denied' }
+          }
+
+          return {
+            granted: false,
+            reason: 'unknown_error',
+            error: permissionError,
+          }
+        }
+      }
+
+      return { granted: true, reason: 'unknown_platform' }
+    } catch (error) {
+      return { granted: false, reason: 'check_failed', error }
+    }
+  }
+
+  /**
+   * Test notification capability with error handling
+   */
+  async testNotificationCapability() {
+    return new Promise((resolve) => {
+      try {
+        const testNotification = new Notification({
+          title: 'Test',
+          body: 'Testing notification support',
+          silent: true,
+        })
+
+        let resolved = false
+
+        // Handle successful show
+        testNotification.on('show', () => {
+          if (!resolved) {
+            resolved = true
+            testNotification.close()
+            resolve({ success: true })
+          }
+        })
+
+        // Handle failures
+        testNotification.on('failed', (event, error) => {
+          if (!resolved) {
+            resolved = true
+            resolve({ success: false, error: error || 'notification_failed' })
+          }
+        })
+
+        // Handle click (means it worked)
+        testNotification.on('click', () => {
+          if (!resolved) {
+            resolved = true
+            testNotification.close()
+            resolve({ success: true })
+          }
+        })
+
+        // Timeout fallback
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true
+            try {
+              testNotification.close()
+            } catch {
+              // Ignore close errors
+            }
+            resolve({ success: true }) // Assume success if no explicit failure
+          }
+        }, 1000)
+
+        // Show the test notification
+        testNotification.show()
+      } catch (error) {
+        resolve({ success: false, error })
+      }
+    })
+  }
+
+  /**
+   * Handle notification unavailable scenario
+   */
+  handleNotificationUnavailable(_reason) {
+    this.preferences.enabled = false
+    this.fallbackMode = 'unavailable'
+
+    console.log('📱 Notifications unavailable, enabling fallback mode')
+
+    // Could implement alternative notification methods here
+    // e.g., system tray tooltip updates, window title changes, etc.
+  }
+
+  /**
+   * Handle notification permission denied
+   */
+  handleNotificationPermissionDenied(reason) {
+    this.preferences.enabled = false
+    this.fallbackMode = 'permission_denied'
+
+    console.log('🔒 Notification permissions denied, enabling fallback mode')
+
+    // Show user-friendly message about enabling notifications
+    this.showPermissionDeniedGuidance(reason)
+  }
+
+  /**
+   * Handle notification test failure
+   */
+  handleNotificationTestFailure(_error) {
+    this.preferences.enabled = false
+    this.fallbackMode = 'test_failed'
+
+    console.log('⚠️ Notification test failed, enabling fallback mode')
+
+    // Implement graceful degradation
+    this.enableFallbackNotificationMethods()
+  }
+
+  /**
+   * Handle notification initialization failure
+   */
+  handleNotificationInitializationFailure(error) {
+    this.preferences.enabled = false
+    this.fallbackMode = 'init_failed'
+
+    console.log('❌ Notification initialization failed, enabling fallback mode')
+
+    // Log detailed error for debugging
+    console.error('Notification initialization error details:', error)
+  }
+
+  /**
+   * Show guidance for enabling notifications
+   */
+  showPermissionDeniedGuidance(reason) {
+    // Use system tray or window title to inform user
+    if (this.systemTrayManager && this.systemTrayManager.hasTray()) {
+      this.systemTrayManager.setTrayTooltip(
+        'TODO App - Notifications disabled (check system settings)',
+      )
     }
 
-    return true
+    // Could also show an in-app message when main window is focused
+    if (this.windowManager && this.windowManager.hasMainWindow()) {
+      const mainWindow = this.windowManager.getMainWindow()
+      mainWindow.webContents.send('notification-permission-denied', {
+        reason,
+        guidance: this.getPermissionGuidanceForPlatform(),
+      })
+    }
+  }
+
+  /**
+   * Get platform-specific guidance for enabling notifications
+   */
+  getPermissionGuidanceForPlatform() {
+    switch (process.platform) {
+      case 'darwin':
+        return 'Enable notifications in System Preferences > Notifications > TODO App'
+      case 'win32':
+        return 'Enable notifications in Windows Settings > System > Notifications & actions'
+      case 'linux':
+        return 'Check your desktop environment notification settings'
+      default:
+        return 'Check your system notification settings'
+    }
+  }
+
+  /**
+   * Enable fallback notification methods
+   */
+  enableFallbackNotificationMethods() {
+    this.fallbackMethods = {
+      trayTooltip: true,
+      windowTitle: true,
+      inAppBanner: true,
+    }
+
+    console.log('📢 Enabled fallback notification methods')
+  }
+
+  /**
+   * Show fallback notification when normal notifications fail
+   */
+  showFallbackNotification(title, body, options = {}) {
+    if (!this.fallbackMethods) return
+
+    try {
+      // Update system tray tooltip
+      if (
+        this.fallbackMethods.trayTooltip &&
+        this.systemTrayManager &&
+        this.systemTrayManager.hasTray()
+      ) {
+        this.systemTrayManager.setTrayTooltip(`${title}: ${body}`)
+      }
+
+      // Update window title
+      if (
+        this.fallbackMethods.windowTitle &&
+        this.windowManager &&
+        this.windowManager.hasMainWindow()
+      ) {
+        const mainWindow = this.windowManager.getMainWindow()
+        const originalTitle = mainWindow.getTitle()
+        mainWindow.setTitle(`${title} - ${originalTitle}`)
+
+        // Restore original title after delay
+        setTimeout(() => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.setTitle(originalTitle)
+          }
+        }, 3000)
+      }
+
+      // Send in-app notification
+      if (
+        this.fallbackMethods.inAppBanner &&
+        this.windowManager &&
+        this.windowManager.hasMainWindow()
+      ) {
+        const mainWindow = this.windowManager.getMainWindow()
+        mainWindow.webContents.send('show-fallback-notification', {
+          title,
+          body,
+          options,
+        })
+      }
+    } catch (error) {
+      console.warn('Fallback notification methods failed:', error)
+    }
   }
 
   /**
@@ -192,10 +469,12 @@ class NotificationManager {
   }
 
   /**
-   * Show custom notification
+   * Show custom notification with fallback support
    */
   showNotification(title, body, options = {}) {
+    // If notifications are disabled or not supported, use fallback methods
     if (!this.preferences.enabled || !Notification.isSupported()) {
+      this.showFallbackNotification(title, body, options)
       return null
     }
 
@@ -242,18 +521,27 @@ class NotificationManager {
         console.log(`Notification shown: ${title}`)
       })
 
-      // Handle notification failed
+      // Handle notification failed - use fallback methods
       notification.on('failed', (event, error) => {
-        console.error('Notification failed:', error)
+        console.error('Notification failed, using fallback methods:', error)
         if (options.tag) {
           this.activeNotifications.delete(options.tag)
         }
+
+        // Use fallback notification methods
+        this.showFallbackNotification(title, body, options)
       })
 
       notification.show()
       return notification
     } catch (error) {
-      console.error('Failed to show notification:', error)
+      console.error(
+        'Failed to show notification, using fallback methods:',
+        error,
+      )
+
+      // Use fallback notification methods
+      this.showFallbackNotification(title, body, options)
       return null
     }
   }

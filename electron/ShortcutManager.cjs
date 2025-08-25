@@ -46,13 +46,37 @@ class ShortcutManager {
   }
 
   /**
-   * Initialize and register all default shortcuts
+   * Initialize and register all default shortcuts with conflict handling
    */
   initialize() {
     try {
-      this.registerDefaultShortcuts()
-      console.log('✅ Keyboard shortcuts initialized')
-      return true
+      const results = this.registerDefaultShortcuts()
+
+      const successCount = results.filter((r) => r.success).length
+      const totalCount = results.length
+
+      if (successCount === totalCount) {
+        console.log('✅ All keyboard shortcuts initialized successfully')
+        return true
+      } else if (successCount > 0) {
+        console.log(
+          `⚠️ Keyboard shortcuts partially initialized: ${successCount}/${totalCount} successful`,
+        )
+
+        // Show summary notification
+        if (this.notificationManager) {
+          this.notificationManager.showNotification(
+            'Shortcuts Initialized',
+            `${successCount}/${totalCount} shortcuts registered successfully`,
+            { silent: true },
+          )
+        }
+
+        return true
+      } else {
+        console.error('❌ Failed to initialize any keyboard shortcuts')
+        return false
+      }
     } catch (error) {
       console.error('❌ Failed to initialize keyboard shortcuts:', error)
       return false
@@ -60,61 +84,89 @@ class ShortcutManager {
   }
 
   /**
-   * Register all shortcuts from configuration
+   * Register all shortcuts from configuration with result tracking
    */
   registerDefaultShortcuts() {
     const shortcuts = this.shortcuts
+    const results = []
 
     // New task shortcut
-    this.registerShortcut(shortcuts.newTask, 'newTask', () => {
-      this.handleNewTaskShortcut()
+    results.push({
+      id: 'newTask',
+      success: this.registerShortcut(shortcuts.newTask, 'newTask', () => {
+        this.handleNewTaskShortcut()
+      }),
     })
 
     // Search shortcut
-    this.registerShortcut(shortcuts.search, 'search', () => {
-      this.handleSearchShortcut()
+    results.push({
+      id: 'search',
+      success: this.registerShortcut(shortcuts.search, 'search', () => {
+        this.handleSearchShortcut()
+      }),
     })
 
     // Toggle floating navigator
-    this.registerShortcut(
-      shortcuts.toggleFloatingNavigator,
-      'toggleFloatingNavigator',
-      () => {
-        this.handleToggleFloatingNavigator()
-      },
-    )
+    results.push({
+      id: 'toggleFloatingNavigator',
+      success: this.registerShortcut(
+        shortcuts.toggleFloatingNavigator,
+        'toggleFloatingNavigator',
+        () => {
+          this.handleToggleFloatingNavigator()
+        },
+      ),
+    })
 
     // Show main window
-    this.registerShortcut(shortcuts.showMainWindow, 'showMainWindow', () => {
-      this.handleShowMainWindow()
+    results.push({
+      id: 'showMainWindow',
+      success: this.registerShortcut(
+        shortcuts.showMainWindow,
+        'showMainWindow',
+        () => {
+          this.handleShowMainWindow()
+        },
+      ),
     })
 
     // Minimize window
-    this.registerShortcut(shortcuts.minimize, 'minimize', () => {
-      this.handleMinimizeWindow()
+    results.push({
+      id: 'minimize',
+      success: this.registerShortcut(shortcuts.minimize, 'minimize', () => {
+        this.handleMinimizeWindow()
+      }),
     })
 
     // Toggle always on top (for floating navigator)
-    this.registerShortcut(
-      shortcuts.toggleAlwaysOnTop,
-      'toggleAlwaysOnTop',
-      () => {
-        this.handleToggleAlwaysOnTop()
-      },
-    )
+    results.push({
+      id: 'toggleAlwaysOnTop',
+      success: this.registerShortcut(
+        shortcuts.toggleAlwaysOnTop,
+        'toggleAlwaysOnTop',
+        () => {
+          this.handleToggleAlwaysOnTop()
+        },
+      ),
+    })
 
     // Focus floating navigator
-    this.registerShortcut(
-      shortcuts.focusFloatingNavigator,
-      'focusFloatingNavigator',
-      () => {
-        this.handleFocusFloatingNavigator()
-      },
-    )
+    results.push({
+      id: 'focusFloatingNavigator',
+      success: this.registerShortcut(
+        shortcuts.focusFloatingNavigator,
+        'focusFloatingNavigator',
+        () => {
+          this.handleFocusFloatingNavigator()
+        },
+      ),
+    })
+
+    return results
   }
 
   /**
-   * Register a single keyboard shortcut
+   * Register a single keyboard shortcut with conflict resolution
    */
   registerShortcut(accelerator, id, callback) {
     if (!this.isEnabled) return false
@@ -125,6 +177,14 @@ class ShortcutManager {
         this.unregisterShortcut(id)
       }
 
+      // Check if shortcut is already registered by another application
+      if (globalShortcut.isRegistered(accelerator)) {
+        console.warn(
+          `⚠️ Shortcut ${accelerator} is already registered by another application`,
+        )
+        return this.handleShortcutConflict(accelerator, id, callback)
+      }
+
       const success = globalShortcut.register(accelerator, callback)
 
       if (success) {
@@ -132,18 +192,232 @@ class ShortcutManager {
           accelerator,
           callback,
           registeredAt: new Date(),
+          isAlternative: false,
         })
         console.log(`✅ Registered shortcut: ${accelerator} (${id})`)
         return true
       } else {
-        console.warn(
-          `⚠️ Failed to register shortcut: ${accelerator} (${id}) - may be in use`,
-        )
-        return false
+        console.warn(`⚠️ Failed to register shortcut: ${accelerator} (${id})`)
+        return this.handleShortcutConflict(accelerator, id, callback)
       }
     } catch (error) {
       console.error(`❌ Error registering shortcut ${accelerator}:`, error)
-      return false
+      return this.handleShortcutConflict(accelerator, id, callback)
+    }
+  }
+
+  /**
+   * Handle shortcut registration conflicts by trying alternatives
+   */
+  handleShortcutConflict(originalAccelerator, id, callback) {
+    console.log(
+      `🔄 Attempting to resolve shortcut conflict for ${originalAccelerator} (${id})`,
+    )
+
+    const alternatives = this.generateAlternativeShortcuts(
+      originalAccelerator,
+      id,
+    )
+
+    for (const alternative of alternatives) {
+      try {
+        if (!globalShortcut.isRegistered(alternative)) {
+          const success = globalShortcut.register(alternative, callback)
+
+          if (success) {
+            this.registeredShortcuts.set(id, {
+              accelerator: alternative,
+              originalAccelerator,
+              callback,
+              registeredAt: new Date(),
+              isAlternative: true,
+            })
+
+            console.log(
+              `✅ Registered alternative shortcut: ${alternative} (${id}) - original: ${originalAccelerator}`,
+            )
+
+            // Notify user about the change
+            this.notifyShortcutChange(id, originalAccelerator, alternative)
+
+            return true
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to register alternative ${alternative}:`, error)
+      }
+    }
+
+    // If no alternatives work, disable this shortcut
+    console.warn(
+      `❌ Could not register any alternative for ${originalAccelerator} (${id})`,
+    )
+    this.handleShortcutRegistrationFailure(id, originalAccelerator)
+
+    return false
+  }
+
+  /**
+   * Generate alternative shortcuts when conflicts occur
+   */
+  generateAlternativeShortcuts(originalAccelerator, id) {
+    const alternatives = []
+    const isMac = process.platform === 'darwin'
+
+    // Parse the original accelerator
+    const parts = originalAccelerator.split('+')
+    const key = parts[parts.length - 1]
+    const modifiers = parts.slice(0, -1)
+
+    // Try different modifier combinations
+    const alternativeModifiers = [
+      // Add Alt/Option
+      [...modifiers, isMac ? 'Option' : 'Alt'],
+      // Replace Ctrl with Alt (or vice versa)
+      modifiers.map((m) => {
+        if (m === 'Ctrl' || m === 'Control') return isMac ? 'Option' : 'Alt'
+        if (m === 'Alt') return isMac ? 'Cmd' : 'Ctrl'
+        return m
+      }),
+      // Add Shift
+      [...modifiers, 'Shift'],
+      // Try with different base modifier
+      [isMac ? 'Cmd' : 'Ctrl', 'Alt', 'Shift'],
+    ]
+
+    // Generate alternatives
+    for (const altModifiers of alternativeModifiers) {
+      const uniqueModifiers = [...new Set(altModifiers)] // Remove duplicates
+      if (uniqueModifiers.length > 0) {
+        alternatives.push(`${uniqueModifiers.join('+')}+${key}`)
+      }
+    }
+
+    // Try different keys for some shortcuts
+    const alternativeKeys = this.getAlternativeKeysForShortcut(id, key)
+    for (const altKey of alternativeKeys) {
+      alternatives.push(`${modifiers.join('+')}+${altKey}`)
+    }
+
+    // Remove duplicates and the original
+    return [...new Set(alternatives)].filter(
+      (alt) => alt !== originalAccelerator,
+    )
+  }
+
+  /**
+   * Get alternative keys for specific shortcut types
+   */
+  getAlternativeKeysForShortcut(id, _originalKey) {
+    const alternatives = {
+      newTask: ['Insert', 'Plus', 'T'],
+      search: ['S', 'L', 'Find'],
+      toggleFloatingNavigator: ['W', 'Space', 'Tab'],
+      showMainWindow: ['Home', 'Return', 'Enter'],
+      minimize: ['H', 'Down', 'Minus'],
+      toggleAlwaysOnTop: ['T', 'Up', 'P'],
+      focusFloatingNavigator: ['W', 'Space', 'F'],
+    }
+
+    return alternatives[id] || []
+  }
+
+  /**
+   * Notify user about shortcut changes
+   */
+  notifyShortcutChange(id, original, alternative) {
+    if (this.notificationManager) {
+      this.notificationManager.showNotification(
+        'Shortcut Changed',
+        `${this.getShortcutDisplayName(id)}: ${original} → ${alternative}`,
+        { silent: true },
+      )
+    }
+
+    // Also log to console for debugging
+    console.log(`📝 Shortcut changed for ${id}: ${original} → ${alternative}`)
+  }
+
+  /**
+   * Handle complete shortcut registration failure
+   */
+  handleShortcutRegistrationFailure(id, accelerator) {
+    // Store the failed shortcut for user reference
+    this.failedShortcuts = this.failedShortcuts || new Map()
+    this.failedShortcuts.set(id, {
+      accelerator,
+      failedAt: new Date(),
+      reason: 'conflict_unresolved',
+    })
+
+    // Notify user
+    if (this.notificationManager) {
+      this.notificationManager.showNotification(
+        'Shortcut Unavailable',
+        `Could not register ${this.getShortcutDisplayName(id)} (${accelerator}) - conflicts with system`,
+        { silent: true },
+      )
+    }
+
+    console.warn(`📋 Shortcut ${id} (${accelerator}) disabled due to conflicts`)
+  }
+
+  /**
+   * Get display name for shortcut ID
+   */
+  getShortcutDisplayName(id) {
+    const displayNames = {
+      newTask: 'New Task',
+      search: 'Search',
+      toggleFloatingNavigator: 'Toggle Floating Navigator',
+      showMainWindow: 'Show Main Window',
+      minimize: 'Minimize',
+      toggleAlwaysOnTop: 'Toggle Always On Top',
+      focusFloatingNavigator: 'Focus Floating Navigator',
+    }
+
+    return displayNames[id] || id
+  }
+
+  /**
+   * Get failed shortcuts for user reference
+   */
+  getFailedShortcuts() {
+    return this.failedShortcuts ? Object.fromEntries(this.failedShortcuts) : {}
+  }
+
+  /**
+   * Retry registering failed shortcuts
+   */
+  retryFailedShortcuts() {
+    if (!this.failedShortcuts || this.failedShortcuts.size === 0) {
+      return { success: true, message: 'No failed shortcuts to retry' }
+    }
+
+    const retryResults = []
+
+    for (const [id, failedShortcut] of this.failedShortcuts) {
+      const handler = this.getHandlerForShortcut(id)
+      if (handler) {
+        const success = this.registerShortcut(
+          failedShortcut.accelerator,
+          id,
+          handler,
+        )
+
+        if (success) {
+          this.failedShortcuts.delete(id)
+          retryResults.push({ id, success: true })
+        } else {
+          retryResults.push({ id, success: false })
+        }
+      }
+    }
+
+    return {
+      success: retryResults.some((r) => r.success),
+      results: retryResults,
+      message: `Retried ${retryResults.length} shortcuts, ${retryResults.filter((r) => r.success).length} successful`,
     }
   }
 

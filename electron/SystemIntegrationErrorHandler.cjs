@@ -1,0 +1,633 @@
+// SystemIntegrationErrorHandler - handles system integration failures
+
+/**
+ * Centralized error handler for system integration failures
+ * Coordinates fallback behavior across tray, notifications, and shortcuts
+ */
+class SystemIntegrationErrorHandler {
+  constructor(windowManager, configManager = null) {
+    this.windowManager = windowManager
+    this.configManager = configManager
+    this.systemTrayManager = null
+    this.notificationManager = null
+    this.shortcutManager = null
+
+    // Track system integration status
+    this.integrationStatus = {
+      tray: { available: false, fallbackMode: false, error: null },
+      notifications: { available: false, fallbackMode: false, error: null },
+      shortcuts: {
+        available: false,
+        partiallyAvailable: false,
+        failedCount: 0,
+        error: null,
+      },
+    }
+
+    // Track user notifications about failures
+    this.userNotified = {
+      tray: false,
+      notifications: false,
+      shortcuts: false,
+    }
+  }
+
+  /**
+   * Set system integration managers
+   */
+  setManagers(systemTrayManager, notificationManager, shortcutManager) {
+    this.systemTrayManager = systemTrayManager
+    this.notificationManager = notificationManager
+    this.shortcutManager = shortcutManager
+  }
+
+  /**
+   * Initialize system integration with comprehensive error handling
+   */
+  async initializeSystemIntegration() {
+    console.log('🚀 Initializing system integration with error handling...')
+
+    const results = {
+      tray: await this.initializeTrayWithErrorHandling(),
+      notifications: await this.initializeNotificationsWithErrorHandling(),
+      shortcuts: await this.initializeShortcutsWithErrorHandling(),
+    }
+
+    // Analyze overall integration status
+    this.analyzeIntegrationStatus(results)
+
+    // Show user summary if there are issues
+    this.showIntegrationSummary(results)
+
+    return results
+  }
+
+  /**
+   * Initialize system tray with error handling
+   */
+  async initializeTrayWithErrorHandling() {
+    try {
+      if (!this.systemTrayManager) {
+        throw new Error('SystemTrayManager not available')
+      }
+
+      const tray = this.systemTrayManager.createTray()
+
+      if (tray) {
+        this.integrationStatus.tray = {
+          available: true,
+          fallbackMode: false,
+          error: null,
+        }
+        console.log('✅ System tray initialized successfully')
+        return { success: true, component: 'tray' }
+      } else {
+        // Tray creation failed, check if fallback mode was enabled
+        const isFallbackMode = this.systemTrayManager.isFallbackMode()
+
+        this.integrationStatus.tray = {
+          available: false,
+          fallbackMode: isFallbackMode,
+          error: 'Tray creation failed',
+        }
+
+        console.warn('⚠️ System tray unavailable, fallback mode enabled')
+        return {
+          success: false,
+          fallback: true,
+          component: 'tray',
+          error: 'Tray creation failed',
+        }
+      }
+    } catch (error) {
+      this.integrationStatus.tray = {
+        available: false,
+        fallbackMode: true,
+        error: error.message,
+      }
+
+      console.error('❌ System tray initialization failed:', error)
+
+      // Enable fallback mode in window manager
+      if (this.windowManager) {
+        this.windowManager.setTrayFallbackMode(true)
+      }
+
+      return {
+        success: false,
+        fallback: true,
+        component: 'tray',
+        error: error.message,
+      }
+    }
+  }
+
+  /**
+   * Initialize notifications with error handling
+   */
+  async initializeNotificationsWithErrorHandling() {
+    try {
+      if (!this.notificationManager) {
+        throw new Error('NotificationManager not available')
+      }
+
+      const success = await this.notificationManager.initialize()
+
+      if (success) {
+        this.integrationStatus.notifications = {
+          available: true,
+          fallbackMode: false,
+          error: null,
+        }
+        console.log('✅ Notifications initialized successfully')
+        return { success: true, component: 'notifications' }
+      } else {
+        // Check if fallback methods are available
+        const hasFallbackMethods = this.notificationManager.fallbackMethods
+
+        this.integrationStatus.notifications = {
+          available: false,
+          fallbackMode: !!hasFallbackMethods,
+          error: 'Notification initialization failed',
+        }
+
+        console.warn('⚠️ Notifications unavailable, fallback methods enabled')
+        return {
+          success: false,
+          fallback: !!hasFallbackMethods,
+          component: 'notifications',
+          error: 'Notification initialization failed',
+        }
+      }
+    } catch (error) {
+      this.integrationStatus.notifications = {
+        available: false,
+        fallbackMode: false,
+        error: error.message,
+      }
+
+      console.error('❌ Notification initialization failed:', error)
+      return {
+        success: false,
+        fallback: false,
+        component: 'notifications',
+        error: error.message,
+      }
+    }
+  }
+
+  /**
+   * Initialize shortcuts with error handling
+   */
+  async initializeShortcutsWithErrorHandling() {
+    try {
+      if (!this.shortcutManager) {
+        throw new Error('ShortcutManager not available')
+      }
+
+      const success = this.shortcutManager.initialize()
+
+      if (success) {
+        // Check if any shortcuts failed
+        const failedShortcuts = this.shortcutManager.getFailedShortcuts()
+        const failedCount = Object.keys(failedShortcuts).length
+
+        if (failedCount === 0) {
+          this.integrationStatus.shortcuts = {
+            available: true,
+            partiallyAvailable: false,
+            failedCount: 0,
+            error: null,
+          }
+          console.log('✅ All shortcuts initialized successfully')
+          return { success: true, component: 'shortcuts' }
+        } else {
+          this.integrationStatus.shortcuts = {
+            available: false,
+            partiallyAvailable: true,
+            failedCount,
+            error: `${failedCount} shortcuts failed to register`,
+          }
+          console.warn(
+            `⚠️ Shortcuts partially available: ${failedCount} failed`,
+          )
+          return {
+            success: true,
+            partial: true,
+            component: 'shortcuts',
+            failedCount,
+            failedShortcuts,
+          }
+        }
+      } else {
+        this.integrationStatus.shortcuts = {
+          available: false,
+          partiallyAvailable: false,
+          failedCount: 0,
+          error: 'Shortcut initialization failed',
+        }
+
+        console.error('❌ Shortcut initialization failed completely')
+        return {
+          success: false,
+          component: 'shortcuts',
+          error: 'Shortcut initialization failed',
+        }
+      }
+    } catch (error) {
+      this.integrationStatus.shortcuts = {
+        available: false,
+        partiallyAvailable: false,
+        failedCount: 0,
+        error: error.message,
+      }
+
+      console.error('❌ Shortcut initialization failed:', error)
+      return { success: false, component: 'shortcuts', error: error.message }
+    }
+  }
+
+  /**
+   * Analyze overall integration status
+   */
+  analyzeIntegrationStatus(results) {
+    const { tray, notifications, shortcuts } = results
+
+    let overallStatus = 'full' // full, partial, minimal, failed
+    const issues = []
+
+    // Check tray status
+    if (!tray.success) {
+      if (tray.fallback) {
+        issues.push('System tray unavailable (using fallback)')
+        overallStatus = 'partial'
+      } else {
+        issues.push('System tray failed')
+        overallStatus = 'minimal'
+      }
+    }
+
+    // Check notification status
+    if (!notifications.success) {
+      if (notifications.fallback) {
+        issues.push('Notifications unavailable (using fallback)')
+        if (overallStatus === 'full') overallStatus = 'partial'
+      } else {
+        issues.push('Notifications failed')
+        if (overallStatus !== 'minimal') overallStatus = 'minimal'
+      }
+    }
+
+    // Check shortcut status
+    if (!shortcuts.success) {
+      issues.push('Shortcuts failed')
+      overallStatus = 'failed'
+    } else if (shortcuts.partial) {
+      issues.push(`${shortcuts.failedCount} shortcuts unavailable`)
+      if (overallStatus === 'full') overallStatus = 'partial'
+    }
+
+    this.overallStatus = overallStatus
+    this.issues = issues
+
+    console.log(`📊 System integration status: ${overallStatus}`)
+    if (issues.length > 0) {
+      console.log('📋 Issues:', issues.join(', '))
+    }
+  }
+
+  /**
+   * Show integration summary to user
+   */
+  showIntegrationSummary(_results) {
+    if (this.overallStatus === 'full') {
+      // Everything working, no need to notify user
+      return
+    }
+
+    // Prepare user-friendly message
+    let title = 'Desktop Integration'
+    let message = ''
+
+    switch (this.overallStatus) {
+      case 'partial':
+        title = 'Desktop Integration Partially Available'
+        message =
+          'Some desktop features are unavailable but the app will work normally.'
+        break
+      case 'minimal':
+        title = 'Limited Desktop Integration'
+        message =
+          'Desktop features are limited. The app will work with basic functionality.'
+        break
+      case 'failed':
+        title = 'Desktop Integration Unavailable'
+        message =
+          'Desktop integration features are not available on this system.'
+        break
+    }
+
+    // Add specific issues to message
+    if (this.issues.length > 0) {
+      message += `\n\nIssues: ${this.issues.join(', ')}`
+    }
+
+    // Show notification using available methods
+    this.showIntegrationNotification(title, message)
+
+    // Save status to config for future reference
+    this.saveIntegrationStatus()
+  }
+
+  /**
+   * Show integration notification using available methods
+   */
+  showIntegrationNotification(title, message) {
+    // Try native notification first
+    if (this.notificationManager && this.notificationManager.isEnabled()) {
+      this.notificationManager.showNotification(title, message, {
+        silent: true,
+      })
+      return
+    }
+
+    // Try system tray tooltip
+    if (this.systemTrayManager && this.systemTrayManager.hasTray()) {
+      this.systemTrayManager.setTrayTooltip(`${title}: ${message}`)
+    }
+
+    // Try window title update
+    if (this.windowManager && this.windowManager.hasMainWindow()) {
+      const mainWindow = this.windowManager.getMainWindow()
+      const originalTitle = mainWindow.getTitle()
+      mainWindow.setTitle(`${title} - ${originalTitle}`)
+
+      // Restore original title after delay
+      setTimeout(() => {
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.setTitle(originalTitle)
+        }
+      }, 5000)
+    }
+
+    // Send to renderer for in-app display
+    if (this.windowManager && this.windowManager.hasMainWindow()) {
+      const mainWindow = this.windowManager.getMainWindow()
+      mainWindow.webContents.send('system-integration-status', {
+        status: this.overallStatus,
+        title,
+        message,
+        issues: this.issues,
+        integrationStatus: this.integrationStatus,
+      })
+    }
+  }
+
+  /**
+   * Save integration status to configuration
+   */
+  saveIntegrationStatus() {
+    if (this.configManager) {
+      try {
+        this.configManager.set('systemIntegration.lastStatus', {
+          status: this.overallStatus,
+          issues: this.issues,
+          timestamp: new Date().toISOString(),
+          integrationStatus: this.integrationStatus,
+        })
+      } catch (error) {
+        console.warn('Failed to save integration status:', error)
+      }
+    }
+  }
+
+  /**
+   * Get current integration status
+   */
+  getIntegrationStatus() {
+    return {
+      overall: this.overallStatus,
+      issues: this.issues,
+      components: this.integrationStatus,
+    }
+  }
+
+  /**
+   * Retry failed integrations
+   */
+  async retryFailedIntegrations() {
+    console.log('🔄 Retrying failed system integrations...')
+
+    const retryResults = {}
+
+    // Retry tray if it failed
+    if (!this.integrationStatus.tray.available) {
+      retryResults.tray = await this.initializeTrayWithErrorHandling()
+    }
+
+    // Retry notifications if they failed
+    if (!this.integrationStatus.notifications.available) {
+      retryResults.notifications =
+        await this.initializeNotificationsWithErrorHandling()
+    }
+
+    // Retry shortcuts if they failed
+    if (
+      !this.integrationStatus.shortcuts.available ||
+      this.integrationStatus.shortcuts.partiallyAvailable
+    ) {
+      if (this.shortcutManager) {
+        const shortcutRetry = this.shortcutManager.retryFailedShortcuts()
+        retryResults.shortcuts = {
+          success: shortcutRetry.success,
+          component: 'shortcuts',
+          message: shortcutRetry.message,
+        }
+      }
+    }
+
+    // Re-analyze status if any retries were performed
+    if (Object.keys(retryResults).length > 0) {
+      this.analyzeIntegrationStatus({
+        tray: retryResults.tray || {
+          success: this.integrationStatus.tray.available,
+        },
+        notifications: retryResults.notifications || {
+          success: this.integrationStatus.notifications.available,
+        },
+        shortcuts: retryResults.shortcuts || {
+          success: this.integrationStatus.shortcuts.available,
+        },
+      })
+    }
+
+    return retryResults
+  }
+
+  /**
+   * Handle app quit - cleanup integration components
+   */
+  handleAppQuit() {
+    console.log('🧹 Cleaning up system integration...')
+
+    try {
+      if (this.shortcutManager) {
+        this.shortcutManager.cleanup()
+      }
+    } catch (error) {
+      console.warn('Error cleaning up shortcuts:', error)
+    }
+
+    try {
+      if (this.notificationManager) {
+        this.notificationManager.cleanup()
+      }
+    } catch (error) {
+      console.warn('Error cleaning up notifications:', error)
+    }
+
+    try {
+      if (this.systemTrayManager) {
+        this.systemTrayManager.destroy()
+      }
+    } catch (error) {
+      console.warn('Error cleaning up system tray:', error)
+    }
+  }
+
+  /**
+   * Get user-friendly status report
+   */
+  getStatusReport() {
+    const report = {
+      overall: this.overallStatus,
+      summary: this.getStatusSummary(),
+      components: {
+        tray: this.getTrayStatusReport(),
+        notifications: this.getNotificationStatusReport(),
+        shortcuts: this.getShortcutStatusReport(),
+      },
+      recommendations: this.getRecommendations(),
+    }
+
+    return report
+  }
+
+  /**
+   * Get overall status summary
+   */
+  getStatusSummary() {
+    switch (this.overallStatus) {
+      case 'full':
+        return 'All desktop integration features are working properly.'
+      case 'partial':
+        return 'Most desktop features are working. Some features may use alternative methods.'
+      case 'minimal':
+        return 'Basic desktop functionality is available. Some features are unavailable.'
+      case 'failed':
+        return 'Desktop integration features are not available on this system.'
+      default:
+        return 'Desktop integration status unknown.'
+    }
+  }
+
+  /**
+   * Get tray status report
+   */
+  getTrayStatusReport() {
+    const status = this.integrationStatus.tray
+
+    if (status.available) {
+      return {
+        status: 'working',
+        message: 'System tray is available and working.',
+      }
+    } else if (status.fallbackMode) {
+      return {
+        status: 'fallback',
+        message:
+          'System tray unavailable. App will minimize normally instead of to tray.',
+      }
+    } else {
+      return {
+        status: 'failed',
+        message: `System tray failed: ${status.error}`,
+      }
+    }
+  }
+
+  /**
+   * Get notification status report
+   */
+  getNotificationStatusReport() {
+    const status = this.integrationStatus.notifications
+
+    if (status.available) {
+      return { status: 'working', message: 'Native notifications are working.' }
+    } else if (status.fallbackMode) {
+      return {
+        status: 'fallback',
+        message:
+          'Native notifications unavailable. Using alternative notification methods.',
+      }
+    } else {
+      return {
+        status: 'failed',
+        message: `Notifications failed: ${status.error}`,
+      }
+    }
+  }
+
+  /**
+   * Get shortcut status report
+   */
+  getShortcutStatusReport() {
+    const status = this.integrationStatus.shortcuts
+
+    if (status.available && !status.partiallyAvailable) {
+      return {
+        status: 'working',
+        message: 'All keyboard shortcuts are working.',
+      }
+    } else if (status.partiallyAvailable) {
+      return {
+        status: 'partial',
+        message: `Most shortcuts working. ${status.failedCount} shortcuts unavailable due to conflicts.`,
+      }
+    } else {
+      return {
+        status: 'failed',
+        message: `Shortcuts failed: ${status.error}`,
+      }
+    }
+  }
+
+  /**
+   * Get recommendations for improving integration
+   */
+  getRecommendations() {
+    const recommendations = []
+
+    if (!this.integrationStatus.tray.available) {
+      recommendations.push(
+        'Check if your desktop environment supports system tray icons.',
+      )
+    }
+
+    if (!this.integrationStatus.notifications.available) {
+      recommendations.push(
+        'Enable notifications in your system settings for better task alerts.',
+      )
+    }
+
+    if (this.integrationStatus.shortcuts.partiallyAvailable) {
+      recommendations.push(
+        'Some keyboard shortcuts conflict with system shortcuts. Check shortcut settings to see alternatives.',
+      )
+    }
+
+    return recommendations
+  }
+}
+
+module.exports = SystemIntegrationErrorHandler

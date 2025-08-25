@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 // Whitelist of allowed IPC channels for security
 const ALLOWED_CHANNELS = {
+  // IPC Error handling
+  'ipc-error-stats': true,
+  'ipc-error-health-check': true,
+  'ipc-error-reset-stats': true,
   // Todo operations
   'todo-get-all': true,
   'todo-create': true,
@@ -1117,6 +1121,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
 
     ipcRenderer.removeAllListeners(channel)
+  },
+
+  // IPC Error handling and monitoring
+  errorHandling: {
+    /**
+     * Get IPC error statistics
+     */
+    getStats: async () => {
+      try {
+        return await ipcRenderer.invoke('ipc-error-stats')
+      } catch (error) {
+        console.error('Failed to get IPC error stats:', error)
+        return null
+      }
+    },
+
+    /**
+     * Perform IPC health check
+     */
+    healthCheck: async () => {
+      try {
+        return await ipcRenderer.invoke('ipc-error-health-check')
+      } catch (error) {
+        console.error('Failed to perform IPC health check:', error)
+        return { isHealthy: false, error: 'Health check failed' }
+      }
+    },
+
+    /**
+     * Reset IPC error statistics
+     */
+    resetStats: async () => {
+      try {
+        return await ipcRenderer.invoke('ipc-error-reset-stats')
+      } catch (error) {
+        console.error('Failed to reset IPC error stats:', error)
+        return false
+      }
+    },
   },
 })
 

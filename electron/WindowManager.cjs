@@ -14,6 +14,7 @@ class WindowManager {
     this.serverUrl = serverUrl
     this.configManager = configManager
     this.windowStateManager = windowStateManager
+    this.trayFallbackMode = false
   }
 
   /**
@@ -279,12 +280,32 @@ class WindowManager {
   }
 
   /**
-   * Minimize main window to tray
+   * Minimize main window to tray (or minimize normally in fallback mode)
    */
   minimizeToTray() {
     if (this.mainWindow) {
-      this.mainWindow.hide()
+      if (this.trayFallbackMode) {
+        // In fallback mode, minimize normally instead of hiding
+        this.mainWindow.minimize()
+      } else {
+        this.mainWindow.hide()
+      }
     }
+  }
+
+  /**
+   * Set tray fallback mode
+   */
+  setTrayFallbackMode(enabled) {
+    this.trayFallbackMode = enabled
+    console.log(`Tray fallback mode ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  /**
+   * Check if in tray fallback mode
+   */
+  isTrayFallbackMode() {
+    return this.trayFallbackMode
   }
 
   /**

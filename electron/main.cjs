@@ -2,9 +2,11 @@ const { app, BrowserWindow, ipcMain, session } = require('electron')
 
 const { APIBridge } = require('./api-bridge.cjs')
 const ConfigManager = require('./ConfigManager.cjs')
+const IPCErrorHandler = require('./IPCErrorHandler.cjs')
 const { NextServerManager } = require('./next-server.cjs')
 const NotificationManager = require('./NotificationManager.cjs')
 const ShortcutManager = require('./ShortcutManager.cjs')
+const SystemIntegrationErrorHandler = require('./SystemIntegrationErrorHandler.cjs')
 const SystemTrayManager = require('./SystemTrayManager.cjs')
 const WindowManager = require('./WindowManager.cjs')
 const WindowStateManager = require('./WindowStateManager.cjs')
@@ -19,6 +21,8 @@ let systemTrayManager
 let notificationManager
 let shortcutManager
 let apiBridge
+let ipcErrorHandler
+let systemIntegrationErrorHandler
 // let authManager
 let nextServerManager
 
@@ -65,6 +69,13 @@ function setupSecurity() {
 }
 
 async function createWindow() {
+  // Initialize IPC error handler first
+  ipcErrorHandler = new IPCErrorHandler({
+    maxRetries: 3,
+    baseDelay: 1000,
+    enableLogging: true,
+  })
+
   // Initialize configuration manager
   configManager = new ConfigManager()
 
@@ -89,6 +100,12 @@ async function createWindow() {
     windowStateManager,
   )
 
+  // Initialize system integration error handler
+  systemIntegrationErrorHandler = new SystemIntegrationErrorHandler(
+    windowManager,
+    configManager,
+  )
+
   // Initialize system tray manager
   systemTrayManager = new SystemTrayManager(windowManager)
 
@@ -98,7 +115,6 @@ async function createWindow() {
     systemTrayManager,
     configManager,
   )
-  await notificationManager.initialize()
 
   // Initialize shortcut manager
   shortcutManager = new ShortcutManager(
@@ -106,13 +122,22 @@ async function createWindow() {
     notificationManager,
     configManager,
   )
-  shortcutManager.initialize()
+
+  // Set managers in error handler
+  systemIntegrationErrorHandler.setManagers(
+    systemTrayManager,
+    notificationManager,
+    shortcutManager,
+  )
+
+  // Initialize system integration with comprehensive error handling
+  const integrationResults =
+    await systemIntegrationErrorHandler.initializeSystemIntegration()
+
+  console.log('🔧 System integration results:', integrationResults)
 
   // Create main window using WindowManager
   const mainWindow = windowManager.createMainWindow()
-
-  // Create system tray
-  systemTrayManager.createTray()
 
   // Override window close behavior to minimize to tray
   mainWindow.on('close', (event) => {
@@ -161,6 +186,9 @@ app.on('before-quit', async () => {
   if (systemTrayManager) {
     systemTrayManager.setQuitting(true)
   }
+  if (systemIntegrationErrorHandler) {
+    systemIntegrationErrorHandler.handleAppQuit()
+  }
   if (shortcutManager) {
     shortcutManager.cleanup()
   }
@@ -172,6 +200,9 @@ app.on('before-quit', async () => {
   }
   if (windowManager) {
     windowManager.cleanup()
+  }
+  if (ipcErrorHandler) {
+    ipcErrorHandler.cleanup()
   }
   if (apiBridge) {
     await apiBridge.disconnect()
@@ -222,138 +253,279 @@ ipcMain.handle('app-quit', () => {
   app.quit()
 })
 
-// Todo operation IPC handlers - connected to API bridge
-ipcMain.handle('todo-get-all', async () => {
-  try {
-    if (!apiBridge) {
-      throw new Error('API bridge not initialized')
-    }
-    return await apiBridge.getTodos()
-  } catch (error) {
-    console.error('Failed to get todos:', error)
-    throw new Error('Failed to retrieve todos')
-  }
-})
-
-ipcMain.handle('todo-get-by-id', async (event, id) => {
-  try {
-    // Validate input
-    if (!id || typeof id !== 'string') {
-      throw new Error('Invalid todo ID')
-    }
-
-    // TODO: Connect to ORPC API in task 4.2
-    console.log('IPC: Getting todo by ID:', id, '(placeholder)')
-    return null
-  } catch (error) {
-    console.error('Failed to get todo:', error)
-    throw new Error('Failed to retrieve todo')
-  }
-})
-
-ipcMain.handle('todo-create', async (_event, todoData) => {
-  try {
-    // Validate input
-    if (!todoData || typeof todoData !== 'object' || !todoData.title) {
-      throw new Error('Invalid todo data')
-    }
-
-    if (!apiBridge) {
-      throw new Error('API bridge not initialized')
-    }
-
-    const newTodo = await apiBridge.createTodo(todoData)
-
-    // Show notification for task creation
-    if (notificationManager) {
-      notificationManager.showTaskCreatedNotification(newTodo)
-    }
-
-    return newTodo
-  } catch (error) {
-    console.error('Failed to create todo:', error)
-    throw new Error('Failed to create todo')
-  }
-})
-
-ipcMain.handle('todo-update', async (_event, id, updates) => {
-  try {
-    // Validate input
-    if (!id || typeof id !== 'string') {
-      throw new Error('Invalid todo ID')
-    }
-    if (!updates || typeof updates !== 'object') {
-      throw new Error('Invalid update data')
-    }
-
-    if (!apiBridge) {
-      throw new Error('API bridge not initialized')
-    }
-
-    const updatedTodo = await apiBridge.updateTodo(id, updates)
-
-    // Show appropriate notification based on what was updated
-    if (notificationManager) {
-      if (updates.hasOwnProperty('completed')) {
-        notificationManager.showTaskCompletedNotification(updatedTodo)
-      } else {
-        notificationManager.showTaskUpdatedNotification(updatedTodo, updates)
+// Todo operation IPC handlers - connected to API bridge with error handling
+ipcMain.handle(
+  'todo-get-all',
+  ipcErrorHandler.wrapHandler(
+    async () => {
+      if (!apiBridge) {
+        throw new Error('API bridge not initialized')
       }
-    }
+      return apiBridge.getTodos()
+    },
+    {
+      channel: 'todo-get-all',
+      operationType: 'getTodos',
+      enableDegradation: true,
+    },
+  ),
+)
 
-    return updatedTodo
-  } catch (error) {
-    console.error('Failed to update todo:', error)
-    throw new Error('Failed to update todo')
-  }
-})
+ipcMain.handle(
+  'todo-get-by-id',
+  ipcErrorHandler.wrapHandler(
+    async (event, id) => {
+      // Validate input
+      const validation = ipcErrorHandler.validateInput(id, {
+        type: 'string',
+        required: true,
+      })
 
-ipcMain.handle('todo-delete', async (_event, id) => {
-  try {
-    // Validate input
-    if (!id || typeof id !== 'string') {
-      throw new Error('Invalid todo ID')
-    }
+      if (!validation.isValid) {
+        throw new Error(`Invalid todo ID: ${validation.error}`)
+      }
 
-    if (!apiBridge) {
-      throw new Error('API bridge not initialized')
-    }
+      if (!apiBridge) {
+        throw new Error('API bridge not initialized')
+      }
 
-    // Get todo before deletion for notification
-    const todoToDelete = await apiBridge.getTodoById(id)
+      return apiBridge.getTodoById(id)
+    },
+    {
+      channel: 'todo-get-by-id',
+      operationType: 'getTodo',
+      enableDegradation: true,
+    },
+  ),
+)
 
-    const result = await apiBridge.deleteTodo(id)
+ipcMain.handle(
+  'todo-create',
+  ipcErrorHandler.wrapHandler(
+    async (_event, todoData) => {
+      // Validate input
+      const validation = ipcErrorHandler.validateInput(todoData, {
+        type: 'object',
+        required: true,
+        properties: {
+          title: { required: true },
+        },
+      })
 
-    // Show notification for task deletion
-    if (notificationManager && todoToDelete) {
-      notificationManager.showTaskDeletedNotification(todoToDelete)
-    }
+      if (!validation.isValid) {
+        throw new Error(`Invalid todo data: ${validation.error}`)
+      }
 
-    return result
-  } catch (error) {
-    console.error('Failed to delete todo:', error)
-    throw new Error('Failed to delete todo')
-  }
-})
+      if (!apiBridge) {
+        throw new Error('API bridge not initialized')
+      }
 
-// Window management IPC handlers
-ipcMain.handle('window-minimize', () => {
-  if (windowManager && windowManager.hasMainWindow()) {
-    windowManager.minimizeToTray()
-  }
-})
+      const newTodo = await apiBridge.createTodo(todoData)
 
-ipcMain.handle('window-close', () => {
-  if (windowManager && windowManager.hasMainWindow()) {
-    windowManager.minimizeToTray()
-  }
-})
+      // Show notification for task creation (with error handling)
+      try {
+        if (notificationManager) {
+          notificationManager.showTaskCreatedNotification(newTodo)
+        }
+      } catch (notificationError) {
+        ipcErrorHandler.logWarning(
+          'Failed to show task creation notification',
+          {
+            error: notificationError.message,
+            todoId: newTodo?.id,
+          },
+        )
+      }
 
-ipcMain.handle('window-toggle-floating-navigator', () => {
-  if (windowManager) {
-    windowManager.toggleFloatingNavigator()
-  }
-})
+      return newTodo
+    },
+    {
+      channel: 'todo-create',
+      operationType: 'createTodo',
+      enableDegradation: true,
+    },
+  ),
+)
+
+ipcMain.handle(
+  'todo-update',
+  ipcErrorHandler.wrapHandler(
+    async (_event, id, updates) => {
+      // Validate input
+      const idValidation = ipcErrorHandler.validateInput(id, {
+        type: 'string',
+        required: true,
+      })
+
+      if (!idValidation.isValid) {
+        throw new Error(`Invalid todo ID: ${idValidation.error}`)
+      }
+
+      const updatesValidation = ipcErrorHandler.validateInput(updates, {
+        type: 'object',
+        required: true,
+      })
+
+      if (!updatesValidation.isValid) {
+        throw new Error(`Invalid update data: ${updatesValidation.error}`)
+      }
+
+      if (!apiBridge) {
+        throw new Error('API bridge not initialized')
+      }
+
+      const updatedTodo = await apiBridge.updateTodo(id, updates)
+
+      // Show appropriate notification based on what was updated (with error handling)
+      try {
+        if (notificationManager) {
+          if (updates.hasOwnProperty('completed')) {
+            notificationManager.showTaskCompletedNotification(updatedTodo)
+          } else {
+            notificationManager.showTaskUpdatedNotification(
+              updatedTodo,
+              updates,
+            )
+          }
+        }
+      } catch (notificationError) {
+        ipcErrorHandler.logWarning('Failed to show task update notification', {
+          error: notificationError.message,
+          todoId: updatedTodo?.id,
+        })
+      }
+
+      return updatedTodo
+    },
+    {
+      channel: 'todo-update',
+      operationType: 'updateTodo',
+      enableDegradation: true,
+    },
+  ),
+)
+
+ipcMain.handle(
+  'todo-delete',
+  ipcErrorHandler.wrapHandler(
+    async (_event, id) => {
+      // Validate input
+      const validation = ipcErrorHandler.validateInput(id, {
+        type: 'string',
+        required: true,
+      })
+
+      if (!validation.isValid) {
+        throw new Error(`Invalid todo ID: ${validation.error}`)
+      }
+
+      if (!apiBridge) {
+        throw new Error('API bridge not initialized')
+      }
+
+      // Get todo before deletion for notification (with error handling)
+      let todoToDelete = null
+      try {
+        todoToDelete = await apiBridge.getTodoById(id)
+      } catch (error) {
+        ipcErrorHandler.logWarning('Failed to get todo before deletion', {
+          error: error.message,
+          todoId: id,
+        })
+      }
+
+      const result = await apiBridge.deleteTodo(id)
+
+      // Show notification for task deletion (with error handling)
+      try {
+        if (notificationManager && todoToDelete) {
+          notificationManager.showTaskDeletedNotification(todoToDelete)
+        }
+      } catch (notificationError) {
+        ipcErrorHandler.logWarning(
+          'Failed to show task deletion notification',
+          {
+            error: notificationError.message,
+            todoId: id,
+          },
+        )
+      }
+
+      return result
+    },
+    {
+      channel: 'todo-delete',
+      operationType: 'deleteTodo',
+      enableDegradation: true,
+    },
+  ),
+)
+
+// Window management IPC handlers with error handling
+ipcMain.handle(
+  'window-minimize',
+  ipcErrorHandler.wrapHandler(
+    () => {
+      if (!windowManager) {
+        throw new Error('Window manager not initialized')
+      }
+
+      if (!windowManager.hasMainWindow()) {
+        throw new Error('Main window not available')
+      }
+
+      windowManager.minimizeToTray()
+      return true
+    },
+    {
+      channel: 'window-minimize',
+      operationType: 'windowOperation',
+      enableDegradation: true,
+    },
+  ),
+)
+
+ipcMain.handle(
+  'window-close',
+  ipcErrorHandler.wrapHandler(
+    () => {
+      if (!windowManager) {
+        throw new Error('Window manager not initialized')
+      }
+
+      if (!windowManager.hasMainWindow()) {
+        throw new Error('Main window not available')
+      }
+
+      windowManager.minimizeToTray()
+      return true
+    },
+    {
+      channel: 'window-close',
+      operationType: 'windowOperation',
+      enableDegradation: true,
+    },
+  ),
+)
+
+ipcMain.handle(
+  'window-toggle-floating-navigator',
+  ipcErrorHandler.wrapHandler(
+    () => {
+      if (!windowManager) {
+        throw new Error('Window manager not initialized')
+      }
+
+      windowManager.toggleFloatingNavigator()
+      return true
+    },
+    {
+      channel: 'window-toggle-floating-navigator',
+      operationType: 'windowOperation',
+      enableDegradation: true,
+    },
+  ),
+)
 
 ipcMain.handle('window-show-floating-navigator', () => {
   if (windowManager) {
@@ -386,12 +558,43 @@ ipcMain.handle('tray-set-tooltip', (event, text) => {
   }
 })
 
-// Notification management IPC handlers
-ipcMain.handle('notification-show', (event, title, body, options) => {
-  if (notificationManager) {
-    return notificationManager.showNotification(title, body, options)
-  }
-})
+// Notification management IPC handlers with error handling
+ipcMain.handle(
+  'notification-show',
+  ipcErrorHandler.wrapHandler(
+    (event, title, body, options) => {
+      // Validate input
+      const titleValidation = ipcErrorHandler.validateInput(title, {
+        type: 'string',
+        required: true,
+      })
+
+      if (!titleValidation.isValid) {
+        throw new Error(`Invalid notification title: ${titleValidation.error}`)
+      }
+
+      const bodyValidation = ipcErrorHandler.validateInput(body, {
+        type: 'string',
+        required: true,
+      })
+
+      if (!bodyValidation.isValid) {
+        throw new Error(`Invalid notification body: ${bodyValidation.error}`)
+      }
+
+      if (!notificationManager) {
+        throw new Error('Notification manager not initialized')
+      }
+
+      return notificationManager.showNotification(title, body, options || {})
+    },
+    {
+      channel: 'notification-show',
+      operationType: 'notification',
+      enableDegradation: true,
+    },
+  ),
+)
 
 ipcMain.handle('notification-get-preferences', () => {
   if (notificationManager) {
@@ -634,20 +837,62 @@ ipcMain.handle('todo-toggle-complete', async (_event, id, currentCompleted) => {
   }
 })
 
-// Configuration management IPC handlers
-ipcMain.handle('config-get', (event, path, defaultValue) => {
-  if (configManager) {
-    return configManager.get(path, defaultValue)
-  }
-  return defaultValue
-})
+// Configuration management IPC handlers with error handling
+ipcMain.handle(
+  'config-get',
+  ipcErrorHandler.wrapHandler(
+    (event, path, defaultValue) => {
+      // Validate input
+      const validation = ipcErrorHandler.validateInput(path, {
+        type: 'string',
+        required: true,
+      })
 
-ipcMain.handle('config-set', (event, path, value) => {
-  if (configManager) {
-    return configManager.set(path, value)
-  }
-  return false
-})
+      if (!validation.isValid) {
+        throw new Error(`Invalid config path: ${validation.error}`)
+      }
+
+      if (!configManager) {
+        throw new Error('Configuration manager not initialized')
+      }
+
+      return configManager.get(path, defaultValue)
+    },
+    {
+      channel: 'config-get',
+      operationType: 'getConfig',
+      enableDegradation: true,
+    },
+  ),
+)
+
+ipcMain.handle(
+  'config-set',
+  ipcErrorHandler.wrapHandler(
+    (event, path, value) => {
+      // Validate input
+      const validation = ipcErrorHandler.validateInput(path, {
+        type: 'string',
+        required: true,
+      })
+
+      if (!validation.isValid) {
+        throw new Error(`Invalid config path: ${validation.error}`)
+      }
+
+      if (!configManager) {
+        throw new Error('Configuration manager not initialized')
+      }
+
+      return configManager.set(path, value)
+    },
+    {
+      channel: 'config-set',
+      operationType: 'setConfig',
+      enableDegradation: true,
+    },
+  ),
+)
 
 ipcMain.handle('config-get-all', () => {
   if (configManager) {
@@ -826,3 +1071,62 @@ ipcMain.handle(
     }
   },
 )
+
+// IPC Error handling and monitoring handlers
+ipcMain.handle('ipc-error-stats', () => {
+  if (ipcErrorHandler) {
+    return ipcErrorHandler.getStats()
+  }
+  return null
+})
+
+ipcMain.handle('ipc-error-health-check', async () => {
+  if (ipcErrorHandler) {
+    return ipcErrorHandler.healthCheck()
+  }
+  return { isHealthy: false, error: 'Error handler not initialized' }
+})
+
+ipcMain.handle('ipc-error-reset-stats', () => {
+  if (ipcErrorHandler) {
+    ipcErrorHandler.resetStats()
+    return true
+  }
+  return false
+})
+
+// System integration error handling IPC handlers
+ipcMain.handle('system-integration-get-status', () => {
+  if (systemIntegrationErrorHandler) {
+    return systemIntegrationErrorHandler.getIntegrationStatus()
+  }
+  return { overall: 'unknown', issues: [], components: {} }
+})
+
+ipcMain.handle('system-integration-get-report', () => {
+  if (systemIntegrationErrorHandler) {
+    return systemIntegrationErrorHandler.getStatusReport()
+  }
+  return null
+})
+
+ipcMain.handle('system-integration-retry-failed', async () => {
+  if (systemIntegrationErrorHandler) {
+    return systemIntegrationErrorHandler.retryFailedIntegrations()
+  }
+  return {}
+})
+
+ipcMain.handle('shortcuts-get-failed', () => {
+  if (shortcutManager) {
+    return shortcutManager.getFailedShortcuts()
+  }
+  return {}
+})
+
+ipcMain.handle('shortcuts-retry-failed', () => {
+  if (shortcutManager) {
+    return shortcutManager.retryFailedShortcuts()
+  }
+  return { success: false, message: 'Shortcut manager not available' }
+})

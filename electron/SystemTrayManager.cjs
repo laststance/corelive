@@ -13,23 +13,271 @@ class SystemTrayManager {
    * Create system tray with icon and context menu
    */
   createTray() {
-    // Create tray icon
-    const iconPath = this.getTrayIconPath()
-    const trayIcon = nativeImage.createFromPath(iconPath)
+    try {
+      // Check if system tray is supported on this platform
+      if (!this.isSystemTraySupported()) {
+        console.warn('System tray is not supported on this platform')
+        this.tray = null
+        this.enableFallbackMode()
+        return null
+      }
 
-    // Resize icon for tray (16x16 on most platforms)
-    this.tray = new Tray(trayIcon.resize({ width: 16, height: 16 }))
+      // Create tray icon with comprehensive error handling
+      const trayIcon = this.createTrayIcon()
+      if (!trayIcon) {
+        console.warn('Failed to create tray icon, enabling fallback mode')
+        this.enableFallbackMode()
+        return null
+      }
 
-    // Set tooltip
-    this.tray.setToolTip('TODO Desktop App')
+      // Attempt to create tray with retry logic
+      this.tray = this.createTrayWithRetry(trayIcon)
+      if (!this.tray) {
+        console.warn(
+          'Failed to create system tray after retries, enabling fallback mode',
+        )
+        this.enableFallbackMode()
+        return null
+      }
 
-    // Create context menu
-    this.updateTrayMenu()
+      // Set tooltip with error handling
+      this.setTrayTooltipSafely('TODO Desktop App')
 
-    // Handle tray click events
-    this.setupTrayEvents()
+      // Create context menu with error handling
+      if (!this.setupTrayMenuSafely()) {
+        console.warn('Failed to setup tray menu, using minimal functionality')
+      }
 
-    return this.tray
+      // Handle tray click events with error handling
+      if (!this.setupTrayEventsSafely()) {
+        console.warn(
+          'Failed to setup tray events, tray will have limited functionality',
+        )
+      }
+
+      console.log('✅ System tray created successfully')
+      return this.tray
+    } catch (error) {
+      console.error('❌ Failed to create system tray:', error)
+      this.handleTrayCreationFailure(error)
+      return null
+    }
+  }
+
+  /**
+   * Check if system tray is supported on current platform
+   */
+  isSystemTraySupported() {
+    try {
+      // System tray is generally supported on all major platforms
+      // but may fail in some environments (like headless servers, some Linux distros)
+      return (
+        process.platform === 'win32' ||
+        process.platform === 'darwin' ||
+        process.platform === 'linux'
+      )
+    } catch (error) {
+      console.warn('Error checking system tray support:', error)
+      return false
+    }
+  }
+
+  /**
+   * Create tray icon with fallback options
+   */
+  createTrayIcon() {
+    try {
+      const iconPath = this.getTrayIconPath()
+      let trayIcon
+
+      if (iconPath) {
+        try {
+          trayIcon = nativeImage.createFromPath(iconPath)
+          if (!trayIcon.isEmpty()) {
+            // Resize icon for tray (16x16 on most platforms)
+            trayIcon = trayIcon.resize({ width: 16, height: 16 })
+            return trayIcon
+          }
+        } catch (iconError) {
+          console.warn('Failed to load tray icon from path:', iconError)
+        }
+      }
+
+      // Try to create a simple colored icon as fallback
+      try {
+        trayIcon = this.createFallbackIcon()
+        if (trayIcon && !trayIcon.isEmpty()) {
+          return trayIcon
+        }
+      } catch (fallbackError) {
+        console.warn('Failed to create fallback icon:', fallbackError)
+      }
+
+      // Last resort: create empty image
+      try {
+        return nativeImage.createEmpty()
+      } catch (emptyError) {
+        console.error('Failed to create empty icon:', emptyError)
+        return null
+      }
+    } catch (error) {
+      console.error('Error creating tray icon:', error)
+      return null
+    }
+  }
+
+  /**
+   * Create a simple fallback icon
+   */
+  createFallbackIcon() {
+    try {
+      // Try to create a simple icon programmatically without external dependencies
+      // Create a minimal 16x16 bitmap
+      const width = 16
+      const height = 16
+      const buffer = Buffer.alloc(width * height * 4) // RGBA
+
+      // Fill with blue color (#007ACC)
+      for (let i = 0; i < buffer.length; i += 4) {
+        buffer[i] = 0 // R
+        buffer[i + 1] = 122 // G
+        buffer[i + 2] = 204 // B
+        buffer[i + 3] = 255 // A
+      }
+
+      return nativeImage.createFromBuffer(buffer, { width, height })
+    } catch (bitmapError) {
+      console.warn('Failed to create bitmap fallback icon:', bitmapError)
+      return null
+    }
+  }
+
+  /**
+   * Create tray with retry logic
+   */
+  createTrayWithRetry(trayIcon, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const tray = new Tray(trayIcon)
+
+        // Test if tray was created successfully
+        if (tray && !tray.isDestroyed()) {
+          return tray
+        }
+      } catch (error) {
+        console.warn(`Tray creation attempt ${attempt} failed:`, error)
+
+        if (attempt < maxRetries) {
+          // Wait before retry (exponential backoff)
+          const delay = Math.pow(2, attempt - 1) * 100
+          // Use a simple busy wait instead of shell command for cross-platform compatibility
+          const start = Date.now()
+          while (Date.now() - start < delay) {
+            // Busy wait
+          }
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Set tray tooltip safely
+   */
+  setTrayTooltipSafely(text) {
+    if (!this.tray || this.tray.isDestroyed()) return false
+
+    try {
+      this.tray.setToolTip(text)
+      return true
+    } catch (error) {
+      console.warn('Failed to set tray tooltip:', error)
+      return false
+    }
+  }
+
+  /**
+   * Setup tray menu safely
+   */
+  setupTrayMenuSafely() {
+    try {
+      this.updateTrayMenu()
+      return true
+    } catch (error) {
+      console.warn('Failed to create tray menu:', error)
+
+      try {
+        this.createFallbackMenu()
+        return true
+      } catch (fallbackError) {
+        console.error('Failed to create fallback menu:', fallbackError)
+        return false
+      }
+    }
+  }
+
+  /**
+   * Setup tray events safely
+   */
+  setupTrayEventsSafely() {
+    try {
+      this.setupTrayEvents()
+      return true
+    } catch (error) {
+      console.warn('Failed to setup tray events:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handle tray creation failure and enable fallback mode
+   */
+  handleTrayCreationFailure(error) {
+    console.error('System tray creation failed completely:', error)
+    this.tray = null
+    this.enableFallbackMode()
+
+    // Notify user about tray unavailability
+    if (this.windowManager) {
+      try {
+        // Show a notification if possible
+        const { Notification } = require('electron')
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title: 'System Tray Unavailable',
+            body: 'System tray could not be created. The app will continue without tray functionality.',
+            silent: true,
+          })
+          notification.show()
+        }
+      } catch (notificationError) {
+        console.warn(
+          'Could not show tray failure notification:',
+          notificationError,
+        )
+      }
+    }
+  }
+
+  /**
+   * Enable fallback mode when tray is not available
+   */
+  enableFallbackMode() {
+    this.fallbackMode = true
+    console.log('📱 Enabled fallback mode - app will not minimize to tray')
+
+    // Modify window behavior to not minimize to tray
+    if (this.windowManager) {
+      this.windowManager.setTrayFallbackMode(true)
+    }
+  }
+
+  /**
+   * Check if running in fallback mode
+   */
+  isFallbackMode() {
+    return this.fallbackMode || false
   }
 
   /**
@@ -54,41 +302,104 @@ class SystemTrayManager {
    * Update tray context menu
    */
   updateTrayMenu(tasks = []) {
-    if (!this.tray) return
+    if (!this.tray || this.tray.isDestroyed()) {
+      console.warn('Cannot update tray menu: tray not available')
+      return false
+    }
 
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: 'Show TODO App',
-        click: () => {
-          this.windowManager.restoreFromTray()
+    try {
+      const contextMenu = Menu.buildFromTemplate([
+        {
+          label: 'Show TODO App',
+          click: () => {
+            try {
+              this.windowManager.restoreFromTray()
+            } catch (error) {
+              console.error('Failed to restore window from tray:', error)
+            }
+          },
         },
-      },
-      {
-        type: 'separator',
-      },
-      {
-        label: 'Toggle Floating Navigator',
-        click: () => {
-          this.windowManager.toggleFloatingNavigator()
+        {
+          type: 'separator',
         },
-      },
-      {
-        type: 'separator',
-      },
-      ...this.buildTaskMenuItems(tasks),
-      {
-        type: 'separator',
-      },
-      {
-        label: 'Quit',
-        click: () => {
-          this.isQuitting = true
-          require('electron').app.quit()
+        {
+          label: 'Toggle Floating Navigator',
+          click: () => {
+            try {
+              this.windowManager.toggleFloatingNavigator()
+            } catch (error) {
+              console.error('Failed to toggle floating navigator:', error)
+            }
+          },
         },
-      },
-    ])
+        {
+          type: 'separator',
+        },
+        ...this.buildTaskMenuItems(tasks),
+        {
+          type: 'separator',
+        },
+        {
+          label: 'Quit',
+          click: () => {
+            try {
+              this.isQuitting = true
+              require('electron').app.quit()
+            } catch (error) {
+              console.error('Failed to quit application:', error)
+            }
+          },
+        },
+      ])
 
-    this.tray.setContextMenu(contextMenu)
+      this.tray.setContextMenu(contextMenu)
+      return true
+    } catch (error) {
+      console.error('Failed to update tray menu:', error)
+
+      // Try to create a fallback menu
+      try {
+        this.createFallbackMenu()
+      } catch (fallbackError) {
+        console.error('Failed to create fallback menu:', fallbackError)
+      }
+
+      return false
+    }
+  }
+
+  /**
+   * Create a minimal fallback menu when normal menu creation fails
+   */
+  createFallbackMenu() {
+    if (!this.tray || this.tray.isDestroyed()) return
+
+    try {
+      const fallbackMenu = Menu.buildFromTemplate([
+        {
+          label: 'Show App',
+          click: () => {
+            try {
+              this.windowManager.restoreFromTray()
+            } catch (error) {
+              console.error('Failed to restore window:', error)
+            }
+          },
+        },
+        {
+          label: 'Quit',
+          click: () => {
+            this.isQuitting = true
+            require('electron').app.quit()
+          },
+        },
+      ])
+
+      this.tray.setContextMenu(fallbackMenu)
+      console.log('✅ Fallback tray menu created')
+    } catch (error) {
+      console.error('❌ Failed to create fallback tray menu:', error)
+    }
   }
   /**
    * Build menu items for recent tasks
@@ -139,32 +450,46 @@ class SystemTrayManager {
   }
 
   /**
-   * Show native notification
+   * Show native notification with error handling
    */
   showNotification(title, body, options = {}) {
-    if (!Notification.isSupported()) {
-      console.warn('Notifications are not supported on this system')
-      return
-    }
-
-    const notification = new Notification({
-      title,
-      body,
-      icon: this.getTrayIconPath(),
-      silent: options.silent || false,
-      ...options,
-    })
-
-    // Handle notification click
-    notification.on('click', () => {
-      this.windowManager.restoreFromTray()
-      if (options.onClick) {
-        options.onClick()
+    try {
+      if (!Notification.isSupported()) {
+        console.warn('Notifications are not supported on this system')
+        return null
       }
-    })
 
-    notification.show()
-    return notification
+      const notification = new Notification({
+        title,
+        body,
+        icon: this.getTrayIconPath(),
+        silent: options.silent || false,
+        ...options,
+      })
+
+      // Handle notification click with error handling
+      notification.on('click', () => {
+        try {
+          this.windowManager.restoreFromTray()
+          if (options.onClick) {
+            options.onClick()
+          }
+        } catch (error) {
+          console.error('Failed to handle notification click:', error)
+        }
+      })
+
+      // Handle notification errors
+      notification.on('failed', (event, error) => {
+        console.error('Notification failed:', error)
+      })
+
+      notification.show()
+      return notification
+    } catch (error) {
+      console.error('Failed to show notification:', error)
+      return null
+    }
   }
 
   /**

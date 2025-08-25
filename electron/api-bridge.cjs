@@ -39,7 +39,44 @@ class APIBridge {
       return todos
     } catch (error) {
       console.error('Failed to get todos:', error)
-      throw error
+
+      // Check if it's a connection error
+      if (error.code === 'P1001' || error.message.includes('connection')) {
+        throw new Error(
+          'Database connection failed. Please check your database connection.',
+        )
+      }
+
+      // Check if it's an authentication error
+      if (error.code === 'P1002') {
+        throw new Error(
+          'Database authentication failed. Please check your credentials.',
+        )
+      }
+
+      throw new Error(`Database operation failed: ${error.message}`)
+    }
+  }
+
+  async getTodoById(id) {
+    try {
+      const todo = await this.prisma.todo.findUnique({
+        where: {
+          id: id,
+          userId: this.currentUserId,
+        },
+      })
+      return todo
+    } catch (error) {
+      console.error('Failed to get todo by ID:', error)
+
+      if (error.code === 'P1001' || error.message.includes('connection')) {
+        throw new Error(
+          'Database connection failed. Please check your database connection.',
+        )
+      }
+
+      throw new Error(`Failed to retrieve todo: ${error.message}`)
     }
   }
 
@@ -55,7 +92,16 @@ class APIBridge {
       return todo
     } catch (error) {
       console.error('Failed to create todo:', error)
-      throw error
+
+      if (error.code === 'P1001' || error.message.includes('connection')) {
+        throw new Error('Database connection failed. Cannot create todo.')
+      }
+
+      if (error.code === 'P2002') {
+        throw new Error('A todo with this title already exists.')
+      }
+
+      throw new Error(`Failed to create todo: ${error.message}`)
     }
   }
 
@@ -74,7 +120,18 @@ class APIBridge {
       return todo
     } catch (error) {
       console.error('Failed to update todo:', error)
-      throw error
+
+      if (error.code === 'P1001' || error.message.includes('connection')) {
+        throw new Error('Database connection failed. Cannot update todo.')
+      }
+
+      if (error.code === 'P2025') {
+        throw new Error(
+          'Todo not found or you do not have permission to update it.',
+        )
+      }
+
+      throw new Error(`Failed to update todo: ${error.message}`)
     }
   }
 
@@ -89,7 +146,18 @@ class APIBridge {
       return { success: true }
     } catch (error) {
       console.error('Failed to delete todo:', error)
-      throw error
+
+      if (error.code === 'P1001' || error.message.includes('connection')) {
+        throw new Error('Database connection failed. Cannot delete todo.')
+      }
+
+      if (error.code === 'P2025') {
+        throw new Error(
+          'Todo not found or you do not have permission to delete it.',
+        )
+      }
+
+      throw new Error(`Failed to delete todo: ${error.message}`)
     }
   }
 
