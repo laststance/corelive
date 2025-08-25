@@ -76,7 +76,14 @@ async function buildNextJS() {
   console.log('📦 Building Next.js application...\n')
 
   try {
-    await runCommand('pnpm', ['build'])
+    // Set environment variables for Electron build
+    const env = {
+      ...process.env,
+      NODE_ENV: 'production',
+      ELECTRON_BUILD: 'true',
+    }
+
+    await runCommand('pnpm', ['build'], { env })
     console.log('✅ Next.js build completed!\n')
   } catch (error) {
     console.error('❌ Next.js build failed:', error.message)
@@ -90,6 +97,9 @@ async function buildElectron(platform = 'all') {
   )
 
   try {
+    // Set optimization environment variable
+    process.env.ELECTRON_BUILD = 'true'
+
     const buildCommands = {
       win: ['electron:build:win'],
       mac: ['electron:build:mac'],
@@ -103,6 +113,9 @@ async function buildElectron(platform = 'all') {
     console.log(
       `✅ Electron build completed for ${platforms[platform] || platform}!\n`,
     )
+
+    // Analyze bundle size after build
+    await analyzeBundleSize()
   } catch (error) {
     console.error(
       `❌ Electron build failed for ${platforms[platform] || platform}:`,
@@ -110,6 +123,55 @@ async function buildElectron(platform = 'all') {
     )
     throw error
   }
+}
+
+async function analyzeBundleSize() {
+  console.log('📊 Analyzing bundle size...\n')
+
+  try {
+    const distDir = path.join(process.cwd(), 'dist-electron')
+    const nextDir = path.join(process.cwd(), '.next')
+
+    if (fs.existsSync(distDir)) {
+      const distSize = await getFolderSize(distDir)
+      console.log(`📦 Electron dist size: ${formatBytes(distSize)}`)
+    }
+
+    if (fs.existsSync(nextDir)) {
+      const nextSize = await getFolderSize(nextDir)
+      console.log(`🌐 Next.js build size: ${formatBytes(nextSize)}`)
+
+      // Analyze specific Next.js chunks
+      const staticDir = path.join(nextDir, 'static')
+      if (fs.existsSync(staticDir)) {
+        const staticSize = await getFolderSize(staticDir)
+        console.log(`📄 Static assets size: ${formatBytes(staticSize)}`)
+      }
+    }
+
+    console.log('')
+  } catch (error) {
+    console.warn('⚠️ Bundle analysis failed:', error.message)
+  }
+}
+
+async function getFolderSize(folderPath) {
+  let totalSize = 0
+
+  const files = fs.readdirSync(folderPath, { withFileTypes: true })
+
+  for (const file of files) {
+    const filePath = path.join(folderPath, file.name)
+
+    if (file.isDirectory()) {
+      totalSize += await getFolderSize(filePath)
+    } else {
+      const stats = fs.statSync(filePath)
+      totalSize += stats.size
+    }
+  }
+
+  return totalSize
 }
 
 function generateBuildReport() {

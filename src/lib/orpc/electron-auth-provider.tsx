@@ -30,7 +30,7 @@ export function ElectronAuthProvider({
       try {
         if (user) {
           // User is authenticated, sync with Electron
-          await window.electronAPI?.auth.setUser({
+          await window.electronAPI?.auth?.setUser({
             id: user.id,
             email: user.primaryEmailAddress?.emailAddress,
             name: user.fullName || user.firstName || 'User',
@@ -39,7 +39,7 @@ export function ElectronAuthProvider({
           console.log('✅ Authentication synced with Electron')
         } else {
           // User is not authenticated, logout from Electron
-          await window.electronAPI?.auth.logout()
+          await window.electronAPI?.auth?.logout()
           console.log('🔓 Logged out from Electron')
         }
       } catch (error) {
@@ -63,7 +63,7 @@ export function useElectronAuth() {
     if (!isElectron) return null
 
     try {
-      return await window.electronAPI?.auth.getUser()
+      return await window.electronAPI?.auth?.getUser()
     } catch (error) {
       console.error('Failed to get Electron user:', error)
       return null
@@ -74,7 +74,7 @@ export function useElectronAuth() {
     if (!isElectron) return false
 
     try {
-      return await window.electronAPI?.auth.isAuthenticated()
+      return await window.electronAPI?.auth?.isAuthenticated()
     } catch (error) {
       console.error('Failed to check Electron authentication:', error)
       return false

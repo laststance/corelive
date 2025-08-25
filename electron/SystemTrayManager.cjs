@@ -85,17 +85,16 @@ class SystemTrayManager {
   /**
    * Create tray icon with fallback options
    */
-  createTrayIcon() {
+  createTrayIcon(state = 'default') {
     try {
-      const iconPath = this.getTrayIconPath()
+      const iconPath = this.getTrayIconPath(state)
       let trayIcon
 
       if (iconPath) {
         try {
           trayIcon = nativeImage.createFromPath(iconPath)
           if (!trayIcon.isEmpty()) {
-            // Resize icon for tray (16x16 on most platforms)
-            trayIcon = trayIcon.resize({ width: 16, height: 16 })
+            // Don't resize - our generated icons are already the correct size
             return trayIcon
           }
         } catch (iconError) {
@@ -281,21 +280,67 @@ class SystemTrayManager {
   }
 
   /**
-   * Get appropriate tray icon path based on platform
+   * Get appropriate tray icon path based on platform and state
    */
-  getTrayIconPath() {
-    // For now, use a simple approach - create a basic icon
-    // TODO: Create proper tray icons (16x16 PNG files)
-    const fs = require('fs')
-    const faviconPath = path.join(__dirname, '../public/favicon.ico')
+  getTrayIconPath(state = 'default') {
+    const iconDir = path.join(__dirname, '..', 'build', 'icons', 'tray')
+    // Determine appropriate size based on platform and DPI
+    const size = this.getTrayIconSize()
 
-    // Check if favicon exists, otherwise create a fallback
-    if (fs.existsSync(faviconPath)) {
-      return faviconPath
+    // Try state-specific icon first
+    const stateIconPath = path.join(
+      iconDir,
+      `tray-${size}x${size}-${state}.png`,
+    )
+    if (this.fileExists(stateIconPath)) {
+      return stateIconPath
     }
 
-    // Return empty path for now - Electron will use default
-    return ''
+    // Fallback to default state
+    const defaultIconPath = path.join(iconDir, `tray-${size}x${size}.png`)
+    if (this.fileExists(defaultIconPath)) {
+      return defaultIconPath
+    }
+
+    // Final fallback to any available tray icon
+    const fallbackIcons = [
+      path.join(iconDir, 'tray-16x16.png'),
+      path.join(iconDir, 'tray-20x20.png'),
+      path.join(iconDir, 'tray-24x24.png'),
+      path.join(iconDir, 'tray-32x32.png'),
+    ]
+
+    for (const iconPath of fallbackIcons) {
+      if (this.fileExists(iconPath)) {
+        return iconPath
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Get appropriate tray icon size based on platform and DPI
+   */
+  getTrayIconSize() {
+    // macOS typically uses 16x16 for tray icons
+    if (process.platform === 'darwin') {
+      return 16
+    }
+    // Windows and Linux can vary, but 16x16 is most common
+    // TODO: Detect DPI and adjust accordingly
+    return 16
+  }
+
+  /**
+   * Check if file exists safely
+   */
+  fileExists(filePath) {
+    try {
+      return require('fs').existsSync(filePath)
+    } catch {
+      return false
+    }
   }
 
   /**
@@ -550,6 +595,66 @@ class SystemTrayManager {
    */
   getTray() {
     return this.tray
+  }
+
+  /**
+   * Set tray icon state
+   */
+  setTrayIconState(state = 'default') {
+    if (!this.tray || this.tray.isDestroyed()) {
+      console.warn('Cannot set tray icon state: tray not available')
+      return false
+    }
+
+    try {
+      const iconPath = this.getTrayIconPath(state)
+      if (iconPath) {
+        // Handle test environment where nativeImage might not be available
+        if (typeof nativeImage !== 'undefined' && nativeImage.createFromPath) {
+          const icon = nativeImage.createFromPath(iconPath)
+          this.tray.setImage(icon)
+        } else {
+          // In test environment, just call setImage with the path
+          this.tray.setImage(iconPath)
+        }
+        console.log(`Tray icon state changed to: ${state}`)
+        return true
+      } else {
+        console.warn(`Tray icon for state '${state}' not found`)
+        return false
+      }
+    } catch (error) {
+      console.error('Failed to set tray icon state:', error)
+      return false
+    }
+  }
+
+  /**
+   * Set tray icon to active state
+   */
+  setActiveState() {
+    return this.setTrayIconState('active')
+  }
+
+  /**
+   * Set tray icon to notification state
+   */
+  setNotificationState() {
+    return this.setTrayIconState('notification')
+  }
+
+  /**
+   * Set tray icon to disabled state
+   */
+  setDisabledState() {
+    return this.setTrayIconState('disabled')
+  }
+
+  /**
+   * Reset tray icon to default state
+   */
+  resetToDefaultState() {
+    return this.setTrayIconState('default')
   }
 
   /**

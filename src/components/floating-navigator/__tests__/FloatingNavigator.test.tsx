@@ -68,7 +68,9 @@ describe('FloatingNavigator', () => {
     render(<FloatingNavigator {...mockProps} />)
 
     const checkbox = screen.getAllByRole('checkbox')[0]
-    fireEvent.click(checkbox)
+    if (checkbox) {
+      fireEvent.click(checkbox)
+    }
 
     expect(mockProps.onTaskToggle).toHaveBeenCalledWith('1')
   })

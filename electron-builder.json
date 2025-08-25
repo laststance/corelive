@@ -6,6 +6,10 @@
     "output": "dist-electron",
     "buildResources": "build"
   },
+  "icon": "build/icons/icon-512x512.png",
+  "nodeGypRebuild": false,
+  "npmRebuild": false,
+  "buildDependenciesFromSource": false,
   "files": [
     ".next/**/*",
     "electron/**/*",
@@ -20,7 +24,19 @@
     "!**/__tests__/**/*",
     "!**/test/**/*",
     "!**/.DS_Store",
-    "!**/node_modules/.cache/**/*"
+    "!**/node_modules/.cache/**/*",
+    "!**/node_modules/**/test/**/*",
+    "!**/node_modules/**/tests/**/*",
+    "!**/node_modules/**/*.test.js",
+    "!**/node_modules/**/*.spec.js",
+    "!**/node_modules/**/README.md",
+    "!**/node_modules/**/CHANGELOG.md",
+    "!**/node_modules/**/LICENSE*",
+    "!**/node_modules/**/*.d.ts",
+    "!**/node_modules/**/*.map",
+    "!**/.next/cache/**/*",
+    "!**/.next/static/chunks/pages/_error-*.js",
+    "!**/.next/static/chunks/webpack-*.js"
   ],
   "extraResources": [
     {
@@ -48,16 +64,14 @@
         "arch": ["x64", "arm64"]
       }
     ],
-    "icon": "build/icon.icns",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
-    "notarize": {
-      "teamId": "${APPLE_TEAM_ID}"
-    },
+    "notarize": false,
     "type": "distribution",
-    "minimumSystemVersion": "10.15.0"
+    "minimumSystemVersion": "10.15.0",
+    "icon": "build/icons/icon-1024x1024.png"
   },
   "dmg": {
     "contents": [
@@ -90,21 +104,14 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "build/icon.ico",
-    "publisherName": "CoreLive",
-    "certificateFile": "${WIN_CSC_LINK}",
-    "certificatePassword": "${WIN_CSC_KEY_PASSWORD}",
-    "signingHashAlgorithms": ["sha256"],
-    "signDlls": true,
-    "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+    "cscLink": "${WIN_CSC_LINK}",
+    "cscKeyPassword": "${WIN_CSC_KEY_PASSWORD}",
+    "icon": "build/icons/icon-256x256.png"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "allowElevation": true,
-    "installerIcon": "build/icon.ico",
-    "uninstallerIcon": "build/icon.ico",
-    "installerHeaderIcon": "build/icon.ico",
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "${productName}",
@@ -134,12 +141,14 @@
       }
     ],
     "category": "Office",
-    "icon": "build/icons",
+    "icon": "build/icons/",
     "desktop": {
-      "Name": "CoreLive TODO",
-      "Comment": "A modern TODO application with desktop integration",
-      "Keywords": "todo;task;productivity;electron;",
-      "StartupWMClass": "corelive-todo"
+      "entry": {
+        "Name": "CoreLive TODO",
+        "Comment": "A modern TODO application with desktop integration",
+        "Keywords": "todo;task;productivity;electron;",
+        "StartupWMClass": "corelive-todo"
+      }
     },
     "maintainer": "CoreLive <support@corelive.com>",
     "vendor": "CoreLive",

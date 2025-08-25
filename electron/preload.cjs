@@ -31,6 +31,10 @@ const ALLOWED_CHANNELS = {
   'tray-show-notification': true,
   'tray-update-menu': true,
   'tray-set-tooltip': true,
+  'tray-set-icon-state': true,
+
+  // Menu actions
+  'menu-action': true,
 
   // Notification management
   'notification-show': true,
@@ -354,6 +358,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await ipcRenderer.invoke('tray-set-tooltip', sanitizedText)
       } catch (error) {
         console.error('Failed to set tray tooltip:', error)
+      }
+    },
+
+    /**
+     * Set system tray icon state
+     */
+    setTrayIconState: async (state) => {
+      if (typeof state !== 'string') {
+        throw new Error('Icon state must be a string')
+      }
+
+      const validStates = ['default', 'active', 'notification', 'disabled']
+      if (!validStates.includes(state)) {
+        throw new Error(
+          `Invalid icon state. Must be one of: ${validStates.join(', ')}`,
+        )
+      }
+
+      try {
+        return await ipcRenderer.invoke('tray-set-icon-state', state)
+      } catch (error) {
+        console.error('Failed to set tray icon state:', error)
+        return false
       }
     },
   },
@@ -682,6 +709,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         console.error('Failed to sync auth from web:', error)
         throw new Error('Failed to sync authentication')
+      }
+    },
+  },
+
+  // Menu management APIs
+  menu: {
+    /**
+     * Trigger menu action
+     */
+    triggerAction: async (action) => {
+      if (!action || typeof action !== 'string') {
+        throw new Error('Menu action is required')
+      }
+
+      try {
+        return await ipcRenderer.invoke('menu-action', { action })
+      } catch (error) {
+        console.error('Failed to trigger menu action:', error)
+        throw new Error('Failed to trigger menu action')
       }
     },
   },

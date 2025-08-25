@@ -1,21 +1,42 @@
 'use client'
 
-import {
-  Plus,
-  Check,
-  X,
-  Edit2,
-  Trash2,
-  Minimize2,
-  Pin,
-  PinOff,
-  ExternalLink,
-} from 'lucide-react'
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
+
+// Lazy load icons to reduce initial bundle size
+const Plus = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Plus })),
+)
+const Check = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Check })),
+)
+const X = lazy(async () => import('lucide-react').then((mod) => ({ default: mod.X })))
+const Edit2 = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Edit2 })),
+)
+const Trash2 = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Trash2 })),
+)
+const Minimize2 = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Minimize2 })),
+)
+const Pin = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Pin })),
+)
+const PinOff = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.PinOff })),
+)
+const ExternalLink = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.ExternalLink })),
+)
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+
+// Icon fallback component for loading state
+const IconFallback = () => (
+  <div className="bg-muted h-3 w-3 animate-pulse rounded" />
+)
 
 export interface FloatingTodo {
   id: string
@@ -177,7 +198,9 @@ export function FloatingNavigator({
               className="h-6 w-6 p-0"
               title="Open main window"
             >
-              <ExternalLink className="h-3 w-3" />
+              <Suspense fallback={<IconFallback />}>
+                <ExternalLink className="h-3 w-3" />
+              </Suspense>
             </Button>
             <Button
               size="sm"
@@ -188,11 +211,13 @@ export function FloatingNavigator({
                 isAlwaysOnTop ? 'Disable always on top' : 'Enable always on top'
               }
             >
-              {isAlwaysOnTop ? (
-                <PinOff className="h-3 w-3" />
-              ) : (
-                <Pin className="h-3 w-3" />
-              )}
+              <Suspense fallback={<IconFallback />}>
+                {isAlwaysOnTop ? (
+                  <PinOff className="h-3 w-3" />
+                ) : (
+                  <Pin className="h-3 w-3" />
+                )}
+              </Suspense>
             </Button>
             <Button
               size="sm"
@@ -201,7 +226,9 @@ export function FloatingNavigator({
               className="h-6 w-6 p-0"
               title="Minimize"
             >
-              <Minimize2 className="h-3 w-3" />
+              <Suspense fallback={<IconFallback />}>
+                <Minimize2 className="h-3 w-3" />
+              </Suspense>
             </Button>
             <Button
               size="sm"
@@ -210,7 +237,9 @@ export function FloatingNavigator({
               className="text-destructive hover:text-destructive h-6 w-6 p-0"
               title="Close"
             >
-              <X className="h-3 w-3" />
+              <Suspense fallback={<IconFallback />}>
+                <X className="h-3 w-3" />
+              </Suspense>
             </Button>
           </div>
         )}
@@ -234,7 +263,9 @@ export function FloatingNavigator({
             className="h-8 w-8 p-0"
             aria-label="Add task"
           >
-            <Plus className="h-3 w-3" />
+            <Suspense fallback={<IconFallback />}>
+              <Plus className="h-3 w-3" />
+            </Suspense>
           </Button>
         </div>
       </div>
@@ -270,7 +301,9 @@ export function FloatingNavigator({
                         onClick={saveEdit}
                         className="h-6 w-6 p-0"
                       >
-                        <Check className="h-3 w-3" />
+                        <Suspense fallback={<IconFallback />}>
+                          <Check className="h-3 w-3" />
+                        </Suspense>
                       </Button>
                       <Button
                         size="sm"
@@ -278,7 +311,9 @@ export function FloatingNavigator({
                         onClick={cancelEdit}
                         className="h-6 w-6 p-0"
                       >
-                        <X className="h-3 w-3" />
+                        <Suspense fallback={<IconFallback />}>
+                          <X className="h-3 w-3" />
+                        </Suspense>
                       </Button>
                     </div>
                   ) : (
@@ -297,7 +332,9 @@ export function FloatingNavigator({
                           onClick={() => startEditing(todo)}
                           className="h-6 w-6 p-0"
                         >
-                          <Edit2 className="h-3 w-3" />
+                          <Suspense fallback={<IconFallback />}>
+                            <Edit2 className="h-3 w-3" />
+                          </Suspense>
                         </Button>
                         <Button
                           size="sm"
@@ -305,7 +342,9 @@ export function FloatingNavigator({
                           onClick={() => onTaskDelete(todo.id)}
                           className="text-destructive hover:text-destructive h-6 w-6 p-0"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Suspense fallback={<IconFallback />}>
+                            <Trash2 className="h-3 w-3" />
+                          </Suspense>
                         </Button>
                       </div>
                     </>
@@ -347,7 +386,9 @@ export function FloatingNavigator({
                     onClick={() => onTaskDelete(todo.id)}
                     className="text-destructive hover:text-destructive h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <Suspense fallback={<IconFallback />}>
+                      <Trash2 className="h-3 w-3" />
+                    </Suspense>
                   </Button>
                 </div>
               ))}

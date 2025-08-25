@@ -136,14 +136,44 @@
     - _Requirements: 1.1_
 
 - [-] 11. Final integration and testing
-  - [x] 11.1 Perform end-to-end testing
+  - [ ] 11.1 Perform end-to-end testing
     - Test complete user workflows from task creation to completion
     - Verify authentication flow and data synchronization
     - Test system tray, notifications, and keyboard shortcuts across platforms
     - _Requirements: All requirements validation_
 
-  - [ ] 11.2 Optimize performance and bundle size
+  - [x] 11.2 Optimize performance and bundle size
     - Optimize Electron bundle size and startup time
     - Implement lazy loading for non-critical components
     - Profile memory usage and implement cleanup procedures
     - _Requirements: 1.1, 1.2_
+
+- [ ] 12. Enhance desktop app experience and native integration
+  - [x] 12.1 Implement native application menu
+    - Create comprehensive application menu with File, Edit, View, Window, and Help menus
+    - Add menu items for common actions (New Task, Search, Preferences, About)
+    - Implement platform-specific menu behaviors (macOS vs Windows/Linux)
+    - Add keyboard shortcuts display in menu items
+    - _Requirements: 5.1, 5.2, 5.3_
+
+  - [x] 12.2 Enhance icon system and visual identity
+    - Generate complete icon set for all platforms (16x16 to 1024x1024)
+    - Create proper .icns file for macOS and .ico file for Windows
+    - Add app icon to system tray with high-DPI support
+    - Implement dynamic tray icon states (active/inactive, notification badges)
+    - _Requirements: 1.1, 1.3_
+
+  - [ ] 12.3 Add deep linking and URL scheme support
+    - Register custom URL scheme (corelive-todo://) for the application
+    - Implement URL parsing to open specific tasks or views
+    - Add support for creating tasks from external applications
+    - Handle multiple instances and focus existing window when opened via URL
+    - _Requirements: 1.1, 4.1_
+
+  - [ ] 12.4 Implement accessibility enhancements
+    - Add proper ARIA labels and roles to floating navigator components
+    - Implement keyboard navigation for all interactive elements
+    - Add screen reader support with descriptive announcements
+    - Ensure high contrast mode compatibility
+    - Add focus indicators and skip links for better navigation
+    - _Requirements: 2.1, 2.2, 5.1, 5.2_

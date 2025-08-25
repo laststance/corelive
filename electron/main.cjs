@@ -1,32 +1,41 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 
+// Performance optimization imports
 const { APIBridge } = require('./api-bridge.cjs')
-const AutoUpdater = require('./AutoUpdater.cjs')
 const ConfigManager = require('./ConfigManager.cjs')
 const IPCErrorHandler = require('./IPCErrorHandler.cjs')
+const { lazyLoadManager } = require('./LazyLoadManager.cjs')
+const { memoryProfiler } = require('./MemoryProfiler.cjs')
+// Critical imports - loaded immediately
 const { NextServerManager } = require('./next-server.cjs')
-const NotificationManager = require('./NotificationManager.cjs')
-const ShortcutManager = require('./ShortcutManager.cjs')
-const SystemIntegrationErrorHandler = require('./SystemIntegrationErrorHandler.cjs')
-const SystemTrayManager = require('./SystemTrayManager.cjs')
+const {
+  performanceOptimizer,
+  OPTIMIZATION_LEVELS,
+} = require('./performance-config.cjs')
 const WindowManager = require('./WindowManager.cjs')
 const WindowStateManager = require('./WindowStateManager.cjs')
-// const { AuthManager } = require('./auth-manager')
+
 const isDev = process.env.NODE_ENV === 'development'
 
+// Set optimization level based on environment
+const optimizationLevel = isDev ? 'development' : 'production'
+const config = OPTIMIZATION_LEVELS[optimizationLevel]
+
 // Keep a global reference of managers
-let autoUpdater
 let configManager
 let windowStateManager
 let windowManager
+let apiBridge
+let ipcErrorHandler
+let nextServerManager
+
+// Lazy-loaded managers (loaded when needed)
+let autoUpdater
 let systemTrayManager
 let notificationManager
 let shortcutManager
-let apiBridge
-let ipcErrorHandler
 let systemIntegrationErrorHandler
-// let authManager
-let nextServerManager
+let menuManager
 
 // Content Security Policy for enhanced security
 const CSP_POLICY = [
@@ -72,86 +81,135 @@ function setupSecurity() {
 }
 
 async function createWindow() {
-  // Initialize IPC error handler first
-  ipcErrorHandler = new IPCErrorHandler({
-    maxRetries: 3,
-    baseDelay: 1000,
-    enableLogging: true,
-  })
+  console.log('🚀 Starting optimized Electron initialization...')
 
-  // Initialize configuration manager
-  configManager = new ConfigManager()
+  // Start performance monitoring
+  if (config.enableMemoryMonitoring) {
+    memoryProfiler.startMonitoring()
+  }
 
-  // Initialize window state manager
-  windowStateManager = new WindowStateManager(configManager)
+  // Critical initialization - must happen immediately
+  const criticalInit = async () => {
+    console.log('⚡ Initializing critical components...')
 
-  // Initialize Next.js server
-  nextServerManager = new NextServerManager()
-  const serverUrl = await nextServerManager.start()
+    // Initialize IPC error handler first
+    ipcErrorHandler = new IPCErrorHandler({
+      maxRetries: 3,
+      baseDelay: 1000,
+      enableLogging: true,
+    })
 
-  // Initialize API bridge
-  apiBridge = new APIBridge()
-  await apiBridge.initialize()
+    // Initialize configuration manager
+    configManager = new ConfigManager()
 
-  // Initialize authentication manager
-  // authManager = new AuthManager(apiBridge)
+    // Initialize window state manager
+    windowStateManager = new WindowStateManager(configManager)
 
-  // Initialize window manager with server URL and managers
-  windowManager = new WindowManager(
-    serverUrl,
-    configManager,
-    windowStateManager,
+    // Initialize Next.js server
+    nextServerManager = new NextServerManager()
+    const serverUrl = await nextServerManager.start()
+
+    // Initialize API bridge
+    apiBridge = new APIBridge()
+    await apiBridge.initialize()
+
+    // Initialize window manager with server URL and managers
+    windowManager = new WindowManager(
+      serverUrl,
+      configManager,
+      windowStateManager,
+    )
+
+    // Create main window immediately for better perceived performance
+    const mainWindow = windowManager.createMainWindow()
+    performanceOptimizer.startupMetrics.windowsCreated++
+
+    return { mainWindow, serverUrl }
+  }
+
+  // Deferred initialization - happens after main window is shown
+  const deferredInit = async () => {
+    console.log('📦 Initializing deferred components...')
+
+    try {
+      // Load system integration components lazily
+      const SystemIntegrationErrorHandler = await lazyLoadManager.loadComponent(
+        'SystemIntegrationErrorHandler',
+      )
+      systemIntegrationErrorHandler = new SystemIntegrationErrorHandler(
+        windowManager,
+        configManager,
+      )
+
+      // Load menu manager
+      const MenuManager = await lazyLoadManager.loadComponent('MenuManager')
+      menuManager = new MenuManager()
+      menuManager.initialize(mainWindow, windowManager, configManager)
+
+      // Load system tray manager
+      const SystemTrayManager =
+        await lazyLoadManager.loadComponent('SystemTrayManager')
+      systemTrayManager = new SystemTrayManager(windowManager)
+
+      // Load notification manager
+      const NotificationManager = await lazyLoadManager.loadComponent(
+        'NotificationManager',
+      )
+      notificationManager = new NotificationManager(
+        windowManager,
+        systemTrayManager,
+        configManager,
+      )
+
+      // Load shortcut manager
+      const ShortcutManager =
+        await lazyLoadManager.loadComponent('ShortcutManager')
+      shortcutManager = new ShortcutManager(
+        windowManager,
+        notificationManager,
+        configManager,
+      )
+
+      // Set managers in error handler
+      systemIntegrationErrorHandler.setManagers(
+        systemTrayManager,
+        notificationManager,
+        shortcutManager,
+      )
+
+      // Initialize system integration with comprehensive error handling
+      const integrationResults =
+        await systemIntegrationErrorHandler.initializeSystemIntegration()
+
+      console.log('🔧 System integration results:', integrationResults)
+
+      // Load auto-updater in background
+      const AutoUpdater = await lazyLoadManager.loadComponent('AutoUpdater')
+      autoUpdater = new AutoUpdater()
+      autoUpdater.setMainWindow(windowManager.getMainWindow())
+
+      // Set up window close behavior after tray manager is loaded
+      const mainWindow = windowManager.getMainWindow()
+      mainWindow.on('close', (event) => {
+        if (systemTrayManager) {
+          systemTrayManager.handleWindowClose(event)
+        }
+      })
+
+      console.log('✅ Deferred initialization completed')
+    } catch (error) {
+      console.error('❌ Deferred initialization failed:', error)
+      // Continue without non-critical components
+    }
+  }
+
+  // Use optimized startup
+  const { mainWindow } = await performanceOptimizer.optimizeStartup(
+    criticalInit,
+    deferredInit,
   )
 
-  // Initialize system integration error handler
-  systemIntegrationErrorHandler = new SystemIntegrationErrorHandler(
-    windowManager,
-    configManager,
-  )
-
-  // Initialize system tray manager
-  systemTrayManager = new SystemTrayManager(windowManager)
-
-  // Initialize notification manager
-  notificationManager = new NotificationManager(
-    windowManager,
-    systemTrayManager,
-    configManager,
-  )
-
-  // Initialize shortcut manager
-  shortcutManager = new ShortcutManager(
-    windowManager,
-    notificationManager,
-    configManager,
-  )
-
-  // Set managers in error handler
-  systemIntegrationErrorHandler.setManagers(
-    systemTrayManager,
-    notificationManager,
-    shortcutManager,
-  )
-
-  // Initialize system integration with comprehensive error handling
-  const integrationResults =
-    await systemIntegrationErrorHandler.initializeSystemIntegration()
-
-  console.log('🔧 System integration results:', integrationResults)
-
-  // Create main window using WindowManager
-  const mainWindow = windowManager.createMainWindow()
-
-  // Initialize auto-updater
-  autoUpdater = new AutoUpdater()
-  autoUpdater.setMainWindow(mainWindow)
-
-  // Override window close behavior to minimize to tray
-  mainWindow.on('close', (event) => {
-    systemTrayManager.handleWindowClose(event)
-  })
-
-  // Set up IPC handlers after all managers are initialized
+  // Set up IPC handlers immediately (they handle lazy loading internally)
   setupIPCHandlers()
 
   return mainWindow
@@ -475,11 +533,18 @@ function setupIPCHandlers() {
     }
   })
 
-  // Notification management IPC handlers with error handling
+  ipcMain.handle('tray-set-icon-state', (event, state) => {
+    if (systemTrayManager) {
+      return systemTrayManager.setTrayIconState(state)
+    }
+    return false
+  })
+
+  // Notification management IPC handlers with error handling and lazy loading
   ipcMain.handle(
     'notification-show',
     ipcErrorHandler.wrapHandler(
-      (event, title, body, options) => {
+      async (event, title, body, options) => {
         // Validate input
         const titleValidation = ipcErrorHandler.validateInput(title, {
           type: 'string',
@@ -501,8 +566,22 @@ function setupIPCHandlers() {
           throw new Error(`Invalid notification body: ${bodyValidation.error}`)
         }
 
+        // Lazy load notification manager if not available
         if (!notificationManager) {
-          throw new Error('Notification manager not initialized')
+          try {
+            const NotificationManager = await lazyLoadManager.loadComponent(
+              'NotificationManager',
+            )
+            // eslint-disable-next-line require-atomic-updates
+            notificationManager = new NotificationManager(
+              windowManager,
+              systemTrayManager,
+              configManager,
+            )
+          } catch (error) {
+            console.warn('Failed to load notification manager:', error.message)
+            throw new Error('Notification manager not available')
+          }
         }
 
         return notificationManager.showNotification(title, body, options || {})
@@ -621,6 +700,31 @@ function setupIPCHandlers() {
     return true
   })
 
+  // Performance monitoring IPC handlers
+  ipcMain.handle('performance-get-metrics', () => {
+    return {
+      optimizer: performanceOptimizer.getMetrics(),
+      memory: memoryProfiler.getStatistics(),
+      lazyLoad: lazyLoadManager.getStatus(),
+    }
+  })
+
+  ipcMain.handle('performance-trigger-cleanup', () => {
+    memoryProfiler.performCleanup('manual')
+    return true
+  })
+
+  ipcMain.handle('performance-get-startup-time', () => {
+    return Date.now() - performanceOptimizer.startupMetrics.startTime
+  })
+
+  // Menu action IPC handlers
+  ipcMain.handle('menu-action', (event, action) => {
+    if (menuManager) {
+      menuManager.handleMenuAction(action)
+    }
+  })
+
   // Add other IPC handlers without error wrapping for simplicity
   ipcMain.handle('window-show-main', () => {
     if (windowManager) {
@@ -729,6 +833,12 @@ app.on('window-all-closed', () => {
 
 // Cleanup before quit
 app.on('before-quit', async () => {
+  console.log('🧹 Starting application cleanup...')
+
+  // Stop performance monitoring
+  memoryProfiler.stopMonitoring()
+
+  // Cleanup managers in reverse order of initialization
   if (systemTrayManager) {
     systemTrayManager.setQuitting(true)
   }
@@ -756,6 +866,13 @@ app.on('before-quit', async () => {
   if (nextServerManager) {
     await nextServerManager.stop()
   }
+
+  // Cleanup performance components
+  lazyLoadManager.cleanup()
+  performanceOptimizer.cleanup()
+  memoryProfiler.cleanup()
+
+  console.log('✅ Application cleanup completed')
 })
 
 // Security: Prevent new window creation from renderer and other security measures

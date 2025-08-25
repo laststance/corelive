@@ -16,6 +16,10 @@ class ElectronIPCLink {
       const [namespace, method] = path
 
       if (namespace === 'todo') {
+        if (!window.electronAPI!.todos) {
+          throw new Error('Todos API not available')
+        }
+
         switch (method) {
           case 'list':
             return await window.electronAPI!.todos.getTodos()
@@ -35,7 +39,7 @@ class ElectronIPCLink {
             const completedTodos = todos.filter((todo: any) => todo.completed)
             await Promise.all(
               completedTodos.map(async (todo: any) =>
-                window.electronAPI!.todos.deleteTodo(todo.id),
+                window.electronAPI!.todos!.deleteTodo(todo.id),
               ),
             )
             return { deletedCount: completedTodos.length }

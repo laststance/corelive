@@ -66,7 +66,6 @@ class WindowManager {
       show: false,
       titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
       backgroundColor: '#ffffff',
-      autoHideMenuBar: true,
     })
 
     // Apply saved window state
