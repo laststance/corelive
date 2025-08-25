@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: Related Playwright
+alwaysApply: false
 ---
 # Authentication Patterns
 
