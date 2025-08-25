@@ -1,0 +1,48 @@
+/* Floating Navigator Styles */
+
+/* Make the header draggable */
+.drag-handle {
+  -webkit-app-region: drag;
+}
+
+/* Ensure buttons and interactive elements are not draggable */
+.drag-handle button,
+.drag-handle input,
+.drag-handle [role='button'],
+.pointer-events-auto {
+  -webkit-app-region: no-drag;
+}
+
+/* Smooth transitions for window controls */
+.floating-navigator-controls {
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Custom scrollbar for the task list */
+.floating-navigator-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.floating-navigator-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.floating-navigator-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.floating-navigator-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure proper text selection behavior */
+.drag-handle .pointer-events-none {
+  user-select: none;
+}
+
+/* Focus styles for accessibility */
+.floating-navigator-button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

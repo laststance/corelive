@@ -51,14 +51,14 @@
     - Ensure authentication state synchronization between processes
     - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 5. Implement floating navigator UI component
-  - [ ] 5.1 Create compact floating navigator React component
+- [x] 5. Implement floating navigator UI component
+  - [x] 5.1 Create compact floating navigator React component
     - Build minimal TODO list component optimized for small window size
     - Implement inline task editing and completion toggling
     - Add quick task creation input with keyboard shortcuts
     - _Requirements: 2.1, 2.2, 2.3, 5.1, 5.2_
 
-  - [ ] 5.2 Implement floating navigator window management
+  - [x] 5.2 Implement floating navigator window management
     - Create floating navigator window with proper styling (frameless, always on top)
     - Implement position persistence and drag functionality
     - Add toggle visibility and focus management
