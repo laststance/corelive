@@ -17,7 +17,7 @@
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "eslint . --fix",
-    "test": "vitest:run",
+    "test": "vitest run",
     "test:storybook": "vitest run --config vitest.config.storybook.ts",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
