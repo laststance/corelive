@@ -28,6 +28,7 @@ jobs:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
         run: |
           touch .env
+          : "${CI:=true}"
           : "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:=pk_test_dummy}"
           : "${NEXT_PUBLIC_CLERK_SIGN_IN_URL:=/login}"
           : "${NEXT_PUBLIC_CLERK_SIGN_UP_URL:=/sign-up}"
@@ -66,8 +67,7 @@ jobs:
 
       - name: Run Playwright tests 🧪
         run: pnpm exec playwright test --reporter=list
-        env:
-          CI: true
+
       - name: Upload Playwright Report 📊
         uses: actions/upload-artifact@v4
         if: always()
