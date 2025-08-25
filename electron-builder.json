@@ -1,8 +1,10 @@
 {
   "appId": "com.corelive.todoapp",
   "productName": "CoreLive TODO",
+  "copyright": "Copyright © 2025 CoreLive",
   "directories": {
-    "output": "dist-electron"
+    "output": "dist-electron",
+    "buildResources": "build"
   },
   "files": [
     ".next/**/*",
@@ -11,10 +13,14 @@
     "package.json",
     "next.config.js",
     "public/**/*",
-    "src/**/*",
     "prisma/**/*",
-    "!src/**/*.test.*",
-    "!src/**/*.spec.*"
+    "!src/**/*",
+    "!**/*.test.*",
+    "!**/*.spec.*",
+    "!**/__tests__/**/*",
+    "!**/test/**/*",
+    "!**/.DS_Store",
+    "!**/node_modules/.cache/**/*"
   ],
   "extraResources": [
     {
@@ -23,37 +29,159 @@
       "filter": ["**/*"]
     }
   ],
+  "publish": {
+    "provider": "github",
+    "owner": "corelive",
+    "repo": "corelive-todo",
+    "private": true,
+    "releaseType": "release"
+  },
   "mac": {
     "category": "public.app-category.productivity",
     "target": [
       {
         "target": "dmg",
         "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
       }
     ],
-    "icon": "public/favicon.ico"
+    "icon": "build/icon.icns",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "notarize": {
+      "teamId": "${APPLE_TEAM_ID}"
+    },
+    "type": "distribution",
+    "minimumSystemVersion": "10.15.0"
+  },
+  "dmg": {
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ],
+    "title": "${productName} ${version}",
+    "backgroundColor": "#ffffff",
+    "window": {
+      "width": 540,
+      "height": 380
+    }
   },
   "win": {
     "target": [
       {
         "target": "nsis",
+        "arch": ["x64", "ia32"]
+      },
+      {
+        "target": "portable",
         "arch": ["x64"]
       }
     ],
-    "icon": "public/favicon.ico"
+    "icon": "build/icon.ico",
+    "publisherName": "CoreLive",
+    "certificateFile": "${WIN_CSC_LINK}",
+    "certificatePassword": "${WIN_CSC_KEY_PASSWORD}",
+    "signingHashAlgorithms": ["sha256"],
+    "signDlls": true,
+    "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "allowElevation": true,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "${productName}",
+    "include": "build/installer.nsh",
+    "deleteAppDataOnUninstall": false
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-portable.${ext}"
   },
   "linux": {
     "target": [
       {
         "target": "AppImage",
         "arch": ["x64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64"]
+      },
+      {
+        "target": "rpm",
+        "arch": ["x64"]
+      },
+      {
+        "target": "snap",
+        "arch": ["x64"]
       }
     ],
     "category": "Office",
-    "icon": "public/favicon.ico"
+    "icon": "build/icons",
+    "desktop": {
+      "Name": "CoreLive TODO",
+      "Comment": "A modern TODO application with desktop integration",
+      "Keywords": "todo;task;productivity;electron;",
+      "StartupWMClass": "corelive-todo"
+    },
+    "maintainer": "CoreLive <support@corelive.com>",
+    "vendor": "CoreLive",
+    "synopsis": "Modern TODO application with desktop integration"
   },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
-  }
+  "deb": {
+    "depends": [
+      "gconf2",
+      "gconf-service",
+      "libnotify4",
+      "libappindicator1",
+      "libxtst6",
+      "libnss3"
+    ]
+  },
+  "rpm": {
+    "depends": ["libnotify", "libappindicator-gtk3", "libXtst", "nss"]
+  },
+  "snap": {
+    "grade": "stable",
+    "confinement": "strict",
+    "plugs": [
+      "default",
+      "desktop",
+      "desktop-legacy",
+      "home",
+      "x11",
+      "unity7",
+      "browser-support",
+      "network",
+      "gsettings",
+      "audio-playback",
+      "pulseaudio",
+      "opengl"
+    ],
+    "environment": {
+      "DISABLE_WAYLAND": "1"
+    }
+  },
+  "appImage": {
+    "artifactName": "${productName}-${version}.${ext}"
+  },
+  "afterSign": "scripts/notarize.js",
+  "afterAllArtifactBuild": "scripts/after-build.js"
 }

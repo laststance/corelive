@@ -122,14 +122,14 @@
     - Test task operations through the floating interface
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 10. Configure build and packaging
-  - [ ] 10.1 Set up Electron Builder configuration
+- [x] 10. Configure build and packaging
+  - [x] 10.1 Set up Electron Builder configuration
     - Configure electron-builder for multi-platform builds (Windows, macOS, Linux)
     - Set up code signing and notarization for macOS
     - Configure auto-updater with secure update channels
     - _Requirements: 1.1_
 
-  - [ ] 10.2 Create development and production scripts
+  - [x] 10.2 Create development and production scripts
     - Set up concurrent development server for Next.js and Electron
     - Create build scripts for production packaging
     - Configure CI/CD pipeline for automated builds and releases

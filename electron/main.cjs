@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 
 const { APIBridge } = require('./api-bridge.cjs')
+const AutoUpdater = require('./AutoUpdater.cjs')
 const ConfigManager = require('./ConfigManager.cjs')
 const IPCErrorHandler = require('./IPCErrorHandler.cjs')
 const { NextServerManager } = require('./next-server.cjs')
@@ -14,6 +15,7 @@ const WindowStateManager = require('./WindowStateManager.cjs')
 const isDev = process.env.NODE_ENV === 'development'
 
 // Keep a global reference of managers
+let autoUpdater
 let configManager
 let windowStateManager
 let windowManager
@@ -139,6 +141,10 @@ async function createWindow() {
   // Create main window using WindowManager
   const mainWindow = windowManager.createMainWindow()
 
+  // Initialize auto-updater
+  autoUpdater = new AutoUpdater()
+  autoUpdater.setMainWindow(mainWindow)
+
   // Override window close behavior to minimize to tray
   mainWindow.on('close', (event) => {
     systemTrayManager.handleWindowClose(event)
@@ -210,6 +216,7 @@ app.on('before-quit', async () => {
   if (nextServerManager) {
     await nextServerManager.stop()
   }
+  // Auto-updater doesn't need explicit cleanup
 })
 
 // Security: Prevent new window creation from renderer and other security measures
@@ -944,6 +951,33 @@ ipcMain.handle('config-export', (event, filePath) => {
 })
 
 ipcMain.handle('config-import', (event, filePath) => {
+  if (configManager) {
+    return configManager.importConfig(filePath)
+  }
+  return null
+})
+
+// Auto-updater IPC handlers
+ipcMain.handle('updater-check-for-updates', () => {
+  if (autoUpdater) {
+    autoUpdater.manualCheckForUpdates()
+  }
+})
+
+ipcMain.handle('updater-quit-and-install', () => {
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall()
+  }
+})
+
+ipcMain.handle('updater-get-status', () => {
+  if (autoUpdater) {
+    return autoUpdater.getUpdateStatus()
+  }
+  return { updateAvailable: false, updateDownloaded: false }
+})
+
+ipcMain.handle('config-import-file', (event, filePath) => {
   if (configManager) {
     return configManager.importConfig(filePath)
   }

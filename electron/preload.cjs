@@ -80,11 +80,17 @@ const ALLOWED_CHANNELS = {
   'app-version': true,
   'app-quit': true,
 
+  // Auto-updater operations
+  'updater-check-for-updates': true,
+  'updater-quit-and-install': true,
+  'updater-get-status': true,
+
   // Event channels
   'window-focus': true,
   'window-blur': true,
   'app-update-available': true,
   'app-update-downloaded': true,
+  'updater-message': true,
   'todo-updated': true,
   'todo-created': true,
   'todo-deleted': true,
@@ -1158,6 +1164,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         console.error('Failed to reset IPC error stats:', error)
         return false
+      }
+    },
+  },
+
+  // Auto-updater operations
+  updater: {
+    /**
+     * Check for application updates
+     */
+    checkForUpdates: async () => {
+      try {
+        return await ipcRenderer.invoke('updater-check-for-updates')
+      } catch (error) {
+        console.error('Failed to check for updates:', error)
+        return false
+      }
+    },
+
+    /**
+     * Quit and install update
+     */
+    quitAndInstall: async () => {
+      try {
+        return await ipcRenderer.invoke('updater-quit-and-install')
+      } catch (error) {
+        console.error('Failed to quit and install update:', error)
+        return false
+      }
+    },
+
+    /**
+     * Get update status
+     */
+    getStatus: async () => {
+      try {
+        return await ipcRenderer.invoke('updater-get-status')
+      } catch (error) {
+        console.error('Failed to get update status:', error)
+        return { updateAvailable: false, updateDownloaded: false }
       }
     },
   },
