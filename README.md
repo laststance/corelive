@@ -80,3 +80,31 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+
+## Desktop Application (Electron)
+
+This project includes an Electron desktop application that wraps the Next.js web app.
+
+### Electron Development
+
+```bash
+# Run the desktop app in development mode
+pnpm electron:dev
+
+# Run Electron directly (requires Next.js dev server to be running)
+pnpm electron
+```
+
+### Building Desktop App
+
+```bash
+# Build for all platforms
+pnpm electron:build
+
+# Build for specific platforms
+pnpm electron:build:win    # Windows
+pnpm electron:build:mac    # macOS
+pnpm electron:build:linux  # Linux
+```
+
+The built applications will be available in the `dist-electron/` directory.

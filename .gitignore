@@ -51,3 +51,9 @@ clerk-playwright-nextjs
 .playwright-mcp
 # Playwright authentication state
 e2e/.auth
+
+# Electron
+dist-electron/
+*.exe
+*.dmg
+*.AppImage
