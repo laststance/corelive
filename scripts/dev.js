@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'child_process'
-import { createServer } from 'http'
+import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -54,30 +54,22 @@ async function checkServer(_url, maxAttempts = 30, interval = 1000) {
     const check = () => {
       attempts++
 
-      const req = createServer().listen(0, () => {
-        // const testPort = req.address().port
-        req.close()
-
-        const http = require('http')
-        const testReq = http.get(`http://localhost:${port}`, (res) => {
-          if (res.statusCode === 200) {
-            console.log(
-              `✅ Next.js server is ready at http://localhost:${port}`,
-            )
-            resolve()
-          } else {
-            scheduleNextCheck()
-          }
-        })
-
-        testReq.on('error', () => {
+      const testReq = http.get(`http://localhost:${port}`, (res) => {
+        if (res.statusCode === 200) {
+          console.log(`✅ Next.js server is ready at http://localhost:${port}`)
+          resolve()
+        } else {
           scheduleNextCheck()
-        })
+        }
+      })
 
-        testReq.setTimeout(2000, () => {
-          testReq.destroy()
-          scheduleNextCheck()
-        })
+      testReq.on('error', () => {
+        scheduleNextCheck()
+      })
+
+      testReq.setTimeout(2000, () => {
+        testReq.destroy()
+        scheduleNextCheck()
       })
     }
 

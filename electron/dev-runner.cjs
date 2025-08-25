@@ -49,7 +49,7 @@ async function startElectron() {
     // Start Electron
     const electronProcess = spawn(
       'electron',
-      [path.join(__dirname, 'main.js')],
+      [path.join(__dirname, 'main.cjs')],
       {
         stdio: 'inherit',
         env: {
