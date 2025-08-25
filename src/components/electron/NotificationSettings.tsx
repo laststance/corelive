@@ -59,6 +59,9 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.notifications) {
+        throw new Error('Electron API not available')
+      }
       const prefs = await window.electronAPI.notifications.getPreferences()
       const enabled = await window.electronAPI.notifications.isEnabled()
 
@@ -77,6 +80,9 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.notifications) {
+        throw new Error('Electron API not available')
+      }
       const count = await window.electronAPI.notifications.getActiveCount()
       setActiveCount(count)
     } catch (error) {
@@ -91,6 +97,9 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
 
     setIsSaving(true)
     try {
+      if (!window.electronAPI?.notifications) {
+        throw new Error('Electron API not available')
+      }
       const updatedPrefs = { ...preferences, ...newPreferences }
       const result =
         await window.electronAPI.notifications.updatePreferences(updatedPrefs)
@@ -109,6 +118,9 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.notifications) {
+        throw new Error('Electron API not available')
+      }
       await window.electronAPI.notifications.show(
         'Test Notification',
         'This is a test notification from your TODO app!',
@@ -123,6 +135,9 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.notifications) {
+        throw new Error('Electron API not available')
+      }
       await window.electronAPI.notifications.clearAll()
       setActiveCount(0)
     } catch (error) {

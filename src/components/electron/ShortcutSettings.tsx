@@ -31,7 +31,7 @@ interface ShortcutStats {
   shortcuts: Record<string, string>
 }
 
-const SHORTCUT_DESCRIPTIONS = {
+const SHORTCUT_DESCRIPTIONS: Record<string, string> = {
   newTask: 'Create new task',
   search: 'Focus search',
   toggleFloatingNavigator: 'Toggle floating navigator',
@@ -67,6 +67,9 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.shortcuts) {
+        throw new Error('Electron API not available')
+      }
       const [registered, defaults, currentStats] = await Promise.all([
         window.electronAPI.shortcuts.getRegistered(),
         window.electronAPI.shortcuts.getDefaults(),
@@ -102,6 +105,9 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
     setError(null)
 
     try {
+      if (!window.electronAPI?.shortcuts) {
+        throw new Error('Electron API not available')
+      }
       const success = await window.electronAPI.shortcuts.update(shortcuts)
 
       if (success) {
@@ -130,6 +136,9 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
     if (!isElectron || !stats) return
 
     try {
+      if (!window.electronAPI?.shortcuts) {
+        throw new Error('Electron API not available')
+      }
       if (stats.isEnabled) {
         await window.electronAPI.shortcuts.disable()
       } else {
@@ -148,6 +157,12 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
     try {
       const accelerator = shortcuts[id]
       if (accelerator) {
+        if (
+          !window.electronAPI?.shortcuts ||
+          !window.electronAPI?.notifications
+        ) {
+          throw new Error('Electron API not available')
+        }
         const isRegistered =
           await window.electronAPI.shortcuts.isRegistered(accelerator)
         if (isRegistered) {

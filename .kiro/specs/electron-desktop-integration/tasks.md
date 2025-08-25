@@ -64,7 +64,7 @@
     - Add toggle visibility and focus management
     - _Requirements: 2.1, 2.2, 2.5, 6.1, 6.3_
 
-- [ ] 6. Add system integration features
+- [x] 6. Add system integration features
   - [x] 6.1 Implement native notifications
     - Create notification system for task creation, completion, and updates
     - Add user preference controls for notification types
@@ -90,7 +90,7 @@
     - Handle multi-monitor setups and display changes
     - _Requirements: 6.1, 6.2, 6.3_
 
-- [-] 8. Add error handling and recovery
+- [x] 8. Add error handling and recovery
   - [x] 8.1 Implement IPC error handling
     - Add retry logic for failed IPC communications
     - Implement graceful degradation when API calls fail
@@ -103,7 +103,7 @@
     - Implement fallback behavior for shortcut registration conflicts
     - _Requirements: 1.3, 3.3, 5.3_
 
-- [ ] 9. Create comprehensive test suite
+- [x] 9. Create comprehensive test suite
   - [x] 9.1 Write unit tests for main process components
     - Test WindowManager class functionality with Vitest
     - Test SystemTrayManager operations and event handling
@@ -135,8 +135,8 @@
     - Configure CI/CD pipeline for automated builds and releases
     - _Requirements: 1.1_
 
-- [ ] 11. Final integration and testing
-  - [ ] 11.1 Perform end-to-end testing
+- [-] 11. Final integration and testing
+  - [x] 11.1 Perform end-to-end testing
     - Test complete user workflows from task creation to completion
     - Verify authentication flow and data synchronization
     - Test system tray, notifications, and keyboard shortcuts across platforms

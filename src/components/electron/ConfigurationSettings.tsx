@@ -27,7 +27,6 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-
 interface ElectronConfig {
   version: string
   window: {
@@ -133,6 +132,9 @@ export function ConfigurationSettings() {
   const loadConfiguration = async () => {
     try {
       setLoading(true)
+      if (!window.electronAPI?.config) {
+        throw new Error('Electron API not available')
+      }
       const allConfig = await window.electronAPI.config.getAll()
       setConfig(allConfig)
 
@@ -155,9 +157,15 @@ export function ConfigurationSettings() {
     let current: any = newConfig
 
     for (let i = 0; i < keys.length - 1; i++) {
-      current = current[keys[i]]
+      const key = keys[i]
+      if (key && current[key] !== undefined) {
+        current = current[key]
+      }
     }
-    current[keys[keys.length - 1]] = value
+    const lastKey = keys[keys.length - 1]
+    if (lastKey) {
+      current[lastKey] = value
+    }
 
     setConfig(newConfig)
     setHasChanges(true)
@@ -170,6 +178,9 @@ export function ConfigurationSettings() {
       setSaving(true)
 
       // Validate before saving
+      if (!window.electronAPI?.config) {
+        throw new Error('Electron API not available')
+      }
       const validationResult = await window.electronAPI.config.validate()
       if (!validationResult.isValid) {
         setValidation(validationResult)
@@ -195,6 +206,9 @@ export function ConfigurationSettings() {
       }
 
       flattenConfig(config)
+      if (!window.electronAPI?.config) {
+        throw new Error('Electron API not available')
+      }
       await window.electronAPI.config.update(updates)
 
       setHasChanges(false)
@@ -211,6 +225,9 @@ export function ConfigurationSettings() {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.config) {
+        throw new Error('Electron API not available')
+      }
       await window.electronAPI.config.reset()
       await loadConfiguration()
       setHasChanges(false)
@@ -225,6 +242,9 @@ export function ConfigurationSettings() {
     if (!isElectron) return
 
     try {
+      if (!window.electronAPI?.config) {
+        throw new Error('Electron API not available')
+      }
       await window.electronAPI.config.resetSection(section)
       await loadConfiguration()
       setHasChanges(false)
@@ -243,6 +263,9 @@ export function ConfigurationSettings() {
       // For now, we'll just create a backup
 
       // For now, we'll just create a backup
+      if (!window.electronAPI?.config) {
+        throw new Error('Electron API not available')
+      }
       const backupPath = await window.electronAPI.config.backup()
       if (backupPath) {
         toast.success(`Configuration exported to ${backupPath}`)

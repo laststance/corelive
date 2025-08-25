@@ -40,6 +40,17 @@ export default defineConfig({
       },
       dependencies: ['setup'], // Run setup project first
     },
+
+    // Electron desktop integration tests
+    {
+      name: 'electron',
+      testMatch: /.*electron.*\.spec\.ts/,
+      use: {
+        // Electron-specific configuration
+        trace: 'on-first-retry',
+        screenshot: 'only-on-failure',
+      },
+    },
   ],
 
   // One-time hooks

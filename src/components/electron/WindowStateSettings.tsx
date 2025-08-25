@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 
-
 interface WindowState {
   bounds: {
     x: number
@@ -83,6 +82,9 @@ export function WindowStateSettings() {
     try {
       setLoading(true)
 
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
+      }
       const [statsData, displaysData] = await Promise.all([
         window.electronAPI.windowState.getStats(),
         window.electronAPI.windowState.getAllDisplays(),
@@ -100,6 +102,9 @@ export function WindowStateSettings() {
 
   const moveWindowToDisplay = async (windowType: string, displayId: number) => {
     try {
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
+      }
       const success = await window.electronAPI.windowState.moveToDisplay(
         windowType,
         displayId,
@@ -118,6 +123,9 @@ export function WindowStateSettings() {
 
   const snapWindowToEdge = async (windowType: string, edge: string) => {
     try {
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
+      }
       const success = await window.electronAPI.windowState.snapToEdge(
         windowType,
         edge,
@@ -136,6 +144,9 @@ export function WindowStateSettings() {
 
   const resetWindowState = async (windowType: string) => {
     try {
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
+      }
       const success = await window.electronAPI.windowState.reset(windowType)
       if (success) {
         toast.success(`${windowType} window state reset to defaults`)
@@ -366,7 +377,9 @@ export function WindowStateSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'bottom-left')}
+                    onClick={async () =>
+                      snapWindowToEdge('main', 'bottom-left')
+                    }
                   >
                     Bottom Left
                   </Button>
@@ -380,7 +393,9 @@ export function WindowStateSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'bottom-right')}
+                    onClick={async () =>
+                      snapWindowToEdge('main', 'bottom-right')
+                    }
                   >
                     Bottom Right
                   </Button>
@@ -472,28 +487,36 @@ export function WindowStateSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => snapWindowToEdge('floating', 'top-left')}
+                    onClick={async () =>
+                      snapWindowToEdge('floating', 'top-left')
+                    }
                   >
                     Top Left
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => snapWindowToEdge('floating', 'top-right')}
+                    onClick={async () =>
+                      snapWindowToEdge('floating', 'top-right')
+                    }
                   >
                     Top Right
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => snapWindowToEdge('floating', 'bottom-left')}
+                    onClick={async () =>
+                      snapWindowToEdge('floating', 'bottom-left')
+                    }
                   >
                     Bottom Left
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={async () => snapWindowToEdge('floating', 'bottom-right')}
+                    onClick={async () =>
+                      snapWindowToEdge('floating', 'bottom-right')
+                    }
                   >
                     Bottom Right
                   </Button>

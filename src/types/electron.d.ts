@@ -70,6 +70,17 @@ export interface ElectronAPI {
     close(): void
     toggleFloatingNavigator(): void
     setAlwaysOnTop(flag: boolean): void
+    isAlwaysOnTop(): boolean
+    isMinimized(): boolean
+    restore(): void
+    getBounds(): { x: number; y: number; width: number; height: number }
+    setBounds(bounds: {
+      x?: number
+      y?: number
+      width?: number
+      height?: number
+    }): void
+    moveToDisplay(displayIndex: number): void
   }
 
   // System integration
@@ -104,8 +115,48 @@ export interface ElectronAPI {
     getStats(): Promise<ShortcutStats | null>
   }
 
+  // Configuration management
+  config: {
+    save(): boolean
+    load(): any
+    getAll(): Promise<any>
+    validate(): Promise<{ isValid: boolean; errors: string[] }>
+    update(updates: any): Promise<void>
+    reset(): Promise<void>
+    resetSection(section: string): Promise<void>
+    backup(): Promise<string>
+  }
+
+  // Window state management
+  windowState: {
+    getStats(): Promise<any>
+    getAllDisplays(): Promise<any[]>
+    moveToDisplay(windowType: string, displayId: number): Promise<boolean>
+    snapToEdge(windowType: string, edge: string): Promise<boolean>
+    reset(windowType: string): Promise<boolean>
+  }
+
+  // System tray operations
+  tray: {
+    click(): void
+    show(): void
+    hide(): void
+  }
+
+  // Display management
+  display: {
+    getAllDisplays(): any[]
+    handleDisplayChange(): void
+  }
+
+  // Testing utilities
+  test: {
+    simulateError(type: string): void
+    clearErrors(): void
+  }
+
   // Event listeners
-  on(channel: string, callback: Function): void
+  on(channel: string, callback: Function): (() => void) | void
   removeListener(channel: string, callback: Function): void
 }
 

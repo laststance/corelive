@@ -36,7 +36,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
     typeof window !== 'undefined' && window.electronAPI?.shortcuts
 
   const loadShortcuts = useCallback(async () => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.shortcuts) return
 
     try {
       const [registered, defaults, currentStats] = await Promise.all([
@@ -57,7 +57,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
   const updateShortcuts = useCallback(
     async (newShortcuts: Record<string, string>) => {
-      if (!isElectron) return false
+      if (!isElectron || !window.electronAPI?.shortcuts) return false
 
       try {
         const success = await window.electronAPI.shortcuts.update(newShortcuts)
@@ -75,7 +75,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
   const registerShortcut = useCallback(
     async (accelerator: string, id: string) => {
-      if (!isElectron) return false
+      if (!isElectron || !window.electronAPI?.shortcuts) return false
 
       try {
         const success = await window.electronAPI.shortcuts.register(
@@ -96,7 +96,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
   const unregisterShortcut = useCallback(
     async (id: string) => {
-      if (!isElectron) return false
+      if (!isElectron || !window.electronAPI?.shortcuts) return false
 
       try {
         const success = await window.electronAPI.shortcuts.unregister(id)
@@ -114,7 +114,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
   const isShortcutRegistered = useCallback(
     async (accelerator: string) => {
-      if (!isElectron) return false
+      if (!isElectron || !window.electronAPI?.shortcuts) return false
 
       try {
         return await window.electronAPI.shortcuts.isRegistered(accelerator)
@@ -127,7 +127,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
   )
 
   const enableShortcuts = useCallback(async () => {
-    if (!isElectron) return false
+    if (!isElectron || !window.electronAPI?.shortcuts) return false
 
     try {
       const success = await window.electronAPI.shortcuts.enable()
@@ -142,7 +142,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
   }, [isElectron, loadShortcuts])
 
   const disableShortcuts = useCallback(async () => {
-    if (!isElectron) return false
+    if (!isElectron || !window.electronAPI?.shortcuts) return false
 
     try {
       const success = await window.electronAPI.shortcuts.disable()
@@ -157,7 +157,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
   }, [isElectron, loadShortcuts])
 
   const refreshStats = useCallback(async () => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.shortcuts) return
 
     try {
       const currentStats = await window.electronAPI.shortcuts.getStats()
@@ -173,7 +173,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
   // Set up event listeners for shortcut events
   useEffect(() => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.on) return
 
     // Listen for shortcut events
     const handleNewTask = () => {
@@ -193,8 +193,13 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
     const cleanupSearch = window.electronAPI.on('shortcut-search', handleSearch)
 
     return () => {
-      if (cleanupNewTask) cleanupNewTask()
-      if (cleanupSearch) cleanupSearch()
+      // Event cleanup functions may not exist in all implementations
+      try {
+        if (typeof cleanupNewTask === 'function') cleanupNewTask()
+        if (typeof cleanupSearch === 'function') cleanupSearch()
+      } catch (error) {
+        console.warn('Error cleaning up event listeners:', error)
+      }
     }
   }, [isElectron])
 

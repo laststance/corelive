@@ -41,7 +41,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
     typeof window !== 'undefined' && window.electronAPI?.notifications
 
   const loadNotificationStatus = useCallback(async () => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.notifications) return
 
     try {
       const [enabled, prefs, count] = await Promise.all([
@@ -62,7 +62,8 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
 
   const showNotification = useCallback(
     async (title: string, body: string, options: any = {}) => {
-      if (!isElectron || !isEnabled) return
+      if (!isElectron || !isEnabled || !window.electronAPI?.notifications)
+        return
 
       try {
         await window.electronAPI.notifications.show(title, body, options)
@@ -78,7 +79,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
 
   const updatePreferences = useCallback(
     async (newPreferences: Partial<NotificationPreferences>) => {
-      if (!isElectron) return
+      if (!isElectron || !window.electronAPI?.notifications) return
 
       try {
         const updatedPrefs =
@@ -98,7 +99,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
   )
 
   const clearAll = useCallback(async () => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.notifications) return
 
     try {
       await window.electronAPI.notifications.clearAll()
@@ -111,7 +112,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
 
   const clearNotification = useCallback(
     async (tag: string) => {
-      if (!isElectron) return
+      if (!isElectron || !window.electronAPI?.notifications) return
 
       try {
         await window.electronAPI.notifications.clear(tag)
@@ -126,7 +127,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
   )
 
   const refreshActiveCount = useCallback(async () => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.notifications) return
 
     try {
       const count = await window.electronAPI.notifications.getActiveCount()
@@ -142,7 +143,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
 
   // Set up event listeners for notification updates
   useEffect(() => {
-    if (!isElectron) return
+    if (!isElectron || !window.electronAPI?.on) return
 
     // Listen for todo events to update active count
     const handleTodoCreated = async () => refreshActiveCount()
@@ -163,9 +164,14 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
     )
 
     return () => {
-      if (cleanupCreated) cleanupCreated()
-      if (cleanupUpdated) cleanupUpdated()
-      if (cleanupDeleted) cleanupDeleted()
+      // Event cleanup functions may not exist in all implementations
+      try {
+        if (typeof cleanupCreated === 'function') cleanupCreated()
+        if (typeof cleanupUpdated === 'function') cleanupUpdated()
+        if (typeof cleanupDeleted === 'function') cleanupDeleted()
+      } catch (error) {
+        console.warn('Error cleaning up event listeners:', error)
+      }
     }
   }, [isElectron, refreshActiveCount])
 
