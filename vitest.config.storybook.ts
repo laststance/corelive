@@ -38,6 +38,11 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Required for @storybook/nextjs-vite when using next/image
-    include: ['sb-original/default-loader', 'sb-original/image-context'],
+    include: [
+      'sb-original/default-loader',
+      'sb-original/image-context',
+      '@mdx-js/react',
+      'markdown-to-jsx',
+    ],
   },
 })
