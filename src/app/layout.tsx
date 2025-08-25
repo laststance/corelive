@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import '@/globals.css'
 
 import { env } from '@/env.mjs'
+import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ORPCProvider } from '@/lib/orpc/react-query'
 import { cn } from '@/lib/utils'
 
@@ -38,7 +39,9 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
       <html lang="en" suppressHydrationWarning>
         <body className={cn('mx-auto min-h-screen antialiased')}>
           <ORPCProvider>
-            <MSWProvider>{children}</MSWProvider>
+            <ElectronAuthProvider>
+              <MSWProvider>{children}</MSWProvider>
+            </ElectronAuthProvider>
           </ORPCProvider>
         </body>
       </html>

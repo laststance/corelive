@@ -7,8 +7,8 @@ import { useState } from 'react'
 
 import type { AppRouter } from '@/server/router'
 
-import { createClient } from './client-with-clerk'
 import { createQueryClient } from './query-client'
+import { createClient } from './unified-client'
 
 // oPRC React Query ユーティリティの作成
 // Create oPRC React Query utilities

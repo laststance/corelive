@@ -1,12 +1,18 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 
+const { APIBridge } = require('./api-bridge')
+const { NextServerManager } = require('./next-server')
 const SystemTrayManager = require('./SystemTrayManager')
 const WindowManager = require('./WindowManager')
+// const { AuthManager } = require('./auth-manager')
 const isDev = process.env.NODE_ENV === 'development'
 
 // Keep a global reference of managers
 let windowManager
 let systemTrayManager
+let apiBridge
+// let authManager
+let nextServerManager
 
 // Content Security Policy for enhanced security
 const CSP_POLICY = [
@@ -50,9 +56,20 @@ function setupSecurity() {
   )
 }
 
-function createWindow() {
-  // Initialize window manager
-  windowManager = new WindowManager()
+async function createWindow() {
+  // Initialize Next.js server
+  nextServerManager = new NextServerManager()
+  const serverUrl = await nextServerManager.start()
+
+  // Initialize API bridge
+  apiBridge = new APIBridge()
+  await apiBridge.initialize()
+
+  // Initialize authentication manager
+  // authManager = new AuthManager(apiBridge)
+
+  // Initialize window manager with server URL
+  windowManager = new WindowManager(serverUrl)
 
   // Initialize system tray manager
   systemTrayManager = new SystemTrayManager(windowManager)
@@ -106,12 +123,18 @@ app.on('window-all-closed', () => {
 })
 
 // Cleanup before quit
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   if (systemTrayManager) {
     systemTrayManager.setQuitting(true)
   }
   if (windowManager) {
     windowManager.cleanup()
+  }
+  if (apiBridge) {
+    await apiBridge.disconnect()
+  }
+  if (nextServerManager) {
+    await nextServerManager.stop()
   }
 })
 
@@ -156,14 +179,13 @@ ipcMain.handle('app-quit', () => {
   app.quit()
 })
 
-// Todo operation IPC handlers - these will connect to the existing ORPC API
-// For now, these are placeholder implementations that will be connected to the actual API in task 4
+// Todo operation IPC handlers - connected to API bridge
 ipcMain.handle('todo-get-all', async () => {
   try {
-    // TODO: Connect to ORPC API in task 4.2
-    // For now, return empty array as placeholder
-    console.log('IPC: Getting all todos (placeholder)')
-    return []
+    if (!apiBridge) {
+      throw new Error('API bridge not initialized')
+    }
+    return await apiBridge.getTodos()
   } catch (error) {
     console.error('Failed to get todos:', error)
     throw new Error('Failed to retrieve todos')
@@ -186,28 +208,25 @@ ipcMain.handle('todo-get-by-id', async (event, id) => {
   }
 })
 
-ipcMain.handle('todo-create', async (event, todoData) => {
+ipcMain.handle('todo-create', async (_event, todoData) => {
   try {
     // Validate input
     if (!todoData || typeof todoData !== 'object' || !todoData.title) {
       throw new Error('Invalid todo data')
     }
 
-    // TODO: Connect to ORPC API in task 4.2
-    console.log('IPC: Creating todo:', todoData, '(placeholder)')
-    return {
-      id: 'temp-id',
-      ...todoData,
-      completed: false,
-      createdAt: new Date().toISOString(),
+    if (!apiBridge) {
+      throw new Error('API bridge not initialized')
     }
+
+    return await apiBridge.createTodo(todoData)
   } catch (error) {
     console.error('Failed to create todo:', error)
     throw new Error('Failed to create todo')
   }
 })
 
-ipcMain.handle('todo-update', async (event, id, updates) => {
+ipcMain.handle('todo-update', async (_event, id, updates) => {
   try {
     // Validate input
     if (!id || typeof id !== 'string') {
@@ -217,25 +236,29 @@ ipcMain.handle('todo-update', async (event, id, updates) => {
       throw new Error('Invalid update data')
     }
 
-    // TODO: Connect to ORPC API in task 4.2
-    console.log('IPC: Updating todo:', id, updates, '(placeholder)')
-    return { id, ...updates, updatedAt: new Date().toISOString() }
+    if (!apiBridge) {
+      throw new Error('API bridge not initialized')
+    }
+
+    return await apiBridge.updateTodo(id, updates)
   } catch (error) {
     console.error('Failed to update todo:', error)
     throw new Error('Failed to update todo')
   }
 })
 
-ipcMain.handle('todo-delete', async (event, id) => {
+ipcMain.handle('todo-delete', async (_event, id) => {
   try {
     // Validate input
     if (!id || typeof id !== 'string') {
       throw new Error('Invalid todo ID')
     }
 
-    // TODO: Connect to ORPC API in task 4.2
-    console.log('IPC: Deleting todo:', id, '(placeholder)')
-    return { success: true }
+    if (!apiBridge) {
+      throw new Error('API bridge not initialized')
+    }
+
+    return await apiBridge.deleteTodo(id)
   } catch (error) {
     console.error('Failed to delete todo:', error)
     throw new Error('Failed to delete todo')
@@ -358,23 +381,18 @@ ipcMain.handle('window-show-main', () => {
 })
 
 // Quick todo operations for floating navigator
-ipcMain.handle('todo-quick-create', async (event, todoData) => {
+ipcMain.handle('todo-quick-create', async (_event, todoData) => {
   try {
     // Validate input
     if (!todoData || typeof todoData !== 'object' || !todoData.title) {
       throw new Error('Invalid todo data')
     }
 
-    // TODO: Connect to ORPC API in task 4.2
-    // For now, use the same logic as regular create but optimized for quick creation
-    console.log('IPC: Quick creating todo:', todoData, '(placeholder)')
-    const quickTodo = {
-      id: 'quick-temp-id',
-      ...todoData,
-      completed: false,
-      createdAt: new Date().toISOString(),
-      source: 'floating-navigator',
+    if (!apiBridge) {
+      throw new Error('API bridge not initialized')
     }
+
+    const quickTodo = await apiBridge.createTodo(todoData)
 
     // Notify main window of new todo
     if (windowManager && windowManager.hasMainWindow()) {
@@ -388,22 +406,21 @@ ipcMain.handle('todo-quick-create', async (event, todoData) => {
   }
 })
 
-ipcMain.handle('todo-toggle-complete', async (event, id) => {
+ipcMain.handle('todo-toggle-complete', async (_event, id, currentCompleted) => {
   try {
     // Validate input
     if (!id || typeof id !== 'string') {
       throw new Error('Invalid todo ID')
     }
 
-    // TODO: Connect to ORPC API in task 4.2
-    // For now, simulate toggle operation
-    console.log('IPC: Toggling todo completion:', id, '(placeholder)')
-    const updatedTodo = {
-      id,
-      completed: true, // This would be toggled based on current state
-      updatedAt: new Date().toISOString(),
-      source: 'floating-navigator',
+    if (!apiBridge) {
+      throw new Error('API bridge not initialized')
     }
+
+    // Toggle the completion status
+    const updatedTodo = await apiBridge.updateTodo(id, {
+      completed: !currentCompleted,
+    })
 
     // Notify main window of todo update
     if (windowManager && windowManager.hasMainWindow()) {

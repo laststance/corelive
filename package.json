@@ -43,11 +43,10 @@
     "e2e:debug": "playwright test --debug",
     "electron": "electron .",
     "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://localhost:3000 && node electron/dev-runner.js\"",
-    "electron:build": "ELECTRON_BUILD=true pnpm build && electron-builder",
-    "electron:build:win": "ELECTRON_BUILD=true pnpm build && electron-builder --win",
-    "electron:build:mac": "ELECTRON_BUILD=true pnpm build && electron-builder --mac",
-    "electron:build:linux": "ELECTRON_BUILD=true pnpm build && electron-builder --linux",
-    "export": "ELECTRON_BUILD=true next build"
+    "electron:build": "pnpm build && electron-builder",
+    "electron:build:win": "pnpm build && electron-builder --win",
+    "electron:build:mac": "pnpm build && electron-builder --mac",
+    "electron:build:linux": "pnpm build && electron-builder --linux"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.4",

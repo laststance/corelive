@@ -4,7 +4,18 @@
   "directories": {
     "output": "dist-electron"
   },
-  "files": ["out/**/*", "electron/**/*", "node_modules/**/*", "package.json"],
+  "files": [
+    ".next/**/*",
+    "electron/**/*",
+    "node_modules/**/*",
+    "package.json",
+    "next.config.js",
+    "public/**/*",
+    "src/**/*",
+    "prisma/**/*",
+    "!src/**/*.test.*",
+    "!src/**/*.spec.*"
+  ],
   "extraResources": [
     {
       "from": "public",

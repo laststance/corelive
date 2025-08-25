@@ -4,11 +4,12 @@ const path = require('path')
 const { BrowserWindow, screen } = require('electron')
 
 class WindowManager {
-  constructor() {
+  constructor(serverUrl = null) {
     this.mainWindow = null
     this.floatingNavigator = null
     this.configPath = path.join(__dirname, 'window-state.json')
     this.isDev = process.env.NODE_ENV === 'development'
+    this.serverUrl = serverUrl
   }
 
   /**
@@ -161,9 +162,9 @@ class WindowManager {
     }
 
     // Load the application
-    const startUrl = this.isDev
-      ? 'http://localhost:3000'
-      : `file://${path.join(__dirname, '../out/index.html')}`
+    const startUrl =
+      this.serverUrl ||
+      (this.isDev ? 'http://localhost:3000' : 'http://localhost:3000')
 
     this.mainWindow.loadURL(startUrl)
 
@@ -235,9 +236,11 @@ class WindowManager {
     })
 
     // Load floating navigator page
-    const floatingUrl = this.isDev
-      ? 'http://localhost:3000/floating-navigator'
-      : `file://${path.join(__dirname, '../out/floating-navigator.html')}`
+    const floatingUrl = this.serverUrl
+      ? `${this.serverUrl}/floating-navigator`
+      : this.isDev
+        ? 'http://localhost:3000/floating-navigator'
+        : 'http://localhost:3000/floating-navigator'
 
     this.floatingNavigator.loadURL(floatingUrl)
 

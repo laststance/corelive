@@ -25,27 +25,27 @@
     - Add tray click handlers for window restoration
     - _Requirements: 1.3, 1.4_
 
-- [ ] 3. Create secure preload scripts for IPC communication
-  - [ ] 3.1 Implement main window preload script
+- [x] 3. Create secure preload scripts for IPC communication
+  - [x] 3.1 Implement main window preload script
     - Create preload script with contextBridge API exposure
     - Implement secure IPC channels for todo operations (getTodos, createTodo, updateTodo, deleteTodo)
     - Add window control APIs (minimize, close, toggleFloatingNavigator)
     - _Requirements: 4.1, 4.2, 4.3_
 
-  - [ ] 3.2 Implement floating navigator preload script
+  - [x] 3.2 Implement floating navigator preload script
     - Create separate preload script for floating navigator window
     - Expose compact API surface for floating navigator functionality
     - Implement secure communication channels for quick task operations
     - _Requirements: 2.1, 2.2, 2.4, 4.1, 4.2_
 
-- [ ] 4. Integrate with existing Next.js application
-  - [ ] 4.1 Configure Next.js for Electron environment
+- [x] 4. Integrate with existing Next.js application
+  - [x] 4.1 Configure Next.js for Electron environment
     - Modify next.config.js to support Electron's file:// protocol
     - Configure static export for Electron packaging
     - Update API routes to work in Electron context
     - _Requirements: 1.1, 1.2, 4.1, 4.2, 4.3_
 
-  - [ ] 4.2 Create Electron-specific API client
+  - [x] 4.2 Create Electron-specific API client
     - Implement ORPC client adapter that works through Electron IPC
     - Create API bridge that connects Electron IPC to existing ORPC procedures
     - Ensure authentication state synchronization between processes

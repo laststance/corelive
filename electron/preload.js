@@ -9,6 +9,13 @@ const ALLOWED_CHANNELS = {
   'todo-delete': true,
   'todo-get-by-id': true,
 
+  // Authentication operations
+  'auth-get-user': true,
+  'auth-set-user': true,
+  'auth-logout': true,
+  'auth-is-authenticated': true,
+  'auth-sync-from-web': true,
+
   // Window operations
   'window-minimize': true,
   'window-close': true,
@@ -33,6 +40,7 @@ const ALLOWED_CHANNELS = {
   'todo-updated': true,
   'todo-created': true,
   'todo-deleted': true,
+  'auth-state-changed': true,
 }
 
 /**
@@ -288,6 +296,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await ipcRenderer.invoke('tray-set-tooltip', sanitizedText)
       } catch (error) {
         console.error('Failed to set tray tooltip:', error)
+      }
+    },
+  },
+
+  // Authentication management
+  auth: {
+    /**
+     * Get current user
+     */
+    getUser: async () => {
+      try {
+        return await ipcRenderer.invoke('auth-get-user')
+      } catch (error) {
+        console.error('Failed to get user:', error)
+        return null
+      }
+    },
+
+    /**
+     * Set current user
+     */
+    setUser: async (user) => {
+      try {
+        return await ipcRenderer.invoke('auth-set-user', sanitizeData(user))
+      } catch (error) {
+        console.error('Failed to set user:', error)
+        throw new Error('Failed to set user')
+      }
+    },
+
+    /**
+     * Logout current user
+     */
+    logout: async () => {
+      try {
+        return await ipcRenderer.invoke('auth-logout')
+      } catch (error) {
+        console.error('Failed to logout:', error)
+        throw new Error('Failed to logout')
+      }
+    },
+
+    /**
+     * Check if user is authenticated
+     */
+    isAuthenticated: async () => {
+      try {
+        return await ipcRenderer.invoke('auth-is-authenticated')
+      } catch (error) {
+        console.error('Failed to check authentication:', error)
+        return false
+      }
+    },
+
+    /**
+     * Sync authentication state from web version
+     */
+    syncFromWeb: async (authData) => {
+      try {
+        return await ipcRenderer.invoke(
+          'auth-sync-from-web',
+          sanitizeData(authData),
+        )
+      } catch (error) {
+        console.error('Failed to sync auth from web:', error)
+        throw new Error('Failed to sync authentication')
       }
     },
   },
