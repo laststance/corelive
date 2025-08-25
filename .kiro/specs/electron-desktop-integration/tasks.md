@@ -6,20 +6,20 @@
   - Configure package.json scripts for development and building
   - _Requirements: 1.1, 1.2_
 
-- [ ] 2. Implement secure main process architecture
-  - [ ] 2.1 Create main process entry point with security best practices
+- [x] 2. Implement secure main process architecture
+  - [x] 2.1 Create main process entry point with security best practices
     - Write main.js with context isolation enabled and node integration disabled
     - Implement basic BrowserWindow creation with security configurations
     - Set up Content Security Policy for renderer processes
     - _Requirements: 1.1, 4.1, 4.2, 4.3_
 
-  - [ ] 2.2 Implement Window Manager class
+  - [x] 2.2 Implement Window Manager class
     - Create WindowManager class to handle main window and floating navigator creation
     - Implement window state persistence (position, size, maximized state)
     - Add window restoration and minimization logic
     - _Requirements: 1.1, 1.4, 6.1, 6.2, 6.4_
 
-  - [ ] 2.3 Implement System Tray Manager
+  - [x] 2.3 Implement System Tray Manager
     - Create SystemTrayManager class with tray icon and context menu
     - Implement minimize to tray functionality instead of closing
     - Add tray click handlers for window restoration
