@@ -104,19 +104,19 @@
     - _Requirements: 1.3, 3.3, 5.3_
 
 - [ ] 9. Create comprehensive test suite
-  - [ ] 9.1 Write unit tests for main process components
+  - [x] 9.1 Write unit tests for main process components
     - Test WindowManager class functionality with Vitest
     - Test SystemTrayManager operations and event handling
     - Test IPC handler validation and security
     - _Requirements: All requirements validation_
 
-  - [ ] 9.2 Write tests for preload scripts and security
+  - [x] 9.2 Write tests for preload scripts and security
     - Test contextBridge API exposure and security boundaries
     - Verify IPC channel whitelisting and validation
     - Test that Node.js access is properly blocked in renderer processes
     - _Requirements: 4.1, 4.2, 4.3_
 
-  - [ ] 9.3 Write integration tests for floating navigator
+  - [x] 9.3 Write integration tests for floating navigator
     - Test floating navigator component functionality with React Testing Library
     - Test window management and positioning
     - Test task operations through the floating interface

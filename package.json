@@ -20,6 +20,8 @@
     "lint": "next lint",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
+    "test:electron": "vitest run --config vitest.config.electron.ts",
+    "test:electron:watch": "vitest --watch --config vitest.config.electron.ts",
     "test:storybook": "vitest run --config vitest.config.storybook.ts",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
