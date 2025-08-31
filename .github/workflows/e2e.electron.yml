@@ -1,0 +1,96 @@
+name: E2E Tests (Electron)
+
+on:
+  pull_request: ~
+  push:
+    branches:
+      - main
+
+jobs:
+  e2e-electron-tests:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository 🔄
+        uses: actions/checkout@v4
+
+      - name: Use shared prepare action 🔧
+        uses: ./.github/actions/prepare
+
+      - name: Set environment variables 🌍
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}
+          NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_UP_URL }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: |
+          touch .env
+          : "${CI:=true}"
+          : "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:=pk_test_dummy}"
+          : "${NEXT_PUBLIC_CLERK_SIGN_IN_URL:=/login}"
+          : "${NEXT_PUBLIC_CLERK_SIGN_UP_URL:=/sign-up}"
+          : "${CLERK_SECRET_KEY:=sk_test_dummy}"
+          : "${WEBHOOK_SECRET:=whsec_dummy}"
+          : "${POSTGRES_PRISMA_URL:=postgresql://postgres:password@localhost:5432/corelive?schema=public}"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}" >> .env
+          echo "CLERK_SECRET_KEY=${CLERK_SECRET_KEY}" >> .env
+          echo "WEBHOOK_SECRET=${WEBHOOK_SECRET}" >> .env
+          echo "POSTGRES_PRISMA_URL=${POSTGRES_PRISMA_URL}" >> .env
+          echo "NEXT_PUBLIC_ENABLE_MSW_MOCK=true" >> .env
+
+      - name: Start Postgres via Docker Compose 🐳
+        run: |
+          docker compose -f compose.yml -p corelive up -d postgres --wait
+          docker ps -a
+
+      - name: Show Postgres logs on failure 🪵
+        if: failure()
+        run: |
+          docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true
+
+      - name: Run Prisma migrations 📦
+        run: pnpm prisma migrate deploy
+
+      - name: Generate Prisma Client 🗄️
+        run: pnpm prisma generate
+
+      - name: Build Next.js application 🏗️
+        run: pnpm build
+
+      - name: Build Electron application ⚡
+        run: ELECTRON_BUILD=true pnpm build && pnpm electron:build:dir
+
+      - name: Install Playwright Browsers 🎭
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Electron Playwright tests 🧪
+        run: pnpm exec playwright test --project=electron --reporter=list
+
+      - name: Upload Playwright Report 📊
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-electron
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload Test Screenshots 📸
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-screenshots-electron
+          path: e2e/screenshots/
+          retention-days: 30
+
+      - name: Upload Test Results 📋
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-electron
+          path: test-results/
+          retention-days: 30
