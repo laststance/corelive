@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-unresolved
 import { notarize } from '@electron/notarize'
 
 export default async function notarizing(context) {

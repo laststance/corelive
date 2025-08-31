@@ -32,12 +32,13 @@ export default defineConfig({
     },
 
     {
-      name: 'chromium',
+      name: 'web',
       use: {
         ...devices['Desktop Chrome'],
         // Use prepared auth state from setup
         storageState: 'e2e/.auth/user.json',
       },
+      testMatch: /^(?!.*electron).*\.spec\.ts$/,
       dependencies: ['setup'], // Run setup project first
     },
 
@@ -49,6 +50,8 @@ export default defineConfig({
         // Electron-specific configuration
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
+        // Use prepared auth state from setup
+        storageState: 'e2e/.auth/user.json',
       },
     },
   ],
@@ -60,7 +63,7 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     // Only start the server; build happens in globalSetup to avoid race conditions
-    command: 'NODE_ENV=test NEXT_PUBLIC_ENABLE_MSW_MOCK=true DEBUG= pnpm start',
+    command: 'NODE_ENV=test NEXT_PUBLIC_ENABLE_MSW_MOCK=true pnpm start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
