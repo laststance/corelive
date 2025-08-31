@@ -125,6 +125,7 @@
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.1",
     "@electron/notarize": "^2.5.0",
+    "@mdx-js/react": "^3.1.1",
     "@playwright/experimental-ct-react": "^1.55.0",
     "@playwright/test": "^1.55.0",
     "@prisma/client": "^6.14.0",
@@ -158,6 +159,7 @@
     "happy-dom": "^18.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
+    "markdown-to-jsx": "^7.7.13",
     "msw": "^2.10.5",
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",
