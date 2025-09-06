@@ -12,44 +12,8 @@ export async function POST(req: Request) {
   // Header access
   const headerPayload = await headers()
 
-  // Lightweight bypass for local mocking via MSW: when enabled and explicitly flagged,
-  // accept the JSON payload without Svix signature verification.
-  const isMockBypassEnabled = env.NEXT_PUBLIC_ENABLE_MSW_MOCK === 'true'
-  const isMswMockRequest =
-    headerPayload.get('x-msw-mock') === 'true' ||
-    headerPayload.get('X-MSW-Mock') === 'true'
-
-  if (isMockBypassEnabled && isMswMockRequest) {
-    try {
-      const payload = (await req.json()) as {
-        type?: string
-        data?: any
-      }
-      if (payload?.type === 'user.created' && payload?.data) {
-        const data = payload.data as any
-        await prisma.user.create({
-          data: {
-            clerkId: data.id,
-            name: data.username ? data.username : `${data.first_name ?? ''} ${data.last_name ?? ''}`.trim(),
-            email: data.email_addresses?.[0]?.email_address ?? null,
-          },
-        })
-      }
-      return new Response('', { status: 201 })
-    } catch (err) {
-      console.error('Mock webhook processing failed:', err)
-      return new Response('Mock webhook processing failed', { status: 500 })
-    }
-  }
-
   // You can find this in the Clerk Dashboard -> Webhooks -> choose the endpoint
   const WEBHOOK_SECRET = env.WEBHOOK_SECRET
-
-  if (!WEBHOOK_SECRET) {
-    throw new Error(
-      'Please add WEBHOOK_SECRET from Clerk Dashboard to .env or .env.local',
-    )
-  }
 
   const svix_id = headerPayload.get('svix-id')
   const svix_timestamp = headerPayload.get('svix-timestamp')
@@ -83,13 +47,24 @@ export async function POST(req: Request) {
 
   if (evt.type === 'user.created') {
     console.log('New user created')
+    const userData = evt.data
+    const emailAddress = userData.email_addresses?.[0]?.email_address
+
+    if (!emailAddress) {
+      console.error('No email address found for user')
+      return new Response('No email address found', { status: 400 })
+    }
+
+    const firstName = userData.first_name || ''
+    const lastName = userData.last_name || ''
+    const name =
+      userData.username || `${firstName} ${lastName}`.trim() || 'Unknown User'
+
     await prisma.user.create({
       data: {
-        clerkId: evt.data.id,
-        name: evt.data.username
-          ? evt.data.username
-          : evt.data.first_name + ' ' + evt.data.last_name,
-        email: evt.data.email_addresses[0]!.email_address,
+        clerkId: userData.id,
+        name,
+        email: emailAddress,
       },
     })
   }

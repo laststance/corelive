@@ -89,22 +89,8 @@ export class ElectronTestHelper {
     try {
       console.log('🔐 Setting up authentication...')
 
-      // Navigate to root first to initialize MSW
+      // Navigate to root first
       await page.goto('/')
-      await page.waitForTimeout(2000)
-
-      // Set MSW authentication state
-      await page.evaluate(() => {
-        console.log('Setting MSW auth state...')
-        localStorage.setItem('msw_auth', 'true')
-
-        // Trigger MSW to recognize the auth state
-        fetch(window.location.origin + '/?__MSW_SET_AUTH__=true').catch(() => {
-          console.log('MSW auth trigger completed')
-        })
-      })
-
-      console.log('✅ MSW auth state set')
       await page.waitForTimeout(1000)
 
       // Navigate to home page
@@ -122,6 +108,13 @@ export class ElectronTestHelper {
         const hasPending = document.body?.innerText?.includes('pending')
         const hasAddTodo =
           document.querySelector('input[placeholder*="todo"]') !== null
+
+        console.log('Authentication check:', {
+          hasTasksHeader,
+          hasTodoList,
+          hasPending,
+          hasAddTodo,
+        })
 
         return hasTasksHeader || hasTodoList || hasPending || hasAddTodo
       })

@@ -75,14 +75,12 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
     // Verify authentication state is maintained
     const authState = await context.mainWindow.evaluate(() => {
       return {
-        mswAuth: localStorage.getItem('msw_auth'),
         hasUserData: document.body.innerText.includes('Todo List'),
         hasTaskInterface:
           document.querySelector('input[placeholder*="todo"]') !== null,
       }
     })
 
-    expect(authState.mswAuth).toBe('true')
     expect(authState.hasUserData).toBe(true)
     expect(authState.hasTaskInterface).toBe(true)
 
@@ -268,7 +266,7 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
 
     // Requirement 4: Authentication and data sync
     const authState = await context.mainWindow.evaluate(() => {
-      return localStorage.getItem('msw_auth') === 'true'
+      return document.body.innerText.includes('Todo List')
     })
     expect(authState).toBe(true)
 

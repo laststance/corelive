@@ -3,16 +3,8 @@ import { test as setup, expect } from '@playwright/test'
 const authFile = './e2e/.auth/user.json'
 
 setup('authenticate', async ({ page }) => {
-  // Navigate to the root page first to initialize MSW
+  // Navigate to the root page first
   await page.goto('/')
-
-  // Wait a moment for MSW to initialize
-  await page.waitForTimeout(1000)
-
-  // Set MSW authentication state to simulate successful login
-  await page.evaluate(() => {
-    localStorage.setItem('msw_auth', 'true')
-  })
 
   // Navigate to the home page to verify authentication works
   await page.goto('/home')

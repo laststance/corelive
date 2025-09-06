@@ -63,7 +63,7 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     // Only start the server; build happens in globalSetup to avoid race conditions
-    command: 'NODE_ENV=test NEXT_PUBLIC_ENABLE_MSW_MOCK=true pnpm start',
+    command: 'NODE_ENV=test pnpm start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
