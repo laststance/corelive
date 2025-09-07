@@ -46,15 +46,6 @@ export default defineConfig({
       dependencies: ['setup'], // Run setup project first
     },
 
-    // Debug project - for debugging authentication without setup dependency
-    {
-      name: 'debug',
-      use: {
-        ...devices['Desktop Chrome'],
-      },
-      testMatch: /.*debug.*\.spec\.ts$/,
-    },
-
     // Electron desktop integration tests
     {
       name: 'electron',
