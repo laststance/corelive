@@ -24,7 +24,7 @@ export function createLink() {
       // Retrieve auth info from Clerk in production environment
       if (typeof window !== 'undefined' && window.Clerk) {
         try {
-          const session = await window.Clerk.session
+          const session = window.Clerk.session
           if (session?.user?.id) {
             return {
               Authorization: `Bearer ${session.user.id}`,

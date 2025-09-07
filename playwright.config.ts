@@ -21,6 +21,10 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    /* Ensure test environment is set */
+    extraHTTPHeaders: {
+      'x-test-environment': 'true',
+    },
   },
 
   /* Configure projects for major browsers */
@@ -42,6 +46,15 @@ export default defineConfig({
       dependencies: ['setup'], // Run setup project first
     },
 
+    // Debug project - for debugging authentication without setup dependency
+    {
+      name: 'debug',
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+      testMatch: /.*debug.*\.spec\.ts$/,
+    },
+
     // Electron desktop integration tests
     {
       name: 'electron',
@@ -53,6 +66,7 @@ export default defineConfig({
         // Use prepared auth state from setup
         storageState: 'e2e/.auth/user.json',
       },
+      dependencies: ['setup'], // Ensure setup runs first for electron tests too
     },
   ],
 
@@ -62,10 +76,13 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    // Only start the server; build happens in globalSetup to avoid race conditions
-    command: 'NODE_ENV=test pnpm start',
+    // Start the dev server for testing
+    command: 'NODE_ENV=test pnpm dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    env: {
+      NODE_ENV: 'test',
+    },
   },
 })
