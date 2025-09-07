@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    ignoreDuringBuilds: true, // Playwright実行前などのビルド時間短縮のため
+    ignoreDuringBuilds: true,
   },
   // Electron configuration - keep images unoptimized for better compatibility
   images: {
