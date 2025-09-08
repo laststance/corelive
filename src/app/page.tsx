@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: '%s | Corelive',
     default: 'Corelive',
   },
-  description: 'Personal Task navigator for you.',
+  description: 'Personal Todo navigator for you.',
 }
 
 export default function Home() {

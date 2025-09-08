@@ -78,13 +78,6 @@ setup('authenticate', async ({ page, context }) => {
     // Wait for authentication to complete and redirects
     await page.waitForTimeout(3000)
 
-    // Check where we are now
-    page.url()
-
-    // Navigate to protected route to verify authentication
-
-    await page.goto('/home', { waitUntil: 'networkidle' })
-
     // Final verification
     const finalUrl = page.url()
 
@@ -110,13 +103,6 @@ setup('authenticate', async ({ page, context }) => {
         fullPage: true,
       })
       .catch(() => {})
-
-    // Log additional error details
-    if (error.message.includes('page.waitForFunction')) {
-    }
-
-    // Additional debugging info
-
     throw error
   }
 })

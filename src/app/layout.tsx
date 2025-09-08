@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description: 'Corelive convert your leafy tasks to solid engagement.',
 }
 
-export interface RootLayoutProps {
+interface RootLayoutProps {
   children: Readonly<React.ReactNode>
 }
 
