@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+import { log } from '../../src/lib/logger.ts'
+
 // Mock Electron modules
 const mockBrowserWindow = vi.fn(() => ({
   loadURL: vi.fn(),
@@ -563,9 +565,7 @@ describe('Main Process Components', () => {
             return await handler(...args)
           } catch (error) {
             if (options.enableDegradation) {
-              console.warn(
-                `Handler failed, using degraded mode: ${error.message}`,
-              )
+              log.warn(`Handler failed, using degraded mode: ${error.message}`)
               return null
             }
             throw error

@@ -2,6 +2,8 @@ const { spawn } = require('child_process')
 const http = require('http')
 const path = require('path')
 
+const { log } = require('../src/lib/logger.cjs')
+
 // Set development environment
 process.env.NODE_ENV = 'development'
 
@@ -12,7 +14,6 @@ async function checkServer(url, retries = 30) {
       http
         .get(url, (res) => {
           if (res.statusCode === 200) {
-            console.log('✅ Next.js dev server is ready')
             resolve()
           } else {
             retry(attempt)
@@ -25,9 +26,6 @@ async function checkServer(url, retries = 30) {
 
     const retry = (attempt) => {
       if (attempt < retries) {
-        console.log(
-          `⏳ Waiting for Next.js dev server... (${attempt + 1}/${retries})`,
-        )
         setTimeout(() => check(attempt + 1), 1000)
       } else {
         reject(new Error('Next.js dev server failed to start'))
@@ -43,8 +41,6 @@ async function startElectron() {
   try {
     // Wait for Next.js dev server
     await checkServer('http://localhost:3000')
-
-    console.log('🚀 Starting Electron...')
 
     // Start Electron
     const electronProcess = spawn(
@@ -65,11 +61,11 @@ async function startElectron() {
     })
 
     electronProcess.on('error', (error) => {
-      console.error('❌ Failed to start Electron:', error)
+      log.error('❌ Failed to start Electron:', error)
       process.exit(1)
     })
   } catch (error) {
-    console.error('❌ Error starting Electron:', error.message)
+    log.error('❌ Error starting Electron:', error.message)
     process.exit(1)
   }
 }

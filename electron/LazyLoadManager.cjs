@@ -5,6 +5,8 @@
  * to improve startup time and reduce memory usage.
  */
 
+const { log } = require('../src/lib/logger.cjs')
+
 const { performanceOptimizer } = require('./performance-config.cjs')
 
 class LazyLoadManager {
@@ -121,14 +123,11 @@ class LazyLoadManager {
    * @param {Array<string>} componentNames - Names of components to preload
    */
   async preloadCriticalComponents(componentNames) {
-    console.log('🚀 Preloading critical components...')
-
     const preloadPromises = componentNames.map(async (componentName) => {
       try {
         await this.loadComponent(componentName)
-        console.log(`✅ Preloaded: ${componentName}`)
       } catch (error) {
-        console.warn(`⚠️ Failed to preload ${componentName}:`, error.message)
+        log.warn(`⚠️ Failed to preload ${componentName}:`, error.message)
       }
     })
 
@@ -140,19 +139,16 @@ class LazyLoadManager {
    * @param {Array<string>} componentNames - Names of components to load
    */
   loadInBackground(componentNames) {
-    console.log('📦 Loading components in background...')
-
     // Use setImmediate to defer loading until after current event loop
     setImmediate(async () => {
       for (const componentName of componentNames) {
         try {
           await this.loadComponent(componentName)
-          console.log(`🔄 Background loaded: ${componentName}`)
 
           // Small delay between loads to prevent blocking
           await new Promise((resolve) => setTimeout(resolve, 100))
         } catch (error) {
-          console.warn(
+          log.warn(
             `⚠️ Background load failed for ${componentName}:`,
             error.message,
           )
@@ -202,8 +198,6 @@ class LazyLoadManager {
    * Cleanup all loaded components
    */
   cleanup() {
-    console.log('🧹 Cleaning up lazy load manager...')
-
     // Clear all loading promises
     this.loadingPromises.clear()
 

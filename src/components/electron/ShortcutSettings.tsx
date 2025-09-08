@@ -16,6 +16,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
+import { log } from '../../lib/logger'
+
 interface ShortcutSettingsProps {
   className?: string
 }
@@ -82,7 +84,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
       setHasChanges(false)
       setError(null)
     } catch (error) {
-      console.error('Failed to load shortcuts:', error)
+      log.error('Failed to load shortcuts:', error)
       setError('Failed to load shortcut settings')
     } finally {
       setIsLoading(false)
@@ -119,7 +121,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
         )
       }
     } catch (error) {
-      console.error('Failed to save shortcuts:', error)
+      log.error('Failed to save shortcuts:', error)
       setError('Failed to save shortcut settings')
     } finally {
       setIsSaving(false)
@@ -146,7 +148,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
       }
       await loadShortcuts()
     } catch (error) {
-      console.error('Failed to toggle shortcuts:', error)
+      log.error('Failed to toggle shortcuts:', error)
       setError('Failed to toggle shortcuts')
     }
   }
@@ -177,7 +179,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
         }
       }
     } catch (error) {
-      console.error('Failed to test shortcut:', error)
+      log.error('Failed to test shortcut:', error)
       setError('Failed to test shortcut')
     }
   }

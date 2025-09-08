@@ -9,6 +9,8 @@ const { EventEmitter } = require('events')
 
 const { app, BrowserWindow } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class MemoryProfiler extends EventEmitter {
   constructor(options = {}) {
     super()
@@ -40,7 +42,6 @@ class MemoryProfiler extends EventEmitter {
       return
     }
 
-    console.log('🔍 Starting memory monitoring...')
     this.isMonitoring = true
 
     // Set up monitoring interval
@@ -65,7 +66,6 @@ class MemoryProfiler extends EventEmitter {
       return
     }
 
-    console.log('⏹️ Stopping memory monitoring...')
     this.isMonitoring = false
 
     if (this.monitoringInterval) {
@@ -140,7 +140,7 @@ class MemoryProfiler extends EventEmitter {
           rendererMemory.totalHeapUsed += processInfo.estimatedHeapUsed
         }
       } catch (error) {
-        console.warn(
+        log.warn(
           `Failed to get memory info for window ${index}:`,
           error.message,
         )
@@ -171,11 +171,11 @@ class MemoryProfiler extends EventEmitter {
     const totalMemory = snapshot.totalHeapUsed
 
     if (totalMemory > this.options.criticalThreshold) {
-      console.warn(`🚨 Critical memory usage: ${this.formatBytes(totalMemory)}`)
+      log.warn(`🚨 Critical memory usage: ${this.formatBytes(totalMemory)}`)
       this.emit('memory-critical', snapshot)
       this.performCleanup('critical')
     } else if (totalMemory > this.options.warningThreshold) {
-      console.warn(`⚠️ High memory usage: ${this.formatBytes(totalMemory)}`)
+      log.warn(`⚠️ High memory usage: ${this.formatBytes(totalMemory)}`)
       this.emit('memory-warning', snapshot)
       this.performCleanup('warning')
     }
@@ -185,7 +185,7 @@ class MemoryProfiler extends EventEmitter {
    * Handle memory warning events
    */
   handleMemoryWarning() {
-    console.warn('⚠️ System memory warning received')
+    log.warn('⚠️ System memory warning received')
     this.performCleanup('system-warning')
   }
 
@@ -194,8 +194,6 @@ class MemoryProfiler extends EventEmitter {
    * @param {string} level - Cleanup level ('warning', 'critical', 'system-warning')
    */
   performCleanup(level = 'warning') {
-    console.log(`🧹 Performing ${level} memory cleanup...`)
-
     // Force garbage collection if available
     if (this.options.enableGC && global.gc) {
       global.gc()
@@ -217,10 +215,7 @@ class MemoryProfiler extends EventEmitter {
 
     // Log memory usage after cleanup
     setTimeout(() => {
-      const afterCleanup = this.checkMemoryUsage()
-      console.log(
-        `✅ Cleanup completed. Memory usage: ${this.formatBytes(afterCleanup.totalHeapUsed)}`,
-      )
+      this.checkMemoryUsage()
     }, 1000)
   }
 
@@ -253,7 +248,6 @@ class MemoryProfiler extends EventEmitter {
     })
 
     if (clearedCount > 0) {
-      console.log(`🗑️ Cleared ${clearedCount} modules from cache`)
     }
   }
 
@@ -282,7 +276,7 @@ class MemoryProfiler extends EventEmitter {
       try {
         callback(level)
       } catch (error) {
-        console.error('Cleanup callback failed:', error)
+        log.error('Cleanup callback failed:', error)
       }
     })
   }
@@ -332,12 +326,10 @@ class MemoryProfiler extends EventEmitter {
    * @param {Object} snapshot - Memory snapshot
    */
   logMemoryUsage(snapshot) {
-    const main = snapshot.mainProcess
-    const total = snapshot.totalHeapUsed
-
-    console.log(
-      `📊 Memory: Main ${this.formatBytes(main.heapUsed)} | Total ${this.formatBytes(total)} | RSS ${this.formatBytes(main.rss)}`,
-    )
+    // Access snapshot properties for potential future use
+    if (snapshot.mainProcess && snapshot.totalHeapUsed) {
+      // Memory logging implementation would go here
+    }
   }
 
   /**
@@ -373,8 +365,6 @@ class MemoryProfiler extends EventEmitter {
    * Cleanup profiler
    */
   cleanup() {
-    console.log('🧹 Cleaning up memory profiler...')
-
     this.stopMonitoring()
     this.memoryHistory = []
     this.cleanupCallbacks.clear()

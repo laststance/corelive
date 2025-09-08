@@ -1,4 +1,5 @@
 // SystemIntegrationErrorHandler - handles system integration failures
+const { log } = require('../src/lib/logger.cjs')
 
 /**
  * Centralized error handler for system integration failures
@@ -45,8 +46,6 @@ class SystemIntegrationErrorHandler {
    * Initialize system integration with comprehensive error handling
    */
   async initializeSystemIntegration() {
-    console.log('🚀 Initializing system integration with error handling...')
-
     const results = {
       tray: await this.initializeTrayWithErrorHandling(),
       notifications: await this.initializeNotificationsWithErrorHandling(),
@@ -79,7 +78,7 @@ class SystemIntegrationErrorHandler {
           fallbackMode: false,
           error: null,
         }
-        console.log('✅ System tray initialized successfully')
+
         return { success: true, component: 'tray' }
       } else {
         // Tray creation failed, check if fallback mode was enabled
@@ -91,7 +90,7 @@ class SystemIntegrationErrorHandler {
           error: 'Tray creation failed',
         }
 
-        console.warn('⚠️ System tray unavailable, fallback mode enabled')
+        log.warn('⚠️ System tray unavailable, fallback mode enabled')
         return {
           success: false,
           fallback: true,
@@ -106,7 +105,7 @@ class SystemIntegrationErrorHandler {
         error: error.message,
       }
 
-      console.error('❌ System tray initialization failed:', error)
+      log.error('❌ System tray initialization failed:', error)
 
       // Enable fallback mode in window manager
       if (this.windowManager) {
@@ -139,7 +138,7 @@ class SystemIntegrationErrorHandler {
           fallbackMode: false,
           error: null,
         }
-        console.log('✅ Notifications initialized successfully')
+
         return { success: true, component: 'notifications' }
       } else {
         // Check if fallback methods are available
@@ -151,7 +150,7 @@ class SystemIntegrationErrorHandler {
           error: 'Notification initialization failed',
         }
 
-        console.warn('⚠️ Notifications unavailable, fallback methods enabled')
+        log.warn('⚠️ Notifications unavailable, fallback methods enabled')
         return {
           success: false,
           fallback: !!hasFallbackMethods,
@@ -166,7 +165,7 @@ class SystemIntegrationErrorHandler {
         error: error.message,
       }
 
-      console.error('❌ Notification initialization failed:', error)
+      log.error('❌ Notification initialization failed:', error)
       return {
         success: false,
         fallback: false,
@@ -199,7 +198,7 @@ class SystemIntegrationErrorHandler {
             failedCount: 0,
             error: null,
           }
-          console.log('✅ All shortcuts initialized successfully')
+
           return { success: true, component: 'shortcuts' }
         } else {
           this.integrationStatus.shortcuts = {
@@ -208,9 +207,7 @@ class SystemIntegrationErrorHandler {
             failedCount,
             error: `${failedCount} shortcuts failed to register`,
           }
-          console.warn(
-            `⚠️ Shortcuts partially available: ${failedCount} failed`,
-          )
+          log.warn(`⚠️ Shortcuts partially available: ${failedCount} failed`)
           return {
             success: true,
             partial: true,
@@ -227,7 +224,7 @@ class SystemIntegrationErrorHandler {
           error: 'Shortcut initialization failed',
         }
 
-        console.error('❌ Shortcut initialization failed completely')
+        log.error('❌ Shortcut initialization failed completely')
         return {
           success: false,
           component: 'shortcuts',
@@ -242,7 +239,7 @@ class SystemIntegrationErrorHandler {
         error: error.message,
       }
 
-      console.error('❌ Shortcut initialization failed:', error)
+      log.error('❌ Shortcut initialization failed:', error)
       return { success: false, component: 'shortcuts', error: error.message }
     }
   }
@@ -289,11 +286,6 @@ class SystemIntegrationErrorHandler {
 
     this.overallStatus = overallStatus
     this.issues = issues
-
-    console.log(`📊 System integration status: ${overallStatus}`)
-    if (issues.length > 0) {
-      console.log('📋 Issues:', issues.join(', '))
-    }
   }
 
   /**
@@ -396,7 +388,7 @@ class SystemIntegrationErrorHandler {
           integrationStatus: this.integrationStatus,
         })
       } catch (error) {
-        console.warn('Failed to save integration status:', error)
+        log.warn('Failed to save integration status:', error)
       }
     }
   }
@@ -416,8 +408,6 @@ class SystemIntegrationErrorHandler {
    * Retry failed integrations
    */
   async retryFailedIntegrations() {
-    console.log('🔄 Retrying failed system integrations...')
-
     const retryResults = {}
 
     // Retry tray if it failed
@@ -468,14 +458,12 @@ class SystemIntegrationErrorHandler {
    * Handle app quit - cleanup integration components
    */
   handleAppQuit() {
-    console.log('🧹 Cleaning up system integration...')
-
     try {
       if (this.shortcutManager) {
         this.shortcutManager.cleanup()
       }
     } catch (error) {
-      console.warn('Error cleaning up shortcuts:', error)
+      log.warn('Error cleaning up shortcuts:', error)
     }
 
     try {
@@ -483,7 +471,7 @@ class SystemIntegrationErrorHandler {
         this.notificationManager.cleanup()
       }
     } catch (error) {
-      console.warn('Error cleaning up notifications:', error)
+      log.warn('Error cleaning up notifications:', error)
     }
 
     try {
@@ -491,7 +479,7 @@ class SystemIntegrationErrorHandler {
         this.systemTrayManager.destroy()
       }
     } catch (error) {
-      console.warn('Error cleaning up system tray:', error)
+      log.warn('Error cleaning up system tray:', error)
     }
   }
 

@@ -3,6 +3,8 @@
 import { useUser } from '@clerk/nextjs'
 import { useEffect } from 'react'
 
+import { log } from '../logger'
+
 import { isElectronEnvironment } from './electron-client'
 
 /**
@@ -35,15 +37,12 @@ export function ElectronAuthProvider({
             email: user.primaryEmailAddress?.emailAddress,
             name: user.fullName || user.firstName || 'User',
           })
-
-          console.log('✅ Authentication synced with Electron')
         } else {
           // User is not authenticated, logout from Electron
           await window.electronAPI?.auth?.logout()
-          console.log('🔓 Logged out from Electron')
         }
       } catch (error) {
-        console.error('Failed to sync authentication with Electron:', error)
+        log.error('Failed to sync authentication with Electron:', error)
       }
     }
 
@@ -65,7 +64,7 @@ export function useElectronAuth() {
     try {
       return await window.electronAPI?.auth?.getUser()
     } catch (error) {
-      console.error('Failed to get Electron user:', error)
+      log.error('Failed to get Electron user:', error)
       return null
     }
   }
@@ -76,7 +75,7 @@ export function useElectronAuth() {
     try {
       return await window.electronAPI?.auth?.isAuthenticated()
     } catch (error) {
-      console.error('Failed to check Electron authentication:', error)
+      log.error('Failed to check Electron authentication:', error)
       return false
     }
   }

@@ -201,9 +201,6 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
         context.floatingNavigator.getByText(floatingTask),
       ).toBeVisible()
     } else {
-      console.log(
-        'Floating navigator could not be opened, skipping floating-specific tests',
-      )
     }
   })
 
@@ -235,13 +232,11 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
       // Move back to primary display
       await ElectronTestHelper.moveToDisplay(context.mainWindow, 0)
     } else {
-      console.log('Single monitor setup detected, skipping multi-monitor tests')
     }
 
     // Test display change handling (simulated)
     await context.mainWindow.evaluate(() => {
       // Display change handling would be automatic in real Electron
-      console.log('Display change handling simulation')
     })
 
     // Verify app remains functional after display change simulation

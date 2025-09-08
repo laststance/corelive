@@ -2,6 +2,8 @@ const path = require('path')
 
 const { Tray, Menu, nativeImage, Notification } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class SystemTrayManager {
   constructor(windowManager) {
     this.windowManager = windowManager
@@ -16,7 +18,7 @@ class SystemTrayManager {
     try {
       // Check if system tray is supported on this platform
       if (!this.isSystemTraySupported()) {
-        console.warn('System tray is not supported on this platform')
+        log.warn('System tray is not supported on this platform')
         this.tray = null
         this.enableFallbackMode()
         return null
@@ -25,7 +27,7 @@ class SystemTrayManager {
       // Create tray icon with comprehensive error handling
       const trayIcon = this.createTrayIcon()
       if (!trayIcon) {
-        console.warn('Failed to create tray icon, enabling fallback mode')
+        log.warn('Failed to create tray icon, enabling fallback mode')
         this.enableFallbackMode()
         return null
       }
@@ -33,7 +35,7 @@ class SystemTrayManager {
       // Attempt to create tray with retry logic
       this.tray = this.createTrayWithRetry(trayIcon)
       if (!this.tray) {
-        console.warn(
+        log.warn(
           'Failed to create system tray after retries, enabling fallback mode',
         )
         this.enableFallbackMode()
@@ -45,20 +47,19 @@ class SystemTrayManager {
 
       // Create context menu with error handling
       if (!this.setupTrayMenuSafely()) {
-        console.warn('Failed to setup tray menu, using minimal functionality')
+        log.warn('Failed to setup tray menu, using minimal functionality')
       }
 
       // Handle tray click events with error handling
       if (!this.setupTrayEventsSafely()) {
-        console.warn(
+        log.warn(
           'Failed to setup tray events, tray will have limited functionality',
         )
       }
 
-      console.log('✅ System tray created successfully')
       return this.tray
     } catch (error) {
-      console.error('❌ Failed to create system tray:', error)
+      log.error('❌ Failed to create system tray:', error)
       this.handleTrayCreationFailure(error)
       return null
     }
@@ -77,7 +78,7 @@ class SystemTrayManager {
         process.platform === 'linux'
       )
     } catch (error) {
-      console.warn('Error checking system tray support:', error)
+      log.warn('Error checking system tray support:', error)
       return false
     }
   }
@@ -98,7 +99,7 @@ class SystemTrayManager {
             return trayIcon
           }
         } catch (iconError) {
-          console.warn('Failed to load tray icon from path:', iconError)
+          log.warn('Failed to load tray icon from path:', iconError)
         }
       }
 
@@ -109,18 +110,18 @@ class SystemTrayManager {
           return trayIcon
         }
       } catch (fallbackError) {
-        console.warn('Failed to create fallback icon:', fallbackError)
+        log.warn('Failed to create fallback icon:', fallbackError)
       }
 
       // Last resort: create empty image
       try {
         return nativeImage.createEmpty()
       } catch (emptyError) {
-        console.error('Failed to create empty icon:', emptyError)
+        log.error('Failed to create empty icon:', emptyError)
         return null
       }
     } catch (error) {
-      console.error('Error creating tray icon:', error)
+      log.error('Error creating tray icon:', error)
       return null
     }
   }
@@ -146,7 +147,7 @@ class SystemTrayManager {
 
       return nativeImage.createFromBuffer(buffer, { width, height })
     } catch (bitmapError) {
-      console.warn('Failed to create bitmap fallback icon:', bitmapError)
+      log.warn('Failed to create bitmap fallback icon:', bitmapError)
       return null
     }
   }
@@ -164,7 +165,7 @@ class SystemTrayManager {
           return tray
         }
       } catch (error) {
-        console.warn(`Tray creation attempt ${attempt} failed:`, error)
+        log.warn(`Tray creation attempt ${attempt} failed:`, error)
 
         if (attempt < maxRetries) {
           // Wait before retry (exponential backoff)
@@ -191,7 +192,7 @@ class SystemTrayManager {
       this.tray.setToolTip(text)
       return true
     } catch (error) {
-      console.warn('Failed to set tray tooltip:', error)
+      log.warn('Failed to set tray tooltip:', error)
       return false
     }
   }
@@ -204,13 +205,13 @@ class SystemTrayManager {
       this.updateTrayMenu()
       return true
     } catch (error) {
-      console.warn('Failed to create tray menu:', error)
+      log.warn('Failed to create tray menu:', error)
 
       try {
         this.createFallbackMenu()
         return true
       } catch (fallbackError) {
-        console.error('Failed to create fallback menu:', fallbackError)
+        log.error('Failed to create fallback menu:', fallbackError)
         return false
       }
     }
@@ -224,7 +225,7 @@ class SystemTrayManager {
       this.setupTrayEvents()
       return true
     } catch (error) {
-      console.warn('Failed to setup tray events:', error)
+      log.warn('Failed to setup tray events:', error)
       return false
     }
   }
@@ -233,7 +234,7 @@ class SystemTrayManager {
    * Handle tray creation failure and enable fallback mode
    */
   handleTrayCreationFailure(error) {
-    console.error('System tray creation failed completely:', error)
+    log.error('System tray creation failed completely:', error)
     this.tray = null
     this.enableFallbackMode()
 
@@ -251,10 +252,7 @@ class SystemTrayManager {
           notification.show()
         }
       } catch (notificationError) {
-        console.warn(
-          'Could not show tray failure notification:',
-          notificationError,
-        )
+        log.warn('Could not show tray failure notification:', notificationError)
       }
     }
   }
@@ -264,7 +262,6 @@ class SystemTrayManager {
    */
   enableFallbackMode() {
     this.fallbackMode = true
-    console.log('📱 Enabled fallback mode - app will not minimize to tray')
 
     // Modify window behavior to not minimize to tray
     if (this.windowManager) {
@@ -348,7 +345,7 @@ class SystemTrayManager {
    */
   updateTrayMenu(tasks = []) {
     if (!this.tray || this.tray.isDestroyed()) {
-      console.warn('Cannot update tray menu: tray not available')
+      log.warn('Cannot update tray menu: tray not available')
       return false
     }
 
@@ -360,7 +357,7 @@ class SystemTrayManager {
             try {
               this.windowManager.restoreFromTray()
             } catch (error) {
-              console.error('Failed to restore window from tray:', error)
+              log.error('Failed to restore window from tray:', error)
             }
           },
         },
@@ -373,7 +370,7 @@ class SystemTrayManager {
             try {
               this.windowManager.toggleFloatingNavigator()
             } catch (error) {
-              console.error('Failed to toggle floating navigator:', error)
+              log.error('Failed to toggle floating navigator:', error)
             }
           },
         },
@@ -391,7 +388,7 @@ class SystemTrayManager {
               this.isQuitting = true
               require('electron').app.quit()
             } catch (error) {
-              console.error('Failed to quit application:', error)
+              log.error('Failed to quit application:', error)
             }
           },
         },
@@ -400,13 +397,13 @@ class SystemTrayManager {
       this.tray.setContextMenu(contextMenu)
       return true
     } catch (error) {
-      console.error('Failed to update tray menu:', error)
+      log.error('Failed to update tray menu:', error)
 
       // Try to create a fallback menu
       try {
         this.createFallbackMenu()
       } catch (fallbackError) {
-        console.error('Failed to create fallback menu:', fallbackError)
+        log.error('Failed to create fallback menu:', fallbackError)
       }
 
       return false
@@ -427,7 +424,7 @@ class SystemTrayManager {
             try {
               this.windowManager.restoreFromTray()
             } catch (error) {
-              console.error('Failed to restore window:', error)
+              log.error('Failed to restore window:', error)
             }
           },
         },
@@ -441,9 +438,8 @@ class SystemTrayManager {
       ])
 
       this.tray.setContextMenu(fallbackMenu)
-      console.log('✅ Fallback tray menu created')
     } catch (error) {
-      console.error('❌ Failed to create fallback tray menu:', error)
+      log.error('❌ Failed to create fallback tray menu:', error)
     }
   }
   /**
@@ -500,7 +496,7 @@ class SystemTrayManager {
   showNotification(title, body, options = {}) {
     try {
       if (!Notification.isSupported()) {
-        console.warn('Notifications are not supported on this system')
+        log.warn('Notifications are not supported on this system')
         return null
       }
 
@@ -520,19 +516,19 @@ class SystemTrayManager {
             options.onClick()
           }
         } catch (error) {
-          console.error('Failed to handle notification click:', error)
+          log.error('Failed to handle notification click:', error)
         }
       })
 
       // Handle notification errors
       notification.on('failed', (event, error) => {
-        console.error('Notification failed:', error)
+        log.error('Notification failed:', error)
       })
 
       notification.show()
       return notification
     } catch (error) {
-      console.error('Failed to show notification:', error)
+      log.error('Failed to show notification:', error)
       return null
     }
   }
@@ -602,7 +598,7 @@ class SystemTrayManager {
    */
   setTrayIconState(state = 'default') {
     if (!this.tray || this.tray.isDestroyed()) {
-      console.warn('Cannot set tray icon state: tray not available')
+      log.warn('Cannot set tray icon state: tray not available')
       return false
     }
 
@@ -617,14 +613,14 @@ class SystemTrayManager {
           // In test environment, just call setImage with the path
           this.tray.setImage(iconPath)
         }
-        console.log(`Tray icon state changed to: ${state}`)
+
         return true
       } else {
-        console.warn(`Tray icon for state '${state}' not found`)
+        log.warn(`Tray icon for state '${state}' not found`)
         return false
       }
     } catch (error) {
-      console.error('Failed to set tray icon state:', error)
+      log.error('Failed to set tray icon state:', error)
       return false
     }
   }

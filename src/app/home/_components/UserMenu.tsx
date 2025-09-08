@@ -5,6 +5,8 @@ import { LogOut } from 'lucide-react'
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
+import { log } from '../../../lib/logger'
+
 export function UserMenu() {
   const { signOut } = useClerk()
 
@@ -12,7 +14,7 @@ export function UserMenu() {
     try {
       await signOut()
     } catch (error) {
-      console.error('Logout failed:', error)
+      log.error('Logout failed:', error)
     }
   }
 

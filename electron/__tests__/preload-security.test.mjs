@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+import { log } from '../../src/lib/logger.ts'
+
 // Mock Electron modules
 const mockIpcRenderer = {
   invoke: vi.fn(),
@@ -431,14 +433,12 @@ describe('Preload Script Security Tests', () => {
 
       const secureEventListener = (channel, callback) => {
         if (!ALLOWED_CHANNELS[channel]) {
-          console.error(
-            `Attempted to listen to unauthorized channel: ${channel}`,
-          )
+          log.error(`Attempted to listen to unauthorized channel: ${channel}`)
           return false
         }
 
         if (typeof callback !== 'function') {
-          console.error('Callback must be a function')
+          log.error('Callback must be a function')
           return false
         }
 
@@ -473,7 +473,7 @@ describe('Preload Script Security Tests', () => {
             const sanitizedArgs = args.map((arg) => sanitizeData(arg))
             userCallback(event, ...sanitizedArgs)
           } catch (error) {
-            console.error('Error in event callback:', error)
+            log.error('Error in event callback:', error)
           }
         }
       }

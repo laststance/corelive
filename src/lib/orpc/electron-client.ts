@@ -3,6 +3,8 @@ import type { RouterClient } from '@orpc/server'
 
 import type { AppRouter } from '@/server/router'
 
+import { log } from '../logger'
+
 // Electron IPC Link for ORPC
 class ElectronIPCLink {
   async call(path: string[], input: any) {
@@ -50,7 +52,7 @@ class ElectronIPCLink {
 
       throw new Error(`Unknown namespace: ${namespace}`)
     } catch (error) {
-      console.error('Electron IPC call failed:', error)
+      log.error('Electron IPC call failed:', error)
       throw error
     }
   }

@@ -1,5 +1,7 @@
 const { PrismaClient } = require('@prisma/client')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class APIBridge {
   constructor() {
     this.prisma = new PrismaClient()
@@ -9,9 +11,8 @@ class APIBridge {
   async initialize() {
     try {
       await this.prisma.$connect()
-      console.log('✅ Database connected successfully')
     } catch (error) {
-      console.error('❌ Database connection failed:', error)
+      log.error('❌ Database connection failed:', error)
       throw error
     }
   }
@@ -38,7 +39,7 @@ class APIBridge {
       })
       return todos
     } catch (error) {
-      console.error('Failed to get todos:', error)
+      log.error('Failed to get todos:', error)
 
       // Check if it's a connection error
       if (error.code === 'P1001' || error.message.includes('connection')) {
@@ -68,7 +69,7 @@ class APIBridge {
       })
       return todo
     } catch (error) {
-      console.error('Failed to get todo by ID:', error)
+      log.error('Failed to get todo by ID:', error)
 
       if (error.code === 'P1001' || error.message.includes('connection')) {
         throw new Error(
@@ -91,7 +92,7 @@ class APIBridge {
       })
       return todo
     } catch (error) {
-      console.error('Failed to create todo:', error)
+      log.error('Failed to create todo:', error)
 
       if (error.code === 'P1001' || error.message.includes('connection')) {
         throw new Error('Database connection failed. Cannot create todo.')
@@ -119,7 +120,7 @@ class APIBridge {
       })
       return todo
     } catch (error) {
-      console.error('Failed to update todo:', error)
+      log.error('Failed to update todo:', error)
 
       if (error.code === 'P1001' || error.message.includes('connection')) {
         throw new Error('Database connection failed. Cannot update todo.')
@@ -145,7 +146,7 @@ class APIBridge {
       })
       return { success: true }
     } catch (error) {
-      console.error('Failed to delete todo:', error)
+      log.error('Failed to delete todo:', error)
 
       if (error.code === 'P1001' || error.message.includes('connection')) {
         throw new Error('Database connection failed. Cannot delete todo.')
@@ -171,7 +172,7 @@ class APIBridge {
       })
       return { deletedCount: result.count }
     } catch (error) {
-      console.error('Failed to clear completed todos:', error)
+      log.error('Failed to clear completed todos:', error)
       throw error
     }
   }

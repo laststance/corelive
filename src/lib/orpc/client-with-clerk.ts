@@ -4,6 +4,8 @@ import type { RouterClient } from '@orpc/server'
 
 import type { AppRouter } from '@/server/router'
 
+import { log } from '../logger'
+
 // Mock client creation function for development environment
 export function createLink() {
   return new RPCLink({
@@ -31,7 +33,7 @@ export function createLink() {
             }
           }
         } catch (error) {
-          console.error('Failed to get Clerk session:', error)
+          log.error('Failed to get Clerk session:', error)
         }
       }
       return {}

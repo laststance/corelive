@@ -1,6 +1,8 @@
 import { useRouter } from 'next/navigation'
 import { useEffect, useCallback, useRef } from 'react'
 
+import { log } from '../lib/logger'
+
 interface DeepLinkTask {
   id: string
   title: string
@@ -46,8 +48,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
   // Handle task focus event
   const handleTaskFocus = useCallback(
     (event: any, data: DeepLinkEventData) => {
-      console.log('🔗 Deep link: Focus task', data)
-
       if (data.task && optionsRef.current.onTaskFocus) {
         optionsRef.current.onTaskFocus(data.task, data.params)
       } else if (data.task) {
@@ -61,8 +61,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
   // Handle task creation event
   const handleTaskCreate = useCallback(
     (event: any, data: DeepLinkEventData) => {
-      console.log('🔗 Deep link: Create task', data)
-
       if (optionsRef.current.onTaskCreate) {
         optionsRef.current.onTaskCreate({
           title: data.title,
@@ -87,8 +85,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
   // Handle task created event
   const handleTaskCreated = useCallback(
     (event: any, data: DeepLinkEventData) => {
-      console.log('🔗 Deep link: Task created', data)
-
       if (data.task && optionsRef.current.onTaskCreated) {
         optionsRef.current.onTaskCreated(data.task)
       } else if (data.task) {
@@ -102,8 +98,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
   // Handle navigation event
   const handleNavigate = useCallback(
     (event: any, data: DeepLinkEventData) => {
-      console.log('🔗 Deep link: Navigate', data)
-
       if (data.view && optionsRef.current.onNavigate) {
         optionsRef.current.onNavigate(data.view, data.params)
       } else if (data.view) {
@@ -120,8 +114,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
   // Handle search event
   const handleSearch = useCallback(
     (event: any, data: DeepLinkEventData) => {
-      console.log('🔗 Deep link: Search', data)
-
       if (optionsRef.current.onSearch) {
         optionsRef.current.onSearch(data.query || '', data.filter)
       } else {
@@ -177,7 +169,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
       try {
         return await window.electronAPI.deepLink.generateUrl(action, params)
       } catch (error) {
-        console.error('Failed to generate deep link:', error)
+        log.error('Failed to generate deep link:', error)
         return null
       }
     },
@@ -193,7 +185,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
     try {
       return await window.electronAPI.deepLink.getExamples()
     } catch (error) {
-      console.error('Failed to get deep link examples:', error)
+      log.error('Failed to get deep link examples:', error)
       return {}
     }
   }, [])
@@ -207,7 +199,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
     try {
       return await window.electronAPI.deepLink.handleUrl(url)
     } catch (error) {
-      console.error('Failed to handle deep link URL:', error)
+      log.error('Failed to handle deep link URL:', error)
       return false
     }
   }, [])
@@ -285,7 +277,7 @@ export const deepLinkUtils = {
         hash: parsedUrl.hash,
       }
     } catch (error) {
-      console.error('Failed to parse deep link URL:', error)
+      log.error('Failed to parse deep link URL:', error)
       return null
     }
   },

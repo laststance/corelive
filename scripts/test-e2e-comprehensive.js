@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { log } from '../src/lib/logger.ts'
 
 /**
  * Comprehensive E2E Test Runner
@@ -25,30 +26,30 @@ const colors = {
   cyan: '\x1b[36m',
 }
 
-function log(message, color = colors.reset) {
-  console.log(`${color}${message}${colors.reset}`)
+function logMessage(message, color = colors.reset) {
+  console.warn(`${color}${message}${colors.reset}`)
 }
 
 function logSection(title) {
-  log(`\n${'='.repeat(60)}`, colors.cyan)
-  log(`${title}`, colors.bright + colors.cyan)
-  log(`${'='.repeat(60)}`, colors.cyan)
+  logMessage(`\n${'='.repeat(60)}`, colors.cyan)
+  logMessage(`${title}`, colors.bright + colors.cyan)
+  logMessage(`${'='.repeat(60)}`, colors.cyan)
 }
 
 function logStep(step) {
-  log(`\n→ ${step}`, colors.blue)
+  logMessage(`\n→ ${step}`, colors.blue)
 }
 
 function logSuccess(message) {
-  log(`✓ ${message}`, colors.green)
+  logMessage(`✓ ${message}`, colors.green)
 }
 
 function logError(message) {
-  log(`✗ ${message}`, colors.red)
+  logMessage(`✗ ${message}`, colors.red)
 }
 
 function logWarning(message) {
-  log(`⚠ ${message}`, colors.yellow)
+  logMessage(`⚠ ${message}`, colors.yellow)
 }
 
 async function runCommand(command, options = {}) {
@@ -187,7 +188,7 @@ async function validateBundleSize() {
     }
   } catch (error) {
     logWarning('Bundle size validation failed (non-critical)')
-    console.error(error.message)
+    log.error(error.message)
   }
 }
 
@@ -298,6 +299,6 @@ process.on('SIGTERM', () => {
 // Run the test suite
 main().catch((error) => {
   logError('Unexpected error in test suite')
-  console.error(error)
+  log.error(error)
   process.exit(1)
 })

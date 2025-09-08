@@ -5,6 +5,8 @@ import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+import { log } from '../src/lib/logger.ts'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -26,8 +28,6 @@ let electronProcess = null
 
 // Cleanup function
 function cleanup() {
-  console.log('\n🧹 Cleaning up processes...')
-
   if (electronProcess) {
     electronProcess.kill('SIGTERM')
     electronProcess = null
@@ -56,7 +56,6 @@ async function checkServer(_url, maxAttempts = 30, interval = 1000) {
 
       const testReq = http.get(`http://localhost:${port}`, (res) => {
         if (res.statusCode === 200) {
-          console.log(`✅ Next.js server is ready at http://localhost:${port}`)
           resolve()
         } else {
           scheduleNextCheck()
@@ -79,9 +78,6 @@ async function checkServer(_url, maxAttempts = 30, interval = 1000) {
         return
       }
 
-      console.log(
-        `⏳ Waiting for Next.js server... (attempt ${attempts}/${maxAttempts})`,
-      )
       setTimeout(check, interval)
     }
 
@@ -91,10 +87,8 @@ async function checkServer(_url, maxAttempts = 30, interval = 1000) {
 
 async function startDevelopment() {
   try {
-    console.log('🚀 Starting CoreLive TODO development environment...\n')
-
     // Start Next.js development server
-    console.log('📦 Starting Next.js development server...')
+
     nextProcess = spawn('pnpm', ['dev'], {
       stdio: 'pipe',
       shell: true,
@@ -109,17 +103,16 @@ async function startDevelopment() {
     nextProcess.stdout.on('data', (data) => {
       const output = data.toString()
       if (output.includes('Ready') || output.includes('compiled')) {
-        console.log(`📦 Next.js: ${output.trim()}`)
       }
     })
 
     nextProcess.stderr.on('data', (data) => {
-      console.error(`📦 Next.js Error: ${data.toString().trim()}`)
+      log.error(`📦 Next.js Error: ${data.toString().trim()}`)
     })
 
     nextProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
-        console.error(`📦 Next.js process exited with code ${code}`)
+        log.error(`📦 Next.js process exited with code ${code}`)
         cleanup()
       }
     })
@@ -128,7 +121,7 @@ async function startDevelopment() {
     await checkServer(`http://localhost:${port}`)
 
     // Start Electron
-    console.log('\n⚡ Starting Electron...')
+
     electronProcess = spawn(
       'node',
       [path.join(__dirname, '..', 'electron', 'dev-runner.cjs')],
@@ -145,17 +138,12 @@ async function startDevelopment() {
 
     electronProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
-        console.error(`⚡ Electron process exited with code ${code}`)
+        log.error(`⚡ Electron process exited with code ${code}`)
       }
       cleanup()
     })
-
-    console.log('\n✅ Development environment started successfully!')
-    console.log(`📱 Next.js: http://localhost:${port}`)
-    console.log('⚡ Electron: Running in development mode')
-    console.log('\n💡 Press Ctrl+C to stop all processes\n')
   } catch (error) {
-    console.error('❌ Failed to start development environment:', error.message)
+    log.error('❌ Failed to start development environment:', error.message)
     cleanup()
   }
 }

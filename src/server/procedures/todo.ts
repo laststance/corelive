@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { prisma } from '@/lib/prisma'
 
+import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
 import {
   TodoSchema,
@@ -46,7 +47,7 @@ export const listTodos = authMiddleware
       }
     } catch (error) {
       // TODO: Use Logger Library
-      console.error('Error in listTodos:', error)
+      log.error('Error in listTodos:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch todos',
         cause: error,
@@ -73,7 +74,7 @@ export const createTodo = authMiddleware
       return todo
     } catch (error) {
       // TODO: Use Logger Library
-      console.error('Error in createTodo:', error)
+      log.error('Error in createTodo:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to create todo',
         cause: error,

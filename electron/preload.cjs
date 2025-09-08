@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 // Whitelist of allowed IPC channels for security
 const ALLOWED_CHANNELS = {
   // IPC Error handling
@@ -161,7 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('todo-get-all')
       } catch (error) {
-        console.error('Failed to get todos:', error)
+        log.error('Failed to get todos:', error)
         throw new Error('Failed to retrieve todos')
       }
     },
@@ -176,7 +178,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('todo-get-by-id', sanitizeData(id))
       } catch (error) {
-        console.error('Failed to get todo:', error)
+        log.error('Failed to get todo:', error)
         throw new Error('Failed to retrieve todo')
       }
     },
@@ -199,7 +201,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('todo-create', sanitizedData)
       } catch (error) {
-        console.error('Failed to create todo:', error)
+        log.error('Failed to create todo:', error)
         throw new Error('Failed to create todo')
       }
     },
@@ -225,7 +227,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedUpdates,
         )
       } catch (error) {
-        console.error('Failed to update todo:', error)
+        log.error('Failed to update todo:', error)
         throw new Error('Failed to update todo')
       }
     },
@@ -243,7 +245,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('todo-delete', sanitizedId)
       } catch (error) {
-        console.error('Failed to delete todo:', error)
+        log.error('Failed to delete todo:', error)
         throw new Error('Failed to delete todo')
       }
     },
@@ -258,7 +260,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-minimize')
       } catch (error) {
-        console.error('Failed to minimize window:', error)
+        log.error('Failed to minimize window:', error)
       }
     },
 
@@ -269,7 +271,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-close')
       } catch (error) {
-        console.error('Failed to close window:', error)
+        log.error('Failed to close window:', error)
       }
     },
 
@@ -280,7 +282,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-toggle-floating-navigator')
       } catch (error) {
-        console.error('Failed to toggle floating navigator:', error)
+        log.error('Failed to toggle floating navigator:', error)
       }
     },
 
@@ -291,7 +293,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-show-floating-navigator')
       } catch (error) {
-        console.error('Failed to show floating navigator:', error)
+        log.error('Failed to show floating navigator:', error)
       }
     },
 
@@ -302,7 +304,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-hide-floating-navigator')
       } catch (error) {
-        console.error('Failed to hide floating navigator:', error)
+        log.error('Failed to hide floating navigator:', error)
       }
     },
   },
@@ -332,7 +334,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedOptions,
         )
       } catch (error) {
-        console.error('Failed to show notification:', error)
+        log.error('Failed to show notification:', error)
         throw new Error('Failed to show notification')
       }
     },
@@ -350,7 +352,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('tray-update-menu', sanitizedTasks)
       } catch (error) {
-        console.error('Failed to update tray menu:', error)
+        log.error('Failed to update tray menu:', error)
       }
     },
 
@@ -367,7 +369,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('tray-set-tooltip', sanitizedText)
       } catch (error) {
-        console.error('Failed to set tray tooltip:', error)
+        log.error('Failed to set tray tooltip:', error)
       }
     },
 
@@ -389,7 +391,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('tray-set-icon-state', state)
       } catch (error) {
-        console.error('Failed to set tray icon state:', error)
+        log.error('Failed to set tray icon state:', error)
         return false
       }
     },
@@ -420,7 +422,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedOptions,
         )
       } catch (error) {
-        console.error('Failed to show notification:', error)
+        log.error('Failed to show notification:', error)
         throw new Error('Failed to show notification')
       }
     },
@@ -432,7 +434,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('notification-get-preferences')
       } catch (error) {
-        console.error('Failed to get notification preferences:', error)
+        log.error('Failed to get notification preferences:', error)
         return null
       }
     },
@@ -453,7 +455,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedPreferences,
         )
       } catch (error) {
-        console.error('Failed to update notification preferences:', error)
+        log.error('Failed to update notification preferences:', error)
         throw new Error('Failed to update preferences')
       }
     },
@@ -465,7 +467,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('notification-clear-all')
       } catch (error) {
-        console.error('Failed to clear all notifications:', error)
+        log.error('Failed to clear all notifications:', error)
       }
     },
 
@@ -482,7 +484,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('notification-clear', sanitizedTag)
       } catch (error) {
-        console.error('Failed to clear notification:', error)
+        log.error('Failed to clear notification:', error)
       }
     },
 
@@ -493,7 +495,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('notification-is-enabled')
       } catch (error) {
-        console.error('Failed to check notification status:', error)
+        log.error('Failed to check notification status:', error)
         return false
       }
     },
@@ -505,7 +507,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('notification-get-active-count')
       } catch (error) {
-        console.error('Failed to get active notification count:', error)
+        log.error('Failed to get active notification count:', error)
         return 0
       }
     },
@@ -520,7 +522,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-get-registered')
       } catch (error) {
-        console.error('Failed to get registered shortcuts:', error)
+        log.error('Failed to get registered shortcuts:', error)
         return {}
       }
     },
@@ -532,7 +534,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-get-defaults')
       } catch (error) {
-        console.error('Failed to get default shortcuts:', error)
+        log.error('Failed to get default shortcuts:', error)
         return {}
       }
     },
@@ -550,7 +552,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-update', sanitizedShortcuts)
       } catch (error) {
-        console.error('Failed to update shortcuts:', error)
+        log.error('Failed to update shortcuts:', error)
         throw new Error('Failed to update shortcuts')
       }
     },
@@ -576,7 +578,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedId,
         )
       } catch (error) {
-        console.error('Failed to register shortcut:', error)
+        log.error('Failed to register shortcut:', error)
         throw new Error('Failed to register shortcut')
       }
     },
@@ -594,7 +596,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-unregister', sanitizedId)
       } catch (error) {
-        console.error('Failed to unregister shortcut:', error)
+        log.error('Failed to unregister shortcut:', error)
         throw new Error('Failed to unregister shortcut')
       }
     },
@@ -615,7 +617,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedAccelerator,
         )
       } catch (error) {
-        console.error('Failed to check shortcut registration:', error)
+        log.error('Failed to check shortcut registration:', error)
         return false
       }
     },
@@ -627,7 +629,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-enable')
       } catch (error) {
-        console.error('Failed to enable shortcuts:', error)
+        log.error('Failed to enable shortcuts:', error)
         return false
       }
     },
@@ -639,7 +641,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-disable')
       } catch (error) {
-        console.error('Failed to disable shortcuts:', error)
+        log.error('Failed to disable shortcuts:', error)
         return false
       }
     },
@@ -651,7 +653,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-get-stats')
       } catch (error) {
-        console.error('Failed to get shortcut stats:', error)
+        log.error('Failed to get shortcut stats:', error)
         return null
       }
     },
@@ -666,7 +668,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('auth-get-user')
       } catch (error) {
-        console.error('Failed to get user:', error)
+        log.error('Failed to get user:', error)
         return null
       }
     },
@@ -678,7 +680,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('auth-set-user', sanitizeData(user))
       } catch (error) {
-        console.error('Failed to set user:', error)
+        log.error('Failed to set user:', error)
         throw new Error('Failed to set user')
       }
     },
@@ -690,7 +692,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('auth-logout')
       } catch (error) {
-        console.error('Failed to logout:', error)
+        log.error('Failed to logout:', error)
         throw new Error('Failed to logout')
       }
     },
@@ -702,7 +704,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('auth-is-authenticated')
       } catch (error) {
-        console.error('Failed to check authentication:', error)
+        log.error('Failed to check authentication:', error)
         return false
       }
     },
@@ -717,7 +719,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizeData(authData),
         )
       } catch (error) {
-        console.error('Failed to sync auth from web:', error)
+        log.error('Failed to sync auth from web:', error)
         throw new Error('Failed to sync authentication')
       }
     },
@@ -736,7 +738,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('menu-action', { action })
       } catch (error) {
-        console.error('Failed to trigger menu action:', error)
+        log.error('Failed to trigger menu action:', error)
         throw new Error('Failed to trigger menu action')
       }
     },
@@ -762,7 +764,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedDefault,
         )
       } catch (error) {
-        console.error('Failed to get config value:', error)
+        log.error('Failed to get config value:', error)
         return defaultValue
       }
     },
@@ -785,7 +787,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedValue,
         )
       } catch (error) {
-        console.error('Failed to set config value:', error)
+        log.error('Failed to set config value:', error)
         throw new Error('Failed to update configuration')
       }
     },
@@ -797,7 +799,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-get-all')
       } catch (error) {
-        console.error('Failed to get all config:', error)
+        log.error('Failed to get all config:', error)
         return {}
       }
     },
@@ -815,7 +817,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-get-section', sanitizedSection)
       } catch (error) {
-        console.error('Failed to get config section:', error)
+        log.error('Failed to get config section:', error)
         return {}
       }
     },
@@ -833,7 +835,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-update', sanitizedUpdates)
       } catch (error) {
-        console.error('Failed to update config:', error)
+        log.error('Failed to update config:', error)
         throw new Error('Failed to update configuration')
       }
     },
@@ -845,7 +847,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-reset')
       } catch (error) {
-        console.error('Failed to reset config:', error)
+        log.error('Failed to reset config:', error)
         throw new Error('Failed to reset configuration')
       }
     },
@@ -866,7 +868,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedSection,
         )
       } catch (error) {
-        console.error('Failed to reset config section:', error)
+        log.error('Failed to reset config section:', error)
         throw new Error('Failed to reset configuration section')
       }
     },
@@ -878,7 +880,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-validate')
       } catch (error) {
-        console.error('Failed to validate config:', error)
+        log.error('Failed to validate config:', error)
         return { isValid: false, errors: ['Validation failed'] }
       }
     },
@@ -896,7 +898,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-export', sanitizedPath)
       } catch (error) {
-        console.error('Failed to export config:', error)
+        log.error('Failed to export config:', error)
         throw new Error('Failed to export configuration')
       }
     },
@@ -914,7 +916,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-import', sanitizedPath)
       } catch (error) {
-        console.error('Failed to import config:', error)
+        log.error('Failed to import config:', error)
         throw new Error('Failed to import configuration')
       }
     },
@@ -926,7 +928,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-backup')
       } catch (error) {
-        console.error('Failed to backup config:', error)
+        log.error('Failed to backup config:', error)
         return null
       }
     },
@@ -938,7 +940,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('config-get-paths')
       } catch (error) {
-        console.error('Failed to get config paths:', error)
+        log.error('Failed to get config paths:', error)
         return {}
       }
     },
@@ -959,7 +961,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-state-get', sanitizedType)
       } catch (error) {
-        console.error('Failed to get window state:', error)
+        log.error('Failed to get window state:', error)
         return null
       }
     },
@@ -985,7 +987,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedProperties,
         )
       } catch (error) {
-        console.error('Failed to set window state:', error)
+        log.error('Failed to set window state:', error)
         throw new Error('Failed to update window state')
       }
     },
@@ -1003,7 +1005,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-state-reset', sanitizedType)
       } catch (error) {
-        console.error('Failed to reset window state:', error)
+        log.error('Failed to reset window state:', error)
         throw new Error('Failed to reset window state')
       }
     },
@@ -1015,7 +1017,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-state-get-stats')
       } catch (error) {
-        console.error('Failed to get window state stats:', error)
+        log.error('Failed to get window state stats:', error)
         return {}
       }
     },
@@ -1041,7 +1043,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedDisplayId,
         )
       } catch (error) {
-        console.error('Failed to move window to display:', error)
+        log.error('Failed to move window to display:', error)
         throw new Error('Failed to move window to display')
       }
     },
@@ -1067,7 +1069,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedEdge,
         )
       } catch (error) {
-        console.error('Failed to snap window to edge:', error)
+        log.error('Failed to snap window to edge:', error)
         throw new Error('Failed to snap window to edge')
       }
     },
@@ -1088,7 +1090,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedType,
         )
       } catch (error) {
-        console.error('Failed to get window display:', error)
+        log.error('Failed to get window display:', error)
         return null
       }
     },
@@ -1100,7 +1102,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('window-state-get-all-displays')
       } catch (error) {
-        console.error('Failed to get all displays:', error)
+        log.error('Failed to get all displays:', error)
         return []
       }
     },
@@ -1115,7 +1117,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('app-version')
       } catch (error) {
-        console.error('Failed to get app version:', error)
+        log.error('Failed to get app version:', error)
         return 'unknown'
       }
     },
@@ -1127,7 +1129,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('app-quit')
       } catch (error) {
-        console.error('Failed to quit app:', error)
+        log.error('Failed to quit app:', error)
       }
     },
   },
@@ -1152,7 +1154,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           sanitizedParams,
         )
       } catch (error) {
-        console.error('Failed to generate deep link:', error)
+        log.error('Failed to generate deep link:', error)
         return null
       }
     },
@@ -1164,7 +1166,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('deep-link-get-examples')
       } catch (error) {
-        console.error('Failed to get deep link examples:', error)
+        log.error('Failed to get deep link examples:', error)
         return {}
       }
     },
@@ -1182,7 +1184,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('deep-link-handle-url', sanitizedUrl)
       } catch (error) {
-        console.error('Failed to handle deep link:', error)
+        log.error('Failed to handle deep link:', error)
         return false
       }
     },
@@ -1191,12 +1193,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Secure event listener management
   on: (channel, callback) => {
     if (!validateChannel(channel)) {
-      console.error(`Attempted to listen to unauthorized channel: ${channel}`)
+      log.error(`Attempted to listen to unauthorized channel: ${channel}`)
       return
     }
 
     if (typeof callback !== 'function') {
-      console.error('Callback must be a function')
+      log.error('Callback must be a function')
       return
     }
 
@@ -1206,7 +1208,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const sanitizedArgs = args.map((arg) => sanitizeData(arg))
         callback(event, ...sanitizedArgs)
       } catch (error) {
-        console.error('Error in event callback:', error)
+        log.error('Error in event callback:', error)
       }
     }
 
@@ -1220,7 +1222,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   removeListener: (channel, callback) => {
     if (!validateChannel(channel)) {
-      console.error(
+      log.error(
         `Attempted to remove listener from unauthorized channel: ${channel}`,
       )
       return
@@ -1232,7 +1234,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Remove all listeners for a channel
   removeAllListeners: (channel) => {
     if (!validateChannel(channel)) {
-      console.error(
+      log.error(
         `Attempted to remove all listeners from unauthorized channel: ${channel}`,
       )
       return
@@ -1250,7 +1252,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('ipc-error-stats')
       } catch (error) {
-        console.error('Failed to get IPC error stats:', error)
+        log.error('Failed to get IPC error stats:', error)
         return null
       }
     },
@@ -1262,7 +1264,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('ipc-error-health-check')
       } catch (error) {
-        console.error('Failed to perform IPC health check:', error)
+        log.error('Failed to perform IPC health check:', error)
         return { isHealthy: false, error: 'Health check failed' }
       }
     },
@@ -1274,7 +1276,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('ipc-error-reset-stats')
       } catch (error) {
-        console.error('Failed to reset IPC error stats:', error)
+        log.error('Failed to reset IPC error stats:', error)
         return false
       }
     },
@@ -1289,7 +1291,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('updater-check-for-updates')
       } catch (error) {
-        console.error('Failed to check for updates:', error)
+        log.error('Failed to check for updates:', error)
         return false
       }
     },
@@ -1301,7 +1303,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('updater-quit-and-install')
       } catch (error) {
-        console.error('Failed to quit and install update:', error)
+        log.error('Failed to quit and install update:', error)
         return false
       }
     },
@@ -1313,7 +1315,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await ipcRenderer.invoke('updater-get-status')
       } catch (error) {
-        console.error('Failed to get update status:', error)
+        log.error('Failed to get update status:', error)
         return { updateAvailable: false, updateDownloaded: false }
       }
     },

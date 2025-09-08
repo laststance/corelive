@@ -1,63 +1,122 @@
-import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { test as setup, expect } from '@playwright/test'
+import { setupClerkTestingToken, clerk } from '@clerk/testing/playwright'
+import { test as setup } from '@playwright/test'
 
+import { log } from '../src/lib/logger'
+
+setup.describe.configure({ mode: 'serial' })
 const authFile = './e2e/.auth/user.json'
 
-setup('authenticate', async ({ page }) => {
-  // Since we modified the middleware to skip auth for tests,
-  // we can directly navigate to the home page
+setup('authenticate', async ({ page, context }) => {
+  // Check environment variables
+  const username = process.env.E2E_CLERK_USER_USERNAME
+  const password = process.env.E2E_CLERK_USER_PASSWORD
+  const secretKey = process.env.CLERK_SECRET_KEY
 
-  console.log('Setting up Clerk testing token for bot detection avoidance...')
-  await setupClerkTestingToken({ page })
-
-  // Navigate directly to the home page (middleware will skip auth check for tests)
-  await page.goto('/home')
-
-  // Wait for the page to load (less strict)
-  await page.waitForLoadState('domcontentloaded')
-  await page.waitForTimeout(1000)
-
-  console.log('Home page loaded, URL:', page.url())
-  console.log('Page title:', await page.title())
-
-  // Check if we're on the home page
-  const currentURL = page.url()
-  console.log('Current URL after navigation:', currentURL)
-
-  if (currentURL.includes('/home')) {
-    console.log('Successfully on home page')
-
-    // Verify page title
-    try {
-      await expect(page).toHaveTitle('Corelive')
-      console.log('Page title verified')
-    } catch (error) {
-      console.log('Page title check failed:', (error as Error).message)
-    }
-
-    // Try to find TODO app components (may not be present if DB is not set up)
-    try {
-      await expect(page.getByText('Todo List')).toBeVisible({ timeout: 5000 })
-      console.log('Todo List found')
-    } catch (error) {
-      console.log('Todo List not found:', (error as Error).message)
-    }
-
-    try {
-      await expect(page.getByPlaceholder('Enter a new todo...')).toBeVisible({
-        timeout: 5000,
-      })
-      console.log('Todo input found')
-    } catch (error) {
-      console.log('Todo input not found:', (error as Error).message)
-    }
-  } else {
-    console.log(
-      'Not on home page, but saving state anyway for testing purposes',
-    )
+  if (!username || !password || !secretKey) {
+    throw new Error('Required environment variables not found!')
   }
 
-  // Save the state regardless (for testing purposes)
-  await page.context().storageState({ path: authFile })
-  console.log('Auth state saved to:', authFile)
+  try {
+    // Set up testing token explicitly
+
+    await setupClerkTestingToken({ page })
+
+    // Navigate to root page
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+
+    // Small wait for page initialization
+    await page.waitForTimeout(2000)
+
+    // Check if Clerk is available without waiting for loaded state
+    await page.evaluate(() => {
+      return {
+        clerkExists: typeof window.Clerk !== 'undefined',
+        clerkKeys:
+          typeof window.Clerk !== 'undefined' ? Object.keys(window.Clerk) : [],
+      }
+    })
+
+    // Try sign-in with clerk helper
+
+    try {
+      await clerk.signIn({
+        page,
+        signInParams: {
+          strategy: 'password',
+          identifier: username,
+          password: password,
+        },
+      })
+    } catch {
+      // Fallback: Manual sign-in
+      await page.goto('/login', { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(2000)
+
+      // Look for form inputs
+      const usernameInput = page
+        .locator(
+          'input[name="identifier"], input[type="text"], input[type="email"]',
+        )
+        .first()
+      const passwordInput = page.locator('input[type="password"]').first()
+
+      if (
+        (await usernameInput.isVisible()) &&
+        (await passwordInput.isVisible())
+      ) {
+        await usernameInput.fill(username)
+        await passwordInput.fill(password)
+
+        const submitButton = page.locator('button[type="submit"]').first()
+        await submitButton.click()
+
+        await page.waitForTimeout(3000)
+      }
+    }
+
+    // Wait for authentication to complete and redirects
+    await page.waitForTimeout(3000)
+
+    // Check where we are now
+    page.url()
+
+    // Navigate to protected route to verify authentication
+
+    await page.goto('/home', { waitUntil: 'networkidle' })
+
+    // Final verification
+    const finalUrl = page.url()
+
+    if (finalUrl.includes('/home')) {
+      // Save the authenticated state
+      await context.storageState({ path: authFile })
+
+      // Take success screenshot
+      await page.screenshot({ path: './e2e/screenshots/auth-success.png' })
+    } else if (finalUrl.includes('/login') || finalUrl.includes('/sign-in')) {
+      throw new Error('Authentication failed - redirected to login page')
+    } else {
+      // Still save state as authentication might have worked
+      await context.storageState({ path: authFile })
+    }
+  } catch (error: any) {
+    log.error('❌ Authentication failed:', error.message)
+
+    // Take debug screenshot
+    await page
+      .screenshot({
+        path: './e2e/screenshots/auth-debug.png',
+        fullPage: true,
+      })
+      .catch(() => {})
+
+    // Log additional error details
+    if (error.message.includes('page.waitForFunction')) {
+    }
+
+    // Additional debugging info
+
+    throw error
+  }
 })

@@ -3,6 +3,8 @@ const path = require('path')
 
 const { screen, app } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class WindowStateManager {
   constructor(configManager) {
     this.configManager = configManager
@@ -29,7 +31,7 @@ class WindowStateManager {
         return this.validateWindowStates(states)
       }
     } catch (error) {
-      console.error('Failed to load window states:', error)
+      log.error('Failed to load window states:', error)
     }
 
     // Return default states if loading fails
@@ -232,7 +234,7 @@ class WindowStateManager {
       fs.writeFileSync(this.windowStatePath, stateData, 'utf8')
       return true
     } catch (error) {
-      console.error('Failed to save window states:', error)
+      log.error('Failed to save window states:', error)
       return false
     }
   }
@@ -281,7 +283,7 @@ class WindowStateManager {
 
       return this.saveWindowStates()
     } catch (error) {
-      console.error(`Failed to update ${windowType} window state:`, error)
+      log.error(`Failed to update ${windowType} window state:`, error)
       return false
     }
   }
@@ -332,9 +334,7 @@ class WindowStateManager {
   /**
    * Handle display configuration changes
    */
-  handleDisplayChange(changeType) {
-    console.log(`Display change detected: ${changeType}`)
-
+  handleDisplayChange(_changeType) {
     // Get current display configuration
     const currentDisplays = screen.getAllDisplays()
     const primaryDisplay = screen.getPrimaryDisplay()
@@ -348,9 +348,6 @@ class WindowStateManager {
 
       if (!windowDisplay) {
         // Display no longer exists, move to primary display
-        console.log(
-          `Display ${state.displayId} no longer exists, moving ${windowType} window to primary display`,
-        )
 
         const newPosition = this.calculateCenterPosition(
           { width: state.width, height: state.height },
@@ -376,9 +373,6 @@ class WindowStateManager {
         )
 
         if (validatedBounds.x !== state.x || validatedBounds.y !== state.y) {
-          console.log(
-            `Adjusting ${windowType} window position due to display metrics change`,
-          )
           this.setWindowState(windowType, {
             x: validatedBounds.x,
             y: validatedBounds.y,
@@ -512,7 +506,7 @@ class WindowStateManager {
 
       return true
     } catch (error) {
-      console.error(`Failed to apply ${windowType} window state:`, error)
+      log.error(`Failed to apply ${windowType} window state:`, error)
       return false
     }
   }
@@ -556,13 +550,13 @@ class WindowStateManager {
     const targetDisplay = displays.find((d) => d.id === displayId)
 
     if (!targetDisplay) {
-      console.warn(`Display ${displayId} not found`)
+      log.warn(`Display ${displayId} not found`)
       return false
     }
 
     const state = this.getWindowState(windowType)
     if (!state) {
-      console.warn(`Window state for ${windowType} not found`)
+      log.warn(`Window state for ${windowType} not found`)
       return false
     }
 
@@ -787,7 +781,7 @@ class WindowStateManager {
       this.debouncedSaveWindowStates()
       return true
     } catch (error) {
-      console.error(`Failed to update ${windowType} window state:`, error)
+      log.error(`Failed to update ${windowType} window state:`, error)
       return false
     }
   }

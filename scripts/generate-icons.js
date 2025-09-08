@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url'
 
 import sharp from 'sharp'
 
+import { log } from '../src/lib/logger.ts'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -42,13 +44,13 @@ class IconGenerator {
     // Ensure output directories exist
     await fs.mkdir(this.outputDir, { recursive: true })
     await fs.mkdir(this.trayDir, { recursive: true })
-    console.log('🎨 Icon Generator initialized')
-    console.log(`📁 Source: ${this.sourceIcon}`)
-    console.log(`📁 Output: ${this.outputDir}`)
+    log.warn('🎨 Icon Generator initialized')
+    log.warn(`📁 Source: ${this.sourceIcon}`)
+    log.warn(`📁 Output: ${this.outputDir}`)
   }
 
   async generatePNGIcons() {
-    console.log('\n📸 Generating PNG icons...')
+    log.warn('\n📸 Generating PNG icons...')
     const allSizes = new Set([
       ...ICON_SIZES.windows,
       ...ICON_SIZES.macos,
@@ -66,18 +68,15 @@ class IconGenerator {
           })
           .png({ quality: 100, compressionLevel: 9 })
           .toFile(outputPath)
-        console.log(`  ✅ Generated ${size}x${size} PNG`)
+        log.warn(`  ✅ Generated ${size}x${size} PNG`)
       } catch (error) {
-        console.error(
-          `  ❌ Failed to generate ${size}x${size} PNG:`,
-          error.message,
-        )
+        log.error(`  ❌ Failed to generate ${size}x${size} PNG:`, error.message)
       }
     }
   }
 
   async generateTrayIcons() {
-    console.log('\n🔔 Generating tray icons...')
+    log.warn('\n🔔 Generating tray icons...')
     for (const [state, config] of Object.entries(TRAY_STATES)) {
       for (const size of ICON_SIZES.tray) {
         const outputPath = path.join(
@@ -120,9 +119,9 @@ class IconGenerator {
           await pipeline
             .png({ quality: 100, compressionLevel: 9 })
             .toFile(outputPath)
-          console.log(`  ✅ Generated ${size}x${size} tray icon (${state})`)
+          log.warn(`  ✅ Generated ${size}x${size} tray icon (${state})`)
         } catch (error) {
-          console.error(
+          log.error(
             `  ❌ Failed to generate ${size}x${size} tray icon (${state}):`,
             error.message,
           )
@@ -132,7 +131,7 @@ class IconGenerator {
   }
 
   async generateFavicons() {
-    console.log('\n🌐 Generating web favicons...')
+    log.warn('\n🌐 Generating web favicons...')
     const faviconSizes = [16, 32, 48, 64, 128, 192, 512]
     const webDir = path.join(__dirname, '../public')
 
@@ -150,9 +149,9 @@ class IconGenerator {
           })
           .png({ quality: 100, compressionLevel: 9 })
           .toFile(outputPath)
-        console.log(`  ✅ Generated ${size}x${size} favicon`)
+        log.warn(`  ✅ Generated ${size}x${size} favicon`)
       } catch (error) {
-        console.error(
+        log.error(
           `  ❌ Failed to generate ${size}x${size} favicon:`,
           error.message,
         )
@@ -169,14 +168,14 @@ class IconGenerator {
         })
         .png()
         .toFile(path.join(webDir, 'favicon.ico'))
-      console.log(`  ✅ Generated favicon.ico`)
+      log.warn(`  ✅ Generated favicon.ico`)
     } catch (error) {
-      console.error(`  ❌ Failed to generate favicon.ico:`, error.message)
+      log.error(`  ❌ Failed to generate favicon.ico:`, error.message)
     }
   }
 
   async generateAppIcons() {
-    console.log('\n📱 Generating app store icons...')
+    log.warn('\n📱 Generating app store icons...')
     // Generate high-resolution icons for app stores
     const appIconSizes = [512, 1024]
     for (const size of appIconSizes) {
@@ -193,9 +192,9 @@ class IconGenerator {
           })
           .png({ quality: 100, compressionLevel: 9 })
           .toFile(outputPath)
-        console.log(`  ✅ Generated ${size}x${size} app icon`)
+        log.warn(`  ✅ Generated ${size}x${size} app icon`)
       } catch (error) {
-        console.error(
+        log.error(
           `  ❌ Failed to generate ${size}x${size} app icon:`,
           error.message,
         )
@@ -204,7 +203,7 @@ class IconGenerator {
   }
 
   async generateIconManifest() {
-    console.log('\n📋 Generating icon manifest...')
+    log.warn('\n📋 Generating icon manifest...')
     const manifest = {
       generated: new Date().toISOString(),
       source: this.sourceIcon,
@@ -255,9 +254,9 @@ class IconGenerator {
       // Save manifest
       const manifestPath = path.join(this.outputDir, 'icon-manifest.json')
       await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
-      console.log(`  ✅ Generated icon manifest: ${manifestPath}`)
+      log.warn(`  ✅ Generated icon manifest: ${manifestPath}`)
     } catch (error) {
-      console.error(`  ❌ Failed to generate icon manifest:`, error.message)
+      log.error(`  ❌ Failed to generate icon manifest:`, error.message)
     }
   }
 
@@ -270,18 +269,18 @@ class IconGenerator {
       await this.generateAppIcons()
       await this.generateIconManifest()
 
-      console.log('\n🎉 Icon generation completed successfully!')
-      console.log('\n📊 Summary:')
-      console.log(
+      log.warn('\n🎉 Icon generation completed successfully!')
+      log.warn('\n📊 Summary:')
+      log.warn(
         `  • PNG icons: ${ICON_SIZES.windows.length + ICON_SIZES.macos.length + ICON_SIZES.linux.length} sizes`,
       )
-      console.log(
+      log.warn(
         `  • Tray icons: ${ICON_SIZES.tray.length * Object.keys(TRAY_STATES).length} variants`,
       )
-      console.log(`  • Favicons: 8 sizes`)
-      console.log(`  • App icons: 2 high-res versions`)
+      log.warn(`  • Favicons: 8 sizes`)
+      log.warn(`  • App icons: 2 high-res versions`)
     } catch (error) {
-      console.error('\n❌ Icon generation failed:', error)
+      log.error('\n❌ Icon generation failed:', error)
       process.exit(1)
     }
   }

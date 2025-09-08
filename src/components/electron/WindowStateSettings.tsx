@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 
+import { log } from '../../lib/logger'
+
 interface WindowState {
   bounds: {
     x: number
@@ -93,7 +95,7 @@ export function WindowStateSettings() {
       setStats(statsData)
       setDisplays(displaysData)
     } catch (error) {
-      console.error('Failed to load window state data:', error)
+      log.error('Failed to load window state data:', error)
       toast.error('Failed to load window state information')
     } finally {
       setLoading(false)
@@ -116,7 +118,7 @@ export function WindowStateSettings() {
         toast.error(`Failed to move ${windowType} window`)
       }
     } catch (error) {
-      console.error('Failed to move window:', error)
+      log.error('Failed to move window:', error)
       toast.error(`Failed to move ${windowType} window`)
     }
   }
@@ -137,7 +139,7 @@ export function WindowStateSettings() {
         toast.error(`Failed to snap ${windowType} window`)
       }
     } catch (error) {
-      console.error('Failed to snap window:', error)
+      log.error('Failed to snap window:', error)
       toast.error(`Failed to snap ${windowType} window`)
     }
   }
@@ -155,7 +157,7 @@ export function WindowStateSettings() {
         toast.error(`Failed to reset ${windowType} window state`)
       }
     } catch (error) {
-      console.error('Failed to reset window state:', error)
+      log.error('Failed to reset window state:', error)
       toast.error(`Failed to reset ${windowType} window state`)
     }
   }

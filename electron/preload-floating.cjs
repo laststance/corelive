@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 // Whitelist of allowed IPC channels for floating navigator (more restricted than main window)
 const ALLOWED_CHANNELS = {
   // Essential todo operations for floating navigator
@@ -80,7 +82,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('todo-get-all')
       } catch (error) {
-        console.error('Floating Navigator: Failed to get todos:', error)
+        log.error('Floating Navigator: Failed to get todos:', error)
         throw new Error('Failed to retrieve todos')
       }
     },
@@ -103,7 +105,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
           (await ipcRenderer.invoke('todo-create', todoData))
         )
       } catch (error) {
-        console.error('Floating Navigator: Failed to create todo:', error)
+        log.error('Floating Navigator: Failed to create todo:', error)
         throw new Error('Failed to create todo')
       }
     },
@@ -127,7 +129,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
           }))
         )
       } catch (error) {
-        console.error('Floating Navigator: Failed to toggle todo:', error)
+        log.error('Floating Navigator: Failed to toggle todo:', error)
         throw new Error('Failed to toggle todo')
       }
     },
@@ -166,7 +168,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
           sanitizedUpdates,
         )
       } catch (error) {
-        console.error('Floating Navigator: Failed to update todo:', error)
+        log.error('Floating Navigator: Failed to update todo:', error)
         throw new Error('Failed to update todo')
       }
     },
@@ -184,7 +186,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('todo-delete', sanitizedId)
       } catch (error) {
-        console.error('Floating Navigator: Failed to delete todo:', error)
+        log.error('Floating Navigator: Failed to delete todo:', error)
         throw new Error('Failed to delete todo')
       }
     },
@@ -199,7 +201,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('floating-window-close')
       } catch (error) {
-        console.error('Floating Navigator: Failed to close window:', error)
+        log.error('Floating Navigator: Failed to close window:', error)
       }
     },
 
@@ -210,7 +212,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('floating-window-minimize')
       } catch (error) {
-        console.error('Floating Navigator: Failed to minimize window:', error)
+        log.error('Floating Navigator: Failed to minimize window:', error)
       }
     },
 
@@ -221,10 +223,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('floating-window-toggle-always-on-top')
       } catch (error) {
-        console.error(
-          'Floating Navigator: Failed to toggle always on top:',
-          error,
-        )
+        log.error('Floating Navigator: Failed to toggle always on top:', error)
       }
     },
 
@@ -236,7 +235,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
         // This will be handled by the main process to restore main window
         return await ipcRenderer.invoke('window-show-main')
       } catch (error) {
-        console.error('Floating Navigator: Failed to focus main window:', error)
+        log.error('Floating Navigator: Failed to focus main window:', error)
       }
     },
   },
@@ -244,14 +243,14 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
   // Secure event listener management (restricted set for floating navigator)
   on: (channel, callback) => {
     if (!validateChannel(channel)) {
-      console.error(
+      log.error(
         `Floating Navigator: Attempted to listen to unauthorized channel: ${channel}`,
       )
       return
     }
 
     if (typeof callback !== 'function') {
-      console.error('Floating Navigator: Callback must be a function')
+      log.error('Floating Navigator: Callback must be a function')
       return
     }
 
@@ -261,7 +260,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
         const sanitizedArgs = args.map((arg) => sanitizeData(arg))
         callback(event, ...sanitizedArgs)
       } catch (error) {
-        console.error('Floating Navigator: Error in event callback:', error)
+        log.error('Floating Navigator: Error in event callback:', error)
       }
     }
 
@@ -275,7 +274,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
 
   removeListener: (channel, callback) => {
     if (!validateChannel(channel)) {
-      console.error(
+      log.error(
         `Floating Navigator: Attempted to remove listener from unauthorized channel: ${channel}`,
       )
       return
@@ -293,7 +292,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('floating-window-get-bounds')
       } catch (error) {
-        console.error('Floating Navigator: Failed to get window bounds:', error)
+        log.error('Floating Navigator: Failed to get window bounds:', error)
         return null
       }
     },
@@ -314,7 +313,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
           sanitizedBounds,
         )
       } catch (error) {
-        console.error('Floating Navigator: Failed to set window bounds:', error)
+        log.error('Floating Navigator: Failed to set window bounds:', error)
       }
     },
 
@@ -325,7 +324,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('floating-window-is-always-on-top')
       } catch (error) {
-        console.error(
+        log.error(
           'Floating Navigator: Failed to check always on top status:',
           error,
         )
@@ -359,7 +358,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
           sanitizedOptions,
         )
       } catch (error) {
-        console.error('Floating Navigator: Failed to show notification:', error)
+        log.error('Floating Navigator: Failed to show notification:', error)
         throw new Error('Failed to show notification')
       }
     },
@@ -371,7 +370,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('notification-is-enabled')
       } catch (error) {
-        console.error(
+        log.error(
           'Floating Navigator: Failed to check notification status:',
           error,
         )
@@ -386,7 +385,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('notification-get-preferences')
       } catch (error) {
-        console.error(
+        log.error(
           'Floating Navigator: Failed to get notification preferences:',
           error,
         )
@@ -404,7 +403,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-get-registered')
       } catch (error) {
-        console.error(
+        log.error(
           'Floating Navigator: Failed to get registered shortcuts:',
           error,
         )
@@ -419,10 +418,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-get-defaults')
       } catch (error) {
-        console.error(
-          'Floating Navigator: Failed to get default shortcuts:',
-          error,
-        )
+        log.error('Floating Navigator: Failed to get default shortcuts:', error)
         return {}
       }
     },
@@ -434,10 +430,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       try {
         return await ipcRenderer.invoke('shortcuts-get-stats')
       } catch (error) {
-        console.error(
-          'Floating Navigator: Failed to get shortcut stats:',
-          error,
-        )
+        log.error('Floating Navigator: Failed to get shortcut stats:', error)
         return null
       }
     },
@@ -458,7 +451,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorShortcuts', {
    */
   register: async (shortcuts) => {
     if (!shortcuts || typeof shortcuts !== 'object') {
-      console.error('Floating Navigator: Invalid shortcuts configuration')
+      log.error('Floating Navigator: Invalid shortcuts configuration')
       return
     }
 
@@ -470,7 +463,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorShortcuts', {
         sanitizedShortcuts,
       )
     } catch (error) {
-      console.error('Floating Navigator: Failed to register shortcuts:', error)
+      log.error('Floating Navigator: Failed to register shortcuts:', error)
     }
   },
 
@@ -479,7 +472,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorShortcuts', {
    */
   unregister: async (shortcutKeys) => {
     if (!Array.isArray(shortcutKeys)) {
-      console.error('Floating Navigator: Shortcut keys must be an array')
+      log.error('Floating Navigator: Shortcut keys must be an array')
       return
     }
 
@@ -491,10 +484,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorShortcuts', {
         sanitizedKeys,
       )
     } catch (error) {
-      console.error(
-        'Floating Navigator: Failed to unregister shortcuts:',
-        error,
-      )
+      log.error('Floating Navigator: Failed to unregister shortcuts:', error)
     }
   },
 })

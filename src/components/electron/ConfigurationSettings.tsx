@@ -27,6 +27,8 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
+import { log } from '../../lib/logger'
+
 interface ElectronConfig {
   version: string
   window: {
@@ -142,7 +144,7 @@ export function ConfigurationSettings() {
       const validationResult = await window.electronAPI.config.validate()
       setValidation(validationResult)
     } catch (error) {
-      console.error('Failed to load configuration:', error)
+      log.error('Failed to load configuration:', error)
       toast.error('Failed to load configuration')
     } finally {
       setLoading(false)
@@ -214,7 +216,7 @@ export function ConfigurationSettings() {
       setHasChanges(false)
       toast.success('Configuration saved successfully')
     } catch (error) {
-      console.error('Failed to save configuration:', error)
+      log.error('Failed to save configuration:', error)
       toast.error('Failed to save configuration')
     } finally {
       setSaving(false)
@@ -233,7 +235,7 @@ export function ConfigurationSettings() {
       setHasChanges(false)
       toast.success('Configuration reset to defaults')
     } catch (error) {
-      console.error('Failed to reset configuration:', error)
+      log.error('Failed to reset configuration:', error)
       toast.error('Failed to reset configuration')
     }
   }
@@ -250,7 +252,7 @@ export function ConfigurationSettings() {
       setHasChanges(false)
       toast.success(`${section} settings reset to defaults`)
     } catch (error) {
-      console.error('Failed to reset section:', error)
+      log.error('Failed to reset section:', error)
       toast.error(`Failed to reset ${section} settings`)
     }
   }
@@ -273,7 +275,7 @@ export function ConfigurationSettings() {
         toast.error('Failed to export configuration')
       }
     } catch (error) {
-      console.error('Failed to export configuration:', error)
+      log.error('Failed to export configuration:', error)
       toast.error('Failed to export configuration')
     }
   }

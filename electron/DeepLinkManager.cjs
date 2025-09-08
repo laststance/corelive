@@ -2,6 +2,8 @@ const { URL } = require('url')
 
 const { app } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 /**
  * Deep Link Manager for handling custom URL scheme (corelive://)
  * Supports opening specific tasks, views, and creating tasks from external applications
@@ -39,11 +41,8 @@ class DeepLinkManager {
       this.handleInitialUrl()
 
       this.isInitialized = true
-      console.log(
-        `✅ Deep linking initialized for protocol: ${this.protocol}://`,
-      )
     } catch (error) {
-      console.error('❌ Failed to initialize deep linking:', error)
+      log.error('❌ Failed to initialize deep linking:', error)
     }
   }
 
@@ -55,7 +54,7 @@ class DeepLinkManager {
     if (!app.isDefaultProtocolClient(this.protocol)) {
       const success = app.setAsDefaultProtocolClient(this.protocol)
       if (!success) {
-        console.warn('⚠️ Failed to register as default protocol client')
+        log.warn('⚠️ Failed to register as default protocol client')
       }
     }
 
@@ -133,12 +132,10 @@ class DeepLinkManager {
    */
   async handleDeepLink(url) {
     try {
-      console.log(`🔗 Processing deep link: ${url}`)
-
       // Parse the URL
       const parsedUrl = this.parseDeepLinkUrl(url)
       if (!parsedUrl) {
-        console.warn('⚠️ Invalid deep link URL format')
+        log.warn('⚠️ Invalid deep link URL format')
         return
       }
 
@@ -148,7 +145,7 @@ class DeepLinkManager {
       // Route to appropriate handler
       await this.routeDeepLink(parsedUrl)
     } catch (error) {
-      console.error('❌ Failed to handle deep link:', error)
+      log.error('❌ Failed to handle deep link:', error)
 
       // Show error notification
       if (this.notificationManager) {
@@ -185,7 +182,7 @@ class DeepLinkManager {
         hash: parsedUrl.hash,
       }
     } catch (error) {
-      console.error('Failed to parse deep link URL:', error)
+      log.error('Failed to parse deep link URL:', error)
       return null
     }
   }
@@ -215,7 +212,7 @@ class DeepLinkManager {
         break
 
       default:
-        console.warn(`⚠️ Unknown deep link action: ${action}`)
+        log.warn(`⚠️ Unknown deep link action: ${action}`)
         // Default to opening main window
         this.ensureWindowVisible()
     }
@@ -230,7 +227,7 @@ class DeepLinkManager {
     const taskId = path.replace('/', '') || params.id
 
     if (!taskId) {
-      console.warn('⚠️ Task action requires task ID')
+      log.warn('⚠️ Task action requires task ID')
       return
     }
 
@@ -239,7 +236,7 @@ class DeepLinkManager {
       const task = await this.apiBridge.getTodoById(taskId)
 
       if (!task) {
-        console.warn(`⚠️ Task not found: ${taskId}`)
+        log.warn(`⚠️ Task not found: ${taskId}`)
         if (this.notificationManager) {
           this.notificationManager.showNotification(
             'Task Not Found',
@@ -262,7 +259,7 @@ class DeepLinkManager {
         )
       }
     } catch (error) {
-      console.error('Failed to handle task action:', error)
+      log.error('Failed to handle task action:', error)
       if (this.notificationManager) {
         this.notificationManager.showNotification(
           'Error',
@@ -281,7 +278,7 @@ class DeepLinkManager {
     const { title, description, priority, dueDate } = params
 
     if (!title) {
-      console.warn('⚠️ Create action requires title parameter')
+      log.warn('⚠️ Create action requires title parameter')
       // Open create dialog without pre-filled data
       this.sendToRenderer('deep-link-create-task', {})
       return
@@ -310,7 +307,7 @@ class DeepLinkManager {
         )
       }
     } catch (error) {
-      console.error('Failed to create task from deep link:', error)
+      log.error('Failed to create task from deep link:', error)
 
       // Fallback: open create dialog with pre-filled data
       this.sendToRenderer('deep-link-create-task', {
@@ -457,7 +454,6 @@ class DeepLinkManager {
       // Remove protocol client registration
       app.removeAsDefaultProtocolClient(this.protocol)
       this.isInitialized = false
-      console.log('🧹 Deep linking cleaned up')
     }
   }
 }

@@ -6,9 +6,11 @@
  * and startup optimization.
  */
 
-const path = require('path')
+require('path')
 
 const { app } = require('electron')
+
+const { log } = require('../src/lib/logger.cjs')
 
 class PerformanceOptimizer {
   constructor() {
@@ -33,7 +35,6 @@ class PerformanceOptimizer {
    */
   lazyLoad(moduleName, loader) {
     if (!this.lazyModules.has(moduleName)) {
-      console.log(`🔄 Lazy loading module: ${moduleName}`)
       const startTime = Date.now()
 
       try {
@@ -41,12 +42,15 @@ class PerformanceOptimizer {
         this.lazyModules.set(moduleName, module)
         this.startupMetrics.modulesLoaded++
 
+        // Calculate load time for potential future use
         const loadTime = Date.now() - startTime
-        console.log(`✅ Loaded ${moduleName} in ${loadTime}ms`)
+        if (loadTime) {
+          /* Load time available for logging */
+        }
 
         return module
       } catch (error) {
-        console.error(`❌ Failed to lazy load ${moduleName}:`, error)
+        log.error(`❌ Failed to lazy load ${moduleName}:`, error)
         throw error
       }
     }
@@ -63,12 +67,12 @@ class PerformanceOptimizer {
       const heapUsed = memoryUsage.heapUsed
 
       if (heapUsed > this.memoryThresholds.critical) {
-        console.warn(
+        log.warn(
           `🚨 Critical memory usage: ${Math.round(heapUsed / 1024 / 1024)}MB`,
         )
         this.performMemoryCleanup()
       } else if (heapUsed > this.memoryThresholds.warning) {
-        console.warn(
+        log.warn(
           `⚠️ High memory usage: ${Math.round(heapUsed / 1024 / 1024)}MB`,
         )
       }
@@ -81,8 +85,6 @@ class PerformanceOptimizer {
    * Perform memory cleanup operations
    */
   performMemoryCleanup() {
-    console.log('🧹 Performing memory cleanup...')
-
     // Force garbage collection if available
     if (global.gc) {
       global.gc()
@@ -121,8 +123,6 @@ class PerformanceOptimizer {
    * @param {Function} deferredInit - Deferred initialization function
    */
   async optimizeStartup(criticalInit, deferredInit) {
-    console.log('🚀 Starting optimized initialization...')
-
     // Run critical initialization first
     await criticalInit()
 
@@ -130,12 +130,13 @@ class PerformanceOptimizer {
     setImmediate(async () => {
       try {
         await deferredInit()
+        // Calculate total time for potential future use
         const totalTime = Date.now() - this.startupMetrics.startTime
-        console.log(`✅ Startup completed in ${totalTime}ms`)
-        console.log(`📊 Modules loaded: ${this.startupMetrics.modulesLoaded}`)
-        console.log(`🪟 Windows created: ${this.startupMetrics.windowsCreated}`)
+        if (totalTime) {
+          /* Total time available for logging */
+        }
       } catch (error) {
-        console.error('❌ Deferred initialization failed:', error)
+        log.error('❌ Deferred initialization failed:', error)
       }
     })
   }
@@ -176,16 +177,13 @@ class PerformanceOptimizer {
    * @param {Array<string>} resources - Array of resource paths
    */
   async preloadResources(resources) {
-    console.log('📦 Preloading critical resources...')
-
     const preloadPromises = resources.map(async (resource) => {
       try {
         if (resource.endsWith('.js') || resource.endsWith('.cjs')) {
           require(resource)
         }
-        console.log(`✅ Preloaded: ${path.basename(resource)}`)
       } catch (error) {
-        console.warn(`⚠️ Failed to preload ${resource}:`, error.message)
+        log.warn(`⚠️ Failed to preload ${resource}:`, error.message)
       }
     })
 
@@ -221,8 +219,6 @@ class PerformanceOptimizer {
    * Cleanup all performance monitoring
    */
   cleanup() {
-    console.log('🧹 Cleaning up performance optimizer...')
-
     // Clear all intervals
     this.cleanupIntervals.forEach((interval) => {
       clearInterval(interval)

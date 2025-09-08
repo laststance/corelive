@@ -2,22 +2,17 @@ import { RPCHandler } from '@orpc/server/fetch'
 
 import { router } from '@/server/router'
 
+import { log } from '../../../../lib/logger'
+
 const handler = new RPCHandler(router)
 
 async function handleRequest(request: Request) {
   try {
     // TODO: Use Certain Logger Library
-    console.log('🔍 oPRC Request Debug:', {
-      method: request.method,
-      url: request.url,
-      headers: Object.fromEntries(request.headers.entries()),
-      contentType: request.headers.get('content-type'),
-    })
 
     // Clone and read request body
     const clonedRequest = request.clone()
-    const body = await clonedRequest.text()
-    console.log('📦 Request Body:', body)
+    await clonedRequest.text()
 
     const { response } = await handler.handle(request, {
       prefix: '/api/rpc',
@@ -29,7 +24,7 @@ async function handleRequest(request: Request) {
     return response ?? new Response('Not found', { status: 404 })
   } catch (error) {
     // TODO: Use Certain Logger Library
-    console.error('❌ oPRC Handler Error:', error)
+    log.error('❌ oPRC Handler Error:', error)
     return new Response(
       JSON.stringify({
         error: 'Internal Server Error',

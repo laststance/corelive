@@ -3,6 +3,8 @@ const path = require('path')
 
 const { app } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class ConfigManager {
   constructor() {
     // Use app.getPath('userData') for cross-platform user data directory
@@ -120,7 +122,7 @@ class ConfigManager {
         fs.mkdirSync(this.configDir, { recursive: true })
       }
     } catch (error) {
-      console.error('Failed to create config directory:', error)
+      log.error('Failed to create config directory:', error)
     }
   }
 
@@ -140,7 +142,7 @@ class ConfigManager {
         return this.migrateConfig(mergedConfig)
       }
     } catch (error) {
-      console.error('Failed to load config:', error)
+      log.error('Failed to load config:', error)
     }
 
     // Return default config if loading fails
@@ -156,7 +158,7 @@ class ConfigManager {
       fs.writeFileSync(this.configPath, configData, 'utf8')
       return true
     } catch (error) {
-      console.error('Failed to save config:', error)
+      log.error('Failed to save config:', error)
       return false
     }
   }
@@ -196,8 +198,6 @@ class ConfigManager {
     if (currentVersion === targetVersion) {
       return config
     }
-
-    console.log(`Migrating config from ${currentVersion} to ${targetVersion}`)
 
     // Perform version-specific migrations here
     // Example migration logic:
@@ -392,7 +392,7 @@ class ConfigManager {
       fs.writeFileSync(filePath, configData, 'utf8')
       return true
     } catch (error) {
-      console.error('Failed to export config:', error)
+      log.error('Failed to export config:', error)
       return false
     }
   }
@@ -423,7 +423,7 @@ class ConfigManager {
 
       return this.saveConfig()
     } catch (error) {
-      console.error('Failed to import config:', error)
+      log.error('Failed to import config:', error)
       return false
     }
   }
@@ -452,7 +452,7 @@ class ConfigManager {
 
       return this.exportConfig(backupPath) ? backupPath : null
     } catch (error) {
-      console.error('Failed to backup config:', error)
+      log.error('Failed to backup config:', error)
       return null
     }
   }
@@ -483,7 +483,7 @@ class ConfigManager {
 
       return filesToDelete.length
     } catch (error) {
-      console.error('Failed to cleanup backups:', error)
+      log.error('Failed to cleanup backups:', error)
       return 0
     }
   }

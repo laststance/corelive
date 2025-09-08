@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url'
 import { _electron as electron, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 
+import { log } from '../../src/lib/logger'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -63,22 +65,16 @@ export class ElectronTestHelper {
         })
 
         if (isReady) {
-          console.log(`✅ Server ready after ${i + 1} attempts`)
           return true
         }
 
-        console.log(`⏳ Server not ready, attempt ${i + 1}/${maxAttempts}`)
         await page.waitForTimeout(2000)
-      } catch (error) {
-        console.log(
-          `⚠️ Health check error on attempt ${i + 1}:`,
-          error instanceof Error ? error.message : String(error),
-        )
+      } catch {
         await page.waitForTimeout(2000)
       }
     }
 
-    console.error('❌ Server failed to become ready')
+    log.error('❌ Server failed to become ready')
     return false
   }
 
@@ -87,14 +83,12 @@ export class ElectronTestHelper {
    */
   static async setupAuthentication(page: Page): Promise<boolean> {
     try {
-      console.log('🔐 Setting up authentication...')
-
       // Navigate to root first
       await page.goto('/')
       await page.waitForTimeout(1000)
 
       // Navigate to home page
-      console.log('🏠 Navigating to /home...')
+
       await page.goto('/home')
       await page.waitForLoadState('networkidle')
 
@@ -109,25 +103,16 @@ export class ElectronTestHelper {
         const hasAddTodo =
           document.querySelector('input[placeholder*="todo"]') !== null
 
-        console.log('Authentication check:', {
-          hasTasksHeader,
-          hasTodoList,
-          hasPending,
-          hasAddTodo,
-        })
-
         return hasTasksHeader || hasTodoList || hasPending || hasAddTodo
       })
 
       if (isAuthenticated) {
-        console.log('✅ Authentication successful')
         return true
       } else {
-        console.log('❌ Authentication failed - not on authenticated page')
         return false
       }
     } catch (error) {
-      console.error('❌ Authentication setup failed:', error)
+      log.error('❌ Authentication setup failed:', error)
       return false
     }
   }
@@ -153,27 +138,23 @@ export class ElectronTestHelper {
     mainWindow.on('console', (msg) => {
       const message = `[${msg.type().toUpperCase()}] ${msg.text()}`
       consoleMessages.push(message)
-      console.log(`Electron Console: ${message}`)
     })
 
     mainWindow.on('pageerror', (error) => {
       const errorMessage = `Page Error: ${error.message}\nStack: ${error.stack}`
       pageErrors.push(errorMessage)
-      console.error(`Electron Page Error: ${errorMessage}`)
+      log.error(`Electron Page Error: ${errorMessage}`)
     })
 
     try {
       // Wait for the window to be fully loaded
       await mainWindow.waitForLoadState('networkidle')
-      console.log('✅ Initial page loaded')
 
       // Wait for Electron-specific initialization
       await mainWindow.waitForTimeout(3000)
-      console.log('✅ Electron initialization wait complete')
 
       // Check if Next.js server is responding by checking current URL
-      const currentUrl = await mainWindow.evaluate(() => window.location.href)
-      console.log(`Current URL: ${currentUrl}`)
+      await mainWindow.evaluate(() => window.location.href)
 
       // Wait for Next.js server to be ready
       const serverReady = await this.waitForServerReady(mainWindow)
@@ -189,15 +170,13 @@ export class ElectronTestHelper {
 
       // Check for any errors that occurred during setup
       if (pageErrors.length > 0) {
-        console.error('Page errors detected:', pageErrors)
+        log.error('Page errors detected:', pageErrors)
         throw new Error(`Page errors occurred: ${pageErrors.join('; ')}`)
       }
-
-      console.log('✅ Electron app launched successfully')
     } catch (error) {
-      console.error('❌ Error during Electron app setup:', error)
-      console.error('Console messages:', consoleMessages)
-      console.error('Page errors:', pageErrors)
+      log.error('❌ Error during Electron app setup:', error)
+      log.error('Console messages:', consoleMessages)
+      log.error('Page errors:', pageErrors)
 
       // Try to get more debugging info
       try {
@@ -207,13 +186,13 @@ export class ElectronTestHelper {
           () => document.body?.innerText || 'No body text',
         )
 
-        console.error('Debug info:', {
+        log.error('Debug info:', {
           url,
           title,
           bodyText: bodyText.substring(0, 500),
         })
       } catch (debugError) {
-        console.error('Could not get debug info:', debugError)
+        log.error('Could not get debug info:', debugError)
       }
 
       throw error
@@ -436,7 +415,7 @@ export class ElectronTestHelper {
       // Check if the checkbox is checked in main window
       return mainCheckbox.isChecked()
     } catch (error) {
-      console.error('Data synchronization test failed:', error)
+      log.error('Data synchronization test failed:', error)
       return false
     }
   }
@@ -469,7 +448,7 @@ export class ElectronTestHelper {
 
       return isMinimized
     } catch (error) {
-      console.error('System tray test failed:', error)
+      log.error('System tray test failed:', error)
       return false
     }
   }
@@ -519,7 +498,7 @@ export class ElectronTestHelper {
 
       results.floatingToggle = floatingNavigatorWorked
     } catch (error) {
-      console.error('Keyboard shortcuts test failed:', error)
+      log.error('Keyboard shortcuts test failed:', error)
     }
 
     return results
@@ -537,9 +516,8 @@ export class ElectronTestHelper {
         // Mock notification API if not available
         if (!window.Notification) {
           ;(window as any).Notification = class {
-            constructor(title: string, options?: any) {
+            constructor(_title: string, _options?: any) {
               ;(window as any).notificationReceived = true
-              console.log('Mock notification:', title, options)
             }
           }
         }
@@ -563,7 +541,7 @@ export class ElectronTestHelper {
 
       return notificationReceived
     } catch (error) {
-      console.error('Notification test failed:', error)
+      log.error('Notification test failed:', error)
       return false
     }
   }
@@ -601,7 +579,7 @@ export class ElectronTestHelper {
 
       return true
     } catch (error) {
-      console.error('Error recovery test failed:', error)
+      log.error('Error recovery test failed:', error)
       return false
     }
   }
@@ -636,7 +614,7 @@ export class ElectronTestHelper {
 
       return saved && boundsChanged
     } catch (error) {
-      console.error('Window state persistence test failed:', error)
+      log.error('Window state persistence test failed:', error)
       return false
     }
   }

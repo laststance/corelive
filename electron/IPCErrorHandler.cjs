@@ -3,6 +3,8 @@ const path = require('path')
 
 const { app } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 /**
  * IPC Error Handler with retry logic, graceful degradation, and error reporting
  */
@@ -36,7 +38,7 @@ class IPCErrorHandler {
     try {
       await fs.mkdir(this.logPath, { recursive: true })
     } catch (error) {
-      console.error('Failed to create logs directory:', error)
+      log.error('Failed to create logs directory:', error)
     }
   }
 
@@ -273,7 +275,7 @@ class IPCErrorHandler {
       data,
     }
 
-    console.error(`[IPC Error] ${message}`, data)
+    log.error(`[IPC Error] ${message}`, data)
 
     if (this.enableLogging) {
       await this.writeLogFile('error', logEntry)
@@ -288,7 +290,7 @@ class IPCErrorHandler {
       data,
     }
 
-    console.warn(`[IPC Warning] ${message}`, data)
+    log.warn(`[IPC Warning] ${message}`, data)
 
     if (this.enableLogging) {
       await this.writeLogFile('warning', logEntry)
@@ -303,7 +305,7 @@ class IPCErrorHandler {
       data,
     }
 
-    console.log(`[IPC Info] ${message}`, data)
+    log.info(`[IPC Info] ${message}`, data)
 
     if (this.enableLogging) {
       await this.writeLogFile('info', logEntry)
@@ -318,7 +320,7 @@ class IPCErrorHandler {
 
       await fs.appendFile(logFile, logLine)
     } catch (error) {
-      console.error('Failed to write log file:', error)
+      log.error('Failed to write log file:', error)
     }
   }
 

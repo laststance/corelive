@@ -2,9 +2,12 @@ import type { WebhookEvent } from '@clerk/nextjs/server'
 import { PrismaClient } from '@prisma/client'
 import { headers } from 'next/headers'
 import { Webhook } from 'svix'
-export const runtime = 'nodejs'
 
 import { env } from '@/env.mjs'
+
+import { log } from '../../../lib/logger'
+
+export const runtime = 'nodejs'
 
 const prisma = new PrismaClient()
 
@@ -39,19 +42,18 @@ export async function POST(req: Request) {
       'svix-signature': svix_signature,
     }) as WebhookEvent
   } catch (err) {
-    console.error('Error verifying webhook:', err)
+    log.error('Error verifying webhook:', err)
     return new Response('Error occured', {
       status: 400,
     })
   }
 
   if (evt.type === 'user.created') {
-    console.log('New user created')
     const userData = evt.data
     const emailAddress = userData.email_addresses?.[0]?.email_address
 
     if (!emailAddress) {
-      console.error('No email address found for user')
+      log.error('No email address found for user')
       return new Response('No email address found', { status: 400 })
     }
 

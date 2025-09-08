@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+import { log } from '../lib/logger'
+
 interface ShortcutStats {
   totalRegistered: number
   isEnabled: boolean
@@ -50,7 +52,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       setDefaultShortcuts(defaults)
       setStats(currentStats)
     } catch (error) {
-      console.error('Failed to load shortcuts:', error)
+      log.error('Failed to load shortcuts:', error)
       setIsSupported(false)
     }
   }, [isElectron])
@@ -66,7 +68,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         }
         return success
       } catch (error) {
-        console.error('Failed to update shortcuts:', error)
+        log.error('Failed to update shortcuts:', error)
         return false
       }
     },
@@ -87,7 +89,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         }
         return success
       } catch (error) {
-        console.error('Failed to register shortcut:', error)
+        log.error('Failed to register shortcut:', error)
         return false
       }
     },
@@ -105,7 +107,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         }
         return success
       } catch (error) {
-        console.error('Failed to unregister shortcut:', error)
+        log.error('Failed to unregister shortcut:', error)
         return false
       }
     },
@@ -119,7 +121,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       try {
         return await window.electronAPI.shortcuts.isRegistered(accelerator)
       } catch (error) {
-        console.error('Failed to check shortcut registration:', error)
+        log.error('Failed to check shortcut registration:', error)
         return false
       }
     },
@@ -136,7 +138,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       }
       return success
     } catch (error) {
-      console.error('Failed to enable shortcuts:', error)
+      log.error('Failed to enable shortcuts:', error)
       return false
     }
   }, [isElectron, loadShortcuts])
@@ -151,7 +153,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       }
       return success
     } catch (error) {
-      console.error('Failed to disable shortcuts:', error)
+      log.error('Failed to disable shortcuts:', error)
       return false
     }
   }, [isElectron, loadShortcuts])
@@ -163,7 +165,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       const currentStats = await window.electronAPI.shortcuts.getStats()
       setStats(currentStats)
     } catch (error) {
-      console.error('Failed to refresh shortcut stats:', error)
+      log.error('Failed to refresh shortcut stats:', error)
     }
   }, [isElectron])
 
@@ -177,12 +179,10 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
     // Listen for shortcut events
     const handleNewTask = () => {
-      console.log('New task shortcut triggered')
       // This could trigger a custom event or callback
     }
 
     const handleSearch = () => {
-      console.log('Search shortcut triggered')
       // This could trigger a custom event or callback
     }
 
@@ -198,7 +198,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         if (typeof cleanupNewTask === 'function') cleanupNewTask()
         if (typeof cleanupSearch === 'function') cleanupSearch()
       } catch (error) {
-        console.warn('Error cleaning up event listeners:', error)
+        log.warn('Error cleaning up event listeners:', error)
       }
     }
   }, [isElectron])

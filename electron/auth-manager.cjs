@@ -51,8 +51,6 @@ class AuthManager {
       if (this.apiBridge) {
         this.apiBridge.setUserId(user.id)
       }
-
-      console.log('✅ User authenticated:', user.id)
     } else {
       this.logout()
     }
@@ -66,8 +64,6 @@ class AuthManager {
     if (this.apiBridge) {
       this.apiBridge.setUserId('electron-user')
     }
-
-    console.log('🔓 User logged out')
   }
 
   getCurrentUser() {

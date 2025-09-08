@@ -4,6 +4,8 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
+import { log } from '../src/lib/logger.ts'
+
 /**
  * Production build script for CoreLive TODO Electron app
  *
@@ -23,8 +25,6 @@ const platforms = {
 
 async function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    console.log(`🔧 Running: ${command} ${args.join(' ')}`)
-
     const child = spawn(command, args, {
       stdio: 'inherit',
       shell: true,
@@ -46,35 +46,29 @@ async function runCommand(command, args, options = {}) {
 }
 
 async function runPreBuildChecks() {
-  console.log('\n🔍 Running pre-build checks...\n')
-
   try {
     // Type checking
-    console.log('📝 Type checking...')
+
     await runCommand('pnpm', ['typecheck'])
 
     // Linting
-    console.log('🔍 Linting...')
+
     await runCommand('pnpm', ['lint'])
 
     // Unit tests
-    console.log('🧪 Running unit tests...')
+
     await runCommand('pnpm', ['test', '--run'])
 
     // Electron tests
-    console.log('⚡ Running Electron tests...')
-    await runCommand('pnpm', ['test:electron', '--run'])
 
-    console.log('✅ All pre-build checks passed!\n')
+    await runCommand('pnpm', ['test:electron', '--run'])
   } catch (error) {
-    console.error('❌ Pre-build checks failed:', error.message)
+    log.error('❌ Pre-build checks failed:', error.message)
     throw error
   }
 }
 
 async function buildNextJS() {
-  console.log('📦 Building Next.js application...\n')
-
   try {
     // Set environment variables for Electron build
     const env = {
@@ -84,18 +78,13 @@ async function buildNextJS() {
     }
 
     await runCommand('pnpm', ['build'], { env })
-    console.log('✅ Next.js build completed!\n')
   } catch (error) {
-    console.error('❌ Next.js build failed:', error.message)
+    log.error('❌ Next.js build failed:', error.message)
     throw error
   }
 }
 
 async function buildElectron(platform = 'all') {
-  console.log(
-    `⚡ Building Electron application for ${platforms[platform] || platform}...\n`,
-  )
-
   try {
     // Set optimization environment variable
     process.env.ELECTRON_BUILD = 'true'
@@ -110,14 +99,10 @@ async function buildElectron(platform = 'all') {
     const command = buildCommands[platform] || ['electron:build']
     await runCommand('pnpm', command)
 
-    console.log(
-      `✅ Electron build completed for ${platforms[platform] || platform}!\n`,
-    )
-
     // Analyze bundle size after build
     await analyzeBundleSize()
   } catch (error) {
-    console.error(
+    log.error(
       `❌ Electron build failed for ${platforms[platform] || platform}:`,
       error.message,
     )
@@ -126,32 +111,25 @@ async function buildElectron(platform = 'all') {
 }
 
 async function analyzeBundleSize() {
-  console.log('📊 Analyzing bundle size...\n')
-
   try {
     const distDir = path.join(process.cwd(), 'dist-electron')
     const nextDir = path.join(process.cwd(), '.next')
 
     if (fs.existsSync(distDir)) {
-      const distSize = await getFolderSize(distDir)
-      console.log(`📦 Electron dist size: ${formatBytes(distSize)}`)
+      await getFolderSize(distDir)
     }
 
     if (fs.existsSync(nextDir)) {
-      const nextSize = await getFolderSize(nextDir)
-      console.log(`🌐 Next.js build size: ${formatBytes(nextSize)}`)
+      await getFolderSize(nextDir)
 
       // Analyze specific Next.js chunks
       const staticDir = path.join(nextDir, 'static')
       if (fs.existsSync(staticDir)) {
-        const staticSize = await getFolderSize(staticDir)
-        console.log(`📄 Static assets size: ${formatBytes(staticSize)}`)
+        await getFolderSize(staticDir)
       }
     }
-
-    console.log('')
   } catch (error) {
-    console.warn('⚠️ Bundle analysis failed:', error.message)
+    log.warn('⚠️ Bundle analysis failed:', error.message)
   }
 }
 
@@ -175,12 +153,9 @@ async function getFolderSize(folderPath) {
 }
 
 function generateBuildReport() {
-  console.log('📊 Generating build report...\n')
-
   const distDir = path.join(process.cwd(), 'dist-electron')
 
   if (!fs.existsSync(distDir)) {
-    console.log('⚠️  No build artifacts found')
     return
   }
 
@@ -210,12 +185,7 @@ function generateBuildReport() {
   const reportPath = path.join(distDir, 'build-report.json')
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('📊 Build Report:')
-  console.log(`   Total artifacts: ${report.artifacts.length}`)
-  report.artifacts.forEach((artifact) => {
-    console.log(`   📄 ${artifact.name} (${artifact.sizeFormatted})`)
-  })
-  console.log(`   📋 Full report: ${reportPath}\n`)
+  report.artifacts.forEach((_artifact) => {})
 }
 
 function formatBytes(bytes) {
@@ -230,11 +200,6 @@ async function main() {
   const platform = process.argv[2] || 'all'
   const skipChecks = process.argv.includes('--skip-checks')
   const skipNextJS = process.argv.includes('--skip-nextjs')
-
-  console.log('🏗️  CoreLive TODO - Production Build\n')
-  console.log(`Platform: ${platforms[platform] || platform}`)
-  console.log(`Skip checks: ${skipChecks}`)
-  console.log(`Skip Next.js: ${skipNextJS}\n`)
 
   try {
     const startTime = Date.now()
@@ -253,19 +218,16 @@ async function main() {
     await buildElectron(platform)
 
     // Generate report
-    generateBuildReport()
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
-    console.log(`🎉 Build completed successfully in ${duration}s!`)
+    generateBuildReport()((Date.now() - startTime) / 1000).toFixed(2)
   } catch (error) {
-    console.error('\n❌ Build failed:', error.message)
+    log.error('\n❌ Build failed:', error.message)
     process.exit(1)
   }
 }
 
 // Show help
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log(`
+  log.warn(`
 CoreLive TODO - Production Build Script
 
 Usage: node scripts/build.js [platform] [options]

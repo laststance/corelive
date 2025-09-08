@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+import { log } from '../lib/logger'
+
 interface NotificationPreferences {
   enabled: boolean
   taskCreated: boolean
@@ -55,7 +57,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
       setPreferences(prefs)
       setActiveCount(count)
     } catch (error) {
-      console.error('Failed to load notification status:', error)
+      log.error('Failed to load notification status:', error)
       setIsSupported(false)
     }
   }, [isElectron])
@@ -70,7 +72,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
         // Refresh active count after showing notification
         await refreshActiveCount()
       } catch (error) {
-        console.error('Failed to show notification:', error)
+        log.error('Failed to show notification:', error)
         throw error
       }
     },
@@ -91,7 +93,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
           setIsEnabled(updatedPrefs.enabled)
         }
       } catch (error) {
-        console.error('Failed to update notification preferences:', error)
+        log.error('Failed to update notification preferences:', error)
         throw error
       }
     },
@@ -105,7 +107,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
       await window.electronAPI.notifications.clearAll()
       setActiveCount(0)
     } catch (error) {
-      console.error('Failed to clear all notifications:', error)
+      log.error('Failed to clear all notifications:', error)
       throw error
     }
   }, [isElectron])
@@ -119,7 +121,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
         // Refresh active count after clearing notification
         await refreshActiveCount()
       } catch (error) {
-        console.error('Failed to clear notification:', error)
+        log.error('Failed to clear notification:', error)
         throw error
       }
     },
@@ -133,7 +135,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
       const count = await window.electronAPI.notifications.getActiveCount()
       setActiveCount(count)
     } catch (error) {
-      console.error('Failed to refresh active count:', error)
+      log.error('Failed to refresh active count:', error)
     }
   }, [isElectron])
 
@@ -170,7 +172,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
         if (typeof cleanupUpdated === 'function') cleanupUpdated()
         if (typeof cleanupDeleted === 'function') cleanupDeleted()
       } catch (error) {
-        console.warn('Error cleaning up event listeners:', error)
+        log.warn('Error cleaning up event listeners:', error)
       }
     }
   }, [isElectron, refreshActiveCount])

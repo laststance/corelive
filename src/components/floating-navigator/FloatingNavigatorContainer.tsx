@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 
+import { log } from '../../lib/logger'
+
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
 
 // Extend window interface for floating navigator API
@@ -64,7 +66,7 @@ export function FloatingNavigatorContainer() {
       setTodos(transformedTodos)
       setError(null)
     } catch (err) {
-      console.error('Failed to load todos:', err)
+      log.error('Failed to load todos:', err)
       setError('Failed to load tasks')
     } finally {
       setIsLoading(false)
@@ -125,7 +127,7 @@ export function FloatingNavigatorContainer() {
         prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
       )
     } catch (err) {
-      console.error('Failed to toggle todo:', err)
+      log.error('Failed to toggle todo:', err)
       // Reload to get correct state
       loadTodos()
     }
@@ -149,7 +151,7 @@ export function FloatingNavigatorContainer() {
         },
       ])
     } catch (err) {
-      console.error('Failed to create todo:', err)
+      log.error('Failed to create todo:', err)
       // Reload to get correct state
       loadTodos()
     }
@@ -166,7 +168,7 @@ export function FloatingNavigatorContainer() {
         prev.map((t) => (t.id === id ? { ...t, text: title } : t)),
       )
     } catch (err) {
-      console.error('Failed to update todo:', err)
+      log.error('Failed to update todo:', err)
       // Reload to get correct state
       loadTodos()
     }
@@ -181,7 +183,7 @@ export function FloatingNavigatorContainer() {
       // Remove from local state
       setTodos((prev) => prev.filter((t) => t.id !== id))
     } catch (err) {
-      console.error('Failed to delete todo:', err)
+      log.error('Failed to delete todo:', err)
       // Reload to get correct state
       loadTodos()
     }

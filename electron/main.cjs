@@ -1,5 +1,7 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 // Performance optimization imports
 const { APIBridge } = require('./api-bridge.cjs')
 const ConfigManager = require('./ConfigManager.cjs')
@@ -82,8 +84,6 @@ function setupSecurity() {
 }
 
 async function createWindow() {
-  console.log('🚀 Starting optimized Electron initialization...')
-
   // Start performance monitoring
   if (config.enableMemoryMonitoring) {
     memoryProfiler.startMonitoring()
@@ -91,8 +91,6 @@ async function createWindow() {
 
   // Critical initialization - must happen immediately
   const criticalInit = async () => {
-    console.log('⚡ Initializing critical components...')
-
     // Initialize IPC error handler first
     ipcErrorHandler = new IPCErrorHandler({
       maxRetries: 3,
@@ -130,8 +128,6 @@ async function createWindow() {
 
   // Deferred initialization - happens after main window is shown
   const deferredInit = async () => {
-    console.log('📦 Initializing deferred components...')
-
     try {
       // Load system integration components lazily
       const SystemIntegrationErrorHandler = await lazyLoadManager.loadComponent(
@@ -179,10 +175,7 @@ async function createWindow() {
       )
 
       // Initialize system integration with comprehensive error handling
-      const integrationResults =
-        await systemIntegrationErrorHandler.initializeSystemIntegration()
-
-      console.log('🔧 System integration results:', integrationResults)
+      await systemIntegrationErrorHandler.initializeSystemIntegration()
 
       // Load auto-updater in background
       const AutoUpdater = await lazyLoadManager.loadComponent('AutoUpdater')
@@ -212,10 +205,8 @@ async function createWindow() {
           systemTrayManager.handleWindowClose(event)
         }
       })
-
-      console.log('✅ Deferred initialization completed')
     } catch (error) {
-      console.error('❌ Deferred initialization failed:', error)
+      log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
     }
   }
@@ -596,7 +587,7 @@ function setupIPCHandlers() {
               configManager,
             )
           } catch (error) {
-            console.warn('Failed to load notification manager:', error.message)
+            log.warn('Failed to load notification manager:', error.message)
             throw new Error('Notification manager not available')
           }
         }
@@ -694,15 +685,15 @@ function setupIPCHandlers() {
     }
   })
 
-  ipcMain.handle('auth-set-user', (event, user) => {
+  ipcMain.handle('auth-set-user', (_event, _user) => {
     // Mock implementation - just return success
-    console.log('Setting user:', user)
+
     return true
   })
 
   ipcMain.handle('auth-logout', () => {
     // Mock implementation - just return success
-    console.log('Logging out user')
+
     return true
   })
 
@@ -711,9 +702,9 @@ function setupIPCHandlers() {
     return true
   })
 
-  ipcMain.handle('auth-sync-from-web', (event, authData) => {
+  ipcMain.handle('auth-sync-from-web', (_event, _authData) => {
     // Mock implementation - just return success
-    console.log('Syncing auth from web:', authData)
+
     return true
   })
 
@@ -797,7 +788,7 @@ function setupIPCHandlers() {
 
       return quickTodo
     } catch (error) {
-      console.error('Failed to quick create todo:', error)
+      log.error('Failed to quick create todo:', error)
       throw new Error('Failed to create todo')
     }
   })
@@ -830,7 +821,7 @@ function setupIPCHandlers() {
 
         return updatedTodo
       } catch (error) {
-        console.error('Failed to toggle todo completion:', error)
+        log.error('Failed to toggle todo completion:', error)
         throw new Error('Failed to toggle todo')
       }
     },
@@ -856,8 +847,8 @@ if (!gotTheLock) {
         REACT_DEVELOPER_TOOLS,
       } = require('electron-devtools-installer')
       installExtension(REACT_DEVELOPER_TOOLS)
-        .then((name) => console.log(`Added Extension: ${name}`))
-        .catch((err) => console.log('An error occurred: ', err))
+        .then(() => {})
+        .catch(() => {})
     }
 
     createWindow()
@@ -880,8 +871,6 @@ app.on('window-all-closed', () => {
 
 // Cleanup before quit
 app.on('before-quit', async () => {
-  console.log('🧹 Starting application cleanup...')
-
   // Stop performance monitoring
   memoryProfiler.stopMonitoring()
 
@@ -921,8 +910,6 @@ app.on('before-quit', async () => {
   lazyLoadManager.cleanup()
   performanceOptimizer.cleanup()
   memoryProfiler.cleanup()
-
-  console.log('✅ Application cleanup completed')
 })
 
 // Security: Prevent new window creation from renderer and other security measures

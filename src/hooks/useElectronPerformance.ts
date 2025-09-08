@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
+import { log } from '../lib/logger'
+
 interface PerformanceMetrics {
   optimizer: {
     uptime: number
@@ -100,7 +102,7 @@ export function useElectronPerformance(): UseElectronPerformanceReturn {
           ? err.message
           : 'Failed to fetch performance metrics'
       setError(errorMessage)
-      console.error('Failed to fetch performance metrics:', err)
+      log.error('Failed to fetch performance metrics:', err)
     } finally {
       setIsLoading(false)
     }
@@ -113,7 +115,7 @@ export function useElectronPerformance(): UseElectronPerformanceReturn {
 
     try {
       // Mock cleanup for now
-      console.log('Performance cleanup triggered')
+
       // Refresh metrics after cleanup
       await refreshMetrics()
     } catch (err) {

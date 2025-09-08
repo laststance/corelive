@@ -1,5 +1,7 @@
 const { globalShortcut, BrowserWindow } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class ShortcutManager {
   constructor(windowManager, notificationManager, configManager = null) {
     this.windowManager = windowManager
@@ -56,13 +58,8 @@ class ShortcutManager {
       const totalCount = results.length
 
       if (successCount === totalCount) {
-        console.log('✅ All keyboard shortcuts initialized successfully')
         return true
       } else if (successCount > 0) {
-        console.log(
-          `⚠️ Keyboard shortcuts partially initialized: ${successCount}/${totalCount} successful`,
-        )
-
         // Show summary notification
         if (this.notificationManager) {
           this.notificationManager.showNotification(
@@ -74,11 +71,11 @@ class ShortcutManager {
 
         return true
       } else {
-        console.error('❌ Failed to initialize any keyboard shortcuts')
+        log.error('❌ Failed to initialize any keyboard shortcuts')
         return false
       }
     } catch (error) {
-      console.error('❌ Failed to initialize keyboard shortcuts:', error)
+      log.error('❌ Failed to initialize keyboard shortcuts:', error)
       return false
     }
   }
@@ -179,7 +176,7 @@ class ShortcutManager {
 
       // Check if shortcut is already registered by another application
       if (globalShortcut.isRegistered(accelerator)) {
-        console.warn(
+        log.warn(
           `⚠️ Shortcut ${accelerator} is already registered by another application`,
         )
         return this.handleShortcutConflict(accelerator, id, callback)
@@ -194,14 +191,14 @@ class ShortcutManager {
           registeredAt: new Date(),
           isAlternative: false,
         })
-        console.log(`✅ Registered shortcut: ${accelerator} (${id})`)
+
         return true
       } else {
-        console.warn(`⚠️ Failed to register shortcut: ${accelerator} (${id})`)
+        log.warn(`⚠️ Failed to register shortcut: ${accelerator} (${id})`)
         return this.handleShortcutConflict(accelerator, id, callback)
       }
     } catch (error) {
-      console.error(`❌ Error registering shortcut ${accelerator}:`, error)
+      log.error(`❌ Error registering shortcut ${accelerator}:`, error)
       return this.handleShortcutConflict(accelerator, id, callback)
     }
   }
@@ -210,10 +207,6 @@ class ShortcutManager {
    * Handle shortcut registration conflicts by trying alternatives
    */
   handleShortcutConflict(originalAccelerator, id, callback) {
-    console.log(
-      `🔄 Attempting to resolve shortcut conflict for ${originalAccelerator} (${id})`,
-    )
-
     const alternatives = this.generateAlternativeShortcuts(
       originalAccelerator,
       id,
@@ -233,10 +226,6 @@ class ShortcutManager {
               isAlternative: true,
             })
 
-            console.log(
-              `✅ Registered alternative shortcut: ${alternative} (${id}) - original: ${originalAccelerator}`,
-            )
-
             // Notify user about the change
             this.notifyShortcutChange(id, originalAccelerator, alternative)
 
@@ -244,12 +233,12 @@ class ShortcutManager {
           }
         }
       } catch (error) {
-        console.warn(`Failed to register alternative ${alternative}:`, error)
+        log.warn(`Failed to register alternative ${alternative}:`, error)
       }
     }
 
     // If no alternatives work, disable this shortcut
-    console.warn(
+    log.warn(
       `❌ Could not register any alternative for ${originalAccelerator} (${id})`,
     )
     this.handleShortcutRegistrationFailure(id, originalAccelerator)
@@ -335,7 +324,6 @@ class ShortcutManager {
     }
 
     // Also log to console for debugging
-    console.log(`📝 Shortcut changed for ${id}: ${original} → ${alternative}`)
   }
 
   /**
@@ -359,7 +347,7 @@ class ShortcutManager {
       )
     }
 
-    console.warn(`📋 Shortcut ${id} (${accelerator}) disabled due to conflicts`)
+    log.warn(`📋 Shortcut ${id} (${accelerator}) disabled due to conflicts`)
   }
 
   /**
@@ -431,10 +419,10 @@ class ShortcutManager {
     try {
       globalShortcut.unregister(shortcut.accelerator)
       this.registeredShortcuts.delete(id)
-      console.log(`✅ Unregistered shortcut: ${shortcut.accelerator} (${id})`)
+
       return true
     } catch (error) {
-      console.error(`❌ Error unregistering shortcut ${id}:`, error)
+      log.error(`❌ Error unregistering shortcut ${id}:`, error)
       return false
     }
   }
@@ -461,7 +449,7 @@ class ShortcutManager {
         )
       }
     } catch (error) {
-      console.error('Error handling new task shortcut:', error)
+      log.error('Error handling new task shortcut:', error)
     }
   }
 
@@ -478,7 +466,7 @@ class ShortcutManager {
         mainWindow.webContents.send('shortcut-search')
       }
     } catch (error) {
-      console.error('Error handling search shortcut:', error)
+      log.error('Error handling search shortcut:', error)
     }
   }
 
@@ -502,7 +490,7 @@ class ShortcutManager {
         )
       }
     } catch (error) {
-      console.error('Error handling toggle floating navigator shortcut:', error)
+      log.error('Error handling toggle floating navigator shortcut:', error)
     }
   }
 
@@ -513,7 +501,7 @@ class ShortcutManager {
     try {
       this.windowManager.restoreFromTray()
     } catch (error) {
-      console.error('Error handling show main window shortcut:', error)
+      log.error('Error handling show main window shortcut:', error)
     }
   }
 
@@ -534,7 +522,7 @@ class ShortcutManager {
         }
       }
     } catch (error) {
-      console.error('Error handling minimize window shortcut:', error)
+      log.error('Error handling minimize window shortcut:', error)
     }
   }
 
@@ -560,7 +548,7 @@ class ShortcutManager {
         }
       }
     } catch (error) {
-      console.error('Error handling toggle always on top shortcut:', error)
+      log.error('Error handling toggle always on top shortcut:', error)
     }
   }
 
@@ -578,7 +566,7 @@ class ShortcutManager {
         this.windowManager.showFloatingNavigator()
       }
     } catch (error) {
-      console.error('Error handling focus floating navigator shortcut:', error)
+      log.error('Error handling focus floating navigator shortcut:', error)
     }
   }
 
@@ -613,7 +601,7 @@ class ShortcutManager {
 
       return true
     } catch (error) {
-      console.error('Error updating shortcuts:', error)
+      log.error('Error updating shortcuts:', error)
       return false
     }
   }
@@ -702,9 +690,8 @@ class ShortcutManager {
     try {
       globalShortcut.unregisterAll()
       this.registeredShortcuts.clear()
-      console.log('✅ All shortcuts unregistered')
     } catch (error) {
-      console.error('❌ Error unregistering all shortcuts:', error)
+      log.error('❌ Error unregistering all shortcuts:', error)
     }
   }
 

@@ -1,5 +1,7 @@
 import { useEffect, useCallback } from 'react'
 
+import { log } from '../lib/logger'
+
 interface MenuAction {
   action: string
   filePath?: string
@@ -27,8 +29,6 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
 
   const handleMenuAction = useCallback(
     (event: any, menuAction: MenuAction) => {
-      console.log('Menu action received:', menuAction)
-
       switch (menuAction.action) {
         case 'new-task':
           onNewTask?.()
@@ -50,7 +50,7 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
           }
           break
         default:
-          console.warn('Unhandled menu action:', menuAction.action)
+          log.warn('Unhandled menu action:', menuAction.action)
       }
     },
     [onNewTask, onFocusSearch, onOpenPreferences, onImportTasks, onExportTasks],
@@ -72,7 +72,7 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
       try {
         await window.electronAPI.menu.triggerAction(action)
       } catch (error) {
-        console.error('Failed to trigger menu action:', error)
+        log.error('Failed to trigger menu action:', error)
       }
     }
   }, [])

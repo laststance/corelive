@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { log } from '../lib/logger'
+
 type TrayIconState = 'default' | 'active' | 'notification' | 'disabled'
 
 /**
@@ -23,7 +25,7 @@ export function useElectronTrayIcon() {
   const setIconState = useCallback(
     async (state: TrayIconState): Promise<boolean> => {
       if (!isAvailable) {
-        console.warn('Tray icon API not available')
+        log.warn('Tray icon API not available')
         return false
       }
 
@@ -35,7 +37,7 @@ export function useElectronTrayIcon() {
         }
         return success
       } catch (error) {
-        console.error('Failed to set tray icon state:', error)
+        log.error('Failed to set tray icon state:', error)
         return false
       }
     },
@@ -45,7 +47,10 @@ export function useElectronTrayIcon() {
   /**
    * Set tray icon to active state
    */
-  const setActive = useCallback(async () => setIconState('active'), [setIconState])
+  const setActive = useCallback(
+    async () => setIconState('active'),
+    [setIconState],
+  )
 
   /**
    * Set tray icon to notification state
@@ -77,14 +82,14 @@ export function useElectronTrayIcon() {
   const setTooltip = useCallback(
     async (text: string): Promise<void> => {
       if (!isAvailable) {
-        console.warn('Tray tooltip API not available')
+        log.warn('Tray tooltip API not available')
         return
       }
 
       try {
         await window.electronAPI!.system!.setTrayTooltip(text)
       } catch (error) {
-        console.error('Failed to set tray tooltip:', error)
+        log.error('Failed to set tray tooltip:', error)
       }
     },
     [isAvailable],

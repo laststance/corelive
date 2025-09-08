@@ -1,4 +1,6 @@
 const { Menu, shell, dialog, app } = require('electron')
+
+const { log } = require('../src/lib/logger.cjs')
 // const path = require('path') // TODO: Remove if not needed
 
 class MenuManager {
@@ -431,7 +433,7 @@ class MenuManager {
         })
       }
     } catch (error) {
-      console.error('Failed to show import dialog:', error)
+      log.error('Failed to show import dialog:', error)
     }
   }
 
@@ -455,7 +457,7 @@ class MenuManager {
         })
       }
     } catch (error) {
-      console.error('Failed to show export dialog:', error)
+      log.error('Failed to show export dialog:', error)
     }
   }
 
@@ -528,7 +530,7 @@ Copyright © 2025 CoreLive`,
         this.exportTasks()
         break
       default:
-        console.warn('Unknown menu action:', action.action)
+        log.warn('Unknown menu action:', action.action)
     }
   }
 

@@ -5,8 +5,6 @@ import path from 'path'
 export default async function afterBuild(context) {
   const { outDir, electronPlatformName } = context
 
-  console.log(`Post-build processing for ${electronPlatformName}...`)
-
   // Create checksums for all built files
   const files = fs.readdirSync(outDir)
   const checksums = {}
@@ -34,18 +32,13 @@ export default async function afterBuild(context) {
   const checksumsPath = path.join(outDir, 'checksums.json')
   fs.writeFileSync(checksumsPath, JSON.stringify(checksums, null, 2))
 
-  console.log(`Checksums written to ${checksumsPath}`)
-
   // Platform-specific post-processing
   switch (electronPlatformName) {
     case 'darwin':
-      console.log('macOS build completed')
       break
     case 'win32':
-      console.log('Windows build completed')
       break
     case 'linux':
-      console.log('Linux build completed')
       break
   }
 }

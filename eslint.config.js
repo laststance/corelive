@@ -5,8 +5,20 @@ import tsPrefixer from 'eslint-config-ts-prefixer'
 // import storybook from 'eslint-plugin-storybook'
 
 export default defineConfig([
+  {
+    ignores: [
+      '.next/**',
+      'html/**',
+      'storybook-static/**',
+      'dist/**',
+      'out/**',
+      'build/**',
+    ],
+  },
   ...tsPrefixer,
   {
-    ignores: ['.next', 'html', 'storybook-static'],
+    rules: {
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+    },
   },
 ])

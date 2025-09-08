@@ -4,6 +4,8 @@ const { parse } = require('url')
 
 const next = require('next')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class NextServerManager {
   constructor() {
     this.server = null
@@ -41,14 +43,12 @@ class NextServerManager {
           }
 
           this.port = this.server.address().port
-          console.log(
-            `✅ Next.js server started on http://localhost:${this.port}`,
-          )
+
           resolve(`http://localhost:${this.port}`)
         })
       })
     } catch (error) {
-      console.error('❌ Failed to start Next.js server:', error)
+      log.error('❌ Failed to start Next.js server:', error)
       throw error
     }
   }
@@ -57,7 +57,6 @@ class NextServerManager {
     if (this.server) {
       return new Promise((resolve) => {
         this.server.close(() => {
-          console.log('🔴 Next.js server stopped')
           resolve()
         })
       })

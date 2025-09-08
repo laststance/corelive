@@ -209,10 +209,10 @@ const taskUrl = await window.electronAPI.deepLink.generateUrl('task', {
 ```typescript
 useElectronDeepLink({
   onTaskFocus: (task, params) => {
-    console.log('Focus task:', task.title)
+    // log suppressed
   },
   onTaskCreate: (data) => {
-    console.log('Create task with:', data)
+    // log suppressed
   },
 })
 ```

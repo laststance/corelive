@@ -15,6 +15,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
+import { log } from '../../lib/logger'
+
 interface NotificationPreferences {
   enabled: boolean
   taskCreated: boolean
@@ -70,7 +72,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
       }
       setIsSupported(enabled)
     } catch (error) {
-      console.error('Failed to load notification preferences:', error)
+      log.error('Failed to load notification preferences:', error)
     } finally {
       setIsLoading(false)
     }
@@ -86,7 +88,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
       const count = await window.electronAPI.notifications.getActiveCount()
       setActiveCount(count)
     } catch (error) {
-      console.error('Failed to load active notification count:', error)
+      log.error('Failed to load active notification count:', error)
     }
   }
 
@@ -108,7 +110,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
         setPreferences(result)
       }
     } catch (error) {
-      console.error('Failed to update notification preferences:', error)
+      log.error('Failed to update notification preferences:', error)
     } finally {
       setIsSaving(false)
     }
@@ -127,7 +129,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
         { silent: !preferences.sound },
       )
     } catch (error) {
-      console.error('Failed to show test notification:', error)
+      log.error('Failed to show test notification:', error)
     }
   }
 
@@ -141,7 +143,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
       await window.electronAPI.notifications.clearAll()
       setActiveCount(0)
     } catch (error) {
-      console.error('Failed to clear notifications:', error)
+      log.error('Failed to clear notifications:', error)
     }
   }
 

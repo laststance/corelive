@@ -2,6 +2,8 @@ const path = require('path')
 
 const { BrowserWindow } = require('electron')
 
+require('../src/lib/logger.cjs')
+
 class WindowManager {
   constructor(
     serverUrl = null,
@@ -297,7 +299,6 @@ class WindowManager {
    */
   setTrayFallbackMode(enabled) {
     this.trayFallbackMode = enabled
-    console.log(`Tray fallback mode ${enabled ? 'enabled' : 'disabled'}`)
   }
 
   /**

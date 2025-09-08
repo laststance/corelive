@@ -35,6 +35,8 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 
+import { log } from '../../lib/logger'
+
 // Icon fallback component for loading state
 const IconFallback = () => (
   <div className="bg-muted h-3 w-3 animate-pulse rounded" />
@@ -219,7 +221,7 @@ export function FloatingNavigator({
       try {
         await window.floatingNavigatorAPI!.window.minimize()
       } catch (error) {
-        console.error('Failed to minimize window:', error)
+        log.error('Failed to minimize window:', error)
       }
     }
   }
@@ -229,7 +231,7 @@ export function FloatingNavigator({
       try {
         await window.floatingNavigatorAPI!.window.close()
       } catch (error) {
-        console.error('Failed to close window:', error)
+        log.error('Failed to close window:', error)
       }
     }
   }
@@ -241,7 +243,7 @@ export function FloatingNavigator({
           await window.floatingNavigatorAPI!.window.toggleAlwaysOnTop()
         setIsAlwaysOnTop(newState)
       } catch (error) {
-        console.error('Failed to toggle always on top:', error)
+        log.error('Failed to toggle always on top:', error)
       }
     }
   }
@@ -251,7 +253,7 @@ export function FloatingNavigator({
       try {
         await window.floatingNavigatorAPI!.window.focusMainWindow()
       } catch (error) {
-        console.error('Failed to focus main window:', error)
+        log.error('Failed to focus main window:', error)
       }
     }
   }

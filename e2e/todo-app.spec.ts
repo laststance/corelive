@@ -2,6 +2,9 @@ import { test, expect } from '@playwright/test'
 
 test.describe('TODO App E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
+    // Check if storage state was loaded
+    await page.context().storageState()
+
     // Navigate to the TODO app home page
     // Authentication state is automatically loaded from playwright/.auth/user.json
     await page.goto('/home')
@@ -10,6 +13,9 @@ test.describe('TODO App E2E Tests', () => {
   test('should display TODO app correctly after authentication', async ({
     page,
   }) => {
+    // Give middleware time to process the request
+    await page.waitForTimeout(1000)
+
     // Verify we're on the authenticated TODO app page
     await expect(page).toHaveURL('/home')
 
@@ -149,9 +155,7 @@ test.describe('TODO App E2E Tests', () => {
     } else {
       // Notes UI is functional but content may not be persisted yet
       // This is still a successful test of the notes UI functionality
-      console.log(
-        `Notes UI is functional. Saved notes: "${notesValue}", Expected: "${todoNotes}"`,
-      )
+
       // Just verify the notes textarea is accessible for editing
       await notesTextarea.fill('Updated notes')
       await expect(notesTextarea).toHaveValue('Updated notes')

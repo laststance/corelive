@@ -2,6 +2,8 @@ const path = require('path')
 
 const { Notification, nativeImage } = require('electron')
 
+const { log } = require('../src/lib/logger.cjs')
+
 class NotificationManager {
   constructor(windowManager, systemTrayManager, configManager = null) {
     this.windowManager = windowManager
@@ -43,7 +45,7 @@ class NotificationManager {
     try {
       // Check if notifications are supported
       if (!Notification.isSupported()) {
-        console.warn('Notifications are not supported on this system')
+        log.warn('Notifications are not supported on this system')
         this.handleNotificationUnavailable('not_supported')
         return false
       }
@@ -51,10 +53,7 @@ class NotificationManager {
       // Check platform-specific permission requirements
       const permissionResult = await this.checkNotificationPermissions()
       if (!permissionResult.granted) {
-        console.warn(
-          'Notification permissions denied:',
-          permissionResult.reason,
-        )
+        log.warn('Notification permissions denied:', permissionResult.reason)
         this.handleNotificationPermissionDenied(permissionResult.reason)
         return false
       }
@@ -62,15 +61,14 @@ class NotificationManager {
       // Test notification capability with comprehensive error handling
       const testResult = await this.testNotificationCapability()
       if (!testResult.success) {
-        console.warn('Notification test failed:', testResult.error)
+        log.warn('Notification test failed:', testResult.error)
         this.handleNotificationTestFailure(testResult.error)
         return false
       }
 
-      console.log('✅ Notifications initialized successfully')
       return true
     } catch (error) {
-      console.error('❌ Failed to initialize notification manager:', error)
+      log.error('❌ Failed to initialize notification manager:', error)
       this.handleNotificationInitializationFailure(error)
       return false
     }
@@ -190,8 +188,6 @@ class NotificationManager {
     this.preferences.enabled = false
     this.fallbackMode = 'unavailable'
 
-    console.log('📱 Notifications unavailable, enabling fallback mode')
-
     // Could implement alternative notification methods here
     // e.g., system tray tooltip updates, window title changes, etc.
   }
@@ -202,8 +198,6 @@ class NotificationManager {
   handleNotificationPermissionDenied(reason) {
     this.preferences.enabled = false
     this.fallbackMode = 'permission_denied'
-
-    console.log('🔒 Notification permissions denied, enabling fallback mode')
 
     // Show user-friendly message about enabling notifications
     this.showPermissionDeniedGuidance(reason)
@@ -216,8 +210,6 @@ class NotificationManager {
     this.preferences.enabled = false
     this.fallbackMode = 'test_failed'
 
-    console.log('⚠️ Notification test failed, enabling fallback mode')
-
     // Implement graceful degradation
     this.enableFallbackNotificationMethods()
   }
@@ -229,10 +221,8 @@ class NotificationManager {
     this.preferences.enabled = false
     this.fallbackMode = 'init_failed'
 
-    console.log('❌ Notification initialization failed, enabling fallback mode')
-
     // Log detailed error for debugging
-    console.error('Notification initialization error details:', error)
+    log.error('Notification initialization error details:', error)
   }
 
   /**
@@ -281,8 +271,6 @@ class NotificationManager {
       windowTitle: true,
       inAppBanner: true,
     }
-
-    console.log('📢 Enabled fallback notification methods')
   }
 
   /**
@@ -333,7 +321,7 @@ class NotificationManager {
         })
       }
     } catch (error) {
-      console.warn('Fallback notification methods failed:', error)
+      log.warn('Fallback notification methods failed:', error)
     }
   }
 
@@ -517,13 +505,11 @@ class NotificationManager {
       })
 
       // Handle notification show
-      notification.on('show', () => {
-        console.log(`Notification shown: ${title}`)
-      })
+      notification.on('show', () => {})
 
       // Handle notification failed - use fallback methods
       notification.on('failed', (event, error) => {
-        console.error('Notification failed, using fallback methods:', error)
+        log.error('Notification failed, using fallback methods:', error)
         if (options.tag) {
           this.activeNotifications.delete(options.tag)
         }
@@ -535,10 +521,7 @@ class NotificationManager {
       notification.show()
       return notification
     } catch (error) {
-      console.error(
-        'Failed to show notification, using fallback methods:',
-        error,
-      )
+      log.error('Failed to show notification, using fallback methods:', error)
 
       // Use fallback notification methods
       this.showFallbackNotification(title, body, options)
@@ -560,7 +543,7 @@ class NotificationManager {
         mainWindow.webContents.send('focus-task', taskId)
       }
     } catch (error) {
-      console.error('Failed to handle task notification click:', error)
+      log.error('Failed to handle task notification click:', error)
     }
   }
 
@@ -577,10 +560,10 @@ class NotificationManager {
           await this.markTaskComplete(task.id)
           break
         default:
-          console.warn('Unknown action index:', actionIndex)
+          log.warn('Unknown action index:', actionIndex)
       }
     } catch (error) {
-      console.error('Failed to handle task created action:', error)
+      log.error('Failed to handle task created action:', error)
     }
   }
 
@@ -599,10 +582,10 @@ class NotificationManager {
           }
           break
         default:
-          console.warn('Unknown action index:', actionIndex)
+          log.warn('Unknown action index:', actionIndex)
       }
     } catch (error) {
-      console.error('Failed to handle task completed action:', error)
+      log.error('Failed to handle task completed action:', error)
     }
   }
 
@@ -617,7 +600,7 @@ class NotificationManager {
         mainWindow.webContents.send('mark-task-complete', taskId)
       }
     } catch (error) {
-      console.error('Failed to mark task complete:', error)
+      log.error('Failed to mark task complete:', error)
     }
   }
 
@@ -635,7 +618,7 @@ class NotificationManager {
     try {
       return nativeImage.createFromPath(iconPath)
     } catch (error) {
-      console.warn('Could not load notification icon:', error)
+      log.warn('Could not load notification icon:', error)
       return null
     }
   }
@@ -679,7 +662,7 @@ class NotificationManager {
       try {
         notification.close()
       } catch (error) {
-        console.warn(`Failed to close notification ${tag}:`, error)
+        log.warn(`Failed to close notification ${tag}:`, error)
       }
     }
     this.activeNotifications.clear()
@@ -695,7 +678,7 @@ class NotificationManager {
         notification.close()
         this.activeNotifications.delete(tag)
       } catch (error) {
-        console.warn(`Failed to close notification ${tag}:`, error)
+        log.warn(`Failed to close notification ${tag}:`, error)
       }
     }
   }

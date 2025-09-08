@@ -1,7 +1,7 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { test, expect , _electron as electron } from '@playwright/test'
+import { test, expect, _electron as electron } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -269,11 +269,5 @@ test.describe('Electron Basic Integration E2E Tests', () => {
       return true
     })
     expect(complexScenario).toBe(true)
-
-    console.log('✅ End-to-end testing infrastructure is fully functional')
-    console.log('✅ All Electron desktop integration APIs are available')
-    console.log('✅ Security configuration is properly implemented')
-    console.log('✅ System integration features are accessible')
-    console.log('✅ Ready for comprehensive workflow testing')
   })
 })
