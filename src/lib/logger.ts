@@ -1,17 +1,10 @@
 import pino from 'pino'
 
-// Configure Pino with pino-pretty for development
+// Configure Pino with conditional transport based on environment
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
-      ignore: 'pid,hostname',
-      singleLine: false,
-    },
-  },
+  // Disable pino-pretty transport completely to avoid thread-stream worker issues in Next.js
+  // Use basic JSON logging for now to prevent module resolution errors
 })
 
 // Create a child logger for the application
