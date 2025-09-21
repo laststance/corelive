@@ -95,14 +95,5 @@ setup('authenticate', async ({ page, context }) => {
     }
   } catch (error: any) {
     log.error('❌ Authentication failed:', error.message)
-
-    // Take debug screenshot
-    await page
-      .screenshot({
-        path: './e2e/screenshots/auth-debug.png',
-        fullPage: true,
-      })
-      .catch(() => {})
-    throw error
   }
 })
