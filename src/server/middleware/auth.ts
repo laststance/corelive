@@ -23,7 +23,6 @@ export const authMiddleware = os
         where: { clerkId: 'user_mock_user_id' },
         update: {},
         create: {
-          // Bug: NEXT_PUBLIC_ENABLE_MSW_MOCK="true" の場合でもSign Up/Inでemailとnameが登録されない
           clerkId: 'user_mock_user_id',
           email: 'test@example.com',
           name: 'Test User',
