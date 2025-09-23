@@ -8,14 +8,12 @@ const handler = new RPCHandler(router)
 
 async function handleRequest(request: Request) {
   try {
-    // TODO: Use Certain Logger Library
-
     // Clone and read request body
     const clonedRequest = request.clone()
     await clonedRequest.text()
 
     const { response } = await handler.handle(request, {
-      prefix: '/api/rpc',
+      prefix: '/api/orpc',
       context: {
         headers: request.headers,
       },
@@ -23,7 +21,6 @@ async function handleRequest(request: Request) {
 
     return response ?? new Response('Not found', { status: 404 })
   } catch (error) {
-    // TODO: Use Certain Logger Library
     log.error('❌ oPRC Handler Error:', error)
     return new Response(
       JSON.stringify({

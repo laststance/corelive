@@ -13,7 +13,7 @@ export function createLink() {
       if (typeof window === 'undefined') {
         throw new Error('RPCLink is not allowed on the server side.')
       }
-      return `${window.location.origin}/api/rpc`
+      return `${window.location.origin}/api/orpc`
     },
     headers: async () => {
       // Get userId from Clerk user session
