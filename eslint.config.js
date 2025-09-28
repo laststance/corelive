@@ -2,9 +2,11 @@
 
 import { defineConfig } from 'eslint/config'
 import tsPrefixer from 'eslint-config-ts-prefixer'
+import reactYouMightNotNeedAnEffect from 'eslint-plugin-react-you-might-not-need-an-effect'
 // import storybook from 'eslint-plugin-storybook'
 
 export default defineConfig([
+  reactYouMightNotNeedAnEffect.configs.recommended,
   {
     ignores: [
       '.next/**',

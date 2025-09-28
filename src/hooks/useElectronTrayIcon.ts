@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { log } from '../lib/logger'
 
@@ -9,15 +9,12 @@ type TrayIconState = 'default' | 'active' | 'notification' | 'disabled'
  */
 export function useElectronTrayIcon() {
   const [currentState, setCurrentState] = useState<TrayIconState>('default')
-  const [isAvailable, setIsAvailable] = useState(false)
-
-  // Check if tray API is available
-  useEffect(() => {
-    const available =
+  const [isAvailable] = useState(() => {
+    return (
       typeof window !== 'undefined' &&
       window.electronAPI?.system?.setTrayIconState !== undefined
-    setIsAvailable(available)
-  }, [])
+    )
+  })
 
   /**
    * Set tray icon state

@@ -88,13 +88,14 @@ function Carousel({
     [scrollPrev, scrollNext],
   )
 
-  React.useEffect(() => {
-    if (!api || !setApi) return
-    setApi(api)
-  }, [api, setApi])
-
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!api) return
+
+    // Set API reference for parent component
+    if (setApi) {
+      setApi(api)
+    }
+
     onSelect(api)
     api.on('reInit', onSelect)
     api.on('select', onSelect)
@@ -102,7 +103,7 @@ function Carousel({
     return () => {
       api?.off('select', onSelect)
     }
-  }, [api, onSelect])
+  }, [api, onSelect, setApi])
 
   return (
     <CarouselContext.Provider
