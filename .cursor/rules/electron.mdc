@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+- Please run `pnpm electron &` or `pnpm dev:electron &` in the background, since the Electron command often becomes unresponsive.
