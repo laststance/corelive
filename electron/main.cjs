@@ -43,16 +43,18 @@ let deepLinkManager
 // Content Security Policy for enhanced security
 const CSP_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.dev", // Allow Clerk.js and Next.js
-  "style-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.dev", // Allow Clerk styles and Next.js
-  "img-src 'self' data: https: https://*.clerk.accounts.dev https://*.clerk.dev",
-  "font-src 'self' data: https://*.clerk.accounts.dev https://*.clerk.dev",
-  "connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* https://*.clerk.accounts.dev https://*.clerk.dev", // Allow Clerk API and dev server connections
-  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev",
-  "worker-src 'self' blob:", // Allow Clerk workers from blob URLs
+  // Allow Clerk assets from .dev and .com domains
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "style-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "img-src 'self' data: https: https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "font-src 'self' data: https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  // Include Clerk telemetry and .com endpoints in connect-src for development
+  "connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com https://clerk-telemetry.com",
+  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self' https://*.clerk.accounts.dev https://*.clerk.dev",
+  "form-action 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
 ].join('; ')
 
 function setupSecurity() {
@@ -104,9 +106,15 @@ async function createWindow() {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // Initialize Next.js server
-    nextServerManager = new NextServerManager()
-    const serverUrl = await nextServerManager.start()
+    // Resolve server URL
+    let serverUrl = process.env.ELECTRON_DEV_SERVER_URL
+
+    // In development, use external Next dev server when provided by scripts/dev.js
+    if (!serverUrl) {
+      // Initialize internal Next.js server (used in production or if external not provided)
+      nextServerManager = new NextServerManager()
+      serverUrl = await nextServerManager.start()
+    }
 
     // Initialize API bridge
     apiBridge = new APIBridge()
