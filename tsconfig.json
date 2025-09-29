@@ -49,5 +49,5 @@
     ".storybook/*.ts",
     ".storybook/*.tsx"
   ],
-  "exclude": ["node_modules", ".next", "examples-with-next"]
+  "exclude": ["node_modules", ".next", "next", "examples-with-next"]
 }

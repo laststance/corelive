@@ -6,6 +6,11 @@ alwaysApply: false
 
 ## Clerk Integration
 
+### Cleark Test User
+email: test@test.com
+password: 3fjgir987340gjghgrr
+
+
 This project uses [Clerk](https://clerk.com) for authentication and user management.
 
 ### Setup and Configuration

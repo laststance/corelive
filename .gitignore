@@ -57,3 +57,5 @@ dist-electron/
 *.exe
 *.dmg
 *.AppImage
+
+next
