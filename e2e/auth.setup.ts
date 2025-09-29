@@ -8,13 +8,20 @@ const authFile = './e2e/.auth/user.json'
 
 setup('authenticate', async ({ page, context }) => {
   // Check environment variables
+  if (!process.env.E2E_CLERK_USER_USERNAME)
+    throw new Error(
+      'Required environment variables E2E_CLERK_USER_USERNAME not found!',
+    )
+  if (!process.env.E2E_CLERK_USER_PASSWORD)
+    throw new Error(
+      'Required environment variables E2E_CLERK_USER_PASSWORD not found!',
+    )
+  if (!process.env.CLERK_SECRET_KEY)
+    throw new Error(
+      'Required environment variables CLERK_SECRET_KEY not found!',
+    )
   const username = process.env.E2E_CLERK_USER_USERNAME
   const password = process.env.E2E_CLERK_USER_PASSWORD
-  const secretKey = process.env.CLERK_SECRET_KEY
-
-  if (!username || !password || !secretKey) {
-    throw new Error('Required environment variables not found!')
-  }
 
   try {
     // Set up testing token explicitly
