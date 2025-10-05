@@ -25,8 +25,8 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 
 ### Environment Variables
 
-1. Create a `.env.local` file in the root of the project
-1. Set variables in `.env.local` following the [src/env.mjs](./src/env.mjs)
+1. Copy `.env.example` to `.env` in the root of the project
+2. Fill in your actual values in the `.env` file (see `.env.example` for required variables)
 
 ### Database Setup
 

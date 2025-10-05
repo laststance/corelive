@@ -49,8 +49,8 @@ WIN_CSC_KEY_PASSWORD=certificate_password
 
 ### Setting Up Environment Variables
 
-1. Copy `.env.build` to `.env.local`
-2. Fill in your actual values
+1. Copy `.env.example` to `.env` in the root of the project
+2. Fill in your actual values in the `.env` file (see `.env.example` for all required variables)
 3. For CI/CD, set these as GitHub Secrets
 
 ## Development
