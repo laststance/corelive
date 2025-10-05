@@ -46,7 +46,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     // ブラウザテスト用の追加設定
-    reporter: 'verbose',
+    reporters: 'verbose',
   },
   resolve: {
     alias: {
