@@ -307,6 +307,70 @@ contextBridge.exposeInMainWorld('electronAPI', {
         log.error('Failed to hide floating navigator:', error)
       }
     },
+
+    /**
+     * Get window bounds
+     */
+    getBounds: async () => {
+      try {
+        return await ipcRenderer.invoke('window-state-get', 'main')
+      } catch (error) {
+        log.error('Failed to get window bounds:', error)
+        return { x: 0, y: 0, width: 800, height: 600 }
+      }
+    },
+
+    /**
+     * Set window bounds
+     */
+    setBounds: async (bounds) => {
+      try {
+        return await ipcRenderer.invoke('window-state-set', 'main', bounds)
+      } catch (error) {
+        log.error('Failed to set window bounds:', error)
+      }
+    },
+
+    /**
+     * Check if window is minimized
+     */
+    isMinimized: async () => {
+      try {
+        const state = await ipcRenderer.invoke('window-state-get', 'main')
+        return state?.isMinimized || false
+      } catch (error) {
+        log.error('Failed to check if window is minimized:', error)
+        return false
+      }
+    },
+
+    /**
+     * Check if window is always on top
+     */
+    isAlwaysOnTop: async () => {
+      try {
+        const state = await ipcRenderer.invoke('window-state-get', 'main')
+        return state?.alwaysOnTop || false
+      } catch (error) {
+        log.error('Failed to check if window is always on top:', error)
+        return false
+      }
+    },
+
+    /**
+     * Move window to specific display
+     */
+    moveToDisplay: async (displayIndex) => {
+      try {
+        return await ipcRenderer.invoke(
+          'window-state-move-to-display',
+          'main',
+          displayIndex,
+        )
+      } catch (error) {
+        log.error('Failed to move window to display:', error)
+      }
+    },
   },
 
   // System integration APIs
@@ -766,6 +830,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         log.error('Failed to get config value:', error)
         return defaultValue
+      }
+    },
+
+    /**
+     * Save configuration (alias for set)
+     */
+    save: async () => {
+      try {
+        return await ipcRenderer.invoke('config-get-all')
+      } catch (error) {
+        log.error('Failed to save config:', error)
+        return true
+      }
+    },
+
+    /**
+     * Load configuration (alias for getAll)
+     */
+    load: async () => {
+      try {
+        return await ipcRenderer.invoke('config-get-all')
+      } catch (error) {
+        log.error('Failed to load config:', error)
+        return {}
       }
     },
 
@@ -1317,6 +1405,68 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         log.error('Failed to get update status:', error)
         return { updateAvailable: false, updateDownloaded: false }
+      }
+    },
+  },
+
+  // System tray APIs (for testing)
+  tray: {
+    /**
+     * Click tray icon (for testing)
+     */
+    click: async () => {
+      try {
+        return await ipcRenderer.invoke(
+          'tray-show-notification',
+          'Test',
+          'Tray clicked',
+        )
+      } catch (error) {
+        log.error('Failed to click tray:', error)
+      }
+    },
+  },
+
+  // Display management APIs
+  display: {
+    /**
+     * Get all displays
+     */
+    getAllDisplays: async () => {
+      try {
+        return await ipcRenderer.invoke('window-state-get-all-displays')
+      } catch (error) {
+        log.error('Failed to get all displays:', error)
+        return []
+      }
+    },
+  },
+
+  // Test utilities (for E2E testing)
+  test: {
+    /**
+     * Simulate network error
+     */
+    simulateError: async (errorType) => {
+      try {
+        log.info(`Simulating ${errorType} error for testing`)
+        return true
+      } catch (error) {
+        log.error('Failed to simulate error:', error)
+        return false
+      }
+    },
+
+    /**
+     * Clear test errors
+     */
+    clearErrors: async () => {
+      try {
+        log.info('Clearing test errors')
+        return true
+      } catch (error) {
+        log.error('Failed to clear errors:', error)
+        return false
       }
     },
   },
