@@ -118,8 +118,19 @@ export class ElectronTestHelper {
   }
   static async launchElectronApp(): Promise<ElectronTestContext> {
     // Build the app first if needed
+    // Create a unique user data directory for this test to avoid conflicts
+    const uniqueUserDataDir = path.join(
+      __dirname,
+      '../../.playwright-electron',
+      `test-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+    )
+
     const electronApp = await electron.launch({
-      args: [path.join(__dirname, '../../electron/main.cjs')],
+      args: [
+        path.join(__dirname, '../../electron/main.cjs'),
+        // Use unique user data directory to avoid singleton conflicts
+        `--user-data-dir=${uniqueUserDataDir}`,
+      ],
       env: {
         ...process.env,
         NODE_ENV: 'test',

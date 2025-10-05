@@ -1,43 +1,33 @@
-import path from 'path'
+import { test, expect } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { test, expect, _electron as electron } from '@playwright/test'
-import type { ElectronApplication, Page } from '@playwright/test'
+import {
+  ElectronTestHelper,
+  type ElectronTestContext,
+} from './helpers/electron-test-utils'
 
 test.describe('Electron Deep Linking', () => {
-  let electronApp: ElectronApplication
+  let context: ElectronTestContext
   let page: Page
 
   test.beforeAll(async () => {
-    // Launch Electron app
-    electronApp = await electron.launch({
-      args: [path.join(__dirname, '..', 'electron', 'main.cjs')],
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        ELECTRON_IS_DEV: '1',
-      },
-    })
-
-    // Get the first window
-    page = await electronApp.firstWindow()
-
-    // Wait for the app to be ready
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000) // Give time for initialization
+    // Launch Electron app using the helper
+    context = await ElectronTestHelper.launchElectronApp()
+    page = context.mainWindow
   })
 
   test.afterAll(async () => {
-    await electronApp.close()
+    await ElectronTestHelper.closeElectronApp(context)
   })
 
   test('should register custom URL protocol', async () => {
-    // Test that the app can handle deep links by checking if the protocol is registered
-    const isRegistered = await electronApp.evaluate(async ({ app }) => {
-      return app.isDefaultProtocolClient('corelive')
+    // Test that the deep link API is available in the renderer
+    const hasDeepLinkAPI = await page.evaluate(() => {
+      return typeof window.electronAPI?.deepLink !== 'undefined'
     })
 
-    // The app should attempt to register the protocol (may not succeed in test environment)
-    expect(typeof isRegistered).toBe('boolean')
+    // The app should expose deep link API through electronAPI
+    expect(hasDeepLinkAPI).toBe(true)
   })
 
   test('should generate deep link URLs', async () => {

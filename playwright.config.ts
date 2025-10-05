@@ -50,6 +50,8 @@ export default defineConfig({
     {
       name: 'electron',
       testMatch: /.*electron.*\.spec\.ts/,
+      // Run electron tests sequentially to avoid singleton lock conflicts
+      workers: 1,
       use: {
         // Electron-specific configuration
         trace: 'on-first-retry',

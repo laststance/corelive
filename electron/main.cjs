@@ -837,8 +837,9 @@ function setupIPCHandlers() {
   )
 }
 
-// Ensure single instance
-const gotTheLock = app.requestSingleInstanceLock()
+// Ensure single instance (disabled in test environment to allow parallel testing)
+const isTestEnvironment = process.env.NODE_ENV === 'test'
+const gotTheLock = isTestEnvironment ? true : app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   app.quit()

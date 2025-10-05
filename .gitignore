@@ -52,6 +52,9 @@ clerk-playwright-nextjs
 # Playwright authentication state
 e2e/.auth
 
+# Playwright Electron test artifacts
+.playwright-electron/
+
 # Electron
 dist-electron/
 *.exe
