@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     create: {
       clerkId: 'user_32MtPR8Z8ywubMj2jwG9DdSbzPq',
       email: 'test@test.com',
-      name: 'Test User',
+      name: 'test01',
       bio: 'Test account for development and E2E testing',
     },
   })

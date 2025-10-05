@@ -2,9 +2,6 @@ import { test, expect } from '@playwright/test'
 
 test.describe('TODO App E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
-    // Check if storage state was loaded
-    await page.context().storageState()
-
     // Navigate to the TODO app home page
     // Authentication state is automatically loaded from playwright/.auth/user.json
     await page.goto('/home')
