@@ -65,10 +65,8 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
 
-  /* Run your local dev server before starting the tests */
   webServer: {
-    // Start the dev server for testing (recommended for E2E)
-    command: 'NODE_ENV=test pnpm dev',
+    command: 'NODE_ENV=test pnpm start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

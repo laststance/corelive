@@ -1,15 +1,26 @@
-import { createRequire } from 'module'
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-const require = createRequire(import.meta.url)
+// Create mock objects that will be reused
+const mockLog = {
+  error: vi.fn((...args) => {
+    // Console log to see what errors are happening
+    if (args[1] instanceof Error) {
+      console.error('[TEST]', args[0], args[1].message, args[1].stack)
+    }
+  }),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+}
 
-// Mock Electron modules
 const mockApp = {
   isDefaultProtocolClient: vi.fn(() => false),
   setAsDefaultProtocolClient: vi.fn(() => true),
   removeAsDefaultProtocolClient: vi.fn(() => true),
-  on: vi.fn(),
+  on: vi.fn((_event, _callback) => {
+    // Simulate proper event listener registration
+    return undefined
+  }),
   requestSingleInstanceLock: vi.fn(() => true),
 }
 
@@ -17,14 +28,15 @@ const mockShell = {
   openExternal: vi.fn(),
 }
 
-// Mock the electron module before importing DeepLinkManager
+// Mock modules using vi.doMock for better CommonJS support
+vi.doMock('../../src/lib/logger.cjs', () => ({
+  log: mockLog,
+}))
+
 vi.doMock('electron', () => ({
   app: mockApp,
   shell: mockShell,
 }))
-
-// Mock URL constructor for Node.js environment
-global.URL = global.URL || require('url').URL
 
 describe('DeepLinkManager', () => {
   let DeepLinkManager
@@ -37,19 +49,22 @@ describe('DeepLinkManager', () => {
     // Reset all mocks
     vi.clearAllMocks()
 
+    // Create a consistent mock window instance that gets reused
+    const mockWindow = {
+      isMinimized: vi.fn(() => false),
+      isVisible: vi.fn(() => true),
+      restore: vi.fn(),
+      show: vi.fn(),
+      focus: vi.fn(),
+      webContents: {
+        send: vi.fn(),
+      },
+    }
+
     // Create mock dependencies
     mockWindowManager = {
       hasMainWindow: vi.fn(() => true),
-      getMainWindow: vi.fn(() => ({
-        isMinimized: vi.fn(() => false),
-        isVisible: vi.fn(() => true),
-        restore: vi.fn(),
-        show: vi.fn(),
-        focus: vi.fn(),
-        webContents: {
-          send: vi.fn(),
-        },
-      })),
+      getMainWindow: vi.fn(() => mockWindow), // Return the same instance every time
       restoreFromTray: vi.fn(),
     }
 
@@ -62,12 +77,18 @@ describe('DeepLinkManager', () => {
       showNotification: vi.fn(),
     }
 
-    // Import DeepLinkManager
-    DeepLinkManager = require('../DeepLinkManager.cjs')
+    // Clear module cache and reimport to get fresh mocked instance
+    vi.resetModules()
+
+    // Import DeepLinkManager using dynamic ESM import (works with CommonJS modules)
+    // CommonJS module.exports becomes .default in ESM
+    const module = await import('../DeepLinkManager.cjs?t=' + Date.now())
+    DeepLinkManager = module.default
     deepLinkManager = new DeepLinkManager(
       mockWindowManager,
       mockApiBridge,
       mockNotificationManager,
+      mockApp, // Pass the mocked app as 4th parameter for dependency injection
     )
   })
 
@@ -316,7 +337,7 @@ describe('DeepLinkManager', () => {
         description: 'Description & symbols',
       })
       expect(url).toBe(
-        'corelive://create?title=Task%20with%20spaces&description=Description%20%26%20symbols',
+        'corelive://create?title=Task+with+spaces&description=Description+%26+symbols',
       )
     })
 

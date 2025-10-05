@@ -196,6 +196,7 @@ async function createWindow() {
         windowManager,
         apiBridge,
         notificationManager,
+        app, // Pass app for testability
       )
       deepLinkManager.initialize()
 

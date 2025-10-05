@@ -1,7 +1,5 @@
 const { URL } = require('url')
 
-const { app } = require('electron')
-
 const { log } = require('../src/lib/logger.cjs')
 
 /**
@@ -9,10 +7,17 @@ const { log } = require('../src/lib/logger.cjs')
  * Supports opening specific tasks, views, and creating tasks from external applications
  */
 class DeepLinkManager {
-  constructor(windowManager, apiBridge, notificationManager) {
+  constructor(
+    windowManager,
+    apiBridge,
+    notificationManager,
+    electronApp = null,
+  ) {
     this.windowManager = windowManager
     this.apiBridge = apiBridge
     this.notificationManager = notificationManager
+    // Allow app to be injected for testing, otherwise use electron's app
+    this.app = electronApp || require('electron').app
     this.protocol = 'corelive'
     this.isInitialized = false
     this.pendingUrl = null
@@ -51,15 +56,15 @@ class DeepLinkManager {
    */
   registerProtocol() {
     // Set as default protocol client
-    if (!app.isDefaultProtocolClient(this.protocol)) {
-      const success = app.setAsDefaultProtocolClient(this.protocol)
+    if (!this.app.isDefaultProtocolClient(this.protocol)) {
+      const success = this.app.setAsDefaultProtocolClient(this.protocol)
       if (!success) {
         log.warn('⚠️ Failed to register as default protocol client')
       }
     }
 
     // Handle protocol URLs on macOS
-    app.on('open-url', (event, url) => {
+    this.app.on('open-url', (event, url) => {
       event.preventDefault()
       this.handleDeepLink(url)
     })
@@ -69,7 +74,7 @@ class DeepLinkManager {
    * Setup handler for second instance (Windows/Linux)
    */
   setupSecondInstanceHandler() {
-    app.on('second-instance', (_event, commandLine, _workingDirectory) => {
+    this.app.on('second-instance', (_event, commandLine, _workingDirectory) => {
       this.handleSecondInstance(commandLine, _workingDirectory)
     })
   }
@@ -452,7 +457,7 @@ class DeepLinkManager {
   cleanup() {
     if (this.isInitialized) {
       // Remove protocol client registration
-      app.removeAsDefaultProtocolClient(this.protocol)
+      this.app.removeAsDefaultProtocolClient(this.protocol)
       this.isInitialized = false
     }
   }
