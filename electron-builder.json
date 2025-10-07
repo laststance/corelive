@@ -110,8 +110,6 @@
         "arch": ["x64"]
       }
     ],
-    "cscLink": "${WIN_CSC_LINK}",
-    "cscKeyPassword": "${WIN_CSC_KEY_PASSWORD}",
     "icon": "build/icons/icon-256x256.png"
   },
   "nsis": {
