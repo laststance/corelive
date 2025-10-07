@@ -87,6 +87,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Set environment variables 🌍
+        shell: bash
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}
