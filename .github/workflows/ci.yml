@@ -53,6 +53,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate icons for Electron tests 🎨
+        run: pnpm build:icons
+
       - name: Run unit tests
         run: pnpm test --run --coverage
 
