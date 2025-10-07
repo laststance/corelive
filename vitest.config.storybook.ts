@@ -44,7 +44,6 @@ export default defineConfig({
     teardownTimeout: 30000,
     // 依存関係の事前解決でテストの安定性を向上
     globals: true,
-    environment: 'jsdom',
     // ブラウザテスト用の追加設定
     reporters: 'verbose',
   },

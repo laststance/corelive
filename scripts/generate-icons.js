@@ -5,7 +5,11 @@ import { fileURLToPath } from 'url'
 
 import sharp from 'sharp'
 
-import { log } from '../src/lib/logger.ts'
+// Simple console logger for build scripts
+const log = {
+  warn: (...args) => console.warn(...args),
+  error: (...args) => console.error(...args),
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
