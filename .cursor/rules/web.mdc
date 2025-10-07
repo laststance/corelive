@@ -5,4 +5,4 @@ alwaysApply: true
 # Playwright
 
 - use `pnpm start` for webServer
-- must build the application before running the tests
+- must run `pnpm build` before running the tests

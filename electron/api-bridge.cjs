@@ -5,7 +5,8 @@ const { log } = require('../src/lib/logger.cjs')
 class APIBridge {
   constructor() {
     this.prisma = new PrismaClient()
-    this.currentUserId = 'electron-user' // Default user for Electron
+    this.currentUserId = null
+    this.currentClerkId = null
   }
 
   async initialize() {
@@ -21,23 +22,80 @@ class APIBridge {
     await this.prisma.$disconnect()
   }
 
-  // Set the current user ID (for authentication)
-  setUserId(userId) {
-    this.currentUserId = userId
+  // Ensure an active user is set before performing operations
+  ensureActiveUser() {
+    if (this.currentUserId === null) {
+      throw new Error('Active user not set for Electron API bridge')
+    }
+    return this.currentUserId
+  }
+
+  // Update active user based on Clerk ID
+  async setUserByClerkId(clerkId) {
+    if (!clerkId || typeof clerkId !== 'string') {
+      throw new Error('Invalid Clerk user ID')
+    }
+
+    const user = await this.prisma.user.upsert({
+      where: { clerkId },
+      update: {},
+      create: {
+        clerkId,
+      },
+    })
+
+    this.currentUserId = user.id
+    this.currentClerkId = clerkId
+    return user
+  }
+
+  clearActiveUser() {
+    this.currentUserId = null
+    this.currentClerkId = null
+  }
+
+  parseTodoId(id) {
+    if (typeof id === 'number' && Number.isInteger(id)) {
+      return id
+    }
+
+    const numericId = Number.parseInt(id, 10)
+    if (Number.isNaN(numericId)) {
+      throw new Error('Invalid todo ID')
+    }
+    return numericId
   }
 
   // Todo operations
-  async getTodos() {
+  async listTodos(options = {}) {
+    const userId = this.ensureActiveUser()
+
+    const { completed, limit = 100, offset = 0 } = options || {}
+
+    const where = {
+      userId,
+      ...(typeof completed === 'boolean' && { completed }),
+    }
+
     try {
-      const todos = await this.prisma.todo.findMany({
-        where: {
-          userId: this.currentUserId,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      })
-      return todos
+      const [todos, total] = await Promise.all([
+        this.prisma.todo.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        }),
+        this.prisma.todo.count({ where }),
+      ])
+
+      const hasMore = offset + todos.length < total
+
+      return {
+        todos,
+        total,
+        hasMore,
+        nextOffset: hasMore ? offset + limit : undefined,
+      }
     } catch (error) {
       log.error('Failed to get todos:', error)
 
@@ -60,11 +118,14 @@ class APIBridge {
   }
 
   async getTodoById(id) {
+    const userId = this.ensureActiveUser()
+    const todoId = this.parseTodoId(id)
+
     try {
       const todo = await this.prisma.todo.findUnique({
         where: {
-          id: id,
-          userId: this.currentUserId,
+          id: todoId,
+          userId,
         },
       })
       return todo
@@ -82,12 +143,19 @@ class APIBridge {
   }
 
   async createTodo(data) {
+    const userId = this.ensureActiveUser()
+
+    if (!data || typeof data !== 'object' || !data.text) {
+      throw new Error('Invalid todo data')
+    }
+
     try {
       const todo = await this.prisma.todo.create({
         data: {
-          title: data.title,
+          text: data.text,
+          notes: data.notes ?? null,
           completed: false,
-          userId: this.currentUserId,
+          userId,
         },
       })
       return todo
@@ -107,14 +175,18 @@ class APIBridge {
   }
 
   async updateTodo(id, data) {
+    const userId = this.ensureActiveUser()
+    const todoId = this.parseTodoId(id)
+
     try {
       const todo = await this.prisma.todo.update({
         where: {
-          id: id,
-          userId: this.currentUserId,
+          id: todoId,
+          userId,
         },
         data: {
-          ...(data.title !== undefined && { title: data.title }),
+          ...(data.text !== undefined && { text: data.text }),
+          ...(data.notes !== undefined && { notes: data.notes }),
           ...(data.completed !== undefined && { completed: data.completed }),
         },
       })
@@ -137,11 +209,14 @@ class APIBridge {
   }
 
   async deleteTodo(id) {
+    const userId = this.ensureActiveUser()
+    const todoId = this.parseTodoId(id)
+
     try {
       await this.prisma.todo.delete({
         where: {
-          id: id,
-          userId: this.currentUserId,
+          id: todoId,
+          userId,
         },
       })
       return { success: true }
@@ -163,16 +238,49 @@ class APIBridge {
   }
 
   async clearCompleted() {
+    const userId = this.ensureActiveUser()
+
     try {
       const result = await this.prisma.todo.deleteMany({
         where: {
-          userId: this.currentUserId,
+          userId,
           completed: true,
         },
       })
       return { deletedCount: result.count }
     } catch (error) {
       log.error('Failed to clear completed todos:', error)
+      throw error
+    }
+  }
+
+  async toggleTodo(id) {
+    const userId = this.ensureActiveUser()
+    const todoId = this.parseTodoId(id)
+
+    try {
+      const existing = await this.prisma.todo.findFirst({
+        where: {
+          id: todoId,
+          userId,
+        },
+      })
+
+      if (!existing) {
+        throw new Error('Todo not found')
+      }
+
+      return this.prisma.todo.update({
+        where: {
+          id: todoId,
+          userId,
+        },
+        data: {
+          completed: !existing.completed,
+        },
+      })
+    } catch (error) {
+      log.error('Failed to toggle todo completion:', error)
       throw error
     }
   }

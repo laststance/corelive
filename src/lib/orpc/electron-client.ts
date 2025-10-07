@@ -24,27 +24,20 @@ class ElectronIPCLink {
 
         switch (method) {
           case 'list':
-            return await window.electronAPI!.todos.getTodos()
+            return await window.electronAPI!.todos.getTodos(input || {})
           case 'create':
             return await window.electronAPI!.todos.createTodo(input)
           case 'update':
-            return await window.electronAPI!.todos.updateTodo(input.id, input)
+            return await window.electronAPI!.todos.updateTodo(
+              input.id,
+              input.data || input,
+            )
           case 'delete':
             return await window.electronAPI!.todos.deleteTodo(input.id)
           case 'toggle':
-            return await window.electronAPI!.todos.updateTodo(input.id, {
-              completed: !input.completed,
-            })
+            return await window.electronAPI!.todos.toggleTodo(input.id)
           case 'clearCompleted':
-            // Get all todos, filter completed ones, and delete them
-            const todos = await window.electronAPI!.todos.getTodos()
-            const completedTodos = todos.filter((todo: any) => todo.completed)
-            await Promise.all(
-              completedTodos.map(async (todo: any) =>
-                window.electronAPI!.todos!.deleteTodo(todo.id),
-              ),
-            )
-            return { deletedCount: completedTodos.length }
+            return await window.electronAPI!.todos.clearCompleted()
           default:
             throw new Error(`Unknown todo method: ${method}`)
         }

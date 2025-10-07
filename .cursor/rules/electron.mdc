@@ -3,3 +3,9 @@ alwaysApply: true
 ---
 
 - Please run `pnpm electron &` or `pnpm dev:electron &` in the background, since the Electron command often becomes unresponsive.
+
+
+
+- must run `pnpm electron:build` before running the Playwright tests
+- Prohibited: Mocking authentication
+- Prohibited: Mocking the database

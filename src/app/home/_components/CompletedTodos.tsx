@@ -57,15 +57,19 @@ export function CompletedTodos({
 
   // Flatten todos across all pages
   const allTodos: Todo[] =
-    data?.pages.flatMap((page) =>
-      page.todos.map((todo) => ({
+    data?.pages.flatMap((page) => {
+      if (!page || !Array.isArray(page.todos)) {
+        return []
+      }
+
+      return page.todos.map((todo) => ({
         id: todo.id.toString(),
         text: todo.text,
         completed: todo.completed,
         createdAt: new Date(todo.createdAt),
         notes: todo.notes,
-      })),
-    ) ?? []
+      }))
+    }) ?? []
 
   // Group by date
   const groupedTodos: GroupedTodos = allTodos.reduce((groups, todo) => {

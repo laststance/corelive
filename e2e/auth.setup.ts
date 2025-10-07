@@ -1,4 +1,4 @@
-import { setupClerkTestingToken, clerk } from '@clerk/testing/playwright'
+import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { test as setup } from '@playwright/test'
 
 import { log } from '../src/lib/logger'
@@ -7,7 +7,10 @@ setup.describe.configure({ mode: 'serial' })
 const authFile = './e2e/.auth/user.json'
 
 setup('authenticate', async ({ page, context }) => {
-  // Check environment variables
+  if (!process.env.E2E_CLERK_USER_EMAIL)
+    throw new Error(
+      'Required environment variables E2E_CLERK_USER_EMAIL not found!',
+    )
   if (!process.env.E2E_CLERK_USER_USERNAME)
     throw new Error(
       'Required environment variables E2E_CLERK_USER_USERNAME not found!',
@@ -20,87 +23,49 @@ setup('authenticate', async ({ page, context }) => {
     throw new Error(
       'Required environment variables CLERK_SECRET_KEY not found!',
     )
-  const username = process.env.E2E_CLERK_USER_USERNAME
+
+  const email = process.env.E2E_CLERK_USER_EMAIL
   const password = process.env.E2E_CLERK_USER_PASSWORD
 
   try {
-    // Set up testing token explicitly
-
     await setupClerkTestingToken({ page })
 
-    // Navigate to root page
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle')
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    const identifierInput = page
+      .locator(
+        'input[name="identifier"], input[type="email"], input[type="text"]',
+      )
+      .first()
+    await identifierInput.waitFor({ state: 'visible', timeout: 10_000 })
+    await identifierInput.fill(email)
 
-    // Small wait for page initialization
-    await page.waitForTimeout(2000)
+    await identifierInput.press('Enter')
 
-    // Check if Clerk is available without waiting for loaded state
-    await page.evaluate(() => {
-      return {
-        clerkExists: typeof window.Clerk !== 'undefined',
-        clerkKeys:
-          typeof window.Clerk !== 'undefined' ? Object.keys(window.Clerk) : [],
-      }
+    const passwordInput = page.locator('input[type="password"]').first()
+    await passwordInput.waitFor({ state: 'visible', timeout: 10_000 })
+    await passwordInput.fill(password)
+
+    await passwordInput.press('Enter')
+
+    await page.waitForURL('**/home', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
     })
 
-    // Try sign-in with clerk helper
+    await page.waitForLoadState('networkidle')
+    await page.waitForFunction(
+      () =>
+        document.body?.innerText?.includes('Tasks') ||
+        document.body?.innerText?.includes('Todo List'),
+      { timeout: 10_000 },
+    )
 
-    try {
-      await clerk.signIn({
-        page,
-        signInParams: {
-          strategy: 'password',
-          identifier: username,
-          password: password,
-        },
-      })
-    } catch {
-      // Fallback: Manual sign-in
-      await page.goto('/login', { waitUntil: 'domcontentloaded' })
-      await page.waitForTimeout(2000)
-
-      // Look for form inputs
-      const usernameInput = page
-        .locator(
-          'input[name="identifier"], input[type="text"], input[type="email"]',
-        )
-        .first()
-      const passwordInput = page.locator('input[type="password"]').first()
-
-      if (
-        (await usernameInput.isVisible()) &&
-        (await passwordInput.isVisible())
-      ) {
-        await usernameInput.fill(username)
-        await passwordInput.fill(password)
-
-        const submitButton = page.locator('button[type="submit"]').first()
-        await submitButton.click()
-
-        await page.waitForTimeout(3000)
-      }
-    }
-
-    // Wait for authentication to complete and redirects
-    await page.waitForTimeout(3000)
-
-    // Final verification
-    const finalUrl = page.url()
-
-    if (finalUrl.includes('/home')) {
-      // Save the authenticated state
-      await context.storageState({ path: authFile })
-
-      // Take success screenshot
-      await page.screenshot({ path: './e2e/screenshots/auth-success.png' })
-    } else if (finalUrl.includes('/login') || finalUrl.includes('/sign-in')) {
-      throw new Error('Authentication failed - redirected to login page')
-    } else {
-      // Still save state as authentication might have worked
-      await context.storageState({ path: authFile })
-    }
+    await context.storageState({ path: authFile })
+    await page.screenshot({ path: './e2e/screenshots/auth-success.png' })
   } catch (error: any) {
     log.error('❌ Authentication failed:', error.message)
+    throw error
   }
 })

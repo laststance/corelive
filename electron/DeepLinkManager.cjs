@@ -141,14 +141,15 @@ class DeepLinkManager {
       const parsedUrl = this.parseDeepLinkUrl(url)
       if (!parsedUrl) {
         log.warn('⚠️ Invalid deep link URL format')
-        return
+        return false
       }
 
       // Ensure main window is visible
       this.ensureWindowVisible()
 
       // Route to appropriate handler
-      await this.routeDeepLink(parsedUrl)
+      const handled = await this.routeDeepLink(parsedUrl)
+      return handled
     } catch (error) {
       log.error('❌ Failed to handle deep link:', error)
 
@@ -160,6 +161,7 @@ class DeepLinkManager {
           { type: 'error' },
         )
       }
+      return false
     }
   }
 
@@ -202,25 +204,28 @@ class DeepLinkManager {
     switch (action) {
       case 'task':
         await this.handleTaskAction(path, params)
-        break
+        return true
 
       case 'create':
         await this.handleCreateAction(params)
-        break
+        return true
 
       case 'view':
         await this.handleViewAction(path, params)
-        break
+        return true
 
       case 'search':
         await this.handleSearchAction(params)
-        break
+        return true
 
       default:
         log.warn(`⚠️ Unknown deep link action: ${action}`)
         // Default to opening main window
         this.ensureWindowVisible()
+        return false
     }
+
+    return true
   }
 
   /**

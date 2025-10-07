@@ -41,7 +41,7 @@ test.describe('Electron Deep Linking', () => {
       return null
     })
 
-    expect(deepLinkUrl).toBe('corelive-todo://task?id=123')
+    expect(deepLinkUrl).toBe('corelive://task?id=123')
   })
 
   test('should get example deep link URLs', async () => {

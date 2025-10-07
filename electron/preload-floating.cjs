@@ -92,14 +92,14 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
      */
     quickCreate: async (title) => {
       if (!title || typeof title !== 'string' || title.trim().length === 0) {
-        throw new Error('Todo title is required')
+        throw new Error('Todo text is required')
       }
 
       const sanitizedTitle = sanitizeData(title)
 
       try {
         // Use quick create handler or fallback to regular create
-        const todoData = { title: sanitizedTitle }
+        const todoData = { text: sanitizedTitle }
         return (
           (await ipcRenderer.invoke('todo-quick-create', todoData)) ||
           (await ipcRenderer.invoke('todo-create', todoData))
@@ -114,7 +114,7 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
      * Toggle todo completion status
      */
     toggleComplete: async (id) => {
-      if (!id || typeof id !== 'string') {
+      if (!id) {
         throw new Error('Invalid todo ID')
       }
 

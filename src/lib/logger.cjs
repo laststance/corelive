@@ -2,13 +2,17 @@ const pino = require('pino')
 
 // Determine environment and process type
 const isDevelopment = process.env.NODE_ENV !== 'production'
+const isTestEnvironment = process.env.NODE_ENV === 'test'
 const isMainProcess = process.type === 'browser'
 
 // In Electron preload/renderer, using pino-pretty (thread-stream) causes
 // SharedArrayBuffer errors due to lack of cross-origin isolation. Only enable
 // pretty transport in the Electron main process during development.
 const shouldUsePrettyTransport =
-  isDevelopment && isMainProcess && process.env.DISABLE_PINO_PRETTY !== 'true'
+  isDevelopment &&
+  !isTestEnvironment &&
+  isMainProcess &&
+  process.env.DISABLE_PINO_PRETTY !== 'true'
 
 // Configure Pino conditionally to avoid thread-stream in renderer/preload
 const logger = pino({

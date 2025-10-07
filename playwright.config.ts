@@ -1,4 +1,23 @@
+import { execSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { defineConfig, devices } from '@playwright/test'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const BUILD_ID_PATH = join(__dirname, '.next', 'BUILD_ID')
+
+if (!existsSync(BUILD_ID_PATH)) {
+  execSync('pnpm build', {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+    },
+  })
+}
 
 /**
  * See https://playwright.dev/docs/test-configuration.

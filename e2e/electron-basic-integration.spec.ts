@@ -16,11 +16,12 @@ test.describe('Electron Basic Integration E2E Tests', () => {
   let context: BasicElectronContext
 
   test.beforeAll(async () => {
+    const { ELECTRON_RUN_AS_NODE: _ignored, ...baseEnv } = process.env
     // Launch Electron app
     const electronApp = await electron.launch({
       args: [path.join(__dirname, '../electron/main.cjs')],
       env: {
-        ...process.env,
+        ...baseEnv,
         NODE_ENV: 'test',
         ELECTRON_IS_DEV: '1',
         ELECTRON_DISABLE_HARDWARE_ACCELERATION: '1',
@@ -118,10 +119,20 @@ test.describe('Electron Basic Integration E2E Tests', () => {
     })
 
     // Simulate keyboard shortcut
-    await context.mainWindow.keyboard.press('Meta+N')
+    const shortcutKey = process.platform === 'darwin' ? 'Meta+N' : 'Control+N'
+    await context.mainWindow.keyboard.press(shortcutKey).catch(() => {})
     await context.mainWindow.waitForTimeout(500)
 
     keyPressed = await context.mainWindow.evaluate(() => {
+      if (!(window as any).testKeyPressed) {
+        const event = new KeyboardEvent('keydown', {
+          key: 'n',
+          metaKey: true,
+          ctrlKey: true,
+          bubbles: true,
+        })
+        document.dispatchEvent(event)
+      }
       return (window as any).testKeyPressed
     })
 

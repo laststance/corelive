@@ -105,7 +105,11 @@ export function TodoList() {
   }
 
   // Transform data into Todo component format
-  const mapTodos = (todos: any[]): Todo[] => {
+  const mapTodos = (todos: unknown): Todo[] => {
+    if (!Array.isArray(todos)) {
+      return []
+    }
+
     return todos.map((todo) => ({
       id: todo.id.toString(),
       text: todo.text,
@@ -115,7 +119,7 @@ export function TodoList() {
     }))
   }
 
-  const pendingTodos = pendingData ? mapTodos(pendingData.todos) : []
+  const pendingTodos = mapTodos(pendingData?.todos)
 
   if (pendingLoading) {
     return (

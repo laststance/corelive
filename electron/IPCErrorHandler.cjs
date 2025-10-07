@@ -275,7 +275,7 @@ class IPCErrorHandler {
       data,
     }
 
-    log.error(`[IPC Error] ${message}`, data)
+    log.error({ data }, `[IPC Error] ${message}`)
 
     if (this.enableLogging) {
       await this.writeLogFile('error', logEntry)
@@ -290,7 +290,7 @@ class IPCErrorHandler {
       data,
     }
 
-    log.warn(`[IPC Warning] ${message}`, data)
+    log.warn({ data }, `[IPC Warning] ${message}`)
 
     if (this.enableLogging) {
       await this.writeLogFile('warning', logEntry)
@@ -305,7 +305,7 @@ class IPCErrorHandler {
       data,
     }
 
-    log.info(`[IPC Info] ${message}`, data)
+    log.info({ data }, `[IPC Info] ${message}`)
 
     if (this.enableLogging) {
       await this.writeLogFile('info', logEntry)

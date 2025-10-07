@@ -11,11 +11,13 @@ interface ElectronAPI {
 
   // Todo operations
   todos?: {
-    getTodos: () => Promise<any[]>
-    getTodoById: (id: string) => Promise<any>
+    getTodos: (options?: any) => Promise<any>
+    getTodoById: (id: string | number) => Promise<any>
     createTodo: (todoData: any) => Promise<any>
-    updateTodo: (id: string, updates: any) => Promise<any>
-    deleteTodo: (id: string) => Promise<void>
+    updateTodo: (id: string | number, updates: any) => Promise<any>
+    deleteTodo: (id: string | number) => Promise<void>
+    toggleTodo: (id: string | number) => Promise<any>
+    clearCompleted: () => Promise<{ deletedCount: number }>
   }
 
   // Window operations
@@ -87,7 +89,7 @@ interface ElectronAPI {
   // Authentication
   auth?: {
     getUser: () => Promise<any>
-    setUser: (user: any) => Promise<boolean>
+    setUser: (user: any) => Promise<any>
     logout: () => Promise<boolean>
     isAuthenticated: () => Promise<boolean>
     syncFromWeb: (authData: any) => Promise<boolean>
