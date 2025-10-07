@@ -13,7 +13,7 @@
   "main": "electron/main.cjs",
   "homepage": "./",
   "scripts": {
-    "postinstall": "PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 pnpm prisma generate",
+    "postinstall": "pnpm prisma generate",
     "dev": "next dev",
     "build": "next build",
     "build:icons": "node scripts/generate-icons.js",
