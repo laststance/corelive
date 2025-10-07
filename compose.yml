@@ -17,7 +17,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'pg_isready -U postgres && psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive',
+          'PGPASSWORD=password pg_isready -U postgres && PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive',
         ]
       interval: 10s
       timeout: 5s
