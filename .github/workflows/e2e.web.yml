@@ -24,6 +24,7 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           E2E_CLERK_USER_USERNAME: ${{ secrets.E2E_CLERK_USER_USERNAME }}
           E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
+          E2E_CLERK_USER_EMAIL: ${{ secrets.E2E_CLERK_USER_EMAIL }}
         run: |
           touch .env
           echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}" >> .env
@@ -35,6 +36,7 @@ jobs:
           echo "POSTGRES_PRISMA_URL=postgresql://postgres:password@localhost:5432/corelive?schema=public" >> .env
           echo "E2E_CLERK_USER_USERNAME=${E2E_CLERK_USER_USERNAME}" >> .env
           echo "E2E_CLERK_USER_PASSWORD=${E2E_CLERK_USER_PASSWORD}" >> .env
+          echo "E2E_CLERK_USER_EMAIL=${E2E_CLERK_USER_EMAIL}" >> .env
 
       - name: Start Postgres via Docker Compose 🐳
         run: |
