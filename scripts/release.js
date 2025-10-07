@@ -3,8 +3,6 @@
 import { spawn, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-
-import { log } from '../src/lib/logger.ts'
 // import { fileURLToPath } from 'url'
 
 // const __filename = fileURLToPath(import.meta.url)
@@ -55,9 +53,9 @@ function validateEnvironment() {
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
 
   if (missingVars.length > 0) {
-    log.error('❌ Missing required environment variables:')
+    console.error('❌ Missing required environment variables:')
     missingVars.forEach((varName) => {
-      log.error(`   - ${varName}`)
+      console.error(`   - ${varName}`)
     })
     throw new Error('Environment validation failed')
   }
@@ -67,8 +65,8 @@ function validateEnvironment() {
     const gitStatus = execSync('git status --porcelain', { encoding: 'utf8' })
 
     if (gitStatus.trim()) {
-      log.error('❌ Git working directory is not clean:')
-      log.error(gitStatus)
+      console.error('❌ Git working directory is not clean:')
+      console.error(gitStatus)
       throw new Error('Please commit or stash your changes before releasing')
     }
   } catch (error) {
@@ -84,7 +82,7 @@ async function updateVersion(versionType) {
 
     return newVersion
   } catch (error) {
-    log.error('❌ Version update failed:', error.message)
+    console.error('❌ Version update failed:', error.message)
     throw error
   }
 }
@@ -94,7 +92,7 @@ async function buildForRelease() {
     // Use the build script
     await runCommand('node', ['scripts/build.js', 'all'])
   } catch (error) {
-    log.error('❌ Release build failed:', error.message)
+    console.error('❌ Release build failed:', error.message)
     throw error
   }
 }
@@ -105,7 +103,7 @@ async function createGitTag(version) {
     await runCommand('git', ['commit', '-m', `chore: release v${version}`])
     await runCommand('git', ['tag', `v${version}`])
   } catch (error) {
-    log.error('❌ Git tag creation failed:', error.message)
+    console.error('❌ Git tag creation failed:', error.message)
     throw error
   }
 }
@@ -118,7 +116,7 @@ async function publishRelease(_version) {
 
     // The GitHub Actions workflow will handle the actual release creation
   } catch (error) {
-    log.error('❌ Release publishing failed:', error.message)
+    console.error('❌ Release publishing failed:', error.message)
     throw error
   }
 }
@@ -156,7 +154,7 @@ function generateReleaseNotes(version) {
 
     return releaseNotes
   } catch (error) {
-    log.warn('⚠️  Failed to generate release notes:', error.message)
+    console.warn('⚠️  Failed to generate release notes:', error.message)
     return null
   }
 }
@@ -199,14 +197,15 @@ async function main() {
     if (!dryRun) {
     }
   } catch (error) {
-    log.error('\n❌ Release failed:', error.message)
+    console.error('\n❌ Release failed:', error.message)
     process.exit(1)
   }
 }
 
 // Show help
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  log.warn(`
+  // eslint-disable-next-line no-console
+  console.log(`
 CoreLive TODO - Release Script
 
 Usage: node scripts/release.js [version-type] [options]

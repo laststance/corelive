@@ -4,8 +4,6 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
-import { log } from '../src/lib/logger.ts'
-
 /**
  * Production build script for CoreLive TODO Electron app
  *
@@ -63,7 +61,7 @@ async function runPreBuildChecks() {
 
     await runCommand('pnpm', ['test:electron', '--run'])
   } catch (error) {
-    log.error('❌ Pre-build checks failed:', error.message)
+    console.error('❌ Pre-build checks failed:', error.message)
     throw error
   }
 }
@@ -79,7 +77,7 @@ async function buildNextJS() {
 
     await runCommand('pnpm', ['build'], { env })
   } catch (error) {
-    log.error('❌ Next.js build failed:', error.message)
+    console.error('❌ Next.js build failed:', error.message)
     throw error
   }
 }
@@ -102,7 +100,7 @@ async function buildElectron(platform = 'all') {
     // Analyze bundle size after build
     await analyzeBundleSize()
   } catch (error) {
-    log.error(
+    console.error(
       `❌ Electron build failed for ${platforms[platform] || platform}:`,
       error.message,
     )
@@ -129,7 +127,7 @@ async function analyzeBundleSize() {
       }
     }
   } catch (error) {
-    log.warn('⚠️ Bundle analysis failed:', error.message)
+    console.warn('⚠️ Bundle analysis failed:', error.message)
   }
 }
 
@@ -220,14 +218,15 @@ async function main() {
     // Generate report
     generateBuildReport()((Date.now() - startTime) / 1000).toFixed(2)
   } catch (error) {
-    log.error('\n❌ Build failed:', error.message)
+    console.error('\n❌ Build failed:', error.message)
     process.exit(1)
   }
 }
 
 // Show help
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  log.warn(`
+  // eslint-disable-next-line no-console
+  console.log(`
 CoreLive TODO - Production Build Script
 
 Usage: node scripts/build.js [platform] [options]

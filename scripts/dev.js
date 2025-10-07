@@ -5,8 +5,6 @@ import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { log } from '../src/lib/logger.ts'
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -107,12 +105,12 @@ async function startDevelopment() {
     })
 
     nextProcess.stderr.on('data', (data) => {
-      log.error(`📦 Next.js Error: ${data.toString().trim()}`)
+      console.error(`📦 Next.js Error: ${data.toString().trim()}`)
     })
 
     nextProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
-        log.error(`📦 Next.js process exited with code ${code}`)
+        console.error(`📦 Next.js process exited with code ${code}`)
         cleanup()
       }
     })
@@ -138,12 +136,12 @@ async function startDevelopment() {
 
     electronProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
-        log.error(`⚡ Electron process exited with code ${code}`)
+        console.error(`⚡ Electron process exited with code ${code}`)
       }
       cleanup()
     })
   } catch (error) {
-    log.error('❌ Failed to start development environment:', error.message)
+    console.error('❌ Failed to start development environment:', error.message)
     cleanup()
   }
 }

@@ -1,7 +1,5 @@
 import { notarize } from '@electron/notarize'
 
-import { log } from '../src/lib/logger.ts'
-
 export default async function notarizing(context) {
   const { electronPlatformName, appOutDir } = context
 
@@ -17,7 +15,7 @@ export default async function notarizing(context) {
   const teamId = process.env.APPLE_TEAM_ID
 
   if (!appleId || !appleIdPassword || !teamId) {
-    log.warn(
+    console.warn(
       'Skipping notarization: Missing required environment variables (APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID)',
     )
     return
@@ -32,7 +30,7 @@ export default async function notarizing(context) {
       teamId: teamId,
     })
   } catch (error) {
-    log.error('Notarization failed:', error)
+    console.error('Notarization failed:', error)
     throw error
   }
 }

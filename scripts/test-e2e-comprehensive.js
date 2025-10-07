@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { log } from '../src/lib/logger.ts'
 
 /**
  * Comprehensive E2E Test Runner
@@ -177,7 +176,8 @@ async function validateBundleSize() {
     if (fs.existsSync(distPath)) {
       const stats = fs.statSync(distPath)
       const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2)
-      log(`Bundle size: ${sizeInMB} MB`, colors.cyan)
+      // eslint-disable-next-line no-console
+      console.log(`${colors.cyan}Bundle size: ${sizeInMB} MB${colors.reset}`)
 
       // Warn if bundle is too large (adjust threshold as needed)
       if (parseFloat(sizeInMB) > 500) {
@@ -188,7 +188,7 @@ async function validateBundleSize() {
     }
   } catch (error) {
     logWarning('Bundle size validation failed (non-critical)')
-    log.error(error.message)
+    console.error(error.message)
   }
 }
 
@@ -226,7 +226,8 @@ async function runCrossplatformValidation() {
   logSection('Cross-platform Validation')
 
   const platform = process.platform
-  log(`Running on platform: ${platform}`, colors.cyan)
+  // eslint-disable-next-line no-console
+  console.log(`${colors.cyan}Running on platform: ${platform}${colors.reset}`)
 
   // Platform-specific validations
   switch (platform) {
@@ -254,7 +255,10 @@ async function main() {
   const startTime = Date.now()
 
   try {
-    log('Starting Comprehensive E2E Test Suite', colors.bright + colors.magenta)
+    // eslint-disable-next-line no-console
+    console.log(
+      `${colors.bright}${colors.magenta}Starting Comprehensive E2E Test Suite${colors.reset}`,
+    )
 
     await checkPrerequisites()
     await buildApplication()
@@ -270,9 +274,9 @@ async function main() {
 
     logSection('Test Suite Complete')
     logSuccess(`All tests passed in ${duration} seconds`)
-    log(
-      '🎉 Electron Desktop Integration is ready for production!',
-      colors.bright + colors.green,
+    // eslint-disable-next-line no-console
+    console.log(
+      `${colors.bright}${colors.green}🎉 Electron Desktop Integration is ready for production!${colors.reset}`,
     )
   } catch (error) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2)
@@ -287,18 +291,20 @@ async function main() {
 
 // Handle process termination
 process.on('SIGINT', () => {
-  log('\nTest suite interrupted by user', colors.yellow)
+  // eslint-disable-next-line no-console
+  console.log(`${colors.yellow}\nTest suite interrupted by user${colors.reset}`)
   process.exit(1)
 })
 
 process.on('SIGTERM', () => {
-  log('\nTest suite terminated', colors.yellow)
+  // eslint-disable-next-line no-console
+  console.log(`${colors.yellow}\nTest suite terminated${colors.reset}`)
   process.exit(1)
 })
 
 // Run the test suite
 main().catch((error) => {
   logError('Unexpected error in test suite')
-  log.error(error)
+  console.error(error)
   process.exit(1)
 })
