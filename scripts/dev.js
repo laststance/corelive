@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // const isDev = process.env.NODE_ENV !== 'production'
-const port = process.env.PORT || 3000
+const port = process.env.PORT || 3011
 
 /**
  * Development server script for CoreLive TODO Electron app

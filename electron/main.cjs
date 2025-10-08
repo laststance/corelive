@@ -265,7 +265,7 @@ async function createWindow() {
 
     // In test environment, always use external server if available
     if (isTestEnvironment && !serverUrl) {
-      serverUrl = 'http://localhost:3000'
+      serverUrl = 'http://localhost:3011'
     }
 
     // In development, use external Next dev server when provided by scripts/dev.js

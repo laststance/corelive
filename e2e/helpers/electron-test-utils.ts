@@ -294,7 +294,7 @@ export class ElectronTestHelper {
     )
 
     const { ELECTRON_RUN_AS_NODE: _ignored, ...baseEnv } = process.env
-    const baseUrl = baseEnv.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3000'
+    const baseUrl = baseEnv.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3011'
 
     let nextServerProcess: ChildProcess | null = null
     try {

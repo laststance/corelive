@@ -75,7 +75,7 @@ yarn dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3011](http://localhost:3011) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
@@ -84,7 +84,7 @@ This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-opti
 ### Ngrok
 
 Need ngrok to recive create.user event [webhook](https://clerk.com/docs/webhooks/overview) from Clerk in local.  
-like `ngrok http --domain=foo.bar-ngrok.app 3000`
+like `ngrok http --domain=foo.bar-ngrok.app 3011`
 
 ## Desktop Application (Electron)
 

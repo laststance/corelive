@@ -78,7 +78,7 @@ class WindowManager {
     // Load the application
     const startUrl =
       this.serverUrl ||
-      (this.isDev ? 'http://localhost:3000' : 'http://localhost:3000')
+      (this.isDev ? 'http://localhost:3011' : 'http://localhost:3011')
 
     this.mainWindow.loadURL(startUrl)
 
@@ -191,8 +191,8 @@ class WindowManager {
     const floatingUrl = this.serverUrl
       ? `${this.serverUrl}/floating-navigator`
       : this.isDev
-        ? 'http://localhost:3000/floating-navigator'
-        : 'http://localhost:3000/floating-navigator'
+        ? 'http://localhost:3011/floating-navigator'
+        : 'http://localhost:3011/floating-navigator'
 
     this.floatingNavigator.loadURL(floatingUrl)
 

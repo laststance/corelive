@@ -170,9 +170,9 @@ describe('Main Process Components', () => {
         }
       }
 
-      const windowManager = new WindowManager('http://localhost:3000')
+      const windowManager = new WindowManager('http://localhost:3011')
 
-      expect(windowManager.serverUrl).toBe('http://localhost:3000')
+      expect(windowManager.serverUrl).toBe('http://localhost:3011')
       expect(windowManager.hasMainWindow()).toBe(false)
       expect(windowManager.hasFloatingNavigator()).toBe(false)
     })
@@ -185,7 +185,7 @@ describe('Main Process Components', () => {
 
         createMainWindow() {
           this.mainWindow = new mockBrowserWindow()
-          this.mainWindow.loadURL('http://localhost:3000')
+          this.mainWindow.loadURL('http://localhost:3011')
           return this.mainWindow
         }
 
@@ -198,7 +198,7 @@ describe('Main Process Components', () => {
       const window = windowManager.createMainWindow()
 
       expect(mockBrowserWindow).toHaveBeenCalled()
-      expect(window.loadURL).toHaveBeenCalledWith('http://localhost:3000')
+      expect(window.loadURL).toHaveBeenCalledWith('http://localhost:3011')
       expect(windowManager.hasMainWindow()).toBe(true)
     })
 

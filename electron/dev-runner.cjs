@@ -40,7 +40,7 @@ async function checkServer(url, retries = 30) {
 async function startElectron() {
   try {
     // Wait for Next.js dev server
-    await checkServer('http://localhost:3000')
+    await checkServer('http://localhost:3011')
 
     // Start Electron
     const electronProcess = spawn(
