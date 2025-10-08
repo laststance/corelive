@@ -36,6 +36,9 @@ export function TodoList() {
         // Invalidate cache
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
       },
+      onError: (error) => {
+        console.error('Failed to create TODO:', error)
+      },
     }),
   )
 

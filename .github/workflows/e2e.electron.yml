@@ -81,6 +81,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Electron Playwright tests 🧪
+        env:
+          E2E_TEST_MODE: 'true'
         run: pnpm exec playwright test --project=electron --reporter=list
 
       - name: Upload Playwright Report 📊

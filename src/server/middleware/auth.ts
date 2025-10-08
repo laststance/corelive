@@ -31,6 +31,24 @@ export const authMiddleware = os
       return next({ context: { user } })
     }
 
+    // E2E test mode: Allow mock user in test environment
+    // This enables E2E tests to work even when window.Clerk isn't loaded yet
+    if (
+      process.env.E2E_TEST_MODE === 'true' &&
+      (!clerkUserId || clerkUserId === 'user_mock_user_id')
+    ) {
+      const user = await prisma.user.upsert({
+        where: { clerkId: 'user_mock_user_id' },
+        update: {},
+        create: {
+          clerkId: 'user_mock_user_id',
+          email: 'test@example.com',
+          name: 'Test User',
+        },
+      })
+      return next({ context: { user } })
+    }
+
     if (!clerkUserId) {
       throw new ORPCError('UNAUTHORIZED', {
         message: 'Authentication required',

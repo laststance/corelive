@@ -69,6 +69,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Web Playwright tests 🧪
+        env:
+          E2E_TEST_MODE: 'true'
         run: pnpm exec playwright test --project=web --reporter=list
 
       - name: Upload Playwright Report 📊
