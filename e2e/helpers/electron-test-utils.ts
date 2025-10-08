@@ -328,6 +328,8 @@ export class ElectronTestHelper {
         path.join(__dirname, '../../electron/main.cjs'),
         // Use unique user data directory to avoid singleton conflicts
         `--user-data-dir=${uniqueUserDataDir}`,
+        // Disable sandbox in CI environments due to permission requirements
+        ...(process.env.CI ? ['--no-sandbox'] : []),
       ],
       env: {
         ...baseEnv,
