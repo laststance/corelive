@@ -1184,22 +1184,15 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     // Setup security policies
     setupSecurity()
-
     // Create the main application window
     const mainWindow = await createWindow()
-
-    if (isTestEnvironment && mainWindow) {
-      // Keep main window visible and focused during automated tests
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore()
-      }
-      if (typeof mainWindow.showInactive === 'function') {
-        mainWindow.showInactive()
-      } else {
-        mainWindow.show()
-      }
-      mainWindow.focus()
-      app.setActivationPolicy?.('accessory')
+    if (isTestEnvironment) {
+      // Simulate headless mode in Playwright e2e
+      app.hide()
+      // In test mode, show without stealing focus
+      mainWindow.showInactive()
+      // Mac Only: Hide from dock during test
+      app.setActivationPolicy('accessory')
     }
 
     app.on('activate', () => {
