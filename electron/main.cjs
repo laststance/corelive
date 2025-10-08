@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
+const notifier = require('node-notifier')
 
 // Enable remote debugging for Playwright-driven Electron tests when requested
 if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
@@ -1187,12 +1188,13 @@ if (!gotTheLock) {
     // Create the main application window
     const mainWindow = await createWindow()
     if (isTestEnvironment) {
+      notifier.notify('Electron is Testing')
       // Simulate headless mode in Playwright e2e
-      app.hide()
+      // app.hide()
       // In test mode, show without stealing focus
       mainWindow.showInactive()
       // Mac Only: Hide from dock during test
-      app.setActivationPolicy('accessory')
+      // app.setActivationPolicy('accessory')
     }
 
     app.on('activate', () => {

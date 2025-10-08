@@ -535,12 +535,39 @@ export class ElectronTestHelper {
   }
 
   static async closeElectronApp(context: ElectronTestContext): Promise<void> {
+    // Close floating navigator first
     if (context?.floatingNavigator && !context.floatingNavigator.isClosed()) {
-      await context.floatingNavigator.close()
+      try {
+        await context.floatingNavigator.close()
+      } catch (error) {
+        log.warn('[electron-test] Failed to close floating navigator:', error)
+      }
     }
+
+    // Close Electron app with proper error handling and wait for termination
     if (context?.electronApp) {
-      await context.electronApp.close()
+      try {
+        log.debug('[electron-test] Closing Electron app...')
+        await context.electronApp.close()
+        // Wait longer for process to fully terminate to avoid race conditions
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        log.debug('[electron-test] Electron app closed successfully')
+      } catch (error) {
+        log.error('[electron-test] Error closing Electron app:', error)
+        // Try once more after a longer delay
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await context.electronApp.close()
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+          log.debug('[electron-test] Electron app closed on retry')
+        } catch (retryError) {
+          log.error('[electron-test] Retry close also failed:', retryError)
+          // Continue anyway - process might be dead
+        }
+      }
     }
+
+    // Clean up Next.js server process if it exists
     if (context?.nextServerProcess) {
       const serverProcess = context.nextServerProcess
       if (!serverProcess.killed) {

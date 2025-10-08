@@ -39,7 +39,25 @@ test.describe('Electron Basic Integration E2E Tests', () => {
 
   test.afterAll(async () => {
     if (context?.electronApp) {
-      await context.electronApp.close()
+      try {
+        await context.electronApp.close()
+        // Wait longer for process to fully terminate to avoid race conditions
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      } catch (error) {
+        console.error(
+          '[electron-test] Error closing Electron app in afterAll:',
+          error,
+        )
+        // Force exit if close() fails
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await context.electronApp.close()
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+        } catch {
+          // Ignore second failure but log it
+          console.error('[electron-test] Retry close also failed in afterAll')
+        }
+      }
     }
   })
 
