@@ -49,7 +49,7 @@ setup('authenticate', async ({ page, context }) => {
 
     await passwordInput.press('Enter')
 
-    await page.waitForURL('**/home', {
+    await page.waitForURL('**/home{,/}', {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     })

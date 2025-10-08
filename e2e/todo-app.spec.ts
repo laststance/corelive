@@ -5,16 +5,29 @@ test.describe('TODO App E2E Tests', () => {
     // Navigate to the TODO app home page
     // Authentication state is automatically loaded from playwright/.auth/user.json
     await page.goto('/home')
+    // Wait for page to be fully loaded
+    await page.waitForLoadState('networkidle')
   })
 
   test('should display TODO app correctly after authentication', async ({
     page,
   }) => {
-    // Give middleware time to process the request
-    await page.waitForTimeout(1000)
+    // Wait for page to be fully loaded (not just DOM, but also network requests)
+    await page.waitForLoadState('networkidle')
 
     // Verify we're on the authenticated TODO app page
-    await expect(page).toHaveURL('/home')
+    await expect(page).toHaveURL(/\/home\/?$/)
+
+    // Wait for either loading state to finish or Todo List to appear
+    await expect(
+      page.getByText('Todo List').or(page.getByText('Loading...')),
+    ).toBeVisible({ timeout: 10000 })
+
+    // If loading, wait for it to finish and Todo List to appear
+    const isLoading = await page.getByText('Loading...').isVisible()
+    if (isLoading) {
+      await expect(page.getByText('Todo List')).toBeVisible({ timeout: 10000 })
+    }
 
     // Verify main TODO app components are present
     await expect(page.getByText('Todo List')).toBeVisible()
