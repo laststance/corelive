@@ -19,7 +19,11 @@ test.describe('Electron Basic Integration E2E Tests', () => {
     const { ELECTRON_RUN_AS_NODE: _ignored, ...baseEnv } = process.env
     // Launch Electron app
     const electronApp = await electron.launch({
-      args: [path.join(__dirname, '../electron/main.cjs')],
+      args: [
+        path.join(__dirname, '../electron/main.cjs'),
+        // Disable sandbox in CI environments due to permission requirements
+        ...(process.env.CI ? ['--no-sandbox'] : []),
+      ],
       env: {
         ...baseEnv,
         NODE_ENV: 'test',
