@@ -1,6 +1,6 @@
 {
-  "appId": "com.corelive.todoapp",
-  "productName": "CoreLive TODO",
+  "appId": "com.corelive.app",
+  "productName": "CoreLive",
   "copyright": "Copyright © 2025 CoreLive",
   "directories": {
     "output": "dist-electron",
@@ -54,7 +54,7 @@
   },
   "protocols": [
     {
-      "name": "CoreLive TODO Protocol",
+      "name": "CoreLive Protocol",
       "schemes": ["corelive"]
     }
   ],
@@ -149,16 +149,16 @@
     "icon": "build/icons/",
     "desktop": {
       "entry": {
-        "Name": "CoreLive TODO",
-        "Comment": "A modern TODO application with desktop integration",
-        "Keywords": "todo;task;productivity;electron;",
+        "Name": "CoreLive",
+        "Comment": "A comprehensive design system and web application with desktop integration",
+        "Keywords": "productivity;design;system;electron;",
         "StartupWMClass": "corelive",
         "MimeType": "x-scheme-handler/corelive;"
       }
     },
     "maintainer": "CoreLive <support@corelive.com>",
     "vendor": "CoreLive",
-    "synopsis": "Modern TODO application with desktop integration"
+    "synopsis": "Comprehensive design system and web application with desktop integration"
   },
   "deb": {
     "depends": [
