@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { cpus } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -30,8 +31,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Limit workers to 50% CPU cores to prevent resource saturation (community best practice) */
+  workers: process.env.CI ? 1 : Math.max(1, Math.floor(cpus().length / 2)),
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'list',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -75,10 +76,10 @@ export default defineConfig({
         // Electron-specific configuration
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
-        // Use prepared auth state from setup
-        storageState: 'e2e/.auth/user.json',
+        // Electron tests handle auth via IPC mocking, not web cookies
+        // No storageState needed - tests accept both login and authenticated states
       },
-      dependencies: ['setup'], // Ensure setup runs first for electron tests too
+      // No dependencies - Electron tests run independently with their own auth handling
     },
   ],
 

@@ -33,12 +33,14 @@ setup('authenticate', async ({ page, context }) => {
     await page.goto('/login', { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
+    // Wait for Clerk SignIn component to fully render (React hydration + Clerk mounting)
+    // Clerk components are rendered client-side, so we need to wait beyond networkidle
     const identifierInput = page
       .locator(
         'input[name="identifier"], input[type="email"], input[type="text"]',
       )
       .first()
-    await identifierInput.waitFor({ state: 'visible', timeout: 10_000 })
+    await identifierInput.waitFor({ state: 'visible', timeout: 30_000 })
     await identifierInput.fill(email)
 
     await identifierInput.press('Enter')

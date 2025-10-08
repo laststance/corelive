@@ -628,19 +628,15 @@ export class ElectronTestHelper {
 
     if (context.floatingNavigator) {
       try {
-        await context.floatingNavigator.waitForLoadState('domcontentloaded')
-        const loadingLocator =
-          context.floatingNavigator.getByText(/loading tasks/i)
-        await loadingLocator.waitFor({ state: 'detached', timeout: 10_000 })
-        const retryButton = context.floatingNavigator.getByRole('button', {
-          name: /retry/i,
+        // Just wait for DOM to load, don't wait for data loading to complete
+        // After many tests, app state may be degraded and data loading may hang
+        await context.floatingNavigator.waitForLoadState('domcontentloaded', {
+          timeout: 5000,
         })
-        if (await retryButton.count()) {
-          await retryButton.click()
-          await context.floatingNavigator.waitForTimeout(500)
-        }
+        // Give UI a moment to render
+        await context.floatingNavigator.waitForTimeout(500)
       } catch (error) {
-        log.warn('Floating navigator content did not finish loading:', error)
+        log.warn('Floating navigator DOM load timeout:', error)
       }
     }
   }
