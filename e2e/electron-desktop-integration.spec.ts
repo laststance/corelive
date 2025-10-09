@@ -204,7 +204,6 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
     // Pass context to enable proper window cleanup
     const shortcutResults = await ElectronTestHelper.testAllKeyboardShortcuts(
       context.mainWindow,
-      context,
     )
 
     // Verify new task shortcut works
@@ -364,7 +363,6 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
     // Requirement 5: Keyboard shortcuts
     const shortcuts = await ElectronTestHelper.testAllKeyboardShortcuts(
       context.mainWindow,
-      context,
     )
     expect(typeof shortcuts.newTask).toBe('boolean')
 
