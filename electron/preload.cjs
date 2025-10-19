@@ -772,6 +772,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     setUser: async (user) => {
       try {
+        if (!user || typeof user !== 'object' || !user.clerkId) {
+          throw new Error('Invalid auth payload: clerkId is required')
+        }
+
         return await ipcRenderer.invoke('auth-set-user', sanitizeData(user))
       } catch (error) {
         log.error('Failed to set user:', error)
@@ -808,6 +812,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     syncFromWeb: async (authData) => {
       try {
+        if (!authData || typeof authData !== 'object' || !authData.clerkId) {
+          throw new Error('Invalid auth payload: clerkId is required')
+        }
+
         return await ipcRenderer.invoke(
           'auth-sync-from-web',
           sanitizeData(authData),

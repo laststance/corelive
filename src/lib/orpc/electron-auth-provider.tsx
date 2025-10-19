@@ -8,7 +8,11 @@ import { log } from '../logger'
 import { isElectronEnvironment } from './electron-client'
 
 /**
- * Component that synchronizes Clerk authentication state with Electron
+ * Component that synchronizes Clerk authentication state with Electron.
+ *
+ * When running inside Electron we forward the minimal user payload required by
+ * the main process: the Clerk user identifier (`clerkId`) plus optional
+ * denormalised profile fields that help the native shell display context.
  */
 export function ElectronAuthProvider({
   children,
@@ -33,9 +37,9 @@ export function ElectronAuthProvider({
         if (user) {
           // User is authenticated, sync with Electron
           await window.electronAPI?.auth?.setUser({
-            id: user.id,
-            email: user.primaryEmailAddress?.emailAddress,
-            name: user.fullName || user.firstName || 'User',
+            clerkId: user.id,
+            email: user.primaryEmailAddress?.emailAddress ?? null,
+            name: user.fullName ?? user.firstName ?? null,
           })
         } else {
           // User is not authenticated, logout from Electron

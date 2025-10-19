@@ -176,7 +176,7 @@ async function setActiveUser(userPayload) {
   }
 
   if (!userPayload || typeof userPayload !== 'object' || !userPayload.clerkId) {
-    throw new Error('Invalid user payload')
+    throw new Error('Invalid user payload: clerkId is required')
   }
 
   const prismaUser = await apiBridge.setUserByClerkId(userPayload.clerkId)

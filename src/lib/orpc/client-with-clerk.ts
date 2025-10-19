@@ -16,13 +16,6 @@ export function createLink() {
       return `${window.location.origin}/api/orpc`
     },
     headers: async () => {
-      // Use a fixed user ID in development environment
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          Authorization: 'Bearer user_mock_user_id',
-        }
-      }
-
       // Retrieve auth info from Clerk in production environment
       if (typeof window !== 'undefined' && window.Clerk) {
         try {
