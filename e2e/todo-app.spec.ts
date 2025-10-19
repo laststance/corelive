@@ -1,7 +1,12 @@
+import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { test, expect } from '@playwright/test'
 
 test.describe('TODO App E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
+    // Setup Clerk testing token for each test
+    // This is required for Clerk to work properly in test mode
+    await setupClerkTestingToken({ page })
+
     // Navigate to the TODO app home page
     // Authentication state is automatically loaded from playwright/.auth/user.json
     await page.goto('/home')
