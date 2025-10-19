@@ -49,18 +49,18 @@ export function TodoItem({
           checked={todo.completed}
           onCheckedChange={() => onToggleComplete(todo.id)}
           id={`todo-${todo.id}`}
+          aria-label={todo.text}
         />
         <div className="min-w-0 flex-1">
-          <label
-            htmlFor={`todo-${todo.id}`}
-            className={`block cursor-pointer ${
+          <div
+            className={`block ${
               todo.completed
                 ? 'text-muted-foreground line-through'
                 : 'text-foreground'
             }`}
           >
             {todo.text}
-          </label>
+          </div>
           <p className="text-muted-foreground mt-1 text-xs">
             {todo.createdAt.toLocaleDateString('en-US')}
           </p>
