@@ -23,8 +23,8 @@ import { Textarea } from '@/components/ui/textarea'
 
 // Form schema definition
 const todoFormSchema = z.object({
-  text: z.string().min(1, 'Please enter a task'),
-  notes: z.string().optional(),
+  text: z.string().trim().min(1, 'Please enter a task'),
+  notes: z.string().trim().optional(),
 })
 
 type TodoFormValues = z.infer<typeof todoFormSchema>
