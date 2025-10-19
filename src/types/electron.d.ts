@@ -1,5 +1,17 @@
 // Comprehensive Electron API type definitions
 
+interface ElectronAuthUser {
+  /**
+   * Clerk user identifier. Required by the Electron main process to hydrate the
+   * Prisma-backed user session.
+   */
+  clerkId: string
+  /** Optional denormalised email address for UI-only display */
+  email?: string | null
+  /** Optional denormalised name for UI-only display */
+  name?: string | null
+}
+
 interface ElectronAPI {
   // Event handling
   on: (
@@ -89,7 +101,7 @@ interface ElectronAPI {
   // Authentication
   auth?: {
     getUser: () => Promise<any>
-    setUser: (user: any) => Promise<any>
+    setUser: (user: ElectronAuthUser) => Promise<any>
     logout: () => Promise<boolean>
     isAuthenticated: () => Promise<boolean>
     syncFromWeb: (authData: any) => Promise<boolean>
@@ -184,3 +196,4 @@ declare global {
 }
 
 export type { ElectronAPI }
+export type { ElectronAuthUser }

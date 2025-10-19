@@ -16,27 +16,46 @@ export function createLink() {
       return `${window.location.origin}/api/orpc`
     },
     headers: async () => {
-      // Use a fixed user ID in development environment
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          Authorization: 'Bearer user_mock_user_id',
-        }
+      if (typeof window === 'undefined') {
+        return {}
       }
 
-      // Retrieve auth info from Clerk in production environment
-      if (typeof window !== 'undefined' && window.Clerk) {
-        try {
-          const session = window.Clerk.session
-          if (session?.user?.id) {
-            return {
-              Authorization: `Bearer ${session.user.id}`,
-            }
-          }
-        } catch (error) {
-          log.error('Failed to get Clerk session:', error)
-        }
+      const clerk = window.Clerk
+      if (!clerk) {
+        // when Clerk hasn't loaded yet (e.g. Playwright immediately after navigation)
+        return {}
       }
-      return {}
+
+      try {
+        // First, try to get session without calling load() - it might already be available
+        let userId = clerk.session?.user?.id ?? clerk.user?.id ?? null
+
+        // If no session yet, try calling load() with timeout
+        if (!userId) {
+          const maybeLoad = (clerk as { load?: () => Promise<void> }).load
+          if (typeof maybeLoad === 'function') {
+            // Add timeout to prevent hanging indefinitely in test environments
+            await Promise.race([
+              maybeLoad.call(clerk),
+              new Promise((resolve) => setTimeout(resolve, 3000)),
+            ])
+          }
+
+          // Try getting session again after load
+          userId = clerk.session?.user?.id ?? clerk.user?.id ?? null
+        }
+
+        if (!userId) {
+          return {}
+        }
+
+        return {
+          Authorization: `Bearer ${userId}`,
+        }
+      } catch (error) {
+        log.error('Failed to load Clerk session for ORPC client:', error)
+        return {}
+      }
     },
   })
 }
