@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import {
   ElectronTestHelper,
   type ElectronTestContext,
-} from './helpers/electron-test-utils'
+} from '../helpers/electron-test-utils'
 
 test.describe('Electron Desktop Integration E2E Tests', () => {
   let context: ElectronTestContext
