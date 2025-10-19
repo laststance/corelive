@@ -21,7 +21,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-// フォームのスキーマ定義
 // Form schema definition
 const todoFormSchema = z.object({
   text: z.string().min(1, 'Please enter a task'),
@@ -80,7 +79,7 @@ export function AddTodoForm({ onAddTodo }: AddTodoFormProps) {
                     type="button"
                     variant="outline"
                     size="default"
-                    className={`${notesValue ? 'text-primary border-primary' : ''}`}
+                    className={`${notesValue ? 'border-primary text-primary' : ''}`}
                   >
                     <StickyNote className="h-4 w-4" />
                     {isNotesOpen ? (
