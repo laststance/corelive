@@ -44,7 +44,7 @@
     "db:truncate": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate reset --skip-seed --force",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "e2e:web": "E2E_TEST_MODE=true BASE_URL=http://localhost:3011 CLERK_PUBLISHABLE_KEY=pk_test_aGVhbHRoeS1tb2xsdXNrLTcxLmNsZXJrLmFjY291bnRzLmRldiQ CLERK_SECRET_KEY=sk_test_pYqKDK1x53ytappi9LFCJgyWWo7mOug6UVoeFPLtpW E2E_CLERK_USER_USERNAME=test01 E2E_CLERK_USER_PASSWORD=3fjgir987340gjghgrr npx playwright test --project=web",
+    "e2e:web": "E2E_TEST_MODE=true BASE_URL=http://localhost:3011 playwright test --project=web",
     "e2e:electron": "E2E_TEST_MODE=true playwright test --project=electron",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
