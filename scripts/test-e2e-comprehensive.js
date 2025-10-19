@@ -83,7 +83,7 @@ async function checkPrerequisites() {
     'package.json',
     'playwright.config.ts',
     'electron/main.cjs',
-    'e2e/electron-desktop-integration.spec.ts',
+    'e2e/electron/desktop-integration.spec.ts',
   ]
 
   for (const file of requiredFiles) {

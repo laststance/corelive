@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test'
 import {
   ElectronTestHelper,
   type ElectronTestContext,
-} from './helpers/electron-test-utils'
+} from '../helpers/electron-test-utils'
 
 test.describe('Electron Deep Linking', () => {
   let context: ElectronTestContext
