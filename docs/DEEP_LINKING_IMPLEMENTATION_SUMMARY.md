@@ -147,7 +147,7 @@ window.electronAPI.deepLink = {
 - Error handling verification
 - Mock-based testing
 
-### 2. Integration Tests (`e2e/electron-deep-linking.spec.ts`)
+### 2. Integration Tests (`e2e/deep-linking.spec.ts`)
 
 - End-to-end deep linking functionality
 - Protocol registration verification

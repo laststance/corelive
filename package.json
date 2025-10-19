@@ -5,7 +5,7 @@
   "author": "CoreLive",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.17.0+sha512.fce8a3dd29a4ed2ec566fb53efbb04d8c44a0f05bc6f24a73046910fb9c3ce7afa35a0980500668fa3573345bd644644fa98338fa168235c80f4aa17aa17fbef",
+  "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d",
   "lint-staged": {
     "*": "prettier --ignore-unknown --write",
     "*.{js,ts,jsx,tsx,cjs,mjs}": [
@@ -46,9 +46,6 @@
     "build-storybook": "storybook build",
     "e2e:web": "E2E_TEST_MODE=true BASE_URL=http://localhost:3011 CLERK_PUBLISHABLE_KEY=pk_test_aGVhbHRoeS1tb2xsdXNrLTcxLmNsZXJrLmFjY291bnRzLmRldiQ CLERK_SECRET_KEY=sk_test_pYqKDK1x53ytappi9LFCJgyWWo7mOug6UVoeFPLtpW E2E_CLERK_USER_USERNAME=test01 E2E_CLERK_USER_PASSWORD=3fjgir987340gjghgrr npx playwright test --project=web",
     "e2e:electron": "E2E_TEST_MODE=true playwright test --project=electron",
-    "e2e:ui": "E2E_TEST_MODE=true playwright test --ui",
-    "e2e:debug": "playwright test --debug",
-    "e2e:comprehensive": "node scripts/test-e2e-comprehensive.js",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
     "electron:dev:legacy": "concurrently \"pnpm dev\" \"wait-on http://localhost:3011 && node electron/dev-runner.cjs\"",
