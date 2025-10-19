@@ -187,4 +187,44 @@ test.describe('TODO App E2E Tests', () => {
       // Skip this assertion when todos exist
     }
   })
+
+  test('should only toggle completion when clicking checkbox, not text', async ({
+    page,
+  }) => {
+    const todoText = `CheckboxOnlyTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+
+    // Add a new TODO
+    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page.getByRole('button', { name: 'Add', exact: true }).click()
+
+    // Wait for the TODO to appear and get initial checkbox state
+    await page.waitForTimeout(1000) // Wait for creation
+    const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+    await expect(todoCheckbox).toBeVisible()
+    await expect(todoCheckbox).not.toBeChecked()
+
+    // Test 1: Click the TODO text (not checkbox) and verify it does NOT toggle
+    const todoTextElement = page
+      .locator('div')
+      .filter({ hasText: new RegExp(`^${todoText}$`) })
+      .first()
+    await expect(todoTextElement).toBeVisible()
+    await todoTextElement.click()
+    await page.waitForTimeout(500)
+
+    // Checkbox should STILL be unchecked (clicking text did nothing)
+    await expect(todoCheckbox).not.toBeChecked()
+
+    // Test 2: Now click the actual checkbox to toggle it
+    await todoCheckbox.click()
+    await page.waitForTimeout(1000) // Wait for state update
+    await expect(todoCheckbox).toBeChecked()
+
+    // Test 3: Click the TODO text again while checked - verify it does NOT toggle
+    await todoTextElement.click()
+    await page.waitForTimeout(500)
+
+    // Checkbox should STILL be checked (clicking text did nothing)
+    await expect(todoCheckbox).toBeChecked()
+  })
 })
