@@ -6,6 +6,7 @@ import type { AppRouter } from '@/server/router'
 
 import { log } from '../logger'
 
+// TODO deadcode
 // Client-side link creation function
 export function createLink() {
   return new RPCLink({
@@ -20,10 +21,18 @@ export function createLink() {
       if (typeof window !== 'undefined' && window.Clerk) {
         try {
           // Get userId from Clerk session
-          const session = window.Clerk.session
-          if (session?.user?.id) {
+          const clerk = window.Clerk
+          const maybeLoad = (clerk as { load?: () => Promise<void> }).load
+          if (typeof maybeLoad === 'function') {
+            await maybeLoad.call(clerk)
+          }
+
+          const session = clerk.session
+          const userId = session?.user?.id ?? clerk.user?.id ?? null
+
+          if (userId) {
             return {
-              Authorization: `Bearer ${session.user.id}`,
+              Authorization: `Bearer ${userId}`,
             }
           }
         } catch (error) {
