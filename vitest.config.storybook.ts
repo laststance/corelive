@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
+import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 
 const dirname =
@@ -22,7 +23,7 @@ export default defineConfig({
     browser: {
       enabled: true,
       headless: true,
-      provider: 'playwright',
+      provider: playwright(),
       instances: [
         {
           browser: 'chromium',
@@ -30,14 +31,6 @@ export default defineConfig({
       ],
     },
     setupFiles: ['.storybook/vitest.setup.ts'],
-    // テストの安定性を確保するための設定
-    pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: true,
-        isolate: false,
-      },
-    },
     // テストタイムアウトを延長
     testTimeout: 30000,
     hookTimeout: 30000,
