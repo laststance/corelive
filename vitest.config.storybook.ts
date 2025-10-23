@@ -18,6 +18,10 @@ export default defineConfig({
       configDir: path.join(dirname, '.storybook'),
     }),
   ],
+  define: {
+    // Define __dirname for modules that expect it in ESM mode
+    __dirname: JSON.stringify(dirname),
+  },
   test: {
     name: 'storybook',
     browser: {
