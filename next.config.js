@@ -1,12 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // Electron configuration - keep images unoptimized for better compatibility
   images: {
     unoptimized: true,
   },
+  // Turbopack configuration (Next.js 16+)
+  // Empty config silences warnings while allowing future customization
+  turbopack: {},
   // Performance optimizations
   experimental: {
     // Disable optimizeCss for Electron builds due to critters dependency issue

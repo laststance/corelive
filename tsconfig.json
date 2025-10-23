@@ -10,7 +10,7 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     /* Strictness */
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -47,7 +47,8 @@
     ".next/types/**/*.ts",
     ".storybook/*.js",
     ".storybook/*.ts",
-    ".storybook/*.tsx"
+    ".storybook/*.tsx",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", "next", "examples-with-next"]
 }
