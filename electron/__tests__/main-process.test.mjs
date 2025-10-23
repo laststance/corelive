@@ -3,45 +3,45 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { log } from '../../src/lib/logger.ts'
 
 // Mock Electron modules
-const mockBrowserWindow = vi.fn(() => ({
-  loadURL: vi.fn(),
-  show: vi.fn(),
-  hide: vi.fn(),
-  close: vi.fn(),
-  minimize: vi.fn(),
-  restore: vi.fn(),
-  focus: vi.fn(),
-  isMinimized: vi.fn(() => false),
-  isVisible: vi.fn(() => true),
-  isDestroyed: vi.fn(() => false),
-  isAlwaysOnTop: vi.fn(() => false),
-  setAlwaysOnTop: vi.fn(),
-  getBounds: vi.fn(() => ({ x: 100, y: 100, width: 800, height: 600 })),
-  setBounds: vi.fn(),
-  on: vi.fn(),
-  once: vi.fn(),
-  webContents: {
+const mockBrowserWindow = vi.fn(function () {
+  this.loadURL = vi.fn()
+  this.show = vi.fn()
+  this.hide = vi.fn()
+  this.close = vi.fn()
+  this.minimize = vi.fn()
+  this.restore = vi.fn()
+  this.focus = vi.fn()
+  this.isMinimized = vi.fn(() => false)
+  this.isVisible = vi.fn(() => true)
+  this.isDestroyed = vi.fn(() => false)
+  this.isAlwaysOnTop = vi.fn(() => false)
+  this.setAlwaysOnTop = vi.fn()
+  this.getBounds = vi.fn(() => ({ x: 100, y: 100, width: 800, height: 600 }))
+  this.setBounds = vi.fn()
+  this.on = vi.fn()
+  this.once = vi.fn()
+  this.webContents = {
     openDevTools: vi.fn(),
     send: vi.fn(),
-  },
-}))
+  }
+})
 
-const mockTray = vi.fn(() => ({
-  setToolTip: vi.fn(),
-  setContextMenu: vi.fn(),
-  destroy: vi.fn(),
-  isDestroyed: vi.fn(() => false),
-  on: vi.fn(),
-}))
+const mockTray = vi.fn(function () {
+  this.setToolTip = vi.fn()
+  this.setContextMenu = vi.fn()
+  this.destroy = vi.fn()
+  this.isDestroyed = vi.fn(() => false)
+  this.on = vi.fn()
+})
 
 const mockMenu = {
   buildFromTemplate: vi.fn(() => ({})),
 }
 
-const mockNotification = vi.fn(() => ({
-  show: vi.fn(),
-  on: vi.fn(),
-}))
+const mockNotification = vi.fn(function () {
+  this.show = vi.fn()
+  this.on = vi.fn()
+})
 
 const mockNativeImage = {
   createFromPath: vi.fn(() => ({

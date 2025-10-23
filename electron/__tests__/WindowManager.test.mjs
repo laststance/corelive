@@ -2,28 +2,28 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // Mock Electron modules before importing
 vi.mock('electron', () => ({
-  BrowserWindow: vi.fn(() => ({
-    loadURL: vi.fn(),
-    show: vi.fn(),
-    hide: vi.fn(),
-    close: vi.fn(),
-    minimize: vi.fn(),
-    restore: vi.fn(),
-    focus: vi.fn(),
-    isMinimized: vi.fn(() => false),
-    isVisible: vi.fn(() => true),
-    isDestroyed: vi.fn(() => false),
-    isAlwaysOnTop: vi.fn(() => false),
-    setAlwaysOnTop: vi.fn(),
-    getBounds: vi.fn(() => ({ x: 100, y: 100, width: 800, height: 600 })),
-    setBounds: vi.fn(),
-    on: vi.fn(),
-    once: vi.fn(),
-    webContents: {
+  BrowserWindow: vi.fn(function () {
+    this.loadURL = vi.fn()
+    this.show = vi.fn()
+    this.hide = vi.fn()
+    this.close = vi.fn()
+    this.minimize = vi.fn()
+    this.restore = vi.fn()
+    this.focus = vi.fn()
+    this.isMinimized = vi.fn(() => false)
+    this.isVisible = vi.fn(() => true)
+    this.isDestroyed = vi.fn(() => false)
+    this.isAlwaysOnTop = vi.fn(() => false)
+    this.setAlwaysOnTop = vi.fn()
+    this.getBounds = vi.fn(() => ({ x: 100, y: 100, width: 800, height: 600 }))
+    this.setBounds = vi.fn()
+    this.on = vi.fn()
+    this.once = vi.fn()
+    this.webContents = {
       openDevTools: vi.fn(),
       send: vi.fn(),
-    },
-  })),
+    }
+  }),
 }))
 
 // Mock path module
