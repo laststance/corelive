@@ -15,6 +15,7 @@ export default defineConfig([
       'dist/**',
       'out/**',
       'build/**',
+      'next-env.d.ts',
     ],
   },
   ...tsPrefixer,

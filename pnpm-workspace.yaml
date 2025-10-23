@@ -11,3 +11,6 @@ onlyBuiltDependencies:
   - prisma
   - sharp
   - unrs-resolver
+
+patchedDependencies:
+  vite-plugin-storybook-nextjs@2.0.8: patches/vite-plugin-storybook-nextjs@2.0.8.patch
