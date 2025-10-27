@@ -2,7 +2,7 @@ const path = require('path')
 
 const { BrowserWindow } = require('electron')
 
-require('../src/lib/logger.cjs')
+const { log } = require('../src/lib/logger.cjs')
 
 class WindowManager {
   constructor(
@@ -160,6 +160,12 @@ class WindowManager {
       ? this.configManager.getSection('window').floating
       : { frame: false, alwaysOnTop: true, resizable: true }
 
+    log.debug('🔹 Creating floating navigator window...', {
+      windowOptions,
+      floatingConfig,
+      isDev: this.isDev,
+    })
+
     this.floatingNavigator = new BrowserWindow({
       ...windowOptions,
       webPreferences: {
@@ -194,6 +200,7 @@ class WindowManager {
         ? 'http://localhost:3011/floating-navigator'
         : 'http://localhost:3011/floating-navigator'
 
+    log.debug('🔹 Loading floating navigator URL:', floatingUrl)
     this.floatingNavigator.loadURL(floatingUrl)
 
     // Save state on window events with debouncing
@@ -215,8 +222,24 @@ class WindowManager {
     })
 
     this.floatingNavigator.on('closed', () => {
+      log.debug('🔹 Floating navigator window closed')
       this.floatingNavigator = null
       this.saveWindowState()
+    })
+
+    // Add ready-to-show handler
+    this.floatingNavigator.on('ready-to-show', () => {
+      log.debug('🔹 Floating navigator ready-to-show event')
+    })
+
+    // Add did-finish-load handler
+    this.floatingNavigator.webContents.on('did-finish-load', () => {
+      log.debug('🔹 Floating navigator content loaded')
+    })
+
+    // Add error handler
+    this.floatingNavigator.webContents.on('crashed', () => {
+      log.error('🔴 Floating navigator content crashed')
     })
 
     // Apply saved window state
@@ -234,12 +257,21 @@ class WindowManager {
    * Toggle floating navigator visibility
    */
   toggleFloatingNavigator() {
+    log.debug('🔹 toggleFloatingNavigator called', {
+      hasWindow: !!this.floatingNavigator,
+      isVisible: this.floatingNavigator?.isVisible?.(),
+    })
+
     if (!this.floatingNavigator) {
+      log.info('🔹 Creating floating navigator...')
       this.createFloatingNavigator()
+      log.info('🔹 Showing floating navigator...')
       this.floatingNavigator.show()
     } else if (this.floatingNavigator.isVisible()) {
+      log.info('🔹 Hiding floating navigator')
       this.floatingNavigator.hide()
     } else {
+      log.info('🔹 Showing floating navigator')
       this.floatingNavigator.show()
     }
 

@@ -300,6 +300,7 @@ async function createWindow() {
   const deferredInit = async () => {
     try {
       // Load system integration components lazily
+      log.info('🔧 [DEFERRED] Loading SystemIntegrationErrorHandler...')
       const SystemIntegrationErrorHandler = await lazyLoadManager.loadComponent(
         'SystemIntegrationErrorHandler',
       )
@@ -307,17 +308,31 @@ async function createWindow() {
         windowManager,
         configManager,
       )
+      log.info('✅ [DEFERRED] SystemIntegrationErrorHandler loaded')
 
+      log.info('🔧 [DEFERRED] Loading MenuManager...')
       // Load menu manager
       const MenuManager = await lazyLoadManager.loadComponent('MenuManager')
       menuManager = new MenuManager()
-      menuManager.initialize(mainWindow, windowManager, configManager)
 
+      // Get mainWindow from windowManager (mainWindow is local to criticalInit)
+      const mainWindowRef = windowManager.getMainWindow()
+      log.debug(
+        '🔧 [DEFERRED] Retrieved mainWindow from windowManager:',
+        !!mainWindowRef,
+      )
+
+      menuManager.initialize(mainWindowRef, windowManager, configManager)
+      log.info('✅ [DEFERRED] MenuManager loaded')
+
+      log.info('🔧 [DEFERRED] Loading SystemTrayManager...')
       // Load system tray manager
       const SystemTrayManager =
         await lazyLoadManager.loadComponent('SystemTrayManager')
       systemTrayManager = new SystemTrayManager(windowManager)
+      log.info('✅ [DEFERRED] SystemTrayManager loaded')
 
+      log.info('🔧 [DEFERRED] Loading NotificationManager...')
       // Load notification manager
       const NotificationManager = await lazyLoadManager.loadComponent(
         'NotificationManager',
@@ -327,7 +342,9 @@ async function createWindow() {
         systemTrayManager,
         configManager,
       )
+      log.info('✅ [DEFERRED] NotificationManager loaded')
 
+      log.info('🔧 [DEFERRED] Loading ShortcutManager...')
       // Load shortcut manager
       const ShortcutManager =
         await lazyLoadManager.loadComponent('ShortcutManager')
@@ -336,16 +353,21 @@ async function createWindow() {
         notificationManager,
         configManager,
       )
+      log.info('✅ [DEFERRED] ShortcutManager loaded')
 
+      log.info('🔧 [DEFERRED] Setting managers in error handler...')
       // Set managers in error handler
       systemIntegrationErrorHandler.setManagers(
         systemTrayManager,
         notificationManager,
         shortcutManager,
       )
+      log.info('✅ [DEFERRED] Managers set')
 
+      log.info('🔧 [DEFERRED] Initializing system integration...')
       // Initialize system integration with comprehensive error handling
       await systemIntegrationErrorHandler.initializeSystemIntegration()
+      log.info('✅ [DEFERRED] System integration initialized')
 
       // Load auto-updater in background (skip during automated tests)
       if (!isTestEnvironment) {
@@ -398,9 +420,16 @@ async function createWindow() {
   // Run deferred initialization
   setImmediate(async () => {
     try {
+      log.info('🔄 Starting deferred initialization...')
       await deferredInit()
+      log.info('✅ Deferred initialization completed successfully')
     } catch (error) {
-      log.error('❌ Main: Deferred initialization failed:', error.message)
+      console.error('❌ Main: Deferred initialization failed:', error)
+      log.error(
+        '❌ Main: Deferred initialization failed:',
+        error.message,
+        error.stack,
+      )
     }
   })
 
@@ -845,6 +874,103 @@ function setupIPCHandlers() {
   ipcMain.handle('window-hide-floating-navigator', () => {
     if (windowManager) {
       windowManager.hideFloatingNavigator()
+    }
+  })
+
+  // Floating window control IPC handlers
+  ipcMain.handle('floating-window-close', () => {
+    try {
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          floatingWindow.close()
+        }
+      }
+      return true
+    } catch (error) {
+      log.error('Failed to close floating window:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('floating-window-minimize', () => {
+    try {
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          floatingWindow.minimize()
+        }
+      }
+      return true
+    } catch (error) {
+      log.error('Failed to minimize floating window:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('floating-window-toggle-always-on-top', () => {
+    try {
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          const isAlwaysOnTop = floatingWindow.isAlwaysOnTop()
+          floatingWindow.setAlwaysOnTop(!isAlwaysOnTop)
+          return !isAlwaysOnTop
+        }
+      }
+      return false
+    } catch (error) {
+      log.error('Failed to toggle always on top:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('floating-window-get-bounds', () => {
+    try {
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          return floatingWindow.getBounds()
+        }
+      }
+      return null
+    } catch (error) {
+      log.error('Failed to get floating window bounds:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('floating-window-set-bounds', (_event, bounds) => {
+    try {
+      if (!bounds || typeof bounds !== 'object') {
+        throw new Error('Invalid bounds data')
+      }
+
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          floatingWindow.setBounds(bounds)
+        }
+      }
+      return true
+    } catch (error) {
+      log.error('Failed to set floating window bounds:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('floating-window-is-always-on-top', () => {
+    try {
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          return floatingWindow.isAlwaysOnTop()
+        }
+      }
+      return false
+    } catch (error) {
+      log.error('Failed to check always on top status:', error)
+      return false
     }
   })
 

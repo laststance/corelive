@@ -28,13 +28,38 @@ class WindowStateManager {
         const states = JSON.parse(data)
 
         // Validate and migrate window states
+        log.info('Window states loaded successfully')
         return this.validateWindowStates(states)
+      } else {
+        // First launch - no saved state file exists (this is expected)
+        log.info(
+          'No saved window states found, using defaults (first launch or reset)',
+        )
       }
     } catch (error) {
-      log.error('Failed to load window states:', error)
+      // Distinguish between different error types
+      if (error instanceof SyntaxError) {
+        log.error(
+          'Failed to parse window states (corrupted file):',
+          error.message,
+        )
+        log.info('Using default window states')
+      } else if (error.code === 'EACCES') {
+        log.error(
+          'Permission denied when reading window states:',
+          error.message,
+        )
+        log.info('Using default window states')
+      } else {
+        log.error('Failed to load window states:', error.message)
+        if (error.stack) {
+          log.debug('Stack trace:', error.stack)
+        }
+        log.info('Using default window states')
+      }
     }
 
-    // Return default states if loading fails
+    // Return default states if loading fails or file doesn't exist
     return this.getDefaultWindowStates()
   }
 

@@ -52,14 +52,32 @@ class ShortcutManager {
    */
   initialize() {
     try {
+      log.info('⌨️  [ShortcutManager] Starting initialization...')
+      log.debug('⌨️  [ShortcutManager] isEnabled:', this.isEnabled)
+      log.debug('⌨️  [ShortcutManager] shortcuts:', this.shortcuts)
+
       const results = this.registerDefaultShortcuts()
 
       const successCount = results.filter((r) => r.success).length
       const totalCount = results.length
 
+      log.info(
+        `⌨️  [ShortcutManager] Registered ${successCount}/${totalCount} shortcuts`,
+      )
+
+      // Log each shortcut registration result
+      results.forEach((result) => {
+        const status = result.success ? '✅' : '❌'
+        log.debug(`⌨️  [ShortcutManager] ${status} ${result.id}`)
+      })
+
       if (successCount === totalCount) {
+        log.info('✅ [ShortcutManager] All shortcuts initialized successfully')
         return true
       } else if (successCount > 0) {
+        log.warn(
+          `⚠️  [ShortcutManager] Partial success: ${successCount}/${totalCount}`,
+        )
         // Show summary notification
         if (this.notificationManager) {
           this.notificationManager.showNotification(
@@ -71,10 +89,14 @@ class ShortcutManager {
 
         return true
       } else {
+        console.error(
+          '❌ [ShortcutManager] Failed to initialize any keyboard shortcuts',
+        )
         log.error('❌ Failed to initialize any keyboard shortcuts')
         return false
       }
     } catch (error) {
+      console.error('❌ [ShortcutManager] Failed to initialize:', error)
       log.error('❌ Failed to initialize keyboard shortcuts:', error)
       return false
     }
@@ -166,23 +188,42 @@ class ShortcutManager {
    * Register a single keyboard shortcut with conflict resolution
    */
   registerShortcut(accelerator, id, callback) {
-    if (!this.isEnabled) return false
+    log.debug(
+      `⌨️  [registerShortcut] Attempting to register: ${id} = ${accelerator}`,
+    )
+
+    if (!this.isEnabled) {
+      log.debug(`⚠️  [registerShortcut] Shortcuts disabled, skipping ${id}`)
+      return false
+    }
 
     try {
       // Unregister existing shortcut if it exists
       if (this.registeredShortcuts.has(id)) {
+        log.debug(
+          `⌨️  [registerShortcut] Unregistering existing shortcut: ${id}`,
+        )
         this.unregisterShortcut(id)
       }
 
       // Check if shortcut is already registered by another application
       if (globalShortcut.isRegistered(accelerator)) {
         log.warn(
+          `⚠️  [registerShortcut] ${accelerator} already registered by another app`,
+        )
+        log.warn(
           `⚠️ Shortcut ${accelerator} is already registered by another application`,
         )
         return this.handleShortcutConflict(accelerator, id, callback)
       }
 
+      log.debug(
+        `⌨️  [registerShortcut] Calling globalShortcut.register for ${id}...`,
+      )
       const success = globalShortcut.register(accelerator, callback)
+      log.debug(
+        `⌨️  [registerShortcut] globalShortcut.register result: ${success}`,
+      )
 
       if (success) {
         this.registeredShortcuts.set(id, {
@@ -191,9 +232,15 @@ class ShortcutManager {
           registeredAt: new Date(),
           isAlternative: false,
         })
+        log.debug(
+          `✅ [registerShortcut] Successfully registered: ${id} = ${accelerator}`,
+        )
 
         return true
       } else {
+        log.warn(
+          `❌ [registerShortcut] Failed to register: ${id} = ${accelerator}`,
+        )
         log.warn(`⚠️ Failed to register shortcut: ${accelerator} (${id})`)
         return this.handleShortcutConflict(accelerator, id, callback)
       }
@@ -475,6 +522,7 @@ class ShortcutManager {
    */
   handleToggleFloatingNavigator() {
     try {
+      log.debug('🎯 handleToggleFloatingNavigator called')
       this.windowManager.toggleFloatingNavigator()
 
       // Show notification
@@ -483,6 +531,7 @@ class ShortcutManager {
           this.windowManager.hasFloatingNavigator() &&
           this.windowManager.getFloatingNavigator().isVisible()
 
+        log.debug('🎯 Floating navigator visibility:', isVisible)
         this.notificationManager.showNotification(
           'Floating Navigator',
           isVisible ? 'Floating navigator shown' : 'Floating navigator hidden',
@@ -490,6 +539,10 @@ class ShortcutManager {
         )
       }
     } catch (error) {
+      console.error(
+        '🔴 Error handling toggle floating navigator shortcut:',
+        error,
+      )
       log.error('Error handling toggle floating navigator shortcut:', error)
     }
   }

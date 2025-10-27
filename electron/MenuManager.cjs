@@ -15,19 +15,42 @@ class MenuManager {
    * Initialize menu manager with required dependencies
    */
   initialize(mainWindow, windowManager, configManager) {
+    log.debug('📋 [MenuManager] initialize() called with:', {
+      hasMainWindow: !!mainWindow,
+      hasWindowManager: !!windowManager,
+      hasConfigManager: !!configManager,
+    })
+
     this.mainWindow = mainWindow
     this.windowManager = windowManager
     this.configManager = configManager
-    this.createApplicationMenu()
+
+    log.info('📋 [MenuManager] Creating application menu...')
+    try {
+      this.createApplicationMenu()
+      log.info('✅ [MenuManager] Application menu created successfully')
+    } catch (error) {
+      console.error(
+        '❌ [MenuManager] Failed to create application menu:',
+        error,
+      )
+      throw error
+    }
   }
 
   /**
    * Create and set the application menu
    */
   createApplicationMenu() {
+    log.debug('📋 [MenuManager] Building menu template...')
     const template = this.buildMenuTemplate()
+    log.debug(
+      '📋 [MenuManager] Menu template built, creating menu from template...',
+    )
     const menu = Menu.buildFromTemplate(template)
+    log.debug('📋 [MenuManager] Setting application menu...')
     Menu.setApplicationMenu(menu)
+    log.info('✅ [MenuManager] Application menu set successfully')
   }
 
   /**
@@ -400,8 +423,16 @@ class MenuManager {
   }
 
   toggleFloatingNavigator() {
+    log.debug('📋 [MenuManager] toggleFloatingNavigator() called')
+    log.debug('📋 [MenuManager] windowManager exists:', !!this.windowManager)
+
     if (this.windowManager) {
+      log.debug(
+        '📋 [MenuManager] Calling windowManager.toggleFloatingNavigator()',
+      )
       this.windowManager.toggleFloatingNavigator()
+    } else {
+      console.error('❌ [MenuManager] windowManager is not available!')
     }
   }
 
