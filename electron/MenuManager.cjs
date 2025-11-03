@@ -292,14 +292,17 @@ class MenuManager {
       },
       { type: 'separator' },
       {
-        label: 'Toggle Floating Navigator',
-        // accelerator: 'CmdOrCtrl+Shift+F',
-        click: () => this.toggleFloatingNavigator(),
-      },
-      { type: 'separator' },
-      {
         label: 'Floating Navigator',
         submenu: [
+          {
+            label: 'Toggle Floating Navigator',
+            click: () => this.toggleFloatingNavigator(),
+          },
+          {
+            label: 'Search Tasks',
+            click: () => this.handleSearchAction(),
+          },
+          { type: 'separator' },
           {
             label: 'Focus New Task Input',
             // accelerator: 'CmdOrCtrl+N',
@@ -489,6 +492,27 @@ class MenuManager {
   }
 
   /**
+   * Handle search action from menu
+   */
+  handleSearchAction() {
+    log.debug('📋 [MenuManager] handleSearchAction() called')
+
+    try {
+      // Focus main window and trigger search
+      if (this.windowManager) {
+        this.windowManager.restoreFromTray()
+
+        if (this.windowManager.hasMainWindow()) {
+          const mainWindow = this.windowManager.getMainWindow()
+          mainWindow.webContents.send('shortcut-search')
+        }
+      }
+    } catch (error) {
+      log.error('❌ [MenuManager] Error handling search action:', error)
+    }
+  }
+
+  /**
    * Send action to floating navigator window via IPC
    */
   sendFloatingNavigatorAction(action) {
@@ -600,17 +624,21 @@ Copyright © 2025 CoreLive`,
   showKeyboardShortcuts() {
     const shortcuts = [
       'Ctrl/Cmd + N: New Task',
-      'Ctrl/Cmd + F: Search Tasks',
-      'Ctrl/Cmd + Shift + F: Toggle Floating Navigator',
+      'Ctrl/Cmd + M: Minimize Window',
+      'Ctrl/Cmd + Shift + A: Toggle Always on Top',
+      'Ctrl/Cmd + Shift + T: Show Main Window',
+      'Ctrl/Cmd + Shift + N: Focus Floating Navigator',
+      'Ctrl/Cmd + Q: Quit Application',
       'Ctrl/Cmd + ,: Preferences',
       'Ctrl/Cmd + R: Reload',
       'Ctrl/Cmd + Shift + R: Force Reload',
       'Ctrl/Cmd + 0: Reset Zoom',
       'Ctrl/Cmd + Plus: Zoom In',
       'Ctrl/Cmd + Minus: Zoom Out',
-      'Ctrl/Cmd + M: Minimize Window',
       'Ctrl/Cmd + W: Close Window',
       'F11 (Ctrl+Cmd+F on Mac): Toggle Fullscreen',
+      '',
+      '* Search Tasks and Toggle Floating Navigator are available in View > Floating Navigator menu',
     ]
 
     dialog.showMessageBox(this.mainWindow, {
