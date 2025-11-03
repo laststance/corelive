@@ -1,7 +1,6 @@
 const { Menu, shell, dialog, app } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
-// const path = require('path') // TODO: Remove if not needed
 
 class MenuManager {
   constructor() {
@@ -96,7 +95,7 @@ class MenuManager {
         { type: 'separator' },
         {
           label: 'Preferences...',
-          accelerator: 'CmdOrCtrl+,',
+          // accelerator: 'CmdOrCtrl+,',  // Disabled: conflicts with Cursor Editor
           click: () => this.openPreferences(),
         },
         { type: 'separator' },
@@ -137,7 +136,7 @@ class MenuManager {
     const submenu = [
       {
         label: 'New Task',
-        accelerator: 'CmdOrCtrl+N',
+        // accelerator: 'CmdOrCtrl+N',  // Disabled: conflicts with Cursor Editor
         click: () => this.createNewTask(),
       },
       { type: 'separator' },
@@ -157,7 +156,7 @@ class MenuManager {
         { type: 'separator' },
         {
           label: 'Preferences...',
-          accelerator: 'CmdOrCtrl+,',
+          // accelerator: 'CmdOrCtrl+,',  // Disabled: conflicts with Cursor Editor
           click: () => this.openPreferences(),
         },
         { type: 'separator' },
@@ -216,7 +215,7 @@ class MenuManager {
         { type: 'separator' },
         {
           label: 'Find',
-          accelerator: 'CmdOrCtrl+F',
+          // accelerator: 'CmdOrCtrl+F',  // Disabled: conflicts with Cursor Editor
           click: () => this.focusSearch(),
         },
       ],
@@ -294,7 +293,7 @@ class MenuManager {
       { type: 'separator' },
       {
         label: 'Toggle Floating Navigator',
-        accelerator: 'CmdOrCtrl+Shift+F',
+        // accelerator: 'CmdOrCtrl+Shift+F',
         click: () => this.toggleFloatingNavigator(),
       },
       { type: 'separator' },
@@ -303,7 +302,7 @@ class MenuManager {
         submenu: [
           {
             label: 'Focus New Task Input',
-            accelerator: 'CmdOrCtrl+N',
+            // accelerator: 'CmdOrCtrl+N',
             click: () => this.sendFloatingNavigatorAction('focus-new-task'),
           },
           { type: 'separator' },
