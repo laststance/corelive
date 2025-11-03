@@ -68,8 +68,6 @@ class ConfigManager {
       shortcuts: {
         enabled: true,
         newTask: `${modifier}+N`,
-        search: `${modifier}+F`,
-        toggleFloatingNavigator: `${modifier}+Shift+F`,
         showMainWindow: `${modifier}+Shift+T`,
         quit: isMac ? 'Cmd+Q' : 'Ctrl+Q',
         minimize: `${modifier}+M`,

@@ -37,8 +37,6 @@ class ShortcutManager {
 
     return {
       newTask: `${modifier}+N`,
-      search: `${modifier}+F`,
-      toggleFloatingNavigator: `${modifier}+Shift+F`,
       showMainWindow: `${modifier}+Shift+T`,
       quit: isMac ? 'Cmd+Q' : 'Ctrl+Q',
       minimize: `${modifier}+M`,
@@ -115,26 +113,6 @@ class ShortcutManager {
       success: this.registerShortcut(shortcuts.newTask, 'newTask', () => {
         this.handleNewTaskShortcut()
       }),
-    })
-
-    // Search shortcut
-    results.push({
-      id: 'search',
-      success: this.registerShortcut(shortcuts.search, 'search', () => {
-        this.handleSearchShortcut()
-      }),
-    })
-
-    // Toggle floating navigator
-    results.push({
-      id: 'toggleFloatingNavigator',
-      success: this.registerShortcut(
-        shortcuts.toggleFloatingNavigator,
-        'toggleFloatingNavigator',
-        () => {
-          this.handleToggleFloatingNavigator()
-        },
-      ),
     })
 
     // Show main window
@@ -347,8 +325,6 @@ class ShortcutManager {
   getAlternativeKeysForShortcut(id, _originalKey) {
     const alternatives = {
       newTask: ['Insert', 'Plus', 'T'],
-      search: ['S', 'L', 'Find'],
-      toggleFloatingNavigator: ['W', 'Space', 'Tab'],
       showMainWindow: ['Home', 'Return', 'Enter'],
       minimize: ['H', 'Down', 'Minus'],
       toggleAlwaysOnTop: ['T', 'Up', 'P'],
@@ -403,8 +379,6 @@ class ShortcutManager {
   getShortcutDisplayName(id) {
     const displayNames = {
       newTask: 'New Task',
-      search: 'Search',
-      toggleFloatingNavigator: 'Toggle Floating Navigator',
       showMainWindow: 'Show Main Window',
       minimize: 'Minimize',
       toggleAlwaysOnTop: 'Toggle Always On Top',
@@ -497,53 +471,6 @@ class ShortcutManager {
       }
     } catch (error) {
       log.error('Error handling new task shortcut:', error)
-    }
-  }
-
-  /**
-   * Handle search shortcut
-   */
-  handleSearchShortcut() {
-    try {
-      // Focus main window and trigger search
-      this.windowManager.restoreFromTray()
-
-      if (this.windowManager.hasMainWindow()) {
-        const mainWindow = this.windowManager.getMainWindow()
-        mainWindow.webContents.send('shortcut-search')
-      }
-    } catch (error) {
-      log.error('Error handling search shortcut:', error)
-    }
-  }
-
-  /**
-   * Handle toggle floating navigator shortcut
-   */
-  handleToggleFloatingNavigator() {
-    try {
-      log.debug('🎯 handleToggleFloatingNavigator called')
-      this.windowManager.toggleFloatingNavigator()
-
-      // Show notification
-      if (this.notificationManager) {
-        const isVisible =
-          this.windowManager.hasFloatingNavigator() &&
-          this.windowManager.getFloatingNavigator().isVisible()
-
-        log.debug('🎯 Floating navigator visibility:', isVisible)
-        this.notificationManager.showNotification(
-          'Floating Navigator',
-          isVisible ? 'Floating navigator shown' : 'Floating navigator hidden',
-          { silent: true },
-        )
-      }
-    } catch (error) {
-      console.error(
-        '🔴 Error handling toggle floating navigator shortcut:',
-        error,
-      )
-      log.error('Error handling toggle floating navigator shortcut:', error)
     }
   }
 
@@ -665,8 +592,6 @@ class ShortcutManager {
   getHandlerForShortcut(id) {
     const handlers = {
       newTask: () => this.handleNewTaskShortcut(),
-      search: () => this.handleSearchShortcut(),
-      toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
       showMainWindow: () => this.handleShowMainWindow(),
       minimize: () => this.handleMinimizeWindow(),
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
