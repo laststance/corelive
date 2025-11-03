@@ -1,6 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  lazy,
+  Suspense,
+  useCallback,
+} from 'react'
 
 // Lazy load icons to reduce initial bundle size
 const Plus = lazy(async () =>
@@ -39,7 +46,7 @@ import { log } from '../../lib/logger'
 
 // Icon fallback component for loading state
 const IconFallback = () => (
-  <div className="bg-muted h-3 w-3 animate-pulse rounded" />
+  <div className="h-3 w-3 animate-pulse rounded bg-muted" />
 )
 
 export interface FloatingTodo {
@@ -112,82 +119,11 @@ export function FloatingNavigator({
     }
   }
 
-  // Enhanced keyboard navigation
-  const handleGlobalKeyDown = (e: React.KeyboardEvent) => {
-    const allTodos = [...pendingTodos, ...completedTodos]
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        if (focusedTaskIndex < allTodos.length - 1) {
-          setFocusedTaskIndex(focusedTaskIndex + 1)
-          announceToScreenReader(
-            `Task ${focusedTaskIndex + 2} of ${allTodos.length}: ${allTodos[focusedTaskIndex + 1]?.text}`,
-          )
-        }
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        if (focusedTaskIndex > 0) {
-          setFocusedTaskIndex(focusedTaskIndex - 1)
-          announceToScreenReader(
-            `Task ${focusedTaskIndex} of ${allTodos.length}: ${allTodos[focusedTaskIndex - 1]?.text}`,
-          )
-        } else if (focusedTaskIndex === 0) {
-          // Move focus back to input
-          setFocusedTaskIndex(-1)
-          inputRef.current?.focus()
-          announceToScreenReader('Focused on new task input')
-        }
-        break
-      case ' ':
-      case 'Enter':
-        if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-          e.preventDefault()
-          const task = allTodos[focusedTaskIndex]
-          if (task) {
-            if (e.key === ' ') {
-              // Toggle completion with spacebar
-              onTaskToggle(task.id)
-              announceToScreenReader(
-                `Task "${task.text}" ${task.completed ? 'uncompleted' : 'completed'}`,
-              )
-            } else if (e.key === 'Enter') {
-              // Start editing with Enter
-              startEditing(task)
-            }
-          }
-        }
-        break
-      case 'Delete':
-      case 'Backspace':
-        if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-          e.preventDefault()
-          const task = allTodos[focusedTaskIndex]
-          if (task) {
-            onTaskDelete(task.id)
-            announceToScreenReader(`Task "${task.text}" deleted`)
-            // Adjust focus after deletion
-            if (focusedTaskIndex >= allTodos.length - 1) {
-              setFocusedTaskIndex(Math.max(0, allTodos.length - 2))
-            }
-          }
-        }
-        break
-      case 'Escape':
-        // Clear focus and return to input
-        setFocusedTaskIndex(-1)
-        inputRef.current?.focus()
-        announceToScreenReader('Returned to new task input')
-        break
-    }
-  }
-
-  const startEditing = (todo: FloatingTodo) => {
+  const startEditing = useCallback((todo: FloatingTodo) => {
     setEditingId(todo.id)
     setEditText(todo.text)
     announceToScreenReader(`Editing task: ${todo.text}`)
-  }
+  }, [])
 
   const saveEdit = () => {
     if (editingId && editText.trim()) {
@@ -258,27 +194,114 @@ export function FloatingNavigator({
     }
   }
 
-  // Keyboard shortcuts and accessibility
+  // Listen for IPC messages from Electron menu
   useEffect(() => {
-    const handleGlobalKeyPress = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + N for new task
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault()
-        inputRef.current?.focus()
-        announceToScreenReader('New task input focused')
-      }
-      // Ctrl/Cmd + / for help
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault()
-        announceToScreenReader(
-          'Keyboard shortcuts: Ctrl+N for new task, Arrow keys to navigate, Space to toggle completion, Enter to edit, Delete to remove, Escape to return to input',
-        )
+    if (!isFloatingNavigator) return
+
+    const handleMenuAction = (event: CustomEvent) => {
+      const action = event.detail?.action
+      if (!action) return
+
+      switch (action) {
+        case 'focus-new-task':
+          inputRef.current?.focus()
+          announceToScreenReader('New task input focused')
+          break
+        case 'navigate-next-task':
+          {
+            const allTodos = [...pendingTodos, ...completedTodos]
+            if (focusedTaskIndex < allTodos.length - 1) {
+              setFocusedTaskIndex(focusedTaskIndex + 1)
+              announceToScreenReader(
+                `Task ${focusedTaskIndex + 2} of ${allTodos.length}: ${allTodos[focusedTaskIndex + 1]?.text}`,
+              )
+            }
+          }
+          break
+        case 'navigate-previous-task':
+          {
+            const allTodos = [...pendingTodos, ...completedTodos]
+            if (focusedTaskIndex > 0) {
+              setFocusedTaskIndex(focusedTaskIndex - 1)
+              announceToScreenReader(
+                `Task ${focusedTaskIndex} of ${allTodos.length}: ${allTodos[focusedTaskIndex - 1]?.text}`,
+              )
+            } else if (focusedTaskIndex === 0) {
+              setFocusedTaskIndex(-1)
+              inputRef.current?.focus()
+              announceToScreenReader('Focused on new task input')
+            }
+          }
+          break
+        case 'toggle-task-completion':
+          {
+            const allTodos = [...pendingTodos, ...completedTodos]
+            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
+              const task = allTodos[focusedTaskIndex]
+              if (task) {
+                onTaskToggle(task.id)
+                announceToScreenReader(
+                  `Task "${task.text}" ${task.completed ? 'uncompleted' : 'completed'}`,
+                )
+              }
+            }
+          }
+          break
+        case 'edit-task':
+          {
+            const allTodos = [...pendingTodos, ...completedTodos]
+            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
+              const task = allTodos[focusedTaskIndex]
+              if (task) {
+                startEditing(task)
+              }
+            }
+          }
+          break
+        case 'delete-task':
+          {
+            const allTodos = [...pendingTodos, ...completedTodos]
+            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
+              const task = allTodos[focusedTaskIndex]
+              if (task) {
+                onTaskDelete(task.id)
+                announceToScreenReader(`Task "${task.text}" deleted`)
+                // Adjust focus after deletion
+                if (focusedTaskIndex >= allTodos.length - 1) {
+                  setFocusedTaskIndex(Math.max(0, allTodos.length - 2))
+                }
+              }
+            }
+          }
+          break
+        case 'return-to-input':
+          setFocusedTaskIndex(-1)
+          inputRef.current?.focus()
+          announceToScreenReader('Returned to new task input')
+          break
+        case 'show-help':
+          announceToScreenReader(
+            'Floating Navigator: Use View menu to access all functions',
+          )
+          break
       }
     }
 
-    window.addEventListener('keydown', handleGlobalKeyPress)
-    return () => window.removeEventListener('keydown', handleGlobalKeyPress)
-  }, [])
+    // Listen for custom events dispatched from preload script
+    const eventHandler = handleMenuAction as EventListener
+    window.addEventListener('floating-navigator-menu-action', eventHandler)
+    return () => {
+      window.removeEventListener('floating-navigator-menu-action', eventHandler)
+    }
+  }, [
+    isFloatingNavigator,
+    focusedTaskIndex,
+    pendingTodos,
+    completedTodos,
+    onTaskToggle,
+    onTaskDelete,
+    startEditing,
+  ])
 
   // Handle task toggle with announcements
   const handleTaskToggleWithAnnouncement = (id: string) => {
@@ -302,17 +325,15 @@ export function FloatingNavigator({
 
   return (
     <div
-      className="bg-background flex h-full w-full flex-col overflow-hidden rounded-lg border shadow-lg"
+      className="flex h-full w-full flex-col overflow-hidden rounded-lg border bg-background shadow-lg"
       role="application"
       aria-label="Floating Task Navigator"
-      onKeyDown={handleGlobalKeyDown}
-      tabIndex={-1}
     >
       {/* Skip link for keyboard navigation */}
       <a
         ref={skipLinkRef}
         href="#task-input"
-        className="focus:bg-primary focus:text-primary-foreground sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:px-2 focus:py-1"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-primary focus:px-2 focus:py-1 focus:text-primary-foreground"
         onFocus={() => announceToScreenReader('Skip to task input')}
       >
         Skip to task input
@@ -334,8 +355,8 @@ export function FloatingNavigator({
         role="banner"
       >
         <div className="pointer-events-none flex-1">
-          <h1 className="text-foreground text-sm font-medium">Quick Tasks</h1>
-          <p className="text-muted-foreground text-xs" aria-live="polite">
+          <h1 className="text-sm font-medium text-foreground">Quick Tasks</h1>
+          <p className="text-xs text-muted-foreground" aria-live="polite">
             {pendingTodos.length} pending task
             {pendingTodos.length !== 1 ? 's' : ''}
             {completedTodos.length > 0 &&
@@ -353,7 +374,7 @@ export function FloatingNavigator({
               size="sm"
               variant="ghost"
               onClick={handleFocusMainWindow}
-              className="focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="Open main window"
               title="Open main window"
             >
@@ -365,7 +386,7 @@ export function FloatingNavigator({
               size="sm"
               variant="ghost"
               onClick={handleToggleAlwaysOnTop}
-              className="focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label={
                 isAlwaysOnTop ? 'Disable always on top' : 'Enable always on top'
               }
@@ -386,7 +407,7 @@ export function FloatingNavigator({
               size="sm"
               variant="ghost"
               onClick={handleMinimize}
-              className="focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="Minimize window"
               title="Minimize"
             >
@@ -398,7 +419,7 @@ export function FloatingNavigator({
               size="sm"
               variant="ghost"
               onClick={handleClose}
-              className="text-destructive hover:text-destructive focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+              className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="Close window"
               title="Close"
             >
@@ -411,16 +432,16 @@ export function FloatingNavigator({
       </header>
 
       {/* Add new task */}
-      <section className="bg-background border-b p-3" aria-label="Add new task">
+      <section className="border-b bg-background p-3" aria-label="Add new task">
         <div className="flex gap-2">
           <Input
             id="task-input"
             ref={inputRef}
-            placeholder="Add task... (Press Ctrl+/ for keyboard shortcuts)"
+            placeholder="Add task... (Use View menu for actions)"
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
             onKeyDown={handleKeyPress}
-            className="focus-visible:ring-ring h-8 text-sm focus-visible:ring-2 focus-visible:ring-offset-2"
+            className="h-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label="New task title"
             aria-describedby="task-input-help"
           />
@@ -432,7 +453,7 @@ export function FloatingNavigator({
             size="sm"
             onClick={handleCreateTask}
             disabled={!newTaskText.trim()}
-            className="focus-visible:ring-ring h-8 w-8 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+            className="h-8 w-8 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label={`Add task${newTaskText.trim() ? `: ${newTaskText.trim()}` : ''}`}
             title="Add task (Enter)"
           >
@@ -463,7 +484,7 @@ export function FloatingNavigator({
                   key={todo.id}
                   className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${
                     focusedTaskIndex === index
-                      ? 'ring-ring bg-muted/50 ring-2 ring-offset-2'
+                      ? 'bg-muted/50 ring-2 ring-ring ring-offset-2'
                       : ''
                   }`}
                   role="listitem"
@@ -476,7 +497,7 @@ export function FloatingNavigator({
                     onCheckedChange={() =>
                       handleTaskToggleWithAnnouncement(todo.id)
                     }
-                    className="focus-visible:ring-ring h-4 w-4 focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
                   />
 
@@ -491,7 +512,7 @@ export function FloatingNavigator({
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         onKeyDown={handleEditKeyPress}
-                        className="focus-visible:ring-ring h-6 flex-1 text-xs focus-visible:ring-2 focus-visible:ring-offset-2"
+                        className="h-6 flex-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         aria-label="Edit task title"
                         aria-describedby={`edit-help-${todo.id}`}
                       />
@@ -501,7 +522,7 @@ export function FloatingNavigator({
                       <Button
                         size="sm"
                         onClick={saveEdit}
-                        className="focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+                        className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         aria-label="Save changes"
                         title="Save (Enter)"
                       >
@@ -513,7 +534,7 @@ export function FloatingNavigator({
                         size="sm"
                         variant="ghost"
                         onClick={cancelEdit}
-                        className="focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+                        className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         aria-label="Cancel editing"
                         title="Cancel (Escape)"
                       >
@@ -525,7 +546,7 @@ export function FloatingNavigator({
                   ) : (
                     <>
                       <button
-                        className="focus-visible:ring-ring flex-1 cursor-pointer truncate rounded px-1 text-left text-xs focus-visible:ring-2 focus-visible:ring-offset-2"
+                        className="flex-1 cursor-pointer truncate rounded px-1 text-left text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         onClick={() => startEditing(todo)}
                         title={`${todo.text} - Click to edit`}
                         aria-label={`Edit task: ${todo.text}`}
@@ -534,7 +555,7 @@ export function FloatingNavigator({
                       </button>
                       <div
                         id={`task-${todo.id}-actions`}
-                        className="flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                        className="flex gap-1 opacity-0 focus-within:opacity-100 group-hover:opacity-100"
                         role="group"
                         aria-label="Task actions"
                       >
@@ -542,7 +563,7 @@ export function FloatingNavigator({
                           size="sm"
                           variant="ghost"
                           onClick={() => startEditing(todo)}
-                          className="focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+                          className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           aria-label={`Edit task: ${todo.text}`}
                           title="Edit task (Enter)"
                         >
@@ -556,7 +577,7 @@ export function FloatingNavigator({
                           onClick={() =>
                             handleTaskDeleteWithAnnouncement(todo.id)
                           }
-                          className="text-destructive hover:text-destructive focus-visible:ring-ring h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-offset-2"
+                          className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           aria-label={`Delete task: ${todo.text}`}
                           title="Delete task (Delete)"
                         >
@@ -577,7 +598,7 @@ export function FloatingNavigator({
         {completedTodos.length > 0 && (
           <section className="border-t" aria-label="Completed tasks">
             <div className="bg-muted/30 px-3 py-2">
-              <h2 className="text-muted-foreground text-xs font-medium">
+              <h2 className="text-xs font-medium text-muted-foreground">
                 Completed ({completedTodos.length})
               </h2>
             </div>
@@ -591,7 +612,7 @@ export function FloatingNavigator({
                   key={todo.id}
                   className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 opacity-60 ${
                     focusedTaskIndex === pendingTodos.length + index
-                      ? 'ring-ring bg-muted/50 ring-2 ring-offset-2'
+                      ? 'bg-muted/50 ring-2 ring-ring ring-offset-2'
                       : ''
                   }`}
                   role="listitem"
@@ -605,7 +626,7 @@ export function FloatingNavigator({
                     onCheckedChange={() =>
                       handleTaskToggleWithAnnouncement(todo.id)
                     }
-                    className="focus-visible:ring-ring h-4 w-4 focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     aria-label={`Mark completed task "${todo.text}" as incomplete`}
                   />
                   <span
@@ -619,7 +640,7 @@ export function FloatingNavigator({
                     size="sm"
                     variant="ghost"
                     onClick={() => handleTaskDeleteWithAnnouncement(todo.id)}
-                    className="text-destructive hover:text-destructive focus-visible:ring-ring h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className="h-6 w-6 p-0 text-destructive opacity-0 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
                     aria-label={`Delete completed task: ${todo.text}`}
                     title="Delete task"
                   >
@@ -631,7 +652,7 @@ export function FloatingNavigator({
               ))}
               {completedTodos.length > 3 && (
                 <div
-                  className="text-muted-foreground py-1 text-center text-xs"
+                  className="py-1 text-center text-xs text-muted-foreground"
                   role="status"
                   aria-label={`${completedTodos.length - 3} additional completed tasks not shown`}
                 >
@@ -645,11 +666,11 @@ export function FloatingNavigator({
         {/* Empty state */}
         {todos.length === 0 && (
           <div className="p-6 text-center" role="status">
-            <p className="text-muted-foreground text-xs">
+            <p className="text-xs text-muted-foreground">
               No tasks yet. Add one above!
             </p>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Press Ctrl+/ for keyboard shortcuts
+            <p className="mt-2 text-xs text-muted-foreground">
+              Use View menu to access all functions
             </p>
           </div>
         )}

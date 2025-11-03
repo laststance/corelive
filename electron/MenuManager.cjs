@@ -227,88 +227,141 @@ class MenuManager {
    * Create View menu
    */
   createViewMenu() {
+    const submenu = [
+      {
+        label: 'Reload',
+        accelerator: 'CmdOrCtrl+R',
+        click: () => {
+          if (this.mainWindow) {
+            this.mainWindow.reload()
+          }
+        },
+      },
+      {
+        label: 'Force Reload',
+        accelerator: 'CmdOrCtrl+Shift+R',
+        click: () => {
+          if (this.mainWindow) {
+            this.mainWindow.webContents.reloadIgnoringCache()
+          }
+        },
+      },
+      {
+        label: 'Toggle Developer Tools',
+        accelerator: this.isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+        click: () => {
+          if (this.mainWindow) {
+            this.mainWindow.webContents.toggleDevTools()
+          }
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Actual Size',
+        accelerator: 'CmdOrCtrl+0',
+        click: () => {
+          if (this.mainWindow) {
+            this.mainWindow.webContents.zoomLevel = 0
+          }
+        },
+      },
+      {
+        label: 'Zoom In',
+        accelerator: 'CmdOrCtrl+Plus',
+        click: () => {
+          if (this.mainWindow) {
+            const currentZoom = this.mainWindow.webContents.zoomLevel
+            this.mainWindow.webContents.zoomLevel = Math.min(
+              currentZoom + 0.5,
+              3,
+            )
+          }
+        },
+      },
+      {
+        label: 'Zoom Out',
+        accelerator: 'CmdOrCtrl+-',
+        click: () => {
+          if (this.mainWindow) {
+            const currentZoom = this.mainWindow.webContents.zoomLevel
+            this.mainWindow.webContents.zoomLevel = Math.max(
+              currentZoom - 0.5,
+              -3,
+            )
+          }
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Toggle Floating Navigator',
+        accelerator: 'CmdOrCtrl+Shift+F',
+        click: () => this.toggleFloatingNavigator(),
+      },
+      { type: 'separator' },
+      {
+        label: 'Floating Navigator',
+        submenu: [
+          {
+            label: 'Focus New Task Input',
+            accelerator: 'CmdOrCtrl+N',
+            click: () => this.sendFloatingNavigatorAction('focus-new-task'),
+          },
+          { type: 'separator' },
+          {
+            label: 'Navigate to Next Task',
+            accelerator: 'Down',
+            click: () => this.sendFloatingNavigatorAction('navigate-next-task'),
+          },
+          {
+            label: 'Navigate to Previous Task',
+            accelerator: 'Up',
+            click: () =>
+              this.sendFloatingNavigatorAction('navigate-previous-task'),
+          },
+          { type: 'separator' },
+          {
+            label: 'Toggle Task Completion',
+            accelerator: 'Space',
+            click: () =>
+              this.sendFloatingNavigatorAction('toggle-task-completion'),
+          },
+          {
+            label: 'Edit Task',
+            accelerator: 'Enter',
+            click: () => this.sendFloatingNavigatorAction('edit-task'),
+          },
+          {
+            label: 'Delete Task',
+            accelerator: 'Delete',
+            click: () => this.sendFloatingNavigatorAction('delete-task'),
+          },
+          { type: 'separator' },
+          {
+            label: 'Return to Input',
+            accelerator: 'Escape',
+            click: () => this.sendFloatingNavigatorAction('return-to-input'),
+          },
+          {
+            label: 'Show Help',
+            accelerator: 'CmdOrCtrl+/',
+            click: () => this.sendFloatingNavigatorAction('show-help'),
+          },
+        ],
+      },
+      {
+        label: 'Toggle Fullscreen',
+        accelerator: this.isMac ? 'Ctrl+Command+F' : 'F11',
+        click: () => {
+          if (this.mainWindow) {
+            this.mainWindow.setFullScreen(!this.mainWindow.isFullScreen())
+          }
+        },
+      },
+    ]
+
     return {
       label: 'View',
-      submenu: [
-        {
-          label: 'Reload',
-          accelerator: 'CmdOrCtrl+R',
-          click: () => {
-            if (this.mainWindow) {
-              this.mainWindow.reload()
-            }
-          },
-        },
-        {
-          label: 'Force Reload',
-          accelerator: 'CmdOrCtrl+Shift+R',
-          click: () => {
-            if (this.mainWindow) {
-              this.mainWindow.webContents.reloadIgnoringCache()
-            }
-          },
-        },
-        {
-          label: 'Toggle Developer Tools',
-          accelerator: this.isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
-          click: () => {
-            if (this.mainWindow) {
-              this.mainWindow.webContents.toggleDevTools()
-            }
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Actual Size',
-          accelerator: 'CmdOrCtrl+0',
-          click: () => {
-            if (this.mainWindow) {
-              this.mainWindow.webContents.zoomLevel = 0
-            }
-          },
-        },
-        {
-          label: 'Zoom In',
-          accelerator: 'CmdOrCtrl+Plus',
-          click: () => {
-            if (this.mainWindow) {
-              const currentZoom = this.mainWindow.webContents.zoomLevel
-              this.mainWindow.webContents.zoomLevel = Math.min(
-                currentZoom + 0.5,
-                3,
-              )
-            }
-          },
-        },
-        {
-          label: 'Zoom Out',
-          accelerator: 'CmdOrCtrl+-',
-          click: () => {
-            if (this.mainWindow) {
-              const currentZoom = this.mainWindow.webContents.zoomLevel
-              this.mainWindow.webContents.zoomLevel = Math.max(
-                currentZoom - 0.5,
-                -3,
-              )
-            }
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Toggle Floating Navigator',
-          accelerator: 'CmdOrCtrl+Shift+F',
-          click: () => this.toggleFloatingNavigator(),
-        },
-        {
-          label: 'Toggle Fullscreen',
-          accelerator: this.isMac ? 'Ctrl+Command+F' : 'F11',
-          click: () => {
-            if (this.mainWindow) {
-              this.mainWindow.setFullScreen(!this.mainWindow.isFullScreen())
-            }
-          },
-        },
-      ],
+      submenu,
     }
   }
 
@@ -433,6 +486,37 @@ class MenuManager {
       this.windowManager.toggleFloatingNavigator()
     } else {
       console.error('❌ [MenuManager] windowManager is not available!')
+    }
+  }
+
+  /**
+   * Send action to floating navigator window via IPC
+   */
+  sendFloatingNavigatorAction(action) {
+    if (!this.windowManager) {
+      log.warn('📋 [MenuManager] windowManager not available')
+      return
+    }
+
+    if (!this.windowManager.hasFloatingNavigator()) {
+      log.warn('📋 [MenuManager] Floating navigator window not available')
+      return
+    }
+
+    try {
+      const floatingWindow = this.windowManager.getFloatingNavigator()
+      if (floatingWindow && !floatingWindow.isDestroyed()) {
+        floatingWindow.webContents.send(
+          'floating-navigator-menu-action',
+          action,
+        )
+        log.debug('📋 [MenuManager] Sent action to floating navigator:', action)
+      }
+    } catch (error) {
+      log.error(
+        '📋 [MenuManager] Failed to send action to floating navigator:',
+        error,
+      )
     }
   }
 

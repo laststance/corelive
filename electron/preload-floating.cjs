@@ -444,47 +444,12 @@ contextBridge.exposeInMainWorld('floatingNavigatorEnv', {
   platform: process.platform,
 })
 
-// Expose keyboard shortcut helpers for floating navigator
-contextBridge.exposeInMainWorld('floatingNavigatorShortcuts', {
-  /**
-   * Register keyboard shortcuts specific to floating navigator
-   */
-  register: async (shortcuts) => {
-    if (!shortcuts || typeof shortcuts !== 'object') {
-      log.error('Floating Navigator: Invalid shortcuts configuration')
-      return
-    }
-
-    const sanitizedShortcuts = sanitizeData(shortcuts)
-
-    try {
-      return ipcRenderer.invoke(
-        'floating-window-register-shortcuts',
-        sanitizedShortcuts,
-      )
-    } catch (error) {
-      log.error('Floating Navigator: Failed to register shortcuts:', error)
-    }
-  },
-
-  /**
-   * Unregister keyboard shortcuts
-   */
-  unregister: async (shortcutKeys) => {
-    if (!Array.isArray(shortcutKeys)) {
-      log.error('Floating Navigator: Shortcut keys must be an array')
-      return
-    }
-
-    const sanitizedKeys = sanitizeData(shortcutKeys)
-
-    try {
-      return ipcRenderer.invoke(
-        'floating-window-unregister-shortcuts',
-        sanitizedKeys,
-      )
-    } catch (error) {
-      log.error('Floating Navigator: Failed to unregister shortcuts:', error)
-    }
-  },
+// Listen for menu actions from main process and dispatch custom events
+ipcRenderer.on('floating-navigator-menu-action', (_event, action) => {
+  // Dispatch custom event that FloatingNavigator component can listen to
+  window.dispatchEvent(
+    new CustomEvent('floating-navigator-menu-action', {
+      detail: { action },
+    }),
+  )
 })
