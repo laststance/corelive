@@ -35,6 +35,10 @@ const ALLOWED_CHANNELS = {
   'shortcuts-get-registered': true,
   'shortcuts-get-defaults': true,
   'shortcuts-get-stats': true,
+
+  // Authentication channels (for sync)
+  'auth-get-user': true,
+  'auth-sync-from-web': true,
 }
 
 /**
@@ -73,13 +77,56 @@ function sanitizeData(data) {
 
 // Expose compact API surface for floating navigator
 contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
+  // Authentication helper to ensure user is synced
+  auth: {
+    /**
+     * Sync current user from main process to Electron API bridge
+     * This ensures the API bridge has the active user set before making requests
+     */
+    ensureUserSync: async () => {
+      try {
+        const currentUser = await ipcRenderer.invoke('auth-get-user')
+        if (currentUser && currentUser.clerkId) {
+          // Sync user to API bridge
+          await ipcRenderer.invoke('auth-sync-from-web', currentUser)
+          return currentUser
+        }
+        return null
+      } catch (error) {
+        log.error('Floating Navigator: Failed to sync user:', error)
+        throw new Error('Failed to sync authentication')
+      }
+    },
+
+    /**
+     * Get current user from main process
+     */
+    getCurrentUser: async () => {
+      try {
+        return await ipcRenderer.invoke('auth-get-user')
+      } catch (error) {
+        log.error('Floating Navigator: Failed to get current user:', error)
+        return null
+      }
+    },
+  },
+
   // Essential todo operations optimized for floating navigator
   todos: {
     /**
      * Get all todos (optimized for floating navigator display)
+     * Automatically ensures user is synced first
      */
     getTodos: async () => {
       try {
+        // Ensure user is synced before fetching todos
+        await ipcRenderer.invoke('auth-get-user').then(async (user) => {
+          if (!user || !user.clerkId) {
+            // Try to sync user from web if not available
+            await ipcRenderer.invoke('auth-sync-from-web', user)
+          }
+        })
+
         return await ipcRenderer.invoke('todo-get-all')
       } catch (error) {
         log.error('Floating Navigator: Failed to get todos:', error)

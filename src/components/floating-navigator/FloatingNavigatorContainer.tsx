@@ -17,6 +17,9 @@ declare global {
         deleteTodo(id: string): Promise<void>
         toggleComplete(id: string): Promise<any>
       }
+      auth: {
+        ensureUserSync(): Promise<void>
+      }
       window: {
         close(): Promise<void>
         minimize(): Promise<void>
@@ -53,10 +56,23 @@ export function FloatingNavigatorContainer() {
 
     try {
       setIsLoading(true)
-      const todoData = await window.floatingNavigatorAPI!.todos.getTodos()
+
+      // First, ensure user is synced with the Electron API bridge
+      try {
+        await window.floatingNavigatorAPI!.auth.ensureUserSync()
+      } catch (authError) {
+        log.warn('Auth sync warning (will retry on getData):', authError)
+        // Continue anyway - getTodos will try to sync if needed
+      }
+
+      const todoData =
+        (await window.floatingNavigatorAPI!.todos.getTodos()) as any
 
       // Transform the data to match our interface
-      const transformedTodos: FloatingTodo[] = todoData.map((todo: any) => ({
+      const todosArray = Array.isArray(todoData)
+        ? todoData
+        : todoData?.todos || []
+      const transformedTodos: FloatingTodo[] = todosArray.map((todo: any) => ({
         id: todo.id.toString(),
         text: todo.text || todo.title,
         completed: todo.completed,
@@ -67,7 +83,19 @@ export function FloatingNavigatorContainer() {
       setError(null)
     } catch (err) {
       log.error('Failed to load todos:', err)
-      setError('Failed to load tasks')
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to load tasks'
+
+      // Check if it's an authentication issue
+      if (
+        errorMessage.includes('Active user not set') ||
+        errorMessage.includes('authentication') ||
+        errorMessage.includes('Unauthorized')
+      ) {
+        setError('Please open the main app first to authenticate')
+      } else {
+        setError(errorMessage)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -191,8 +219,8 @@ export function FloatingNavigatorContainer() {
 
   if (!isFloatingNavigator) {
     return (
-      <div className="bg-background flex h-full w-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">
+      <div className="flex h-full w-full items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">
           Floating navigator only available in desktop app
         </p>
       </div>
@@ -201,19 +229,19 @@ export function FloatingNavigatorContainer() {
 
   if (isLoading) {
     return (
-      <div className="bg-background flex h-full w-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading tasks...</p>
+      <div className="flex h-full w-full items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Loading tasks...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-background flex h-full w-full flex-col items-center justify-center p-4">
-        <p className="text-destructive mb-2 text-sm">{error}</p>
+      <div className="flex h-full w-full flex-col items-center justify-center bg-background p-4">
+        <p className="mb-2 text-sm text-destructive">{error}</p>
         <button
           onClick={loadTodos}
-          className="text-muted-foreground hover:text-foreground text-xs underline"
+          className="text-xs text-muted-foreground underline hover:text-foreground"
         >
           Retry
         </button>
