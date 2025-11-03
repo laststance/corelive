@@ -41,10 +41,19 @@ export function FloatingNavigatorContainer() {
   const [todos, setTodos] = useState<FloatingTodo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
+  const [isMounted, setIsMounted] = useState(false)
   // Check if we're in Electron floating navigator environment
+  // Only after component mounts to avoid hydration mismatch
   const isFloatingNavigator =
-    typeof window !== 'undefined' && window.floatingNavigatorAPI
+    isMounted && typeof window !== 'undefined' && window.floatingNavigatorAPI
+
+  // Initialize Electron environment on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.floatingNavigatorAPI) {
+      setIsMounted(true)
+      loadTodos()
+    }
+  }, [isFloatingNavigator])
 
   // Load todos from Floating Navigator API
   const loadTodos = async () => {
@@ -101,43 +110,42 @@ export function FloatingNavigatorContainer() {
     }
   }
 
-  // Initialize and set up event listeners
+  // Load todos after mounting and Electron API is detected
   useEffect(() => {
+    if (!isFloatingNavigator) return
     loadTodos()
 
     // Listen for todo updates from main process
-    if (isFloatingNavigator) {
-      const handleTodoUpdate = () => {
-        loadTodos()
-      }
+    const handleTodoUpdate = () => {
+      loadTodos()
+    }
 
-      const handleTodoCreated = () => {
-        loadTodos()
-      }
+    const handleTodoCreated = () => {
+      loadTodos()
+    }
 
-      const handleTodoDeleted = () => {
-        loadTodos()
-      }
+    const handleTodoDeleted = () => {
+      loadTodos()
+    }
 
-      // Set up event listeners
-      const cleanupUpdate = window.floatingNavigatorAPI!.on(
-        'todo-updated',
-        handleTodoUpdate,
-      )
-      const cleanupCreated = window.floatingNavigatorAPI!.on(
-        'todo-created',
-        handleTodoCreated,
-      )
-      const cleanupDeleted = window.floatingNavigatorAPI!.on(
-        'todo-deleted',
-        handleTodoDeleted,
-      )
+    // Set up event listeners
+    const cleanupUpdate = window.floatingNavigatorAPI!.on(
+      'todo-updated',
+      handleTodoUpdate,
+    )
+    const cleanupCreated = window.floatingNavigatorAPI!.on(
+      'todo-created',
+      handleTodoCreated,
+    )
+    const cleanupDeleted = window.floatingNavigatorAPI!.on(
+      'todo-deleted',
+      handleTodoDeleted,
+    )
 
-      return () => {
-        cleanupUpdate?.()
-        cleanupCreated?.()
-        cleanupDeleted?.()
-      }
+    return () => {
+      cleanupUpdate?.()
+      cleanupCreated?.()
+      cleanupDeleted?.()
     }
   }, [isFloatingNavigator])
 
