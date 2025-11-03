@@ -191,6 +191,8 @@ class WindowManager {
       transparent: false,
       hasShadow: true,
       titleBarStyle: 'hidden',
+      // Hide window control buttons (red, yellow, green on macOS)
+      trafficLightPosition: { x: -100, y: -100 },
     })
 
     // Load floating navigator page
