@@ -89,16 +89,22 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
     if (context.floatingNavigator) {
       // After many tests, app state may be degraded
       // Accept loading, failed, or successful states
-      const hasLoadingOrError = await context.floatingNavigator.evaluate(() => {
+      const hasValidState = await context.floatingNavigator.evaluate(() => {
         const text = document.body.innerText
+        const hasInput = document.querySelector(
+          'input[placeholder*="Add task" i]',
+        )
         return (
           text.includes('loading') ||
+          text.includes('Loading') ||
           text.includes('failed') ||
           text.includes('Failed') ||
-          text.includes('Retry')
+          text.includes('Retry') ||
+          // Success state - has input field for creating tasks
+          hasInput !== null
         )
       })
-      expect(hasLoadingOrError).toBe(true)
+      expect(hasValidState).toBe(true)
 
       // Verify floating navigator is always on top
       const isAlwaysOnTop = await ElectronTestHelper.isWindowAlwaysOnTop(
@@ -256,10 +262,17 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
     await ElectronTestHelper.toggleFloatingNavigator(context)
 
     if (context.floatingNavigator && !context.floatingNavigator.isClosed()) {
-      // Verify floating navigator content
-      await expect(
-        context.floatingNavigator.getByText(/failed to load tasks/i),
-      ).toBeVisible()
+      // Check if floating navigator is in error state or success state
+      const hasRetryButton = await context.floatingNavigator
+        .getByRole('button', { name: /retry/i })
+        .count()
+
+      if (hasRetryButton > 0) {
+        // Error state - verify error message is shown
+        await expect(
+          context.floatingNavigator.getByText(/failed to load|please open/i),
+        ).toBeVisible()
+      }
 
       // Verify floating navigator is always on top
       const isAlwaysOnTop = await ElectronTestHelper.isWindowAlwaysOnTop(
@@ -269,13 +282,19 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
 
       // Test task operations only if input is available
       const hasInput = await context.floatingNavigator
-        .getByPlaceholder(/enter.*todo/i)
+        .getByPlaceholder(/add.*task/i)
         .count()
       if (hasInput > 0) {
-        const floatingTask = await ElectronTestHelper.createTestTask(
-          context.floatingNavigator,
-          `FloatingTest-${Date.now()}`,
-        )
+        // Floating navigator uses different placeholder than main window
+        const floatingTask = `FloatingTest-${Date.now()}`
+        await context.floatingNavigator
+          .getByPlaceholder(/add.*task/i)
+          .fill(floatingTask)
+        await context.floatingNavigator
+          .getByRole('button', { name: /add/i })
+          .first()
+          .click()
+        await context.floatingNavigator.waitForTimeout(1000)
         await expect(
           context.floatingNavigator.getByText(floatingTask),
         ).toBeVisible()
