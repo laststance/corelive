@@ -544,6 +544,29 @@ function setupIPCHandlers() {
           )
         }
 
+        // Send event to main window
+        try {
+          if (windowManager && windowManager.hasMainWindow()) {
+            windowManager
+              .getMainWindow()
+              .webContents.send('todo-created', newTodo)
+          }
+
+          // Send event to floating navigator window if it exists
+          const floatingWindow = windowManager?.getFloatingNavigator?.()
+          if (floatingWindow && !floatingWindow.isDestroyed()) {
+            floatingWindow.webContents.send('todo-created', newTodo)
+          }
+        } catch (eventError) {
+          ipcErrorHandler.logWarning(
+            'Failed to send todo-created event to windows',
+            {
+              error: eventError.message,
+              todoId: newTodo?.id,
+            },
+          )
+        }
+
         return newTodo
       },
       {
@@ -594,6 +617,29 @@ function setupIPCHandlers() {
           )
         }
 
+        // Send event to main window
+        try {
+          if (windowManager && windowManager.hasMainWindow()) {
+            windowManager
+              .getMainWindow()
+              .webContents.send('todo-updated', updatedTodo)
+          }
+
+          // Send event to floating navigator window if it exists
+          const floatingWindow = windowManager?.getFloatingNavigator?.()
+          if (floatingWindow && !floatingWindow.isDestroyed()) {
+            floatingWindow.webContents.send('todo-updated', updatedTodo)
+          }
+        } catch (eventError) {
+          ipcErrorHandler.logWarning(
+            'Failed to send todo-updated event to windows',
+            {
+              error: eventError.message,
+              todoId: updatedTodo?.id,
+            },
+          )
+        }
+
         return updatedTodo
       },
       {
@@ -639,6 +685,29 @@ function setupIPCHandlers() {
             'Failed to show task deletion notification',
             {
               error: notificationError.message,
+              todoId: id,
+            },
+          )
+        }
+
+        // Send event to main window
+        try {
+          if (windowManager && windowManager.hasMainWindow()) {
+            windowManager
+              .getMainWindow()
+              .webContents.send('todo-deleted', { id, ...result })
+          }
+
+          // Send event to floating navigator window if it exists
+          const floatingWindow = windowManager?.getFloatingNavigator?.()
+          if (floatingWindow && !floatingWindow.isDestroyed()) {
+            floatingWindow.webContents.send('todo-deleted', { id, ...result })
+          }
+        } catch (eventError) {
+          ipcErrorHandler.logWarning(
+            'Failed to send todo-deleted event to windows',
+            {
+              error: eventError.message,
               todoId: id,
             },
           )
@@ -1245,10 +1314,17 @@ function setupIPCHandlers() {
         notificationManager.showTaskCreatedNotification(quickTodo)
       }
 
+      // Send event to main window
       if (windowManager && windowManager.hasMainWindow()) {
         windowManager
           .getMainWindow()
           .webContents.send('todo-created', quickTodo)
+      }
+
+      // Send event to floating navigator window if it exists
+      const floatingWindow = windowManager?.getFloatingNavigator?.()
+      if (floatingWindow && !floatingWindow.isDestroyed()) {
+        floatingWindow.webContents.send('todo-created', quickTodo)
       }
 
       return quickTodo
@@ -1274,10 +1350,17 @@ function setupIPCHandlers() {
         notificationManager.showTaskCompletedNotification(updatedTodo)
       }
 
+      // Send event to main window
       if (windowManager && windowManager.hasMainWindow()) {
         windowManager
           .getMainWindow()
           .webContents.send('todo-updated', updatedTodo)
+      }
+
+      // Send event to floating navigator window if it exists
+      const floatingWindow = windowManager?.getFloatingNavigator?.()
+      if (floatingWindow && !floatingWindow.isDestroyed()) {
+        floatingWindow.webContents.send('todo-updated', updatedTodo)
       }
 
       return updatedTodo
@@ -1293,7 +1376,20 @@ function setupIPCHandlers() {
         throw new Error('API bridge not initialized')
       }
 
-      return apiBridge.clearCompleted()
+      const result = await apiBridge.clearCompleted()
+
+      // Send event to main window
+      if (windowManager && windowManager.hasMainWindow()) {
+        windowManager.getMainWindow().webContents.send('todo-deleted', result)
+      }
+
+      // Send event to floating navigator window if it exists
+      const floatingWindow = windowManager?.getFloatingNavigator?.()
+      if (floatingWindow && !floatingWindow.isDestroyed()) {
+        floatingWindow.webContents.send('todo-deleted', result)
+      }
+
+      return result
     } catch (error) {
       log.error('Failed to clear completed todos:', error)
       throw new Error('Failed to clear completed todos')
