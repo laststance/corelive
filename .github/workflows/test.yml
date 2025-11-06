@@ -37,5 +37,7 @@ jobs:
           echo "POSTGRES_PRISMA_URL=${POSTGRES_PRISMA_URL}" >> .env
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
+      - name: Generate Icons 🎨
+        run: pnpm build:icons
       - name: Test
         run: pnpm test
