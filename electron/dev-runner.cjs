@@ -52,6 +52,7 @@ async function startElectron() {
           ...process.env,
           NODE_ENV: 'development',
           ELECTRON_DEV_MODE: 'true', // Flag to indicate dev mode
+          PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9222', // Enable remote debugging for MCP tools
         },
       },
     )
