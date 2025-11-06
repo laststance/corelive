@@ -1,7 +1,7 @@
 'use client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import React from 'react'
+import React, { useEffect } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -124,6 +124,40 @@ export function TodoList() {
 
   const pendingTodos = mapTodos(pendingData?.todos)
 
+  // Listen for Electron IPC events to sync todos when they're created/updated/deleted from other windows
+  useEffect(() => {
+    // Only set up listeners in Electron environment
+    if (typeof window === 'undefined' || !window.electronAPI?.on) {
+      return
+    }
+
+    // Handler to invalidate React Query cache when todos change
+    const handleTodoChange = () => {
+      queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+    }
+
+    // Set up event listeners for todo operations
+    const cleanupCreated = window.electronAPI.on(
+      'todo-created',
+      handleTodoChange,
+    )
+    const cleanupUpdated = window.electronAPI.on(
+      'todo-updated',
+      handleTodoChange,
+    )
+    const cleanupDeleted = window.electronAPI.on(
+      'todo-deleted',
+      handleTodoChange,
+    )
+
+    // Return cleanup function to remove listeners
+    return () => {
+      if (typeof cleanupCreated === 'function') cleanupCreated()
+      if (typeof cleanupUpdated === 'function') cleanupUpdated()
+      if (typeof cleanupDeleted === 'function') cleanupDeleted()
+    }
+  }, [queryClient, orpc])
+
   if (pendingLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -155,7 +189,7 @@ export function TodoList() {
         {pendingTodos.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <Circle className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
+              <Circle className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-muted-foreground">
                 No pending tasks. Add a new task to get started.
               </p>
