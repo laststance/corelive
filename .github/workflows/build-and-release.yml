@@ -35,6 +35,9 @@ jobs:
       - name: Run tests
         run: pnpm test --run
 
+      - name: Generate Icons 🎨
+        run: pnpm build:icons
+
       - name: Run Electron tests
         run: pnpm test:electron --run
 
