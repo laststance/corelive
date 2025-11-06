@@ -72,6 +72,7 @@ jobs:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        shell: bash
         run: |
           touch .env
           : "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:=pk_test_dummy}"
