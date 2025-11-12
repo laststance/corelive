@@ -1,0 +1,12 @@
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag,
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-app-region: no-drag;
+}

@@ -43,6 +43,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar'
 
+import './page.css'
 import { TodoList } from './_components/TodoList'
 import { UserMenu } from './_components/UserMenu'
 
@@ -60,11 +61,11 @@ export default function Home() {
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="hover:bg-sidebar-accent group h-auto flex-1 justify-start gap-2 p-2"
+                    className="group h-auto flex-1 justify-start gap-2 p-2 hover:bg-sidebar-accent"
                   >
                     <Avatar className="h-6 w-6">
                       <AvatarImage src={user?.imageUrl} alt="User" />
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      <AvatarFallback className="bg-primary text-xs text-primary-foreground">
                         {user?.firstName?.charAt(0)?.toUpperCase() ||
                           user?.emailAddresses?.[0]?.emailAddress
                             ?.charAt(0)
@@ -102,7 +103,7 @@ export default function Home() {
                             'User'}
                           's Todo
                         </div>
-                        <div className="text-muted-foreground text-xs">
+                        <div className="text-xs text-muted-foreground">
                           Free Plan • 1 member
                         </div>
                       </div>
@@ -128,7 +129,7 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <Avatar className="h-4 w-4">
                         <AvatarImage src={user?.imageUrl} alt="User" />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                        <AvatarFallback className="bg-primary text-xs text-primary-foreground">
                           {user?.firstName?.charAt(0)?.toUpperCase() ||
                             user?.emailAddresses?.[0]?.emailAddress
                               ?.charAt(0)
@@ -164,10 +165,10 @@ export default function Home() {
           {/* Search */}
           <div className="mb-2 px-2">
             <div className="relative">
-              <Search className="text-muted-foreground absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2" />
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search"
-                className="bg-sidebar-accent h-8 border-0 pl-8 focus-visible:ring-1"
+                className="h-8 border-0 bg-sidebar-accent pl-8 focus-visible:ring-1"
               />
             </div>
           </div>
@@ -196,7 +197,7 @@ export default function Home() {
 
           {/* Shared Section */}
           <SidebarGroup>
-            <SidebarGroupLabel className="text-muted-foreground text-xs tracking-wider uppercase">
+            <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground">
               Shared
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -213,7 +214,7 @@ export default function Home() {
 
           {/* Private Section */}
           <SidebarGroup>
-            <SidebarGroupLabel className="text-muted-foreground text-xs tracking-wider uppercase">
+            <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground">
               Private
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -295,8 +296,8 @@ export default function Home() {
       </Sidebar>
 
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
+        <header className="window-drag-region flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="no-drag -ml-1" />
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-medium">Tasks</h2>
           </div>
