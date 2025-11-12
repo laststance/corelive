@@ -1,3 +1,4 @@
+import { codeInspectorPlugin } from 'code-inspector-plugin'
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Electron configuration - keep images unoptimized for better compatibility
@@ -6,7 +7,12 @@ const nextConfig = {
   },
   // Turbopack configuration (Next.js 16+)
   // Empty config silences warnings while allowing future customization
-  turbopack: {},
+  turbopack: {
+    rules: codeInspectorPlugin({
+      bundler: 'turbopack',
+      hotKeys: ['altKey'],
+    }),
+  },
   // Performance optimizations
   experimental: {
     // Disable optimizeCss for Electron builds due to critters dependency issue
