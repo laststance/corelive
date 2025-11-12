@@ -10,3 +10,16 @@ textarea,
 select {
   -webkit-app-region: no-drag;
 }
+
+/* macOS Electron window controls spacing */
+/* Add top padding to prevent overlap with traffic lights (28px) + content padding (16px) */
+[data-sidebar='header'] {
+  padding-top: 44px; /* 28px (traffic lights) + 16px (content spacing) */
+}
+
+/* Use CSS environment variable if available (when titleBarOverlay is enabled) */
+@supports (padding-top: env(titlebar-area-height)) {
+  [data-sidebar='header'] {
+    padding-top: calc(env(titlebar-area-height, 28px) + 1rem);
+  }
+}

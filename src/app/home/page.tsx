@@ -53,7 +53,7 @@ export default function Home() {
   return (
     <SidebarProvider>
       <Sidebar className="border-r">
-        <SidebarHeader className="p-4">
+        <SidebarHeader className="px-4 pb-4">
           <div className="flex items-center justify-between">
             {/* User Profile Section */}
             <div className="flex flex-1 items-center gap-2">
