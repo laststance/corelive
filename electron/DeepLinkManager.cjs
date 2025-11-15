@@ -1,10 +1,55 @@
+/**
+ * @fileoverview Deep Link Manager for Custom URL Protocol Handling
+ *
+ * Enables the app to respond to custom URLs like:
+ * - corelive://open/task/123
+ * - corelive://create?text=Buy%20milk
+ * - corelive://settings
+ *
+ * What are deep links?
+ * Deep links are custom URL schemes that open specific parts of your app.
+ * Like how 'mailto:' opens your email client, 'corelive://' opens this app.
+ *
+ * Why deep links matter for desktop apps:
+ * - Integration with other apps (e.g., click link in email to open task)
+ * - Automation workflows (scripts can trigger app actions)
+ * - Quick access from browser bookmarks
+ * - Command-line integration
+ * - OS search integration (Spotlight, Windows Search)
+ *
+ * Platform differences:
+ * - macOS: Uses 'open-url' event
+ * - Windows/Linux: Uses command line arguments
+ * - All platforms: Must handle app already running vs launching
+ *
+ * Security considerations:
+ * - Validate all URL parameters (prevent injection)
+ * - Don't execute arbitrary commands
+ * - Sanitize user input from URLs
+ * - Consider authentication for sensitive actions
+ *
+ * @module electron/DeepLinkManager
+ */
+
 const { URL } = require('url')
 
 const { log } = require('../src/lib/logger.cjs')
 
 /**
- * Deep Link Manager for handling custom URL scheme (corelive://)
- * Supports opening specific tasks, views, and creating tasks from external applications
+ * Manages custom URL protocol handling for the application.
+ *
+ * Supports various deep link patterns:
+ * - Opening specific items: corelive://open/task/123
+ * - Creating new items: corelive://create?text=New%20Task
+ * - Navigation: corelive://settings, corelive://home
+ * - Actions: corelive://complete/task/456
+ *
+ * The manager handles:
+ * - Protocol registration with the OS
+ * - URL parsing and validation
+ * - Routing to appropriate actions
+ * - Cross-platform compatibility
+ * - App focus and window management
  */
 class DeepLinkManager {
   constructor(
@@ -16,56 +61,84 @@ class DeepLinkManager {
     this.windowManager = windowManager
     this.apiBridge = apiBridge
     this.notificationManager = notificationManager
-    // Allow app to be injected for testing, otherwise use electron's app
+    // Allow app injection for testing
     this.app = electronApp || require('electron').app
-    this.protocol = 'corelive'
+    this.protocol = 'corelive' // Custom URL scheme
     this.isInitialized = false
-    this.pendingUrl = null
+    this.pendingUrl = null // URL received before app ready
 
-    // Bind methods
+    // Bind methods for event handlers
     this.handleDeepLink = this.handleDeepLink.bind(this)
     this.handleSecondInstance = this.handleSecondInstance.bind(this)
   }
 
   /**
-   * Initialize deep linking support
+   * Initializes deep linking support for the application.
+   *
+   * Setup process:
+   * 1. Register custom protocol with OS
+   * 2. Set up handlers for URL events
+   * 3. Check for launch URL (app opened via deep link)
+   *
+   * Must be called after app is ready but before windows are shown
+   * to handle launch URLs properly.
+   *
+   * Why initialization order matters:
+   * - Protocol must be registered before receiving URLs
+   * - Second instance handler must be ready immediately
+   * - Launch URLs need special handling (app not fully ready)
    */
   initialize() {
     if (this.isInitialized) {
-      return
+      return // Prevent double initialization
     }
 
     try {
-      // Register the custom protocol
+      // Register corelive:// protocol with the operating system
       this.registerProtocol()
 
-      // Handle second instance (when app is already running)
+      // Handle when user clicks link while app is already running
       this.setupSecondInstanceHandler()
 
-      // Handle initial URL if app was launched with one
+      // Check if app was launched by clicking a deep link
       this.handleInitialUrl()
 
       this.isInitialized = true
+      log.info('✅ Deep linking initialized')
     } catch (error) {
+      // Non-fatal: app works without deep links
       log.error('❌ Failed to initialize deep linking:', error)
     }
   }
 
   /**
-   * Register the custom URL protocol
+   * Registers the custom URL protocol with the operating system.
+   *
+   * After registration, clicking 'corelive://' URLs will:
+   * - Launch the app if not running
+   * - Focus the app if already running
+   * - Pass the URL to the app for handling
+   *
+   * Platform specifics:
+   * - Windows: Adds registry entries
+   * - macOS: Updates Info.plist, handles via 'open-url' event
+   * - Linux: Creates .desktop file entries
+   *
+   * Note: May require app restart or OS cache clear to take effect
    */
   registerProtocol() {
-    // Set as default protocol client
+    // Register as handler for corelive:// URLs
     if (!this.app.isDefaultProtocolClient(this.protocol)) {
       const success = this.app.setAsDefaultProtocolClient(this.protocol)
       if (!success) {
+        // May fail in dev environment or without proper permissions
         log.warn('⚠️ Failed to register as default protocol client')
       }
     }
 
-    // Handle protocol URLs on macOS
+    // macOS-specific: Handle URLs via event (not command line)
     this.app.on('open-url', (event, url) => {
-      event.preventDefault()
+      event.preventDefault() // Prevent default handling
       this.handleDeepLink(url)
     })
   }

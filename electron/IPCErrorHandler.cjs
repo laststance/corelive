@@ -1,3 +1,32 @@
+/**
+ * @fileoverview IPC Error Handler with Retry Logic and Graceful Degradation
+ *
+ * Ensures reliable Inter-Process Communication in Electron applications.
+ *
+ * Why IPC error handling is critical:
+ * - IPC is the backbone of Electron apps (renderer ↔ main communication)
+ * - Network-like failures can occur even locally
+ * - Renderer crashes don't kill main process
+ * - Race conditions during startup/shutdown
+ * - Memory pressure can delay responses
+ *
+ * Common IPC failures:
+ * - Renderer process crash/reload
+ * - Main process busy/blocked
+ * - Large payload serialization issues
+ * - Handler not registered yet
+ * - Timeout on long operations
+ *
+ * This handler provides:
+ * - Automatic retry with exponential backoff
+ * - Graceful degradation to cached data
+ * - Comprehensive error logging
+ * - Statistics for monitoring
+ * - Recovery strategies
+ *
+ * @module electron/IPCErrorHandler
+ */
+
 const fs = require('fs').promises
 const path = require('path')
 
@@ -6,14 +35,28 @@ const { app } = require('electron')
 const { log } = require('../src/lib/logger.cjs')
 
 /**
- * IPC Error Handler with retry logic, graceful degradation, and error reporting
+ * Handles IPC errors with retry logic and fallback strategies.
+ *
+ * Features:
+ * - Configurable retry attempts
+ * - Exponential backoff to avoid overwhelming system
+ * - Graceful degradation when retries fail
+ * - Error statistics and patterns
+ * - Detailed error logging for debugging
+ * - Input validation helpers
+ *
+ * Usage:
+ * Wrap IPC handlers with this to make them resilient to failures.
  */
 class IPCErrorHandler {
   constructor(options = {}) {
-    this.maxRetries = options.maxRetries || 3
-    this.baseDelay = options.baseDelay || 1000 // 1 second
-    this.maxDelay = options.maxDelay || 10000 // 10 seconds
-    this.backoffMultiplier = options.backoffMultiplier || 2
+    // Retry configuration
+    this.maxRetries = options.maxRetries || 3 // Max retry attempts
+    this.baseDelay = options.baseDelay || 1000 // Initial retry delay (1s)
+    this.maxDelay = options.maxDelay || 10000 // Max retry delay (10s)
+    this.backoffMultiplier = options.backoffMultiplier || 2 // Exponential growth
+
+    // Logging configuration
     this.enableLogging = options.enableLogging !== false
     this.logPath = options.logPath || path.join(app.getPath('userData'), 'logs')
 
@@ -43,18 +86,37 @@ class IPCErrorHandler {
   }
 
   /**
-   * Execute IPC operation with retry logic and error handling
+   * Executes IPC operation with automatic retry and error recovery.
+   *
+   * Retry strategy:
+   * 1. First attempt - immediate
+   * 2. First retry - wait 1 second
+   * 3. Second retry - wait 2 seconds
+   * 4. Third retry - wait 4 seconds
+   *
+   * If all retries fail:
+   * - Returns fallback value if provided
+   * - Logs detailed error information
+   * - Updates error statistics
+   *
+   * @param {Function} operation - The IPC operation to execute
+   * @param {Object} context - Context for error handling
+   * @param {string} context.channel - IPC channel name
+   * @param {string} context.operationType - Type of operation
+   * @param {any} context.fallbackValue - Value to return on failure
+   * @returns {Promise<any>} Operation result or fallback value
    */
   async executeWithRetry(operation, context = {}) {
     const { channel, operationType = 'unknown', fallbackValue = null } = context
     let lastError = null
     let attempt = 0
 
+    // Retry loop with exponential backoff
     while (attempt <= this.maxRetries) {
       try {
         const result = await operation()
 
-        // Log successful retry if this wasn't the first attempt
+        // Success! Log if we had to retry
         if (attempt > 0) {
           this.logInfo(`Operation succeeded after ${attempt} retries`, {
             channel,
@@ -71,12 +133,20 @@ class IPCErrorHandler {
 
         this.recordError(error, { channel, operationType, attempt })
 
-        // If we've exhausted retries, break
+        // Check if we should retry
         if (attempt > this.maxRetries) {
-          break
+          break // No more retries
         }
 
-        // Calculate delay with exponential backoff
+        /**
+         * Exponential backoff calculation.
+         * Delays: 1s, 2s, 4s, 8s (capped at maxDelay)
+         *
+         * Why exponential backoff?
+         * - Gives system time to recover
+         * - Prevents thundering herd problem
+         * - Reduces resource contention
+         */
         const delay = Math.min(
           this.baseDelay * Math.pow(this.backoffMultiplier, attempt - 1),
           this.maxDelay,

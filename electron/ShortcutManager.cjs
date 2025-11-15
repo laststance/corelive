@@ -1,52 +1,133 @@
+/**
+ * @fileoverview Global Keyboard Shortcut Manager for Electron
+ * 
+ * Manages system-wide keyboard shortcuts that work even when the app
+ * doesn't have focus. This is a powerful feature unique to desktop apps.
+ * 
+ * Global shortcuts allow users to:
+ * - Create new tasks from anywhere (Cmd/Ctrl+N)
+ * - Show/hide the app quickly (Cmd/Ctrl+Shift+T)
+ * - Access features without switching windows
+ * 
+ * Security considerations:
+ * - Global shortcuts can conflict with other apps
+ * - Should be customizable to avoid conflicts
+ * - Should be documented for users
+ * - Can be disabled by users
+ * 
+ * Platform differences:
+ * - macOS: Uses Cmd key, some shortcuts reserved by OS
+ * - Windows: Uses Ctrl key, fewer OS restrictions
+ * - Linux: Varies by desktop environment
+ * 
+ * @module electron/ShortcutManager
+ */
+
 const { globalShortcut, BrowserWindow } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Manages global keyboard shortcuts throughout the application.
+ * 
+ * Features:
+ * - Registration/unregistration of global shortcuts
+ * - Conflict detection and handling
+ * - Platform-specific shortcut defaults
+ * - User customization support
+ * - Enable/disable functionality
+ * - Statistics tracking
+ * 
+ * Why global shortcuts matter:
+ * - Productivity: Quick access without app switching
+ * - Accessibility: Keyboard-only navigation
+ * - Power users: Efficient workflows
+ * - Desktop feel: Expected in native apps
+ */
 class ShortcutManager {
   constructor(windowManager, notificationManager, configManager = null) {
+    // Dependencies for shortcut actions
     this.windowManager = windowManager
     this.notificationManager = notificationManager
     this.configManager = configManager
+    
+    // Track registered shortcuts for cleanup
     this.registeredShortcuts = new Map()
 
-    // Load settings from configuration
+    // Load user preferences or defaults
     this.loadSettings()
   }
 
   /**
-   * Load shortcut settings from configuration
+   * Loads shortcut settings from user configuration.
+   * 
+   * Settings include:
+   * - enabled: Global on/off switch
+   * - Individual shortcut key combinations
+   * 
+   * Falls back to platform-specific defaults if no config.
+   * Users can customize shortcuts to avoid conflicts with
+   * other apps they use.
    */
   loadSettings() {
     if (this.configManager) {
+      // Load user preferences
       const shortcutConfig = this.configManager.getSection('shortcuts')
       this.isEnabled = shortcutConfig.enabled
       this.shortcuts = { ...shortcutConfig }
-      delete this.shortcuts.enabled // Remove the enabled flag from shortcuts list
+      delete this.shortcuts.enabled // Remove non-shortcut property
     } else {
+      // Use defaults if no config available
       this.isEnabled = true
       this.shortcuts = this.getDefaultShortcuts()
     }
   }
 
   /**
-   * Get default shortcuts based on platform
+   * Returns platform-specific default shortcuts.
+   * 
+   * Design principles:
+   * - Use standard modifier keys (Cmd on Mac, Ctrl elsewhere)
+   * - Avoid OS-reserved combinations
+   * - Follow platform conventions
+   * - Keep shortcuts memorable and logical
+   * 
+   * Common patterns:
+   * - Cmd/Ctrl+N: New (standard across apps)
+   * - Cmd/Ctrl+Q: Quit (standard)
+   * - Shift for variations of base shortcuts
+   * 
+   * @returns {Object} Map of action names to key combinations
    */
   getDefaultShortcuts() {
     const isMac = process.platform === 'darwin'
     const modifier = isMac ? 'Cmd' : 'Ctrl'
 
     return {
-      newTask: `${modifier}+N`,
-      showMainWindow: `${modifier}+Shift+T`,
-      quit: isMac ? 'Cmd+Q' : 'Ctrl+Q',
-      minimize: `${modifier}+M`,
-      toggleAlwaysOnTop: `${modifier}+Shift+A`,
-      focusFloatingNavigator: `${modifier}+Shift+N`,
+      newTask: `${modifier}+N`,              // Standard "New" shortcut
+      showMainWindow: `${modifier}+Shift+T`,  // T for "Todo"
+      quit: isMac ? 'Cmd+Q' : 'Ctrl+Q',      // Platform standard quit
+      minimize: `${modifier}+M`,              // Standard minimize
+      toggleAlwaysOnTop: `${modifier}+Shift+A`, // A for "Always on top"
+      focusFloatingNavigator: `${modifier}+Shift+N`, // N for "Navigator"
     }
   }
 
   /**
-   * Initialize and register all default shortcuts with conflict handling
+   * Initializes and registers all configured shortcuts.
+   * 
+   * Process:
+   * 1. Check if shortcuts are enabled globally
+   * 2. Attempt to register each shortcut
+   * 3. Handle conflicts gracefully
+   * 4. Report success/failure statistics
+   * 
+   * Conflict handling:
+   * - Shortcuts may fail if already taken by OS or other apps
+   * - Partial success is acceptable (some shortcuts work)
+   * - Users are notified of registration results
+   * 
+   * @returns {boolean} True if at least some shortcuts registered
    */
   initialize() {
     try {
@@ -54,8 +135,10 @@ class ShortcutManager {
       log.debug('⌨️  [ShortcutManager] isEnabled:', this.isEnabled)
       log.debug('⌨️  [ShortcutManager] shortcuts:', this.shortcuts)
 
+      // Register all shortcuts and collect results
       const results = this.registerDefaultShortcuts()
 
+      // Count successes
       const successCount = results.filter((r) => r.success).length
       const totalCount = results.length
 

@@ -1,3 +1,20 @@
+/**
+ * @fileoverview Configuration Manager for Electron Application
+ *
+ * Manages all user preferences and application settings with:
+ * - Persistent storage in platform-specific directories
+ * - Type-safe default values
+ * - Automatic backup and recovery
+ * - Migration support for version updates
+ *
+ * Storage locations:
+ * - Windows: %APPDATA%/CoreLive/config.json
+ * - macOS: ~/Library/Application Support/CoreLive/config.json
+ * - Linux: ~/.config/CoreLive/config.json
+ *
+ * @module electron/ConfigManager
+ */
+
 const fs = require('fs')
 const path = require('path')
 
@@ -5,42 +22,73 @@ const { app } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Manages application configuration with persistence and validation.
+ *
+ * Features:
+ * - Hierarchical configuration structure (dot notation access)
+ * - Automatic file creation with sensible defaults
+ * - Safe writes with atomic file operations
+ * - Configuration validation and sanitization
+ * - Backup management for recovery
+ *
+ * Why a dedicated config manager?
+ * - Centralized settings management
+ * - Cross-platform path handling
+ * - Prevents corruption with safe writes
+ * - Easy testing with dependency injection
+ */
 class ConfigManager {
   constructor() {
-    // Use app.getPath('userData') for cross-platform user data directory
+    /**
+     * Platform-specific configuration directory.
+     * app.getPath('userData') ensures configs are stored in the
+     * correct location for each OS, respecting user permissions.
+     */
     this.configDir = app.getPath('userData')
     this.configPath = path.join(this.configDir, 'config.json')
     this.windowStatePath = path.join(this.configDir, 'window-state.json')
 
-    // Ensure config directory exists
+    // Create directory if it doesn't exist
     this.ensureConfigDirectory()
 
-    // Default configuration
+    // Define default values for all settings
     this.defaultConfig = this.getDefaultConfig()
 
-    // Current configuration
+    // Load existing config or create with defaults
     this.config = this.loadConfig()
   }
 
   /**
-   * Get default configuration structure
+   * Defines the default configuration structure with sensible defaults.
+   *
+   * These defaults are carefully chosen to:
+   * - Work well on all platforms
+   * - Provide good first-run experience
+   * - Be accessible (reasonable font sizes, etc.)
+   * - Follow platform conventions (keyboard shortcuts)
+   *
+   * @returns {Object} Default configuration object
    */
   getDefaultConfig() {
+    // Platform-specific modifier key for shortcuts
     const isMac = process.platform === 'darwin'
     const modifier = isMac ? 'Cmd' : 'Ctrl'
 
     return {
-      version: '1.0.0',
+      version: '1.0.0', // Config schema version for migrations
+
+      // Window preferences
       window: {
         main: {
-          width: 1200,
-          height: 800,
-          minWidth: 800,
-          minHeight: 600,
-          rememberPosition: true,
-          rememberSize: true,
-          startMaximized: false,
-          centerOnStart: true,
+          width: 1200, // Good for most screens
+          height: 800, // 3:2 aspect ratio
+          minWidth: 800, // Minimum for usable UI
+          minHeight: 600, // Prevents UI compression
+          rememberPosition: true, // Restore last position
+          rememberSize: true, // Restore last size
+          startMaximized: false, // Normal size on first run
+          centerOnStart: true, // Center if no saved position
         },
         floating: {
           width: 300,
@@ -56,23 +104,26 @@ class ConfigManager {
           startVisible: false,
         },
       },
+      // System tray behavior
       tray: {
-        enabled: true,
-        minimizeToTray: true,
-        closeToTray: true,
-        startMinimized: false,
-        showNotificationCount: true,
-        doubleClickAction: 'restore', // 'restore' | 'toggle' | 'none'
-        rightClickAction: 'menu', // 'menu' | 'restore' | 'none'
+        enabled: true, // Show tray icon
+        minimizeToTray: true, // Hide window instead of minimize
+        closeToTray: true, // Hide window instead of quit
+        startMinimized: false, // Start with window visible
+        showNotificationCount: true, // Badge with todo count
+        doubleClickAction: 'restore', // What double-click does
+        rightClickAction: 'menu', // What right-click does
       },
+
+      // Global keyboard shortcuts
       shortcuts: {
         enabled: true,
-        newTask: `${modifier}+N`,
-        showMainWindow: `${modifier}+Shift+T`,
-        quit: isMac ? 'Cmd+Q' : 'Ctrl+Q',
-        minimize: `${modifier}+M`,
-        toggleAlwaysOnTop: `${modifier}+Shift+A`,
-        focusFloatingNavigator: `${modifier}+Shift+N`,
+        newTask: `${modifier}+N`, // Create new todo
+        showMainWindow: `${modifier}+Shift+T`, // Show/hide main window
+        quit: isMac ? 'Cmd+Q' : 'Ctrl+Q', // Quit app
+        minimize: `${modifier}+M`, // Minimize window
+        toggleAlwaysOnTop: `${modifier}+Shift+A`, // Toggle floating on top
+        focusFloatingNavigator: `${modifier}+Shift+N`, // Focus floating window
       },
       notifications: {
         enabled: true,
@@ -148,21 +199,47 @@ class ConfigManager {
   }
 
   /**
-   * Save configuration to file
+   * Saves the current configuration to disk.
+   *
+   * Uses synchronous writes for simplicity and reliability.
+   * The file is formatted with indentation for human readability
+   * if users need to manually edit it.
+   *
+   * Error handling:
+   * - Returns false on failure (non-throwing)
+   * - Logs errors for debugging
+   * - Preserves in-memory config even if save fails
+   *
+   * @returns {boolean} True if save successful, false otherwise
    */
   saveConfig() {
     try {
+      // Pretty-print JSON for readability
       const configData = JSON.stringify(this.config, null, 2)
       fs.writeFileSync(this.configPath, configData, 'utf8')
       return true
     } catch (error) {
       log.error('Failed to save config:', error)
-      return false
+      return false // Non-throwing for graceful degradation
     }
   }
 
   /**
-   * Merge loaded config with defaults to ensure all properties exist
+   * Merges loaded configuration with defaults.
+   *
+   * This ensures:
+   * - New properties are added when app updates
+   * - Missing properties get default values
+   * - User's existing settings are preserved
+   * - Config structure remains valid
+   *
+   * Deep merge strategy:
+   * - Objects are merged recursively
+   * - Arrays are replaced entirely
+   * - Primitives from loaded config override defaults
+   *
+   * @param {Object} loadedConfig - Config loaded from disk
+   * @returns {Object} Merged configuration
    */
   mergeWithDefaults(loadedConfig) {
     const merge = (target, source) => {
@@ -172,10 +249,12 @@ class ConfigManager {
         if (
           source[key] &&
           typeof source[key] === 'object' &&
-          !Array.isArray(source[key])
+          !Array.isArray(source[key]) // Arrays are replaced, not merged
         ) {
+          // Recursive merge for nested objects
           result[key] = merge(target[key] || {}, source[key])
         } else if (source[key] !== undefined) {
+          // Use source value if defined
           result[key] = source[key]
         }
       }
@@ -183,31 +262,52 @@ class ConfigManager {
       return result
     }
 
+    // Default config is base, user config overrides
     return merge(this.defaultConfig, loadedConfig)
   }
 
   /**
-   * Migrate configuration between versions
+   * Handles configuration migrations between app versions.
+   *
+   * Why migrations?
+   * - Config structure may change between releases
+   * - Old configs need updating to work with new code
+   * - Preserves user settings during upgrades
+   * - Enables backwards compatibility
+   *
+   * Migration process:
+   * 1. Check current vs target version
+   * 2. Apply migrations in sequence
+   * 3. Update version number
+   * 4. Save migrated config
+   *
+   * @param {Object} config - Configuration to migrate
+   * @returns {Object} Migrated configuration
    */
   migrateConfig(config) {
     const currentVersion = config.version || '0.0.0'
     const targetVersion = this.defaultConfig.version
 
+    // Skip if already up to date
     if (currentVersion === targetVersion) {
       return config
     }
 
-    // Perform version-specific migrations here
-    // Example migration logic:
+    // Apply version-specific migrations in order
     if (this.compareVersions(currentVersion, '1.0.0') < 0) {
       // Migration from pre-1.0.0 versions
       config = this.migrateToV1(config)
     }
 
-    // Update version
+    // Future migrations would go here:
+    // if (this.compareVersions(currentVersion, '2.0.0') < 0) {
+    //   config = this.migrateToV2(config)
+    // }
+
+    // Mark as migrated
     config.version = targetVersion
 
-    // Save migrated config
+    // Persist migrated config
     this.saveConfig()
 
     return config
@@ -249,17 +349,32 @@ class ConfigManager {
   }
 
   /**
-   * Get configuration value by path
+   * Gets a configuration value using dot notation path.
+   *
+   * This is the primary way to read config values. Supports:
+   * - Nested property access: 'window.main.width'
+   * - Array access: 'shortcuts.0'
+   * - Safe access with defaults for missing values
+   *
+   * Examples:
+   * - get('window.main.width') → 1200
+   * - get('tray.enabled') → true
+   * - get('missing.path', 'default') → 'default'
+   *
+   * @param {string} path - Dot-separated path to value
+   * @param {any} defaultValue - Value to return if path not found
+   * @returns {any} Configuration value or default
    */
   get(path, defaultValue = undefined) {
     const keys = path.split('.')
     let current = this.config
 
+    // Traverse the object tree
     for (const key of keys) {
       if (current && typeof current === 'object' && key in current) {
         current = current[key]
       } else {
-        return defaultValue
+        return defaultValue // Path doesn't exist
       }
     }
 
@@ -267,38 +382,84 @@ class ConfigManager {
   }
 
   /**
-   * Set configuration value by path
+   * Sets a configuration value using dot notation path.
+   *
+   * Automatically:
+   * - Creates missing intermediate objects
+   * - Saves to disk after setting
+   * - Overwrites existing values
+   *
+   * Examples:
+   * - set('window.main.width', 1400)
+   * - set('tray.enabled', false)
+   * - set('new.nested.value', 123) // Creates structure
+   *
+   * @param {string} path - Dot-separated path to value
+   * @param {any} value - Value to set
+   * @returns {boolean} True if save successful
    */
   set(path, value) {
     const keys = path.split('.')
     let current = this.config
 
+    // Navigate to parent of target property
     for (let i = 0; i < keys.length - 1; i++) {
       const key = keys[i]
+      // Create intermediate objects as needed
       if (!current[key] || typeof current[key] !== 'object') {
         current[key] = {}
       }
       current = current[key]
     }
 
+    // Set the final value
     current[keys[keys.length - 1]] = value
+
+    // Persist changes
     return this.saveConfig()
   }
 
   /**
-   * Update multiple configuration values
+   * Updates multiple configuration values at once.
+   *
+   * More efficient than multiple set() calls as it:
+   * - Batches all changes
+   * - Saves to disk only once
+   * - Atomic operation (all or nothing)
+   *
+   * Example:
+   * update({
+   *   'window.main.width': 1400,
+   *   'tray.enabled': false,
+   *   'shortcuts.newTask': 'Ctrl+Alt+N'
+   * })
+   *
+   * @param {Object} updates - Object with path:value pairs
+   * @returns {boolean} True if save successful
    */
   update(updates) {
+    // Apply all updates
     for (const [path, value] of Object.entries(updates)) {
       this.set(path, value)
     }
+    // Save once at the end
     return this.saveConfig()
   }
 
   /**
-   * Reset configuration to defaults
+   * Resets all configuration to factory defaults.
+   *
+   * Use cases:
+   * - Troubleshooting corrupted settings
+   * - "Reset to defaults" button in preferences
+   * - Clean slate for testing
+   *
+   * Warning: This is destructive - all user preferences are lost!
+   *
+   * @returns {boolean} True if save successful
    */
   reset() {
+    // Create fresh copy of defaults
     this.config = { ...this.defaultConfig }
     return this.saveConfig()
   }

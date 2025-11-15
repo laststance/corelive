@@ -1,8 +1,30 @@
 /**
- * Memory Profiler for Electron Application
+ * @fileoverview Memory Profiler for Electron Application
  *
- * This module provides memory monitoring, profiling, and cleanup
- * functionality to optimize memory usage and prevent memory leaks.
+ * Monitors and manages memory usage to prevent common Electron memory issues.
+ *
+ * Why memory management is critical in Electron:
+ * - Each renderer process uses separate memory (Chromium multiprocess)
+ * - JavaScript garbage collection isn't always aggressive enough
+ * - Memory leaks accumulate over time in long-running apps
+ * - Users notice when apps consume excessive RAM
+ * - OS may kill app if memory usage is too high
+ *
+ * Common memory issues in Electron:
+ * - Event listener leaks (not removing listeners)
+ * - DOM node leaks (keeping references to removed elements)
+ * - Large data caching without limits
+ * - Multiple renderer processes not being cleaned up
+ * - IPC message queuing without bounds
+ *
+ * This profiler helps by:
+ * - Monitoring memory usage across all processes
+ * - Triggering cleanup at thresholds
+ * - Providing memory usage statistics
+ * - Forcing garbage collection when needed
+ * - Alerting when memory is critically high
+ *
+ * @module electron/MemoryProfiler
  */
 
 const { EventEmitter } = require('events')
@@ -11,17 +33,31 @@ const { app, BrowserWindow } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Monitors memory usage and triggers cleanup operations.
+ *
+ * Features:
+ * - Real-time memory monitoring
+ * - Automatic garbage collection
+ * - Memory usage history tracking
+ * - Renderer process memory tracking
+ * - Cleanup callback system
+ * - Memory pressure event handling
+ *
+ * Extends EventEmitter to notify components of memory events.
+ */
 class MemoryProfiler extends EventEmitter {
   constructor(options = {}) {
     super()
 
+    // Configuration with sensible defaults
     this.options = {
-      monitoringInterval: options.monitoringInterval || 30000, // 30 seconds
-      warningThreshold: options.warningThreshold || 100 * 1024 * 1024, // 100MB
-      criticalThreshold: options.criticalThreshold || 200 * 1024 * 1024, // 200MB
-      enableGC: options.enableGC !== false, // Enable by default
+      monitoringInterval: options.monitoringInterval || 30000, // Check every 30s
+      warningThreshold: options.warningThreshold || 100 * 1024 * 1024, // Warn at 100MB
+      criticalThreshold: options.criticalThreshold || 200 * 1024 * 1024, // Critical at 200MB
+      enableGC: options.enableGC !== false, // Force GC when needed
       enableLogging: options.enableLogging !== false,
-      maxHistorySize: options.maxHistorySize || 100,
+      maxHistorySize: options.maxHistorySize || 100, // Keep last 100 snapshots
     }
 
     this.memoryHistory = []

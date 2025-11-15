@@ -1,17 +1,67 @@
+/**
+ * @fileoverview Application Menu Manager for Electron
+ *
+ * Manages the native application menu bar that appears at the top of the screen
+ * (macOS) or window (Windows/Linux). This is a key differentiator between
+ * web apps and desktop apps.
+ *
+ * Menu features provided:
+ * - File operations (New, Open, Save, etc.)
+ * - Edit operations (Cut, Copy, Paste, etc.)
+ * - View controls (Zoom, Fullscreen, DevTools)
+ * - Window management
+ * - Help and About dialogs
+ *
+ * Platform differences:
+ * - macOS: Menu is always at top of screen, separate from window
+ * - Windows/Linux: Menu is attached to each window
+ * - macOS has special "app menu" with About, Preferences, Quit
+ *
+ * Why native menus matter:
+ * - Users expect standard shortcuts (Cmd+C, Ctrl+V)
+ * - Accessibility tools integrate with native menus
+ * - OS-specific conventions (macOS vs Windows layouts)
+ * - Better keyboard navigation
+ *
+ * @module electron/MenuManager
+ */
+
 const { Menu, shell, dialog, app } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Manages application menu creation and updates.
+ *
+ * This class handles:
+ * - Platform-specific menu layouts
+ * - Standard menu items (File, Edit, View, etc.)
+ * - Custom application actions
+ * - Dynamic menu updates based on app state
+ * - Keyboard shortcut assignments
+ */
 class MenuManager {
   constructor() {
+    // Dependencies injected during initialization
     this.mainWindow = null
     this.windowManager = null
     this.configManager = null
+
+    // Platform detection for menu differences
     this.isMac = process.platform === 'darwin'
   }
 
   /**
-   * Initialize menu manager with required dependencies
+   * Initializes the menu manager with required dependencies.
+   *
+   * Must be called after the main window is created because:
+   * - Some menu actions target the main window
+   * - Window state affects menu item availability
+   * - Need windowManager for multi-window actions
+   *
+   * @param {BrowserWindow} mainWindow - The main application window
+   * @param {WindowManager} windowManager - For window-related menu actions
+   * @param {ConfigManager} configManager - For preference-related actions
    */
   initialize(mainWindow, windowManager, configManager) {
     log.debug('📋 [MenuManager] initialize() called with:', {
@@ -20,15 +70,18 @@ class MenuManager {
       hasConfigManager: !!configManager,
     })
 
+    // Store dependencies for menu actions
     this.mainWindow = mainWindow
     this.windowManager = windowManager
     this.configManager = configManager
 
+    // Create menu immediately - users expect it to be there
     log.info('📋 [MenuManager] Creating application menu...')
     try {
       this.createApplicationMenu()
       log.info('✅ [MenuManager] Application menu created successfully')
     } catch (error) {
+      // Menu creation failure is critical - app feels broken without it
       console.error(
         '❌ [MenuManager] Failed to create application menu:',
         error,
@@ -38,7 +91,15 @@ class MenuManager {
   }
 
   /**
-   * Create and set the application menu
+   * Creates and sets the application menu.
+   *
+   * The menu is built from a template structure that Electron
+   * converts to native menu objects for each platform.
+   *
+   * Process:
+   * 1. Build template (JS object structure)
+   * 2. Convert to native menu
+   * 3. Set as application menu
    */
   createApplicationMenu() {
     log.debug('📋 [MenuManager] Building menu template...')
@@ -53,40 +114,60 @@ class MenuManager {
   }
 
   /**
-   * Build the complete menu template based on platform
+   * Builds the complete menu template based on platform.
+   *
+   * Menu order follows platform conventions:
+   * - macOS: App, File, Edit, View, Window, Help
+   * - Windows/Linux: File, Edit, View, Window, Help
+   *
+   * Each menu has a specific purpose:
+   * - File: Document/data operations
+   * - Edit: Text manipulation and clipboard
+   * - View: Display options and zoom
+   * - Window: Window management
+   * - Help: Documentation and support
+   *
+   * @returns {Array} Menu template array
    */
   buildMenuTemplate() {
     const template = []
 
-    // macOS app menu (first menu)
+    // macOS requires special app menu with app name
     if (this.isMac) {
       template.push(this.createAppMenu())
     }
 
-    // File menu
+    // Standard menus in conventional order
     template.push(this.createFileMenu())
-
-    // Edit menu
     template.push(this.createEditMenu())
-
-    // View menu
     template.push(this.createViewMenu())
-
-    // Window menu
     template.push(this.createWindowMenu())
-
-    // Help menu
     template.push(this.createHelpMenu())
 
     return template
   }
 
   /**
-   * Create macOS-specific app menu
+   * Creates macOS-specific app menu (first menu with app name).
+   *
+   * This menu is unique to macOS and contains:
+   * - About dialog
+   * - Preferences (settings)
+   * - Services (OS integration)
+   * - Hide/Show options
+   * - Quit
+   *
+   * Why macOS is different:
+   * - Menu bar is always visible at top of screen
+   * - First menu must be app name (OS requirement)
+   * - Special roles like 'hide' work only here
+   * - Can't remove this menu (OS enforced)
+   *
+   * @returns {Object} macOS app menu template
    */
   createAppMenu() {
     return {
-      label: app.getName(),
+      label: app.getName(), // Must be app name on macOS
       submenu: [
         {
           label: `About ${app.getName()}`,
@@ -95,7 +176,8 @@ class MenuManager {
         { type: 'separator' },
         {
           label: 'Preferences...',
-          // accelerator: 'CmdOrCtrl+,',  // Disabled: conflicts with Cursor Editor
+          // Note: Cmd+, is standard but conflicts with some editors
+          // accelerator: 'CmdOrCtrl+,',
           click: () => this.openPreferences(),
         },
         { type: 'separator' },
@@ -368,13 +450,25 @@ class MenuManager {
   }
 
   /**
-   * Create Window menu
+   * Creates the Window menu for window management.
+   *
+   * Standard window operations:
+   * - Minimize: Reduces window to taskbar/dock
+   * - Close: Closes current window (may quit app)
+   * - Bring All to Front (macOS): Shows all app windows
+   *
+   * Platform differences:
+   * - macOS: Window menu is expected, has special roles
+   * - Windows: Often combined with File menu
+   * - Linux: Varies by desktop environment
+   *
+   * @returns {Object} Window menu template
    */
   createWindowMenu() {
     const submenu = [
       {
         label: 'Minimize',
-        accelerator: 'CmdOrCtrl+M',
+        accelerator: 'CmdOrCtrl+M', // Cmd on Mac, Ctrl on others
         click: () => {
           if (this.mainWindow) {
             this.mainWindow.minimize()
@@ -383,10 +477,10 @@ class MenuManager {
       },
       {
         label: 'Close',
-        accelerator: 'CmdOrCtrl+W',
+        accelerator: 'CmdOrCtrl+W', // Standard close shortcut
         click: () => {
           if (this.mainWindow) {
-            this.mainWindow.close()
+            this.mainWindow.close() // May trigger quit or minimize to tray
           }
         },
       },
@@ -410,19 +504,35 @@ class MenuManager {
   }
 
   /**
-   * Create Help menu
+   * Creates the Help menu for user assistance.
+   *
+   * Standard help menu items:
+   * - Documentation links
+   * - Support/community links
+   * - Bug reporting
+   * - About dialog (non-macOS)
+   *
+   * Why Help menu matters:
+   * - Users expect F1 or Help menu for assistance
+   * - Standard place for version info
+   * - Links to external resources
+   * - Keyboard shortcut reference
+   *
+   * @returns {Object} Help menu template
    */
   createHelpMenu() {
     const submenu = [
       {
         label: 'Learn More',
         click: () => {
+          // Opens in default browser, not in app
           shell.openExternal('https://github.com/corelive/corelive')
         },
       },
       {
         label: 'Documentation',
         click: () => {
+          // External links maintain security boundary
           shell.openExternal('https://github.com/corelive/corelive/wiki')
         },
       },

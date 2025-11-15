@@ -1,83 +1,154 @@
 /**
- * Performance optimization configuration for Electron
+ * @fileoverview Performance Optimization Configuration for Electron
  *
- * This module provides configuration and utilities for optimizing
- * Electron application performance, including lazy loading, memory management,
- * and startup optimization.
+ * This module manages performance-critical aspects of the Electron app:
+ * - Lazy loading of heavy modules
+ * - Memory usage monitoring and cleanup
+ * - Startup time optimization
+ * - Resource management strategies
+ * 
+ * Why performance optimization matters in Electron:
+ * - Electron apps use more memory than native apps (Chromium + Node.js)
+ * - Startup time affects user perception of app quality
+ * - Memory leaks are common with long-running desktop apps
+ * - Users expect desktop apps to be responsive
+ * 
+ * Key strategies implemented:
+ * 1. Lazy loading: Load modules only when needed
+ * 2. Memory monitoring: Track and respond to high usage
+ * 3. Garbage collection: Force cleanup when needed
+ * 4. Module caching: Balance memory vs performance
+ * 
+ * @module electron/performance-config
  */
 
 require('path')
-
 const { app } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Manages performance optimizations throughout the application lifecycle.
+ * 
+ * This class is instantiated once and provides:
+ * - Lazy module loading system
+ * - Memory usage monitoring
+ * - Automatic cleanup triggers
+ * - Performance metrics tracking
+ */
 class PerformanceOptimizer {
   constructor() {
+    // Cache for lazily loaded modules
     this.lazyModules = new Map()
+    
+    // Memory usage thresholds (in bytes)
     this.memoryThresholds = {
-      warning: 100 * 1024 * 1024, // 100MB
-      critical: 200 * 1024 * 1024, // 200MB
+      warning: 100 * 1024 * 1024,  // 100MB - log warning
+      critical: 200 * 1024 * 1024, // 200MB - force cleanup
     }
+    
+    // Tracks active monitoring intervals for cleanup
     this.cleanupIntervals = new Map()
+    
+    // Startup performance metrics
     this.startupMetrics = {
-      startTime: Date.now(),
-      modulesLoaded: 0,
-      windowsCreated: 0,
+      startTime: Date.now(),      // App start timestamp
+      modulesLoaded: 0,           // Count of lazy-loaded modules
+      windowsCreated: 0,          // Count of windows created
     }
   }
 
   /**
-   * Lazy load a module only when needed
-   * @param {string} moduleName - Name of the module to load
-   * @param {Function} loader - Function that returns the module
-   * @returns {any} The loaded module
+   * Implements lazy loading pattern for heavy modules.
+   * 
+   * Benefits:
+   * - Faster initial startup (load only what's needed)
+   * - Lower initial memory footprint
+   * - Better perceived performance
+   * 
+   * Usage example:
+   * ```js
+   * const autoUpdater = performanceOptimizer.lazyLoad(
+   *   'AutoUpdater',
+   *   () => require('./AutoUpdater.cjs')
+   * )
+   * ```
+   * 
+   * The module is loaded on first access and cached for subsequent calls.
+   * 
+   * @param {string} moduleName - Identifier for the module (for caching)
+   * @param {Function} loader - Function that requires/imports the module
+   * @returns {any} The loaded module (cached after first load)
+   * @throws {Error} If module fails to load
    */
   lazyLoad(moduleName, loader) {
+    // Check cache first
     if (!this.lazyModules.has(moduleName)) {
       const startTime = Date.now()
 
       try {
+        // Load module for the first time
         const module = loader()
         this.lazyModules.set(moduleName, module)
         this.startupMetrics.modulesLoaded++
 
-        // Calculate load time for potential future use
+        // Track load time for performance analysis
         const loadTime = Date.now() - startTime
-        if (loadTime) {
-          /* Load time available for logging */
+        if (loadTime > 100) {
+          // Warn if module takes too long to load
+          log.warn(`Module ${moduleName} took ${loadTime}ms to load`)
         }
 
         return module
       } catch (error) {
         log.error(`❌ Failed to lazy load ${moduleName}:`, error)
-        throw error
+        throw error // Re-throw for caller to handle
       }
     }
 
+    // Return cached module
     return this.lazyModules.get(moduleName)
   }
 
   /**
-   * Monitor memory usage and trigger cleanup if needed
+   * Starts monitoring memory usage and triggers cleanup when needed.
+   * 
+   * Memory management is crucial for Electron apps because:
+   * - Each renderer process uses its own memory
+   * - Chromium's memory usage can grow over time
+   * - Node.js heap has limits
+   * - Users notice when apps consume too much RAM
+   * 
+   * Monitoring strategy:
+   * - Check every 30 seconds (balanced interval)
+   * - Warning at 100MB heap usage
+   * - Critical/cleanup at 200MB heap usage
+   * 
+   * These thresholds are conservative and may need adjustment
+   * based on your app's specific needs.
    */
   startMemoryMonitoring() {
     const interval = setInterval(() => {
+      // Get current memory statistics
       const memoryUsage = process.memoryUsage()
       const heapUsed = memoryUsage.heapUsed
 
+      // Check against thresholds
       if (heapUsed > this.memoryThresholds.critical) {
         log.warn(
           `🚨 Critical memory usage: ${Math.round(heapUsed / 1024 / 1024)}MB`,
         )
+        // Force immediate cleanup
         this.performMemoryCleanup()
       } else if (heapUsed > this.memoryThresholds.warning) {
+        // Just warn, don't cleanup yet
         log.warn(
           `⚠️ High memory usage: ${Math.round(heapUsed / 1024 / 1024)}MB`,
         )
       }
     }, 30000) // Check every 30 seconds
 
+    // Store interval for later cleanup
     this.cleanupIntervals.set('memory', interval)
   }
 
@@ -230,25 +301,67 @@ class PerformanceOptimizer {
   }
 }
 
-// Configuration for different optimization levels
+/**
+ * Optimization level configurations for different environments.
+ * 
+ * Each level represents a different balance between:
+ * - Performance optimization aggressiveness
+ * - Development experience
+ * - Resource usage
+ * - Debugging capability
+ * 
+ * Choose based on your deployment scenario.
+ */
 const OPTIMIZATION_LEVELS = {
+  /**
+   * Development mode - prioritizes debugging over performance.
+   * 
+   * Settings:
+   * - Lazy loading OFF: All modules load immediately for easier debugging
+   * - Memory monitoring ON: Helps catch memory leaks during development
+   * - Check interval: 60s (less frequent to reduce noise)
+   * - Module caching OFF: Always get fresh modules for hot reload
+   */
   development: {
-    enableLazyLoading: false,
-    enableMemoryMonitoring: true,
-    memoryCheckInterval: 60000, // 1 minute
-    enableModuleCaching: false,
+    enableLazyLoading: false,       // Load everything upfront
+    enableMemoryMonitoring: true,   // Catch memory issues early
+    memoryCheckInterval: 60000,     // 1 minute - less intrusive
+    enableModuleCaching: false,     // Support hot reload
   },
+  
+  /**
+   * Production mode - balanced performance and stability.
+   * 
+   * Settings:
+   * - Lazy loading ON: Faster startup, lower initial memory
+   * - Memory monitoring ON: Proactive cleanup for long-running apps
+   * - Check interval: 30s (frequent checks for user-facing app)
+   * - Module caching ON: Better performance, lower memory churn
+   */
   production: {
-    enableLazyLoading: true,
-    enableMemoryMonitoring: true,
-    memoryCheckInterval: 30000, // 30 seconds
-    enableModuleCaching: true,
+    enableLazyLoading: true,        // Optimize startup time
+    enableMemoryMonitoring: true,   // Maintain stability
+    memoryCheckInterval: 30000,     // 30 seconds - responsive to issues
+    enableModuleCaching: true,      // Cache for performance
   },
+  
+  /**
+   * Minimal mode - maximum performance, minimum overhead.
+   * 
+   * Use when:
+   * - Running on low-end hardware
+   * - Memory monitoring causes issues
+   * - Maximum performance is critical
+   * 
+   * Trade-offs:
+   * - No automatic memory cleanup
+   * - May use more memory over time
+   */
   minimal: {
-    enableLazyLoading: true,
-    enableMemoryMonitoring: false,
-    memoryCheckInterval: 0,
-    enableModuleCaching: true,
+    enableLazyLoading: true,        // Still want fast startup
+    enableMemoryMonitoring: false,  // No monitoring overhead
+    memoryCheckInterval: 0,         // Disabled
+    enableModuleCaching: true,      // Maximum caching
   },
 }
 

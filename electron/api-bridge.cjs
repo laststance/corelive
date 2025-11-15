@@ -1,28 +1,102 @@
+/**
+ * @fileoverview API Bridge for Electron Main Process
+ * 
+ * This module provides a secure bridge between the Electron main process
+ * and the database. In Electron's security model, only the main process
+ * should have direct database access.
+ * 
+ * Architecture:
+ * - Renderer (web page) → IPC → Main Process → APIBridge → Database
+ * - Never expose database credentials to renderer
+ * - All queries run in main process
+ * - Results sanitized before sending to renderer
+ * 
+ * Why is this bridge necessary?
+ * - Security: Renderer processes are untrusted (can run user content)
+ * - Architecture: Keeps database logic centralized
+ * - Performance: Connection pooling in main process
+ * - Type safety: Single source of truth for data operations
+ * 
+ * User context:
+ * - Tracks current user via Clerk ID
+ * - All operations scoped to current user
+ * - Prevents cross-user data access
+ * 
+ * @module electron/api-bridge
+ */
+
 const { PrismaClient } = require('@prisma/client')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Manages database operations from the Electron main process.
+ * 
+ * Key responsibilities:
+ * - Database connection management
+ * - User context tracking
+ * - CRUD operations for todos
+ * - Data validation and sanitization
+ * - Error handling and logging
+ * 
+ * Security principles:
+ * - Never trust renderer input
+ * - Always validate IDs and data
+ * - Scope all queries to current user
+ * - Sanitize errors before sending to renderer
+ */
 class APIBridge {
   constructor() {
+    // Prisma client for database operations
     this.prisma = new PrismaClient()
-    this.currentUserId = null
-    this.currentClerkId = null
+    
+    // Track current user context
+    this.currentUserId = null    // Internal database ID
+    this.currentClerkId = null   // Clerk authentication ID
   }
 
+  /**
+   * Initializes database connection.
+   * 
+   * Must be called during app startup before any database operations.
+   * Connection failures are critical - app cannot function without database.
+   * 
+   * @throws {Error} If database connection fails
+   */
   async initialize() {
     try {
       await this.prisma.$connect()
+      log.info('✅ Database connected successfully')
     } catch (error) {
       log.error('❌ Database connection failed:', error)
-      throw error
+      throw error  // Let app decide how to handle
     }
   }
 
+  /**
+   * Closes database connection gracefully.
+   * 
+   * Should be called during app shutdown to:
+   * - Release database connections
+   * - Flush pending writes
+   * - Prevent connection leaks
+   */
   async disconnect() {
     await this.prisma.$disconnect()
+    log.info('Database disconnected')
   }
 
-  // Ensure an active user is set before performing operations
+  /**
+   * Ensures a user is authenticated before database operations.
+   * 
+   * Security guard that prevents:
+   * - Unauthenticated access
+   * - Operations without user context
+   * - Cross-user data access
+   * 
+   * @returns {number} The current user's database ID
+   * @throws {Error} If no user is authenticated
+   */
   ensureActiveUser() {
     if (this.currentUserId === null) {
       throw new Error('Active user not set for Electron API bridge')
@@ -30,20 +104,38 @@ class APIBridge {
     return this.currentUserId
   }
 
-  // Update active user based on Clerk ID
+  /**
+   * Sets the active user context from Clerk authentication.
+   * 
+   * Creates user record if needed (upsert operation).
+   * This bridges Clerk (web auth) with our database.
+   * 
+   * Flow:
+   * 1. User signs in via Clerk in renderer
+   * 2. Clerk ID sent to main process
+   * 3. This method creates/updates database user
+   * 4. All subsequent operations use this context
+   * 
+   * @param {string} clerkId - Clerk user identifier
+   * @returns {Promise<User>} The user record
+   * @throws {Error} If clerkId is invalid
+   */
   async setUserByClerkId(clerkId) {
+    // Validate input
     if (!clerkId || typeof clerkId !== 'string') {
       throw new Error('Invalid Clerk user ID')
     }
 
+    // Create or update user record
     const user = await this.prisma.user.upsert({
       where: { clerkId },
-      update: {},
+      update: {},  // No updates needed, just ensure exists
       create: {
-        clerkId,
+        clerkId,   // Minimal user creation
       },
     })
 
+    // Set context for future operations
     this.currentUserId = user.id
     this.currentClerkId = clerkId
     return user
@@ -66,14 +158,31 @@ class APIBridge {
     return numericId
   }
 
-  // Todo operations
+  /**
+   * Lists todos for the current user with pagination.
+   * 
+   * Features:
+   * - Automatic user scoping (security)
+   * - Optional filtering by completion status
+   * - Pagination support for large lists
+   * - Total count for UI pagination
+   * 
+   * @param {Object} options - Query options
+   * @param {boolean} [options.completed] - Filter by completion status
+   * @param {number} [options.limit=100] - Maximum results to return
+   * @param {number} [options.offset=0] - Skip this many results
+   * @returns {Promise<Object>} Paginated todo results
+   */
   async listTodos(options = {}) {
+    // Ensure user is authenticated
     const userId = this.ensureActiveUser()
 
+    // Extract and validate options
     const { completed, limit = 100, offset = 0 } = options || {}
 
+    // Build query filter - always scoped to user
     const where = {
-      userId,
+      userId,  // Critical: prevent cross-user access
       ...(typeof completed === 'boolean' && { completed }),
     }
 

@@ -1,56 +1,129 @@
+/**
+ * @fileoverview Native Notification Manager for Electron
+ * 
+ * Manages OS-level notifications for the application.
+ * 
+ * Why notifications matter for desktop apps:
+ * - Keep users informed without interrupting workflow
+ * - Provide updates when app is minimized/background
+ * - Drive engagement through timely reminders
+ * - Integrate with OS notification center
+ * - Accessibility: Audio/visual alerts for all users
+ * 
+ * Platform differences:
+ * - Windows: Action Center integration, toast notifications
+ * - macOS: Notification Center, requires permissions
+ * - Linux: Varies by desktop environment (libnotify)
+ * 
+ * Notification types:
+ * - Task created: Confirm action success
+ * - Task completed: Celebrate achievements
+ * - Reminders: Time-based alerts
+ * - Updates: App update available
+ * - Errors: Important failures
+ * 
+ * Best practices:
+ * - Don't spam users with notifications
+ * - Make them actionable (click to open task)
+ * - Respect Do Not Disturb modes
+ * - Allow granular preferences
+ * - Handle permission denials gracefully
+ * 
+ * @module electron/NotificationManager
+ */
+
 const path = require('path')
 
 const { Notification, nativeImage } = require('electron')
 
 const { log } = require('../src/lib/logger.cjs')
 
+/**
+ * Manages native OS notifications with robust error handling.
+ * 
+ * Features:
+ * - Cross-platform notification support
+ * - Permission management
+ * - User preference respect
+ * - Click action handling
+ * - Notification grouping
+ * - Custom icons and sounds
+ * - Fallback strategies
+ * 
+ * The manager handles platform quirks:
+ * - macOS permission prompts
+ * - Windows notification settings
+ * - Linux desktop environment variations
+ */
 class NotificationManager {
   constructor(windowManager, systemTrayManager, configManager = null) {
-    this.windowManager = windowManager
-    this.systemTrayManager = systemTrayManager
-    this.configManager = configManager
-    this.activeNotifications = new Map()
+    this.windowManager = windowManager         // For click actions
+    this.systemTrayManager = systemTrayManager // For tray notifications
+    this.configManager = configManager         // User preferences
+    this.activeNotifications = new Map()       // Track active notifications
 
-    // Load preferences from config or use defaults
+    // Load user preferences or use sensible defaults
     this.loadPreferences()
   }
 
   /**
-   * Load notification preferences from configuration
+   * Loads notification preferences from user configuration.
+   * 
+   * Preferences allow users to:
+   * - Disable notifications entirely
+   * - Choose which events trigger notifications
+   * - Control sound/visual settings
+   * - Set auto-hide timing
+   * 
+   * Defaults are chosen to be helpful but not annoying.
    */
   loadPreferences() {
     if (this.configManager) {
       this.preferences = this.configManager.getSection('notifications')
     } else {
-      // Fallback to default preferences
+      // Default preferences - balanced for most users
       this.preferences = {
-        enabled: true,
-        taskCreated: true,
-        taskCompleted: true,
-        taskUpdated: true,
-        taskDeleted: false,
-        sound: true,
-        showInTray: true,
-        autoHide: true,
-        autoHideDelay: 5000,
-        position: 'topRight',
+        enabled: true,          // Master switch
+        taskCreated: true,      // Confirm task creation
+        taskCompleted: true,    // Celebrate completions
+        taskUpdated: true,      // Show important changes
+        taskDeleted: false,     // Usually not needed
+        sound: true,            // Audio feedback
+        showInTray: true,       // Tray icon badges
+        autoHide: true,         // Don't persist forever
+        autoHideDelay: 5000,    // 5 seconds visibility
+        position: 'topRight',   // Standard position
       }
     }
   }
 
   /**
-   * Initialize notification manager and check permissions
+   * Initializes the notification system with permission checks.
+   * 
+   * Initialization steps:
+   * 1. Check OS support for notifications
+   * 2. Request/verify permissions (macOS)
+   * 3. Test notification capability
+   * 4. Set up fallback strategies
+   * 
+   * Why thorough initialization?
+   * - Permissions can be complex on macOS
+   * - Some Linux systems lack notification support
+   * - Early detection allows graceful degradation
+   * - Better UX than failing when trying to notify
+   * 
+   * @returns {Promise<boolean>} True if notifications are available
    */
   async initialize() {
     try {
-      // Check if notifications are supported
+      // Step 1: Check basic support
       if (!Notification.isSupported()) {
         log.warn('Notifications are not supported on this system')
         this.handleNotificationUnavailable('not_supported')
         return false
       }
 
-      // Check platform-specific permission requirements
+      // Step 2: Check permissions (mainly for macOS)
       const permissionResult = await this.checkNotificationPermissions()
       if (!permissionResult.granted) {
         log.warn('Notification permissions denied:', permissionResult.reason)
@@ -58,7 +131,7 @@ class NotificationManager {
         return false
       }
 
-      // Test notification capability with comprehensive error handling
+      // Step 3: Test with actual notification
       const testResult = await this.testNotificationCapability()
       if (!testResult.success) {
         log.warn('Notification test failed:', testResult.error)
@@ -66,6 +139,7 @@ class NotificationManager {
         return false
       }
 
+      log.info('✅ Notifications initialized successfully')
       return true
     } catch (error) {
       log.error('❌ Failed to initialize notification manager:', error)
@@ -75,16 +149,28 @@ class NotificationManager {
   }
 
   /**
-   * Check notification permissions across platforms
+   * Checks notification permissions across different platforms.
+   * 
+   * Platform behaviors:
+   * - Windows: Usually allowed by default
+   * - Linux: Depends on desktop environment
+   * - macOS: Requires explicit permission
+   * 
+   * macOS Catalina+ requires:
+   * - User approval in System Preferences
+   * - App must be notarized
+   * - Cannot programmatically request permission
+   * 
+   * @returns {Promise<Object>} Permission status and reason
    */
   async checkNotificationPermissions() {
     try {
-      // On Windows and Linux, notifications are generally available
+      // Windows/Linux typically allow notifications by default
       if (process.platform === 'win32' || process.platform === 'linux') {
         return { granted: true, reason: 'platform_default' }
       }
 
-      // On macOS, check if we can create notifications
+      // macOS requires special handling
       if (process.platform === 'darwin') {
         try {
           // Try to create a silent test notification

@@ -1,21 +1,54 @@
 /**
- * Lazy Loading Manager for Electron Components
+ * @fileoverview Lazy Loading Manager for Electron Components
  *
- * This module manages lazy loading of non-critical Electron components
- * to improve startup time and reduce memory usage.
+ * Manages on-demand loading of non-critical Electron components
+ * to dramatically improve startup performance.
+ *
+ * Why lazy loading matters in Electron:
+ * - Electron apps can be slow to start (loading Chromium + Node.js)
+ * - Users expect desktop apps to launch quickly
+ * - Many features aren't needed immediately at startup
+ * - Loading everything upfront wastes memory and time
+ *
+ * Strategy:
+ * - Load only essential components at startup (window, IPC)
+ * - Defer heavy modules until actually needed
+ * - Cache loaded modules to avoid re-loading
+ * - Handle loading errors gracefully
+ *
+ * Performance impact:
+ * - Can reduce startup time by 30-50%
+ * - Lower initial memory footprint
+ * - Better perceived performance
+ *
+ * @module electron/LazyLoadManager
  */
 
 const { log } = require('../src/lib/logger.cjs')
 
 const { performanceOptimizer } = require('./performance-config.cjs')
 
+/**
+ * Orchestrates lazy loading of Electron components.
+ *
+ * Components are categorized by priority:
+ * - Critical: Loaded immediately (WindowManager, API Bridge)
+ * - Important: Loaded soon after startup (Menu, Shortcuts)
+ * - Optional: Loaded on-demand (Tray, Notifications, Updates)
+ *
+ * This manager ensures:
+ * - Components load only once (singleton pattern)
+ * - Concurrent requests share the same loading promise
+ * - Failed loads don't crash the app
+ * - Loading metrics are tracked
+ */
 class LazyLoadManager {
   constructor() {
-    this.loadedComponents = new Set()
-    this.loadingPromises = new Map()
-    this.componentFactories = new Map()
+    this.loadedComponents = new Set() // Track loaded modules
+    this.loadingPromises = new Map() // Prevent duplicate loads
+    this.componentFactories = new Map() // Module loader functions
 
-    // Register component factories
+    // Define how to load each component
     this.registerComponentFactories()
   }
 

@@ -1,25 +1,73 @@
-// SystemIntegrationErrorHandler - handles system integration failures
+/**
+ * @fileoverview System Integration Error Handler for Electron
+ *
+ * Manages failures in OS-level integrations and provides fallback strategies.
+ *
+ * Why system integration error handling matters:
+ * - OS features can fail for many reasons (permissions, conflicts, bugs)
+ * - Users expect apps to work even with partial feature failures
+ * - Different platforms have different failure modes
+ * - Graceful degradation is better than crashing
+ *
+ * System integrations that can fail:
+ * - System tray (missing on some Linux desktops)
+ * - Notifications (permissions, DND mode)
+ * - Global shortcuts (conflicts with other apps)
+ * - Protocol handlers (security restrictions)
+ * - Auto-start (permissions)
+ *
+ * This handler provides:
+ * - Centralized error management
+ * - Fallback strategies for each feature
+ * - User notification of degraded functionality
+ * - Recovery attempts where possible
+ * - Detailed logging for support
+ *
+ * @module electron/SystemIntegrationErrorHandler
+ */
+
 const { log } = require('../src/lib/logger.cjs')
 
 /**
- * Centralized error handler for system integration failures
- * Coordinates fallback behavior across tray, notifications, and shortcuts
+ * Coordinates error handling and fallback strategies for OS integrations.
+ *
+ * Key responsibilities:
+ * - Initialize system features with error handling
+ * - Track what's working and what's not
+ * - Implement fallback behaviors
+ * - Notify users of limitations
+ * - Attempt recovery when appropriate
+ *
+ * Design philosophy:
+ * - Fail gracefully, not catastrophically
+ * - Always provide core functionality
+ * - Be transparent about limitations
+ * - Log everything for debugging
  */
 class SystemIntegrationErrorHandler {
   constructor(windowManager, configManager = null) {
     this.windowManager = windowManager
     this.configManager = configManager
+
+    // References to system integration managers
     this.systemTrayManager = null
     this.notificationManager = null
     this.shortcutManager = null
 
-    // Track system integration status
+    /**
+     * Track integration status for each feature.
+     * This helps us:
+     * - Know what's working
+     * - Implement appropriate fallbacks
+     * - Show accurate status to users
+     * - Debug issues in production
+     */
     this.integrationStatus = {
       tray: { available: false, fallbackMode: false, error: null },
       notifications: { available: false, fallbackMode: false, error: null },
       shortcuts: {
         available: false,
-        partiallyAvailable: false,
+        partiallyAvailable: false, // Some shortcuts might work
         failedCount: 0,
         error: null,
       },
@@ -43,7 +91,20 @@ class SystemIntegrationErrorHandler {
   }
 
   /**
-   * Initialize system integration with comprehensive error handling
+   * Initializes all system integrations with error handling.
+   *
+   * Process:
+   * 1. Try to initialize each integration
+   * 2. Catch and handle failures
+   * 3. Activate fallback modes
+   * 4. Notify user of any limitations
+   *
+   * Why initialize all at once?
+   * - Better user experience (one notification vs many)
+   * - Can make intelligent fallback decisions
+   * - Easier to show overall status
+   *
+   * @returns {Promise<Object>} Status of each integration
    */
   async initializeSystemIntegration() {
     const results = {
@@ -52,17 +113,30 @@ class SystemIntegrationErrorHandler {
       shortcuts: await this.initializeShortcutsWithErrorHandling(),
     }
 
-    // Analyze overall integration status
+    // Determine overall health and fallback strategies
     this.analyzeIntegrationStatus(results)
 
-    // Show user summary if there are issues
+    // Inform user once about all issues (better UX)
     this.showIntegrationSummary(results)
 
     return results
   }
 
   /**
-   * Initialize system tray with error handling
+   * Initializes system tray with fallback handling.
+   *
+   * Common failure scenarios:
+   * - Linux without system tray support
+   * - macOS with hidden menu bar
+   * - Windows with disabled notification area
+   * - Missing tray icon file
+   *
+   * Fallback behavior:
+   * - Window stays in taskbar when closed
+   * - No minimize-to-tray functionality
+   * - Window controls work normally
+   *
+   * @returns {Promise<Object>} Initialization result
    */
   async initializeTrayWithErrorHandling() {
     try {
@@ -73,6 +147,7 @@ class SystemIntegrationErrorHandler {
       const tray = this.systemTrayManager.createTray()
 
       if (tray) {
+        // Success! Tray is working
         this.integrationStatus.tray = {
           available: true,
           fallbackMode: false,
