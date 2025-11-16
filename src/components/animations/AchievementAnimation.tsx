@@ -1,7 +1,7 @@
 'use client'
 
 import { Trophy, Star, Gift, Medal, Crown } from 'lucide-react'
-import React from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -118,21 +118,27 @@ export function AchievementNotifications({
   // Show achievements one by one
   const achievement = achievements[currentIndex] || null
 
-  const handleComplete = () => {
-    if (currentIndex < achievements.length - 1) {
-      setCurrentIndex(currentIndex + 1)
-    } else {
-      setAchievements([])
-      setCurrentIndex(0)
-    }
-  }
+  const handleComplete = useCallback(() => {
+    setCurrentIndex((prevIndex) => {
+      let shouldReset = false
+      setAchievements((prevAchievements) => {
+        if (prevIndex < prevAchievements.length - 1) {
+          return prevAchievements
+        } else {
+          shouldReset = true
+          return []
+        }
+      })
+      return shouldReset ? 0 : prevIndex + 1
+    })
+  }, [])
 
-  const addAchievement = (achievement: Achievement) => {
-    setAchievements((prev) => [...prev, achievement])
-  }
+  const addAchievement = useCallback((achievement: Achievement) => {
+    setAchievements((prev: Achievement[]) => [...prev, achievement])
+  }, [])
 
   // Expose methods via ref or context if needed
-  React.useEffect(() => {
+  useEffect(() => {
     // Example: Listen for achievement events
     const handleAchievementUnlock = (event: CustomEvent<Achievement>) => {
       addAchievement(event.detail)
@@ -148,14 +154,26 @@ export function AchievementNotifications({
         handleAchievementUnlock as EventListener,
       )
     }
-  }, [])
+  }, [addAchievement])
+
+  // Auto-advance after animation completes (you can adjust timing)
+  /* eslint-disable react-you-might-not-need-an-effect/no-event-handler */
+  useEffect(() => {
+    if (achievement) {
+      const timer = setTimeout(() => {
+        handleComplete()
+      }, 3000) // 3 seconds for animation
+      return () => clearTimeout(timer)
+    }
+  }, [achievement, handleComplete])
+  /* eslint-enable react-you-might-not-need-an-effect/no-event-handler */
+
+  if (!achievement) {
+    return null
+  }
 
   return (
-    <AchievementAnimation
-      achievement={achievement}
-      onComplete={handleComplete}
-      className={className}
-    />
+    <AchievementAnimation achievement={achievement} className={className} />
   )
 }
 

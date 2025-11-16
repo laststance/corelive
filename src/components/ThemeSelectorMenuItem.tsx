@@ -22,7 +22,9 @@ export function ThemeSelectorMenuItem() {
   const { theme, setTheme } = useTheme()
 
   // Group themes by free/premium for the menu
-  const basicThemes = ['light', 'dark', 'traditional-light', 'traditional-dark']
+  const defaultThemes = ['light', 'dark']
+  const coreliveBases = ['corelive-base-light', 'corelive-base-dark']
+  const traditionalThemes = ['traditional-light', 'traditional-dark']
 
   const harmonizedThemes = [
     'harmonized-red',
@@ -80,11 +82,23 @@ export function ThemeSelectorMenuItem() {
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent className="max-h-96 w-48 overflow-y-auto">
-          {/* Basic Themes */}
+          {/* Default shadcn/ui Themes */}
           <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-            Basic
+            Default
           </div>
-          {basicThemes.map(renderThemeItem)}
+          {defaultThemes.map(renderThemeItem)}
+
+          {/* CoreLive Base Themes */}
+          <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
+            CoreLive Base
+          </div>
+          {coreliveBases.map(renderThemeItem)}
+
+          {/* Traditional TODO Themes */}
+          <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
+            Traditional TODO
+          </div>
+          {traditionalThemes.map(renderThemeItem)}
 
           {/* Harmonized Themes */}
           <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">

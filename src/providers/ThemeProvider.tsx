@@ -9,14 +9,24 @@ import React, { createContext, useContext } from 'react'
  * Supporting 100+ themes across different categories
  */
 export const CORELIVE_THEMES = {
-  // Base themes (Free tier)
-  BASE: {
+  // Default themes from shadcn/ui (Free tier)
+  DEFAULT: {
     LIGHT: 'light',
     DARK: 'dark',
-    TRADITIONAL_LIGHT: 'traditional-light',
-    TRADITIONAL_DARK: 'traditional-dark',
   },
-  
+
+  // CoreLive base themes (Free tier)
+  CORELIVE_BASE: {
+    LIGHT: 'corelive-base-light',
+    DARK: 'corelive-base-dark',
+  },
+
+  // Traditional TODO themes (Free tier)
+  TRADITIONAL: {
+    LIGHT: 'traditional-light',
+    DARK: 'traditional-dark',
+  },
+
   // Harmonized themes (from harmonized-palette.css)
   HARMONIZED: {
     RED: 'harmonized-red',
@@ -30,7 +40,7 @@ export const CORELIVE_THEMES = {
     FUCHSIA: 'harmonized-fuchsia',
     FUCHSIA_DARK: 'harmonized-fuchsia-dark',
   },
-  
+
   // Premium Dark themes (30 variants)
   DARK: {
     MIDNIGHT: 'dark-midnight',
@@ -40,7 +50,7 @@ export const CORELIVE_THEMES = {
     SHADOW: 'dark-shadow',
     // ... more to be added
   },
-  
+
   // Premium Light themes (20 variants)
   LIGHT: {
     PEARL: 'light-pearl',
@@ -50,7 +60,7 @@ export const CORELIVE_THEMES = {
     IVORY: 'light-ivory',
     // ... more to be added
   },
-  
+
   // Gradient themes (20 variants)
   GRADIENT: {
     AURORA: 'gradient-aurora',
@@ -60,7 +70,7 @@ export const CORELIVE_THEMES = {
     NEBULA: 'gradient-nebula',
     // ... more to be added
   },
-  
+
   // Retro/Vintage themes (15 variants)
   RETRO: {
     SYNTHWAVE: 'retro-synthwave',
@@ -70,7 +80,7 @@ export const CORELIVE_THEMES = {
     NEON: 'retro-neon',
     // ... more to be added
   },
-  
+
   // Seasonal themes (15 variants)
   SEASONAL: {
     SPRING_BLOSSOM: 'seasonal-spring-blossom',
@@ -83,13 +93,18 @@ export const CORELIVE_THEMES = {
 } as const
 
 // Extract all theme values into a flat array
-export const ALL_THEMES = Object.values(CORELIVE_THEMES).flatMap(category => 
-  Object.values(category)
+export const ALL_THEMES = Object.values(CORELIVE_THEMES).flatMap((category) =>
+  Object.values(category),
 )
 
 // Theme categories for filtering
 export const THEME_CATEGORIES = {
-  FREE: [...Object.values(CORELIVE_THEMES.BASE), ...Object.values(CORELIVE_THEMES.HARMONIZED)],
+  FREE: [
+    ...Object.values(CORELIVE_THEMES.DEFAULT),
+    ...Object.values(CORELIVE_THEMES.CORELIVE_BASE),
+    ...Object.values(CORELIVE_THEMES.TRADITIONAL),
+    ...Object.values(CORELIVE_THEMES.HARMONIZED),
+  ],
   PREMIUM_DARK: Object.values(CORELIVE_THEMES.DARK),
   PREMIUM_LIGHT: Object.values(CORELIVE_THEMES.LIGHT),
   PREMIUM_GRADIENT: Object.values(CORELIVE_THEMES.GRADIENT),
@@ -98,43 +113,71 @@ export const THEME_CATEGORIES = {
 } as const
 
 // Theme metadata for UI display
-export const THEME_METADATA: Record<string, {
-  name: string
-  category: 'base' | 'harmonized' | 'dark' | 'light' | 'gradient' | 'retro' | 'seasonal'
-  isPremium: boolean
-  description?: string
-  preview?: string // Preview color or gradient
-}> = {
-  // Base themes
-  [CORELIVE_THEMES.BASE.LIGHT]: {
+export const THEME_METADATA: Record<
+  string,
+  {
+    name: string
+    category:
+      | 'base'
+      | 'harmonized'
+      | 'dark'
+      | 'light'
+      | 'gradient'
+      | 'retro'
+      | 'seasonal'
+    isPremium: boolean
+    description?: string
+    preview?: string // Preview color or gradient
+  }
+> = {
+  // Default shadcn/ui themes
+  [CORELIVE_THEMES.DEFAULT.LIGHT]: {
     name: 'Light',
     category: 'base',
     isPremium: false,
     description: 'Clean and minimal light theme',
     preview: '#ffffff',
   },
-  [CORELIVE_THEMES.BASE.DARK]: {
+  [CORELIVE_THEMES.DEFAULT.DARK]: {
     name: 'Dark',
     category: 'base',
     isPremium: false,
     description: 'Modern dark theme',
     preview: '#1a1a1a',
   },
-  [CORELIVE_THEMES.BASE.TRADITIONAL_LIGHT]: {
+
+  // CoreLive base themes
+  [CORELIVE_THEMES.CORELIVE_BASE.LIGHT]: {
+    name: 'CoreLive Light',
+    category: 'base',
+    isPremium: false,
+    description: 'CoreLive extended light theme',
+    preview: '#ffffff',
+  },
+  [CORELIVE_THEMES.CORELIVE_BASE.DARK]: {
+    name: 'CoreLive Dark',
+    category: 'base',
+    isPremium: false,
+    description: 'CoreLive extended dark theme',
+    preview: '#1a1a1a',
+  },
+
+  // Traditional TODO themes
+  [CORELIVE_THEMES.TRADITIONAL.LIGHT]: {
     name: 'Traditional Light',
     category: 'base',
     isPremium: false,
     description: 'Classic TODO app light mode',
     preview: '#f5f5f5',
   },
-  [CORELIVE_THEMES.BASE.TRADITIONAL_DARK]: {
+  [CORELIVE_THEMES.TRADITIONAL.DARK]: {
     name: 'Traditional Dark',
     category: 'base',
     isPremium: false,
     description: 'Classic TODO app dark mode',
     preview: '#2d2d2d',
   },
-  
+
   // Harmonized themes
   [CORELIVE_THEMES.HARMONIZED.RED]: {
     name: 'Harmonized Red',
@@ -207,7 +250,7 @@ export const THEME_METADATA: Record<string, {
     description: 'Dark fuchsia color palette',
     preview: '#701a75',
   },
-  
+
   // Premium Dark themes
   [CORELIVE_THEMES.DARK.MIDNIGHT]: {
     name: 'Midnight',
@@ -244,7 +287,7 @@ export const THEME_METADATA: Record<string, {
     description: 'Deep shadow theme',
     preview: '#2d1b69',
   },
-  
+
   // Premium Light themes
   [CORELIVE_THEMES.LIGHT.PEARL]: {
     name: 'Pearl',
@@ -281,7 +324,7 @@ export const THEME_METADATA: Record<string, {
     description: 'Classic ivory theme',
     preview: '#fffef7',
   },
-  
+
   // Premium Gradient themes
   [CORELIVE_THEMES.GRADIENT.AURORA]: {
     name: 'Aurora',
@@ -318,7 +361,7 @@ export const THEME_METADATA: Record<string, {
     description: 'Space nebula gradient',
     preview: 'linear-gradient(135deg, #4c1d95, #a21caf)',
   },
-  
+
   // Premium Retro themes
   [CORELIVE_THEMES.RETRO.SYNTHWAVE]: {
     name: 'Synthwave',
@@ -355,7 +398,7 @@ export const THEME_METADATA: Record<string, {
     description: 'Neon sign glow',
     preview: '#ff00ff',
   },
-  
+
   // Premium Seasonal themes
   [CORELIVE_THEMES.SEASONAL.SPRING_BLOSSOM]: {
     name: 'Spring Blossom',

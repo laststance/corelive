@@ -5,8 +5,20 @@
  * Import this file in your globals.css
  */
 
-/* Base theme (includes all base tokens) */
-@import './tokens/themes/base-theme.css';
+/* Base tokens */
+@import './tokens/base/harmonized-palette.css';
+@import './tokens/base/typography.css';
+@import './tokens/base/spacing.css';
+@import './tokens/base/animations.css';
+@import './tokens/base/tailwind-theme.css';
+@import './tokens/base/global-base.css';
+
+/* Default shadcn/ui theme - Load after base tokens */
+@import './tokens/themes/shadcn-default.css';
+
+/* CoreLive base theme */
+@import './tokens/themes/corelive-base.css';
+@import './tokens/themes/corelive-colors.css';
 
 /* Theme variations */
 @import './tokens/themes/traditional-todo.css';

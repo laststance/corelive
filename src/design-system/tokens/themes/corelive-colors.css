@@ -1,24 +1,13 @@
 /**
- * CoreLive Design System - Base Color Tokens
+ * CoreLive Design System - CoreLive Theme Color Tokens
  * 
- * This file defines the color token architecture that powers the entire theme system.
- * Colors are defined using OKLCH for better perceptual uniformity and interpolation.
+ * Color definitions specific to CoreLive themes
+ * Uses OKLCH for better perceptual uniformity and interpolation
  */
 
-/* Import harmonized color palette from Evil Martians */
-@import './harmonized-palette.css';
-
 @layer base {
-  /**
-   * Color token naming convention:
-   * --color-{role}-{variant}-{state}
-   * 
-   * Roles: primary, secondary, accent, neutral, success, warning, danger
-   * Variants: DEFAULT, foreground, 50-950 (shades)
-   * States: hover, active, disabled
-   */
-
-  :root {
+  /* CoreLive Light theme colors */
+  [data-theme='corelive-base-light'] {
     /* System color tokens - These map to our design roles */
     --color-background: oklch(0.985 0.002 247.859); /* Base background */
     --color-foreground: oklch(0.195 0.002 247.839); /* Base text */
@@ -72,9 +61,8 @@
     --color-chart-5: oklch(0.65 0.25 300);
   }
 
-  /* Dark mode color tokens */
-  .dark,
-  [data-theme='dark'] {
+  /* CoreLive Dark theme colors */
+  [data-theme='corelive-base-dark'] {
     --color-background: oklch(0.145 0.002 247.865);
     --color-foreground: oklch(0.985 0.002 247.859);
 
@@ -156,7 +144,9 @@
 
 /* Export color tokens to CSS variables for Tailwind */
 @layer base {
-  * {
+  [data-theme='corelive-base-light'],
+  [data-theme='corelive-base-dark'],
+  [data-theme^='harmonized-'] {
     /* Map design system colors to Tailwind's expected variables */
     --background: var(--color-background);
     --foreground: var(--color-foreground);
