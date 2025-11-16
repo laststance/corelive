@@ -1,0 +1,209 @@
+/**
+ * CoreLive Design System - Traditional TODO Theme
+ * 
+ * Classic TODO app aesthetic with paper-like backgrounds
+ * and traditional checkbox styling
+ */
+
+@layer base {
+  /* Traditional Light Mode */
+  [data-theme='traditional-light'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Traditional Light';
+    --theme-mode: 'light';
+
+    /* Paper-like colors */
+    --color-background: oklch(0.975 0.001 82.5); /* Off-white paper */
+    --color-foreground: oklch(0.2 0.01 250); /* Dark blue ink */
+
+    /* Traditional blue primary */
+    --color-primary: oklch(0.52 0.19 236); /* Classic blue */
+    --color-primary-foreground: oklch(0.98 0 0);
+
+    /* Muted secondary */
+    --color-secondary: oklch(0.7 0.05 250);
+    --color-secondary-foreground: oklch(0.98 0 0);
+
+    /* Paper texture accents */
+    --color-accent: oklch(0.95 0.01 82.5);
+    --color-accent-foreground: oklch(0.3 0.01 250);
+
+    --color-muted: oklch(0.92 0.005 82.5);
+    --color-muted-foreground: oklch(0.45 0.01 250);
+
+    /* Traditional status colors */
+    --color-success: oklch(0.55 0.15 145);
+    --color-warning: oklch(0.7 0.15 85);
+    --color-danger: oklch(0.55 0.2 27);
+
+    /* Card as notebook paper */
+    --color-card: oklch(0.985 0 0);
+    --color-card-foreground: var(--color-foreground);
+
+    /* Input styling */
+    --color-input: oklch(0.96 0.002 82.5);
+    --color-border: oklch(0.85 0.01 250);
+    --color-ring: var(--color-primary);
+
+    /* Paper shadows */
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --shadow-sm:
+      0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+    --shadow-md:
+      0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg:
+      0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+
+    /* Traditional TODO specific */
+    --todo-line-color: oklch(0.9 0.01 250);
+    --todo-checkbox-size: 18px;
+    --todo-line-height: 28px;
+    --todo-paper-line: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent var(--todo-line-height),
+      var(--todo-line-color) var(--todo-line-height),
+      var(--todo-line-color) calc(var(--todo-line-height) + 1px)
+    );
+  }
+
+  /* Traditional Dark Mode */
+  [data-theme='traditional-dark'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Traditional Dark';
+    --theme-mode: 'dark';
+
+    /* Dark paper colors */
+    --color-background: oklch(0.2 0.01 250); /* Dark navy */
+    --color-foreground: oklch(0.92 0.01 82.5); /* Light cream */
+
+    /* Muted blue primary */
+    --color-primary: oklch(0.6 0.15 236);
+    --color-primary-foreground: oklch(0.15 0.01 250);
+
+    /* Warm secondary */
+    --color-secondary: oklch(0.5 0.1 60);
+    --color-secondary-foreground: oklch(0.95 0.01 82.5);
+
+    /* Dark accents */
+    --color-accent: oklch(0.28 0.015 250);
+    --color-accent-foreground: oklch(0.9 0.01 82.5);
+
+    --color-muted: oklch(0.25 0.01 250);
+    --color-muted-foreground: oklch(0.65 0.01 82.5);
+
+    /* Muted status colors */
+    --color-success: oklch(0.6 0.15 145);
+    --color-warning: oklch(0.65 0.18 70);
+    --color-danger: oklch(0.6 0.2 27);
+
+    /* Dark card */
+    --color-card: oklch(0.22 0.01 250);
+    --color-card-foreground: var(--color-foreground);
+
+    /* Input styling */
+    --color-input: oklch(0.27 0.01 250);
+    --color-border: oklch(0.35 0.01 250);
+    --color-ring: var(--color-primary);
+
+    /* Subtle shadows */
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+    --shadow-md:
+      0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+    --shadow-lg:
+      0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+
+    /* Traditional TODO specific */
+    --todo-line-color: oklch(0.3 0.01 250);
+    --todo-checkbox-size: 18px;
+    --todo-line-height: 28px;
+    --todo-paper-line: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent var(--todo-line-height),
+      var(--todo-line-color) var(--todo-line-height),
+      var(--todo-line-color) calc(var(--todo-line-height) + 1px)
+    );
+  }
+
+  /* Traditional theme specific styles */
+  [data-theme^='traditional'] {
+    /* Notebook paper effect for todo lists */
+    .todo-list,
+    [data-todo-list] {
+      background-image: var(--todo-paper-line);
+      background-size: 100% calc(var(--todo-line-height) + 1px);
+      padding-left: var(--spacing-8); /* Margin line */
+      position: relative;
+    }
+
+    .todo-list::before,
+    [data-todo-list]::before {
+      content: '';
+      position: absolute;
+      left: var(--spacing-6);
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background-color: oklch(0.8 0.05 25); /* Red margin line */
+    }
+
+    /* Traditional checkbox styling */
+    input[type='checkbox'] {
+      width: var(--todo-checkbox-size);
+      height: var(--todo-checkbox-size);
+      border: 2px solid var(--color-primary);
+      border-radius: var(--radius-sm);
+      background-color: var(--color-card);
+      transition: all var(--duration-fast) var(--ease-smooth);
+    }
+
+    input[type='checkbox']:checked {
+      background-color: var(--color-primary);
+      background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: 12px;
+    }
+
+    /* Strikethrough for completed items */
+    .todo-completed,
+    [data-completed='true'] {
+      text-decoration: line-through;
+      opacity: 0.6;
+      color: var(--color-muted-foreground);
+    }
+
+    /* Hand-drawn style borders */
+    .todo-item,
+    [data-todo-item] {
+      border-bottom: 1px solid var(--todo-line-color);
+      padding: calc(var(--todo-line-height) / 4) 0;
+      min-height: var(--todo-line-height);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-3);
+    }
+
+    /* Traditional button style */
+    .button-traditional,
+    [data-traditional-button] {
+      background-color: var(--color-card);
+      color: var(--color-primary);
+      border: 2px solid var(--color-primary);
+      font-weight: var(--font-weight-medium);
+      transition: all var(--duration-fast) var(--ease-smooth);
+    }
+
+    .button-traditional:hover,
+    [data-traditional-button]:hover {
+      background-color: var(--color-primary);
+      color: var(--color-primary-foreground);
+    }
+  }
+}

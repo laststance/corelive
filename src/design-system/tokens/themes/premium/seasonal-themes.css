@@ -1,0 +1,173 @@
+/**
+ * CoreLive Design System - Premium Seasonal Themes
+ * 
+ * Collection of premium seasonal theme variations
+ */
+
+@layer base {
+  /* Spring Blossom Theme */
+  [data-theme='seasonal-spring-blossom'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Spring Blossom';
+    --theme-mode: 'seasonal';
+
+    /* Cherry blossom spring colors */
+    --color-background: oklch(0.97 0.02 10);
+    --color-foreground: oklch(0.3 0.05 10);
+    --color-primary: oklch(0.75 0.2 10);
+    --color-primary-foreground: oklch(0.97 0.02 10);
+    --color-secondary: oklch(0.7 0.15 120);
+    --color-secondary-foreground: oklch(0.2 0.02 120);
+    --color-accent: oklch(0.93 0.03 10);
+    --color-accent-foreground: oklch(0.4 0.05 10);
+    --color-muted: oklch(0.92 0.02 10);
+    --color-muted-foreground: oklch(0.5 0.03 10);
+
+    /* Spring effects */
+    --card-background: oklch(0.98 0.01 10);
+    --card-shadow: 0 4px 6px -1px oklch(0.75 0.2 10 / 10%);
+
+    /* Blossom animations */
+    --animation-duration: var(--duration-slow);
+    --animation-easing: var(--ease-smooth);
+  }
+
+  /* Summer Beach Theme */
+  [data-theme='seasonal-summer-beach'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Summer Beach';
+    --theme-mode: 'seasonal';
+
+    /* Beach summer colors */
+    --color-background: oklch(0.98 0.02 50);
+    --color-foreground: oklch(0.25 0.03 200);
+    --color-primary: oklch(0.6 0.2 200);
+    --color-primary-foreground: oklch(0.98 0.02 50);
+    --color-secondary: oklch(0.8 0.18 50);
+    --color-secondary-foreground: oklch(0.25 0.03 50);
+    --color-accent: oklch(0.94 0.03 50);
+    --color-accent-foreground: oklch(0.35 0.03 200);
+    --color-muted: oklch(0.93 0.02 50);
+    --color-muted-foreground: oklch(0.55 0.02 200);
+
+    /* Beach effects */
+    --gradient-background: linear-gradient(
+      180deg,
+      oklch(0.98 0.02 50) 0%,
+      oklch(0.95 0.04 60) 100%
+    );
+    --card-background: oklch(0.99 0.01 50);
+
+    /* Wave animations */
+    --card-shadow: 0 4px 6px -1px oklch(0.6 0.2 200 / 15%);
+  }
+
+  /* Autumn Forest Theme */
+  [data-theme='seasonal-autumn-forest'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Autumn Forest';
+    --theme-mode: 'seasonal';
+
+    /* Autumn forest colors */
+    --color-background: oklch(0.95 0.04 35);
+    --color-foreground: oklch(0.25 0.05 30);
+    --color-primary: oklch(0.65 0.25 30);
+    --color-primary-foreground: oklch(0.95 0.04 35);
+    --color-secondary: oklch(0.6 0.2 60);
+    --color-secondary-foreground: oklch(0.95 0.04 35);
+    --color-accent: oklch(0.9 0.05 35);
+    --color-accent-foreground: oklch(0.35 0.05 30);
+    --color-muted: oklch(0.88 0.04 35);
+    --color-muted-foreground: oklch(0.5 0.04 30);
+
+    /* Autumn effects */
+    --gradient-background: linear-gradient(
+      135deg,
+      oklch(0.95 0.04 35) 0%,
+      oklch(0.92 0.06 40) 100%
+    );
+    --card-background: oklch(0.97 0.03 35);
+    --card-border: oklch(0.8 0.1 35);
+    --card-border-width: 1px;
+
+    /* Leaf fall animations */
+    --animation-duration: var(--duration-slower);
+    --animation-easing: var(--ease-smooth);
+  }
+
+  /* Winter Snow Theme */
+  [data-theme='seasonal-winter-snow'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Winter Snow';
+    --theme-mode: 'seasonal';
+
+    /* Frosty winter colors */
+    --color-background: oklch(0.98 0.01 210);
+    --color-foreground: oklch(0.2 0.02 210);
+    --color-primary: oklch(0.5 0.15 210);
+    --color-primary-foreground: oklch(0.98 0.01 210);
+    --color-secondary: oklch(0.45 0.1 180);
+    --color-secondary-foreground: oklch(0.98 0.01 210);
+    --color-accent: oklch(0.94 0.02 210);
+    --color-accent-foreground: oklch(0.3 0.02 210);
+    --color-muted: oklch(0.93 0.01 210);
+    --color-muted-foreground: oklch(0.45 0.02 210);
+
+    /* Winter effects */
+    --card-background: oklch(0.99 0.005 210);
+    --card-shadow: 0 4px 6px -1px oklch(0.5 0.15 210 / 10%);
+
+    /* Frost effects */
+    --input-background: oklch(0.97 0.01 210);
+    --input-border-color: oklch(0.85 0.02 210);
+  }
+
+  /* Holiday Theme */
+  [data-theme='seasonal-holiday'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Holiday';
+    --theme-mode: 'seasonal';
+
+    /* Festive holiday colors */
+    --color-background: oklch(0.15 0.05 140);
+    --color-foreground: oklch(0.95 0.02 30);
+    --color-primary: oklch(0.6 0.3 25);
+    --color-primary-foreground: oklch(0.95 0.02 30);
+    --color-secondary: oklch(0.85 0.15 60);
+    --color-secondary-foreground: oklch(0.15 0.05 140);
+    --color-accent: oklch(0.25 0.06 140);
+    --color-accent-foreground: oklch(0.92 0.02 30);
+    --color-muted: oklch(0.22 0.05 140);
+    --color-muted-foreground: oklch(0.7 0.03 30);
+
+    /* Holiday effects */
+    --gradient-primary: linear-gradient(
+      135deg,
+      oklch(0.6 0.3 25),
+      oklch(0.55 0.25 140)
+    );
+    --card-background: oklch(0.18 0.05 140);
+    --card-shadow: 0 10px 15px -3px oklch(0.85 0.15 60 / 20%);
+
+    /* Festive borders */
+    --card-border: oklch(0.85 0.15 60);
+    --card-border-width: 2px;
+
+    /* Sparkle animations */
+    --animation-duration: var(--duration-slow);
+    --animation-easing: var(--ease-bounce);
+  }
+
+  /* More premium seasonal themes can be added here */
+  /* Total target: 15 seasonal theme variations */
+}

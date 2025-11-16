@@ -1,0 +1,270 @@
+/**
+ * CoreLive Design System - Animation Tokens
+ * 
+ * Animation properties for consistent motion design across the system
+ * Following Apple HIG principles for meaningful, subtle animations
+ */
+
+@layer base {
+  :root {
+    /* Duration tokens */
+    --duration-instant: 0ms;
+    --duration-fast: 150ms;
+    --duration-normal: 300ms;
+    --duration-slow: 500ms;
+    --duration-slower: 700ms;
+    --duration-slowest: 1000ms;
+
+    /* Easing functions */
+    --ease-linear: linear;
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-elastic: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Apple-style easing */
+    --ease-apple-default: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    --ease-apple-ease-in: cubic-bezier(0.42, 0, 1, 1);
+    --ease-apple-ease-out: cubic-bezier(0, 0, 0.58, 1);
+    --ease-apple-ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+
+    /* Delay tokens */
+    --delay-none: 0ms;
+    --delay-75: 75ms;
+    --delay-100: 100ms;
+    --delay-150: 150ms;
+    --delay-200: 200ms;
+    --delay-300: 300ms;
+    --delay-500: 500ms;
+    --delay-700: 700ms;
+    --delay-1000: 1000ms;
+
+    /* Animation properties for components */
+    --animation-duration: var(--duration-normal);
+    --animation-easing: var(--ease-smooth);
+    --animation-delay: var(--delay-none);
+
+    /* Transition tokens */
+    --transition-none: none;
+    --transition-all: all var(--duration-normal) var(--ease-smooth);
+    --transition-colors:
+      background-color var(--duration-normal) var(--ease-smooth),
+      border-color var(--duration-normal) var(--ease-smooth),
+      color var(--duration-normal) var(--ease-smooth),
+      fill var(--duration-normal) var(--ease-smooth),
+      stroke var(--duration-normal) var(--ease-smooth);
+    --transition-opacity: opacity var(--duration-normal) var(--ease-smooth);
+    --transition-shadow: box-shadow var(--duration-normal) var(--ease-smooth);
+    --transition-transform: transform var(--duration-normal) var(--ease-smooth);
+
+    /* Keyframe animation names */
+    --animation-spin: spin;
+    --animation-ping: ping;
+    --animation-pulse: pulse;
+    --animation-bounce: bounce;
+    --animation-fade-in: fadeIn;
+    --animation-fade-out: fadeOut;
+    --animation-slide-in: slideIn;
+    --animation-slide-out: slideOut;
+    --animation-scale-in: scaleIn;
+    --animation-scale-out: scaleOut;
+  }
+
+  /* Keyframe definitions */
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes ping {
+    75%,
+    100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  @keyframes bounce {
+    0%,
+    100% {
+      transform: translateY(-25%);
+      animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+    }
+    50% {
+      transform: translateY(0);
+      animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideOut {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleOut {
+    from {
+      transform: scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+  }
+
+  /* CoreLive specific animations */
+  @keyframes confetti {
+    0% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-100vh) rotate(720deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes levelUp {
+    0% {
+      transform: scale(1) rotate(0deg);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.5) rotate(180deg);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1) rotate(360deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes todoComplete {
+    0% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 0.6;
+    }
+  }
+
+  /* Animation utilities */
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .animate-ping {
+    animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-bounce {
+    animation: bounce 1s infinite;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn var(--duration-normal) var(--ease-out);
+  }
+
+  .animate-fade-out {
+    animation: fadeOut var(--duration-normal) var(--ease-in);
+  }
+
+  .animate-slide-in {
+    animation: slideIn var(--duration-normal) var(--ease-out);
+  }
+
+  .animate-slide-out {
+    animation: slideOut var(--duration-normal) var(--ease-in);
+  }
+
+  .animate-scale-in {
+    animation: scaleIn var(--duration-normal) var(--ease-out);
+  }
+
+  .animate-scale-out {
+    animation: scaleOut var(--duration-normal) var(--ease-in);
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

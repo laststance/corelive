@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
+import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -152,6 +153,8 @@ export default function Home() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>Create work account</DropdownMenuItem>
                   <DropdownMenuItem>Add another account</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <ThemeSelectorMenuItem />
                   <UserMenu />
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>Get Mac app</DropdownMenuItem>

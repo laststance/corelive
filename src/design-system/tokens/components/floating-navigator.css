@@ -1,0 +1,254 @@
+/**
+ * CoreLive Design System - Floating Navigator Component Tokens
+ * 
+ * Design tokens for the Electron floating window navigator
+ */
+
+@layer base {
+  :root {
+    /* Floating Navigator Structure */
+    --floating-nav-width: 400px;
+    --floating-nav-height: 600px;
+    --floating-nav-min-width: 300px;
+    --floating-nav-min-height: 400px;
+    --floating-nav-max-width: 600px;
+    --floating-nav-max-height: 800px;
+    --floating-nav-padding: var(--spacing-4);
+    --floating-nav-border-radius: var(--radius-lg);
+    --floating-nav-border-width: 1px;
+
+    /* Floating Navigator Colors */
+    --floating-nav-background: var(--color-background) / 95%;
+    --floating-nav-foreground: var(--color-foreground);
+    --floating-nav-border: var(--color-border);
+    --floating-nav-backdrop-blur: 20px;
+
+    /* Floating Navigator Header */
+    --floating-nav-header-height: 48px;
+    --floating-nav-header-padding: var(--spacing-3);
+    --floating-nav-header-background: var(--color-background) / 80%;
+    --floating-nav-header-border-width: 1px;
+    --floating-nav-header-border-color: var(--color-border);
+    --floating-nav-drag-region-height: 32px;
+
+    /* Floating Navigator Controls */
+    --floating-nav-control-size: 24px;
+    --floating-nav-control-gap: var(--spacing-2);
+    --floating-nav-control-background: transparent;
+    --floating-nav-control-background-hover: var(--color-accent);
+    --floating-nav-control-icon-size: 14px;
+    --floating-nav-control-icon-color: var(--color-muted-foreground);
+    --floating-nav-control-icon-color-hover: var(--color-foreground);
+
+    /* Floating Navigator Search */
+    --floating-nav-search-height: 40px;
+    --floating-nav-search-padding: var(--spacing-3);
+    --floating-nav-search-background: var(--color-input) / 50%;
+    --floating-nav-search-border-radius: var(--radius-full);
+    --floating-nav-search-icon-size: 16px;
+
+    /* Floating Navigator Task List */
+    --floating-nav-task-item-height: 56px;
+    --floating-nav-task-item-padding: var(--spacing-3);
+    --floating-nav-task-item-gap: var(--spacing-2);
+    --floating-nav-task-item-border-radius: var(--radius-md);
+
+    /* Floating Navigator Quick Actions */
+    --floating-nav-action-size: 48px;
+    --floating-nav-action-icon-size: 20px;
+    --floating-nav-action-background: var(--color-primary);
+    --floating-nav-action-background-hover: var(--color-primary) / 90%;
+    --floating-nav-action-color: var(--color-primary-foreground);
+    --floating-nav-action-shadow: var(--shadow-lg);
+
+    /* Floating Navigator Dock Mode */
+    --floating-nav-dock-width: 80px;
+    --floating-nav-dock-height: 100vh;
+    --floating-nav-dock-padding: var(--spacing-2);
+    --floating-nav-dock-item-size: 64px;
+    --floating-nav-dock-item-gap: var(--spacing-2);
+
+    /* Floating Navigator Animations */
+    --floating-nav-transition: all var(--duration-normal) var(--ease-smooth);
+    --floating-nav-show-animation: scaleIn var(--duration-normal)
+      var(--ease-bounce);
+    --floating-nav-hide-animation: scaleOut var(--duration-fast) var(--ease-in);
+    --floating-nav-dock-transition: width var(--duration-normal)
+      var(--ease-smooth);
+
+    /* Floating Navigator Shadows */
+    --floating-nav-shadow:
+      0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --floating-nav-shadow-hover:
+      0 25px 30px -5px rgb(0 0 0 / 0.15), 0 10px 15px -6px rgb(0 0 0 / 0.1);
+
+    /* Floating Navigator Opacity States */
+    --floating-nav-opacity-inactive: 0.8;
+    --floating-nav-opacity-active: 1;
+    --floating-nav-opacity-minimized: 0.3;
+  }
+
+  /* Theme-specific floating navigator adjustments */
+  [data-theme^='traditional'] {
+    --floating-nav-background: var(--color-card) / 98%;
+    --floating-nav-border-radius: var(--radius-md);
+  }
+
+  /* Dark theme floating navigator */
+  .dark,
+  [data-theme*='dark'] {
+    --floating-nav-shadow:
+      0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+    --floating-nav-backdrop-blur: 24px;
+  }
+
+  /* Premium theme floating navigator effects */
+  [data-theme^='gradient'] {
+    --floating-nav-background: linear-gradient(
+      135deg,
+      var(--color-background) / 95% 0%,
+      var(--color-background) / 90% 100%
+    );
+    --floating-nav-border: transparent;
+    --floating-nav-shadow: 0 20px 25px -5px var(--color-primary) / 20%;
+  }
+
+  [data-theme^='retro'] {
+    --floating-nav-border-width: 2px;
+    --floating-nav-shadow: 6px 6px 0 0 var(--color-foreground) / 20%;
+    --floating-nav-border-radius: var(--radius-sm);
+  }
+
+  /* Glass morphism theme */
+  [data-theme*='glass'] {
+    --floating-nav-background: var(--color-background) / 70%;
+    --floating-nav-backdrop-blur: 30px;
+    --floating-nav-border: var(--color-border) / 30%;
+  }
+
+  /* Floating navigator utility classes */
+  .floating-navigator {
+    width: var(--floating-nav-width);
+    height: var(--floating-nav-height);
+    background: var(--floating-nav-background);
+    color: var(--floating-nav-foreground);
+    border: var(--floating-nav-border-width) solid var(--floating-nav-border);
+    border-radius: var(--floating-nav-border-radius);
+    backdrop-filter: blur(var(--floating-nav-backdrop-blur));
+    -webkit-backdrop-filter: blur(var(--floating-nav-backdrop-blur));
+    box-shadow: var(--floating-nav-shadow);
+    transition: var(--floating-nav-transition);
+    opacity: var(--floating-nav-opacity-active);
+  }
+
+  .floating-navigator:hover {
+    box-shadow: var(--floating-nav-shadow-hover);
+  }
+
+  .floating-navigator-inactive {
+    opacity: var(--floating-nav-opacity-inactive);
+  }
+
+  .floating-navigator-minimized {
+    opacity: var(--floating-nav-opacity-minimized);
+  }
+
+  .floating-navigator-header {
+    height: var(--floating-nav-header-height);
+    padding: var(--floating-nav-header-padding);
+    background: var(--floating-nav-header-background);
+    border-bottom: var(--floating-nav-header-border-width) solid
+      var(--floating-nav-header-border-color);
+    border-radius: var(--floating-nav-border-radius)
+      var(--floating-nav-border-radius) 0 0;
+    -webkit-app-region: drag;
+  }
+
+  .floating-navigator-controls {
+    gap: var(--floating-nav-control-gap);
+    -webkit-app-region: no-drag;
+  }
+
+  .floating-navigator-control {
+    width: var(--floating-nav-control-size);
+    height: var(--floating-nav-control-size);
+    background: var(--floating-nav-control-background);
+    border-radius: var(--radius-md);
+    transition: var(--floating-nav-transition);
+  }
+
+  .floating-navigator-control:hover {
+    background: var(--floating-nav-control-background-hover);
+  }
+
+  .floating-navigator-control-icon {
+    width: var(--floating-nav-control-icon-size);
+    height: var(--floating-nav-control-icon-size);
+    color: var(--floating-nav-control-icon-color);
+  }
+
+  .floating-navigator-control:hover .floating-navigator-control-icon {
+    color: var(--floating-nav-control-icon-color-hover);
+  }
+
+  .floating-navigator-search {
+    height: var(--floating-nav-search-height);
+    padding: 0 var(--floating-nav-search-padding);
+    background: var(--floating-nav-search-background);
+    border-radius: var(--floating-nav-search-border-radius);
+  }
+
+  .floating-navigator-content {
+    padding: var(--floating-nav-padding);
+  }
+
+  .floating-navigator-task-item {
+    height: var(--floating-nav-task-item-height);
+    padding: var(--floating-nav-task-item-padding);
+    gap: var(--floating-nav-task-item-gap);
+    border-radius: var(--floating-nav-task-item-border-radius);
+  }
+
+  .floating-navigator-action {
+    width: var(--floating-nav-action-size);
+    height: var(--floating-nav-action-size);
+    background: var(--floating-nav-action-background);
+    color: var(--floating-nav-action-color);
+    border-radius: var(--radius-full);
+    box-shadow: var(--floating-nav-action-shadow);
+    transition: var(--floating-nav-transition);
+  }
+
+  .floating-navigator-action:hover {
+    background: var(--floating-nav-action-background-hover);
+    transform: scale(1.05);
+  }
+
+  .floating-navigator-action-icon {
+    width: var(--floating-nav-action-icon-size);
+    height: var(--floating-nav-action-icon-size);
+  }
+
+  /* Dock mode */
+  .floating-navigator-docked {
+    width: var(--floating-nav-dock-width);
+    height: var(--floating-nav-dock-height);
+    border-radius: 0;
+    padding: var(--floating-nav-dock-padding);
+  }
+
+  .floating-navigator-dock-item {
+    width: var(--floating-nav-dock-item-size);
+    height: var(--floating-nav-dock-item-size);
+    margin-bottom: var(--floating-nav-dock-item-gap);
+  }
+
+  /* Animations */
+  .floating-navigator-enter {
+    animation: var(--floating-nav-show-animation);
+  }
+
+  .floating-navigator-exit {
+    animation: var(--floating-nav-hide-animation);
+  }
+}

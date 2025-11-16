@@ -8,10 +8,7 @@ const nextConfig = {
   // Turbopack configuration (Next.js 16+)
   // Empty config silences warnings while allowing future customization
   turbopack: {
-    rules: codeInspectorPlugin({
-      bundler: 'turbopack',
-      hotKeys: ['altKey'],
-    }),
+    rules: {},
   },
   // Performance optimizations
   experimental: {
@@ -32,6 +29,16 @@ const nextConfig = {
   },
   // Configure webpack for Electron environment and performance
   webpack: (config, { isServer, dev }) => {
+    // Code inspector plugin for development
+    if (dev && !isServer) {
+      config.plugins.push(
+        ...codeInspectorPlugin({
+          bundler: 'webpack',
+          hotKeys: ['altKey'],
+        }),
+      )
+    }
+
     // Handle Electron environment
     if (process.env.ELECTRON_BUILD) {
       // Handle Node.js modules in Electron renderer

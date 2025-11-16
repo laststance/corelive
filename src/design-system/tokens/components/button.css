@@ -1,0 +1,266 @@
+/**
+ * CoreLive Design System - Button Component Tokens
+ * 
+ * Design tokens for button components across all variants and states
+ */
+
+@layer base {
+  :root {
+    /* Button Structure */
+    --button-height-sm: 32px;
+    --button-height-md: 36px;
+    --button-height-lg: 40px;
+    --button-padding-x-sm: var(--spacing-3);
+    --button-padding-x-md: var(--spacing-4);
+    --button-padding-x-lg: var(--spacing-6);
+    --button-gap: var(--spacing-2);
+    --button-border-radius: var(--radius-md);
+    --button-border-width: 1px;
+    --button-icon-size: 36px;
+
+    /* Button Typography */
+    --button-font-size-sm: var(--font-size-sm);
+    --button-font-size-md: var(--font-size-sm);
+    --button-font-size-lg: var(--font-size-base);
+    --button-font-weight: var(--font-weight-medium);
+    --button-line-height: var(--line-height-none);
+    --button-letter-spacing: var(--letter-spacing-normal);
+
+    /* Button Default Variant */
+    --button-default-background: var(--color-primary);
+    --button-default-background-hover: var(--color-primary) / 90%;
+    --button-default-background-active: var(--color-primary) / 80%;
+    --button-default-text: var(--color-primary-foreground);
+    --button-default-border: transparent;
+
+    /* Button Secondary Variant */
+    --button-secondary-background: var(--color-secondary);
+    --button-secondary-background-hover: var(--color-secondary) / 80%;
+    --button-secondary-background-active: var(--color-secondary) / 70%;
+    --button-secondary-text: var(--color-secondary-foreground);
+    --button-secondary-border: transparent;
+
+    /* Button Outline Variant */
+    --button-outline-background: transparent;
+    --button-outline-background-hover: var(--color-accent);
+    --button-outline-background-active: var(--color-accent);
+    --button-outline-text: var(--color-foreground);
+    --button-outline-text-hover: var(--color-accent-foreground);
+    --button-outline-border: var(--color-border);
+
+    /* Button Ghost Variant */
+    --button-ghost-background: transparent;
+    --button-ghost-background-hover: var(--color-accent);
+    --button-ghost-background-active: var(--color-accent);
+    --button-ghost-text: var(--color-foreground);
+    --button-ghost-text-hover: var(--color-accent-foreground);
+    --button-ghost-border: transparent;
+
+    /* Button Destructive Variant */
+    --button-destructive-background: var(--color-danger);
+    --button-destructive-background-hover: var(--color-danger) / 90%;
+    --button-destructive-background-active: var(--color-danger) / 80%;
+    --button-destructive-text: var(--color-danger-foreground);
+    --button-destructive-border: transparent;
+
+    /* Button Link Variant */
+    --button-link-background: transparent;
+    --button-link-background-hover: transparent;
+    --button-link-background-active: transparent;
+    --button-link-text: var(--color-primary);
+    --button-link-text-hover: var(--color-primary) / 80%;
+    --button-link-border: transparent;
+    --button-link-underline-offset: 4px;
+
+    /* Button States */
+    --button-disabled-opacity: 0.5;
+    --button-loading-opacity: 0.8;
+    --button-focus-ring-width: 3px;
+    --button-focus-ring-color: var(--color-ring) / 50%;
+    --button-focus-ring-offset: 0;
+
+    /* Button Icons */
+    --button-icon-size-sm: 14px;
+    --button-icon-size-md: 16px;
+    --button-icon-size-lg: 18px;
+
+    /* Button Shadows */
+    --button-shadow: none;
+    --button-shadow-hover: var(--shadow-sm);
+    --button-shadow-active: none;
+
+    /* Button Transitions */
+    --button-transition: all var(--duration-fast) var(--ease-smooth);
+    --button-transform-active: scale(0.98);
+
+    /* Button Special Effects */
+    --button-ripple-color: currentColor / 20%;
+    --button-ripple-duration: var(--duration-slow);
+    --button-pulse-shadow: 0 0 0 0 var(--color-primary) / 70%;
+  }
+
+  /* Theme-specific button adjustments */
+  [data-theme^='traditional'] {
+    --button-border-radius: var(--radius-sm);
+    --button-default-background: var(--color-card);
+    --button-default-text: var(--color-primary);
+    --button-default-border: var(--color-primary);
+    --button-default-background-hover: var(--color-primary);
+    --button-default-text-hover: var(--color-primary-foreground);
+  }
+
+  [data-theme^='harmonized-red'] {
+    --button-destructive-background: var(--harmonized-red-600);
+    --button-link-text: var(--harmonized-red-600);
+  }
+
+  [data-theme^='harmonized-mustard'] {
+    --button-warning-background: var(--harmonized-mustard-600);
+    --button-warning-text: var(--harmonized-mustard-50);
+  }
+
+  [data-theme^='harmonized-turquoise'] {
+    --button-success-background: var(--harmonized-turquoise-600);
+    --button-success-text: var(--harmonized-turquoise-50);
+  }
+
+  /* Premium theme button effects */
+  [data-theme^='gradient'] {
+    --button-default-background: linear-gradient(
+      135deg,
+      var(--color-primary),
+      var(--color-secondary)
+    );
+    --button-default-background-hover: linear-gradient(
+      135deg,
+      var(--color-primary) / 90%,
+      var(--color-secondary) / 90%
+    );
+  }
+
+  [data-theme^='retro'] {
+    --button-border-width: 2px;
+    --button-shadow: 4px 4px 0 0 var(--color-foreground) / 20%;
+    --button-shadow-active: 2px 2px 0 0 var(--color-foreground) / 20%;
+    --button-transform-active: translate(2px, 2px);
+  }
+
+  /* Button utility classes */
+  .button {
+    height: var(--button-height-md);
+    padding: 0 var(--button-padding-x-md);
+    gap: var(--button-gap);
+    border-radius: var(--button-border-radius);
+    border: var(--button-border-width) solid;
+    font-size: var(--button-font-size-md);
+    font-weight: var(--button-font-weight);
+    line-height: var(--button-line-height);
+    letter-spacing: var(--button-letter-spacing);
+    transition: var(--button-transition);
+    box-shadow: var(--button-shadow);
+  }
+
+  .button:hover {
+    box-shadow: var(--button-shadow-hover);
+  }
+
+  .button:active {
+    box-shadow: var(--button-shadow-active);
+    transform: var(--button-transform-active);
+  }
+
+  .button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--button-focus-ring-width)
+      var(--button-focus-ring-color);
+  }
+
+  .button:disabled {
+    opacity: var(--button-disabled-opacity);
+    pointer-events: none;
+  }
+
+  /* Size variants */
+  .button-sm {
+    height: var(--button-height-sm);
+    padding: 0 var(--button-padding-x-sm);
+    font-size: var(--button-font-size-sm);
+  }
+
+  .button-lg {
+    height: var(--button-height-lg);
+    padding: 0 var(--button-padding-x-lg);
+    font-size: var(--button-font-size-lg);
+  }
+
+  .button-icon {
+    width: var(--button-icon-size);
+    height: var(--button-icon-size);
+    padding: 0;
+  }
+
+  /* Variant classes */
+  .button-default {
+    background: var(--button-default-background);
+    color: var(--button-default-text);
+    border-color: var(--button-default-border);
+  }
+
+  .button-default:hover {
+    background: var(--button-default-background-hover);
+  }
+
+  .button-secondary {
+    background: var(--button-secondary-background);
+    color: var(--button-secondary-text);
+    border-color: var(--button-secondary-border);
+  }
+
+  .button-secondary:hover {
+    background: var(--button-secondary-background-hover);
+  }
+
+  .button-outline {
+    background: var(--button-outline-background);
+    color: var(--button-outline-text);
+    border-color: var(--button-outline-border);
+  }
+
+  .button-outline:hover {
+    background: var(--button-outline-background-hover);
+    color: var(--button-outline-text-hover);
+  }
+
+  .button-ghost {
+    background: var(--button-ghost-background);
+    color: var(--button-ghost-text);
+    border-color: var(--button-ghost-border);
+  }
+
+  .button-ghost:hover {
+    background: var(--button-ghost-background-hover);
+    color: var(--button-ghost-text-hover);
+  }
+
+  .button-destructive {
+    background: var(--button-destructive-background);
+    color: var(--button-destructive-text);
+    border-color: var(--button-destructive-border);
+  }
+
+  .button-destructive:hover {
+    background: var(--button-destructive-background-hover);
+  }
+
+  .button-link {
+    background: var(--button-link-background);
+    color: var(--button-link-text);
+    border-color: var(--button-link-border);
+    text-decoration: underline;
+    text-underline-offset: var(--button-link-underline-offset);
+  }
+
+  .button-link:hover {
+    color: var(--button-link-text-hover);
+  }
+}

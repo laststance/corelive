@@ -1,0 +1,235 @@
+/**
+ * CoreLive Design System - Premium Gradient Themes
+ * 
+ * Collection of premium gradient theme variations
+ */
+
+@layer base {
+  /* Aurora Theme */
+  [data-theme='gradient-aurora'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Aurora';
+    --theme-mode: 'gradient';
+
+    /* Northern lights gradient colors */
+    --color-background: oklch(0.15 0.02 280);
+    --color-foreground: oklch(0.98 0.01 280);
+    --color-primary: oklch(0.55 0.25 280);
+    --color-primary-foreground: oklch(0.98 0.01 280);
+    --color-secondary: oklch(0.6 0.25 320);
+    --color-secondary-foreground: oklch(0.98 0.01 320);
+    --color-accent: oklch(0.25 0.03 280);
+    --color-accent-foreground: oklch(0.95 0.01 280);
+    --color-muted: oklch(0.22 0.02 280);
+    --color-muted-foreground: oklch(0.7 0.01 280);
+
+    /* Gradient effects */
+    --gradient-primary: linear-gradient(
+      135deg,
+      var(--color-primary),
+      var(--color-secondary)
+    );
+    --gradient-background: linear-gradient(
+      135deg,
+      var(--color-background) 0%,
+      oklch(0.18 0.03 320) 100%
+    );
+    --gradient-card: linear-gradient(
+      135deg,
+      oklch(0.2 0.02 280) 0%,
+      oklch(0.23 0.03 320) 100%
+    );
+
+    /* Blur effects */
+    --backdrop-blur: 20px;
+    --card-backdrop-blur: 12px;
+
+    /* Custom properties */
+    --card-background: var(--gradient-card);
+    --button-default-background: var(--gradient-primary);
+  }
+
+  /* Sunset Theme */
+  [data-theme='gradient-sunset'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Sunset';
+    --theme-mode: 'gradient';
+
+    /* Warm sunset gradient colors */
+    --color-background: oklch(0.95 0.03 30);
+    --color-foreground: oklch(0.2 0.01 30);
+    --color-primary: oklch(0.65 0.25 30);
+    --color-primary-foreground: oklch(0.98 0.01 30);
+    --color-secondary: oklch(0.7 0.2 60);
+    --color-secondary-foreground: oklch(0.15 0.01 60);
+    --color-accent: oklch(0.9 0.04 30);
+    --color-accent-foreground: oklch(0.25 0.01 30);
+    --color-muted: oklch(0.88 0.03 30);
+    --color-muted-foreground: oklch(0.4 0.01 30);
+
+    /* Gradient effects */
+    --gradient-primary: linear-gradient(
+      135deg,
+      oklch(0.75 0.25 15),
+      oklch(0.8 0.2 60)
+    );
+    --gradient-background: linear-gradient(
+      135deg,
+      oklch(0.95 0.03 30) 0%,
+      oklch(0.92 0.05 60) 100%
+    );
+    --gradient-card: linear-gradient(
+      135deg,
+      oklch(0.98 0.02 30) 0%,
+      oklch(0.96 0.03 50) 100%
+    );
+
+    /* Custom properties */
+    --card-background: var(--gradient-card);
+    --button-default-background: var(--gradient-primary);
+  }
+
+  /* Ocean Theme */
+  [data-theme='gradient-ocean'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Ocean';
+    --theme-mode: 'gradient';
+
+    /* Deep ocean gradient colors */
+    --color-background: oklch(0.18 0.04 210);
+    --color-foreground: oklch(0.95 0.01 210);
+    --color-primary: oklch(0.5 0.2 210);
+    --color-primary-foreground: oklch(0.95 0.01 210);
+    --color-secondary: oklch(0.55 0.18 180);
+    --color-secondary-foreground: oklch(0.95 0.01 180);
+    --color-accent: oklch(0.28 0.04 210);
+    --color-accent-foreground: oklch(0.92 0.01 210);
+    --color-muted: oklch(0.25 0.03 210);
+    --color-muted-foreground: oklch(0.65 0.01 210);
+
+    /* Gradient effects */
+    --gradient-primary: linear-gradient(
+      135deg,
+      oklch(0.5 0.2 210),
+      oklch(0.55 0.18 180)
+    );
+    --gradient-background: linear-gradient(
+      180deg,
+      oklch(0.15 0.03 220) 0%,
+      oklch(0.2 0.04 200) 100%
+    );
+    --gradient-card: linear-gradient(
+      135deg,
+      oklch(0.22 0.03 210) 0%,
+      oklch(0.25 0.04 190) 100%
+    );
+
+    /* Blur effects */
+    --backdrop-blur: 24px;
+    --card-backdrop-blur: 16px;
+
+    /* Custom properties */
+    --card-background: var(--gradient-card);
+  }
+
+  /* Forest Theme */
+  [data-theme='gradient-forest'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Forest';
+    --theme-mode: 'gradient';
+
+    /* Deep forest gradient colors */
+    --color-background: oklch(0.2 0.04 140);
+    --color-foreground: oklch(0.92 0.01 140);
+    --color-primary: oklch(0.55 0.2 140);
+    --color-primary-foreground: oklch(0.92 0.01 140);
+    --color-secondary: oklch(0.6 0.15 120);
+    --color-secondary-foreground: oklch(0.15 0.01 120);
+    --color-accent: oklch(0.3 0.04 140);
+    --color-accent-foreground: oklch(0.9 0.01 140);
+    --color-muted: oklch(0.27 0.03 140);
+    --color-muted-foreground: oklch(0.65 0.01 140);
+
+    /* Gradient effects */
+    --gradient-primary: linear-gradient(
+      135deg,
+      oklch(0.55 0.2 140),
+      oklch(0.6 0.15 120)
+    );
+    --gradient-background: linear-gradient(
+      180deg,
+      oklch(0.18 0.03 145) 0%,
+      oklch(0.22 0.04 130) 100%
+    );
+    --gradient-card: linear-gradient(
+      135deg,
+      oklch(0.24 0.03 140) 0%,
+      oklch(0.27 0.04 125) 100%
+    );
+
+    /* Custom properties */
+    --card-background: var(--gradient-card);
+    --button-default-background: var(--gradient-primary);
+  }
+
+  /* Nebula Theme */
+  [data-theme='gradient-nebula'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Nebula';
+    --theme-mode: 'gradient';
+
+    /* Space nebula gradient colors */
+    --color-background: oklch(0.12 0.03 300);
+    --color-foreground: oklch(0.95 0.01 300);
+    --color-primary: oklch(0.65 0.3 300);
+    --color-primary-foreground: oklch(0.95 0.01 300);
+    --color-secondary: oklch(0.6 0.25 340);
+    --color-secondary-foreground: oklch(0.95 0.01 340);
+    --color-accent: oklch(0.22 0.04 300);
+    --color-accent-foreground: oklch(0.92 0.01 300);
+    --color-muted: oklch(0.2 0.03 300);
+    --color-muted-foreground: oklch(0.7 0.01 300);
+
+    /* Gradient effects */
+    --gradient-primary: linear-gradient(
+      135deg,
+      oklch(0.65 0.3 300),
+      oklch(0.6 0.25 340)
+    );
+    --gradient-background: linear-gradient(
+      135deg,
+      oklch(0.12 0.03 300) 0%,
+      oklch(0.15 0.04 330) 50%,
+      oklch(0.13 0.03 280) 100%
+    );
+    --gradient-card: linear-gradient(
+      135deg,
+      oklch(0.18 0.03 300) 0%,
+      oklch(0.2 0.04 320) 100%
+    );
+
+    /* Blur effects */
+    --backdrop-blur: 30px;
+    --card-backdrop-blur: 20px;
+
+    /* Custom properties */
+    --card-background: var(--gradient-card);
+    --button-default-background: var(--gradient-primary);
+
+    /* Special effects */
+    --card-shadow: 0 10px 30px -10px oklch(0.65 0.3 300 / 30%);
+  }
+
+  /* More premium gradient themes can be added here */
+  /* Total target: 20 gradient theme variations */
+}

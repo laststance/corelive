@@ -1,0 +1,194 @@
+/**
+ * CoreLive Design System - Todo Item Component Tokens
+ * 
+ * Design tokens specifically for todo item components
+ * Enables fine-grained control over todo item appearance
+ */
+
+@layer base {
+  :root {
+    /* Todo Item Structure */
+    --todo-item-min-height: 48px;
+    --todo-item-padding-x: var(--spacing-4);
+    --todo-item-padding-y: var(--spacing-3);
+    --todo-item-gap: var(--spacing-3);
+    --todo-item-border-radius: var(--radius-md);
+    --todo-item-border-width: 1px;
+
+    /* Todo Item Colors */
+    --todo-item-background: transparent;
+    --todo-item-background-hover: var(--color-accent);
+    --todo-item-background-selected: var(--color-accent);
+    --todo-item-border-color: var(--color-border);
+    --todo-item-border-color-hover: var(--color-border);
+    --todo-item-border-color-selected: var(--color-ring);
+
+    /* Todo Item Text */
+    --todo-item-text-size: var(--font-size-base);
+    --todo-item-text-color: var(--color-foreground);
+    --todo-item-text-color-completed: var(--color-muted-foreground);
+    --todo-item-text-weight: var(--font-weight-normal);
+    --todo-item-text-weight-completed: var(--font-weight-normal);
+    --todo-item-text-decoration-completed: line-through;
+    --todo-item-opacity-completed: 0.6;
+
+    /* Todo Item Priority Indicators */
+    --todo-item-priority-high-color: var(--color-danger);
+    --todo-item-priority-medium-color: var(--color-warning);
+    --todo-item-priority-low-color: var(--color-success);
+    --todo-item-priority-indicator-size: 4px;
+
+    /* Todo Item Checkbox */
+    --todo-item-checkbox-size: 20px;
+    --todo-item-checkbox-radius: var(--radius-sm);
+    --todo-item-checkbox-border-width: 2px;
+    --todo-item-checkbox-border-color: var(--color-border);
+    --todo-item-checkbox-background: var(--color-background);
+    --todo-item-checkbox-background-checked: var(--color-primary);
+    --todo-item-checkbox-icon-color: var(--color-primary-foreground);
+
+    /* Todo Item Tags */
+    --todo-item-tag-height: 24px;
+    --todo-item-tag-padding-x: var(--spacing-2);
+    --todo-item-tag-radius: var(--radius-full);
+    --todo-item-tag-text-size: var(--font-size-xs);
+    --todo-item-tag-background: var(--color-muted);
+    --todo-item-tag-text-color: var(--color-muted-foreground);
+
+    /* Todo Item Due Date */
+    --todo-item-due-date-text-size: var(--font-size-sm);
+    --todo-item-due-date-text-color: var(--color-muted-foreground);
+    --todo-item-due-date-text-color-overdue: var(--color-danger);
+    --todo-item-due-date-text-color-today: var(--color-warning);
+    --todo-item-due-date-text-color-upcoming: var(--color-success);
+
+    /* Todo Item Actions */
+    --todo-item-action-size: 32px;
+    --todo-item-action-icon-size: 16px;
+    --todo-item-action-color: var(--color-muted-foreground);
+    --todo-item-action-color-hover: var(--color-foreground);
+    --todo-item-action-background-hover: var(--color-accent);
+
+    /* Todo Item Animations */
+    --todo-item-transition: all var(--duration-fast) var(--ease-smooth);
+    --todo-item-completion-animation: todoComplete var(--duration-normal)
+      var(--ease-bounce);
+
+    /* Todo Item Shadows */
+    --todo-item-shadow: none;
+    --todo-item-shadow-hover: var(--shadow-sm);
+    --todo-item-shadow-dragging: var(--shadow-lg);
+
+    /* Todo Item States */
+    --todo-item-focus-ring-width: 2px;
+    --todo-item-focus-ring-color: var(--color-ring);
+    --todo-item-focus-ring-offset: 2px;
+
+    /* Todo Item Subtasks */
+    --todo-item-subtask-indent: var(--spacing-8);
+    --todo-item-subtask-connector-width: 2px;
+    --todo-item-subtask-connector-color: var(--color-border);
+    --todo-item-subtask-connector-style: dashed;
+  }
+
+  /* Theme-specific todo item adjustments */
+  [data-theme^='traditional'] {
+    --todo-item-min-height: var(--todo-line-height);
+    --todo-item-padding-y: calc(var(--todo-line-height) / 4);
+    --todo-item-border-color: transparent;
+    --todo-item-checkbox-size: var(--todo-checkbox-size);
+  }
+
+  [data-theme^='harmonized-red'] {
+    --todo-item-checkbox-background-checked: var(--harmonized-red-600);
+    --todo-item-priority-high-color: var(--harmonized-red-700);
+  }
+
+  [data-theme^='harmonized-mustard'] {
+    --todo-item-checkbox-background-checked: var(--harmonized-mustard-600);
+    --todo-item-priority-medium-color: var(--harmonized-mustard-600);
+  }
+
+  [data-theme^='harmonized-turquoise'] {
+    --todo-item-checkbox-background-checked: var(--harmonized-turquoise-600);
+    --todo-item-priority-low-color: var(--harmonized-turquoise-600);
+  }
+
+  [data-theme^='harmonized-azure'] {
+    --todo-item-checkbox-background-checked: var(--harmonized-azure-600);
+  }
+
+  [data-theme^='harmonized-fuchsia'] {
+    --todo-item-checkbox-background-checked: var(--harmonized-fuchsia-600);
+  }
+
+  /* Utility classes for todo items */
+  .todo-item {
+    min-height: var(--todo-item-min-height);
+    padding: var(--todo-item-padding-y) var(--todo-item-padding-x);
+    gap: var(--todo-item-gap);
+    background: var(--todo-item-background);
+    border: var(--todo-item-border-width) solid var(--todo-item-border-color);
+    border-radius: var(--todo-item-border-radius);
+    transition: var(--todo-item-transition);
+  }
+
+  .todo-item:hover {
+    background: var(--todo-item-background-hover);
+    border-color: var(--todo-item-border-color-hover);
+    box-shadow: var(--todo-item-shadow-hover);
+  }
+
+  .todo-item-text {
+    font-size: var(--todo-item-text-size);
+    color: var(--todo-item-text-color);
+    font-weight: var(--todo-item-text-weight);
+  }
+
+  .todo-item-completed .todo-item-text {
+    color: var(--todo-item-text-color-completed);
+    font-weight: var(--todo-item-text-weight-completed);
+    text-decoration: var(--todo-item-text-decoration-completed);
+    opacity: var(--todo-item-opacity-completed);
+  }
+
+  .todo-item-checkbox {
+    width: var(--todo-item-checkbox-size);
+    height: var(--todo-item-checkbox-size);
+    border-radius: var(--todo-item-checkbox-radius);
+    border: var(--todo-item-checkbox-border-width) solid
+      var(--todo-item-checkbox-border-color);
+    background: var(--todo-item-checkbox-background);
+  }
+
+  .todo-item-checkbox:checked {
+    background: var(--todo-item-checkbox-background-checked);
+    border-color: var(--todo-item-checkbox-background-checked);
+  }
+
+  .todo-item-tag {
+    height: var(--todo-item-tag-height);
+    padding: 0 var(--todo-item-tag-padding-x);
+    border-radius: var(--todo-item-tag-radius);
+    font-size: var(--todo-item-tag-text-size);
+    background: var(--todo-item-tag-background);
+    color: var(--todo-item-tag-text-color);
+  }
+
+  .todo-item-due-date {
+    font-size: var(--todo-item-due-date-text-size);
+    color: var(--todo-item-due-date-text-color);
+  }
+
+  .todo-item-due-date-overdue {
+    color: var(--todo-item-due-date-text-color-overdue);
+  }
+
+  .todo-item-due-date-today {
+    color: var(--todo-item-due-date-text-color-today);
+  }
+
+  .todo-item-due-date-upcoming {
+    color: var(--todo-item-due-date-text-color-upcoming);
+  }
+}

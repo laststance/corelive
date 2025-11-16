@@ -5,6 +5,7 @@ import '@/globals.css'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ORPCProvider } from '@/lib/orpc/react-query'
 import { cn } from '@/lib/utils'
+import { ThemeProvider } from '@/providers/ThemeProvider'
 
 export const metadata: Metadata = {
   title: {
@@ -23,9 +24,16 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={cn('mx-auto min-h-screen antialiased')}>
-          <ORPCProvider>
-            <ElectronAuthProvider>{children}</ElectronAuthProvider>
-          </ORPCProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ORPCProvider>
+              <ElectronAuthProvider>{children}</ElectronAuthProvider>
+            </ORPCProvider>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

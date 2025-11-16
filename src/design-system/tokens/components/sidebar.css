@@ -1,0 +1,231 @@
+/**
+ * CoreLive Design System - Sidebar Component Tokens
+ * 
+ * Design tokens for sidebar navigation components
+ */
+
+@layer base {
+  :root {
+    /* Sidebar Structure */
+    --sidebar-width: 280px;
+    --sidebar-width-collapsed: 70px;
+    --sidebar-width-mobile: 320px;
+    --sidebar-padding: var(--spacing-4);
+    --sidebar-gap: var(--spacing-2);
+    --sidebar-border-width: 1px;
+    --sidebar-border-radius: 0;
+
+    /* Sidebar Colors */
+    --sidebar-background: var(--color-sidebar);
+    --sidebar-foreground: var(--color-sidebar-foreground);
+    --sidebar-border: var(--color-sidebar-border);
+    --sidebar-primary: var(--color-sidebar-primary);
+    --sidebar-primary-foreground: var(--color-sidebar-primary-foreground);
+    --sidebar-accent: var(--color-sidebar-accent);
+    --sidebar-accent-foreground: var(--color-sidebar-accent-foreground);
+    --sidebar-ring: var(--color-sidebar-ring);
+
+    /* Sidebar Header */
+    --sidebar-header-height: 60px;
+    --sidebar-header-padding: var(--spacing-4);
+    --sidebar-header-border-width: 1px;
+    --sidebar-header-border-color: var(--sidebar-border);
+
+    /* Sidebar Footer */
+    --sidebar-footer-height: 60px;
+    --sidebar-footer-padding: var(--spacing-4);
+    --sidebar-footer-border-width: 1px;
+    --sidebar-footer-border-color: var(--sidebar-border);
+
+    /* Sidebar Navigation Items */
+    --sidebar-item-height: 40px;
+    --sidebar-item-padding-x: var(--spacing-3);
+    --sidebar-item-padding-y: var(--spacing-2);
+    --sidebar-item-border-radius: var(--radius-md);
+    --sidebar-item-gap: var(--spacing-3);
+
+    /* Sidebar Item States */
+    --sidebar-item-background: transparent;
+    --sidebar-item-background-hover: var(--sidebar-accent);
+    --sidebar-item-background-active: var(--sidebar-primary);
+    --sidebar-item-text: var(--sidebar-foreground);
+    --sidebar-item-text-hover: var(--sidebar-accent-foreground);
+    --sidebar-item-text-active: var(--sidebar-primary-foreground);
+
+    /* Sidebar Icons */
+    --sidebar-icon-size: 20px;
+    --sidebar-icon-size-collapsed: 24px;
+    --sidebar-chevron-size: 16px;
+
+    /* Sidebar Typography */
+    --sidebar-item-font-size: var(--font-size-sm);
+    --sidebar-item-font-weight: var(--font-weight-medium);
+    --sidebar-item-line-height: var(--line-height-none);
+
+    /* Sidebar Group */
+    --sidebar-group-padding: var(--spacing-2) 0;
+    --sidebar-group-label-font-size: var(--font-size-xs);
+    --sidebar-group-label-font-weight: var(--font-weight-semibold);
+    --sidebar-group-label-color: var(--color-muted-foreground);
+    --sidebar-group-label-padding: var(--spacing-2) var(--spacing-3);
+
+    /* Sidebar Shadows */
+    --sidebar-shadow: var(--shadow-md);
+    --sidebar-shadow-right: 1px 0 3px 0 rgb(0 0 0 / 0.1);
+    --sidebar-shadow-left: -1px 0 3px 0 rgb(0 0 0 / 0.1);
+
+    /* Sidebar Transitions */
+    --sidebar-transition: all var(--duration-normal) var(--ease-smooth);
+    --sidebar-item-transition: all var(--duration-fast) var(--ease-smooth);
+
+    /* Sidebar Toggle Button */
+    --sidebar-toggle-size: 32px;
+    --sidebar-toggle-background: var(--sidebar-background);
+    --sidebar-toggle-border: var(--sidebar-border);
+    --sidebar-toggle-icon-size: 16px;
+
+    /* Sidebar Mobile Overlay */
+    --sidebar-overlay-background: rgb(0 0 0 / 50%);
+    --sidebar-overlay-blur: 4px;
+  }
+
+  /* Theme-specific sidebar adjustments */
+  [data-theme^='traditional'] {
+    --sidebar-item-border-radius: var(--radius-sm);
+    --sidebar-background: var(--color-muted);
+  }
+
+  /* Dark theme sidebar */
+  .dark,
+  [data-theme*='dark'] {
+    --sidebar-shadow-right: 1px 0 3px 0 rgb(0 0 0 / 0.3);
+    --sidebar-shadow-left: -1px 0 3px 0 rgb(0 0 0 / 0.3);
+  }
+
+  /* Premium theme sidebar effects */
+  [data-theme^='gradient'] {
+    --sidebar-background: linear-gradient(
+      180deg,
+      var(--color-sidebar) 0%,
+      var(--color-sidebar) / 95% 100%
+    );
+  }
+
+  [data-theme^='retro'] {
+    --sidebar-border-width: 2px;
+    --sidebar-item-background-hover: var(--sidebar-accent) / 80%;
+  }
+
+  /* Sidebar utility classes */
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--sidebar-background);
+    color: var(--sidebar-foreground);
+    border-right: var(--sidebar-border-width) solid var(--sidebar-border);
+    transition: var(--sidebar-transition);
+    box-shadow: var(--sidebar-shadow-right);
+  }
+
+  .sidebar-collapsed {
+    width: var(--sidebar-width-collapsed);
+  }
+
+  .sidebar-right {
+    border-right: none;
+    border-left: var(--sidebar-border-width) solid var(--sidebar-border);
+    box-shadow: var(--sidebar-shadow-left);
+  }
+
+  .sidebar-header {
+    height: var(--sidebar-header-height);
+    padding: var(--sidebar-header-padding);
+    border-bottom: var(--sidebar-header-border-width) solid
+      var(--sidebar-header-border-color);
+  }
+
+  .sidebar-footer {
+    height: var(--sidebar-footer-height);
+    padding: var(--sidebar-footer-padding);
+    border-top: var(--sidebar-footer-border-width) solid
+      var(--sidebar-footer-border-color);
+  }
+
+  .sidebar-content {
+    padding: var(--sidebar-padding);
+    gap: var(--sidebar-gap);
+  }
+
+  .sidebar-group {
+    padding: var(--sidebar-group-padding);
+  }
+
+  .sidebar-group-label {
+    font-size: var(--sidebar-group-label-font-size);
+    font-weight: var(--sidebar-group-label-font-weight);
+    color: var(--sidebar-group-label-color);
+    padding: var(--sidebar-group-label-padding);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wider);
+  }
+
+  .sidebar-item {
+    height: var(--sidebar-item-height);
+    padding: var(--sidebar-item-padding-y) var(--sidebar-item-padding-x);
+    background: var(--sidebar-item-background);
+    color: var(--sidebar-item-text);
+    border-radius: var(--sidebar-item-border-radius);
+    font-size: var(--sidebar-item-font-size);
+    font-weight: var(--sidebar-item-font-weight);
+    line-height: var(--sidebar-item-line-height);
+    gap: var(--sidebar-item-gap);
+    transition: var(--sidebar-item-transition);
+    cursor: pointer;
+  }
+
+  .sidebar-item:hover {
+    background: var(--sidebar-item-background-hover);
+    color: var(--sidebar-item-text-hover);
+  }
+
+  .sidebar-item-active,
+  .sidebar-item[aria-current='page'] {
+    background: var(--sidebar-item-background-active);
+    color: var(--sidebar-item-text-active);
+  }
+
+  .sidebar-item-icon {
+    width: var(--sidebar-icon-size);
+    height: var(--sidebar-icon-size);
+  }
+
+  .sidebar-collapsed .sidebar-item-icon {
+    width: var(--sidebar-icon-size-collapsed);
+    height: var(--sidebar-icon-size-collapsed);
+  }
+
+  .sidebar-toggle {
+    width: var(--sidebar-toggle-size);
+    height: var(--sidebar-toggle-size);
+    background: var(--sidebar-toggle-background);
+    border: 1px solid var(--sidebar-toggle-border);
+    border-radius: var(--radius-md);
+  }
+
+  /* Mobile sidebar overlay */
+  .sidebar-overlay {
+    background: var(--sidebar-overlay-background);
+    backdrop-filter: blur(var(--sidebar-overlay-blur));
+    -webkit-backdrop-filter: blur(var(--sidebar-overlay-blur));
+  }
+
+  /* Mobile sidebar */
+  @media (max-width: 768px) {
+    .sidebar {
+      width: var(--sidebar-width-mobile);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      z-index: var(--z-index-modal);
+    }
+  }
+}

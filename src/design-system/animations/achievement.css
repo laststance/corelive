@@ -1,0 +1,370 @@
+/**
+ * CoreLive Design System - Achievement Animation
+ * 
+ * Monthly achievement reveal and celebration animations
+ */
+
+@layer base {
+  /* Achievement container */
+  .achievement-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: var(--z-index-notification);
+    max-width: 400px;
+  }
+
+  /* Achievement card */
+  .achievement-card {
+    position: relative;
+    background: var(--card-background);
+    border: var(--card-border-width) solid var(--card-border);
+    border-radius: var(--card-border-radius);
+    padding: var(--card-padding);
+    box-shadow: var(--card-shadow);
+    opacity: 0;
+    transform: translateX(100%);
+    animation: achievementSlideIn var(--duration-normal) var(--ease-out)
+      forwards;
+  }
+
+  /* Achievement badge */
+  .achievement-badge {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto var(--spacing-4);
+    opacity: 0;
+    animation: achievementBadgeReveal var(--duration-normal)
+      var(--duration-fast) var(--ease-bounce) forwards;
+  }
+
+  .achievement-badge-bg {
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-primary, var(--color-primary));
+    border-radius: var(--radius-full);
+    animation: achievementGlow calc(var(--duration-slow) * 2) var(--ease-in-out)
+      infinite alternate;
+  }
+
+  .achievement-badge-icon {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-primary-foreground);
+    font-size: 40px;
+    z-index: 1;
+  }
+
+  /* Achievement content */
+  .achievement-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-foreground);
+    margin-bottom: var(--spacing-2);
+    opacity: 0;
+    animation: achievementTextReveal var(--duration-fast)
+      calc(var(--duration-normal) + var(--duration-fast)) var(--ease-out)
+      forwards;
+  }
+
+  .achievement-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted-foreground);
+    margin-bottom: var(--spacing-3);
+    opacity: 0;
+    animation: achievementTextReveal var(--duration-fast)
+      calc(var(--duration-normal) + var(--duration-fast) * 2) var(--ease-out)
+      forwards;
+  }
+
+  .achievement-reward {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-accent);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    opacity: 0;
+    animation: achievementTextReveal var(--duration-fast)
+      calc(var(--duration-normal) + var(--duration-fast) * 3) var(--ease-out)
+      forwards;
+  }
+
+  /* Achievement progress bar */
+  .achievement-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--color-muted);
+    border-radius: 0 0 var(--card-border-radius) var(--card-border-radius);
+    overflow: hidden;
+  }
+
+  .achievement-progress-bar {
+    height: 100%;
+    background: var(--gradient-primary, var(--color-primary));
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: achievementProgress calc(var(--duration-slowest) * 5)
+      var(--duration-slower) linear forwards;
+  }
+
+  /* Achievement shine effect */
+  .achievement-shine {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.2) 50%,
+      transparent 70%
+    );
+    animation: achievementShine var(--duration-slow)
+      calc(var(--duration-slower) * 2) var(--ease-in-out);
+  }
+
+  /* Star burst effect */
+  .achievement-stars {
+    position: absolute;
+    inset: -20px;
+    opacity: 0;
+    animation: achievementStars var(--duration-normal) var(--duration-normal)
+      var(--ease-out) forwards;
+  }
+
+  .achievement-star {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--color-warning);
+    clip-path: polygon(
+      50% 0%,
+      61% 35%,
+      98% 35%,
+      68% 57%,
+      79% 91%,
+      50% 70%,
+      21% 91%,
+      32% 57%,
+      2% 35%,
+      39% 35%
+    );
+  }
+
+  .achievement-star-1 {
+    top: 10%;
+    left: 10%;
+    animation: achievementStarFloat1 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+  .achievement-star-2 {
+    top: 10%;
+    right: 10%;
+    animation: achievementStarFloat2 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+  .achievement-star-3 {
+    bottom: 20%;
+    left: 15%;
+    animation: achievementStarFloat3 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+  .achievement-star-4 {
+    bottom: 20%;
+    right: 15%;
+    animation: achievementStarFloat4 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+
+  /* Keyframe animations */
+  @keyframes achievementSlideIn {
+    0% {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes achievementBadgeReveal {
+    0% {
+      opacity: 0;
+      transform: scale(0) rotate(-180deg);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2) rotate(10deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes achievementTextReveal {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes achievementGlow {
+    0% {
+      box-shadow: 0 0 10px var(--color-primary) / 40%;
+    }
+    100% {
+      box-shadow: 0 0 30px var(--color-primary) / 60%;
+    }
+  }
+
+  @keyframes achievementProgress {
+    0% {
+      transform: scaleX(0);
+    }
+    100% {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes achievementShine {
+    0% {
+      left: -100%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+
+  @keyframes achievementStars {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes achievementStarFloat1 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(-10px, -10px) rotate(180deg);
+    }
+  }
+
+  @keyframes achievementStarFloat2 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(10px, -10px) rotate(-180deg);
+    }
+  }
+
+  @keyframes achievementStarFloat3 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(-10px, 10px) rotate(180deg);
+    }
+  }
+
+  @keyframes achievementStarFloat4 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(10px, 10px) rotate(-180deg);
+    }
+  }
+
+  /* Rare achievement effects */
+  .achievement-rare {
+    .achievement-badge-bg {
+      background: linear-gradient(
+        135deg,
+        var(--color-warning),
+        var(--color-primary)
+      );
+    }
+
+    .achievement-star {
+      width: 6px;
+      height: 6px;
+    }
+  }
+
+  /* Legendary achievement effects */
+  .achievement-legendary {
+    .achievement-badge-bg {
+      background: linear-gradient(135deg, #ffd700, #ffa500, #ff6347);
+      animation: achievementLegendaryGlow calc(var(--duration-normal) * 2)
+        var(--ease-in-out) infinite;
+    }
+
+    .achievement-card {
+      border-color: #ffd700;
+    }
+  }
+
+  @keyframes achievementLegendaryGlow {
+    0%,
+    100% {
+      box-shadow:
+        0 0 20px #ffd700 / 60%,
+        inset 0 0 20px #ffa500 / 30%;
+    }
+    50% {
+      box-shadow:
+        0 0 40px #ffd700 / 80%,
+        inset 0 0 30px #ffa500 / 50%;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .achievement-card,
+    .achievement-badge,
+    .achievement-title,
+    .achievement-description,
+    .achievement-reward,
+    .achievement-progress-bar,
+    .achievement-shine,
+    .achievement-stars,
+    .achievement-star {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

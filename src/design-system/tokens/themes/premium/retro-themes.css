@@ -1,0 +1,179 @@
+/**
+ * CoreLive Design System - Premium Retro Themes
+ * 
+ * Collection of premium retro/vintage theme variations
+ */
+
+@layer base {
+  /* Synthwave Theme */
+  [data-theme='retro-synthwave'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Synthwave';
+    --theme-mode: 'retro';
+
+    /* 80s synthwave aesthetic colors */
+    --color-background: oklch(0.2 0.1 300);
+    --color-foreground: oklch(0.9 0.15 330);
+    --color-primary: oklch(0.65 0.35 330);
+    --color-primary-foreground: oklch(0.15 0.05 300);
+    --color-secondary: oklch(0.6 0.3 180);
+    --color-secondary-foreground: oklch(0.15 0.05 300);
+    --color-accent: oklch(0.3 0.15 300);
+    --color-accent-foreground: oklch(0.9 0.15 330);
+    --color-muted: oklch(0.25 0.08 300);
+    --color-muted-foreground: oklch(0.7 0.1 330);
+
+    /* Retro effects */
+    --button-border-width: 2px;
+    --card-border-width: 2px;
+    --input-border-width: 2px;
+
+    /* Retro shadows */
+    --shadow-sm: 2px 2px 0 0 var(--color-primary) / 40%;
+    --shadow-md: 4px 4px 0 0 var(--color-primary) / 40%;
+    --shadow-lg: 6px 6px 0 0 var(--color-primary) / 40%;
+
+    /* Transform effects */
+    --button-transform-active: translate(2px, 2px);
+    --card-hover-scale: 1.02;
+
+    /* Special effects */
+    --animation-duration: var(--duration-slow);
+    --animation-easing: var(--ease-bounce);
+  }
+
+  /* Terminal Theme */
+  [data-theme='retro-terminal'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Terminal';
+    --theme-mode: 'retro';
+
+    /* Classic terminal green colors */
+    --color-background: oklch(0.1 0 0);
+    --color-foreground: oklch(0.8 0.25 142);
+    --color-primary: oklch(0.8 0.25 142);
+    --color-primary-foreground: oklch(0.1 0 0);
+    --color-secondary: oklch(0.6 0.15 142);
+    --color-secondary-foreground: oklch(0.1 0 0);
+    --color-accent: oklch(0.15 0.02 142);
+    --color-accent-foreground: oklch(0.8 0.25 142);
+    --color-muted: oklch(0.15 0.02 142);
+    --color-muted-foreground: oklch(0.5 0.15 142);
+
+    /* Terminal effects */
+    --font-family-sans: var(--font-family-mono);
+    --button-font-weight: var(--font-weight-bold);
+
+    /* CRT screen effect */
+    --card-background: oklch(0.11 0.01 142);
+    --card-shadow: inset 0 0 20px oklch(0.8 0.25 142 / 20%);
+
+    /* Cursor blink effect */
+    --input-border-color-focus: oklch(0.8 0.25 142);
+  }
+
+  /* Vaporwave Theme */
+  [data-theme='retro-vaporwave'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Vaporwave';
+    --theme-mode: 'retro';
+
+    /* Vaporwave aesthetic colors */
+    --color-background: oklch(0.9 0.08 320);
+    --color-foreground: oklch(0.25 0.15 280);
+    --color-primary: oklch(0.7 0.3 280);
+    --color-primary-foreground: oklch(0.95 0.02 320);
+    --color-secondary: oklch(0.65 0.25 180);
+    --color-secondary-foreground: oklch(0.15 0.02 180);
+    --color-accent: oklch(0.85 0.1 320);
+    --color-accent-foreground: oklch(0.3 0.15 280);
+    --color-muted: oklch(0.85 0.06 320);
+    --color-muted-foreground: oklch(0.5 0.1 280);
+
+    /* Vaporwave effects */
+    --card-background: linear-gradient(
+      135deg,
+      oklch(0.92 0.06 320) 0%,
+      oklch(0.9 0.08 300) 100%
+    );
+    --button-default-background: linear-gradient(
+      135deg,
+      var(--color-primary),
+      var(--color-secondary)
+    );
+
+    /* Retro borders */
+    --button-border-width: 3px;
+    --card-border-width: 3px;
+    --card-border: var(--color-primary);
+  }
+
+  /* Sepia Theme */
+  [data-theme='retro-sepia'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Sepia';
+    --theme-mode: 'retro';
+
+    /* Old photo sepia colors */
+    --color-background: oklch(0.92 0.04 60);
+    --color-foreground: oklch(0.25 0.06 40);
+    --color-primary: oklch(0.45 0.15 40);
+    --color-primary-foreground: oklch(0.92 0.04 60);
+    --color-secondary: oklch(0.6 0.1 50);
+    --color-secondary-foreground: oklch(0.92 0.04 60);
+    --color-accent: oklch(0.88 0.05 60);
+    --color-accent-foreground: oklch(0.3 0.06 40);
+    --color-muted: oklch(0.87 0.04 60);
+    --color-muted-foreground: oklch(0.5 0.05 40);
+
+    /* Vintage paper texture effect */
+    --card-background: oklch(0.94 0.03 60);
+    --card-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.1);
+    --card-border: oklch(0.8 0.06 50);
+    --card-border-width: 1px;
+  }
+
+  /* Neon Theme */
+  [data-theme='retro-neon'] {
+    color-scheme: dark;
+
+    /* Theme metadata */
+    --theme-name: 'Neon';
+    --theme-mode: 'retro';
+
+    /* Neon sign colors */
+    --color-background: oklch(0.08 0 0);
+    --color-foreground: oklch(0.95 0.4 180);
+    --color-primary: oklch(0.75 0.4 330);
+    --color-primary-foreground: oklch(0.08 0 0);
+    --color-secondary: oklch(0.7 0.4 180);
+    --color-secondary-foreground: oklch(0.08 0 0);
+    --color-accent: oklch(0.15 0.02 0);
+    --color-accent-foreground: oklch(0.95 0.4 180);
+    --color-muted: oklch(0.12 0.01 0);
+    --color-muted-foreground: oklch(0.6 0.3 180);
+
+    /* Neon glow effects */
+    --shadow-sm: 0 0 5px var(--color-primary);
+    --shadow-md: 0 0 10px var(--color-primary);
+    --shadow-lg: 0 0 20px var(--color-primary);
+
+    /* Glow text */
+    --button-default-background: transparent;
+    --button-default-text: var(--color-primary);
+    --button-default-border: var(--color-primary);
+    --button-shadow:
+      0 0 10px var(--color-primary), inset 0 0 5px var(--color-primary) / 30%;
+  }
+
+  /* More premium retro themes can be added here */
+  /* Total target: 15 retro theme variations */
+}

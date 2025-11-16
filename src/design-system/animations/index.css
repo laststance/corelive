@@ -1,0 +1,13 @@
+/**
+ * CoreLive Design System - Animations Index
+ * 
+ * Import all animation modules
+ */
+
+/* Celebration animations */
+@import './confetti.css';
+@import './level-up.css';
+@import './achievement.css';
+
+/* UI micro interactions */
+@import './micro-interactions.css';

@@ -1,0 +1,324 @@
+/**
+ * CoreLive Design System - Level Up Animation
+ * 
+ * User level progression celebration animation
+ */
+
+@layer base {
+  /* Level up container */
+  .level-up-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: var(--z-index-notification);
+    pointer-events: none;
+  }
+
+  /* Level up badge */
+  .level-up-badge {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    animation: levelUpBadge var(--duration-slower) var(--ease-bounce) forwards;
+  }
+
+  /* Level up background effects */
+  .level-up-bg-circle {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--gradient-primary, var(--color-primary));
+    opacity: 0.2;
+    animation: levelUpPulse calc(var(--duration-slower) * 2) var(--ease-out)
+      infinite;
+  }
+
+  .level-up-bg-rays {
+    position: absolute;
+    inset: -50%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      var(--color-primary) / 20% 15deg,
+      transparent 30deg,
+      var(--color-primary) / 20% 45deg,
+      transparent 60deg,
+      var(--color-primary) / 20% 75deg,
+      transparent 90deg
+    );
+    animation: levelUpRotate calc(var(--duration-slower) * 4) linear infinite;
+  }
+
+  /* Level up content */
+  .level-up-icon {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    font-weight: var(--font-weight-bold);
+    z-index: 1;
+    animation: levelUpIcon var(--duration-normal) var(--ease-bounce) forwards;
+  }
+
+  /* Level up text */
+  .level-up-text {
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    opacity: 0;
+    animation: levelUpText var(--duration-normal) var(--duration-normal)
+      var(--ease-out) forwards;
+  }
+
+  .level-up-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-primary);
+    margin-bottom: var(--spacing-1);
+  }
+
+  .level-up-subtitle {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted-foreground);
+  }
+
+  /* Level up particle effects */
+  .level-up-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    opacity: 0;
+  }
+
+  .level-up-particle-1 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle1 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-particle-2 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle2 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-particle-3 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle3 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-particle-4 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle4 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  /* Keyframe animations */
+  @keyframes levelUpBadge {
+    0% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes levelUpPulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.2;
+    }
+    50% {
+      transform: scale(1.3);
+      opacity: 0.1;
+    }
+  }
+
+  @keyframes levelUpRotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes levelUpIcon {
+    0% {
+      transform: scale(0) rotate(0deg);
+    }
+    50% {
+      transform: scale(1.2) rotate(180deg);
+    }
+    100% {
+      transform: scale(1) rotate(360deg);
+    }
+  }
+
+  @keyframes levelUpText {
+    0% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+
+  @keyframes levelUpParticle1 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-100px, -100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpParticle2 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(100px, -100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpParticle3 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-100px, 100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpParticle4 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(100px, 100px) scale(0);
+    }
+  }
+
+  /* Theme-specific level up effects */
+  [data-theme^='gradient'] {
+    .level-up-bg-circle {
+      background: var(--gradient-primary);
+    }
+  }
+
+  [data-theme^='retro'] {
+    .level-up-icon {
+      box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.2);
+    }
+
+    @keyframes levelUpIcon {
+      0% {
+        transform: scale(0) rotate(0deg) translate(0, 0);
+      }
+      50% {
+        transform: scale(1.2) rotate(180deg) translate(2px, 2px);
+      }
+      100% {
+        transform: scale(1) rotate(360deg) translate(0, 0);
+      }
+    }
+  }
+
+  /* Premium sparkle effect */
+  .level-up-sparkle {
+    position: absolute;
+    inset: -20%;
+    opacity: 0;
+    animation: levelUpSparkle calc(var(--duration-slower) * 2) var(--ease-out)
+      forwards;
+  }
+
+  .level-up-sparkle::before,
+  .level-up-sparkle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-primary),
+      transparent
+    );
+    transform-origin: center;
+  }
+
+  .level-up-sparkle::before {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  .level-up-sparkle::after {
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  @keyframes levelUpSparkle {
+    0% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.5);
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .level-up-badge,
+    .level-up-bg-circle,
+    .level-up-bg-rays,
+    .level-up-icon,
+    .level-up-text,
+    .level-up-particle,
+    .level-up-sparkle {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

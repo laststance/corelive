@@ -1,0 +1,127 @@
+/**
+ * CoreLive Design System - Premium Light Themes
+ * 
+ * Collection of premium light theme variations
+ */
+
+@layer base {
+  /* Pearl Theme */
+  [data-theme='light-pearl'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Pearl';
+    --theme-mode: 'light';
+
+    /* Elegant pearl white colors */
+    --color-background: oklch(0.985 0.002 85);
+    --color-foreground: oklch(0.2 0.01 85);
+    --color-primary: oklch(0.45 0.1 30);
+    --color-primary-foreground: oklch(0.98 0.002 85);
+    --color-secondary: oklch(0.8 0.05 60);
+    --color-secondary-foreground: oklch(0.2 0.01 85);
+    --color-accent: oklch(0.95 0.01 85);
+    --color-accent-foreground: oklch(0.3 0.01 85);
+    --color-muted: oklch(0.94 0.005 85);
+    --color-muted-foreground: oklch(0.5 0.01 85);
+
+    /* Card styling */
+    --color-card: oklch(0.99 0.001 85);
+    --color-card-foreground: var(--color-foreground);
+  }
+
+  /* Snow Theme */
+  [data-theme='light-snow'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Snow';
+    --theme-mode: 'light';
+
+    /* Pure snow white colors */
+    --color-background: oklch(1 0 0);
+    --color-foreground: oklch(0.15 0 250);
+    --color-primary: oklch(0.5 0.25 250);
+    --color-primary-foreground: oklch(1 0 0);
+    --color-secondary: oklch(0.6 0.15 200);
+    --color-secondary-foreground: oklch(1 0 0);
+    --color-accent: oklch(0.97 0.01 250);
+    --color-accent-foreground: oklch(0.15 0 250);
+    --color-muted: oklch(0.96 0.005 250);
+    --color-muted-foreground: oklch(0.45 0.01 250);
+  }
+
+  /* Cream Theme */
+  [data-theme='light-cream'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Cream';
+    --theme-mode: 'light';
+
+    /* Warm cream colors */
+    --color-background: oklch(0.98 0.01 70);
+    --color-foreground: oklch(0.25 0.02 70);
+    --color-primary: oklch(0.6 0.15 40);
+    --color-primary-foreground: oklch(0.98 0.01 70);
+    --color-secondary: oklch(0.7 0.1 60);
+    --color-secondary-foreground: oklch(0.25 0.02 70);
+    --color-accent: oklch(0.94 0.02 70);
+    --color-accent-foreground: oklch(0.35 0.02 70);
+    --color-muted: oklch(0.93 0.01 70);
+    --color-muted-foreground: oklch(0.55 0.02 70);
+  }
+
+  /* Alabaster Theme */
+  [data-theme='light-alabaster'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Alabaster';
+    --theme-mode: 'light';
+
+    /* Soft alabaster colors */
+    --color-background: oklch(0.97 0.003 100);
+    --color-foreground: oklch(0.22 0.01 100);
+    --color-primary: oklch(0.5 0.2 220);
+    --color-primary-foreground: oklch(0.97 0.003 100);
+    --color-secondary: oklch(0.65 0.1 180);
+    --color-secondary-foreground: oklch(0.97 0.003 100);
+    --color-accent: oklch(0.94 0.01 100);
+    --color-accent-foreground: oklch(0.3 0.01 100);
+    --color-muted: oklch(0.92 0.005 100);
+    --color-muted-foreground: oklch(0.5 0.01 100);
+  }
+
+  /* Ivory Theme */
+  [data-theme='light-ivory'] {
+    color-scheme: light;
+
+    /* Theme metadata */
+    --theme-name: 'Ivory';
+    --theme-mode: 'light';
+
+    /* Classic ivory colors */
+    --color-background: oklch(0.98 0.008 80);
+    --color-foreground: oklch(0.2 0.01 80);
+    --color-primary: oklch(0.5 0.15 30);
+    --color-primary-foreground: oklch(0.98 0.008 80);
+    --color-secondary: oklch(0.6 0.12 50);
+    --color-secondary-foreground: oklch(0.98 0.008 80);
+    --color-accent: oklch(0.95 0.01 80);
+    --color-accent-foreground: oklch(0.25 0.01 80);
+    --color-muted: oklch(0.94 0.008 80);
+    --color-muted-foreground: oklch(0.45 0.01 80);
+
+    /* Soft shadows */
+    --shadow-sm:
+      0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --shadow-md:
+      0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+    --shadow-lg:
+      0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  }
+
+  /* More premium light themes can be added here */
+  /* Total target: 20 light theme variations */
+}
