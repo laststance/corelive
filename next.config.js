@@ -31,12 +31,19 @@ const nextConfig = {
   webpack: (config, { isServer, dev }) => {
     // Code inspector plugin for development
     if (dev && !isServer) {
-      config.plugins.push(
-        ...codeInspectorPlugin({
-          bundler: 'webpack',
-          hotKeys: ['altKey'],
-        }),
-      )
+      const plugin = codeInspectorPlugin({
+        bundler: 'webpack',
+        hotKeys: ['altKey'],
+      })
+      if (plugin) {
+        if (Array.isArray(plugin)) {
+          config.plugins.push(...plugin)
+        } else {
+          config.plugins.push(plugin)
+        }
+      } else {
+        console.error('Code inspector plugin not found')
+      }
     }
 
     // Handle Electron environment

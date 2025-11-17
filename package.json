@@ -22,7 +22,7 @@
   },
   "scripts": {
     "postinstall": "pnpm prisma generate",
-    "dev": "next dev -p 3011",
+    "dev": "next dev -p 3011 --webpack",
     "build": "next build --webpack",
     "build:icons": "node scripts/generate-icons.js",
     "prebuild": "pnpm build:icons",
