@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
-import { expect, within, userEvent } from '@storybook/test'
 import * as React from 'react'
+import { expect, within, userEvent } from 'storybook/test'
 
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
