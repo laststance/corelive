@@ -1,25 +1,25 @@
 /**
  * @fileoverview Global Keyboard Shortcut Manager for Electron
- * 
+ *
  * Manages system-wide keyboard shortcuts that work even when the app
  * doesn't have focus. This is a powerful feature unique to desktop apps.
- * 
+ *
  * Global shortcuts allow users to:
  * - Create new tasks from anywhere (Cmd/Ctrl+N)
  * - Show/hide the app quickly (Cmd/Ctrl+Shift+T)
  * - Access features without switching windows
- * 
+ *
  * Security considerations:
  * - Global shortcuts can conflict with other apps
  * - Should be customizable to avoid conflicts
  * - Should be documented for users
  * - Can be disabled by users
- * 
+ *
  * Platform differences:
  * - macOS: Uses Cmd key, some shortcuts reserved by OS
  * - Windows: Uses Ctrl key, fewer OS restrictions
  * - Linux: Varies by desktop environment
- * 
+ *
  * @module electron/ShortcutManager
  */
 
@@ -29,7 +29,7 @@ const { log } = require('../src/lib/logger.cjs')
 
 /**
  * Manages global keyboard shortcuts throughout the application.
- * 
+ *
  * Features:
  * - Registration/unregistration of global shortcuts
  * - Conflict detection and handling
@@ -37,7 +37,7 @@ const { log } = require('../src/lib/logger.cjs')
  * - User customization support
  * - Enable/disable functionality
  * - Statistics tracking
- * 
+ *
  * Why global shortcuts matter:
  * - Productivity: Quick access without app switching
  * - Accessibility: Keyboard-only navigation
@@ -50,9 +50,19 @@ class ShortcutManager {
     this.windowManager = windowManager
     this.notificationManager = notificationManager
     this.configManager = configManager
-    
+
     // Track registered shortcuts for cleanup
     this.registeredShortcuts = new Map()
+
+    // Track contextual shortcuts separately
+    this.contextualShortcuts = new Set([
+      'newTask',
+      'minimize',
+      'toggleAlwaysOnTop',
+      'focusFloatingNavigator',
+    ])
+    this.globalShortcuts = new Set(['showMainWindow'])
+    this.focusListenersSetup = false
 
     // Load user preferences or defaults
     this.loadSettings()
@@ -60,11 +70,11 @@ class ShortcutManager {
 
   /**
    * Loads shortcut settings from user configuration.
-   * 
+   *
    * Settings include:
    * - enabled: Global on/off switch
    * - Individual shortcut key combinations
-   * 
+   *
    * Falls back to platform-specific defaults if no config.
    * Users can customize shortcuts to avoid conflicts with
    * other apps they use.
@@ -85,18 +95,18 @@ class ShortcutManager {
 
   /**
    * Returns platform-specific default shortcuts.
-   * 
+   *
    * Design principles:
    * - Use standard modifier keys (Cmd on Mac, Ctrl elsewhere)
    * - Avoid OS-reserved combinations
    * - Follow platform conventions
    * - Keep shortcuts memorable and logical
-   * 
+   *
    * Common patterns:
    * - Cmd/Ctrl+N: New (standard across apps)
    * - Cmd/Ctrl+Q: Quit (standard)
    * - Shift for variations of base shortcuts
-   * 
+   *
    * @returns {Object} Map of action names to key combinations
    */
   getDefaultShortcuts() {
@@ -104,10 +114,10 @@ class ShortcutManager {
     const modifier = isMac ? 'Cmd' : 'Ctrl'
 
     return {
-      newTask: `${modifier}+N`,              // Standard "New" shortcut
-      showMainWindow: `${modifier}+Shift+T`,  // T for "Todo"
-      quit: isMac ? 'Cmd+Q' : 'Ctrl+Q',      // Platform standard quit
-      minimize: `${modifier}+M`,              // Standard minimize
+      newTask: `${modifier}+N`, // Standard "New" shortcut
+      showMainWindow: `${modifier}+Shift+T`, // T for "Todo"
+      quit: isMac ? 'Cmd+Q' : 'Ctrl+Q', // Platform standard quit
+      minimize: `${modifier}+M`, // Standard minimize
       toggleAlwaysOnTop: `${modifier}+Shift+A`, // A for "Always on top"
       focusFloatingNavigator: `${modifier}+Shift+N`, // N for "Navigator"
     }
@@ -115,18 +125,18 @@ class ShortcutManager {
 
   /**
    * Initializes and registers all configured shortcuts.
-   * 
+   *
    * Process:
    * 1. Check if shortcuts are enabled globally
    * 2. Attempt to register each shortcut
    * 3. Handle conflicts gracefully
    * 4. Report success/failure statistics
-   * 
+   *
    * Conflict handling:
    * - Shortcuts may fail if already taken by OS or other apps
    * - Partial success is acceptable (some shortcuts work)
    * - Users are notified of registration results
-   * 
+   *
    * @returns {boolean} True if at least some shortcuts registered
    */
   initialize() {
@@ -135,15 +145,15 @@ class ShortcutManager {
       log.debug('⌨️  [ShortcutManager] isEnabled:', this.isEnabled)
       log.debug('⌨️  [ShortcutManager] shortcuts:', this.shortcuts)
 
-      // Register all shortcuts and collect results
-      const results = this.registerDefaultShortcuts()
+      // Register only global shortcuts initially
+      const results = this.registerGlobalShortcuts()
 
       // Count successes
       const successCount = results.filter((r) => r.success).length
       const totalCount = results.length
 
       log.info(
-        `⌨️  [ShortcutManager] Registered ${successCount}/${totalCount} shortcuts`,
+        `⌨️  [ShortcutManager] Registered ${successCount}/${totalCount} global shortcuts`,
       )
 
       // Log each shortcut registration result
@@ -153,21 +163,14 @@ class ShortcutManager {
       })
 
       if (successCount === totalCount) {
-        log.info('✅ [ShortcutManager] All shortcuts initialized successfully')
+        log.info(
+          '✅ [ShortcutManager] All global shortcuts initialized successfully',
+        )
         return true
       } else if (successCount > 0) {
         log.warn(
           `⚠️  [ShortcutManager] Partial success: ${successCount}/${totalCount}`,
         )
-        // Show summary notification
-        if (this.notificationManager) {
-          this.notificationManager.showNotification(
-            'Shortcuts Initialized',
-            `${successCount}/${totalCount} shortcuts registered successfully`,
-            { silent: true },
-          )
-        }
-
         return true
       } else {
         console.error(
@@ -184,21 +187,84 @@ class ShortcutManager {
   }
 
   /**
-   * Register all shortcuts from configuration with result tracking
+   * Setup focus listeners for dynamic shortcut management.
+   *
+   * This prevents Corelive shortcuts from interfering with other apps:
+   * - When Corelive is focused: All shortcuts active
+   * - When other app is focused: Only global shortcuts (e.g., show window) active
+   *
+   * This solves the issue where Cmd+N in other apps would trigger Corelive instead.
    */
-  registerDefaultShortcuts() {
+  setupFocusListeners() {
+    if (this.focusListenersSetup) {
+      log.debug('⌨️  [ShortcutManager] Focus listeners already setup')
+      return
+    }
+
+    try {
+      const mainWindow = this.windowManager.getMainWindow()
+      const floatingWindow = this.windowManager.getFloatingNavigator()
+
+      // Setup listeners for main window
+      if (mainWindow) {
+        mainWindow.on('focus', () => {
+          log.debug(
+            '⌨️  [ShortcutManager] Main window focused - registering contextual shortcuts',
+          )
+          this.registerContextualShortcuts()
+        })
+
+        mainWindow.on('blur', () => {
+          log.debug(
+            '⌨️  [ShortcutManager] Main window blurred - unregistering contextual shortcuts',
+          )
+          this.unregisterContextualShortcuts()
+        })
+
+        // Register contextual shortcuts if window is already focused
+        if (mainWindow.isFocused()) {
+          this.registerContextualShortcuts()
+        }
+      }
+
+      // Setup listeners for floating navigator if exists
+      if (floatingWindow) {
+        floatingWindow.on('focus', () => {
+          log.debug(
+            '⌨️  [ShortcutManager] Floating window focused - registering contextual shortcuts',
+          )
+          this.registerContextualShortcuts()
+        })
+
+        floatingWindow.on('blur', () => {
+          log.debug(
+            '⌨️  [ShortcutManager] Floating window blurred - unregistering contextual shortcuts',
+          )
+          this.unregisterContextualShortcuts()
+        })
+
+        // Register contextual shortcuts if window is already focused
+        if (floatingWindow.isFocused()) {
+          this.registerContextualShortcuts()
+        }
+      }
+
+      this.focusListenersSetup = true
+      log.info('✅ [ShortcutManager] Focus listeners setup successfully')
+    } catch (error) {
+      log.error('❌ [ShortcutManager] Failed to setup focus listeners:', error)
+    }
+  }
+
+  /**
+   * Register global shortcuts that work even when app is not focused.
+   * Only essential shortcuts like "show main window" should be global.
+   */
+  registerGlobalShortcuts() {
     const shortcuts = this.shortcuts
     const results = []
 
-    // New task shortcut
-    results.push({
-      id: 'newTask',
-      success: this.registerShortcut(shortcuts.newTask, 'newTask', () => {
-        this.handleNewTaskShortcut()
-      }),
-    })
-
-    // Show main window
+    // Show main window - should always work to restore app
     results.push({
       id: 'showMainWindow',
       success: this.registerShortcut(
@@ -210,39 +276,111 @@ class ShortcutManager {
       ),
     })
 
+    return results
+  }
+
+  /**
+   * Register contextual shortcuts that only work when app has focus.
+   * These shortcuts won't interfere with other applications.
+   */
+  registerContextualShortcuts() {
+    const shortcuts = this.shortcuts
+    const results = []
+
+    // Skip if already registered
+    if (this.registeredShortcuts.has('newTask')) {
+      log.debug('⌨️  [ShortcutManager] Contextual shortcuts already registered')
+      return results
+    }
+
+    // New task shortcut
+    if (this.contextualShortcuts.has('newTask')) {
+      results.push({
+        id: 'newTask',
+        success: this.registerShortcut(shortcuts.newTask, 'newTask', () => {
+          this.handleNewTaskShortcut()
+        }),
+      })
+    }
+
     // Minimize window
-    results.push({
-      id: 'minimize',
-      success: this.registerShortcut(shortcuts.minimize, 'minimize', () => {
-        this.handleMinimizeWindow()
-      }),
-    })
+    if (this.contextualShortcuts.has('minimize')) {
+      results.push({
+        id: 'minimize',
+        success: this.registerShortcut(shortcuts.minimize, 'minimize', () => {
+          this.handleMinimizeWindow()
+        }),
+      })
+    }
 
     // Toggle always on top (for floating navigator)
-    results.push({
-      id: 'toggleAlwaysOnTop',
-      success: this.registerShortcut(
-        shortcuts.toggleAlwaysOnTop,
-        'toggleAlwaysOnTop',
-        () => {
-          this.handleToggleAlwaysOnTop()
-        },
-      ),
-    })
+    if (this.contextualShortcuts.has('toggleAlwaysOnTop')) {
+      results.push({
+        id: 'toggleAlwaysOnTop',
+        success: this.registerShortcut(
+          shortcuts.toggleAlwaysOnTop,
+          'toggleAlwaysOnTop',
+          () => {
+            this.handleToggleAlwaysOnTop()
+          },
+        ),
+      })
+    }
 
     // Focus floating navigator
-    results.push({
-      id: 'focusFloatingNavigator',
-      success: this.registerShortcut(
-        shortcuts.focusFloatingNavigator,
-        'focusFloatingNavigator',
-        () => {
-          this.handleFocusFloatingNavigator()
-        },
-      ),
-    })
+    if (this.contextualShortcuts.has('focusFloatingNavigator')) {
+      results.push({
+        id: 'focusFloatingNavigator',
+        success: this.registerShortcut(
+          shortcuts.focusFloatingNavigator,
+          'focusFloatingNavigator',
+          () => {
+            this.handleFocusFloatingNavigator()
+          },
+        ),
+      })
+    }
+
+    const successCount = results.filter((r) => r.success).length
+    log.debug(
+      `⌨️  [ShortcutManager] Registered ${successCount}/${results.length} contextual shortcuts`,
+    )
 
     return results
+  }
+
+  /**
+   * Unregister contextual shortcuts while keeping global shortcuts active.
+   * Called when app loses focus to prevent interfering with other apps.
+   */
+  unregisterContextualShortcuts() {
+    const unregistered = []
+
+    for (const id of this.contextualShortcuts) {
+      if (this.registeredShortcuts.has(id)) {
+        const success = this.unregisterShortcut(id)
+        if (success) {
+          unregistered.push(id)
+        }
+      }
+    }
+
+    if (unregistered.length > 0) {
+      log.debug(
+        `⌨️  [ShortcutManager] Unregistered ${unregistered.length} contextual shortcuts: ${unregistered.join(', ')}`,
+      )
+    }
+  }
+
+  /**
+   * Register all shortcuts from configuration with result tracking
+   */
+  registerDefaultShortcuts() {
+    // This method is now deprecated in favor of registerGlobalShortcuts + registerContextualShortcuts
+    // Kept for backward compatibility
+    const globalResults = this.registerGlobalShortcuts()
+    const contextualResults = this.registerContextualShortcuts()
+    return [...globalResults, ...contextualResults]
   }
 
   /**

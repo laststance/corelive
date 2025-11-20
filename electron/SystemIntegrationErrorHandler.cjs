@@ -261,6 +261,10 @@ class SystemIntegrationErrorHandler {
 
       const success = this.shortcutManager.initialize()
 
+      // Setup focus listeners for dynamic shortcut management
+      // This prevents Corelive shortcuts from interfering with other apps
+      this.shortcutManager.setupFocusListeners()
+
       if (success) {
         // Check if any shortcuts failed
         const failedShortcuts = this.shortcutManager.getFailedShortcuts()
