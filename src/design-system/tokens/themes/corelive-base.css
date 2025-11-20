@@ -108,14 +108,23 @@ body {
   background: var(--color-foreground);
 }
 
-/* Link styles */
-a {
+/**
+ * Link styles
+ * 
+ * Excludes button-styled anchors to prevent conflicts with Button component
+ * when using <Button asChild><Link>...</Link></Button>
+ * 
+ * Example:
+ * - Regular link: <Link href="/about">About</Link> → Uses primary color
+ * - Button link: <Button asChild><Link href="/login">Login</Link></Button> → Inherits button color
+ */
+a:not(.inline-flex) {
   color: var(--color-primary);
   text-decoration: none;
   transition: color var(--duration-fast) var(--ease-smooth);
 }
 
-a:hover {
+a:not(.inline-flex):hover {
   text-decoration: underline;
 }
 
