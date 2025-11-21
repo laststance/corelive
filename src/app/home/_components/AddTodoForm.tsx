@@ -112,7 +112,7 @@ export function AddTodoForm({ onAddTodo }: AddTodoFormProps) {
                       <FormControl>
                         <Textarea
                           placeholder="Add notes (optional)..."
-                          className="min-h-[80px] resize-none"
+                          className="min-h-20 resize-none"
                           {...field}
                         />
                       </FormControl>
