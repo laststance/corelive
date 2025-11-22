@@ -24,7 +24,12 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={cn('mx-auto min-h-screen antialiased')}>
-          <ThemeProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            enableSystem
+            disableTransitionOnChange
+          >
             <ORPCProvider>
               <ElectronAuthProvider>{children}</ElectronAuthProvider>
             </ORPCProvider>
