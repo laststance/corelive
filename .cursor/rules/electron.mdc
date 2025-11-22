@@ -4,8 +4,122 @@ alwaysApply: true
 
 - Please run `pnpm electron &` or `pnpm dev:electron &` in the background, since the Electron command often becomes unresponsive.
 
-
-
-- must run `pnpm electron:build` before running the Playwright tests
+- Must run `pnpm electron:build` before running the Playwright tests
 - Prohibited: Mocking authentication
 - Prohibited: Mocking the database
+
+## Electron MCP Integration
+
+This project uses **Electron MCP Server** for programmatic interaction with running Electron applications. The following MCP tools are available for testing and debugging:
+
+### Window Information
+
+#### `get_electron_window_info`
+Get information about running Electron applications and their windows.
+
+```typescript
+const windowInfo = await mcp_electron_get_electron_window_info({
+  includeChildren: true // Optional, include child windows
+})
+```
+
+**Returns:**
+- Window title, bounds (x, y, width, height)
+- Window visibility and focus state
+- Child windows information
+
+### Screenshots
+
+#### `take_screenshot`
+Capture a screenshot of any running Electron application window.
+
+```typescript
+// Screenshot entire window
+const screenshot = await mcp_electron_take_screenshot()
+
+// Screenshot specific window by title
+const screenshot = await mcp_electron_take_screenshot({
+  windowTitle: 'CoreLive TODO'
+})
+
+// Save to specific path
+const screenshot = await mcp_electron_take_screenshot({
+  outputPath: '/path/to/screenshot.png',
+  windowTitle: 'CoreLive TODO'
+})
+```
+
+**Returns:** Base64 image data for AI analysis. No files created unless `outputPath` is specified.
+
+### UI Interaction
+
+#### `send_command_to_electron`
+Send JavaScript commands to any running Electron application via Chrome DevTools Protocol.
+
+**Enhanced UI interaction commands:**
+- `find_elements` - Analyze all interactive elements (buttons, inputs, selects)
+- `click_by_text` - Click elements by visible text, aria-label, or title
+- `click_by_selector` - Click elements by CSS selector
+- `fill_input` - Fill input fields by selector, placeholder, or label
+- `select_option` - Select dropdown options by value or text
+- `send_keyboard_shortcut` - Send keyboard shortcuts like 'Ctrl+N', 'Enter', 'Escape'
+- `navigate_to_hash` - Navigate to hash routes
+- `get_page_structure` - Get organized overview of page elements
+- `debug_elements` - Get debugging info about buttons and form elements
+- `verify_form_state` - Check current form state and validation status
+- `get_title`, `get_url`, `get_body_text` - Basic page information
+- `eval` - Execute custom JavaScript code
+
+**Example Usage:**
+
+```typescript
+// Get page structure first
+const structure = await mcp_electron_send_command_to_electron({
+  command: 'get_page_structure'
+})
+
+// Click element by text
+await mcp_electron_send_command_to_electron({
+  command: 'click_by_text',
+  args: { text: 'Add Task' }
+})
+
+// Fill input field
+await mcp_electron_send_command_to_electron({
+  command: 'fill_input',
+  args: { placeholder: 'Task name', value: 'My Task' }
+})
+
+// Send keyboard shortcut
+await mcp_electron_send_command_to_electron({
+  command: 'send_keyboard_shortcut',
+  args: { text: 'Escape' }
+})
+```
+
+### Console Logs
+
+#### `read_electron_logs`
+Read console logs and output from running Electron applications.
+
+```typescript
+// Read console logs (default: last 100 lines)
+const logs = await mcp_electron_read_electron_logs({
+  logType: 'console', // 'console', 'main', 'renderer', 'all'
+  lines: 100
+})
+
+// Follow logs in real-time
+const logs = await mcp_electron_read_electron_logs({
+  logType: 'all',
+  follow: true
+})
+```
+
+## Usage Guidelines
+
+1. **Window Detection:** Electron MCP automatically detects apps with remote debugging enabled (port 9222).
+2. **Element Selection:** Use `get_page_structure` or `debug_elements` first to understand available elements before interaction.
+3. **Specific Commands:** Use targeted commands (`click_by_text`, `fill_input`) instead of generic `eval` when possible.
+4. **Screenshot Verification:** Always take screenshots after UI changes to verify the results visually.
+5. **Log Debugging:** Use `read_electron_logs` to diagnose issues and understand app behavior.
