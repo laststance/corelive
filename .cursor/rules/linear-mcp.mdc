@@ -1,0 +1,503 @@
+---
+alwaysApply: true
+---
+
+# Linear MCP Integration
+
+This project uses **Linear** for project and task management, integrated through the **Linear MCP Server**. AI assistants can interact with Linear programmatically to create issues, update projects, manage labels, and more.
+
+## Project Information
+
+- **Workspace:** Laststance
+- **Primary Team:** CoreLive
+- **Project Management:** Linear is used for tracking features, bugs, and technical debt
+
+## Linear MCP Tools
+
+### Issue Management
+
+#### `list_issues`
+List issues in the workspace with flexible filtering.
+
+```typescript
+// List all my issues
+await mcp_linear_list_issues({
+  assignee: 'me',
+  limit: 50
+})
+
+// List issues by team
+await mcp_linear_list_issues({
+  team: 'CoreLive',
+  orderBy: 'updatedAt',
+  limit: 50
+})
+
+// List issues by state
+await mcp_linear_list_issues({
+  state: 'In Progress',
+  assignee: 'me'
+})
+
+// List issues by label
+await mcp_linear_list_issues({
+  label: 'bug',
+  includeArchived: false
+})
+
+// List issues by project
+await mcp_linear_list_issues({
+  project: 'Prisma Migration',
+  team: 'CoreLive'
+})
+
+// Search issues by content
+await mcp_linear_list_issues({
+  query: 'authentication',
+  limit: 20
+})
+
+// Filter by date
+await mcp_linear_list_issues({
+  createdAt: '-P1D', // Created in the last day
+  updatedAt: '-P1W'  // Updated in the last week
+})
+```
+
+**Parameters:**
+- `assignee`: User ID, name, email, or `"me"`
+- `team`: Team name or ID
+- `state`: State name or ID
+- `label`: Label name or ID
+- `project`: Project name or ID
+- `cycle`: Cycle name or ID
+- `query`: Search in title/description
+- `includeArchived`: Default `true`
+- `limit`: Max 250, default 50
+- `orderBy`: `"createdAt"` or `"updatedAt"` (default)
+
+#### `get_issue`
+Get detailed issue information including attachments and git branch name.
+
+```typescript
+const issue = await mcp_linear_get_issue({
+  id: 'COR-123'
+})
+```
+
+**Returns:**
+- Full issue details including description, comments, attachments, labels, assignee, project, cycle, git branch name, etc.
+
+#### `create_issue`
+Create a new Linear issue.
+
+```typescript
+await mcp_linear_create_issue({
+  title: 'Migrate Prisma from v6 to v7',
+  team: 'CoreLive',
+  description: '## Objective\n\nUpgrade Prisma ORM to v7...',
+  assignee: 'me',
+  state: 'In Progress',
+  priority: 2, // 0=No priority, 1=Urgent, 2=High, 3=Normal, 4=Low
+  labels: ['technical-debt', 'database'],
+  project: 'Infrastructure Upgrades',
+  dueDate: '2025-12-31',
+  links: [
+    {
+      url: 'https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7',
+      title: 'Prisma 7 Upgrade Guide'
+    }
+  ]
+})
+```
+
+**Parameters:**
+- `title`: **Required** - Issue title
+- `team`: **Required** - Team name or ID
+- `description`: Markdown description
+- `assignee`: User ID, name, email, or `"me"`
+- `state`: State type, name, or ID
+- `priority`: 0-4 (only set if explicitly requested)
+- `labels`: Array of label names or IDs
+- `project`: Project name or ID
+- `cycle`: Cycle name, number, or ID
+- `parentId`: Parent issue ID for sub-issues
+- `dueDate`: ISO format date
+- `links`: Array of `{ url, title }` objects
+
+#### `update_issue`
+Update an existing issue.
+
+```typescript
+await mcp_linear_update_issue({
+  id: 'COR-123',
+  state: 'Done',
+  description: 'Updated description...',
+  labels: ['completed', 'v7-migration']
+})
+```
+
+**Parameters:** Same as `create_issue`, plus `id` (required)
+
+### Comments
+
+#### `list_comments`
+List comments for a specific issue.
+
+```typescript
+const comments = await mcp_linear_list_comments({
+  issueId: 'COR-123'
+})
+```
+
+#### `create_comment`
+Add a comment to an issue.
+
+```typescript
+await mcp_linear_create_comment({
+  issueId: 'COR-123',
+  body: 'Migration completed successfully! ✅',
+  parentId: 'comment_xxx' // Optional, for replies
+})
+```
+
+### Projects
+
+#### `list_projects`
+List projects with filtering.
+
+```typescript
+// List active projects in team
+await mcp_linear_list_projects({
+  team: 'CoreLive',
+  includeArchived: false,
+  orderBy: 'updatedAt'
+})
+
+// List projects by state
+await mcp_linear_list_projects({
+  state: 'started',
+  member: 'me'
+})
+
+// Search projects
+await mcp_linear_list_projects({
+  query: 'migration',
+  limit: 20
+})
+```
+
+#### `get_project`
+Get detailed project information.
+
+```typescript
+const project = await mcp_linear_get_project({
+  query: 'Prisma Migration' // ID or name
+})
+```
+
+#### `create_project`
+Create a new project.
+
+```typescript
+await mcp_linear_create_project({
+  name: 'Q1 2025 Infrastructure',
+  team: 'CoreLive',
+  description: '## Goals\n\n- Upgrade dependencies\n- Improve performance',
+  summary: 'Infrastructure improvements for Q1',
+  lead: 'me',
+  priority: 2,
+  startDate: '2025-01-01',
+  targetDate: '2025-03-31',
+  state: 'started',
+  labels: ['infrastructure']
+})
+```
+
+#### `update_project`
+Update an existing project.
+
+```typescript
+await mcp_linear_update_project({
+  id: 'project_xxx',
+  state: 'completed',
+  summary: 'All goals achieved'
+})
+```
+
+### Labels
+
+#### `list_issue_labels`
+List available issue labels.
+
+```typescript
+// List all workspace labels
+await mcp_linear_list_issue_labels({})
+
+// List team labels
+await mcp_linear_list_issue_labels({
+  team: 'CoreLive'
+})
+
+// Search labels
+await mcp_linear_list_issue_labels({
+  name: 'bug'
+})
+```
+
+#### `create_issue_label`
+Create a new label.
+
+```typescript
+await mcp_linear_create_issue_label({
+  name: 'prisma-v7',
+  color: '#FF6B6B',
+  description: 'Related to Prisma v7 migration',
+  teamId: 'team_xxx', // Optional, creates workspace label if not provided
+  isGroup: false,
+  parentId: 'label_xxx' // Optional, for child labels
+})
+```
+
+#### `list_project_labels`
+List project-specific labels.
+
+```typescript
+await mcp_linear_list_project_labels({
+  orderBy: 'createdAt',
+  limit: 50
+})
+```
+
+### Issue Statuses
+
+#### `list_issue_statuses`
+List available issue statuses in a team.
+
+```typescript
+const statuses = await mcp_linear_list_issue_statuses({
+  team: 'CoreLive'
+})
+```
+
+#### `get_issue_status`
+Get detailed status information.
+
+```typescript
+const status = await mcp_linear_get_issue_status({
+  team: 'CoreLive',
+  name: 'In Progress' // or id: 'status_xxx'
+})
+```
+
+### Teams
+
+#### `list_teams`
+List teams in the workspace.
+
+```typescript
+await mcp_linear_list_teams({
+  includeArchived: false,
+  orderBy: 'updatedAt'
+})
+```
+
+#### `get_team`
+Get detailed team information.
+
+```typescript
+const team = await mcp_linear_get_team({
+  query: 'CoreLive' // UUID, key, or name
+})
+```
+
+### Users
+
+#### `list_users`
+List users in the workspace.
+
+```typescript
+await mcp_linear_list_users({
+  query: 'john@example.com'
+})
+```
+
+#### `get_user`
+Get detailed user information.
+
+```typescript
+const user = await mcp_linear_get_user({
+  query: 'me' // User ID, name, email, or "me"
+})
+```
+
+### Cycles
+
+#### `list_cycles`
+List cycles for a team.
+
+```typescript
+// Get current cycle
+await mcp_linear_list_cycles({
+  teamId: 'team_xxx',
+  type: 'current'
+})
+
+// Get all cycles
+await mcp_linear_list_cycles({
+  teamId: 'team_xxx'
+})
+
+// Get previous/next cycle
+await mcp_linear_list_cycles({
+  teamId: 'team_xxx',
+  type: 'previous' // or 'next'
+})
+```
+
+### Documents
+
+#### `list_documents`
+List documents in the workspace.
+
+```typescript
+await mcp_linear_list_documents({
+  query: 'architecture',
+  includeArchived: false,
+  orderBy: 'updatedAt',
+  creatorId: 'user_xxx',
+  limit: 50
+})
+```
+
+#### `get_document`
+Get document by ID or slug.
+
+```typescript
+const doc = await mcp_linear_get_document({
+  id: 'doc_xxx' // or slug
+})
+```
+
+### Documentation Search
+
+#### `search_documentation`
+Search Linear's official documentation.
+
+```typescript
+const results = await mcp_linear_search_documentation({
+  query: 'API authentication',
+  page: 0
+})
+```
+
+## Usage Guidelines
+
+### Best Practices
+
+1. **Team Consistency:** Always specify team when creating issues/projects to ensure proper organization.
+
+2. **Label Usage:** Use existing labels when possible; create new labels only for recurring categories.
+
+3. **Priority:** Only set priority if explicitly requested by user. Most issues should use default (no priority).
+
+4. **State Management:** Use clear state transitions: `"Backlog"` → `"Todo"` → `"In Progress"` → `"Done"` → `"Canceled"`.
+
+5. **Search Before Create:** Use `list_issues` to check for duplicates before creating new issues.
+
+6. **Assignee Format:** Prefer `"me"` for current user; use email for specific users.
+
+7. **Markdown Descriptions:** Use proper Markdown formatting for descriptions with headings, lists, code blocks.
+
+8. **Links:** Always provide meaningful titles for issue links (not just URLs).
+
+### Common Workflows
+
+#### Creating a Migration Task
+
+```typescript
+// 1. Create the issue
+const issue = await mcp_linear_create_issue({
+  title: 'Migrate Prisma from v6 to v7',
+  team: 'CoreLive',
+  description: `## Objective
+Upgrade Prisma ORM to v7 following official migration guide.
+
+## Tasks
+- [ ] Update dependencies
+- [ ] Modify schema.prisma
+- [ ] Update client instantiation
+- [ ] Test migration
+- [ ] Update CI/CD`,
+  assignee: 'me',
+  state: 'In Progress',
+  labels: ['database', 'migration'],
+  project: 'Infrastructure',
+  links: [{
+    url: 'https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7',
+    title: 'Prisma 7 Upgrade Guide'
+  }]
+})
+
+// 2. Add progress comments
+await mcp_linear_create_comment({
+  issueId: issue.id,
+  body: 'Dependencies updated successfully ✅'
+})
+
+// 3. Update when complete
+await mcp_linear_update_issue({
+  id: issue.id,
+  state: 'Done'
+})
+```
+
+#### Bug Reporting
+
+```typescript
+await mcp_linear_create_issue({
+  title: 'Login fails with test@test.com',
+  team: 'CoreLive',
+  description: `## Bug Description
+Login form does not accept valid test credentials.
+
+## Steps to Reproduce
+1. Navigate to /sign-in
+2. Enter test@test.com / 3fjgir987340gjghgrr
+3. Click Sign In
+
+## Expected
+User should be authenticated and redirected to /dashboard
+
+## Actual
+Form validation error appears
+
+## Environment
+- Browser: Chrome 120
+- Environment: Development
+- Date: 2025-11-22`,
+  labels: ['bug', 'authentication'],
+  priority: 1, // Urgent
+  assignee: 'me'
+})
+```
+
+## Integration with CI/CD
+
+Linear issues can be linked to commits and PRs:
+
+```bash
+# Commit format
+git commit -m "fix: resolve login validation [COR-123]"
+
+# PR title format
+feat: Add Prisma v7 support [COR-123]
+```
+
+Linear automatically detects issue references and creates bidirectional links.
+
+## Resources
+
+- [Linear API Documentation](https://developers.linear.app/docs)
+- [Linear GraphQL Schema](https://studio.apollographql.com/public/Linear-API/home)
+- [Workflow Best Practices](https://linear.app/docs/workflow)

@@ -29,6 +29,27 @@ const nextConfig = {
   },
   // Configure webpack for Electron environment and performance
   webpack: (config, { isServer, dev }) => {
+    // Externalize Prisma packages for client-side bundles (server-only)
+    if (!isServer) {
+      const originalExternals = config.externals || []
+      config.externals = [
+        ...(Array.isArray(originalExternals)
+          ? originalExternals
+          : [originalExternals]),
+        ({ request }, callback) => {
+          if (
+            request === '@prisma/client' ||
+            request === '@prisma/adapter-pg' ||
+            request === 'dotenv' ||
+            request?.startsWith('@prisma/')
+          ) {
+            return callback(null, `commonjs ${request}`)
+          }
+          callback()
+        },
+      ]
+    }
+
     // Code inspector plugin for development
     if (dev && !isServer) {
       const plugin = codeInspectorPlugin({

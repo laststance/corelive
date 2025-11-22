@@ -1,4 +1,7 @@
+import 'dotenv/config'
+
 import type { WebhookEvent } from '@clerk/nextjs/server'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 import { headers } from 'next/headers'
 import { Webhook } from 'svix'
@@ -9,7 +12,11 @@ import { log } from '../../../lib/logger'
 
 export const runtime = 'nodejs'
 
-const prisma = new PrismaClient()
+const adapter = new PrismaPg({
+  connectionString: process.env.POSTGRES_PRISMA_URL!,
+})
+
+const prisma = new PrismaClient({ adapter })
 
 export async function POST(req: Request) {
   // Header access

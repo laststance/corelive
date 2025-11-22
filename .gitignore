@@ -70,3 +70,6 @@ logs/
 # Claude Code
 .mcp.json
 claudedocs/
+
+# Cursor
+.cursor/mcp.json
