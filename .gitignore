@@ -63,3 +63,10 @@ dist-electron/
 
 # next
 next-env.d.ts
+
+# Unknown
+logs/
+
+# Claude Code
+.mcp.json
+claudedocs/
