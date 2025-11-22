@@ -72,6 +72,7 @@ export function ThemeSelector({
           size="sm"
           className={cn('gap-2', className)}
           data-slot="theme-selector-trigger"
+          aria-label="Select theme"
         >
           <Palette className="h-4 w-4" />
           <span className="hidden sm:inline">

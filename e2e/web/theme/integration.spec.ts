@@ -16,7 +16,12 @@ test.describe('Theme Integration Tests', () => {
 
     // Reload to apply theme
     await page.reload()
-    await page.waitForLoadState('networkidle')
+
+    // Wait for next-themes hydration to complete (data-theme attribute to be set)
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute('data-theme') !== null,
+      { timeout: 5000 },
+    )
 
     // Check that dark theme is applied
     const dataTheme = await page.locator('html').getAttribute('data-theme')
@@ -39,31 +44,34 @@ test.describe('Theme Integration Tests', () => {
   }) => {
     await page.goto('/')
 
-    // Test switching between different themes
+    // Wait for initial hydration
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute('data-theme') !== null,
+      { timeout: 5000 },
+    )
+
+    // Test switching between different themes by setting localStorage and reloading
     const themes = [
       { name: 'light', bgPattern: /^(oklch\(1 0 0\)|lab\(100% 0 0\))$/ },
       { name: 'dark', bgPattern: /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/ },
       { name: 'corelive-base-light', bgPattern: /oklch|lab/ },
-      { name: 'harmonized-red', bgPattern: /harmonized-red|oklch|lab/ },
+      { name: 'harmonized-red', bgPattern: /oklch|lab/ },
     ]
 
     for (const theme of themes) {
-      // Set theme
+      // Set theme via localStorage and reload (next-themes reads from localStorage on hydration)
       await page.evaluate((themeName) => {
         localStorage.setItem('corelive-theme', themeName)
-        // Trigger storage event to update theme
-        window.dispatchEvent(
-          new StorageEvent('storage', {
-            key: 'corelive-theme',
-            newValue: themeName,
-            url: window.location.href,
-            storageArea: localStorage,
-          }),
-        )
       }, theme.name)
 
-      // Wait a moment for theme to apply
-      await page.waitForTimeout(500)
+      // Reload to apply new theme
+      await page.reload()
+
+      // Wait for next-themes hydration
+      await page.waitForFunction(
+        () => document.documentElement.getAttribute('data-theme') !== null,
+        { timeout: 5000 },
+      )
 
       // Check data-theme attribute
       const dataTheme = await page.locator('html').getAttribute('data-theme')
@@ -89,7 +97,12 @@ test.describe('Theme Integration Tests', () => {
 
     // Navigate to a different page
     await page.goto('/login')
-    await page.waitForLoadState('networkidle')
+
+    // Wait for next-themes hydration to complete
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute('data-theme') !== null,
+      { timeout: 5000 },
+    )
 
     // Check theme persisted
     const dataTheme = await page.locator('html').getAttribute('data-theme')
@@ -103,6 +116,9 @@ test.describe('Theme Integration Tests', () => {
   })
 
   test('system theme preference is respected when set', async ({ page }) => {
+    // Emulate dark color scheme preference before navigation
+    await page.emulateMedia({ colorScheme: 'dark' })
+
     await page.goto('/')
 
     // Clear any stored theme preference
@@ -110,12 +126,22 @@ test.describe('Theme Integration Tests', () => {
       localStorage.removeItem('corelive-theme')
     })
 
-    // Emulate dark color scheme preference
-    await page.emulateMedia({ colorScheme: 'dark' })
+    // Reload to apply system preference
     await page.reload()
 
-    // With system preference, it might not set data-theme explicitly
-    // but CSS should reflect dark mode
+    // Wait for next-themes hydration
+    await page.waitForFunction(
+      () => {
+        // next-themes sets data-theme to 'system' or resolved theme value
+        const dataTheme = document.documentElement.getAttribute('data-theme')
+        const htmlClass = document.documentElement.className
+        // Hydration complete when data-theme is set or dark class exists
+        return dataTheme !== null || htmlClass.includes('dark')
+      },
+      { timeout: 5000 },
+    )
+
+    // With system preference, next-themes may set data-theme to 'dark' or add dark class
     const backgroundColor = await page.evaluate(() => {
       const computedStyle = getComputedStyle(document.documentElement)
       return computedStyle.getPropertyValue('--background').trim()
@@ -127,9 +153,11 @@ test.describe('Theme Integration Tests', () => {
     )
     const htmlClass = (await page.locator('html').getAttribute('class')) || ''
     const hasDarkClass = htmlClass.includes('dark')
+    const dataTheme = await page.locator('html').getAttribute('data-theme')
+    const hasDataThemeDark = dataTheme === 'dark'
 
-    // Either background is dark or html has dark class
-    expect(isDarkBg || hasDarkClass).toBe(true)
+    // Either background is dark, html has dark class, or data-theme is dark
+    expect(isDarkBg || hasDarkClass || hasDataThemeDark).toBe(true)
   })
 
   test('all theme options are accessible', async ({ page }) => {
