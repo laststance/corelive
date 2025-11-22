@@ -1,0 +1,316 @@
+# Linear Task Order Manager Command (`/linear-task-order`)
+
+## Overview
+
+Command for managing Linear task work order and organizing In-Progress and TODO issues. This command helps you:
+1. List all In-Progress and TODO issues assigned to you
+2. Set and save work order (which issue to tackle first) to persistent memory
+3. Add sub-issues when needed and insert them into the work order
+4. View current work order across sessions
+
+The work order is saved to memory with key `linear-order` for persistence across sessions, allowing you to maintain your task priorities even after closing and reopening Cursor.
+
+---
+
+## Usage
+
+- **Slash command format**
+  - `/linear-task-order` - List issues and show current work order
+  - `/linear-task-order set <issue-id-1> <issue-id-2> ...` - Set work order explicitly
+  - `/linear-task-order add-sub <parent-issue-id> <title> [position]` - Add sub-issue and insert into order
+
+- **Arguments**
+  - `<issue-id>`: Linear issue ID (e.g., `LAS-123`)
+  - `<title>`: Sub-issue title
+  - `[position]`: Optional position in work order (default: after parent issue)
+
+- **If information is missing**
+  - AI asks in Japanese for:
+    - Work order preference (if not provided)
+    - Sub-issue details (title, description, position)
+
+---
+
+## Core Functionality
+
+### 1. List In-Progress and TODO Issues
+
+The command fetches all issues assigned to you with states:
+- **In Progress**: Issues currently being worked on
+- **Todo**: Issues ready to be started
+
+**Implementation:**
+```typescript
+// Get In-Progress issues
+const inProgressIssues = await mcp_linear_list_issues({
+  team: 'CoreLive',
+  state: 'In Progress',
+  assignee: 'me',
+  limit: 50
+})
+
+// Get TODO issues
+const todoIssues = await mcp_linear_list_issues({
+  team: 'CoreLive',
+  state: 'Todo',
+  assignee: 'me',
+  limit: 50
+})
+```
+
+**Display Format:**
+```
+=== In-Progress Issues ===
+1. LAS-123: Implement user authentication
+2. LAS-456: Fix login validation bug
+
+=== TODO Issues ===
+1. LAS-789: Add dark mode support
+2. LAS-101: Update documentation
+```
+
+### 2. Work Order Management
+
+The work order is stored in memory with key `linear-order` as an array of issue IDs in priority order.
+
+**Memory Format:**
+```json
+{
+  "key": "linear-order",
+  "value": [
+    "LAS-123",
+    "LAS-456",
+    "LAS-789"
+  ]
+}
+```
+
+**Operations:**
+- **Read**: Load existing `linear-order` from memory
+- **Set**: Update `linear-order` with new sequence
+- **Display**: Show current work order with issue titles
+
+**Implementation:**
+```typescript
+// Read existing order
+const existingOrder = await get_memory({ key: 'linear-order' })
+
+// Display current order
+if (existingOrder) {
+  console.log('=== Current Work Order ===')
+  existingOrder.value.forEach((issueId, index) => {
+    const issue = await mcp_linear_get_issue({ id: issueId })
+    console.log(`${index + 1}. ${issueId}: ${issue.title}`)
+  })
+}
+
+// Update order
+await update_memory({
+  key: 'linear-order',
+  value: ['LAS-123', 'LAS-456', 'LAS-789']
+})
+```
+
+### 3. Sub-Issue Addition
+
+When an issue requires sub-tasks, you can create sub-issues and insert them into the work order at a specific position.
+
+**Workflow:**
+1. Create sub-issue with `parentId` pointing to parent issue
+2. Insert sub-issue ID into `linear-order` array at specified position
+3. Update memory with new order
+
+**Implementation:**
+```typescript
+// Create sub-issue
+const subIssue = await mcp_linear_create_issue({
+  title: 'Sub-task: Implement feature X',
+  team: 'CoreLive',
+  parentId: 'LAS-123', // Parent issue ID
+  state: 'Todo',
+  assignee: 'me',
+  description: '...'
+})
+
+// Get current order
+const currentOrder = ['LAS-123', 'LAS-456', 'LAS-789']
+
+// Insert sub-issue after parent (position 1)
+const insertPosition = 1 // After LAS-123
+const newOrder = [
+  ...currentOrder.slice(0, insertPosition),
+  subIssue.id,
+  ...currentOrder.slice(insertPosition)
+]
+// Result: ['LAS-123', 'LAS-999', 'LAS-456', 'LAS-789']
+
+// Save to memory
+await update_memory({
+  key: 'linear-order',
+  value: newOrder
+})
+```
+
+---
+
+## Memory Format Specification
+
+### Key: `linear-order`
+
+**Type**: Array of strings (Issue IDs)
+
+**Format:**
+```json
+[
+  "LAS-123",
+  "LAS-456",
+  "LAS-789"
+]
+```
+
+**Rules:**
+- Array order represents work priority (first = highest priority)
+- Issue IDs must be valid Linear issue identifiers
+- Sub-issues can be inserted at any position
+- Empty array `[]` means no work order set
+
+**Persistence:**
+- Saved across Cursor sessions
+- Can be updated anytime via this command
+- Read automatically when command is executed
+
+---
+
+## Execution Policy
+
+### AI Execution Flow
+
+1. **Initial Load**
+   - Fetch In-Progress and TODO issues using Linear MCP
+   - Load existing `linear-order` from memory
+   - Display both lists with current order highlighted
+
+2. **Work Order Setting**
+   - If user provides explicit order, validate all issue IDs exist
+   - If no order provided, ask user to confirm or set order
+   - Update memory with new order
+   - Confirm save with summary
+
+3. **Sub-Issue Addition**
+   - Validate parent issue exists and is accessible
+   - Create sub-issue via Linear MCP
+   - Determine insertion position (default: after parent)
+   - Update `linear-order` array
+   - Save to memory
+   - Display updated order
+
+4. **Error Handling**
+   - If issue ID not found, report error and suggest alternatives
+   - If memory save fails, retry once and report
+   - If Linear API fails, show error message and suggest retry
+
+### Required Tools
+
+- **Linear MCP Tools**:
+  - `mcp_linear_list_issues` - Fetch issues by state
+  - `mcp_linear_get_issue` - Get issue details
+  - `mcp_linear_create_issue` - Create sub-issues
+
+- **Memory Tools**:
+  - `update_memory` - Save/update `linear-order`
+  - `get_memory` - Read existing `linear-order`
+
+- **Optional Tools**:
+  - `todo_write` - Track command execution progress
+  - `mcp_sequential-thinking_sequentialthinking` - Plan complex operations
+
+### Dialogue Policy
+
+- **Ask for confirmation** before overwriting existing work order
+- **Show preview** of new order before saving
+- **Display issue titles** alongside IDs for clarity
+- **Suggest positions** when adding sub-issues (e.g., "Insert after parent?")
+
+---
+
+## Example Usage
+
+### Example 1: View Current Work Order
+
+```
+/linear-task-order
+```
+
+**Output:**
+```
+=== In-Progress Issues ===
+1. LAS-123: Implement user authentication
+2. LAS-456: Fix login validation bug
+
+=== TODO Issues ===
+1. LAS-789: Add dark mode support
+2. LAS-101: Update documentation
+
+=== Current Work Order ===
+1. LAS-123: Implement user authentication
+2. LAS-456: Fix login validation bug
+3. LAS-789: Add dark mode support
+```
+
+### Example 2: Set Work Order Explicitly
+
+```
+/linear-task-order set LAS-123 LAS-789 LAS-456
+```
+
+**Output:**
+```
+Work order updated:
+1. LAS-123: Implement user authentication
+2. LAS-789: Add dark mode support
+3. LAS-456: Fix login validation bug
+
+Saved to memory (linear-order).
+```
+
+### Example 3: Add Sub-Issue
+
+```
+/linear-task-order add-sub LAS-123 "Implement OAuth provider selection" 1
+```
+
+**Output:**
+```
+Created sub-issue: LAS-999 - Implement OAuth provider selection
+Parent: LAS-123 - Implement user authentication
+
+Updated work order:
+1. LAS-123: Implement user authentication
+2. LAS-999: Implement OAuth provider selection (sub-issue)
+3. LAS-456: Fix login validation bug
+4. LAS-789: Add dark mode support
+
+Saved to memory (linear-order).
+```
+
+---
+
+## Best Practices
+
+1. **Regular Updates**: Run `/linear-task-order` at start of each work session
+2. **Priority Management**: Keep work order aligned with project priorities
+3. **Sub-Issue Strategy**: Break down large issues into manageable sub-tasks
+4. **Order Flexibility**: Reorder as priorities change throughout the day
+5. **Memory Persistence**: Work order persists across sessions, so set it once and update as needed
+
+---
+
+## Integration with Linear Workflow
+
+This command complements Linear's native features:
+- **Priority Field**: Work order can reflect Linear priority (Urgent/High/Normal/Low)
+- **Projects**: Filter by project if needed (extend command in future)
+- **Cycles**: Align work order with sprint/cycle goals
+- **States**: Automatically includes In-Progress and TODO states
+
+The `linear-order` memory serves as a **personal work queue** that persists across sessions, independent of Linear's built-in ordering mechanisms.
