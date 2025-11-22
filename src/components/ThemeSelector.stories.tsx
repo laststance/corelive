@@ -103,32 +103,29 @@ export const WithUIElements: Story = {
     <div className="space-y-4">
       <ThemeSelector />
 
-      <Card className="p-4" data-testid="test-card">
+      <Card className="p-4" data-slot="test-card">
         <h2 className="mb-2 text-lg font-semibold">Theme Test Card</h2>
         <p className="text-muted-foreground">
           This card should reflect the current theme colors.
         </p>
 
         <div className="mt-4 space-x-2">
-          <Button variant="default" data-testid="test-button-primary">
+          <Button variant="default" data-slot="test-button-primary">
             Primary
           </Button>
-          <Button variant="secondary" data-testid="test-button-secondary">
+          <Button variant="secondary" data-slot="test-button-secondary">
             Secondary
           </Button>
-          <Button variant="outline" data-testid="test-button-outline">
+          <Button variant="outline" data-slot="test-button-outline">
             Outline
           </Button>
-          <Button variant="ghost" data-testid="test-button-ghost">
+          <Button variant="ghost" data-slot="test-button-ghost">
             Ghost
           </Button>
         </div>
       </Card>
 
-      <div
-        className="rounded-md border p-4"
-        data-testid="test-border-container"
-      >
+      <div className="rounded-md border p-4" data-slot="test-border-container">
         <p>Border and text colors should adapt to the theme</p>
       </div>
     </div>
@@ -193,7 +190,6 @@ export const SwitchToDarkThemeTest: Story = {
   render: () => <ThemeSelector />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const body = within(document.body)
 
     // Click on theme selector
     const themeSelectorTrigger = canvas.getByRole('button', {
@@ -201,25 +197,26 @@ export const SwitchToDarkThemeTest: Story = {
     })
     await userEvent.click(themeSelectorTrigger)
 
-    // Wait for dropdown (Radix UI renders in portal outside canvas)
+    // Select Dark theme from dropdown - wait a bit for dropdown
     await new Promise((r) => setTimeout(r, 500))
+    const darkThemeOption = canvas.getByRole('menuitem', { name: /^Dark$/ })
+    await userEvent.click(darkThemeOption)
 
-    // Select Dark theme - use getAllByText and filter to get the menu item
-    const darkThemeOptions = body.getAllByText('Dark')
-    const darkThemeOption = darkThemeOptions.find(
-      (el) => el.closest('[role="menuitem"]') !== null,
-    )!
-    await userEvent.click(darkThemeOption.closest('[role="menuitem"]')!)
-
-    // Wait for theme to be applied
+    // Check theme applied - wait a bit for state update
     await new Promise((r) => setTimeout(r, 500))
-
-    // Verify data-theme changed (more reliable than CSS values)
     const rootElement = document.documentElement
     expect(rootElement.getAttribute('data-theme')).toBe('dark')
 
-    // Verify localStorage was updated
-    expect(localStorage.getItem('corelive-theme')).toBe('dark')
+    // Verify dark theme CSS variables
+    const computedStyle = getComputedStyle(document.documentElement)
+    const backgroundColor = computedStyle
+      .getPropertyValue('--background')
+      .trim()
+
+    // shadcn/ui dark theme - browsers may convert oklch to lab
+    expect(backgroundColor).toMatch(
+      /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/,
+    )
   },
 }
 
@@ -228,7 +225,6 @@ export const SwitchToCoreLiveThemesTest: Story = {
   render: () => <ThemeSelector />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const body = within(document.body)
 
     // Click on theme selector
     const themeSelectorTrigger = canvas.getByRole('button', {
@@ -236,11 +232,11 @@ export const SwitchToCoreLiveThemesTest: Story = {
     })
     await userEvent.click(themeSelectorTrigger)
 
-    // Wait for dropdown (Radix UI renders in portal outside canvas)
+    // Wait for dropdown
     await new Promise((r) => setTimeout(r, 500))
 
     // Switch to CoreLive Light
-    const coreliveLight = body
+    const coreliveLight = canvas
       .getByText('CoreLive Light')
       .closest('[role="menuitem"]')!
     await userEvent.click(coreliveLight)
@@ -255,7 +251,7 @@ export const SwitchToCoreLiveThemesTest: Story = {
     await new Promise((r) => setTimeout(r, 500))
 
     // Switch to CoreLive Dark
-    const coreliveDark = body
+    const coreliveDark = canvas
       .getByText('CoreLive Dark')
       .closest('[role="menuitem"]')!
     await userEvent.click(coreliveDark)
@@ -270,7 +266,6 @@ export const SwitchToHarmonizedThemesTest: Story = {
   render: () => <ThemeSelector />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const body = within(document.body)
 
     // Click on theme selector
     const themeSelectorTrigger = canvas.getByRole('button', {
@@ -278,11 +273,11 @@ export const SwitchToHarmonizedThemesTest: Story = {
     })
     await userEvent.click(themeSelectorTrigger)
 
-    // Wait for dropdown (Radix UI renders in portal outside canvas)
+    // Wait for dropdown
     await new Promise((r) => setTimeout(r, 500))
 
     // Switch to Harmonized Red
-    const harmonizedRed = body
+    const harmonizedRed = canvas
       .getByText('Harmonized Red')
       .closest('[role="menuitem"]')!
     await userEvent.click(harmonizedRed)
@@ -306,7 +301,6 @@ export const ThemeAppliestoUIElementsTest: Story = {
   render: WithUIElements.render!,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const body = within(document.body)
 
     // Switch to a distinctive theme (harmonized-red)
     const themeSelectorTrigger = canvas.getByRole('button', {
@@ -314,15 +308,12 @@ export const ThemeAppliestoUIElementsTest: Story = {
     })
     await userEvent.click(themeSelectorTrigger)
 
-    // Wait for dropdown (Radix UI renders in portal outside canvas)
     await new Promise((r) => setTimeout(r, 500))
 
-    // Select Harmonized Red - use getAllByText and filter to get the menu item
-    const harmonizedRedOptions = body.getAllByText('Harmonized Red')
-    const harmonizedRed = harmonizedRedOptions.find(
-      (el) => el.closest('[role="menuitem"]') !== null,
-    )!
-    await userEvent.click(harmonizedRed.closest('[role="menuitem"]')!)
+    const harmonizedRed = canvas
+      .getByText('Harmonized Red')
+      .closest('[role="menuitem"]')!
+    await userEvent.click(harmonizedRed)
 
     // Wait for theme to apply
     await new Promise((r) => setTimeout(r, 500))
@@ -356,7 +347,6 @@ export const ThemeSelectorShowsCurrentThemeTest: Story = {
   render: () => <ThemeSelector />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const body = within(document.body)
 
     // Initially should show "Select Theme" or "Light"
     const themeSelectorTrigger = canvas.getByRole('button', {
@@ -367,18 +357,18 @@ export const ThemeSelectorShowsCurrentThemeTest: Story = {
     // Click to open dropdown
     await userEvent.click(themeSelectorTrigger)
 
-    // Should see current theme info in dropdown (Radix UI renders in portal outside canvas)
+    // Should see current theme info in dropdown
     await new Promise((r) => setTimeout(r, 500))
-    const currentThemeText = body.getByText(/current theme:/i)
+    const currentThemeText = canvas.getByText(/current theme:/i)
     expect(currentThemeText).toBeInTheDocument()
 
     // Switch to dark theme
-    const darkTheme = body.getByText('Dark').closest('[role="menuitem"]')!
+    const darkTheme = canvas.getByText('Dark').closest('[role="menuitem"]')!
     await userEvent.click(darkTheme)
 
-    // Button should now show "Dark" (aria-label stays "Select theme")
+    // Button should now show "Dark"
     await new Promise((r) => setTimeout(r, 500))
-    const updatedTrigger = canvas.getByRole('button', { name: /select theme/i })
+    const updatedTrigger = canvas.getByRole('button', { name: /dark/i })
     expect(updatedTrigger).toBeInTheDocument()
   },
 }
@@ -406,7 +396,6 @@ export const ThemePersistenceTest: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const body = within(document.body)
 
     // Switch to dark theme
     const themeSelectorTrigger = canvas.getByRole('button', {
@@ -414,15 +403,10 @@ export const ThemePersistenceTest: Story = {
     })
     await userEvent.click(themeSelectorTrigger)
 
-    // Wait for dropdown (Radix UI renders in portal outside canvas)
     await new Promise((r) => setTimeout(r, 500))
 
-    // Select Dark theme - use getAllByText and filter to get the menu item
-    const darkThemeOptions = body.getAllByText('Dark')
-    const darkTheme = darkThemeOptions.find(
-      (el) => el.closest('[role="menuitem"]') !== null,
-    )!
-    await userEvent.click(darkTheme.closest('[role="menuitem"]')!)
+    const darkTheme = canvas.getByText('Dark').closest('[role="menuitem"]')!
+    await userEvent.click(darkTheme)
 
     // Wait for theme to be applied
     await new Promise((r) => setTimeout(r, 500))
