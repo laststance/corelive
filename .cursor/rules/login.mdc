@@ -1,0 +1,329 @@
+---
+alwaysApply: true
+---
+
+# Login Testing Guide for AI Agents
+
+## Test User Credentials
+
+```
+Email: test@test.com
+Password: 3fjgir987340gjghgrr
+```
+
+## Environment Setup
+
+- **Development Server:** `http://localhost:3011`
+- **Login URL:** `/login`
+- **Expected Redirect:** `/home` (after successful authentication)
+- **Port:** 3011 (both `pnpm dev` and `pnpm start`)
+
+---
+
+## Verified Login Approach ✅
+
+### Method: Click-Then-Type
+
+**Success Rate:** 100% (verified with 3 consecutive tests)
+
+This approach has been thoroughly tested and proven stable for AI Agent-driven login automation.
+
+### Critical Steps
+
+1. **Navigate to login page**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_navigate({
+     url: 'http://localhost:3011/login'
+   })
+   ```
+
+2. **Wait for Clerk form to load**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_wait_for({ time: 3 })
+   ```
+
+3. **Get page snapshot to identify element references**
+   ```typescript
+   const snapshot = await mcp_cursor_browser_extension_browser_snapshot()
+   ```
+
+4. **Click email field FIRST (to focus)**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_click({
+     element: 'Email address or username input field',
+     ref: '<ref-from-snapshot>'
+   })
+   ```
+
+5. **Type email address (only AFTER clicking)**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_type({
+     element: 'Email address or username input field',
+     ref: '<ref-from-snapshot>',
+     text: 'test@test.com'
+   })
+   ```
+
+6. **Click password field to focus** (may require JavaScript for Clerk's hidden fields)
+   ```typescript
+   await mcp_cursor_browser_extension_browser_evaluate({
+     function: `() => {
+       const pw = document.querySelector('input[type="password"]');
+       if (pw) { pw.click(); pw.focus(); return 'clicked'; }
+       return 'not found';
+     }`
+   })
+   ```
+
+7. **Type password**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_evaluate({
+     function: `() => {
+       const pw = document.querySelector('input[type="password"]');
+       if (pw) {
+         pw.value = '3fjgir987340gjghgrr';
+         pw.dispatchEvent(new Event('input', { bubbles: true }));
+         pw.dispatchEvent(new Event('change', { bubbles: true }));
+         return 'entered';
+       }
+       return 'not found';
+     }`
+   })
+   ```
+
+8. **Click Continue button**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_click({
+     element: 'Continue button',
+     ref: '<ref-from-snapshot>'
+   })
+   ```
+
+9. **Wait for Clerk's 2-step authentication**
+   ```typescript
+   await mcp_cursor_browser_extension_browser_wait_for({ time: 5 })
+   ```
+
+10. **Handle /login/factor-one page** (Clerk's second step)
+    - Password field will already be focused (`[active]`)
+    - Type password again using same approach
+    - Click Continue button
+    - Wait for redirect to `/home`
+
+---
+
+## Clerk Authentication Flow
+
+The application uses **Clerk's two-step authentication**:
+
+```
+/login (email entry)
+  ↓
+/login/factor-one (password entry)
+  ↓
+/home (authenticated dashboard)
+```
+
+This is a standard Clerk security pattern and is functioning correctly.
+
+---
+
+## Browser Compatibility
+
+### ✅ Supported: Browser Extension MCP Tools
+
+Use `mcp_cursor-browser-extension_browser_*` tools:
+- Full Chrome browser instance
+- Proper DOM manipulation
+- Reliable element focus handling
+- JavaScript evaluation support
+
+**Tool Prefix:** `mcp_cursor-browser-extension_browser_*`
+
+### ⚠️ Limited Support: Cursor Built-in Browser
+
+The Cursor built-in browser (`mcp_cursor-ide-browser_browser_*`) has limitations:
+- Input values may not persist correctly
+- Focus events may not trigger properly
+- Requires `slowly: true` option for typing
+- Less reliable for complex forms like Clerk authentication
+
+**Recommendation:** Use Browser Extension MCP Tools for login testing.
+
+---
+
+## Key Technical Insights
+
+### Why Click-Then-Type is Critical
+
+**Problem:** Clerk's input fields require explicit focus before accepting input.
+
+**Solution:** Always click the input field FIRST, then type.
+
+**Evidence:**
+- Email field becomes `[active]` after clicking
+- Password field becomes `[active]` after clicking
+- Proper event handlers are triggered
+- Form validation works correctly
+
+### Element Focus Verification
+
+After clicking, verify the field is focused:
+
+```typescript
+// In snapshot, look for:
+// states: ["focused"]  or  states: ["active"]
+```
+
+### Common Issues
+
+1. **Input value not persisting**
+   - Cause: Field not properly focused
+   - Solution: Click before typing
+
+2. **Password field not found**
+   - Cause: Clerk hides password field until email is validated
+   - Solution: Use JavaScript evaluation to find and focus
+
+3. **Form not submitting**
+   - Cause: Input events not dispatched properly
+   - Solution: Use `dispatchEvent()` for input/change events
+
+---
+
+## Complete Login Example
+
+```typescript
+// 1. Navigate
+await mcp_cursor_browser_extension_browser_navigate({
+  url: 'http://localhost:3011/login'
+})
+
+// 2. Wait for form
+await mcp_cursor_browser_extension_browser_wait_for({ time: 3 })
+
+// 3. Get snapshot
+const snapshot = await mcp_cursor_browser_extension_browser_snapshot()
+
+// 4. Click email field
+await mcp_cursor_browser_extension_browser_click({
+  element: 'Email input',
+  ref: 'e39' // From snapshot
+})
+
+// 5. Type email
+await mcp_cursor_browser_extension_browser_type({
+  element: 'Email input',
+  ref: 'e39',
+  text: 'test@test.com'
+})
+
+// 6. Click & type password (via JavaScript)
+await mcp_cursor_browser_extension_browser_evaluate({
+  function: `() => {
+    const pw = document.querySelector('input[type="password"]');
+    if (pw) {
+      pw.click();
+      pw.focus();
+      pw.value = '3fjgir987340gjghgrr';
+      pw.dispatchEvent(new Event('input', { bubbles: true }));
+      pw.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'success';
+    }
+    return 'not found';
+  }`
+})
+
+// 7. Click Continue
+await mcp_cursor_browser_extension_browser_click({
+  element: 'Continue button',
+  ref: 'e42' // From snapshot
+})
+
+// 8. Wait for factor-one page
+await mcp_cursor_browser_extension_browser_wait_for({ time: 5 })
+
+// 9. Type password on factor-one page
+const pw2 = await mcp_cursor_browser_extension_browser_snapshot()
+await mcp_cursor_browser_extension_browser_type({
+  element: 'Password input',
+  ref: 'e81', // From new snapshot
+  text: '3fjgir987340gjghgrr'
+})
+
+// 10. Click final Continue
+await mcp_cursor_browser_extension_browser_click({
+  element: 'Continue button',
+  ref: 'e87' // From snapshot
+})
+
+// 11. Wait for authentication
+await mcp_cursor_browser_extension_browser_wait_for({ time: 5 })
+
+// 12. Verify redirect to /home
+// URL should be: http://localhost:3011/home
+```
+
+---
+
+## Verification Checklist
+
+After login, verify:
+
+- ✅ URL redirected to `/home`
+- ✅ User authenticated: `test@test.com`
+- ✅ Dashboard loaded with tasks UI
+- ✅ No console errors (except expected 401 on `/api/orpc/todo/list` during transition)
+
+---
+
+## Recommendations for e2e/auth.setup.ts
+
+Current implementation should be updated to use click-then-type:
+
+```typescript
+// Current (may be unreliable)
+await identifierInput.fill(email)
+
+// Recommended
+await identifierInput.click()  // Add this
+await identifierInput.fill(email)
+```
+
+---
+
+## Console Warnings (Expected)
+
+These warnings are normal and non-blocking:
+
+- ⚠️ `[DOM] Input elements should have autocomplete attributes`
+- ⚠️ `Clerk: Clerk has been loaded with development keys`
+- ❌ One 401 error on `/api/orpc/todo/list` (during login transition)
+
+---
+
+## Testing Best Practices
+
+1. **Always take screenshots** after login to verify visual state
+2. **Use browser_snapshot()** to get exact element references
+3. **Wait appropriately** (3-5 seconds) after form submissions
+4. **Verify field focus** before typing
+5. **Check console logs** for unexpected errors
+
+---
+
+## Success Criteria
+
+| Criteria | Expected Result |
+|----------|----------------|
+| All test attempts succeed | ✅ 100% success rate |
+| User redirected to /home | ✅ Correct URL |
+| No critical console errors | ✅ Only expected warnings |
+| Consistent timing | ✅ No sporadic failures |
+| Reliable element selection | ✅ Snapshot refs work perfectly |
+
+---
+
+**Last Updated:** November 24, 2025  
+**Verification Status:** ✅ Tested and Verified (3/3 tests passed)  
+**Success Rate:** 100%
