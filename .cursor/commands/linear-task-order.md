@@ -3,6 +3,7 @@
 ## Overview
 
 Command for managing Linear task work order and organizing In-Progress and TODO issues. This command helps you:
+
 1. List all In-Progress and TODO issues assigned to you
 2. Set and save work order (which issue to tackle first) to persistent memory
 3. Add sub-issues when needed and insert them into the work order
@@ -36,17 +37,19 @@ The work order is saved to memory with key `linear-order` for persistence across
 ### 1. List In-Progress and TODO Issues
 
 The command fetches all issues assigned to you with states:
+
 - **In Progress**: Issues currently being worked on
 - **Todo**: Issues ready to be started
 
 **Implementation:**
+
 ```typescript
 // Get In-Progress issues
 const inProgressIssues = await mcp_linear_list_issues({
   team: 'CoreLive',
   state: 'In Progress',
   assignee: 'me',
-  limit: 50
+  limit: 50,
 })
 
 // Get TODO issues
@@ -54,11 +57,12 @@ const todoIssues = await mcp_linear_list_issues({
   team: 'CoreLive',
   state: 'Todo',
   assignee: 'me',
-  limit: 50
+  limit: 50,
 })
 ```
 
 **Display Format:**
+
 ```
 === In-Progress Issues ===
 1. LAS-123: Implement user authentication
@@ -74,23 +78,22 @@ const todoIssues = await mcp_linear_list_issues({
 The work order is stored in memory with key `linear-order` as an array of issue IDs in priority order.
 
 **Memory Format:**
+
 ```json
 {
   "key": "linear-order",
-  "value": [
-    "LAS-123",
-    "LAS-456",
-    "LAS-789"
-  ]
+  "value": ["LAS-123", "LAS-456", "LAS-789"]
 }
 ```
 
 **Operations:**
+
 - **Read**: Load existing `linear-order` from memory
 - **Set**: Update `linear-order` with new sequence
 - **Display**: Show current work order with issue titles
 
 **Implementation:**
+
 ```typescript
 // Read existing order
 const existingOrder = await get_memory({ key: 'linear-order' })
@@ -107,7 +110,7 @@ if (existingOrder) {
 // Update order
 await update_memory({
   key: 'linear-order',
-  value: ['LAS-123', 'LAS-456', 'LAS-789']
+  value: ['LAS-123', 'LAS-456', 'LAS-789'],
 })
 ```
 
@@ -116,11 +119,13 @@ await update_memory({
 When an issue requires sub-tasks, you can create sub-issues and insert them into the work order at a specific position.
 
 **Workflow:**
+
 1. Create sub-issue with `parentId` pointing to parent issue
 2. Insert sub-issue ID into `linear-order` array at specified position
 3. Update memory with new order
 
 **Implementation:**
+
 ```typescript
 // Create sub-issue
 const subIssue = await mcp_linear_create_issue({
@@ -129,7 +134,7 @@ const subIssue = await mcp_linear_create_issue({
   parentId: 'LAS-123', // Parent issue ID
   state: 'Todo',
   assignee: 'me',
-  description: '...'
+  description: '...',
 })
 
 // Get current order
@@ -140,14 +145,14 @@ const insertPosition = 1 // After LAS-123
 const newOrder = [
   ...currentOrder.slice(0, insertPosition),
   subIssue.id,
-  ...currentOrder.slice(insertPosition)
+  ...currentOrder.slice(insertPosition),
 ]
 // Result: ['LAS-123', 'LAS-999', 'LAS-456', 'LAS-789']
 
 // Save to memory
 await update_memory({
   key: 'linear-order',
-  value: newOrder
+  value: newOrder,
 })
 ```
 
@@ -160,21 +165,20 @@ await update_memory({
 **Type**: Array of strings (Issue IDs)
 
 **Format:**
+
 ```json
-[
-  "LAS-123",
-  "LAS-456",
-  "LAS-789"
-]
+["LAS-123", "LAS-456", "LAS-789"]
 ```
 
 **Rules:**
+
 - Array order represents work priority (first = highest priority)
 - Issue IDs must be valid Linear issue identifiers
 - Sub-issues can be inserted at any position
 - Empty array `[]` means no work order set
 
 **Persistence:**
+
 - Saved across Cursor sessions
 - Can be updated anytime via this command
 - Read automatically when command is executed
@@ -242,6 +246,7 @@ await update_memory({
 ```
 
 **Output:**
+
 ```
 === In-Progress Issues ===
 1. LAS-123: Implement user authentication
@@ -264,6 +269,7 @@ await update_memory({
 ```
 
 **Output:**
+
 ```
 Work order updated:
 1. LAS-123: Implement user authentication
@@ -280,6 +286,7 @@ Saved to memory (linear-order).
 ```
 
 **Output:**
+
 ```
 Created sub-issue: LAS-999 - Implement OAuth provider selection
 Parent: LAS-123 - Implement user authentication
@@ -308,6 +315,7 @@ Saved to memory (linear-order).
 ## Integration with Linear Workflow
 
 This command complements Linear's native features:
+
 - **Priority Field**: Work order can reflect Linear priority (Urgent/High/Normal/Low)
 - **Projects**: Filter by project if needed (extend command in future)
 - **Cycles**: Align work order with sprint/cycle goals
