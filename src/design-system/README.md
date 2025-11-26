@@ -306,7 +306,7 @@ color: #000000;
 
 ```tsx
 // Use component classes that leverage tokens
-<button className="h-[var(--button-height-md)] px-[var(--button-padding-x-md)]">
+<button className="h-(--button-height-md) px-(--button-padding-x-md)">
   Click me
 </button>
 
