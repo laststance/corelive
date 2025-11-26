@@ -146,10 +146,12 @@ export const DefaultThemeTest: Story = {
       .getPropertyValue('--foreground')
       .trim()
 
-    // shadcn/ui light theme - browsers may convert oklch to lab
-    expect(backgroundColor).toMatch(/^(oklch\(1 0 0\)|lab\(100% 0 0\))$/)
+    // shadcn/ui light theme - browsers may convert oklch to lab or percentage
+    expect(backgroundColor).toMatch(
+      /^(oklch\(1 0 0\)|oklch\(100% 0 0\)|lab\(100% 0 0\))$/,
+    )
     expect(foregroundColor).toMatch(
-      /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/,
+      /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/,
     )
   },
 }
@@ -202,9 +204,9 @@ export const SwitchToDarkThemeTest: Story = {
       .getPropertyValue('--background')
       .trim()
 
-    // shadcn/ui dark theme - browsers may convert oklch to lab
+    // shadcn/ui dark theme - browsers may convert oklch to lab or percentage
     expect(backgroundColor).toMatch(
-      /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/,
+      /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/,
     )
   },
 }

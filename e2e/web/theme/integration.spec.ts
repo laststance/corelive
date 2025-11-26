@@ -28,9 +28,9 @@ test.describe('Theme Integration Tests', () => {
       return computedStyle.getPropertyValue('--background').trim()
     })
 
-    // Dark theme background - browsers may show as lab format
+    // Dark theme background - browsers may show as lab format or percentage
     expect(backgroundColor).toMatch(
-      /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/,
+      /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/,
     )
   })
 
@@ -41,8 +41,15 @@ test.describe('Theme Integration Tests', () => {
 
     // Test switching between light and dark themes
     const themes = [
-      { name: 'light', bgPattern: /^(oklch\(1 0 0\)|lab\(100% 0 0\))$/ },
-      { name: 'dark', bgPattern: /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/ },
+      {
+        name: 'light',
+        bgPattern: /^(oklch\(1 0 0\)|oklch\(100% 0 0\)|lab\(100% 0 0\))$/,
+      },
+      {
+        name: 'dark',
+        bgPattern:
+          /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/,
+      },
     ]
 
     for (const theme of themes) {
@@ -121,9 +128,10 @@ test.describe('Theme Integration Tests', () => {
     })
 
     // Should have dark background when system prefers dark
-    const isDarkBg = /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/.test(
-      backgroundColor,
-    )
+    const isDarkBg =
+      /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/.test(
+        backgroundColor,
+      )
 
     // Or data-theme should indicate system/dark preference
     const dataTheme = await page.locator('html').getAttribute('data-theme')
