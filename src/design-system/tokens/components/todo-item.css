@@ -91,37 +91,6 @@
     --todo-item-subtask-connector-style: dashed;
   }
 
-  /* Theme-specific todo item adjustments */
-  [data-theme^='traditional'] {
-    --todo-item-min-height: var(--todo-line-height);
-    --todo-item-padding-y: calc(var(--todo-line-height) / 4);
-    --todo-item-border-color: transparent;
-    --todo-item-checkbox-size: var(--todo-checkbox-size);
-  }
-
-  [data-theme^='harmonized-red'] {
-    --todo-item-checkbox-background-checked: var(--harmonized-red-600);
-    --todo-item-priority-high-color: var(--harmonized-red-700);
-  }
-
-  [data-theme^='harmonized-mustard'] {
-    --todo-item-checkbox-background-checked: var(--harmonized-mustard-600);
-    --todo-item-priority-medium-color: var(--harmonized-mustard-600);
-  }
-
-  [data-theme^='harmonized-turquoise'] {
-    --todo-item-checkbox-background-checked: var(--harmonized-turquoise-600);
-    --todo-item-priority-low-color: var(--harmonized-turquoise-600);
-  }
-
-  [data-theme^='harmonized-azure'] {
-    --todo-item-checkbox-background-checked: var(--harmonized-azure-600);
-  }
-
-  [data-theme^='harmonized-fuchsia'] {
-    --todo-item-checkbox-background-checked: var(--harmonized-fuchsia-600);
-  }
-
   /* Utility classes for todo items */
   .todo-item {
     min-height: var(--todo-item-min-height);

@@ -23,34 +23,6 @@ export function ThemeSelectorMenuItem() {
 
   // Group themes by free/premium for the menu
   const defaultThemes = ['light', 'dark']
-  const coreliveBases = ['corelive-base-light', 'corelive-base-dark']
-  const traditionalThemes = ['traditional-light', 'traditional-dark']
-
-  const harmonizedThemes = [
-    'harmonized-red',
-    'harmonized-mustard',
-    'harmonized-turquoise',
-    'harmonized-azure',
-    'harmonized-fuchsia',
-    'harmonized-red-dark',
-    'harmonized-mustard-dark',
-    'harmonized-turquoise-dark',
-    'harmonized-azure-dark',
-    'harmonized-fuchsia-dark',
-  ]
-
-  const premiumThemes = [
-    'dark-midnight',
-    'dark-charcoal',
-    'light-pearl',
-    'light-snow',
-    'gradient-aurora',
-    'gradient-sunset',
-    'retro-synthwave',
-    'retro-terminal',
-    'seasonal-spring-blossom',
-    'seasonal-winter-snow',
-  ]
 
   const renderThemeItem = (themeId: string) => {
     const themeData = THEME_METADATA[themeId]
@@ -90,27 +62,9 @@ export function ThemeSelectorMenuItem() {
 
           {/* CoreLive Base Themes */}
           <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
-            CoreLive Base
+            TDB
           </div>
-          {coreliveBases.map(renderThemeItem)}
-
-          {/* Traditional TODO Themes */}
-          <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
-            Traditional TODO
-          </div>
-          {traditionalThemes.map(renderThemeItem)}
-
-          {/* Harmonized Themes */}
-          <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
-            Harmonized Palette
-          </div>
-          {harmonizedThemes.map(renderThemeItem)}
-
-          {/* Premium Themes */}
-          <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
-            Premium Themes ✨
-          </div>
-          {premiumThemes.map(renderThemeItem)}
+          {/* {coreliveBases.map(renderThemeItem)} */}
         </DropdownMenuSubContent>
       </DropdownMenuPortal>
     </DropdownMenuSub>

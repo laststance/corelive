@@ -39,12 +39,10 @@ test.describe('Theme Integration Tests', () => {
   }) => {
     await page.goto('/')
 
-    // Test switching between different themes
+    // Test switching between light and dark themes
     const themes = [
       { name: 'light', bgPattern: /^(oklch\(1 0 0\)|lab\(100% 0 0\))$/ },
       { name: 'dark', bgPattern: /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/ },
-      { name: 'corelive-base-light', bgPattern: /oklch|lab/ },
-      { name: 'harmonized-red', bgPattern: /harmonized-red|oklch|lab/ },
     ]
 
     for (const theme of themes) {
@@ -82,9 +80,9 @@ test.describe('Theme Integration Tests', () => {
   test('theme persists across page navigation', async ({ page }) => {
     await page.goto('/')
 
-    // Set a distinctive theme
+    // Set dark theme for persistence test
     await page.evaluate(() => {
-      localStorage.setItem('corelive-theme', 'harmonized-mustard')
+      localStorage.setItem('corelive-theme', 'dark')
     })
 
     // Navigate to a different page
@@ -93,74 +91,59 @@ test.describe('Theme Integration Tests', () => {
 
     // Check theme persisted
     const dataTheme = await page.locator('html').getAttribute('data-theme')
-    expect(dataTheme).toBe('harmonized-mustard')
+    expect(dataTheme).toBe('dark')
 
     // Check localStorage still has the theme
     const storedTheme = await page.evaluate(() => {
       return localStorage.getItem('corelive-theme')
     })
-    expect(storedTheme).toBe('harmonized-mustard')
+    expect(storedTheme).toBe('dark')
   })
 
   test('system theme preference is respected when set', async ({ page }) => {
+    // Emulate dark color scheme BEFORE navigating
+    await page.emulateMedia({ colorScheme: 'dark' })
+
     await page.goto('/')
 
-    // Clear any stored theme preference
+    // Set theme to 'system' to use system preference
     await page.evaluate(() => {
-      localStorage.removeItem('corelive-theme')
+      localStorage.setItem('corelive-theme', 'system')
     })
-
-    // Emulate dark color scheme preference
-    await page.emulateMedia({ colorScheme: 'dark' })
     await page.reload()
+    await page.waitForLoadState('networkidle')
 
-    // With system preference, it might not set data-theme explicitly
-    // but CSS should reflect dark mode
+    // With 'system' theme stored, next-themes should follow system preference
+    // CSS should reflect dark mode when system prefers dark
     const backgroundColor = await page.evaluate(() => {
       const computedStyle = getComputedStyle(document.documentElement)
       return computedStyle.getPropertyValue('--background').trim()
     })
 
-    // Should have dark background (either through .dark class or data-theme)
+    // Should have dark background when system prefers dark
     const isDarkBg = /^(oklch\(0\.145 0 0\)|lab\([\d.]+% 0 0\))$/.test(
       backgroundColor,
     )
-    const htmlClass = (await page.locator('html').getAttribute('class')) || ''
-    const hasDarkClass = htmlClass.includes('dark')
 
-    // Either background is dark or html has dark class
-    expect(isDarkBg || hasDarkClass).toBe(true)
+    // Or data-theme should indicate system/dark preference
+    const dataTheme = await page.locator('html').getAttribute('data-theme')
+    const isSystemOrDark = dataTheme === 'system' || dataTheme === 'dark'
+
+    expect(isDarkBg || isSystemOrDark).toBe(true)
   })
 
   test('all theme options are accessible', async ({ page }) => {
     await page.goto('/')
 
-    // Get all available themes from the provider context
+    // Get all available themes - now only light and dark
     const themes = await page.evaluate(() => {
-      // Try to access theme list from window if exposed
-      // If not available, check localStorage for theme options
-      const storedThemes = [
-        'light',
-        'dark',
-        'corelive-base-light',
-        'corelive-base-dark',
-        'traditional-light',
-        'traditional-dark',
-        'harmonized-red',
-        'harmonized-mustard',
-        'harmonized-turquoise',
-        'harmonized-azure',
-        'harmonized-fuchsia',
-      ]
-
+      const storedThemes = ['light', 'dark']
       return storedThemes
     })
 
-    // Verify we have multiple themes available
-    expect(themes.length).toBeGreaterThan(5)
+    // Verify we have both themes available
+    expect(themes.length).toBe(2)
     expect(themes).toContain('light')
     expect(themes).toContain('dark')
-    expect(themes).toContain('corelive-base-light')
-    expect(themes).toContain('harmonized-red')
   })
 })

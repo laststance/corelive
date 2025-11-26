@@ -368,7 +368,7 @@
   │  ⏱️ 作業時間: 124時間30分           │
   │  🔥 最長ストリーク: 14日            │
   │                                    │
-  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━    │
+  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━    │
   │                                    │
   │  BigEpic進捗:                      │
   │  • プロダクト開発     █████████░ 85%    │
@@ -1010,7 +1010,7 @@ interface HierarchyDisplay {
 │     │                                            │      │
 │     │         BigEpic達成度                      │      │
 │     │                                            │      │
-│     │    プロダクト開発  ██████████░░ 85%         │      │
+│     │    プロダクト開発  ██████████░░░░ 85%         │      │
 │     │    スキルアップ    ████░░░░░░░░ 45%         │      │
 │     │    健康管理       ██████░░░░░░ 62%         │      │
 │     │                                            │      │
@@ -1113,11 +1113,11 @@ interface HierarchyDisplay {
 │  │                                   ○ 非公開     │   │
 │  │                                                  │   │
 │  │ 統計情報                          ◉ 公開       │   │
-│  │ └ 具体的な数値を表示              ◉ はい       │   │
-│  │                                   ○ いいえ     │   │
+│  │ └ 具体的な数値を表示              ◉ いいえ       │   │
+│  │                                   ○ はい       │   │
 │  │                                                  │   │
 │  │ GitHub草UI                        ◉ 公開       │   │
-│  │ └ 週末を非表示                    ◉ いいえ     │   │
+│  │ └ 週末を非表示                    ◉ いいえ       │   │
 │  │                                   ○ はい       │   │
 │  │                                                  │   │
 │  │ BigEpic進捗                       ○ 公開       │   │
@@ -1143,6 +1143,13 @@ interface HierarchyDisplay {
 │  プレビュー                                              │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │ [公開ダッシュボードのプレビュー表示]              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                          │
+│  プロフィール設定                                          │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ プロフィールの公開設定                          │   │
+│  │ プロフィールの表示設定                          │   │
+│  │ バッジの公開設定                                │   │
 │  └─────────────────────────────────────────────────┘   │
 │                                                          │
 │                    [キャンセル] [設定を保存]              │
@@ -1362,110 +1369,26 @@ interface HierarchyDisplay {
 --copilot-suggestion: rgba(163, 163, 163, 0.6); /* Copilot提案用（新規追加） */
 ```
 
-#### Traditional TODO Mode専用カラー（新規追加）
+#### カラーテーマ
 
-```css
-/* Light Mode Colors */
---traditional-bg: #ffffff;
---traditional-surface: #f9fafb;
---traditional-border: #e5e7eb;
---traditional-text: #111827;
---traditional-text-secondary: #6b7280;
---traditional-checkbox: #3b82f6;
---traditional-checked: #10b981;
-
-/* Dark Mode Colors (optional) */
---traditional-dark-bg: #1f2937;
---traditional-dark-surface: #111827;
---traditional-dark-border: #374151;
---traditional-dark-text: #f9fafb;
---traditional-dark-text-secondary: #9ca3af;
-```
-
-#### プレミアムカラーテーマ（100種類以上）（新規追加）
+The design system supports two core themes:
 
 ```typescript
-interface ColorThemeCategories {
-  // ダークテーマ（30種）
-  dark: {
-    'Midnight Blue': ColorTheme
-    'Deep Ocean': ColorTheme
-    'Shadow Purple': ColorTheme
-    'Carbon Black': ColorTheme
-    'Tokyo Night': ColorTheme
-    Dracula: ColorTheme
-    'Nord Dark': ColorTheme
-    // ... 他23種
-  }
-
-  // ライトテーマ（20種）
+interface ColorThemes {
   light: {
-    'Snow White': ColorTheme
-    'Soft Cream': ColorTheme
-    Paper: ColorTheme
-    'GitHub Light': ColorTheme
-    'Solarized Light': ColorTheme
-    // ... 他15種
+    name: 'Light'
+    description: 'Clean and minimal light theme'
+    colorScheme: 'light'
   }
-
-  // グラデーションテーマ（20種）
-  gradient: {
-    'Sunset Glow': ColorTheme
-    'Northern Lights': ColorTheme
-    'Ocean Wave': ColorTheme
-    'Forest Mist': ColorTheme
-    'Neon Dreams': ColorTheme
-    // ... 他15種
-  }
-
-  // レトロ/ヴィンテージ（15種）
-  retro: {
-    'Terminal Green': ColorTheme
-    'Amber CRT': ColorTheme
-    'Commodore 64': ColorTheme
-    'Windows 95': ColorTheme
-    Synthwave: ColorTheme
-    // ... 他10種
-  }
-
-  // 季節テーマ（15種）
-  seasonal: {
-    'Spring Bloom': ColorTheme
-    'Summer Beach': ColorTheme
-    'Autumn Leaves': ColorTheme
-    'Winter Snow': ColorTheme
-    Sakura: ColorTheme
-    // ... 他10種
+  dark: {
+    name: 'Dark'
+    description: 'Modern dark theme'
+    colorScheme: 'dark'
   }
 }
 ```
 
-#### プレミアムテーマ（透明度活用）
-
-```css
-/* Glassmorphism Theme */
---glass-bg: rgba(255, 255, 255, 0.05);
---glass-border: rgba(255, 255, 255, 0.1);
---glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
---backdrop-blur: blur(10px);
-
-/* Aurora Theme */
---aurora-gradient: linear-gradient(
-  to right,
-  rgba(134, 239, 172, 0.3),
-  rgba(59, 130, 246, 0.3),
-  rgba(147, 51, 234, 0.3)
-);
-
-/* Monthly Achievement Theme（新規追加） */
---achievement-gradient: linear-gradient(
-  135deg,
-  rgba(99, 102, 241, 0.95),
-  rgba(139, 92, 246, 0.95)
-);
---achievement-glow: 0 0 80px rgba(139, 92, 246, 0.4);
---achievement-particle: rgba(255, 255, 255, 0.8);
-```
+Both themes support system preference detection via `prefers-color-scheme` media query.
 
 ### 3.2 アニメーション仕様
 
@@ -2493,6 +2416,15 @@ interface TraditionalTaskList {
     projects: string[]
     tags: string[]
     dateRange: DateRange
+  }
+
+  // レイアウト
+  layout: {
+    columns: number // 1-3
+    compactMode: boolean
+    showCheckboxes: boolean
+    showDueDates: boolean
+    showTags: boolean
   }
 
   // インタラクション

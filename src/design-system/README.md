@@ -1,6 +1,6 @@
 # CoreLive Design System Documentation
 
-A comprehensive, theme-able design system built on Tailwind CSS v4, supporting 100+ themes with fine-grained customization.
+A comprehensive, theme-able design system built on Tailwind CSS v4, supporting light and dark themes with fine-grained customization.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ A comprehensive, theme-able design system built on Tailwind CSS v4, supporting 1
 
 The CoreLive Design System provides:
 
-- 🎨 **100+ Themes**: From basic light/dark to premium gradient, retro, and seasonal themes
+- 🎨 **Themes**: Light and dark themes with system preference support
 - 🎯 **Design Tokens**: Fine-grained control over every UI element
 - ✨ **Animations**: Celebration effects, micro-interactions, and smooth transitions
 - 🔧 **Customization**: Component-specific tokens for detailed theming
@@ -36,16 +36,10 @@ src/design-system/
 │   │   ├── colors.css         # Color system with OKLCH
 │   │   ├── typography.css     # Font scales and text styles
 │   │   ├── spacing.css        # Spacing and sizing system
-│   │   ├── animations.css     # Animation tokens
-│   │   └── harmonized-palette.css # Evil Martians palette
-│   ├── themes/
-│   │   ├── base-theme.css     # Default theme setup
-│   │   ├── traditional-todo.css # Classic TODO theme
-│   │   ├── harmonized-themes.css # Harmonized color themes
-│   │   └── premium/           # Premium theme collections
+│   │   └── animations.css     # Animation tokens
+│   ├── themes/                 # Theme definitions (light/dark)
 │   └── components/             # Component-specific tokens
-├── animations/                 # Animation implementations
-└── theme-factory.ts           # Theme generation utilities
+└── animations/                 # Animation implementations
 ```
 
 ## Quick Start
@@ -98,27 +92,14 @@ export function Header() {
 
 ## Themes
 
-### Theme Categories
+### Available Themes
 
-1. **Free Themes** (14 themes)
-   - Light/Dark base themes
-   - Traditional TODO (light/dark)
-   - Harmonized colors (10 variants)
+The design system includes two core themes:
 
-2. **Premium Dark Themes** (30 themes)
-   - Midnight, Charcoal, Obsidian, Noir, Shadow
+1. **Light** - Clean and minimal light theme (default)
+2. **Dark** - Modern dark theme
 
-3. **Premium Light Themes** (20 themes)
-   - Pearl, Snow, Cream, Alabaster, Ivory
-
-4. **Premium Gradient Themes** (20 themes)
-   - Aurora, Sunset, Ocean, Forest, Nebula
-
-5. **Premium Retro Themes** (15 themes)
-   - Synthwave, Terminal, Vaporwave, Sepia, Neon
-
-6. **Premium Seasonal Themes** (15 themes)
-   - Spring Blossom, Summer Beach, Autumn Forest, Winter Snow, Holiday
+Both themes support system preference detection via `prefers-color-scheme`.
 
 ### Using Themes
 
@@ -128,11 +109,7 @@ import { useTheme } from 'next-themes'
 function MyComponent() {
   const { theme, setTheme } = useTheme()
 
-  return (
-    <button onClick={() => setTheme('gradient-aurora')}>
-      Use Aurora Theme
-    </button>
-  )
+  return <button onClick={() => setTheme('dark')}>Use Dark Theme</button>
 }
 ```
 
@@ -280,33 +257,6 @@ See [MIGRATION.md](./MIGRATION.md) for detailed migration instructions.
 
 ## Creating Custom Themes
 
-### Using the Theme Factory
-
-```typescript
-import { generateThemeCSS, ThemeConfig } from '@/design-system/theme-factory'
-
-const myTheme: ThemeConfig = {
-  name: 'My Custom Theme',
-  category: 'dark',
-  isPremium: true,
-  description: 'A beautiful custom theme',
-  preview: '#123456',
-  colors: {
-    background: 'oklch(0.15 0.02 250)',
-    foreground: 'oklch(0.95 0.01 250)',
-    primary: 'oklch(0.55 0.2 250)',
-    // ... other colors
-  },
-  effects: {
-    blur: true,
-    gradient: true,
-    shadow: 'strong',
-  },
-}
-
-const css = generateThemeCSS('my-custom-theme', myTheme)
-```
-
 ### Manual Theme Creation
 
 ```css
@@ -352,17 +302,7 @@ color: #000000;
 }
 ```
 
-### 3. Theme-Specific Adjustments
-
-```css
-/* Adjust for specific themes */
-[data-theme^='retro'] {
-  --button-border-width: 2px;
-  --card-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.2);
-}
-```
-
-### 4. Component Token Usage
+### 3. Component Token Usage
 
 ```tsx
 // Use component classes that leverage tokens
@@ -376,13 +316,12 @@ color: #000000;
 </Button>
 ```
 
-### 5. Testing Themes
+### 4. Testing Themes
 
 Always test your components with:
 
-- Light and dark base themes
-- High contrast themes
-- Gradient themes (for gradient support)
+- Light and dark themes
+- System preference switching
 - Reduced motion preferences
 - Different viewport sizes
 

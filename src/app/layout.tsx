@@ -25,9 +25,8 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
       <html lang="en" suppressHydrationWarning>
         <body className={cn('mx-auto min-h-screen antialiased')}>
           <ThemeProvider
-            attribute="class"
+            attribute="data-theme"
             defaultTheme="light"
-            enableSystem
             disableTransitionOnChange
           >
             <ORPCProvider>

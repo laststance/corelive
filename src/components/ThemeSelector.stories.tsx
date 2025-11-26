@@ -56,7 +56,7 @@ export const InUserDropdown: Story = {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="size-9 rounded-full">
               <Avatar className="size-9">
-                <AvatarFallback data-slot="avatar-fallback">U</AvatarFallback>
+                <AvatarFallback data-testid="avatar-fallback">U</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
@@ -65,29 +65,14 @@ export const InUserDropdown: Story = {
               value={currentTheme}
               onValueChange={setCurrentTheme}
             >
-              <DropdownMenuRadioItem value="Light" data-slot="theme-menu-item">
+              <DropdownMenuRadioItem
+                value="Light"
+                data-testid="theme-menu-item"
+              >
                 Light
               </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="Dark" data-slot="theme-menu-item">
+              <DropdownMenuRadioItem value="Dark" data-testid="theme-menu-item">
                 Dark
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem
-                value="CoreLive Light"
-                data-slot="theme-menu-item"
-              >
-                CoreLive Light
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem
-                value="CoreLive Dark"
-                data-slot="theme-menu-item"
-              >
-                CoreLive Dark
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem
-                value="Harmonized Red"
-                data-slot="theme-menu-item"
-              >
-                Harmonized Red
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
@@ -103,29 +88,32 @@ export const WithUIElements: Story = {
     <div className="space-y-4">
       <ThemeSelector />
 
-      <Card className="p-4" data-slot="test-card">
+      <Card className="p-4" data-testid="test-card">
         <h2 className="mb-2 text-lg font-semibold">Theme Test Card</h2>
         <p className="text-muted-foreground">
           This card should reflect the current theme colors.
         </p>
 
         <div className="mt-4 space-x-2">
-          <Button variant="default" data-slot="test-button-primary">
+          <Button variant="default" data-testid="test-button-primary">
             Primary
           </Button>
-          <Button variant="secondary" data-slot="test-button-secondary">
+          <Button variant="secondary" data-testid="test-button-secondary">
             Secondary
           </Button>
-          <Button variant="outline" data-slot="test-button-outline">
+          <Button variant="outline" data-testid="test-button-outline">
             Outline
           </Button>
-          <Button variant="ghost" data-slot="test-button-ghost">
+          <Button variant="ghost" data-testid="test-button-ghost">
             Ghost
           </Button>
         </div>
       </Card>
 
-      <div className="rounded-md border p-4" data-slot="test-border-container">
+      <div
+        className="rounded-md border p-4"
+        data-testid="test-border-container"
+      >
         <p>Border and text colors should adapt to the theme</p>
       </div>
     </div>
@@ -191,15 +179,16 @@ export const SwitchToDarkThemeTest: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    // Click on theme selector
+    // Click on theme selector - button shows current theme name
     const themeSelectorTrigger = canvas.getByRole('button', {
-      name: /theme|select theme/i,
+      name: /theme|select theme|light|dark/i,
     })
     await userEvent.click(themeSelectorTrigger)
 
-    // Select Dark theme from dropdown - wait a bit for dropdown
+    // Wait for dropdown and find Dark theme - accessible name includes description
     await new Promise((r) => setTimeout(r, 500))
-    const darkThemeOption = canvas.getByRole('menuitem', { name: /^Dark$/ })
+    const body = within(document.body)
+    const darkThemeOption = body.getByRole('menuitem', { name: /Dark/i })
     await userEvent.click(darkThemeOption)
 
     // Check theme applied - wait a bit for state update
@@ -220,105 +209,29 @@ export const SwitchToDarkThemeTest: Story = {
   },
 }
 
-// Test: Can switch to CoreLive themes
-export const SwitchToCoreLiveThemesTest: Story = {
-  render: () => <ThemeSelector />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Click on theme selector
-    const themeSelectorTrigger = canvas.getByRole('button', {
-      name: /theme|select theme/i,
-    })
-    await userEvent.click(themeSelectorTrigger)
-
-    // Wait for dropdown
-    await new Promise((r) => setTimeout(r, 500))
-
-    // Switch to CoreLive Light
-    const coreliveLight = canvas
-      .getByText('CoreLive Light')
-      .closest('[role="menuitem"]')!
-    await userEvent.click(coreliveLight)
-
-    // Verify theme changed
-    await new Promise((r) => setTimeout(r, 500))
-    const rootElement = document.documentElement
-    expect(rootElement.getAttribute('data-theme')).toBe('corelive-base-light')
-
-    // Click theme selector again
-    await userEvent.click(themeSelectorTrigger)
-    await new Promise((r) => setTimeout(r, 500))
-
-    // Switch to CoreLive Dark
-    const coreliveDark = canvas
-      .getByText('CoreLive Dark')
-      .closest('[role="menuitem"]')!
-    await userEvent.click(coreliveDark)
-
-    await new Promise((r) => setTimeout(r, 500))
-    expect(rootElement.getAttribute('data-theme')).toBe('corelive-base-dark')
-  },
-}
-
-// Test: Can switch to harmonized themes
-export const SwitchToHarmonizedThemesTest: Story = {
-  render: () => <ThemeSelector />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    // Click on theme selector
-    const themeSelectorTrigger = canvas.getByRole('button', {
-      name: /theme|select theme/i,
-    })
-    await userEvent.click(themeSelectorTrigger)
-
-    // Wait for dropdown
-    await new Promise((r) => setTimeout(r, 500))
-
-    // Switch to Harmonized Red
-    const harmonizedRed = canvas
-      .getByText('Harmonized Red')
-      .closest('[role="menuitem"]')!
-    await userEvent.click(harmonizedRed)
-
-    // Verify theme changed
-    await new Promise((r) => setTimeout(r, 500))
-    const rootElement = document.documentElement
-    expect(rootElement.getAttribute('data-theme')).toBe('harmonized-red')
-
-    // Verify harmonized theme CSS variables are applied
-    const computedStyle = getComputedStyle(document.documentElement)
-    const primaryColor = computedStyle.getPropertyValue('--primary').trim()
-
-    // Should have a value (actual color depends on theme definition)
-    expect(primaryColor).toBeTruthy()
-  },
-}
-
 // Test: Theme applies to all UI elements
 export const ThemeAppliestoUIElementsTest: Story = {
   render: WithUIElements.render!,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    // Switch to a distinctive theme (harmonized-red)
+    // Switch to dark theme - button shows current theme name
     const themeSelectorTrigger = canvas.getByRole('button', {
-      name: /theme|select theme/i,
+      name: /theme|select theme|light|dark/i,
     })
     await userEvent.click(themeSelectorTrigger)
 
     await new Promise((r) => setTimeout(r, 500))
 
-    const harmonizedRed = canvas
-      .getByText('Harmonized Red')
-      .closest('[role="menuitem"]')!
-    await userEvent.click(harmonizedRed)
+    // Use within(document.body) and flexible name pattern
+    const body = within(document.body)
+    const darkTheme = body.getByRole('menuitem', { name: /Dark/i })
+    await userEvent.click(darkTheme)
 
     // Wait for theme to apply
     await new Promise((r) => setTimeout(r, 500))
     const rootElement = document.documentElement
-    expect(rootElement.getAttribute('data-theme')).toBe('harmonized-red')
+    expect(rootElement.getAttribute('data-theme')).toBe('dark')
 
     // Check that various UI elements have the theme applied
     const card = canvas.getByTestId('test-card')
@@ -348,9 +261,9 @@ export const ThemeSelectorShowsCurrentThemeTest: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    // Initially should show "Select Theme" or "Light"
+    // Initially should show "Light" or "Select Theme"
     const themeSelectorTrigger = canvas.getByRole('button', {
-      name: /theme|select theme|light/i,
+      name: /theme|select theme|light|dark/i,
     })
     expect(themeSelectorTrigger).toBeInTheDocument()
 
@@ -359,11 +272,12 @@ export const ThemeSelectorShowsCurrentThemeTest: Story = {
 
     // Should see current theme info in dropdown
     await new Promise((r) => setTimeout(r, 500))
-    const currentThemeText = canvas.getByText(/current theme:/i)
+    const body = within(document.body)
+    const currentThemeText = body.getByText(/current theme:/i)
     expect(currentThemeText).toBeInTheDocument()
 
-    // Switch to dark theme
-    const darkTheme = canvas.getByText('Dark').closest('[role="menuitem"]')!
+    // Switch to dark theme - use flexible name pattern
+    const darkTheme = body.getByRole('menuitem', { name: /Dark/i })
     await userEvent.click(darkTheme)
 
     // Button should now show "Dark"
@@ -397,15 +311,17 @@ export const ThemePersistenceTest: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    // Switch to dark theme
+    // Switch to dark theme - button shows current theme name
     const themeSelectorTrigger = canvas.getByRole('button', {
-      name: /theme|select theme/i,
+      name: /theme|select theme|light|dark/i,
     })
     await userEvent.click(themeSelectorTrigger)
 
     await new Promise((r) => setTimeout(r, 500))
 
-    const darkTheme = canvas.getByText('Dark').closest('[role="menuitem"]')!
+    // Use within(document.body) and flexible name pattern
+    const body = within(document.body)
+    const darkTheme = body.getByRole('menuitem', { name: /Dark/i })
     await userEvent.click(darkTheme)
 
     // Wait for theme to be applied

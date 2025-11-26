@@ -99,52 +99,6 @@
     --button-pulse-shadow: 0 0 0 0 var(--color-primary) / 70%;
   }
 
-  /* Theme-specific button adjustments */
-  [data-theme^='traditional'] {
-    --button-border-radius: var(--radius-sm);
-    --button-default-background: var(--color-card);
-    --button-default-text: var(--color-primary);
-    --button-default-border: var(--color-primary);
-    --button-default-background-hover: var(--color-primary);
-    --button-default-text-hover: var(--color-primary-foreground);
-  }
-
-  [data-theme^='harmonized-red'] {
-    --button-destructive-background: var(--harmonized-red-600);
-    --button-link-text: var(--harmonized-red-600);
-  }
-
-  [data-theme^='harmonized-mustard'] {
-    --button-warning-background: var(--harmonized-mustard-600);
-    --button-warning-text: var(--harmonized-mustard-50);
-  }
-
-  [data-theme^='harmonized-turquoise'] {
-    --button-success-background: var(--harmonized-turquoise-600);
-    --button-success-text: var(--harmonized-turquoise-50);
-  }
-
-  /* Premium theme button effects */
-  [data-theme^='gradient'] {
-    --button-default-background: linear-gradient(
-      135deg,
-      var(--color-primary),
-      var(--color-secondary)
-    );
-    --button-default-background-hover: linear-gradient(
-      135deg,
-      var(--color-primary) / 90%,
-      var(--color-secondary) / 90%
-    );
-  }
-
-  [data-theme^='retro'] {
-    --button-border-width: 2px;
-    --button-shadow: 4px 4px 0 0 var(--color-foreground) / 20%;
-    --button-shadow-active: 2px 2px 0 0 var(--color-foreground) / 20%;
-    --button-transform-active: translate(2px, 2px);
-  }
-
   /* Button utility classes */
   .button {
     height: var(--button-height-md);

@@ -40,26 +40,6 @@ export function ThemeSelector({
       themes: categories.FREE,
       icon: Palette,
     },
-    'Premium Dark': {
-      themes: categories.PREMIUM_DARK,
-      icon: Sparkles,
-    },
-    'Premium Light': {
-      themes: categories.PREMIUM_LIGHT,
-      icon: Sparkles,
-    },
-    'Premium Gradient': {
-      themes: categories.PREMIUM_GRADIENT,
-      icon: Sparkles,
-    },
-    'Premium Retro': {
-      themes: categories.PREMIUM_RETRO,
-      icon: Sparkles,
-    },
-    'Premium Seasonal': {
-      themes: categories.PREMIUM_SEASONAL,
-      icon: Sparkles,
-    },
   }
 
   const currentThemeData = theme ? metadata[theme] : null
