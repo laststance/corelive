@@ -33,10 +33,10 @@ src/design-system/
 ├── index.css                    # Main entry point
 ├── tokens/
 │   ├── base/                   # Core design tokens
-│   │   ├── colors.css         # Color system with OKLCH
 │   │   ├── typography.css     # Font scales and text styles
 │   │   ├── spacing.css        # Spacing and sizing system
-│   │   └── animations.css     # Animation tokens
+│   │   ├── animations.css     # Animation tokens
+│   │   └── tailwind-theme.css # Tailwind theme integration
 │   ├── themes/                 # Theme definitions (light/dark)
 │   └── components/             # Component-specific tokens
 └── animations/                 # Animation implementations

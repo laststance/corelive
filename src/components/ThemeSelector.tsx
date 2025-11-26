@@ -36,8 +36,8 @@ export function ThemeSelector({
 
   // Group themes by category
   const themesByCategory = {
-    'Free Themes': {
-      themes: categories.FREE,
+    Themes: {
+      themes: categories.DEFAULT,
       icon: Palette,
     },
   }
@@ -71,8 +71,8 @@ export function ThemeSelector({
         <DropdownMenuSeparator />
         <ScrollArea className="h-[400px]">
           {Object.entries(themesByCategory).map(([categoryName, category]) => {
-            const hasThemes = category.themes.some((t) => metadata[t])
-            if (!hasThemes && categoryName !== 'Free Themes') return null
+            const hasThemes = category.themes.some((t: string) => metadata[t])
+            if (!hasThemes) return null
 
             const Icon = category.icon
 
@@ -82,7 +82,7 @@ export function ThemeSelector({
                   <Icon className="h-3 w-3" />
                   {categoryName}
                 </DropdownMenuLabel>
-                {category.themes.map((themeId) => {
+                {category.themes.map((themeId: string) => {
                   const themeData = metadata[themeId]
                   if (!themeData) {
                     // Theme not yet implemented

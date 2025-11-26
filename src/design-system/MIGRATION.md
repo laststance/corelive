@@ -245,16 +245,17 @@ Convert custom color schemes:
 
 ```css
 /* Target specific themes */
-[data-theme='traditional-light'] {
-  /* Traditional theme overrides */
+[data-theme='dark'] {
+  /* Dark theme overrides */
 }
 
-[data-theme^='gradient'] {
-  /* All gradient theme overrides */
+[data-theme='light'] {
+  /* Light theme overrides */
 }
 
-[data-theme$='-dark'] {
-  /* All dark variant overrides */
+/* Or create custom themes */
+[data-theme='my-custom-theme'] {
+  /* Custom theme styles */
 }
 ```
 

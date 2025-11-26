@@ -6,10 +6,9 @@ import React, { createContext, useContext } from 'react'
 
 /**
  * Theme names for the CoreLive DesignSystem
- * Supporting 100+ themes across different categories
+ * Supports light and dark themes with system preference detection
  */
 export const CORELIVE_THEMES = {
-  // Default themes from shadcn/ui (Free tier)
   DEFAULT: {
     LIGHT: 'light',
     DARK: 'dark',
@@ -21,9 +20,9 @@ export const ALL_THEMES = Object.values(CORELIVE_THEMES).flatMap((category) =>
   Object.values(category),
 )
 
-// Theme categories for filtering
+// Theme categories
 export const THEME_CATEGORIES = {
-  FREE: [...Object.values(CORELIVE_THEMES.DEFAULT)],
+  DEFAULT: [...Object.values(CORELIVE_THEMES.DEFAULT)],
 } as const
 
 // Theme metadata for UI display
@@ -37,7 +36,6 @@ export const THEME_METADATA: Record<
     preview?: string // Preview color or gradient
   }
 > = {
-  // Default shadcn/ui themes
   [CORELIVE_THEMES.DEFAULT.LIGHT]: {
     name: 'Light',
     category: 'light',

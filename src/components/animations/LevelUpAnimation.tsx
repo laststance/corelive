@@ -52,7 +52,7 @@ export function LevelUpAnimation({
         <div className="level-up-bg-circle" />
         <div className="level-up-bg-rays" />
 
-        {/* Sparkle effect for premium themes */}
+        {/* Sparkle effect */}
         <div className="level-up-sparkle" />
 
         {/* Level icon */}

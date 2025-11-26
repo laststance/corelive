@@ -21,7 +21,6 @@ import { THEME_METADATA } from '@/providers/ThemeProvider'
 export function ThemeSelectorMenuItem() {
   const { theme, setTheme } = useTheme()
 
-  // Group themes by free/premium for the menu
   const defaultThemes = ['light', 'dark']
 
   const renderThemeItem = (themeId: string) => {
@@ -54,17 +53,7 @@ export function ThemeSelectorMenuItem() {
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent className="max-h-96 w-48 overflow-y-auto">
-          {/* Default shadcn/ui Themes */}
-          <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-            Default
-          </div>
           {defaultThemes.map(renderThemeItem)}
-
-          {/* CoreLive Base Themes */}
-          <div className="mt-2 border-t px-2 py-1 pt-2 text-xs font-medium text-muted-foreground">
-            TDB
-          </div>
-          {/* {coreliveBases.map(renderThemeItem)} */}
         </DropdownMenuSubContent>
       </DropdownMenuPortal>
     </DropdownMenuSub>
