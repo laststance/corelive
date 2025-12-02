@@ -1,0 +1,1089 @@
+/**
+ * CoreLive Animations
+ *
+ * Consolidated animation styles for celebration effects and micro-interactions
+ * Migrated from design-system directory
+ */
+
+@layer base {
+  :root {
+    /* Animation Duration Tokens */
+    --duration-instant: 0ms;
+    --duration-fast: 150ms;
+    --duration-normal: 300ms;
+    --duration-slow: 500ms;
+    --duration-slower: 700ms;
+    --duration-slowest: 1000ms;
+
+    /* Easing Functions */
+    --ease-linear: linear;
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-elastic: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Z-index for notifications/overlays */
+    --z-index-notification: 80;
+
+    /* Status colors for animations */
+    --color-success: oklch(0.627 0.194 149.214);
+    --color-warning: oklch(0.769 0.188 70.08);
+    --color-danger: oklch(0.577 0.245 27.325);
+  }
+
+  [data-theme='dark'] {
+    --color-success: oklch(0.696 0.17 162.48);
+    --color-warning: oklch(0.828 0.189 84.429);
+    --color-danger: oklch(0.704 0.191 22.216);
+  }
+
+  /* ============================================
+   * LEVEL UP ANIMATION
+   * User level progression celebration
+   * ============================================ */
+
+  .level-up-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: var(--z-index-notification);
+    pointer-events: none;
+  }
+
+  .level-up-badge {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    animation: levelUpBadge var(--duration-slower) var(--ease-bounce) forwards;
+  }
+
+  .level-up-bg-circle {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--color-primary);
+    opacity: 0.2;
+    animation: levelUpPulse calc(var(--duration-slower) * 2) var(--ease-out)
+      infinite;
+  }
+
+  .level-up-bg-rays {
+    position: absolute;
+    inset: -50%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      oklch(from var(--color-primary) l c h / 20%) 15deg,
+      transparent 30deg,
+      oklch(from var(--color-primary) l c h / 20%) 45deg,
+      transparent 60deg,
+      oklch(from var(--color-primary) l c h / 20%) 75deg,
+      transparent 90deg
+    );
+    animation: levelUpRotate calc(var(--duration-slower) * 4) linear infinite;
+  }
+
+  .level-up-icon {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    font-weight: 700;
+    z-index: 1;
+    animation: levelUpIcon var(--duration-normal) var(--ease-bounce) forwards;
+  }
+
+  .level-up-text {
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    opacity: 0;
+    animation: levelUpText var(--duration-normal) var(--duration-normal)
+      var(--ease-out) forwards;
+  }
+
+  .level-up-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 0.25rem;
+  }
+
+  .level-up-subtitle {
+    font-size: 0.875rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .level-up-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    opacity: 0;
+  }
+
+  .level-up-particle-1 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle1 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-particle-2 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle2 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-particle-3 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle3 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-particle-4 {
+    top: 50%;
+    left: 50%;
+    animation: levelUpParticle4 var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .level-up-sparkle {
+    position: absolute;
+    inset: -20%;
+    opacity: 0;
+    animation: levelUpSparkle calc(var(--duration-slower) * 2) var(--ease-out)
+      forwards;
+  }
+
+  .level-up-sparkle::before,
+  .level-up-sparkle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-primary),
+      transparent
+    );
+    transform-origin: center;
+  }
+
+  .level-up-sparkle::before {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  .level-up-sparkle::after {
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  /* Level Up Keyframes */
+  @keyframes levelUpBadge {
+    0% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes levelUpPulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.2;
+    }
+    50% {
+      transform: scale(1.3);
+      opacity: 0.1;
+    }
+  }
+
+  @keyframes levelUpRotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes levelUpIcon {
+    0% {
+      transform: scale(0) rotate(0deg);
+    }
+    50% {
+      transform: scale(1.2) rotate(180deg);
+    }
+    100% {
+      transform: scale(1) rotate(360deg);
+    }
+  }
+
+  @keyframes levelUpText {
+    0% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+
+  @keyframes levelUpParticle1 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-100px, -100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpParticle2 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(100px, -100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpParticle3 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-100px, 100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpParticle4 {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(100px, 100px) scale(0);
+    }
+  }
+
+  @keyframes levelUpSparkle {
+    0% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.5);
+    }
+  }
+
+  /* ============================================
+   * ACHIEVEMENT ANIMATION
+   * Monthly achievement reveal and celebration
+   * ============================================ */
+
+  .achievement-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: var(--z-index-notification);
+    max-width: 400px;
+  }
+
+  .achievement-card {
+    position: relative;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow:
+      0 1px 3px 0 rgb(0 0 0 / 0.1),
+      0 1px 2px -1px rgb(0 0 0 / 0.1);
+    opacity: 0;
+    transform: translateX(100%);
+    animation: achievementSlideIn var(--duration-normal) var(--ease-out)
+      forwards;
+  }
+
+  .achievement-badge {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1rem;
+    opacity: 0;
+    animation: achievementBadgeReveal var(--duration-normal)
+      var(--duration-fast) var(--ease-bounce) forwards;
+  }
+
+  .achievement-badge-bg {
+    position: absolute;
+    inset: 0;
+    background: var(--color-primary);
+    border-radius: 9999px;
+    animation: achievementGlow calc(var(--duration-slow) * 2) var(--ease-in-out)
+      infinite alternate;
+  }
+
+  .achievement-badge-icon {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-primary-foreground);
+    font-size: 40px;
+    z-index: 1;
+  }
+
+  .achievement-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--color-foreground);
+    margin-bottom: 0.5rem;
+    opacity: 0;
+    animation: achievementTextReveal var(--duration-fast)
+      calc(var(--duration-normal) + var(--duration-fast)) var(--ease-out)
+      forwards;
+  }
+
+  .achievement-description {
+    font-size: 0.875rem;
+    color: var(--color-muted-foreground);
+    margin-bottom: 0.75rem;
+    opacity: 0;
+    animation: achievementTextReveal var(--duration-fast)
+      calc(var(--duration-normal) + var(--duration-fast) * 2) var(--ease-out)
+      forwards;
+  }
+
+  .achievement-reward {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-accent);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    opacity: 0;
+    animation: achievementTextReveal var(--duration-fast)
+      calc(var(--duration-normal) + var(--duration-fast) * 3) var(--ease-out)
+      forwards;
+  }
+
+  .achievement-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--color-muted);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .achievement-progress-bar {
+    height: 100%;
+    background: var(--color-primary);
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: achievementProgress calc(var(--duration-slowest) * 5)
+      var(--duration-slower) linear forwards;
+  }
+
+  .achievement-shine {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.2) 50%,
+      transparent 70%
+    );
+    animation: achievementShine var(--duration-slow)
+      calc(var(--duration-slower) * 2) var(--ease-in-out);
+  }
+
+  .achievement-stars {
+    position: absolute;
+    inset: -20px;
+    opacity: 0;
+    animation: achievementStars var(--duration-normal) var(--duration-normal)
+      var(--ease-out) forwards;
+  }
+
+  .achievement-star {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--color-warning);
+    clip-path: polygon(
+      50% 0%,
+      61% 35%,
+      98% 35%,
+      68% 57%,
+      79% 91%,
+      50% 70%,
+      21% 91%,
+      32% 57%,
+      2% 35%,
+      39% 35%
+    );
+  }
+
+  .achievement-star-1 {
+    top: 10%;
+    left: 10%;
+    animation: achievementStarFloat1 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+  .achievement-star-2 {
+    top: 10%;
+    right: 10%;
+    animation: achievementStarFloat2 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+  .achievement-star-3 {
+    bottom: 20%;
+    left: 15%;
+    animation: achievementStarFloat3 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+  .achievement-star-4 {
+    bottom: 20%;
+    right: 15%;
+    animation: achievementStarFloat4 calc(var(--duration-slow) * 2)
+      var(--ease-out) infinite;
+  }
+
+  /* Achievement rarity variants */
+  .achievement-rare .achievement-badge-bg {
+    background: linear-gradient(
+      135deg,
+      var(--color-warning),
+      var(--color-primary)
+    );
+  }
+
+  .achievement-rare .achievement-star {
+    width: 6px;
+    height: 6px;
+  }
+
+  .achievement-legendary .achievement-badge-bg {
+    background: linear-gradient(135deg, #ffd700, #ffa500, #ff6347);
+    animation: achievementLegendaryGlow calc(var(--duration-normal) * 2)
+      var(--ease-in-out) infinite;
+  }
+
+  .achievement-legendary .achievement-card {
+    border-color: #ffd700;
+  }
+
+  /* Achievement Keyframes */
+  @keyframes achievementSlideIn {
+    0% {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes achievementBadgeReveal {
+    0% {
+      opacity: 0;
+      transform: scale(0) rotate(-180deg);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2) rotate(10deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes achievementTextReveal {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes achievementGlow {
+    0% {
+      box-shadow: 0 0 10px oklch(from var(--color-primary) l c h / 40%);
+    }
+    100% {
+      box-shadow: 0 0 30px oklch(from var(--color-primary) l c h / 60%);
+    }
+  }
+
+  @keyframes achievementProgress {
+    0% {
+      transform: scaleX(0);
+    }
+    100% {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes achievementShine {
+    0% {
+      left: -100%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+
+  @keyframes achievementStars {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes achievementStarFloat1 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(-10px, -10px) rotate(180deg);
+    }
+  }
+
+  @keyframes achievementStarFloat2 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(10px, -10px) rotate(-180deg);
+    }
+  }
+
+  @keyframes achievementStarFloat3 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(-10px, 10px) rotate(180deg);
+    }
+  }
+
+  @keyframes achievementStarFloat4 {
+    0%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate(10px, 10px) rotate(-180deg);
+    }
+  }
+
+  @keyframes achievementLegendaryGlow {
+    0%,
+    100% {
+      box-shadow:
+        0 0 20px oklch(from #ffd700 l c h / 60%),
+        inset 0 0 20px oklch(from #ffa500 l c h / 30%);
+    }
+    50% {
+      box-shadow:
+        0 0 40px oklch(from #ffd700 l c h / 80%),
+        inset 0 0 30px oklch(from #ffa500 l c h / 50%);
+    }
+  }
+
+  /* ============================================
+   * CONFETTI ANIMATION
+   * Task completion celebration
+   * ============================================ */
+
+  .confetti-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: var(--z-index-notification);
+  }
+
+  .confetti-particle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--confetti-color, var(--color-primary));
+    opacity: 0;
+    animation: confetti var(--duration-slowest) var(--ease-out) forwards;
+  }
+
+  /* Confetti shapes */
+  .confetti-square {
+    border-radius: 0;
+  }
+
+  .confetti-circle {
+    border-radius: 50%;
+  }
+
+  .confetti-triangle {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 10px solid var(--confetti-color, var(--color-primary));
+    background: transparent;
+  }
+
+  .confetti-ribbon {
+    width: 5px;
+    height: 20px;
+    border-radius: 2px;
+  }
+
+  /* Confetti colors */
+  .confetti-color-1 {
+    --confetti-color: var(--color-primary);
+  }
+  .confetti-color-2 {
+    --confetti-color: var(--color-secondary);
+  }
+  .confetti-color-3 {
+    --confetti-color: var(--color-success);
+  }
+  .confetti-color-4 {
+    --confetti-color: var(--color-warning);
+  }
+  .confetti-color-5 {
+    --confetti-color: var(--color-danger);
+  }
+
+  /* Confetti sizes */
+  .confetti-small {
+    transform: scale(0.7);
+  }
+  .confetti-medium {
+    transform: scale(1);
+  }
+  .confetti-large {
+    transform: scale(1.3);
+  }
+
+  /* Confetti delays */
+  .confetti-delay-1 {
+    animation-delay: 0ms;
+  }
+  .confetti-delay-2 {
+    animation-delay: 100ms;
+  }
+  .confetti-delay-3 {
+    animation-delay: 200ms;
+  }
+  .confetti-delay-4 {
+    animation-delay: 300ms;
+  }
+  .confetti-delay-5 {
+    animation-delay: 400ms;
+  }
+
+  /* Confetti variants */
+  .todo-completion-confetti .confetti-particle {
+    animation-duration: calc(var(--duration-slowest) * 1.5);
+  }
+
+  .level-up-confetti .confetti-particle {
+    animation-name: confettiBurst;
+    animation-duration: var(--duration-slowest);
+  }
+
+  .achievement-confetti .confetti-particle {
+    animation-name: confettiSpiral;
+    animation-duration: calc(var(--duration-slowest) * 2);
+  }
+
+  /* Confetti Keyframes */
+  @keyframes confetti {
+    0% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-100vh) rotate(720deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes confettiBurst {
+    0% {
+      opacity: 0;
+      transform: scale(0) rotate(0deg);
+    }
+    10% {
+      opacity: 1;
+      transform: scale(1) rotate(45deg);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.5) rotate(720deg) translateY(-100vh);
+    }
+  }
+
+  @keyframes confettiFall {
+    0% {
+      opacity: 0;
+      transform: translateY(-20px) rotate(0deg);
+    }
+    10% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(100vh) rotate(720deg);
+    }
+  }
+
+  @keyframes confettiSpiral {
+    0% {
+      opacity: 0;
+      transform: translateY(0) translateX(0) rotate(0deg);
+    }
+    10% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(100vh) translateX(200px) rotate(1080deg);
+    }
+  }
+
+  /* ============================================
+   * MICRO INTERACTIONS
+   * Small animations for UI feedback
+   * ============================================ */
+
+  /* Button ripple effect */
+  .button-ripple {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .button-ripple::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.2;
+    transform: translate(-50%, -50%);
+    transition:
+      width var(--duration-slow) var(--ease-out),
+      height var(--duration-slow) var(--ease-out),
+      opacity var(--duration-slow) var(--ease-out);
+  }
+
+  .button-ripple:active::before {
+    width: 300px;
+    height: 300px;
+    opacity: 0;
+  }
+
+  /* Pulse effects */
+  .pulse {
+    animation: pulse calc(var(--duration-normal) * 2) var(--ease-in-out)
+      infinite;
+  }
+
+  .pulse-once {
+    animation: pulseOnce var(--duration-normal) var(--ease-out);
+  }
+
+  @keyframes pulseOnce {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* Shake effect for errors */
+  .shake {
+    animation: shake var(--duration-fast) var(--ease-out);
+  }
+
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+      transform: translateX(-4px);
+    }
+    20%,
+    40%,
+    60%,
+    80% {
+      transform: translateX(4px);
+    }
+  }
+
+  /* Bounce effect */
+  .bounce {
+    animation: microBounce var(--duration-normal) var(--ease-bounce);
+  }
+
+  @keyframes microBounce {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-10px);
+    }
+    60% {
+      transform: translateY(-5px);
+    }
+  }
+
+  /* Checkbox check animation */
+  .checkbox-check {
+    stroke-dasharray: 16;
+    stroke-dashoffset: 16;
+    animation: checkboxCheck var(--duration-fast) var(--ease-out) forwards;
+  }
+
+  @keyframes checkboxCheck {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* Radio select animation */
+  .radio-select {
+    transform: scale(0);
+    animation: radioSelect var(--duration-fast) var(--ease-bounce) forwards;
+  }
+
+  @keyframes radioSelect {
+    0% {
+      transform: scale(0);
+    }
+    50% {
+      transform: scale(1.2);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* Loading dots */
+  .loading-dots {
+    display: inline-flex;
+    gap: 4px;
+  }
+
+  .loading-dot {
+    width: 8px;
+    height: 8px;
+    background: currentColor;
+    border-radius: 50%;
+    animation: loadingDot calc(var(--duration-normal) * 3) var(--ease-in-out)
+      infinite;
+  }
+
+  .loading-dot:nth-child(2) {
+    animation-delay: calc(var(--duration-fast) / 2);
+  }
+
+  .loading-dot:nth-child(3) {
+    animation-delay: var(--duration-fast);
+  }
+
+  @keyframes loadingDot {
+    0%,
+    80%,
+    100% {
+      opacity: 0.4;
+      transform: scale(0.8);
+    }
+    40% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Skeleton loading */
+  .skeleton {
+    position: relative;
+    background: var(--color-muted);
+    overflow: hidden;
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(from var(--color-muted-foreground) l c h / 10%),
+      transparent
+    );
+    transform: translateX(-100%);
+    animation: skeleton calc(var(--duration-slow) * 2) var(--ease-in-out)
+      infinite;
+  }
+
+  @keyframes skeleton {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Hover and press effects */
+  .hover-scale {
+    transition: transform var(--duration-fast) var(--ease-smooth);
+  }
+
+  .hover-scale:hover {
+    transform: scale(1.05);
+  }
+
+  .pressed-scale {
+    transition: transform var(--duration-fast) var(--ease-smooth);
+  }
+
+  .pressed-scale:active {
+    transform: scale(0.95);
+  }
+
+  /* Card lift effect */
+  .card-lift {
+    transition:
+      transform var(--duration-fast) var(--ease-smooth),
+      box-shadow var(--duration-fast) var(--ease-smooth);
+  }
+
+  .card-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  /* ============================================
+   * REDUCED MOTION SUPPORT
+   * Accessibility: Respects user preferences
+   * ============================================ */
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
+    .level-up-badge,
+    .level-up-bg-circle,
+    .level-up-bg-rays,
+    .level-up-icon,
+    .level-up-text,
+    .level-up-particle,
+    .level-up-sparkle,
+    .achievement-card,
+    .achievement-badge,
+    .achievement-title,
+    .achievement-description,
+    .achievement-reward,
+    .achievement-progress-bar,
+    .achievement-shine,
+    .achievement-stars,
+    .achievement-star,
+    .confetti-particle {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+
+    .card-lift:hover,
+    .hover-scale:hover,
+    .pressed-scale:active {
+      transform: none;
+    }
+  }
+}
