@@ -42,5 +42,13 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Generate Icons 🎨
         run: pnpm build:icons
-      - name: Test
-        run: pnpm test
+      - name: Run unit tests
+        run: pnpm test --run --coverage
+      - name: Run Electron tests
+        run: pnpm test:electron --run
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
