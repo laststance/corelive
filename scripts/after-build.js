@@ -35,10 +35,10 @@ export default async function afterBuild(context) {
   // Platform-specific post-processing
   switch (electronPlatformName) {
     case 'darwin':
+      // macOS-specific post-processing can be added here
       break
-    case 'win32':
-      break
-    case 'linux':
+    default:
+      // Only macOS is supported
       break
   }
 }

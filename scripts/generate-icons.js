@@ -15,12 +15,14 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Icon sizes for different platforms
+// Note: This project supports macOS only for desktop builds
+// Windows/Linux sizes are kept for PNG generation compatibility
 const ICON_SIZES = {
-  // Windows ICO sizes
+  // Windows ICO sizes (kept for PNG compatibility)
   windows: [16, 24, 32, 48, 64, 128, 256],
-  // macOS ICNS sizes
+  // macOS ICNS sizes (primary platform)
   macos: [16, 32, 128, 256, 512, 1024],
-  // Linux PNG sizes
+  // Linux PNG sizes (kept for PNG compatibility)
   linux: [16, 24, 32, 48, 64, 128, 256, 512],
   // System tray sizes (for different DPI)
   tray: [16, 20, 24, 32],

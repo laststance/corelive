@@ -230,21 +230,12 @@ async function runCrossplatformValidation() {
   console.log(`${colors.cyan}Running on platform: ${platform}${colors.reset}`)
 
   // Platform-specific validations
+  // Note: Only macOS is supported for desktop builds
   switch (platform) {
     case 'darwin':
       logStep('Validating macOS-specific features')
       // Add macOS-specific tests here
       logSuccess('macOS validation passed')
-      break
-    case 'win32':
-      logStep('Validating Windows-specific features')
-      // Add Windows-specific tests here
-      logSuccess('Windows validation passed')
-      break
-    case 'linux':
-      logStep('Validating Linux-specific features')
-      // Add Linux-specific tests here
-      logSuccess('Linux validation passed')
       break
     default:
       logWarning(`Unknown platform: ${platform}`)

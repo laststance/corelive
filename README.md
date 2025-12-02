@@ -11,6 +11,15 @@
 
 This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+## Platform Support
+
+This project supports:
+
+- **Web**: Browser-based application accessible via web browsers
+- **Desktop (macOS only)**: Electron-based desktop application for macOS
+
+> **Note**: Desktop builds are currently limited to macOS. Windows and Linux support has been removed.
+
 ## Getting Started
 
 ### Prerequisites
@@ -89,9 +98,9 @@ This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-opti
 Need ngrok to recive create.user event [webhook](https://clerk.com/docs/webhooks/overview) from Clerk in local.  
 like `ngrok http --domain=foo.bar-ngrok.app 3011`
 
-## Desktop Application (Electron)
+## Desktop Application (Electron - macOS only)
 
-This project includes an Electron desktop application that wraps the Next.js web app.
+This project includes an Electron desktop application that wraps the Next.js web app. **Desktop builds are currently limited to macOS only.**
 
 ### Electron Development
 
@@ -106,13 +115,13 @@ pnpm electron
 ### Building Desktop App
 
 ```bash
-# Build for all platforms
+# Build for macOS (default)
 pnpm electron:build
 
-# Build for specific platforms
-pnpm electron:build:win    # Windows
-pnpm electron:build:mac    # macOS
-pnpm electron:build:linux  # Linux
+# Build for macOS explicitly
+pnpm electron:build:mac
 ```
 
-The built applications will be available in the `dist-electron/` directory.
+The built macOS applications (DMG and ZIP) will be available in the `dist-electron/` directory.
+
+> **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.

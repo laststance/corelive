@@ -15,10 +15,7 @@ import path from 'path'
  */
 
 const platforms = {
-  win: 'Windows',
   mac: 'macOS',
-  linux: 'Linux',
-  all: 'All platforms',
 }
 
 async function runCommand(command, args, options = {}) {
@@ -82,19 +79,16 @@ async function buildNextJS() {
   }
 }
 
-async function buildElectron(platform = 'all') {
+async function buildElectron(platform = 'mac') {
   try {
     // Set optimization environment variable
     process.env.ELECTRON_BUILD = 'true'
 
     const buildCommands = {
-      win: ['electron:build:win'],
       mac: ['electron:build:mac'],
-      linux: ['electron:build:linux'],
-      all: ['electron:build:all'],
     }
 
-    const command = buildCommands[platform] || ['electron:build']
+    const command = buildCommands[platform] || ['electron:build:mac']
     await runCommand('pnpm', command)
 
     // Analyze bundle size after build
@@ -195,7 +189,7 @@ function formatBytes(bytes) {
 }
 
 async function main() {
-  const platform = process.argv[2] || 'all'
+  const platform = process.argv[2] || 'mac'
   const skipChecks = process.argv.includes('--skip-checks')
   const skipNextJS = process.argv.includes('--skip-nextjs')
 
@@ -232,10 +226,7 @@ CoreLive TODO - Production Build Script
 Usage: node scripts/build.js [platform] [options]
 
 Platforms:
-  win     Build for Windows
-  mac     Build for macOS  
-  linux   Build for Linux
-  all     Build for all platforms (default)
+  mac     Build for macOS (default)
 
 Options:
   --skip-checks    Skip pre-build checks (tests, linting)
@@ -243,9 +234,9 @@ Options:
   --help, -h       Show this help message
 
 Examples:
-  node scripts/build.js                    # Build for all platforms
-  node scripts/build.js mac                # Build for macOS only
-  node scripts/build.js win --skip-checks  # Build for Windows, skip checks
+  node scripts/build.js                    # Build for macOS
+  node scripts/build.js mac                # Build for macOS
+  node scripts/build.js mac --skip-checks  # Build for macOS, skip checks
 `)
   process.exit(0)
 }

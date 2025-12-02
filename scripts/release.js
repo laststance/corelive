@@ -90,7 +90,7 @@ async function updateVersion(versionType) {
 async function buildForRelease() {
   try {
     // Use the build script
-    await runCommand('node', ['scripts/build.js', 'all'])
+    await runCommand('node', ['scripts/build.js', 'mac'])
   } catch (error) {
     console.error('❌ Release build failed:', error.message)
     throw error

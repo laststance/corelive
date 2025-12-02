@@ -18,14 +18,7 @@ This guide covers building and deploying the CoreLive TODO Electron application.
 - Apple Developer Account (for code signing and notarization)
 - Valid Apple certificates
 
-#### Windows (for Windows builds)
-
-- Windows SDK
-- Code signing certificate (optional but recommended)
-
-#### Linux (for Linux builds)
-
-- Standard build tools (gcc, make, etc.)
+> **Note**: This project currently supports macOS only for desktop builds. Windows and Linux support has been removed.
 
 ## Environment Variables
 
@@ -41,10 +34,6 @@ APPLE_ID_PASSWORD=your_app_specific_password
 APPLE_TEAM_ID=YOUR_TEAM_ID
 APPLE_CERTIFICATES_P12=base64_encoded_certificate
 APPLE_CERTIFICATES_PASSWORD=certificate_password
-
-# Windows Code Signing
-WIN_CSC_LINK=path_to_certificate.p12
-WIN_CSC_KEY_PASSWORD=certificate_password
 ```
 
 ### Setting Up Environment Variables
@@ -84,29 +73,29 @@ The development script will:
 ### Quick Build Commands
 
 ```bash
-# Build for all platforms
-pnpm electron:build:prod
+# Build for macOS (default)
+pnpm electron:build
 
-# Build for specific platforms
-pnpm electron:build:win    # Windows only
-pnpm electron:build:mac    # macOS only
-pnpm electron:build:linux  # Linux only
+# Build for macOS explicitly
+pnpm electron:build:mac
 
 # Build directory only (for testing)
 pnpm electron:build:dir
 ```
 
+> **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.
+
 ### Advanced Build Options
 
 ```bash
+# Build for macOS (default)
+node scripts/build.js mac
+
 # Skip pre-build checks (faster, but not recommended)
-node scripts/build.js all --skip-checks
+node scripts/build.js mac --skip-checks
 
 # Skip Next.js build (use existing build)
-node scripts/build.js all --skip-nextjs
-
-# Build for specific platform
-node scripts/build.js mac
+node scripts/build.js mac --skip-nextjs
 ```
 
 ### Build Process
@@ -178,7 +167,7 @@ The release script:
 
 1. Validates environment (git status, env vars)
 2. Updates version numbers
-3. Builds application for all platforms
+3. Builds application for macOS
 4. Creates git tag and commits
 5. Pushes to GitHub (triggers automated release)
 
@@ -199,10 +188,10 @@ Runs on every push and PR:
 
 Runs on version tags:
 
-- Builds for Windows, macOS, and Linux
+- Builds for macOS only
 - Code signing and notarization
 - Creates GitHub releases
-- Uploads artifacts
+- Uploads artifacts (DMG and ZIP)
 - Security scanning
 
 ### GitHub Secrets Required
@@ -213,8 +202,6 @@ APPLE_ID_PASSWORD
 APPLE_TEAM_ID
 APPLE_CERTIFICATES_P12
 APPLE_CERTIFICATES_PASSWORD
-WIN_CSC_LINK
-WIN_CSC_KEY_PASSWORD
 CODECOV_TOKEN (optional)
 ```
 
@@ -230,14 +217,7 @@ CODECOV_TOKEN (optional)
    base64 -i certificate.p12 | pbcopy
    ```
 
-### Windows
-
-1. **Obtain code signing certificate** (from CA like DigiCert, Sectigo)
-2. **Set environment variables**
-   ```bash
-   WIN_CSC_LINK=path/to/certificate.p12
-   WIN_CSC_KEY_PASSWORD=your_password
-   ```
+> **Note**: Only macOS code signing is supported. Windows code signing has been removed.
 
 ## Auto-Updater
 
@@ -309,7 +289,6 @@ ELECTRON_ENABLE_LOGGING=1 pnpm electron:dev
 ### Build Optimization
 
 - Use `--skip-checks` for faster iteration
-- Build specific platforms during development
 - Use `electron:build:dir` for quick testing
 
 ### Bundle Size
