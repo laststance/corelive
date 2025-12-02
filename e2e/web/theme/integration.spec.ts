@@ -38,7 +38,15 @@ test.describe('Theme Integration Tests', () => {
   test('theme changes are reflected in CSS custom properties', async ({
     page,
   }) => {
-    await page.goto('/')
+    await page.goto('/home')
+    await page.waitForLoadState('networkidle')
+
+    // Verify /home page elements are loaded
+    // Check for sidebar (desktop uses data-slot="sidebar", mobile uses data-sidebar="sidebar")
+    const sidebar = page.locator(
+      '[data-slot="sidebar"], [data-sidebar="sidebar"]',
+    )
+    await expect(sidebar.first()).toBeVisible({ timeout: 10000 })
 
     // Test switching between light and dark themes
     const themes = [
@@ -68,7 +76,7 @@ test.describe('Theme Integration Tests', () => {
         )
       }, theme.name)
 
-      // Wait a moment for theme to apply
+      // Wait for theme to apply and UI to update
       await page.waitForTimeout(500)
 
       // Check data-theme attribute
@@ -83,7 +91,34 @@ test.describe('Theme Integration Tests', () => {
 
       expect(backgroundColor).toMatch(theme.bgPattern)
 
-      await argosScreenshot(page, theme.name)
+      // Verify sidebar CSS variable reflects theme
+      const sidebarBgVar = await page.evaluate(() => {
+        const sidebar = document.querySelector(
+          '[data-slot="sidebar"], [data-sidebar="sidebar"]',
+        )
+        if (!sidebar) return null
+        const computedStyle = getComputedStyle(sidebar)
+        return (
+          computedStyle.getPropertyValue('--sidebar-background').trim() ||
+          computedStyle.getPropertyValue('background-color').trim()
+        )
+      })
+
+      // Verify sidebar is visible and has styling
+      expect(sidebarBgVar).toBeTruthy()
+
+      // Verify main content area (SidebarInset) is visible
+      const mainContent = page.locator('[data-slot="sidebar-inset"]')
+      await expect(mainContent.first()).toBeVisible({ timeout: 10000 })
+
+      // Wait for page content to load
+      await page.waitForLoadState('networkidle')
+
+      // Verify /home page URL is correct
+      expect(page.url()).toContain('/home')
+
+      // Take screenshot to verify theme is applied visually
+      await argosScreenshot(page, `home-${theme.name}`)
     }
   })
 
