@@ -135,6 +135,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@argos-ci/playwright": "^6.3.4",
     "@chromatic-com/storybook": "^4.1.3",
     "@clerk/testing": "^1.13.19",
     "@electron/notarize": "^3.1.1",

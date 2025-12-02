@@ -1,3 +1,4 @@
+import { argosScreenshot } from '@argos-ci/playwright'
 import { test, expect } from '@playwright/test'
 
 /**
@@ -81,6 +82,8 @@ test.describe('Theme Integration Tests', () => {
       })
 
       expect(backgroundColor).toMatch(theme.bgPattern)
+
+      await argosScreenshot(page, theme.name)
     }
   })
 

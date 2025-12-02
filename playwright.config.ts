@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 
 import { defineConfig, devices } from '@playwright/test'
 
+import 'dotenv/config'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const BUILD_ID_PATH = join(__dirname, '.next', 'BUILD_ID')
@@ -34,7 +36,19 @@ export default defineConfig({
   /* Limit workers to 50% CPU cores to prevent resource saturation (community best practice) */
   workers: process.env.CI ? 1 : Math.max(1, Math.floor(cpus().length / 2)),
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'list',
+  reporter: [
+    // Use "dot" reporter on CI, "list" otherwise (Playwright default).
+    process.env.CI ? ['html'] : ['list'],
+    // Add Argos reporter.
+    [
+      '@argos-ci/playwright/reporter',
+      {
+        // Upload to Argos on CI only.
+        uploadToArgos: !!process.env.CI,
+        token: process.env.ARGOS_TOKEN,
+      },
+    ],
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
