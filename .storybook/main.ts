@@ -1,3 +1,4 @@
+// This file has been automatically migrated to valid ESM format by Storybook.
 import path from 'path'
 import { fileURLToPath } from 'url'
 
