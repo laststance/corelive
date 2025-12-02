@@ -1,6 +1,6 @@
 /**
  * Example Component - Demonstrates CoreLive Design System usage
- * 
+ *
  * This file shows best practices for using the design system
  */
 
@@ -11,7 +11,13 @@ import React, { useState } from 'react'
 
 import { ConfettiAnimation, useConfetti } from '@/components/animations'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -42,31 +48,33 @@ export function ExampleTodoList() {
     if (newTask.trim()) {
       setTasks([
         ...tasks,
-        { id: Date.now().toString(), title: newTask, completed: false }
+        { id: Date.now().toString(), title: newTask, completed: false },
       ])
       setNewTask('')
     }
   }
 
   const toggleTask = (id: string) => {
-    setTasks(tasks.map(task => {
-      if (task.id === id) {
-        const updated = { ...task, completed: !task.completed }
-        if (updated.completed) celebrate() // Trigger confetti on completion
-        return updated
-      }
-      return task
-    }))
+    setTasks(
+      tasks.map((task) => {
+        if (task.id === id) {
+          const updated = { ...task, completed: !task.completed }
+          if (updated.completed) celebrate() // Trigger confetti on completion
+          return updated
+        }
+        return task
+      }),
+    )
   }
 
   const deleteTask = (id: string) => {
-    setTasks(tasks.filter(task => task.id !== id))
+    setTasks(tasks.filter((task) => task.id !== id))
   }
 
   return (
     <>
       {/* Card using design system tokens */}
-      <Card className="w-full max-w-2xl mx-auto">
+      <Card className="mx-auto w-full max-w-2xl">
         <CardHeader>
           <CardTitle>CoreLive Design System Demo</CardTitle>
           <CardDescription>
@@ -83,7 +91,7 @@ export function ExampleTodoList() {
               placeholder="Add a new task..."
               className="flex-1"
             />
-            <Button 
+            <Button
               onClick={addTask}
               size="icon"
               className="hover-scale" // Micro interaction
@@ -105,9 +113,9 @@ export function ExampleTodoList() {
           </div>
 
           {/* Theme-specific styling example */}
-          <div className="mt-6 p-4 rounded-lg bg-accent text-accent-foreground">
+          <div className="mt-6 rounded-lg bg-accent p-4 text-accent-foreground">
             <p className="text-sm">
-              This component adapts to all {' '}
+              This component adapts to all{' '}
               <span className="font-semibold">100+ themes</span> automatically!
             </p>
           </div>
@@ -123,68 +131,50 @@ export function ExampleTodoList() {
 /**
  * TodoItem component using design tokens
  */
-function TodoItem({ 
-  task, 
-  onToggle, 
-  onDelete 
-}: { 
+function TodoItem({
+  task,
+  onToggle,
+  onDelete,
+}: {
   task: Task
   onToggle: () => void
   onDelete: () => void
 }) {
   return (
-    <div 
+    <div
       className={cn(
-        // Using todo-item design tokens
+        // Using todo-item design tokens - CSS class handles all base styles
         'todo-item group',
-        'flex items-center gap-3',
-        'min-h-[var(--todo-item-min-height)]',
-        'px-[var(--todo-item-padding-x)]',
-        'py-[var(--todo-item-padding-y)]',
-        'rounded-[var(--todo-item-border-radius)]',
-        'border border-border',
-        'transition-[var(--todo-item-transition)]',
-        'hover:bg-[var(--todo-item-background-hover)]',
-        task.completed && 'todo-item-completed'
+        'flex items-center',
+        task.completed && 'todo-item-completed',
       )}
     >
       {/* Checkbox with animation */}
       <button
+        type="button"
         onClick={onToggle}
         className={cn(
           'todo-item-checkbox',
           'flex items-center justify-center',
-          'transition-all',
-          task.completed && 'bg-primary border-primary'
+          'shrink-0',
+          task.completed && 'border-primary bg-primary',
         )}
         aria-label={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
       >
         {task.completed && (
-          <Check className="h-3 w-3 text-primary-foreground animate-in zoom-in-50" />
+          <Check className="animate-in zoom-in-50 h-3 w-3 text-primary-foreground" />
         )}
       </button>
 
       {/* Task text with conditional styling */}
-      <span 
-        className={cn(
-          'todo-item-text',
-          'flex-1',
-          task.completed && [
-            'text-[var(--todo-item-text-color-completed)]',
-            'opacity-[var(--todo-item-opacity-completed)]',
-            'line-through'
-          ]
-        )}
-      >
-        {task.title}
-      </span>
+      <span className={cn('todo-item-text', 'flex-1')}>{task.title}</span>
 
       {/* Delete button with hover effect */}
       <Button
         variant="ghost"
         size="icon"
         onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 transition-opacity hover-scale"
+        className="hover-scale shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
       >
         <Trash2 className="h-4 w-4 text-destructive" />
       </Button>
@@ -197,37 +187,27 @@ function TodoItem({
  */
 export function ThemeAwareCard() {
   return (
-    <Card className="relative overflow-hidden">
+    <Card
+      className="theme-aware-card relative overflow-hidden"
+      data-slot="theme-aware-card"
+    >
       {/* Gradient effect for gradient themes */}
-      <div 
-        className="absolute inset-0 opacity-10 pointer-events-none"
+      <div
+        className="pointer-events-none absolute inset-0 opacity-10"
         style={{
-          background: 'var(--gradient-primary, transparent)'
+          background: 'var(--gradient-primary, transparent)',
         }}
       />
-      
+
       <CardHeader>
         <CardTitle>Theme-Aware Component</CardTitle>
       </CardHeader>
       <CardContent>
         <p>This card has special effects in gradient themes!</p>
-        
-        {/* Theme-specific styles */}
-        <style jsx>{`
-          /* Retro theme border effect */
-          [data-theme^="retro"] .card {
-            box-shadow: 4px 4px 0 0 var(--color-foreground, rgba(0,0,0,0.2));
-          }
-          
-          /* Seasonal theme decorations */
-          [data-theme^="seasonal"] .card::before {
-            content: '✨';
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            opacity: 0.5;
-          }
-        `}</style>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Note: Theme-specific effects (retro borders, seasonal decorations) are
+          applied via CSS data attributes in the design system.
+        </p>
       </CardContent>
     </Card>
   )

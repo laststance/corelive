@@ -1,4 +1,11 @@
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 import type { StorybookConfig } from '@storybook/nextjs-vite'
+import tailwindcss from '@tailwindcss/postcss'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)'],
@@ -29,6 +36,20 @@ const config: StorybookConfig = {
         'react-dom',
         'react/jsx-runtime',
       ],
+    }
+
+    // Tailwind CSS v4 PostCSS configuration
+    // Explicitly configure PostCSS to use @tailwindcss/postcss
+    config.css = {
+      ...config.css,
+      postcss: {
+        plugins: [
+          tailwindcss({
+            // Use project root as base for source detection
+            base: path.resolve(__dirname, '..'),
+          }),
+        ],
+      },
     }
 
     return config

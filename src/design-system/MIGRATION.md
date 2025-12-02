@@ -128,8 +128,8 @@ Replace pixel values with spacing tokens:
 + <div className="p-4 m-2 gap-3"> // These already use token values
 
 // Before (custom values)
-- <div className="p-[18px] m-[10px]">
-+ <div className="p-[var(--spacing-4)] m-[var(--spacing-2-5)]">
+- <div className="p-[18px] m-2.5">
++ <div className="p-(--spacing-4) m-(--spacing-2-5)">
 ```
 
 ### Migrating Typography
@@ -162,7 +162,7 @@ export function Button({ variant = 'primary', children }) {
 
   return (
 -   <button className={`px-4 py-2 rounded ${variants[variant]}`}>
-+   <button className={`h-[var(--button-height-md)] px-[var(--button-padding-x-md)] rounded-[var(--button-border-radius)] ${variants[variant]} transition-colors`}>
++   <button className={`h-(--button-height-md) px-(--button-padding-x-md) rounded-(--button-border-radius) ${variants[variant]} transition-colors`}>
       {children}
     </button>
   )
@@ -174,7 +174,7 @@ export function Button({ variant = 'primary', children }) {
 ```diff
 // Before
 - <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm hover:shadow-md">
-+ <div className="bg-card text-card-foreground p-[var(--card-padding)] rounded-[var(--card-border-radius)] shadow-[var(--card-shadow)] hover:shadow-[var(--card-shadow-hover)] transition-shadow">
++ <div className="bg-card text-card-foreground p-(--card-padding) rounded-(--card-border-radius) shadow-(--card-shadow) hover:shadow-(--card-shadow-hover) transition-shadow">
 ```
 
 #### Input Component
@@ -182,7 +182,7 @@ export function Button({ variant = 'primary', children }) {
 ```diff
 // Before
 - <input className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
-+ <input className="w-full h-[var(--input-height-md)] px-[var(--input-padding-x)] border border-input rounded-[var(--input-border-radius)] bg-background focus:border-ring focus:ring-[var(--input-focus-ring-width)] focus:ring-ring/50 transition-colors" />
++ <input className="w-full h-(--input-height-md) px-(--input-padding-x) border border-input rounded-(--input-border-radius) bg-background focus:border-ring focus:ring-(--input-focus-ring-width) transition-colors" />
 ```
 
 ### Migrating Todo Components

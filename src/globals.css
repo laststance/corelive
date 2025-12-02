@@ -1,8 +1,8 @@
-@plugin 'tailwindcss-animate';
-
-@import 'tailwindcss';
+@import 'tailwindcss' source('.');
 @import 'tw-animate-css';
 @import './design-system/index.css';
+
+@plugin 'tailwindcss-animate';
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
