@@ -69,7 +69,7 @@ export function ThemeSelector({
           Select Theme
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <ScrollArea className="h-[400px]">
+        <ScrollArea className="h-100">
           {Object.entries(themesByCategory).map(([categoryName, category]) => {
             const hasThemes = category.themes.some((t: string) => metadata[t])
             if (!hasThemes) return null
