@@ -41,7 +41,7 @@ export const VerticalPanels: Story = {
   render: () => (
     <ResizablePanelGroup
       direction="vertical"
-      className="h-[300px] max-w-md rounded-lg border"
+      className="h-75 max-w-md rounded-lg border"
     >
       <ResizablePanel defaultSize={50}>
         <div className="flex h-full items-center justify-center p-6">
