@@ -12,7 +12,6 @@ import {
   Edit,
   MoreHorizontal,
   FileText,
-  Star,
   Trash2,
 } from 'lucide-react'
 
@@ -33,7 +32,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -198,54 +196,6 @@ export default function Home() {
 
           <SidebarSeparator />
 
-          {/* Shared Section */}
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground">
-              Shared
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <Plus className="h-4 w-4" />
-                    <span>Start collaborating</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          {/* Private Section */}
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground">
-              Private
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <div className="flex h-4 w-4 items-center justify-center rounded bg-purple-500">
-                      <Star className="h-2.5 w-2.5 text-white" />
-                    </div>
-                    <span>React Web Dev Wiki</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <FileText className="h-4 w-4" />
-                    <span>Web dev Wiki Sub</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <Plus className="h-4 w-4" />
-                    <span>Add new</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
           <div className="flex-1" />
 
           {/* Bottom Navigation */}
@@ -256,12 +206,6 @@ export default function Home() {
                   <SidebarMenuButton>
                     <Settings className="h-4 w-4" />
                     <span>Settings</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <FileText className="h-4 w-4" />
-                    <span>Marketplace</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
