@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useSyncExternalStore } from 'react'
 
 import { log } from '../../lib/logger'
 
@@ -37,23 +37,49 @@ declare global {
   }
 }
 
+/**
+ * Creates a store for tracking mount state (SSR-safe)
+ * @returns Store interface for useSyncExternalStore
+ */
+function createMountStore() {
+  let isMounted = false
+  const listeners = new Set<() => void>()
+
+  return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      // Set mounted on first subscription (client-side only)
+      if (!isMounted && typeof window !== 'undefined') {
+        isMounted = true
+        // Notify after microtask to avoid setState during render
+        queueMicrotask(() => listeners.forEach((l) => l()))
+      }
+      return () => listeners.delete(listener)
+    },
+    getSnapshot: () => isMounted,
+    getServerSnapshot: () => false,
+  }
+}
+
+// Singleton mount store to avoid recreation
+const mountStore = createMountStore()
+
 export function FloatingNavigatorContainer() {
   const [todos, setTodos] = useState<FloatingTodo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isMounted, setIsMounted] = useState(false)
+
+  // SSR-safe mount detection using useSyncExternalStore
+  const isMounted = useSyncExternalStore(
+    mountStore.subscribe,
+    mountStore.getSnapshot,
+    mountStore.getServerSnapshot,
+  )
+
   // Check if we're in Electron floating navigator environment
   // Only after component mounts to avoid hydration mismatch
   const isFloatingNavigator =
     isMounted && typeof window !== 'undefined' && window.floatingNavigatorAPI
-
-  // Initialize Electron environment on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.floatingNavigatorAPI) {
-      setIsMounted(true)
-      loadTodos()
-    }
-  }, [isFloatingNavigator])
 
   // Load todos from Floating Navigator API
   const loadTodos = async () => {

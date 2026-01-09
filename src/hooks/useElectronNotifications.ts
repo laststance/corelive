@@ -32,15 +32,17 @@ interface UseElectronNotificationsReturn {
 }
 
 export function useElectronNotifications(): UseElectronNotificationsReturn {
-  const [isSupported, setIsSupported] = useState(false)
   const [isEnabled, setIsEnabled] = useState(false)
   const [preferences, setPreferences] =
     useState<NotificationPreferences | null>(null)
   const [activeCount, setActiveCount] = useState(0)
 
-  // Check if we're in Electron environment
+  // Check if we're in Electron environment - derived during render
   const isElectron =
     typeof window !== 'undefined' && window.electronAPI?.notifications
+
+  // isSupported is derived directly from isElectron (not stored in state)
+  const isSupported = Boolean(isElectron)
 
   const loadNotificationStatus = useCallback(async () => {
     if (!isElectron || !window.electronAPI?.notifications) return
@@ -52,13 +54,11 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
         window.electronAPI.notifications.getActiveCount(),
       ])
 
-      setIsSupported(true)
       setIsEnabled(enabled)
       setPreferences(prefs)
       setActiveCount(count)
     } catch (error) {
       log.error('Failed to load notification status:', error)
-      setIsSupported(false)
     }
   }, [isElectron])
 
@@ -139,7 +139,9 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
     }
   }, [isElectron])
 
+  // Load notification status on mount - isEnabled comes from async API, not derived from props
   useEffect(() => {
+    // eslint-disable-next-line react-you-might-not-need-an-effect/no-derived-state
     loadNotificationStatus()
   }, [loadNotificationStatus])
 

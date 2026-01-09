@@ -1,9 +1,48 @@
 'use client'
 
 import { Trophy, Star } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useRef, useState, useSyncExternalStore } from 'react'
 
 import { cn } from '@/lib/utils'
+
+/**
+ * Creates a timer store for managing animation visibility
+ * @param duration - Duration before timer completes
+ * @param onComplete - Callback when timer completes
+ * @returns Store interface for useSyncExternalStore
+ */
+function createVisibilityStore(duration: number, onComplete?: () => void) {
+  let isVisible = false
+  const listeners = new Set<() => void>()
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    getSnapshot: () => isVisible,
+    getServerSnapshot: () => false,
+    show: () => {
+      if (isVisible) return
+      isVisible = true
+      listeners.forEach((l) => l())
+      timeoutId = setTimeout(() => {
+        isVisible = false
+        listeners.forEach((l) => l())
+        onComplete?.()
+      }, duration)
+    },
+    hide: () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      isVisible = false
+      listeners.forEach((l) => l())
+    },
+  }
+}
 
 interface LevelUpAnimationProps {
   level: number
@@ -22,21 +61,25 @@ export function LevelUpAnimation({
   onComplete,
   className,
 }: LevelUpAnimationProps) {
-  const [isVisible, setIsVisible] = useState(false)
+  const prevShowRef = useRef(false)
 
-  useEffect(() => {
-    if (show && !isVisible) {
-      setIsVisible(true)
+  // Create stable visibility store
+  const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(null)
+  if (!storeRef.current) {
+    storeRef.current = createVisibilityStore(4000, onComplete)
+  }
 
-      // Auto-hide after animation completes
-      const timer = setTimeout(() => {
-        setIsVisible(false)
-        onComplete?.()
-      }, 4000) // Total animation duration
+  const isVisible = useSyncExternalStore(
+    storeRef.current.subscribe,
+    storeRef.current.getSnapshot,
+    storeRef.current.getServerSnapshot,
+  )
 
-      return () => clearTimeout(timer)
-    }
-  }, [show, isVisible, onComplete])
+  // Detect show rising edge during render (not in effect)
+  if (show && !prevShowRef.current && !isVisible) {
+    storeRef.current.show()
+  }
+  prevShowRef.current = show
 
   if (!isVisible) return null
 
@@ -88,21 +131,25 @@ export function MilestoneLevelUpAnimation({
   milestone: string
   reward?: string
 }) {
-  const [isVisible, setIsVisible] = useState(false)
+  const prevShowRef = useRef(false)
 
-  useEffect(() => {
-    if (show && !isVisible) {
-      setIsVisible(true)
+  // Create stable visibility store with longer duration for milestones
+  const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(null)
+  if (!storeRef.current) {
+    storeRef.current = createVisibilityStore(5000, onComplete)
+  }
 
-      // Auto-hide after animation completes
-      const timer = setTimeout(() => {
-        setIsVisible(false)
-        onComplete?.()
-      }, 5000) // Longer duration for milestone
+  const isVisible = useSyncExternalStore(
+    storeRef.current.subscribe,
+    storeRef.current.getSnapshot,
+    storeRef.current.getServerSnapshot,
+  )
 
-      return () => clearTimeout(timer)
-    }
-  }, [show, isVisible, onComplete])
+  // Detect show rising edge during render (not in effect)
+  if (show && !prevShowRef.current && !isVisible) {
+    storeRef.current.show()
+  }
+  prevShowRef.current = show
 
   if (!isVisible) return null
 
