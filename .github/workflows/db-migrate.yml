@@ -1,0 +1,105 @@
+# Production Database Migration Workflow
+#
+# This workflow deploys pending Prisma migrations to the production database.
+#
+# Usage:
+#   1. Manual trigger: Go to Actions > DB Migrate > Run workflow
+#   2. Auto trigger: Push migration files to prisma/migrations/ on main branch
+#
+# Required GitHub Secrets:
+#   - POSTGRES_PRISMA_URL: Production PostgreSQL connection string
+#
+# Recommended Setup:
+#   1. Create a "production" environment in GitHub repository settings
+#   2. Add required reviewers for the "production" environment
+#   3. This provides an approval gate before migrations run
+#
+name: DB Migrate
+
+on:
+  # Manual trigger with confirmation
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "DEPLOY" to confirm production migration'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (only check status, do not apply)'
+        required: false
+        default: false
+        type: boolean
+
+  # Auto-trigger when migrations are added to main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'prisma/migrations/**'
+      - 'prisma/schema.prisma'
+
+# Prevent concurrent migrations
+concurrency:
+  group: db-migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Deploy Migrations
+    runs-on: ubuntu-latest
+
+    # Use production environment for approval gate
+    environment: production
+
+    steps:
+      - name: Validate confirmation (manual trigger only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'DEPLOY'
+        run: |
+          echo "::error::Confirmation failed. You must type 'DEPLOY' to run production migrations."
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/prepare
+
+      - name: Check migration status (before)
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: |
+          echo "📋 Checking pending migrations..."
+          pnpm prisma:status
+
+      - name: Deploy migrations
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: |
+          echo "🚀 Deploying migrations to production database..."
+          pnpm prisma:deploy
+          echo "✅ Migrations deployed successfully!"
+
+      - name: Dry run notice
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "🔍 Dry run mode - no migrations were applied"
+          echo "Run this workflow again with 'dry_run: false' to apply migrations"
+
+      - name: Verify migration status (after)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: |
+          echo "📋 Verifying migration status..."
+          pnpm prisma:status
+          echo "✅ All migrations verified!"
+
+      - name: Generate Prisma Client
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: |
+          echo "🔧 Generating Prisma client..."
+          pnpm prisma:generate
+          echo "✅ Prisma client generated!"
