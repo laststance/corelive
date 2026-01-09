@@ -28,7 +28,7 @@ jobs:
           echo "NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home" >> .env
           echo "CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}" >> .env
           echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
-          echo "POSTGRES_PRISMA_URL=${{ secrets.POSTGRES_PRISMA_URL }}" >> .env
+          echo "POSTGRES_PRISMA_URL=postgresql://postgres:password@localhost:5432/corelive?schema=public" >> .env
           echo "E2E_CLERK_USER_USERNAME=${{ secrets.E2E_CLERK_USER_USERNAME }}" >> .env
           echo "E2E_CLERK_USER_PASSWORD=${{ secrets.E2E_CLERK_USER_PASSWORD }}" >> .env
           echo "E2E_CLERK_USER_EMAIL=${{ secrets.E2E_CLERK_USER_EMAIL }}" >> .env
