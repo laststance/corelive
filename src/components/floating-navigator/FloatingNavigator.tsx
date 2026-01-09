@@ -548,7 +548,7 @@ export function FloatingNavigator({
                   ) : (
                     <>
                       <button
-                        className="flex-1 cursor-pointer truncate rounded px-1 text-left text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         onClick={() => startEditing(todo)}
                         title={`${todo.text} - Click to edit`}
                         aria-label={`Edit task: ${todo.text}`}
