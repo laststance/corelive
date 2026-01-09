@@ -4,10 +4,8 @@ import { useUser } from '@clerk/nextjs'
 import {
   Search,
   Home as HomeIcon,
-  Inbox,
   Plus,
   Settings,
-  Users,
   ChevronDown,
   Edit,
   MoreHorizontal,
@@ -107,16 +105,6 @@ export default function Home() {
                         </div>
                       </div>
                     </div>
-                    <div className="mb-3 flex gap-2">
-                      <Button size="sm" variant="outline" className="flex-1">
-                        <Settings className="mr-1 h-3 w-3" />
-                        Settings
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1">
-                        <Users className="mr-1 h-3 w-3" />
-                        Invite members
-                      </Button>
-                    </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
@@ -125,32 +113,9 @@ export default function Home() {
                     </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-4 w-4">
-                        <AvatarImage src={user?.imageUrl} alt="User" />
-                        <AvatarFallback className="bg-primary text-xs text-primary-foreground">
-                          {user?.firstName?.charAt(0)?.toUpperCase() ||
-                            user?.emailAddresses?.[0]?.emailAddress
-                              ?.charAt(0)
-                              ?.toUpperCase() ||
-                            'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm">
-                        {user?.firstName ||
-                          user?.emailAddresses?.[0]?.emailAddress ||
-                          'User'}
-                        's Todo
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
                     <Plus className="mr-2 h-4 w-4" />
                     <span className="text-sm">New workspace</span>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>Create work account</DropdownMenuItem>
-                  <DropdownMenuItem>Add another account</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <ThemeSelectorMenuItem />
                   <UserMenu />
@@ -184,12 +149,6 @@ export default function Home() {
                     <span>Home</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <Inbox className="h-4 w-4" />
-                    <span>Inbox</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -220,14 +179,6 @@ export default function Home() {
         </SidebarContent>
 
         <SidebarFooter className="border-t p-2">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton>
-                <Users className="h-4 w-4" />
-                <span>Invite members</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
           <div className="flex items-center justify-between px-2 pt-2">
             <Button variant="ghost" size="icon" className="h-6 w-6">
               <FileText className="h-4 w-4" />
