@@ -90,14 +90,6 @@ export function FloatingNavigator({
   const pendingTodos = todos.filter((todo) => !todo.completed)
   const completedTodos = todos.filter((todo) => todo.completed)
 
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editingId && editInputRef.current) {
-      editInputRef.current.focus()
-      editInputRef.current.select()
-    }
-  }, [editingId])
-
   const handleCreateTask = () => {
     if (newTaskText.trim()) {
       onTaskCreate(newTaskText.trim())
@@ -124,6 +116,13 @@ export function FloatingNavigator({
     setEditingId(todo.id)
     setEditText(todo.text)
     announceToScreenReader(`Editing task: ${todo.text}`)
+    // Focus and select input after DOM update
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.focus()
+        editInputRef.current.select()
+      }
+    }, 0)
   }, [])
 
   const saveEdit = () => {
@@ -548,7 +547,7 @@ export function FloatingNavigator({
                   ) : (
                     <>
                       <button
-                        className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         onClick={() => startEditing(todo)}
                         title={`${todo.text} - Click to edit`}
                         aria-label={`Edit task: ${todo.text}`}
