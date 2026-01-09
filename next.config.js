@@ -1,4 +1,5 @@
 import { codeInspectorPlugin } from 'code-inspector-plugin'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Electron configuration - keep images unoptimized for better compatibility
@@ -6,9 +7,12 @@ const nextConfig = {
     unoptimized: true,
   },
   // Turbopack configuration (Next.js 16+)
-  // Empty config silences warnings while allowing future customization
+  // code-inspector-plugin enables Alt+click to jump to source code in IDE
   turbopack: {
-    rules: {},
+    rules: codeInspectorPlugin({
+      bundler: 'turbopack',
+      hotKeys: ['altKey'],
+    }),
   },
   // Performance optimizations
   experimental: {
