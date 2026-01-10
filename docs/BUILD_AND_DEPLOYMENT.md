@@ -1,13 +1,13 @@
 # Build and Deployment Guide
 
-This guide covers building and deploying the CoreLive TODO Electron application.
+This guide covers building and deploying the CoreLive Electron application.
 
 ## Prerequisites
 
 ### Development Environment
 
-- Node.js 22.17.1 (managed by Volta)
-- pnpm 10.14.0
+- Node.js 22.21.1 (managed by Volta)
+- pnpm 10.27.0
 - Git
 
 ### Platform-Specific Requirements
@@ -18,28 +18,23 @@ This guide covers building and deploying the CoreLive TODO Electron application.
 - Apple Developer Account (for code signing and notarization)
 - Valid Apple certificates
 
-> **Note**: This project currently supports macOS only for desktop builds. Windows and Linux support has been removed.
+> **Note**: This project currently supports macOS only for desktop builds.
 
 ## Environment Variables
 
 ### Required for Production Builds
 
 ```bash
-# GitHub (for auto-updater and releases)
-GH_TOKEN=your_github_token
-
 # macOS Code Signing and Notarization
 APPLE_ID=your_apple_id@example.com
 APPLE_ID_PASSWORD=your_app_specific_password
 APPLE_TEAM_ID=YOUR_TEAM_ID
-APPLE_CERTIFICATES_P12=base64_encoded_certificate
-APPLE_CERTIFICATES_PASSWORD=certificate_password
 ```
 
 ### Setting Up Environment Variables
 
 1. Copy `.env.example` to `.env` in the root of the project
-2. Fill in your actual values in the `.env` file (see `.env.example` for all required variables)
+2. Fill in your actual values
 3. For CI/CD, set these as GitHub Secrets
 
 ## Development
@@ -67,126 +62,65 @@ The development script will:
 
 ## Building
 
-### Quick Build Commands
+### Build Commands
 
 ```bash
-# Build for macOS
-pnpm electron:build:mac
-
-# Build directory only (for testing)
+# Development/Testing (fast, no packaging)
 pnpm electron:build:dir
+open dist-electron/mac/CoreLive.app
+
+# Production Release (DMG + ZIP + signing + Notarization)
+pnpm electron:build:mac
 ```
 
-> **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.
-
-### Advanced Build Options
-
-```bash
-# Build for macOS (default)
-node scripts/build.js mac
-
-# Skip pre-build checks (faster, but not recommended)
-node scripts/build.js mac --skip-checks
-
-# Skip Next.js build (use existing build)
-node scripts/build.js mac --skip-nextjs
-```
+| Option               | Output               | Use Case                           |
+| -------------------- | -------------------- | ---------------------------------- |
+| `electron:build:dir` | Unpacked `.app` only | Fast iteration, testing, debugging |
+| `electron:build:mac` | DMG + ZIP + signed   | Distribution, release              |
 
 ### Build Process
 
-The build script performs:
+1. **Next.js build** with `ELECTRON_BUILD=true`
+2. **Electron build** via electron-builder
+3. **Code signing** (if certificates configured)
+4. **Notarization** (via afterSign hook)
 
-1. **Pre-build checks**
-   - TypeScript type checking
-   - ESLint linting
-   - Unit tests
-   - Electron tests
+### Build Output (`dist-electron/`)
 
-2. **Next.js build**
-   - Production optimization
-   - Static export for Electron
-
-3. **Electron build**
-   - Platform-specific packaging
-   - Code signing (if configured)
-   - Auto-updater setup
-
-4. **Post-build**
-   - Checksum generation
-   - Build report creation
+- `CoreLive-{version}-arm64.dmg` - Installer
+- `CoreLive-{version}-arm64-mac.zip` - Archive
+- `latest-mac.yml` - Auto-update manifest
+- `checksums.json` - Build verification
 
 ## Releases
 
-### Automated Releases
+### Automated Release (Recommended)
 
-```bash
-# Patch release (1.0.0 -> 1.0.1)
-pnpm electron:release
+Releases are fully automated via GitHub Actions:
 
-# Minor release (1.0.0 -> 1.1.0)
-pnpm electron:release:minor
-
-# Major release (1.0.0 -> 2.0.0)
-pnpm electron:release:major
-```
-
-### Manual Release Process
-
-1. **Prepare release**
-
+1. **Update version** in `package.json`
+2. **Commit and create tag**:
    ```bash
-   # Test the release process
-   node scripts/release.js patch --dry-run
+   git add package.json
+   git commit -m "chore: release v1.0.0"
+   git tag v1.0.0
+   git push && git push --tags
    ```
+3. **GitHub Actions** automatically:
+   - Runs tests (typecheck, lint, unit tests, electron tests)
+   - Builds the application
+   - Signs and notarizes the app
+   - Creates a GitHub Release with artifacts
 
-2. **Create release**
+### CI/CD Pipeline (`.github/workflows/build-and-release.yml`)
 
-   ```bash
-   # This will:
-   # - Update version in package.json
-   # - Build the application
-   # - Create git tag
-   # - Push to GitHub (triggers CI/CD)
-   node scripts/release.js patch
-   ```
+Runs on version tags (`v*`):
 
-3. **Monitor CI/CD**
-   - Check GitHub Actions for build progress
-   - Verify artifacts are created
-   - Test the release
-
-### Release Process
-
-The release script:
-
-1. Validates environment (git status, env vars)
-2. Updates version numbers
-3. Builds application for macOS
-4. Creates git tag and commits
-5. Pushes to GitHub (triggers automated release)
-
-## CI/CD Pipeline
-
-### Continuous Integration (`.github/workflows/ci.yml`)
-
-Runs on every push and PR:
-
-- Linting and formatting checks
-- Type checking
-- Unit and integration tests
-- Build verification for all platforms
-- E2E tests
-- Storybook tests
-
-### Build and Release (`.github/workflows/build-and-release.yml`)
-
-Runs on version tags:
-
-- Builds for macOS only
+- Builds for macOS
 - Code signing and notarization
 - Creates GitHub releases
 - Uploads artifacts (DMG and ZIP)
-- Security scanning
+- Security scanning with Trivy
 
 ### GitHub Secrets Required
 
@@ -196,7 +130,13 @@ APPLE_ID_PASSWORD
 APPLE_TEAM_ID
 APPLE_CERTIFICATES_P12
 APPLE_CERTIFICATES_PASSWORD
-CODECOV_TOKEN (optional)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+NEXT_PUBLIC_CLERK_SIGN_IN_URL
+NEXT_PUBLIC_CLERK_SIGN_UP_URL
+NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL
+CLERK_SECRET_KEY
+WEBHOOK_SECRET
+POSTGRES_PRISMA_URL
 ```
 
 ## Code Signing
@@ -204,14 +144,12 @@ CODECOV_TOKEN (optional)
 ### macOS
 
 1. **Get Apple Developer Account**
-2. **Create certificates in Xcode or Apple Developer Portal**
-3. **Export certificate as .p12 file**
-4. **Convert to base64 for GitHub Secrets**
+2. **Create certificates** in Xcode or Apple Developer Portal
+3. **Export certificate** as .p12 file
+4. **Convert to base64** for GitHub Secrets:
    ```bash
    base64 -i certificate.p12 | pbcopy
    ```
-
-> **Note**: Only macOS code signing is supported. Windows code signing has been removed.
 
 ## Auto-Updater
 
@@ -220,20 +158,8 @@ CODECOV_TOKEN (optional)
 The auto-updater is configured in `electron-builder.json`:
 
 - Uses GitHub Releases as update server
-- Checks for updates every 4 hours
 - Supports delta updates
 - Handles update notifications
-
-### Testing Updates
-
-1. **Create test release**
-
-   ```bash
-   node scripts/release.js patch --dry-run
-   ```
-
-2. **Build and install locally**
-3. **Create new version and test update flow**
 
 ## Troubleshooting
 
@@ -282,13 +208,12 @@ ELECTRON_ENABLE_LOGGING=1 pnpm electron:dev
 
 ### Build Optimization
 
-- Use `--skip-checks` for faster iteration
-- Use `electron:build:dir` for quick testing
+- Use `electron:build:dir` for quick testing (no DMG/ZIP packaging)
+- Pre-run `pnpm typecheck && pnpm lint && pnpm test` before production builds
 
 ### Bundle Size
 
 - Monitor build artifacts size
-- Use webpack-bundle-analyzer for Next.js
 - Optimize dependencies and assets
 
 ## Security
@@ -306,19 +231,3 @@ ELECTRON_ENABLE_LOGGING=1 pnpm electron:dev
 - Use security-focused ESLint rules
 - Regular security audits
 - Proper environment variable handling
-
-## Monitoring
-
-### Build Metrics
-
-- Build times and sizes are tracked
-- Artifacts are checksummed
-- Build reports are generated
-- CI/CD metrics in GitHub Actions
-
-### Release Monitoring
-
-- GitHub Releases for distribution
-- Download statistics
-- Update adoption rates
-- Error reporting integration

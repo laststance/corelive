@@ -54,11 +54,6 @@
     "electron:build:mac": "cross-env ELECTRON_BUILD=true next build --webpack && electron-builder --mac",
     "electron:build:dir": "cross-env ELECTRON_BUILD=true next build --webpack && electron-builder --dir",
     "electron:publish": "cross-env ELECTRON_BUILD=true next build --webpack && electron-builder --publish=always",
-    "electron:build:prod": "node scripts/build.js",
-    "electron:release": "node scripts/release.js",
-    "electron:release:minor": "node scripts/release.js minor",
-    "electron:release:major": "node scripts/release.js major",
-    "preelectron:build": "pnpm typecheck && pnpm test:electron --run",
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run"
   },
   "dependencies": {
