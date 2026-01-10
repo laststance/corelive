@@ -149,11 +149,10 @@ class DeepLinkManager {
       }
     }
 
-    // macOS-specific: Handle URLs via event (not command line)
-    this.app.on('open-url', (event, url) => {
-      event.preventDefault() // Prevent default handling
-      this.handleDeepLink(url)
-    })
+    // NOTE: The 'open-url' event listener is registered in main.cjs BEFORE app.whenReady()
+    // This is critical for macOS because the event can fire very early.
+    // Do NOT add another listener here - it would create duplicates.
+    // See main.cjs early 'open-url' handler for the actual implementation.
   }
 
   /**

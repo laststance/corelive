@@ -901,6 +901,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () =>
         ipcRenderer.removeListener('clerk-sign-in-token', wrappedCallback)
     },
+
+    /**
+     * Get pending sign-in token (for race condition handling).
+     * This is called when the renderer is ready to process tokens,
+     * in case it missed the IPC event.
+     *
+     * @returns {Promise<{ token: string, provider: string } | null>}
+     */
+    getPendingToken: async () => {
+      try {
+        return await ipcRenderer.invoke('oauth-get-pending-token')
+      } catch (error) {
+        log.error('Failed to get pending OAuth token:', error)
+        return null
+      }
+    },
+
+    /**
+     * Clear pending sign-in token (after successful sign-in).
+     *
+     * @returns {Promise<boolean>}
+     */
+    clearPendingToken: async () => {
+      try {
+        return await ipcRenderer.invoke('oauth-clear-pending-token')
+      } catch (error) {
+        log.error('Failed to clear pending OAuth token:', error)
+        return false
+      }
+    },
   },
 
   // Menu management APIs

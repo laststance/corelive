@@ -38,39 +38,90 @@ export function ElectronAuthProvider({
     // Wait for Clerk signIn to be available before registering callback
     // This prevents race condition where callback runs before signIn is ready
     if (!isSignInLoaded || !signIn || !setActive) {
-      log.debug('Waiting for Clerk signIn to be available...')
+      log.debug('[OAuth] Waiting for Clerk signIn to be available...', {
+        isSignInLoaded,
+        hasSignIn: !!signIn,
+        hasSetActive: !!setActive,
+      })
       return
     }
 
+    log.info('[OAuth] Clerk signIn is ready, registering token listener')
+
     // Process any pending token that arrived before signIn was ready
     const processPendingToken = async () => {
+      log.debug('[OAuth] Checking for pending token (local ref)', {
+        hasPending: !!pendingToken.current,
+        isProcessing: isProcessingToken.current,
+      })
+
+      // First, check local ref
       if (pendingToken.current && !isProcessingToken.current) {
         const { token, provider } = pendingToken.current
         pendingToken.current = null
+        log.info('[OAuth] Processing pending token from local ref')
         await processSignInToken(token, provider)
+        return
+      }
+
+      // Then, check main process for any pending token (race condition handling)
+      log.debug('[OAuth] Checking main process for pending token')
+      try {
+        const mainProcessToken =
+          await window.electronAPI?.oauth?.getPendingToken()
+        if (mainProcessToken && !isProcessingToken.current) {
+          log.info('[OAuth] Found pending token in main process', {
+            provider: mainProcessToken.provider,
+            tokenPrefix: mainProcessToken.token.slice(0, 10) + '...',
+          })
+          await processSignInToken(
+            mainProcessToken.token,
+            mainProcessToken.provider,
+          )
+        }
+      } catch (error) {
+        log.error(
+          '[OAuth] Failed to get pending token from main process',
+          error,
+        )
       }
     }
 
     const processSignInToken = async (token: string, provider: string) => {
       if (isProcessingToken.current) {
-        log.debug('Sign-in token already being processed, skipping')
+        log.debug('[OAuth] Sign-in token already being processed, skipping')
         return
       }
 
       isProcessingToken.current = true
-      log.info('Processing sign-in token from browser OAuth', { provider })
+      log.info('[OAuth] Processing sign-in token from browser OAuth', {
+        provider,
+        tokenPrefix: token.slice(0, 10) + '...',
+      })
 
       try {
+        log.debug('[OAuth] Calling signIn.create with ticket strategy')
         // Use the ticket strategy to create a session from the sign-in token
         const result = await signIn.create({
           strategy: 'ticket',
           ticket: token,
         })
 
+        log.debug('[OAuth] signIn.create result', {
+          status: result.status,
+          hasSessionId: !!result.createdSessionId,
+        })
+
         if (result.status === 'complete' && result.createdSessionId) {
           // Set the new session as active
+          log.debug('[OAuth] Setting active session', {
+            sessionId: result.createdSessionId,
+          })
           await setActive({ session: result.createdSessionId })
-          log.info('Successfully signed in via browser OAuth token')
+          log.info('[OAuth] Successfully signed in via browser OAuth token')
+
+          // Clear any pending token in main process
+          await window.electronAPI?.oauth?.clearPendingToken()
 
           // Notify ElectronOAuthButtons that auth succeeded (resets loading state)
           // This is done via the Clerk session change which triggers useUser() update
@@ -99,32 +150,51 @@ export function ElectronAuthProvider({
     }
 
     // Register callback for sign-in token from browser OAuth
+    log.debug('[OAuth] Registering main onSignInToken listener')
     const cleanup = window.electronAPI?.oauth?.onSignInToken(
       async (data: { token: string; provider: string }) => {
+        log.info('[OAuth] Main listener received token', {
+          provider: data.provider,
+          tokenPrefix: data.token.slice(0, 10) + '...',
+        })
         await processSignInToken(data.token, data.provider)
       },
     )
 
     // Process any pending token
+    log.debug('[OAuth] About to process pending token (if any)')
     void processPendingToken()
 
-    return cleanup
+    return () => {
+      log.debug('[OAuth] Cleaning up main listener')
+      cleanup?.()
+    }
   }, [signIn, setActive, isSignInLoaded])
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
     if (!isElectronEnvironment()) return
-    if (isSignInLoaded && signIn) return // Already ready, main effect will handle
+    if (isSignInLoaded && signIn) {
+      log.debug('[OAuth] Temp effect: signIn ready, skipping temp listener')
+      return // Already ready, main effect will handle
+    }
 
     // Register temporary listener to capture token before signIn is ready
+    log.debug('[OAuth] Registering temporary listener (signIn not ready yet)')
     const tempCleanup = window.electronAPI?.oauth?.onSignInToken(
       (data: { token: string; provider: string }) => {
-        log.debug('Token received before signIn ready, storing for later')
+        log.info('[OAuth] Temp listener received token, storing for later', {
+          provider: data.provider,
+          tokenPrefix: data.token.slice(0, 10) + '...',
+        })
         pendingToken.current = data
       },
     )
 
-    return tempCleanup
+    return () => {
+      log.debug('[OAuth] Cleaning up temporary listener')
+      tempCleanup?.()
+    }
   }, [isSignInLoaded, signIn])
 
   // Sync auth state with Electron main process

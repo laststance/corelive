@@ -65,6 +65,14 @@ class OAuthManager {
      */
     this.stateTTL = 10 * 60 * 1000
 
+    /**
+     * Pending sign-in token waiting to be retrieved by the renderer.
+     * This is used to handle the race condition where the IPC message
+     * is sent before the renderer's listener is registered.
+     * @type {{ token: string, provider: string, createdAt: number } | null}
+     */
+    this.pendingSignInToken = null
+
     // Cleanup expired states periodically
     this.cleanupInterval = setInterval(() => this.cleanupExpiredStates(), 60000)
   }
@@ -297,11 +305,75 @@ class OAuthManager {
    * The WebView will use Clerk's ticket strategy to create a session:
    * signIn.create({ strategy: 'ticket', ticket: token })
    *
+   * Also stores the token for later retrieval in case the renderer
+   * hasn't registered its listener yet (race condition handling).
+   *
    * @param {string} token - Clerk sign-in token (sit_xxx)
    * @param {string} provider - OAuth provider (google, github)
    */
   sendSignInToken(token, provider) {
+    log.info('[OAuth] Sending sign-in token to WebView', {
+      provider,
+      tokenPrefix: token.slice(0, 10) + '...',
+      hasMainWindow: !!(
+        this.windowManager && this.windowManager.hasMainWindow()
+      ),
+    })
+
+    // Store the token for later retrieval (race condition handling)
+    // Token expires after 60 seconds (same as Clerk's token TTL)
+    this.pendingSignInToken = {
+      token,
+      provider,
+      createdAt: Date.now(),
+    }
+    log.debug('[OAuth] Stored pending sign-in token for retrieval')
+
+    // Also send via IPC in case listener is already registered
     this.sendToRenderer('clerk-sign-in-token', { token, provider })
+    log.debug('[OAuth] Sign-in token sent via IPC')
+  }
+
+  /**
+   * Retrieves and clears the pending sign-in token.
+   *
+   * This is called by the renderer when it's ready to process the token,
+   * in case it missed the IPC event due to race condition.
+   *
+   * @returns {{ token: string, provider: string } | null} The pending token or null
+   */
+  getPendingSignInToken() {
+    if (!this.pendingSignInToken) {
+      log.debug('[OAuth] No pending sign-in token')
+      return null
+    }
+
+    // Check if token is still valid (60 second TTL)
+    const age = Date.now() - this.pendingSignInToken.createdAt
+    if (age > 60 * 1000) {
+      log.debug('[OAuth] Pending sign-in token expired', { ageMs: age })
+      this.pendingSignInToken = null
+      return null
+    }
+
+    const { token, provider } = this.pendingSignInToken
+    this.pendingSignInToken = null // Clear after retrieval (one-time use)
+    log.info('[OAuth] Returning pending sign-in token', {
+      provider,
+      tokenPrefix: token.slice(0, 10) + '...',
+      ageMs: age,
+    })
+    return { token, provider }
+  }
+
+  /**
+   * Clears the pending sign-in token (e.g., after successful sign-in).
+   */
+  clearPendingSignInToken() {
+    if (this.pendingSignInToken) {
+      log.debug('[OAuth] Clearing pending sign-in token')
+      this.pendingSignInToken = null
+    }
   }
 
   /**

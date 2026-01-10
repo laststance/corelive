@@ -122,6 +122,48 @@ let oauthManager // Browser-based OAuth flow management
 let activeUser = null
 
 /**
+ * Queue for deep link URLs received before DeepLinkManager is ready.
+ * On macOS, 'open-url' events can fire very early, even before app.whenReady().
+ * We queue these URLs and process them once the app is fully initialized.
+ */
+let pendingDeepLinkUrl = null
+
+/**
+ * Early 'open-url' handler for macOS.
+ *
+ * CRITICAL: This must be registered BEFORE app.whenReady() to catch
+ * deep links that trigger app launch or arrive when app is starting.
+ * If registered inside app.whenReady(), URLs are lost!
+ */
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  log.info('🔗 [Early] Received open-url event:', {
+    url: url.slice(0, 50) + '...',
+  })
+
+  if (deepLinkManager && deepLinkManager.isInitialized) {
+    // DeepLinkManager ready - handle immediately
+    deepLinkManager.handleDeepLink(url)
+  } else {
+    // Queue for later processing
+    log.info('🔗 [Early] Queuing deep link for later processing')
+    pendingDeepLinkUrl = url
+  }
+})
+
+/**
+ * Process any queued deep link URLs.
+ * Called after DeepLinkManager is fully initialized.
+ */
+function processPendingDeepLinkUrl() {
+  if (pendingDeepLinkUrl && deepLinkManager && deepLinkManager.isInitialized) {
+    log.info('🔗 Processing queued deep link URL')
+    deepLinkManager.handleDeepLink(pendingDeepLinkUrl)
+    pendingDeepLinkUrl = null
+  }
+}
+
+/**
  * Ensures the OAuthManager is initialized when needed.
  *
  * OAuth manager handles browser-based OAuth flows required for providers
@@ -592,23 +634,35 @@ async function createWindow() {
       log.info('✅ [DEFERRED] System integration initialized')
 
       // Load auto-updater in background (skip during automated tests)
+      // Wrapped in own try-catch so failure doesn't block other initializations
       if (!isTestEnvironment) {
-        const AutoUpdater = await lazyLoadManager.loadComponent('AutoUpdater')
-        autoUpdater = new AutoUpdater()
-        autoUpdater.setMainWindow(windowManager.getMainWindow())
+        try {
+          const AutoUpdater = await lazyLoadManager.loadComponent('AutoUpdater')
+          autoUpdater = new AutoUpdater()
+          autoUpdater.setMainWindow(windowManager.getMainWindow())
+        } catch (autoUpdaterError) {
+          log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
+          // Non-critical - continue without auto-updater
+        }
       } else {
         log.info('AutoUpdater initialization skipped in test environment')
       }
 
       // Ensure deep link manager is ready once supporting managers exist
+      log.info('🔧 [DEFERRED] Initializing DeepLinkManager...')
       const manager = ensureDeepLinkManager()
       if (manager) {
+        log.info('✅ [DEFERRED] DeepLinkManager initialized')
         manager.notificationManager = notificationManager
 
-        // Process any pending deep link URL after initialization
+        // Process any pending deep link URLs after initialization
+        // This handles both:
+        // 1. URLs from early 'open-url' events (before app ready)
+        // 2. URLs from command line args (Windows/Linux)
         setTimeout(() => {
           try {
-            manager.processPendingUrl()
+            manager.processPendingUrl() // Command line URLs
+            processPendingDeepLinkUrl() // Early open-url URLs
           } catch (error) {
             log.warn('⚠️ Failed to process pending deep link URL', error)
           }
@@ -1233,6 +1287,21 @@ function setupIPCHandlers() {
     const oauth = ensureOAuthManager()
     if (oauth) {
       oauth.cancelPendingFlow(state)
+    }
+    return true
+  })
+
+  // Get pending sign-in token (for race condition handling)
+  ipcMain.handle('oauth-get-pending-token', () => {
+    const oauth = ensureOAuthManager()
+    return oauth ? oauth.getPendingSignInToken() : null
+  })
+
+  // Clear pending sign-in token (after successful sign-in)
+  ipcMain.handle('oauth-clear-pending-token', () => {
+    const oauth = ensureOAuthManager()
+    if (oauth) {
+      oauth.clearPendingSignInToken()
     }
     return true
   })

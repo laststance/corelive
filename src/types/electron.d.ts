@@ -140,6 +140,16 @@ interface ElectronAPI {
     onSignInToken: (
       callback: (data: { token: string; provider: string }) => void,
     ) => () => void
+    /**
+     * Get pending sign-in token (for race condition handling).
+     * This is called when the renderer is ready to process tokens,
+     * in case it missed the IPC event.
+     */
+    getPendingToken: () => Promise<{ token: string; provider: string } | null>
+    /**
+     * Clear pending sign-in token (after successful sign-in).
+     */
+    clearPendingToken: () => Promise<boolean>
   }
 
   // Configuration
