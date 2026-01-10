@@ -24,8 +24,9 @@ export function ElectronAuthProvider({
   children: React.ReactNode
 }) {
   const { user, isLoaded } = useUser()
-  const { signIn, setActive } = useSignIn()
+  const { signIn, setActive, isLoaded: isSignInLoaded } = useSignIn()
   const isProcessingToken = useRef(false)
+  const pendingToken = useRef<{ token: string; provider: string } | null>(null)
 
   // Handle sign-in token from browser OAuth
   useEffect(() => {
@@ -34,50 +35,97 @@ export function ElectronAuthProvider({
       return
     }
 
+    // Wait for Clerk signIn to be available before registering callback
+    // This prevents race condition where callback runs before signIn is ready
+    if (!isSignInLoaded || !signIn || !setActive) {
+      log.debug('Waiting for Clerk signIn to be available...')
+      return
+    }
+
+    // Process any pending token that arrived before signIn was ready
+    const processPendingToken = async () => {
+      if (pendingToken.current && !isProcessingToken.current) {
+        const { token, provider } = pendingToken.current
+        pendingToken.current = null
+        await processSignInToken(token, provider)
+      }
+    }
+
+    const processSignInToken = async (token: string, provider: string) => {
+      if (isProcessingToken.current) {
+        log.debug('Sign-in token already being processed, skipping')
+        return
+      }
+
+      isProcessingToken.current = true
+      log.info('Processing sign-in token from browser OAuth', { provider })
+
+      try {
+        // Use the ticket strategy to create a session from the sign-in token
+        const result = await signIn.create({
+          strategy: 'ticket',
+          ticket: token,
+        })
+
+        if (result.status === 'complete' && result.createdSessionId) {
+          // Set the new session as active
+          await setActive({ session: result.createdSessionId })
+          log.info('Successfully signed in via browser OAuth token')
+
+          // Notify ElectronOAuthButtons that auth succeeded (resets loading state)
+          // This is done via the Clerk session change which triggers useUser() update
+        } else {
+          log.warn('Sign-in token exchange did not complete', {
+            status: result.status,
+          })
+          // Dispatch error event to reset OAuth button loading state
+          window.dispatchEvent(
+            new CustomEvent('electron-oauth-error', {
+              detail: `Sign-in incomplete: ${result.status}`,
+            }),
+          )
+        }
+      } catch (error) {
+        log.error('Failed to exchange sign-in token for session:', error)
+        // Dispatch error event to reset OAuth button loading state
+        const errorMessage =
+          error instanceof Error ? error.message : 'Token exchange failed'
+        window.dispatchEvent(
+          new CustomEvent('electron-oauth-error', { detail: errorMessage }),
+        )
+      } finally {
+        isProcessingToken.current = false
+      }
+    }
+
     // Register callback for sign-in token from browser OAuth
     const cleanup = window.electronAPI?.oauth?.onSignInToken(
       async (data: { token: string; provider: string }) => {
-        // Prevent duplicate processing
-        if (isProcessingToken.current) {
-          log.debug('Sign-in token already being processed, skipping')
-          return
-        }
-
-        isProcessingToken.current = true
-        log.info('Received sign-in token from browser OAuth', {
-          provider: data.provider,
-        })
-
-        try {
-          if (!signIn) {
-            throw new Error('Clerk signIn not available')
-          }
-
-          // Use the ticket strategy to create a session from the sign-in token
-          const result = await signIn.create({
-            strategy: 'ticket',
-            ticket: data.token,
-          })
-
-          if (result.status === 'complete' && result.createdSessionId) {
-            // Set the new session as active
-            await setActive({ session: result.createdSessionId })
-            log.info('Successfully signed in via browser OAuth token')
-          } else {
-            log.warn('Sign-in token exchange did not complete', {
-              status: result.status,
-            })
-          }
-        } catch (error) {
-          log.error('Failed to exchange sign-in token for session:', error)
-        } finally {
-          isProcessingToken.current = false
-        }
+        await processSignInToken(data.token, data.provider)
       },
     )
 
+    // Process any pending token
+    void processPendingToken()
+
     return cleanup
-  }, [signIn, setActive])
+  }, [signIn, setActive, isSignInLoaded])
+
+  // Store token if it arrives before signIn is ready
+  useEffect(() => {
+    if (!isElectronEnvironment()) return
+    if (isSignInLoaded && signIn) return // Already ready, main effect will handle
+
+    // Register temporary listener to capture token before signIn is ready
+    const tempCleanup = window.electronAPI?.oauth?.onSignInToken(
+      (data: { token: string; provider: string }) => {
+        log.debug('Token received before signIn ready, storing for later')
+        pendingToken.current = data
+      },
+    )
+
+    return tempCleanup
+  }, [isSignInLoaded, signIn])
 
   // Sync auth state with Electron main process
   useEffect(() => {

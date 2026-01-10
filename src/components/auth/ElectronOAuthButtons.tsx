@@ -1,9 +1,36 @@
 'use client'
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useUser } from '@clerk/nextjs'
+import { useCallback, useEffect, useReducer, useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { isElectronEnvironment } from '@/lib/orpc/electron-client'
+
+type OAuthState = {
+  isLoading: string | null
+  error: string | null
+}
+
+type OAuthAction =
+  | { type: 'START_LOADING'; provider: string }
+  | { type: 'SUCCESS' }
+  | { type: 'ERROR'; error: string }
+  | { type: 'RESET' }
+
+function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
+  switch (action.type) {
+    case 'START_LOADING':
+      return { isLoading: action.provider, error: null }
+    case 'SUCCESS':
+      return { isLoading: null, error: null }
+    case 'ERROR':
+      return { isLoading: null, error: action.error }
+    case 'RESET':
+      return { isLoading: null, error: null }
+    default:
+      return state
+  }
+}
 
 /**
  * OAuth buttons for Electron environment.
@@ -16,51 +43,67 @@ import { isElectronEnvironment } from '@/lib/orpc/electron-client'
  * This component provides buttons that trigger the browser-based OAuth flow.
  */
 export function ElectronOAuthButtons() {
-  const [isLoading, setIsLoading] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [state, dispatch] = useReducer(oauthReducer, {
+    isLoading: null,
+    error: null,
+  })
+  const { user } = useUser()
+
+  // When user becomes signed in (from Clerk), reset loading state
+  // This handles successful sign-in via the token exchange
+  const isLoading = user ? null : state.isLoading
+  const error = user ? null : state.error
 
   useEffect(() => {
     if (!isElectronEnvironment()) return
 
     // Register OAuth event listeners
     const unsubscribeSuccess = window.electronAPI?.oauth?.onSuccess?.(() => {
-      setIsLoading(null)
-      setError(null)
-      // Auth state will be synced via ElectronAuthProvider
+      dispatch({ type: 'SUCCESS' })
     })
 
     const unsubscribeError = window.electronAPI?.oauth?.onError?.((data) => {
-      setIsLoading(null)
-      setError(data.error || 'Authentication failed')
+      dispatch({ type: 'ERROR', error: data.error || 'Authentication failed' })
     })
+
+    // Listen for custom error event from ElectronAuthProvider
+    const handleCustomError = (event: Event) => {
+      const customEvent = event as CustomEvent<string>
+      dispatch({
+        type: 'ERROR',
+        error: customEvent.detail || 'Authentication failed',
+      })
+    }
+    window.addEventListener('electron-oauth-error', handleCustomError)
 
     return () => {
       unsubscribeSuccess?.()
       unsubscribeError?.()
+      window.removeEventListener('electron-oauth-error', handleCustomError)
     }
   }, [])
 
   const handleOAuthClick = useCallback(
     async (provider: 'google' | 'github' | 'apple') => {
       if (!window.electronAPI?.oauth) {
-        setError('OAuth not available')
+        dispatch({ type: 'ERROR', error: 'OAuth not available' })
         return
       }
 
-      setIsLoading(provider)
-      setError(null)
+      dispatch({ type: 'START_LOADING', provider })
 
       try {
         const result = await window.electronAPI.oauth.start(provider)
         if (!result.success) {
-          setError(result.error || 'Failed to start authentication')
-          setIsLoading(null)
+          dispatch({
+            type: 'ERROR',
+            error: result.error || 'Failed to start authentication',
+          })
         }
         // If successful, browser will open and user will complete OAuth there
         // The success/error callbacks will handle the result
       } catch {
-        setError('Failed to start authentication')
-        setIsLoading(null)
+        dispatch({ type: 'ERROR', error: 'Failed to start authentication' })
       }
     },
     [],
