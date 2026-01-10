@@ -1,16 +1,16 @@
 /**
  * @fileoverview Window Manager for Electron Application
- * 
+ *
  * This module manages all application windows (BrowserWindow instances).
  * In Electron, windows are the primary UI containers that display web content.
- * 
+ *
  * Key responsibilities:
  * - Create and configure windows with proper security settings
  * - Manage window lifecycle (show, hide, close)
  * - Coordinate with WindowStateManager for position persistence
  * - Handle window-specific events and behaviors
  * - Support multiple window types (main, floating)
- * 
+ *
  * @module electron/WindowManager
  */
 
@@ -18,11 +18,11 @@ const path = require('path')
 
 const { BrowserWindow } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages all application windows and their lifecycle.
- * 
+ *
  * Why a dedicated manager?
  * - Centralizes window creation logic (DRY principle)
  * - Ensures consistent security settings across all windows
@@ -33,7 +33,7 @@ const { log } = require('../src/lib/logger.cjs')
 class WindowManager {
   /**
    * Creates a new WindowManager instance.
-   * 
+   *
    * @param {string|null} serverUrl - URL of the Next.js server (null uses default)
    * @param {ConfigManager|null} configManager - Manages user preferences
    * @param {WindowStateManager|null} windowStateManager - Handles window state persistence
@@ -44,27 +44,27 @@ class WindowManager {
     windowStateManager = null,
   ) {
     // Window references - kept to manage lifecycle
-    this.mainWindow = null         // Primary application window
-    this.floatingNavigator = null  // Always-on-top utility window
-    
+    this.mainWindow = null // Primary application window
+    this.floatingNavigator = null // Always-on-top utility window
+
     // Environment and configuration
     this.isDev = process.env.NODE_ENV === 'development'
     this.serverUrl = serverUrl
     this.configManager = configManager
     this.windowStateManager = windowStateManager
-    
+
     // Fallback mode for when window minimize to tray fails
     this.trayFallbackMode = false
   }
 
   /**
    * Saves current window positions and sizes to persistent storage.
-   * 
+   *
    * This method is called during:
    * - Window resize/move events (debounced)
    * - Before window close
    * - App shutdown
-   * 
+   *
    * Why save window state?
    * - Users expect windows to appear where they left them
    * - Essential for multi-monitor setups
@@ -88,13 +88,13 @@ class WindowManager {
 
   /**
    * Creates the main application window with security-first configuration.
-   * 
+   *
    * Window creation involves:
    * 1. Retrieving saved position/size or using defaults
    * 2. Configuring security settings (most important!)
    * 3. Setting up event handlers
    * 4. Loading the web content
-   * 
+   *
    * @returns {BrowserWindow} The created main window
    */
   createMainWindow() {
@@ -105,32 +105,32 @@ class WindowManager {
 
     this.mainWindow = new BrowserWindow({
       ...windowOptions,
-      
+
       /**
        * Security configuration - CRITICAL!
        * These settings prevent common Electron vulnerabilities.
        */
       webPreferences: {
-        nodeIntegration: false,         // Prevent direct Node.js access from web content
-        contextIsolation: true,         // Isolate preload script context
-        enableRemoteModule: false,      // Disable deprecated remote module
+        nodeIntegration: false, // Prevent direct Node.js access from web content
+        contextIsolation: true, // Isolate preload script context
+        enableRemoteModule: false, // Disable deprecated remote module
         preload: path.join(__dirname, 'preload.cjs'), // Secure bridge script
-        webSecurity: true,              // Enforce same-origin policy
+        webSecurity: true, // Enforce same-origin policy
         allowRunningInsecureContent: false, // Block mixed content
-        experimentalFeatures: false,    // Avoid unstable features
-        sandbox: false,                 // Note: Consider enabling for extra security
-        spellcheck: false,              // Disable for performance
-        
+        experimentalFeatures: false, // Avoid unstable features
+        sandbox: false, // Note: Consider enabling for extra security
+        spellcheck: false, // Disable for performance
+
         // DevTools access - only in dev or when explicitly enabled
         devTools:
           this.isDev ||
           (this.configManager &&
             this.configManager.get('advanced.enableDevTools', false)),
       },
-      
+
       // Visual configuration
       icon: path.join(__dirname, '../public/favicon.ico'),
-      show: false,  // Hidden initially to prevent visual flash
+      show: false, // Hidden initially to prevent visual flash
       titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
       backgroundColor: '#ffffff', // Prevents white flash on load
     })
@@ -183,7 +183,7 @@ class WindowManager {
         )
       }
     })
-    
+
     // Maximize/unmaximize events need special handling
     this.mainWindow.on('maximize', () => {
       if (this.windowStateManager) {
@@ -368,7 +368,7 @@ class WindowManager {
 
   /**
    * Shows the floating navigator window.
-   * 
+   *
    * Creates the window if it doesn't exist, then makes it visible.
    * Used when user explicitly wants to see the floating window.
    */
@@ -382,7 +382,7 @@ class WindowManager {
 
   /**
    * Hides the floating navigator window without destroying it.
-   * 
+   *
    * Keeps the window in memory for quick access later.
    * Useful for temporary hiding without losing window state.
    */

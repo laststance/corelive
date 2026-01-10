@@ -26,7 +26,7 @@
  * @module electron/SystemIntegrationErrorHandler
  */
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Coordinates error handling and fallback strategies for OS integrations.

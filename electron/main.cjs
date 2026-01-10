@@ -37,7 +37,6 @@ if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
 }
 
 // Import custom logger for consistent logging across the application
-const { log } = require('../src/lib/logger.cjs')
 
 /**
  * Module imports are strategically organized for performance optimization.
@@ -54,6 +53,7 @@ const ConfigManager = require('./ConfigManager.cjs')
 const IPCErrorHandler = require('./IPCErrorHandler.cjs')
 // Defers loading of non-critical modules to speed up initial startup
 const { lazyLoadManager } = require('./LazyLoadManager.cjs')
+const { log } = require('./logger.cjs')
 // Monitors memory usage to prevent leaks and optimize performance
 const { memoryProfiler } = require('./MemoryProfiler.cjs')
 // Manages the embedded Next.js server for serving the web application

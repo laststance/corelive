@@ -33,7 +33,7 @@
 
 const { URL } = require('url')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages custom URL protocol handling for the application.

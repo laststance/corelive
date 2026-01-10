@@ -25,7 +25,7 @@
 
 const { globalShortcut, BrowserWindow } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages global keyboard shortcuts throughout the application.

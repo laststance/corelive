@@ -28,7 +28,7 @@
 
 const { Menu, shell, dialog, app } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages application menu creation and updates.

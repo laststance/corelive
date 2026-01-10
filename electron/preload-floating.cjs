@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 // Whitelist of allowed IPC channels for floating navigator (more restricted than main window)
 const ALLOWED_CHANNELS = {

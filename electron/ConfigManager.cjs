@@ -20,7 +20,7 @@ const path = require('path')
 
 const { app } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages application configuration with persistence and validation.

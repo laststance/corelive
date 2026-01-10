@@ -32,7 +32,7 @@ const path = require('path')
 
 const { app } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Handles IPC errors with retry logic and fallback strategies.

@@ -1,34 +1,34 @@
 /**
  * @fileoverview Native Notification Manager for Electron
- * 
+ *
  * Manages OS-level notifications for the application.
- * 
+ *
  * Why notifications matter for desktop apps:
  * - Keep users informed without interrupting workflow
  * - Provide updates when app is minimized/background
  * - Drive engagement through timely reminders
  * - Integrate with OS notification center
  * - Accessibility: Audio/visual alerts for all users
- * 
+ *
  * Platform differences:
  * - Windows: Action Center integration, toast notifications
  * - macOS: Notification Center, requires permissions
  * - Linux: Varies by desktop environment (libnotify)
- * 
+ *
  * Notification types:
  * - Task created: Confirm action success
  * - Task completed: Celebrate achievements
  * - Reminders: Time-based alerts
  * - Updates: App update available
  * - Errors: Important failures
- * 
+ *
  * Best practices:
  * - Don't spam users with notifications
  * - Make them actionable (click to open task)
  * - Respect Do Not Disturb modes
  * - Allow granular preferences
  * - Handle permission denials gracefully
- * 
+ *
  * @module electron/NotificationManager
  */
 
@@ -36,11 +36,11 @@ const path = require('path')
 
 const { Notification, nativeImage } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages native OS notifications with robust error handling.
- * 
+ *
  * Features:
  * - Cross-platform notification support
  * - Permission management
@@ -49,7 +49,7 @@ const { log } = require('../src/lib/logger.cjs')
  * - Notification grouping
  * - Custom icons and sounds
  * - Fallback strategies
- * 
+ *
  * The manager handles platform quirks:
  * - macOS permission prompts
  * - Windows notification settings
@@ -57,10 +57,10 @@ const { log } = require('../src/lib/logger.cjs')
  */
 class NotificationManager {
   constructor(windowManager, systemTrayManager, configManager = null) {
-    this.windowManager = windowManager         // For click actions
+    this.windowManager = windowManager // For click actions
     this.systemTrayManager = systemTrayManager // For tray notifications
-    this.configManager = configManager         // User preferences
-    this.activeNotifications = new Map()       // Track active notifications
+    this.configManager = configManager // User preferences
+    this.activeNotifications = new Map() // Track active notifications
 
     // Load user preferences or use sensible defaults
     this.loadPreferences()
@@ -68,13 +68,13 @@ class NotificationManager {
 
   /**
    * Loads notification preferences from user configuration.
-   * 
+   *
    * Preferences allow users to:
    * - Disable notifications entirely
    * - Choose which events trigger notifications
    * - Control sound/visual settings
    * - Set auto-hide timing
-   * 
+   *
    * Defaults are chosen to be helpful but not annoying.
    */
   loadPreferences() {
@@ -83,35 +83,35 @@ class NotificationManager {
     } else {
       // Default preferences - balanced for most users
       this.preferences = {
-        enabled: true,          // Master switch
-        taskCreated: true,      // Confirm task creation
-        taskCompleted: true,    // Celebrate completions
-        taskUpdated: true,      // Show important changes
-        taskDeleted: false,     // Usually not needed
-        sound: true,            // Audio feedback
-        showInTray: true,       // Tray icon badges
-        autoHide: true,         // Don't persist forever
-        autoHideDelay: 5000,    // 5 seconds visibility
-        position: 'topRight',   // Standard position
+        enabled: true, // Master switch
+        taskCreated: true, // Confirm task creation
+        taskCompleted: true, // Celebrate completions
+        taskUpdated: true, // Show important changes
+        taskDeleted: false, // Usually not needed
+        sound: true, // Audio feedback
+        showInTray: true, // Tray icon badges
+        autoHide: true, // Don't persist forever
+        autoHideDelay: 5000, // 5 seconds visibility
+        position: 'topRight', // Standard position
       }
     }
   }
 
   /**
    * Initializes the notification system with permission checks.
-   * 
+   *
    * Initialization steps:
    * 1. Check OS support for notifications
    * 2. Request/verify permissions (macOS)
    * 3. Test notification capability
    * 4. Set up fallback strategies
-   * 
+   *
    * Why thorough initialization?
    * - Permissions can be complex on macOS
    * - Some Linux systems lack notification support
    * - Early detection allows graceful degradation
    * - Better UX than failing when trying to notify
-   * 
+   *
    * @returns {Promise<boolean>} True if notifications are available
    */
   async initialize() {
@@ -150,17 +150,17 @@ class NotificationManager {
 
   /**
    * Checks notification permissions across different platforms.
-   * 
+   *
    * Platform behaviors:
    * - Windows: Usually allowed by default
    * - Linux: Depends on desktop environment
    * - macOS: Requires explicit permission
-   * 
+   *
    * macOS Catalina+ requires:
    * - User approval in System Preferences
    * - App must be notarized
    * - Cannot programmatically request permission
-   * 
+   *
    * @returns {Promise<Object>} Permission status and reason
    */
   async checkNotificationPermissions() {

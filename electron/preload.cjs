@@ -1,42 +1,42 @@
 /**
  * @fileoverview Electron Preload Script - Security Bridge
- * 
+ *
  * The preload script is the MOST CRITICAL security component in Electron.
  * It runs in a special context that has access to both Node.js APIs and
  * the web page's DOM, acting as a secure bridge between them.
- * 
+ *
  * Security Architecture:
  * 1. Main Process (full system access) ← IPC → Preload Script ← contextBridge → Renderer (web page)
  * 2. Preload has Node.js access but runs in isolated context
  * 3. Only whitelisted, sanitized APIs are exposed to the renderer
- * 
+ *
  * Why is this critical?
  * - Without proper preload isolation, web content could access Node.js
  * - A single XSS vulnerability could compromise the entire system
  * - This script defines the ONLY APIs available to web content
- * 
+ *
  * Best Practices:
  * - NEVER expose raw Node.js APIs to renderer
  * - Always validate and sanitize data
  * - Use channel whitelisting for IPC
  * - Keep the exposed API surface minimal
- * 
+ *
  * @module electron/preload
  */
 
 const { contextBridge, ipcRenderer } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Whitelist of allowed IPC channels for security.
- * 
+ *
  * This is a critical security control. Only channels listed here
  * can be used by the renderer process. This prevents:
  * - Malicious code from accessing unauthorized APIs
  * - Accidental exposure of dangerous functionality
  * - IPC injection attacks
- * 
+ *
  * When adding new channels:
  * 1. Consider if it's truly needed in the renderer
  * 2. Ensure the main process handler validates all input
@@ -193,17 +193,17 @@ function sanitizeData(data) {
 
 /**
  * Expose secure API to renderer process via contextBridge.
- * 
+ *
  * This is the ONLY way renderer processes should access system capabilities.
  * Everything exposed here is available as window.electronAPI in the renderer.
- * 
+ *
  * Security principles applied:
  * 1. No direct Node.js API exposure
  * 2. All data is sanitized before sending via IPC
  * 3. All channels are whitelisted
  * 4. Error messages are sanitized (no system details leaked)
  * 5. Each method validates input before processing
- * 
+ *
  * API Design:
  * - Organized by feature area (todos, auth, window, etc.)
  * - Async/await pattern for all IPC calls
@@ -213,7 +213,7 @@ function sanitizeData(data) {
 contextBridge.exposeInMainWorld('electronAPI', {
   /**
    * Todo Operations
-   * 
+   *
    * Provides CRUD operations for todo items.
    * All operations go through IPC to the main process
    * where the actual database operations happen.
@@ -1577,14 +1577,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 /**
  * Expose environment information to renderer.
- * 
+ *
  * This provides safe, read-only access to environment details
  * that the renderer might need for:
  * - Platform-specific UI adjustments
  * - Debugging and error reporting
  * - Feature detection
  * - Version compatibility checks
- * 
+ *
  * Why is this safe to expose?
  * - All values are read-only
  * - No sensitive system information
@@ -1592,11 +1592,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
  * - Useful for conditional rendering based on platform
  */
 contextBridge.exposeInMainWorld('electronEnv', {
-  isElectron: true,                    // Flag to detect Electron environment
-  platform: process.platform,          // 'darwin', 'win32', or 'linux'
+  isElectron: true, // Flag to detect Electron environment
+  platform: process.platform, // 'darwin', 'win32', or 'linux'
   versions: {
-    node: process.versions.node,       // Node.js version
-    chrome: process.versions.chrome,   // Chromium version
+    node: process.versions.node, // Node.js version
+    chrome: process.versions.chrome, // Chromium version
     electron: process.versions.electron, // Electron version
   },
 })

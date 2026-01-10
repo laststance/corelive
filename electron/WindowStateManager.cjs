@@ -3,7 +3,7 @@ const path = require('path')
 
 const { screen, app } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 class WindowStateManager {
   constructor(configManager) {

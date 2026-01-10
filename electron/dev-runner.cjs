@@ -29,7 +29,7 @@ const { spawn } = require('child_process')
 const http = require('http')
 const path = require('path')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 // Ensure we're in development mode
 process.env.NODE_ENV = 'development'

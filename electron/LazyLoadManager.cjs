@@ -24,8 +24,7 @@
  * @module electron/LazyLoadManager
  */
 
-const { log } = require('../src/lib/logger.cjs')
-
+const { log } = require('./logger.cjs')
 const { performanceOptimizer } = require('./performance-config.cjs')
 
 /**

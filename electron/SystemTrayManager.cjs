@@ -1,30 +1,30 @@
 /**
  * @fileoverview System Tray Manager for Electron
- * 
+ *
  * Manages the system tray icon and menu that appears in:
  * - Windows: System tray (bottom-right corner)
  * - macOS: Menu bar (top-right corner)
  * - Linux: System panel (varies by desktop environment)
- * 
+ *
  * System tray provides:
  * - Quick access when app is minimized
  * - Status indication (icon changes)
  * - Context menu for common actions
  * - Minimize-to-tray functionality
  * - Background running indicator
- * 
+ *
  * Why system tray is important:
  * - Users expect desktop apps to minimize to tray
  * - Provides persistent access without taskbar clutter
  * - Shows app is running in background
  * - Quick actions without opening main window
  * - Standard desktop app pattern
- * 
+ *
  * Platform considerations:
  * - macOS: Limited icon customization, no balloon tooltips
  * - Windows: Full color icons, native notifications
  * - Linux: Varies greatly by desktop environment
- * 
+ *
  * @module electron/SystemTrayManager
  */
 
@@ -32,11 +32,11 @@ const path = require('path')
 
 const { Tray, Menu, nativeImage, Notification } = require('electron')
 
-const { log } = require('../src/lib/logger.cjs')
+const { log } = require('./logger.cjs')
 
 /**
  * Manages system tray functionality with robust error handling.
- * 
+ *
  * Features:
  * - Platform-specific tray icon creation
  * - Context menu management
@@ -44,7 +44,7 @@ const { log } = require('../src/lib/logger.cjs')
  * - Minimize to tray behavior
  * - Status updates (icon, tooltip)
  * - Fallback mode for unsupported systems
- * 
+ *
  * Error handling is critical because:
  * - Some Linux systems don't support tray
  * - Icon loading can fail
@@ -52,14 +52,14 @@ const { log } = require('../src/lib/logger.cjs')
  */
 class SystemTrayManager {
   constructor(windowManager) {
-    this.windowManager = windowManager  // For show/hide operations
-    this.tray = null                   // Tray instance
-    this.isQuitting = false            // Flag to distinguish quit vs minimize
+    this.windowManager = windowManager // For show/hide operations
+    this.tray = null // Tray instance
+    this.isQuitting = false // Flag to distinguish quit vs minimize
   }
 
   /**
    * Creates the system tray with icon and context menu.
-   * 
+   *
    * Creation process:
    * 1. Check platform support
    * 2. Load appropriate icon
@@ -67,10 +67,10 @@ class SystemTrayManager {
    * 4. Set tooltip
    * 5. Create context menu
    * 6. Setup event handlers
-   * 
+   *
    * Robust error handling ensures app works even if tray fails.
    * Falls back to standard window behavior if tray unavailable.
-   * 
+   *
    * @returns {Tray|null} The tray instance or null if failed
    */
   createTray() {
@@ -79,7 +79,7 @@ class SystemTrayManager {
       if (!this.isSystemTraySupported()) {
         log.warn('System tray is not supported on this platform')
         this.tray = null
-        this.enableFallbackMode()  // App works without tray
+        this.enableFallbackMode() // App works without tray
         return null
       }
 
@@ -126,7 +126,7 @@ class SystemTrayManager {
 
   /**
    * Checks if system tray is supported on the current platform.
-   * 
+   *
    * Support varies:
    * - Windows: Always supported
    * - macOS: Always supported (menu bar)
@@ -134,7 +134,7 @@ class SystemTrayManager {
    *   - GNOME: Requires extension
    *   - KDE: Native support
    *   - XFCE: Native support
-   * 
+   *
    * @returns {boolean} True if platform potentially supports tray
    */
   isSystemTraySupported() {
@@ -153,19 +153,19 @@ class SystemTrayManager {
 
   /**
    * Creates the tray icon with appropriate format and size.
-   * 
+   *
    * Icon requirements:
    * - Windows: 16x16 or 32x32, ICO or PNG
    * - macOS: 22x22 (Template images, black & transparent)
    * - Linux: 16x16, 22x22, or 24x24 PNG
-   * 
+   *
    * State support:
    * - default: Normal state
    * - active: Has notifications
    * - error: Problem state
-   * 
+   *
    * Falls back to embedded icon if file loading fails.
-   * 
+   *
    * @param {string} state - Icon state (default/active/error)
    * @returns {NativeImage|null} The tray icon or null
    */

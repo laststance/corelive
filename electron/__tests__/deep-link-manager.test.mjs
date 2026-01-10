@@ -29,7 +29,7 @@ const mockShell = {
 }
 
 // Mock modules using vi.doMock for better CommonJS support
-vi.doMock('../../src/lib/logger.cjs', () => ({
+vi.doMock('../logger.cjs', () => ({
   log: mockLog,
 }))
 
