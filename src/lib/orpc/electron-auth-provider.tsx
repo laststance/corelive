@@ -1,6 +1,6 @@
 'use client'
 
-import { useSignIn, useUser } from '@clerk/nextjs'
+import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
 
 import { log } from '../logger'
@@ -25,8 +25,10 @@ export function ElectronAuthProvider({
 }) {
   const { user, isLoaded } = useUser()
   const { signIn, setActive, isLoaded: isSignInLoaded } = useSignIn()
+  const { signOut } = useClerk()
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
+  const hasRetriedAfterSignOut = useRef(false)
 
   // Handle sign-in token from browser OAuth
   useEffect(() => {
@@ -93,6 +95,19 @@ export function ElectronAuthProvider({
         return
       }
 
+      // Check if user is already authenticated via useUser()
+      // This can happen if the WebView already has a valid session
+      if (user) {
+        log.info(
+          '[OAuth] User already authenticated, skipping token exchange',
+          {
+            userId: user.id,
+          },
+        )
+        await window.electronAPI?.oauth?.clearPendingToken()
+        return
+      }
+
       isProcessingToken.current = true
       log.info('[OAuth] Processing sign-in token from browser OAuth', {
         provider,
@@ -122,6 +137,7 @@ export function ElectronAuthProvider({
 
           // Clear any pending token in main process
           await window.electronAPI?.oauth?.clearPendingToken()
+          hasRetriedAfterSignOut.current = false
 
           // Notify ElectronOAuthButtons that auth succeeded (resets loading state)
           // This is done via the Clerk session change which triggers useUser() update
@@ -137,23 +153,34 @@ export function ElectronAuthProvider({
           )
         }
       } catch (error) {
-        // Check if error is "session_exists" - this means user is already logged in
-        // This can happen when the WebView already has an active Clerk session
+        // Check if error is "session_exists" - Clerk thinks there's a session
+        // but useUser() doesn't see it (stale state issue)
         const clerkError = error as { errors?: Array<{ code?: string }> }
         const isSessionExists = clerkError?.errors?.some(
           (e) => e.code === 'session_exists',
         )
 
-        if (isSessionExists) {
-          // User is already logged in - treat this as success
-          log.info(
-            '[OAuth] Session already exists - user is already authenticated',
-          )
-          // Clear any pending token in main process
+        if (isSessionExists && !hasRetriedAfterSignOut.current) {
+          // Try signing out to clear stale session state, then retry
+          log.info('[OAuth] Session exists error - signing out and retrying')
+          hasRetriedAfterSignOut.current = true
+          isProcessingToken.current = false
+
+          try {
+            await signOut()
+            log.info('[OAuth] Signed out, retrying token exchange')
+            // Retry the token exchange after sign out
+            await processSignInToken(token, provider)
+          } catch (signOutError) {
+            log.error('[OAuth] Failed to sign out:', signOutError)
+            // If sign out fails, just reload the page
+            window.location.reload()
+          }
+          return
+        } else if (isSessionExists) {
+          // Already retried, just reload the page
+          log.info('[OAuth] Session exists after retry - reloading page')
           await window.electronAPI?.oauth?.clearPendingToken()
-          // Refresh the page to ensure the UI shows the authenticated state
-          // This handles the case where the login page was shown but the session exists
-          log.info('[OAuth] Refreshing page to show authenticated state')
           window.location.reload()
         } else {
           log.error('Failed to exchange sign-in token for session:', error)
@@ -189,7 +216,7 @@ export function ElectronAuthProvider({
       log.debug('[OAuth] Cleaning up main listener')
       cleanup?.()
     }
-  }, [signIn, setActive, isSignInLoaded])
+  }, [signIn, setActive, isSignInLoaded, user, signOut])
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
