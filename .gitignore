@@ -72,4 +72,4 @@ logs/
 claudedocs/
 
 # Cursor
-.cursor/mcp.json
+.cursor
