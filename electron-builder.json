@@ -11,14 +11,11 @@
   "npmRebuild": false,
   "buildDependenciesFromSource": false,
   "files": [
-    ".next/**/*",
     "electron/**/*",
     "node_modules/**/*",
-    "node_modules/.*/**/*",
     "package.json",
-    "next.config.js",
     "public/**/*",
-    "prisma/**/*",
+    "!electron/generated/**/*",
     "!src/**/*",
     "!**/*.test.*",
     "!**/*.spec.*",
@@ -34,10 +31,7 @@
     "!**/node_modules/**/CHANGELOG.md",
     "!**/node_modules/**/LICENSE*",
     "!**/node_modules/**/*.d.ts",
-    "!**/node_modules/**/*.map",
-    "!**/.next/cache/**/*",
-    "!**/.next/static/chunks/pages/_error-*.js",
-    "!**/.next/static/chunks/webpack-*.js"
+    "!**/node_modules/**/*.map"
   ],
   "extraResources": [
     {
@@ -46,18 +40,7 @@
       "filter": ["**/*"]
     }
   ],
-  "asarUnpack": [
-    "**/node_modules/@prisma/**",
-    "**/node_modules/@img/**",
-    "**/node_modules/@next/**/*.node"
-  ],
-  "extraFiles": [
-    {
-      "from": "node_modules/.prisma",
-      "to": "Resources/app.asar.unpacked/node_modules/.prisma",
-      "filter": ["**/*"]
-    }
-  ],
+  "asarUnpack": ["node_modules/@img/**"],
   "publish": {
     "provider": "github",
     "owner": "laststance",

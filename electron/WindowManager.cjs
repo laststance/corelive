@@ -141,9 +141,11 @@ class WindowManager {
     }
 
     // Load the application
+    // In development: local Next.js dev server
+    // In production: production web app URL
     const startUrl =
       this.serverUrl ||
-      (this.isDev ? 'http://localhost:3011' : 'http://localhost:3011')
+      (this.isDev ? 'http://localhost:3011' : 'https://corelive.app/')
 
     this.mainWindow.loadURL(startUrl)
 
@@ -282,11 +284,13 @@ class WindowManager {
     })
 
     // Load floating navigator page
+    // In production: loads from corelive.app
+    // In development: loads from local dev server
     const floatingUrl = this.serverUrl
       ? `${this.serverUrl}/floating-navigator`
       : this.isDev
         ? 'http://localhost:3011/floating-navigator'
-        : 'http://localhost:3011/floating-navigator'
+        : 'https://corelive.app/floating-navigator'
 
     log.debug('🔹 Loading floating navigator URL:', floatingUrl)
     this.floatingNavigator.loadURL(floatingUrl)

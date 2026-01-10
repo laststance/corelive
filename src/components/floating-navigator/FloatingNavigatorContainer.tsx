@@ -1,33 +1,45 @@
 'use client'
 
-import React, { useState, useEffect, useSyncExternalStore } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import React, { useSyncExternalStore } from 'react'
 
-import { log } from '../../lib/logger'
+import { useORPCUtils } from '@/lib/orpc/react-query'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
 
-// Extend window interface for floating navigator API
+/**
+ * Window interface for Electron floating navigator window controls.
+ *
+ * In WebView architecture, data operations use oRPC (same as web).
+ * This interface only exposes window controls via Electron IPC.
+ */
 declare global {
   interface Window {
     floatingNavigatorAPI?: {
-      todos: {
-        getTodos(): Promise<any[]>
-        quickCreate(title: string): Promise<any>
-        updateTodo(id: string, updates: any): Promise<any>
-        deleteTodo(id: string): Promise<void>
-        toggleComplete(id: string): Promise<any>
-      }
-      auth: {
-        ensureUserSync(): Promise<void>
-      }
       window: {
         close(): Promise<void>
         minimize(): Promise<void>
         toggleAlwaysOnTop(): Promise<boolean>
         focusMainWindow(): Promise<void>
+        getBounds(): Promise<{
+          x: number
+          y: number
+          width: number
+          height: number
+        } | null>
+        setBounds(bounds: {
+          x?: number
+          y?: number
+          width?: number
+          height?: number
+        }): Promise<void>
+        isAlwaysOnTop(): Promise<boolean>
       }
-      on(channel: string, callback: Function): () => void
-      removeListener(channel: string, callback: Function): void
+      on(channel: string, callback: (...args: unknown[]) => void): () => void
+      removeListener(
+        channel: string,
+        callback: (...args: unknown[]) => void,
+      ): void
     }
     floatingNavigatorEnv?: {
       isElectron: boolean
@@ -39,6 +51,8 @@ declare global {
 
 /**
  * Creates a store for tracking mount state (SSR-safe)
+ * Uses useSyncExternalStore for proper SSR hydration.
+ *
  * @returns Store interface for useSyncExternalStore
  */
 function createMountStore() {
@@ -64,10 +78,19 @@ function createMountStore() {
 // Singleton mount store to avoid recreation
 const mountStore = createMountStore()
 
+/**
+ * FloatingNavigatorContainer - Container component for Floating Navigator.
+ *
+ * In WebView architecture:
+ * - Data operations use oRPC (same as web app via https://corelive.app/api/orpc)
+ * - Window controls use Electron IPC (close, minimize, always-on-top)
+ *
+ * This component provides the same functionality as the web app's todo list,
+ * but in a compact floating window format with Electron-specific controls.
+ */
 export function FloatingNavigatorContainer() {
-  const [todos, setTodos] = useState<FloatingTodo[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const orpc = useORPCUtils()
+  const queryClient = useQueryClient()
 
   // SSR-safe mount detection using useSyncExternalStore
   const isMounted = useSyncExternalStore(
@@ -76,181 +99,99 @@ export function FloatingNavigatorContainer() {
     mountStore.getServerSnapshot,
   )
 
-  // Check if we're in Electron floating navigator environment
-  // Only after component mounts to avoid hydration mismatch
+  // Check if we're in Electron floating navigator environment (for window controls)
   const isFloatingNavigator =
     isMounted && typeof window !== 'undefined' && window.floatingNavigatorAPI
 
-  // Load todos from Floating Navigator API
-  const loadTodos = async () => {
-    if (!isFloatingNavigator) {
-      setError('Floating Navigator API not available')
-      setIsLoading(false)
-      return
-    }
+  // Fetch todos using oRPC (same as web app)
+  const { data, isLoading, error } = useQuery(
+    orpc.todo.list.queryOptions({
+      input: { completed: false, limit: 100, offset: 0 },
+    }),
+  )
 
-    try {
-      setIsLoading(true)
+  // Todo toggle mutation
+  const toggleMutation = useMutation(
+    orpc.todo.toggle.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
 
-      // First, ensure user is synced with the Electron API bridge
-      try {
-        await window.floatingNavigatorAPI!.auth.ensureUserSync()
-      } catch (authError) {
-        log.warn('Auth sync warning (will retry on getData):', authError)
-        // Continue anyway - getTodos will try to sync if needed
-      }
+  // Todo create mutation
+  const createMutation = useMutation(
+    orpc.todo.create.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
 
-      const todoData =
-        (await window.floatingNavigatorAPI!.todos.getTodos()) as any
+  // Todo update mutation
+  const updateMutation = useMutation(
+    orpc.todo.update.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
 
-      // Transform the data to match our interface
-      const todosArray = Array.isArray(todoData)
-        ? todoData
-        : todoData?.todos || []
-      const transformedTodos: FloatingTodo[] = todosArray.map((todo: any) => ({
-        id: todo.id.toString(),
-        text: todo.text || todo.title,
-        completed: todo.completed,
-        createdAt: new Date(todo.createdAt),
-      }))
+  // Todo delete mutation
+  const deleteMutation = useMutation(
+    orpc.todo.delete.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      },
+    }),
+  )
 
-      setTodos(transformedTodos)
-      setError(null)
-    } catch (err) {
-      log.error('Failed to load todos:', err)
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to load tasks'
-
-      // Check if it's an authentication issue
-      if (
-        errorMessage.includes('Active user not set') ||
-        errorMessage.includes('authentication') ||
-        errorMessage.includes('Unauthorized')
-      ) {
-        setError('Please open the main app first to authenticate')
-      } else {
-        setError(errorMessage)
-      }
-    } finally {
-      setIsLoading(false)
+  /**
+   * Handle task toggle - uses oRPC mutation
+   */
+  const handleTaskToggle = (id: string) => {
+    const todoId = parseInt(id, 10)
+    if (!isNaN(todoId)) {
+      toggleMutation.mutate({ id: todoId })
     }
   }
 
-  // Load todos after mounting and Electron API is detected
-  useEffect(() => {
-    if (!isFloatingNavigator) return
-    loadTodos()
+  /**
+   * Handle task creation - uses oRPC mutation
+   */
+  const handleTaskCreate = (title: string) => {
+    createMutation.mutate({ text: title })
+  }
 
-    // Listen for todo updates from main process
-    const handleTodoUpdate = () => {
-      loadTodos()
-    }
-
-    const handleTodoCreated = () => {
-      loadTodos()
-    }
-
-    const handleTodoDeleted = () => {
-      loadTodos()
-    }
-
-    // Set up event listeners
-    const cleanupUpdate = window.floatingNavigatorAPI!.on(
-      'todo-updated',
-      handleTodoUpdate,
-    )
-    const cleanupCreated = window.floatingNavigatorAPI!.on(
-      'todo-created',
-      handleTodoCreated,
-    )
-    const cleanupDeleted = window.floatingNavigatorAPI!.on(
-      'todo-deleted',
-      handleTodoDeleted,
-    )
-
-    return () => {
-      cleanupUpdate?.()
-      cleanupCreated?.()
-      cleanupDeleted?.()
-    }
-  }, [isFloatingNavigator])
-
-  const handleTaskToggle = async (id: string) => {
-    if (!isFloatingNavigator) return
-
-    try {
-      const todo = todos.find((t) => t.id === id)
-      if (!todo) return
-
-      await window.floatingNavigatorAPI!.todos.toggleComplete(id)
-
-      // Optimistically update local state
-      setTodos((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-      )
-    } catch (err) {
-      log.error('Failed to toggle todo:', err)
-      // Reload to get correct state
-      loadTodos()
+  /**
+   * Handle task edit - uses oRPC mutation
+   */
+  const handleTaskEdit = (id: string, title: string) => {
+    const todoId = parseInt(id, 10)
+    if (!isNaN(todoId)) {
+      updateMutation.mutate({ id: todoId, data: { text: title } })
     }
   }
 
-  const handleTaskCreate = async (title: string) => {
-    if (!isFloatingNavigator) return
-
-    try {
-      const newTodo =
-        await window.floatingNavigatorAPI!.todos.quickCreate(title)
-
-      // Add to local state
-      setTodos((prev) => [
-        ...prev,
-        {
-          id: newTodo.id.toString(),
-          text: newTodo.text || newTodo.title,
-          completed: newTodo.completed,
-          createdAt: new Date(newTodo.createdAt),
-        },
-      ])
-    } catch (err) {
-      log.error('Failed to create todo:', err)
-      // Reload to get correct state
-      loadTodos()
+  /**
+   * Handle task delete - uses oRPC mutation
+   */
+  const handleTaskDelete = (id: string) => {
+    const todoId = parseInt(id, 10)
+    if (!isNaN(todoId)) {
+      deleteMutation.mutate({ id: todoId })
     }
   }
 
-  const handleTaskEdit = async (id: string, title: string) => {
-    if (!isFloatingNavigator) return
+  // Transform todos to FloatingTodo format
+  const todos: FloatingTodo[] = (data?.todos ?? []).map((todo) => ({
+    id: todo.id.toString(),
+    text: todo.text,
+    completed: todo.completed,
+    createdAt: new Date(todo.createdAt),
+  }))
 
-    try {
-      await window.floatingNavigatorAPI!.todos.updateTodo(id, { title })
-
-      // Update local state
-      setTodos((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, text: title } : t)),
-      )
-    } catch (err) {
-      log.error('Failed to update todo:', err)
-      // Reload to get correct state
-      loadTodos()
-    }
-  }
-
-  const handleTaskDelete = async (id: string) => {
-    if (!isFloatingNavigator) return
-
-    try {
-      await window.floatingNavigatorAPI!.todos.deleteTodo(id)
-
-      // Remove from local state
-      setTodos((prev) => prev.filter((t) => t.id !== id))
-    } catch (err) {
-      log.error('Failed to delete todo:', err)
-      // Reload to get correct state
-      loadTodos()
-    }
-  }
-
+  // Show message if not in Electron floating navigator
   if (!isFloatingNavigator) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-background">
@@ -261,6 +202,7 @@ export function FloatingNavigatorContainer() {
     )
   }
 
+  // Show loading state
   if (isLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-background">
@@ -269,12 +211,18 @@ export function FloatingNavigatorContainer() {
     )
   }
 
+  // Show error state
   if (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to load tasks'
+
     return (
       <div className="flex h-full w-full flex-col items-center justify-center bg-background p-4">
-        <p className="mb-2 text-sm text-destructive">{error}</p>
+        <p className="mb-2 text-sm text-destructive">{errorMessage}</p>
         <button
-          onClick={loadTodos}
+          onClick={async () =>
+            queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+          }
           className="text-xs text-muted-foreground underline hover:text-foreground"
         >
           Retry

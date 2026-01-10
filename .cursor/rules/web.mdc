@@ -1,8 +1,0 @@
----
-alwaysApply: true
----
-
-# Playwright
-
-- use `pnpm start` for webServer
-- must run `pnpm build` before running the tests

@@ -45,8 +45,9 @@ if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
  * These are essential for app startup and must be available right away.
  */
 
-// Bridge for secure API communication between main and renderer processes
-const { APIBridge } = require('./api-bridge.cjs')
+// Note: APIBridge is no longer needed in WebView architecture
+// The Floating Navigator uses oRPC to communicate with https://corelive.app/
+// const { APIBridge } = require('./api-bridge.cjs')
 // Manages user preferences and application configuration
 const ConfigManager = require('./ConfigManager.cjs')
 // Handles IPC errors with retry logic to ensure reliable communication
@@ -56,8 +57,9 @@ const { lazyLoadManager } = require('./LazyLoadManager.cjs')
 const { log } = require('./logger.cjs')
 // Monitors memory usage to prevent leaks and optimize performance
 const { memoryProfiler } = require('./MemoryProfiler.cjs')
-// Manages the embedded Next.js server for serving the web application
-const { NextServerManager } = require('./next-server.cjs')
+// Note: NextServerManager is no longer needed in WebView architecture
+// The app loads https://corelive.app/ directly in production
+// const { NextServerManager } = require('./next-server.cjs')
 // Performance configuration based on environment (dev/prod)
 const {
   performanceOptimizer,
@@ -95,9 +97,8 @@ const config = OPTIMIZATION_LEVELS[optimizationLevel]
 let configManager // User preferences and app settings
 let windowStateManager // Window position/size persistence
 let windowManager // BrowserWindow lifecycle management
-let apiBridge // Secure IPC communication layer
 let ipcErrorHandler // Error handling with retry logic
-let nextServerManager // Embedded Next.js server
+// Note: apiBridge and nextServerManager are no longer needed in WebView architecture
 
 /**
  * Lazy-loaded managers - initialized only when needed.
@@ -132,8 +133,8 @@ let activeUser = null
  * @returns {DeepLinkManager|null} The initialized manager or null if dependencies aren't ready
  */
 function ensureDeepLinkManager() {
-  // Deep link manager requires window and API bridge to function
-  if (!windowManager || !apiBridge) {
+  // Deep link manager requires window manager to function
+  if (!windowManager) {
     return null
   }
 
@@ -142,7 +143,7 @@ function ensureDeepLinkManager() {
     const DeepLinkManager = require('./DeepLinkManager.cjs')
     deepLinkManager = new DeepLinkManager(
       windowManager,
-      apiBridge,
+      null, // apiBridge no longer used in WebView architecture
       notificationManager || null, // Notifications are optional
       app,
     )
@@ -294,45 +295,27 @@ function syncWindowBoundsToBrowserWindow(windowType = 'main') {
 }
 
 /**
- * Sets the currently authenticated user and syncs with the database.
+ * Sets the currently authenticated user.
  *
- * This bridges Clerk authentication (web-based) with our Electron app.
- * When a user signs in via Clerk in the renderer, we need to:
- * 1. Verify their identity in the main process
- * 2. Create/update their database record
- * 3. Enable user-specific features
- *
- * Why handle this in main process?
- * - Security: Main process has database access, renderer doesn't
- * - Single source of truth: User state managed centrally
- * - IPC security: Validates data before database operations
+ * In WebView architecture, authentication is handled by the web app (Clerk).
+ * This function simply stores the user info for Electron-side features
+ * (e.g., displaying in menu, notifications).
  *
  * @param {Object} userPayload - User data from Clerk authentication
  * @param {string} userPayload.clerkId - Unique Clerk user identifier
  * @returns {Promise<Object>} The active user object
- * @throws {Error} If API bridge not ready or invalid payload
  */
 async function setActiveUser(userPayload) {
-  if (!apiBridge) {
-    throw new Error('API bridge not initialized')
-  }
-
   // Validate payload to prevent security issues
   if (!userPayload || typeof userPayload !== 'object' || !userPayload.clerkId) {
     throw new Error('Invalid user payload: clerkId is required')
   }
 
-  // Sync with database (create if new user, update if existing)
-  const prismaUser = await apiBridge.setUserByClerkId(userPayload.clerkId)
-
-  // Transform database user to app user format
+  // Store user info (no database sync needed - handled by web app)
   activeUser = {
-    id: prismaUser.id,
-    clerkId: prismaUser.clerkId,
-    emailAddresses: prismaUser.email
-      ? [{ emailAddress: prismaUser.email }]
-      : [],
-    firstName: prismaUser.name || null,
+    clerkId: userPayload.clerkId,
+    emailAddresses: userPayload.emailAddresses || [],
+    firstName: userPayload.firstName || null,
   }
   return activeUser
 }
@@ -474,6 +457,8 @@ async function createWindow() {
     windowStateManager = new WindowStateManager(configManager)
 
     // Resolve server URL
+    // In production: loads https://corelive.app/ (via WindowManager default)
+    // In development/test: uses local dev server
     let serverUrl = process.env.ELECTRON_DEV_SERVER_URL
 
     // In test environment, always use external server if available
@@ -482,15 +467,12 @@ async function createWindow() {
     }
 
     // In development, use external Next dev server when provided by scripts/dev.js
-    if (!serverUrl) {
-      // Initialize internal Next.js server (used in production or if external not provided)
-      nextServerManager = new NextServerManager()
-      serverUrl = await nextServerManager.start()
+    // In production, serverUrl stays null and WindowManager loads https://corelive.app/
+    if (isDev && !serverUrl) {
+      serverUrl = 'http://localhost:3011'
     }
 
-    // Initialize API bridge (skip in test mode to avoid DB issues)
-    apiBridge = new APIBridge()
-    await apiBridge.initialize()
+    // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 
     // Initialize window manager with server URL and managers
     windowManager = new WindowManager(
@@ -688,276 +670,7 @@ function setupIPCHandlers() {
     app.quit()
   })
 
-  // Todo operation IPC handlers - connected to API bridge with error handling
-  ipcMain.handle(
-    'todo-get-all',
-    ipcErrorHandler.wrapHandler(
-      async (_event, options = {}) => {
-        if (!apiBridge) {
-          throw new Error('API bridge not initialized')
-        }
-
-        const filters = options && typeof options === 'object' ? options : {}
-
-        return apiBridge.listTodos({
-          completed:
-            typeof filters.completed === 'boolean'
-              ? filters.completed
-              : undefined,
-          limit:
-            typeof filters.limit === 'number' && filters.limit > 0
-              ? filters.limit
-              : 100,
-          offset:
-            typeof filters.offset === 'number' && filters.offset >= 0
-              ? filters.offset
-              : 0,
-        })
-      },
-      {
-        channel: 'todo-get-all',
-        operationType: 'getTodos',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'todo-get-by-id',
-    ipcErrorHandler.wrapHandler(
-      async (_event, id) => {
-        if (id === undefined || id === null) {
-          throw new Error('Todo ID is required')
-        }
-        if (!apiBridge) {
-          throw new Error('API bridge not initialized')
-        }
-        return apiBridge.getTodoById(id)
-      },
-      {
-        channel: 'todo-get-by-id',
-        operationType: 'getTodo',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'todo-create',
-    ipcErrorHandler.wrapHandler(
-      async (_event, todoData) => {
-        if (!todoData || typeof todoData !== 'object') {
-          throw new Error('Invalid todo data')
-        }
-
-        const validation = ipcErrorHandler.validateInput(todoData.text, {
-          type: 'string',
-          required: true,
-        })
-
-        if (!validation.isValid) {
-          throw new Error(`Invalid todo text: ${validation.error}`)
-        }
-
-        if (!apiBridge) {
-          throw new Error('API bridge not initialized')
-        }
-
-        const newTodo = await apiBridge.createTodo(todoData)
-
-        // Show notification for task creation (with error handling)
-        try {
-          if (notificationManager) {
-            notificationManager.showTaskCreatedNotification(newTodo)
-          }
-        } catch (notificationError) {
-          ipcErrorHandler.logWarning(
-            'Failed to show task creation notification',
-            {
-              error: notificationError.message,
-              todoId: newTodo?.id,
-            },
-          )
-        }
-
-        // Send event to main window
-        try {
-          if (windowManager && windowManager.hasMainWindow()) {
-            windowManager
-              .getMainWindow()
-              .webContents.send('todo-created', newTodo)
-          }
-
-          // Send event to floating navigator window if it exists
-          const floatingWindow = windowManager?.getFloatingNavigator?.()
-          if (floatingWindow && !floatingWindow.isDestroyed()) {
-            floatingWindow.webContents.send('todo-created', newTodo)
-          }
-        } catch (eventError) {
-          ipcErrorHandler.logWarning(
-            'Failed to send todo-created event to windows',
-            {
-              error: eventError.message,
-              todoId: newTodo?.id,
-            },
-          )
-        }
-
-        return newTodo
-      },
-      {
-        channel: 'todo-create',
-        operationType: 'createTodo',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'todo-update',
-    ipcErrorHandler.wrapHandler(
-      async (_event, id, updates) => {
-        if (id === undefined || id === null) {
-          throw new Error('Todo ID is required')
-        }
-
-        if (!updates || typeof updates !== 'object') {
-          throw new Error('Invalid update data')
-        }
-
-        if (!apiBridge) {
-          throw new Error('API bridge not initialized')
-        }
-
-        const updatedTodo = await apiBridge.updateTodo(id, updates)
-
-        // Show appropriate notification based on what was updated (with error handling)
-        try {
-          if (notificationManager) {
-            if (updates.hasOwnProperty('completed')) {
-              notificationManager.showTaskCompletedNotification(updatedTodo)
-            } else {
-              notificationManager.showTaskUpdatedNotification(
-                updatedTodo,
-                updates,
-              )
-            }
-          }
-        } catch (notificationError) {
-          ipcErrorHandler.logWarning(
-            'Failed to show task update notification',
-            {
-              error: notificationError.message,
-              todoId: updatedTodo?.id,
-            },
-          )
-        }
-
-        // Send event to main window
-        try {
-          if (windowManager && windowManager.hasMainWindow()) {
-            windowManager
-              .getMainWindow()
-              .webContents.send('todo-updated', updatedTodo)
-          }
-
-          // Send event to floating navigator window if it exists
-          const floatingWindow = windowManager?.getFloatingNavigator?.()
-          if (floatingWindow && !floatingWindow.isDestroyed()) {
-            floatingWindow.webContents.send('todo-updated', updatedTodo)
-          }
-        } catch (eventError) {
-          ipcErrorHandler.logWarning(
-            'Failed to send todo-updated event to windows',
-            {
-              error: eventError.message,
-              todoId: updatedTodo?.id,
-            },
-          )
-        }
-
-        return updatedTodo
-      },
-      {
-        channel: 'todo-update',
-        operationType: 'updateTodo',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'todo-delete',
-    ipcErrorHandler.wrapHandler(
-      async (_event, id) => {
-        if (id === undefined || id === null) {
-          throw new Error('Todo ID is required')
-        }
-
-        if (!apiBridge) {
-          throw new Error('API bridge not initialized')
-        }
-
-        // Get todo before deletion for notification (with error handling)
-        let todoToDelete = null
-        try {
-          todoToDelete = await apiBridge.getTodoById(id)
-        } catch (error) {
-          ipcErrorHandler.logWarning('Failed to get todo before deletion', {
-            error: error.message,
-            todoId: id,
-          })
-        }
-
-        const result = await apiBridge.deleteTodo(id)
-
-        // Show notification for task deletion (with error handling)
-        try {
-          if (notificationManager && todoToDelete) {
-            notificationManager.showTaskDeletedNotification(todoToDelete)
-          }
-        } catch (notificationError) {
-          ipcErrorHandler.logWarning(
-            'Failed to show task deletion notification',
-            {
-              error: notificationError.message,
-              todoId: id,
-            },
-          )
-        }
-
-        // Send event to main window
-        try {
-          if (windowManager && windowManager.hasMainWindow()) {
-            windowManager
-              .getMainWindow()
-              .webContents.send('todo-deleted', { id, ...result })
-          }
-
-          // Send event to floating navigator window if it exists
-          const floatingWindow = windowManager?.getFloatingNavigator?.()
-          if (floatingWindow && !floatingWindow.isDestroyed()) {
-            floatingWindow.webContents.send('todo-deleted', { id, ...result })
-          }
-        } catch (eventError) {
-          ipcErrorHandler.logWarning(
-            'Failed to send todo-deleted event to windows',
-            {
-              error: eventError.message,
-              todoId: id,
-            },
-          )
-        }
-
-        return result
-      },
-      {
-        channel: 'todo-delete',
-        operationType: 'deleteTodo',
-        enableDegradation: true,
-      },
-    ),
-  )
+  // Note: Todo IPC handlers removed - Floating Navigator uses oRPC via web app
 
   // Window management IPC handlers with error handling
   ipcMain.handle(
@@ -1446,9 +1159,6 @@ function setupIPCHandlers() {
 
   ipcMain.handle('auth-logout', async () => {
     activeUser = null
-    if (apiBridge) {
-      apiBridge.clearActiveUser()
-    }
     return true
   })
 
@@ -1523,114 +1233,7 @@ function setupIPCHandlers() {
     }
   })
 
-  // Quick todo operations for floating navigator
-  ipcMain.handle('todo-quick-create', async (_event, todoData) => {
-    try {
-      if (!todoData || typeof todoData !== 'object') {
-        throw new Error('Invalid todo data')
-      }
-
-      const text = todoData.text || todoData.title
-      if (!text || typeof text !== 'string') {
-        throw new Error('Todo text is required')
-      }
-
-      const normalizedData = {
-        text,
-        notes: todoData.notes ?? null,
-      }
-
-      if (!apiBridge) {
-        throw new Error('API bridge not initialized')
-      }
-
-      const quickTodo = await apiBridge.createTodo(normalizedData)
-
-      if (notificationManager) {
-        notificationManager.showTaskCreatedNotification(quickTodo)
-      }
-
-      // Send event to main window
-      if (windowManager && windowManager.hasMainWindow()) {
-        windowManager
-          .getMainWindow()
-          .webContents.send('todo-created', quickTodo)
-      }
-
-      // Send event to floating navigator window if it exists
-      const floatingWindow = windowManager?.getFloatingNavigator?.()
-      if (floatingWindow && !floatingWindow.isDestroyed()) {
-        floatingWindow.webContents.send('todo-created', quickTodo)
-      }
-
-      return quickTodo
-    } catch (error) {
-      log.error('Failed to quick create todo:', error)
-      throw new Error('Failed to create todo')
-    }
-  })
-
-  ipcMain.handle('todo-toggle-complete', async (_event, id) => {
-    try {
-      if (id === undefined || id === null) {
-        throw new Error('Invalid todo ID')
-      }
-
-      if (!apiBridge) {
-        throw new Error('API bridge not initialized')
-      }
-
-      const updatedTodo = await apiBridge.toggleTodo(id)
-
-      if (notificationManager) {
-        notificationManager.showTaskCompletedNotification(updatedTodo)
-      }
-
-      // Send event to main window
-      if (windowManager && windowManager.hasMainWindow()) {
-        windowManager
-          .getMainWindow()
-          .webContents.send('todo-updated', updatedTodo)
-      }
-
-      // Send event to floating navigator window if it exists
-      const floatingWindow = windowManager?.getFloatingNavigator?.()
-      if (floatingWindow && !floatingWindow.isDestroyed()) {
-        floatingWindow.webContents.send('todo-updated', updatedTodo)
-      }
-
-      return updatedTodo
-    } catch (error) {
-      log.error('Failed to toggle todo completion:', error)
-      throw new Error('Failed to toggle todo')
-    }
-  })
-
-  ipcMain.handle('todo-clear-completed', async () => {
-    try {
-      if (!apiBridge) {
-        throw new Error('API bridge not initialized')
-      }
-
-      const result = await apiBridge.clearCompleted()
-
-      // Send event to main window
-      if (windowManager && windowManager.hasMainWindow()) {
-        windowManager.getMainWindow().webContents.send('todo-deleted', result)
-      }
-
-      // Send event to floating navigator window if it exists
-      const floatingWindow = windowManager?.getFloatingNavigator?.()
-      if (floatingWindow && !floatingWindow.isDestroyed()) {
-        floatingWindow.webContents.send('todo-deleted', result)
-      }
-
-      return result
-    } catch (error) {
-      log.error('Failed to clear completed todos:', error)
-      throw new Error('Failed to clear completed todos')
-    }
-  })
+  // Note: Quick todo operations removed - Floating Navigator uses oRPC via web app
 }
 
 /**
@@ -1776,15 +1379,7 @@ app.on('before-quit', async () => {
     ipcErrorHandler.cleanup()
   }
 
-  // Data layer (critical - must complete)
-  if (apiBridge) {
-    await apiBridge.disconnect() // Close database connections
-  }
-
-  // Server shutdown
-  if (nextServerManager) {
-    await nextServerManager.stop() // Stop Next.js server
-  }
+  // Note: apiBridge cleanup removed - no local database in WebView architecture
 
   // Final performance cleanup
   lazyLoadManager.cleanup()

@@ -47,12 +47,8 @@ const ALLOWED_CHANNELS = {
   'ipc-error-stats': true,
   'ipc-error-health-check': true,
   'ipc-error-reset-stats': true,
-  // Todo operations
-  'todo-get-all': true,
-  'todo-create': true,
-  'todo-update': true,
-  'todo-delete': true,
-  'todo-get-by-id': true,
+
+  // Note: Todo operations removed - WebView architecture uses oRPC via HTTP
 
   // Authentication operations
   'auth-get-user': true,
@@ -141,9 +137,7 @@ const ALLOWED_CHANNELS = {
   'app-update-available': true,
   'app-update-downloaded': true,
   'updater-message': true,
-  'todo-updated': true,
-  'todo-created': true,
-  'todo-deleted': true,
+  // Note: todo event channels removed - WebView architecture uses oRPC
   'auth-state-changed': true,
   'focus-task': true,
   'mark-task-complete': true,
@@ -212,139 +206,10 @@ function sanitizeData(data) {
  */
 contextBridge.exposeInMainWorld('electronAPI', {
   /**
-   * Todo Operations
-   *
-   * Provides CRUD operations for todo items.
-   * All operations go through IPC to the main process
-   * where the actual database operations happen.
+   * Note: Todo operations removed - WebView architecture uses oRPC via HTTP.
+   * The web app (loaded in WebView) handles all data operations through
+   * the same oRPC client used by the browser version.
    */
-  todos: {
-    /**
-     * Retrieves all todos with optional filtering.
-     * @param {Object} options - Filter options (completed, limit, offset)
-     * @returns {Promise<Array>} Array of todo items
-     */
-    getTodos: async (options = {}) => {
-      try {
-        return await ipcRenderer.invoke('todo-get-all', sanitizeData(options))
-      } catch (error) {
-        log.error('Failed to get todos:', error)
-        throw new Error('Failed to retrieve todos')
-      }
-    },
-
-    /**
-     * Get todo by ID
-     */
-    getTodoById: async (id) => {
-      if (!id) {
-        throw new Error('Invalid todo ID')
-      }
-      try {
-        return await ipcRenderer.invoke('todo-get-by-id', sanitizeData(id))
-      } catch (error) {
-        log.error('Failed to get todo:', error)
-        throw new Error('Failed to retrieve todo')
-      }
-    },
-
-    /**
-     * Create new todo
-     */
-    createTodo: async (todoData) => {
-      if (!todoData || typeof todoData !== 'object') {
-        throw new Error('Invalid todo data')
-      }
-
-      const sanitizedData = sanitizeData(todoData)
-
-      // Validate required fields
-      if (!sanitizedData.text || typeof sanitizedData.text !== 'string') {
-        throw new Error('Todo text is required')
-      }
-
-      try {
-        return await ipcRenderer.invoke('todo-create', sanitizedData)
-      } catch (error) {
-        log.error('Failed to create todo:', error)
-        throw new Error('Failed to create todo')
-      }
-    },
-
-    /**
-     * Update existing todo
-     */
-    updateTodo: async (id, updates) => {
-      if (!id) {
-        throw new Error('Invalid todo ID')
-      }
-      if (!updates || typeof updates !== 'object') {
-        throw new Error('Invalid update data')
-      }
-
-      const sanitizedId = sanitizeData(id)
-      const sanitizedUpdates = sanitizeData(updates)
-
-      try {
-        return await ipcRenderer.invoke(
-          'todo-update',
-          sanitizedId,
-          sanitizedUpdates,
-        )
-      } catch (error) {
-        log.error('Failed to update todo:', error)
-        throw new Error('Failed to update todo')
-      }
-    },
-
-    /**
-     * Delete todo
-     */
-    deleteTodo: async (id) => {
-      if (!id) {
-        throw new Error('Invalid todo ID')
-      }
-
-      const sanitizedId = sanitizeData(id)
-
-      try {
-        return await ipcRenderer.invoke('todo-delete', sanitizedId)
-      } catch (error) {
-        log.error('Failed to delete todo:', error)
-        throw new Error('Failed to delete todo')
-      }
-    },
-
-    /**
-     * Toggle todo completion state
-     */
-    toggleTodo: async (id) => {
-      if (!id) {
-        throw new Error('Invalid todo ID')
-      }
-
-      const sanitizedId = sanitizeData(id)
-
-      try {
-        return await ipcRenderer.invoke('todo-toggle-complete', sanitizedId)
-      } catch (error) {
-        log.error('Failed to toggle todo:', error)
-        throw new Error('Failed to toggle todo')
-      }
-    },
-
-    /**
-     * Clear completed todos
-     */
-    clearCompleted: async () => {
-      try {
-        return await ipcRenderer.invoke('todo-clear-completed')
-      } catch (error) {
-        log.error('Failed to clear completed todos:', error)
-        throw new Error('Failed to clear completed todos')
-      }
-    },
-  },
 
   // Window control APIs
   window: {
