@@ -1,6 +1,8 @@
 'use client'
 
-import { SignIn as Login } from '@clerk/nextjs'
+import { SignIn as Login, useUser } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 
 import {
   ElectronOAuthButtons,
@@ -20,6 +22,24 @@ import {
  */
 export default function Page() {
   const showElectronOAuth = useShowElectronOAuth()
+  const { user, isLoaded } = useUser()
+  const router = useRouter()
+
+  // Redirect to home if user is already authenticated
+  useEffect(() => {
+    if (isLoaded && user) {
+      router.replace('/home')
+    }
+  }, [user, isLoaded, router])
+
+  // Show loading while checking auth or redirecting
+  if (!isLoaded || user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center">
