@@ -254,6 +254,14 @@ export class ElectronTestHelper {
             syncError,
           )
         }
+
+        // Wait for Clerk session to be fully ready for API calls
+        const sessionReady = await this.waitForClerkSession(page)
+        if (!sessionReady) {
+          log.warn(
+            '[electron-test] Clerk session not ready, API calls may fail',
+          )
+        }
       }
 
       return isAuthenticated
@@ -262,6 +270,51 @@ export class ElectronTestHelper {
       console.error('Electron authentication error:', error)
       return false
     }
+  }
+
+  /**
+   * Wait for Clerk session to be fully loaded and accessible.
+   * The oRPC client needs window.Clerk.session or window.Clerk.user to be available
+   * for authenticated API calls.
+   *
+   * @param page - Playwright page
+   * @param timeoutMs - Maximum time to wait (default: 15 seconds)
+   * @returns true if session is ready, false if timeout
+   */
+  static async waitForClerkSession(
+    page: Page,
+    timeoutMs = 15_000,
+  ): Promise<boolean> {
+    const start = Date.now()
+
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const hasSession = await page.evaluate(() => {
+          const clerk = (window as unknown as { Clerk?: unknown }).Clerk as
+            | {
+                session?: { user?: { id?: string } }
+                user?: { id?: string }
+              }
+            | undefined
+          if (!clerk) return false
+
+          const userId = clerk.session?.user?.id ?? clerk.user?.id
+          return Boolean(userId)
+        })
+
+        if (hasSession) {
+          log.debug('[electron-test] Clerk session is ready')
+          return true
+        }
+
+        await page.waitForTimeout(500)
+      } catch {
+        await page.waitForTimeout(500)
+      }
+    }
+
+    log.warn('[electron-test] Clerk session not ready after timeout')
+    return false
   }
 
   private static async waitForHttpServer(
@@ -772,15 +825,28 @@ export class ElectronTestHelper {
   static async testCompleteTaskWorkflow(page: Page): Promise<string> {
     const taskName = `WorkflowTest-${Date.now()}`
 
+    // Ensure Clerk session is ready for API calls
+    const sessionReady = await this.waitForClerkSession(page, 10_000)
+    if (!sessionReady) {
+      log.warn(
+        '[electron-test] Clerk session not ready in testCompleteTaskWorkflow, task creation may fail',
+      )
+    }
+
+    // Wait for the todo input to be ready
+    const todoInput = page.getByPlaceholder(/enter.*todo/i)
+    await expect(todoInput).toBeVisible({ timeout: 10_000 })
+
     // Create task
-    await page.getByPlaceholder(/enter.*todo/i).fill(taskName)
-
+    await todoInput.fill(taskName)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
-    await page.waitForTimeout(500)
 
-    // Verify task appears
+    // Wait for API call and UI update
+    await page.waitForTimeout(1000)
+
+    // Verify task appears with longer timeout for slow CI environments
     await expect(page.getByText(taskName, { exact: true })).toBeVisible({
-      timeout: 15_000,
+      timeout: 20_000,
     })
 
     // Complete task
@@ -803,8 +869,15 @@ export class ElectronTestHelper {
     taskName: string,
   ): Promise<boolean> {
     try {
+      // Ensure Clerk session is ready before creating tasks
+      await this.waitForClerkSession(mainWindow, 10_000)
+
+      // Wait for the todo input to be ready
+      const todoInput = mainWindow.getByPlaceholder(/enter.*todo/i)
+      await todoInput.waitFor({ state: 'visible', timeout: 10_000 })
+
       // Create task in main window
-      await mainWindow.getByPlaceholder(/enter.*todo/i).fill(taskName)
+      await todoInput.fill(taskName)
       await mainWindow.getByRole('button', { name: 'Add', exact: true }).click()
       await mainWindow.waitForTimeout(2000)
 
