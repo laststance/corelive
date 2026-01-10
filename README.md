@@ -115,10 +115,7 @@ pnpm electron
 ### Building Desktop App
 
 ```bash
-# Build for macOS (default)
-pnpm electron:build
-
-# Build for macOS explicitly
+# Build for macOS
 pnpm electron:build:mac
 ```
 

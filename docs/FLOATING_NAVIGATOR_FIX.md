@@ -104,7 +104,7 @@ To verify the fix:
 1. **Build and run:**
 
    ```bash
-   pnpm electron:build
+   pnpm electron:build:mac
    pnpm electron
    ```
 

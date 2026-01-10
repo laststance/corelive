@@ -49,9 +49,6 @@ APPLE_CERTIFICATES_PASSWORD=certificate_password
 ```bash
 # Start both Next.js and Electron in development mode
 pnpm electron:dev
-
-# Or use the legacy concurrent approach
-pnpm electron:dev:legacy
 ```
 
 The development script will:
@@ -73,10 +70,7 @@ The development script will:
 ### Quick Build Commands
 
 ```bash
-# Build for macOS (default)
-pnpm electron:build
-
-# Build for macOS explicitly
+# Build for macOS
 pnpm electron:build:mac
 
 # Build directory only (for testing)
@@ -278,7 +272,7 @@ openssl pkcs12 -info -in certificate.p12
 
 ```bash
 # Enable debug logging
-DEBUG=electron-builder pnpm electron:build
+DEBUG=electron-builder pnpm electron:build:mac
 
 # Verbose Electron logging
 ELECTRON_ENABLE_LOGGING=1 pnpm electron:dev
