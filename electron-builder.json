@@ -14,6 +14,7 @@
     ".next/**/*",
     "electron/**/*",
     "node_modules/**/*",
+    "node_modules/.*/**/*",
     "package.json",
     "next.config.js",
     "public/**/*",
@@ -42,6 +43,18 @@
     {
       "from": "public",
       "to": "public",
+      "filter": ["**/*"]
+    }
+  ],
+  "asarUnpack": [
+    "**/node_modules/@prisma/**",
+    "**/node_modules/@img/**",
+    "**/node_modules/@next/**/*.node"
+  ],
+  "extraFiles": [
+    {
+      "from": "node_modules/.prisma",
+      "to": "Resources/app.asar.unpacked/node_modules/.prisma",
       "filter": ["**/*"]
     }
   ],
