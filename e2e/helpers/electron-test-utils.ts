@@ -208,10 +208,17 @@ export class ElectronTestHelper {
           })
 
           if (!clerkUser?.clerkId) {
+            log.debug(
+              '[electron-test] window.Clerk user not available, trying backend API',
+            )
             try {
               const secretKey = process.env.CLERK_SECRET_KEY
               if (secretKey) {
                 const clerkClient = createClerkClient({ secretKey })
+                log.debug('[electron-test] Looking up user via Clerk backend', {
+                  email,
+                  username,
+                })
                 const userList = await clerkClient.users.getUserList({
                   emailAddress: [email].filter((e): e is string => Boolean(e)),
                   username: [username].filter((u): u is string => Boolean(u)),
@@ -226,7 +233,17 @@ export class ElectronTestHelper {
                     firstName: backendUser.firstName || null,
                     lastName: backendUser.lastName || null,
                   }
+                  log.debug(
+                    '[electron-test] Found user via Clerk backend',
+                    clerkUser.clerkId,
+                  )
+                } else {
+                  log.warn('[electron-test] No user found via Clerk backend')
                 }
+              } else {
+                log.warn(
+                  '[electron-test] CLERK_SECRET_KEY not set, cannot use backend API',
+                )
               }
             } catch (backendError) {
               console.warn(
@@ -237,6 +254,7 @@ export class ElectronTestHelper {
           }
 
           if (clerkUser?.clerkId) {
+            // Sync user to Electron main process
             const setResult = await page.evaluate(async (user) => {
               try {
                 return await window.electronAPI?.auth?.setUser(user)
@@ -247,6 +265,28 @@ export class ElectronTestHelper {
             }, clerkUser)
 
             log.debug('[electron-test] setUser result', setResult)
+
+            // Inject user data into window.Clerk for oRPC client
+            // The oRPC client checks window.Clerk.session?.user?.id or window.Clerk.user?.id
+            await page.evaluate((user) => {
+              const win = window as unknown as {
+                Clerk?: {
+                  user?: { id?: string }
+                  session?: { user?: { id?: string } }
+                  load?: () => Promise<void>
+                }
+              }
+              if (!win.Clerk) {
+                win.Clerk = {}
+              }
+              // Set user data that oRPC client can access
+              win.Clerk.user = { id: user.clerkId }
+              win.Clerk.session = { user: { id: user.clerkId } }
+              // Provide a no-op load function
+              win.Clerk.load = async () => {}
+            }, clerkUser)
+
+            log.debug('[electron-test] Injected Clerk user for oRPC client')
           }
         } catch (syncError) {
           console.warn(
@@ -256,7 +296,8 @@ export class ElectronTestHelper {
         }
 
         // Wait for Clerk session to be fully ready for API calls
-        const sessionReady = await this.waitForClerkSession(page)
+        // Now that we've injected the user, this should succeed immediately
+        const sessionReady = await this.waitForClerkSession(page, 5_000)
         if (!sessionReady) {
           log.warn(
             '[electron-test] Clerk session not ready, API calls may fail',
