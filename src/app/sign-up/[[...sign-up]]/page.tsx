@@ -2,33 +2,31 @@
 
 import { SignUp } from '@clerk/nextjs'
 
-import {
-  ElectronOAuthButtons,
-  useShowElectronOAuth,
-} from '@/components/auth/ElectronOAuthButtons'
+import { useIsElectron } from '@/components/auth/ElectronLoginForm'
+import { ElectronSignUpForm } from '@/components/auth/ElectronSignUpForm'
 
 /**
- * Sign Up Page with Electron OAuth Support
+ * Sign Up Page with Electron Email/Password Support
  *
  * In web browsers: Shows Clerk's standard SignUp component
- * In Electron: Shows custom OAuth buttons that open system browser
+ * In Electron: Shows email/password form with Google OAuth fallback
  *
  * Why special handling for Electron?
- * - Google OAuth blocks WebView authentication (403: disallowed_useragent)
- * - Must use system browser for OAuth in desktop apps
- * - Deep link callback returns user to Electron after auth
+ * - Email/password works directly in Electron WebView (no browser needed)
+ * - Google OAuth requires system browser (blocks WebView)
+ * - GitHub removed: email/password provides simpler desktop experience
  */
 export default function Page() {
-  const showElectronOAuth = useShowElectronOAuth()
+  const isElectron = useIsElectron()
 
   return (
     <div className="grid h-screen place-items-center">
-      {showElectronOAuth ? (
+      {isElectron ? (
         <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-lg">
           <h1 className="mb-6 text-center text-2xl font-semibold text-gray-900">
             Create your account
           </h1>
-          <ElectronOAuthButtons />
+          <ElectronSignUpForm />
           <div className="mt-6 border-t pt-4">
             <p className="text-center text-xs text-gray-500">
               Already have an account?{' '}
