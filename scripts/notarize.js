@@ -23,7 +23,7 @@ export default async function notarizing(context) {
 
   try {
     await notarize({
-      appBundleId: 'com.corelive.todoapp',
+      appBundleId: 'com.corelive.app',
       appPath: `${appOutDir}/${appName}.app`,
       appleId: appleId,
       appleIdPassword: appleIdPassword,
