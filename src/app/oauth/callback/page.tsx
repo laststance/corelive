@@ -106,7 +106,7 @@ function OAuthCallbackContent() {
   }, [searchParams])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 p-4">
+    <div className="bg-linear-to-b flex min-h-screen flex-col items-center justify-center from-gray-50 to-gray-100 p-4">
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
         {(status === 'loading' || status === 'creating-token') && (
           <>
