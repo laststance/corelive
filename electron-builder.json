@@ -6,7 +6,7 @@
     "output": "dist-electron",
     "buildResources": "build"
   },
-  "icon": "build/icons/icon-512x512.png",
+  "icon": "build/icons/icon.icns",
   "nodeGypRebuild": false,
   "npmRebuild": false,
   "buildDependenciesFromSource": false,
@@ -77,7 +77,7 @@
     "notarize": false,
     "type": "distribution",
     "minimumSystemVersion": "10.15.0",
-    "icon": "build/icons/icon-1024x1024.png"
+    "icon": "build/icons/icon.icns"
   },
   "dmg": {
     "contents": [
