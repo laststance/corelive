@@ -137,13 +137,33 @@ export function ElectronAuthProvider({
           )
         }
       } catch (error) {
-        log.error('Failed to exchange sign-in token for session:', error)
-        // Dispatch error event to reset OAuth button loading state
-        const errorMessage =
-          error instanceof Error ? error.message : 'Token exchange failed'
-        window.dispatchEvent(
-          new CustomEvent('electron-oauth-error', { detail: errorMessage }),
+        // Check if error is "session_exists" - this means user is already logged in
+        // This can happen when the WebView already has an active Clerk session
+        const clerkError = error as { errors?: Array<{ code?: string }> }
+        const isSessionExists = clerkError?.errors?.some(
+          (e) => e.code === 'session_exists',
         )
+
+        if (isSessionExists) {
+          // User is already logged in - treat this as success
+          log.info(
+            '[OAuth] Session already exists - user is already authenticated',
+          )
+          // Clear any pending token in main process
+          await window.electronAPI?.oauth?.clearPendingToken()
+          // Refresh the page to ensure the UI shows the authenticated state
+          // This handles the case where the login page was shown but the session exists
+          log.info('[OAuth] Refreshing page to show authenticated state')
+          window.location.reload()
+        } else {
+          log.error('Failed to exchange sign-in token for session:', error)
+          // Dispatch error event to reset OAuth button loading state
+          const errorMessage =
+            error instanceof Error ? error.message : 'Token exchange failed'
+          window.dispatchEvent(
+            new CustomEvent('electron-oauth-error', { detail: errorMessage }),
+          )
+        }
       } finally {
         isProcessingToken.current = false
       }
