@@ -132,6 +132,14 @@ interface ElectronAPI {
         provider: string
       }) => void,
     ) => () => void
+    /**
+     * Register callback for Clerk sign-in token from browser OAuth.
+     * This token allows the WebView to create its own Clerk session
+     * using signIn.create({ strategy: 'ticket', ticket: token }).
+     */
+    onSignInToken: (
+      callback: (data: { token: string; provider: string }) => void,
+    ) => () => void
   }
 
   // Configuration

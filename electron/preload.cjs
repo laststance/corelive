@@ -64,6 +64,7 @@ const ALLOWED_CHANNELS = {
   'oauth-success': true,
   'oauth-error': true,
   'oauth-complete-exchange': true,
+  'clerk-sign-in-token': true, // Sign-in token from browser OAuth for WebView session
 
   // Window operations
   'window-minimize': true,
@@ -873,6 +874,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('oauth-complete-exchange', wrappedCallback)
       return () =>
         ipcRenderer.removeListener('oauth-complete-exchange', wrappedCallback)
+    },
+
+    /**
+     * Register callback for Clerk sign-in token from browser OAuth.
+     * This token allows the WebView to create its own Clerk session
+     * using signIn.create({ strategy: 'ticket', ticket: token }).
+     *
+     * @param {function} callback - Function called with { token, provider }
+     * @returns {function} Cleanup function to remove the listener
+     */
+    onSignInToken: (callback) => {
+      if (typeof callback !== 'function') {
+        throw new Error('Callback must be a function')
+      }
+
+      const wrappedCallback = (_event, data) => {
+        try {
+          callback(sanitizeData(data))
+        } catch (error) {
+          log.error('Error in OAuth sign-in token callback:', error)
+        }
+      }
+
+      ipcRenderer.on('clerk-sign-in-token', wrappedCallback)
+      return () =>
+        ipcRenderer.removeListener('clerk-sign-in-token', wrappedCallback)
     },
   },
 

@@ -198,7 +198,10 @@ class OAuthManager {
   /**
    * Handles OAuth callback from deep link.
    *
-   * Called when app receives corelive://oauth/callback?code=...&state=...
+   * Called when app receives corelive://oauth/callback?state=...&token=...
+   *
+   * The token is a Clerk sign-in token that allows the WebView to create
+   * its own session (since browser and WebView have separate cookie storage).
    *
    * @param {URL} url - Parsed deep link URL
    * @returns {Promise<{success: boolean, user?: object, error?: string}>}
@@ -206,11 +209,13 @@ class OAuthManager {
   async handleOAuthCallback(url) {
     try {
       const state = url.searchParams.get('state')
+      const token = url.searchParams.get('token')
       const error = url.searchParams.get('error')
       const errorDescription = url.searchParams.get('error_description')
 
       log.info('🔐 Handling OAuth callback', {
         hasState: !!state,
+        hasToken: !!token,
         error,
       })
 
@@ -221,11 +226,19 @@ class OAuthManager {
         return { success: false, error: errorDescription || error }
       }
 
-      // Validate required parameters (only state needed - Clerk handles everything else)
+      // Validate required parameters
       if (!state) {
         log.error('❌ Missing state in OAuth callback')
         this.sendOAuthError('Invalid OAuth callback: missing state parameter')
         return { success: false, error: 'Missing state' }
+      }
+
+      if (!token) {
+        log.error('❌ Missing token in OAuth callback')
+        this.sendOAuthError(
+          'Invalid OAuth callback: missing authentication token',
+        )
+        return { success: false, error: 'Missing token' }
       }
 
       // Validate state and get pending flow data
@@ -247,11 +260,7 @@ class OAuthManager {
       // Remove state (one-time use)
       this.pendingStates.delete(state)
 
-      log.info('🔐 OAuth state validated, session created by Clerk')
-
-      // At this point, Clerk has already created a session on the web app side.
-      // The ElectronAuthProvider will automatically sync the auth state.
-      // We just need to notify the renderer that OAuth completed successfully.
+      log.info('🔐 OAuth state validated, sending sign-in token to WebView')
 
       // Focus the main window to bring app back to foreground
       if (this.windowManager && this.windowManager.hasMainWindow()) {
@@ -260,25 +269,39 @@ class OAuthManager {
         mainWindow.focus()
       }
 
-      // Notify renderer of successful authentication
-      // The web app's ElectronAuthProvider will handle the actual session sync
-      this.sendOAuthSuccess({ provider: pendingFlow.provider })
+      // Send the sign-in token to the WebView
+      // The WebView will use signIn.create({ strategy: 'ticket', ticket: token })
+      // to create a session in its own cookie storage
+      this.sendSignInToken(token, pendingFlow.provider)
 
-      // Show success notification
+      // Show notification (session completion happens in WebView)
       if (this.notificationManager) {
         this.notificationManager.showNotification(
-          'Signed In',
-          'Authentication successful! You are now signed in.',
-          { type: 'success' },
+          'Signing In',
+          'Completing authentication...',
+          { type: 'info' },
         )
       }
 
-      return { success: true, provider: pendingFlow.provider }
+      return { success: true, provider: pendingFlow.provider, token }
     } catch (error) {
       log.error('❌ Failed to handle OAuth callback:', error)
       this.sendOAuthError('Failed to complete sign-in. Please try again.')
       return { success: false, error: error.message }
     }
+  }
+
+  /**
+   * Sends the sign-in token to the WebView for session creation.
+   *
+   * The WebView will use Clerk's ticket strategy to create a session:
+   * signIn.create({ strategy: 'ticket', ticket: token })
+   *
+   * @param {string} token - Clerk sign-in token (sit_xxx)
+   * @param {string} provider - OAuth provider (google, github)
+   */
+  sendSignInToken(token, provider) {
+    this.sendToRenderer('clerk-sign-in-token', { token, provider })
   }
 
   /**
