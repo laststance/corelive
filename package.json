@@ -34,7 +34,7 @@
     "test:ui": "vitest --ui",
     "prettier": "prettier --ignore-unknown --write .",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf .next node_modules pnpm-lock.yaml tsconfig.tsbuildinfo",
+    "clean": "rimraf .next node_modules pnpm-lock.yaml tsconfig.tsbuildinfo dist-electron",
     "prepare": "husky",
     "prisma:migrate": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate dev",
     "prisma:status": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate status",

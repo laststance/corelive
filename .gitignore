@@ -14,8 +14,8 @@
 /out/
 next-env.d.ts
 
-# production
-/build
+# production (Next.js legacy, now uses .next/)
+# Note: /build is used for Electron build resources and is tracked in git
 
 # misc
 .DS_Store
