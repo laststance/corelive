@@ -183,10 +183,16 @@ export class ElectronTestHelper {
       })
 
       if (isAuthenticated) {
+        console.warn(
+          '[electron-test] Authenticated, attempting to get Clerk user',
+        )
         try {
           let clerkUser = await page.evaluate(async () => {
             const clerk = (window as any).Clerk
-            if (!clerk) return null
+            if (!clerk) {
+              console.warn('[electron-test] window.Clerk not available')
+              return null
+            }
 
             if (typeof clerk.load === 'function') {
               try {
@@ -197,8 +203,12 @@ export class ElectronTestHelper {
             }
 
             const user = clerk?.user
-            if (!user) return null
+            if (!user) {
+              console.warn('[electron-test] window.Clerk.user not available')
+              return null
+            }
 
+            console.warn('[electron-test] Found window.Clerk.user:', user.id)
             return {
               clerkId: user.id,
               email: user.primaryEmailAddress?.emailAddress || null,
@@ -208,17 +218,16 @@ export class ElectronTestHelper {
           })
 
           if (!clerkUser?.clerkId) {
-            log.debug(
+            console.warn(
               '[electron-test] window.Clerk user not available, trying backend API',
             )
             try {
               const secretKey = process.env.CLERK_SECRET_KEY
               if (secretKey) {
                 const clerkClient = createClerkClient({ secretKey })
-                log.debug('[electron-test] Looking up user via Clerk backend', {
-                  email,
-                  username,
-                })
+                console.warn(
+                  '[electron-test] Looking up user via Clerk backend',
+                )
                 const userList = await clerkClient.users.getUserList({
                   emailAddress: [email].filter((e): e is string => Boolean(e)),
                   username: [username].filter((u): u is string => Boolean(u)),
@@ -233,15 +242,17 @@ export class ElectronTestHelper {
                     firstName: backendUser.firstName || null,
                     lastName: backendUser.lastName || null,
                   }
-                  log.debug(
-                    '[electron-test] Found user via Clerk backend',
+                  console.warn(
+                    '[electron-test] Found user via Clerk backend:',
                     clerkUser.clerkId,
                   )
                 } else {
-                  log.warn('[electron-test] No user found via Clerk backend')
+                  console.warn(
+                    '[electron-test] No user found via Clerk backend',
+                  )
                 }
               } else {
-                log.warn(
+                console.warn(
                   '[electron-test] CLERK_SECRET_KEY not set, cannot use backend API',
                 )
               }
@@ -264,7 +275,7 @@ export class ElectronTestHelper {
               }
             }, clerkUser)
 
-            log.debug('[electron-test] setUser result', setResult)
+            console.warn('[electron-test] setUser result:', setResult)
 
             // Inject user data into window.Clerk for oRPC client
             // The oRPC client checks window.Clerk.session?.user?.id or window.Clerk.user?.id
@@ -284,9 +295,14 @@ export class ElectronTestHelper {
               win.Clerk.session = { user: { id: user.clerkId } }
               // Provide a no-op load function
               win.Clerk.load = async () => {}
+              console.warn('[electron-test] Injected Clerk user:', user.clerkId)
             }, clerkUser)
 
-            log.debug('[electron-test] Injected Clerk user for oRPC client')
+            console.warn('[electron-test] Clerk user injection complete')
+          } else {
+            console.warn(
+              '[electron-test] No clerkUser available, cannot inject for oRPC',
+            )
           }
         } catch (syncError) {
           console.warn(
@@ -299,9 +315,11 @@ export class ElectronTestHelper {
         // Now that we've injected the user, this should succeed immediately
         const sessionReady = await this.waitForClerkSession(page, 5_000)
         if (!sessionReady) {
-          log.warn(
+          console.warn(
             '[electron-test] Clerk session not ready, API calls may fail',
           )
+        } else {
+          console.warn('[electron-test] Clerk session is ready for API calls')
         }
       }
 
