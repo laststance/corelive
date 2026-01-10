@@ -105,7 +105,8 @@ describe('DeepLinkManager', () => {
       expect(mockApp.setAsDefaultProtocolClient).toHaveBeenCalledWith(
         'corelive',
       )
-      expect(mockApp.on).toHaveBeenCalledWith('open-url', expect.any(Function))
+      // Note: 'open-url' listener is registered in main.cjs BEFORE app.whenReady()
+      // for macOS early event handling. Only 'second-instance' is registered here.
       expect(mockApp.on).toHaveBeenCalledWith(
         'second-instance',
         expect.any(Function),
