@@ -135,6 +135,7 @@ describe('DeepLinkManager', () => {
         path: '/123',
         params: { priority: 'high' },
         hash: '',
+        originalUrl: 'corelive://task/123?priority=high',
       })
     })
 
@@ -154,6 +155,7 @@ describe('DeepLinkManager', () => {
         path: '/completed',
         params: {},
         hash: '',
+        originalUrl: 'corelive://view/completed',
       })
     })
   })
