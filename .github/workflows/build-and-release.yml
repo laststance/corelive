@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '22.17.1'
+  NODE_VERSION: '22.21.1'
 
 jobs:
   test:
@@ -107,6 +107,8 @@ jobs:
           path: |
             dist-electron/*.dmg
             dist-electron/*.zip
+            dist-electron/*.blockmap
+            dist-electron/latest-mac.yml
             dist-electron/checksums.json
           retention-days: 30
 
@@ -133,6 +135,8 @@ jobs:
           files: |
             artifacts/**/*.dmg
             artifacts/**/*.zip
+            artifacts/**/*.blockmap
+            artifacts/**/latest-mac.yml
             artifacts/**/checksums.json
           draft: false
           prerelease: false
