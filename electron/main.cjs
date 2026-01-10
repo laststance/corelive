@@ -1,23 +1,28 @@
 /**
  * @fileoverview Electron Main Process Entry Point
- * 
+ *
  * This is the main process file for the Electron application. In Electron architecture,
  * the main process is responsible for:
  * - Creating and managing application windows (BrowserWindow instances)
  * - Handling system-level events and native OS integrations
  * - Managing Inter-Process Communication (IPC) between main and renderer processes
  * - Controlling the application lifecycle
- * 
+ *
  * Why is this separation important?
  * - Security: Main process has full Node.js access, renderers are sandboxed
  * - Performance: Heavy operations run here don't block the UI
  * - Native features: Only main process can access OS-level APIs
- * 
+ *
  * @module electron/main
  */
 
-const { app, BrowserWindow, ipcMain, session } = require('electron')
-const notifier = require('node-notifier')
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  session,
+  Notification,
+} = require('electron')
 
 /**
  * Enable remote debugging for automated testing with Playwright.
@@ -36,7 +41,7 @@ const { log } = require('../src/lib/logger.cjs')
 
 /**
  * Module imports are strategically organized for performance optimization.
- * 
+ *
  * Critical modules (loaded immediately):
  * These are essential for app startup and must be available right away.
  */
@@ -79,7 +84,7 @@ const config = OPTIMIZATION_LEVELS[optimizationLevel]
 
 /**
  * Manager instances - organized by initialization strategy
- * 
+ *
  * Why use global references?
  * - Managers need to be accessible across different app lifecycle events
  * - Proper cleanup requires maintaining references for shutdown sequence
@@ -87,43 +92,43 @@ const config = OPTIMIZATION_LEVELS[optimizationLevel]
  */
 
 // Core managers - initialized during app startup
-let configManager        // User preferences and app settings
-let windowStateManager   // Window position/size persistence  
-let windowManager        // BrowserWindow lifecycle management
-let apiBridge           // Secure IPC communication layer
-let ipcErrorHandler     // Error handling with retry logic
-let nextServerManager   // Embedded Next.js server
+let configManager // User preferences and app settings
+let windowStateManager // Window position/size persistence
+let windowManager // BrowserWindow lifecycle management
+let apiBridge // Secure IPC communication layer
+let ipcErrorHandler // Error handling with retry logic
+let nextServerManager // Embedded Next.js server
 
 /**
  * Lazy-loaded managers - initialized only when needed.
  * This improves startup time by deferring non-critical features.
- * 
+ *
  * Why lazy load?
  * - Auto-updater isn't needed immediately on startup
  * - System tray might not be used by all users
  * - Notifications are event-driven, not needed at launch
  */
-let autoUpdater                    // Handles app updates
-let systemTrayManager              // System tray icon and menu
-let notificationManager            // OS-level notifications
-let shortcutManager               // Global keyboard shortcuts
-let systemIntegrationErrorHandler  // OS integration error handling
-let menuManager                   // Application menu bar
-let deepLinkManager               // Custom protocol URL handling
+let autoUpdater // Handles app updates
+let systemTrayManager // System tray icon and menu
+let notificationManager // OS-level notifications
+let shortcutManager // Global keyboard shortcuts
+let systemIntegrationErrorHandler // OS integration error handling
+let menuManager // Application menu bar
+let deepLinkManager // Custom protocol URL handling
 
 // Current authenticated user information
 let activeUser = null
 
 /**
  * Ensures the DeepLinkManager is initialized when needed.
- * 
+ *
  * Deep links allow the app to respond to custom protocol URLs (e.g., corelive://open/task/123).
  * This enables integration with web browsers and other applications.
- * 
+ *
  * Why lazy load?
  * - Not all app launches are triggered by deep links
  * - Reduces initial memory footprint and startup time
- * 
+ *
  * @returns {DeepLinkManager|null} The initialized manager or null if dependencies aren't ready
  */
 function ensureDeepLinkManager() {
@@ -153,11 +158,11 @@ function ensureDeepLinkManager() {
 
 /**
  * Ensures WindowStateManager is available before use.
- * 
+ *
  * Window state persistence is critical for user experience - users expect
  * windows to appear where they left them. This helper prevents crashes
  * if state management is accessed before initialization.
- * 
+ *
  * @returns {WindowStateManager} The initialized window state manager
  * @throws {Error} If manager hasn't been initialized yet
  */
@@ -170,11 +175,11 @@ function ensureWindowStateManagerInstance() {
 
 /**
  * Retrieves a BrowserWindow instance by type, creating it if necessary.
- * 
+ *
  * Electron apps can have multiple windows with different purposes:
  * - Main window: Primary application interface
  * - Floating window: Always-on-top utility window for quick access
- * 
+ *
  * @param {string} windowType - Type of window to retrieve ('main' or 'floating')
  * @returns {BrowserWindow|null} The requested window or null if unavailable
  */
@@ -207,15 +212,15 @@ function getBrowserWindowForType(windowType = 'main') {
 
 /**
  * Synchronizes saved window state (position, size, etc.) to actual BrowserWindow.
- * 
+ *
  * This function is crucial for user experience continuity. When users reposition
  * or resize windows, we save that state and restore it on next app launch.
- * 
+ *
  * Why is this important?
  * - Users often have specific screen layouts (multi-monitor setups)
  * - Restoring window positions saves users time reconfiguring
  * - Provides a native app feel vs web apps that always start fresh
- * 
+ *
  * @param {string} windowType - Type of window to sync ('main' or 'floating')
  */
 function syncWindowBoundsToBrowserWindow(windowType = 'main') {
@@ -290,18 +295,18 @@ function syncWindowBoundsToBrowserWindow(windowType = 'main') {
 
 /**
  * Sets the currently authenticated user and syncs with the database.
- * 
+ *
  * This bridges Clerk authentication (web-based) with our Electron app.
  * When a user signs in via Clerk in the renderer, we need to:
  * 1. Verify their identity in the main process
  * 2. Create/update their database record
  * 3. Enable user-specific features
- * 
+ *
  * Why handle this in main process?
  * - Security: Main process has database access, renderer doesn't
  * - Single source of truth: User state managed centrally
  * - IPC security: Validates data before database operations
- * 
+ *
  * @param {Object} userPayload - User data from Clerk authentication
  * @param {string} userPayload.clerkId - Unique Clerk user identifier
  * @returns {Promise<Object>} The active user object
@@ -319,7 +324,7 @@ async function setActiveUser(userPayload) {
 
   // Sync with database (create if new user, update if existing)
   const prismaUser = await apiBridge.setUserByClerkId(userPayload.clerkId)
-  
+
   // Transform database user to app user format
   activeUser = {
     id: prismaUser.id,
@@ -334,19 +339,19 @@ async function setActiveUser(userPayload) {
 
 /**
  * Content Security Policy (CSP) configuration for enhanced security.
- * 
+ *
  * CSP is a critical security feature that prevents:
  * - Cross-site scripting (XSS) attacks
- * - Data injection attacks  
+ * - Data injection attacks
  * - Unauthorized code execution
- * 
+ *
  * Why these specific rules?
  * - 'self': Only allow resources from our own origin by default
  * - Clerk domains: Required for authentication UI components
  * - 'unsafe-inline'/'unsafe-eval': Unfortunately needed for some React/Next.js features
  * - localhost: Development server connections
  * - data: URIs: For inline images and fonts
- * 
+ *
  * Note: In production, consider stricter policies and nonces for inline scripts
  */
 const CSP_POLICY = [
@@ -367,14 +372,14 @@ const CSP_POLICY = [
 
 /**
  * Configures application-wide security policies.
- * 
+ *
  * Security is paramount in Electron apps because they combine web content
  * with system-level access. This function implements defense-in-depth:
- * 
+ *
  * 1. Content Security Policy: Restricts resource loading
  * 2. Permission handling: Controls API access (camera, microphone, etc.)
  * 3. Protocol blocking: Prevents malicious protocol handlers
- * 
+ *
  * Why is this critical?
  * - Electron apps have Node.js access - one XSS could compromise the system
  * - Users trust desktop apps more than websites
@@ -398,7 +403,7 @@ function setupSecurity() {
     /**
      * Permission request handler - controls what APIs web content can access.
      * Default deny approach: explicitly allow only what's needed.
-     * 
+     *
      * Currently allowed:
      * - notifications: For task reminders and updates
      */
@@ -427,21 +432,21 @@ function setupSecurity() {
 
 /**
  * Creates the main application window and initializes all core systems.
- * 
+ *
  * This is the heart of the Electron app startup sequence. It orchestrates:
  * 1. Performance monitoring setup
  * 2. Core manager initialization (in specific order)
  * 3. Window creation and display
  * 4. Deferred feature loading
- * 
+ *
  * Why async?
  * - Next.js server startup is asynchronous
  * - Database connections need to be established
  * - Allows proper error handling during initialization
- * 
+ *
  * The function is split into critical (blocking) and deferred (non-blocking)
  * initialization to optimize perceived startup time.
- * 
+ *
  * @returns {Promise<BrowserWindow>} The main application window
  */
 async function createWindow() {
@@ -651,17 +656,17 @@ async function createWindow() {
 
 /**
  * Sets up all IPC (Inter-Process Communication) handlers.
- * 
+ *
  * IPC is the bridge between the main process (this file) and renderer processes
  * (web pages). Electron uses IPC because:
  * - Renderer processes are sandboxed for security
  * - Main process has full system access
  * - This separation prevents web content from accessing sensitive APIs
- * 
+ *
  * Handler types:
  * - handle(): For async request-response (like API calls)
  * - on(): For one-way messages or events
- * 
+ *
  * All handlers follow these patterns:
  * 1. Input validation (never trust renderer input)
  * 2. Error handling (graceful degradation)
@@ -672,7 +677,7 @@ function setupIPCHandlers() {
    * Basic app control handlers.
    * These provide controlled access to app-level functions.
    */
-  
+
   // Returns current app version for display in UI
   ipcMain.handle('app-version', () => {
     return app.getVersion()
@@ -1630,7 +1635,7 @@ function setupIPCHandlers() {
 
 /**
  * Application Entry Point and Lifecycle Management
- * 
+ *
  * Electron apps follow a specific lifecycle:
  * 1. App starts → 'will-finish-launching' event
  * 2. App ready → 'ready' event (can create windows)
@@ -1641,14 +1646,14 @@ function setupIPCHandlers() {
 
 /**
  * Single Instance Lock
- * 
+ *
  * Ensures only one instance of the app runs at a time.
  * This prevents:
  * - Multiple database connections
  * - Port conflicts (Next.js server)
  * - Confusing UX with duplicate windows
  * - Resource waste
- * 
+ *
  * Exception: Disabled in test environment for parallel test execution
  */
 const gotTheLock = isTestEnvironment ? true : app.requestSingleInstanceLock()
@@ -1667,10 +1672,10 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     // Setup security policies before any window creation
     setupSecurity()
-    
+
     // Create the main application window
     const mainWindow = await createWindow()
-    
+
     /**
      * Test environment special handling.
      * Makes the app behave differently during automated testing:
@@ -1679,7 +1684,7 @@ if (!gotTheLock) {
      * - Can be hidden from dock to reduce visual noise
      */
     if (isTestEnvironment) {
-      notifier.notify('Electron is Testing')
+      new Notification({ title: 'Electron is Testing' }).show()
       // Show window without stealing focus for better test stability
       mainWindow.showInactive()
       // Note: These are commented out but can be enabled if needed:
@@ -1703,10 +1708,10 @@ if (!gotTheLock) {
 
 /**
  * Window close behavior - platform specific.
- * 
+ *
  * - Windows/Linux: Close all windows = quit app (expected behavior)
  * - macOS: Close all windows = app stays in dock (platform convention)
- * 
+ *
  * This follows native platform guidelines for better user experience.
  */
 app.on('window-all-closed', () => {
@@ -1717,18 +1722,18 @@ app.on('window-all-closed', () => {
 
 /**
  * Application cleanup handler.
- * 
+ *
  * Ensures graceful shutdown by:
  * 1. Saving user state (window positions, preferences)
  * 2. Closing database connections properly
  * 3. Removing system integrations (shortcuts, tray icons)
  * 4. Stopping background processes
- * 
+ *
  * Why cleanup order matters:
  * - Reverse order of initialization prevents dependency issues
  * - User-facing features cleaned up first (can fail gracefully)
  * - Core services cleaned up last (must succeed)
- * 
+ *
  * This prevents:
  * - Data corruption from abrupt shutdown
  * - Memory leaks from orphaned processes
@@ -1740,7 +1745,7 @@ app.on('before-quit', async () => {
 
   // Cleanup managers in reverse order of initialization
   // This ensures dependencies are available during cleanup
-  
+
   // User-facing features (can fail without critical impact)
   if (deepLinkManager) {
     deepLinkManager.cleanup()
@@ -1757,7 +1762,7 @@ app.on('before-quit', async () => {
   if (notificationManager) {
     notificationManager.cleanup()
   }
-  
+
   // Core window management
   if (windowStateManager) {
     windowStateManager.cleanup() // Saves window positions
@@ -1765,17 +1770,17 @@ app.on('before-quit', async () => {
   if (windowManager) {
     windowManager.cleanup() // Closes all windows
   }
-  
+
   // Communication layer
   if (ipcErrorHandler) {
     ipcErrorHandler.cleanup()
   }
-  
+
   // Data layer (critical - must complete)
   if (apiBridge) {
     await apiBridge.disconnect() // Close database connections
   }
-  
+
   // Server shutdown
   if (nextServerManager) {
     await nextServerManager.stop() // Stop Next.js server
@@ -1789,15 +1794,15 @@ app.on('before-quit', async () => {
 
 /**
  * Web content security handler.
- * 
+ *
  * This is a critical security boundary. Every web page (renderer process)
  * created by the app passes through here. We enforce strict security
  * policies to prevent:
- * 
+ *
  * 1. Popup/popunder attacks
- * 2. Webview injection vulnerabilities  
+ * 2. Webview injection vulnerabilities
  * 3. Protocol handler exploits
- * 
+ *
  * These handlers run for ALL web content, including:
  * - Main window
  * - Floating window
@@ -1807,12 +1812,12 @@ app.on('before-quit', async () => {
 app.on('web-contents-created', (_event, contents) => {
   /**
    * Prevent new window creation from web content.
-   * 
+   *
    * Why block this?
    * - Prevents popup ads/malware
    * - Stops potential phishing windows
    * - Maintains control over app's window management
-   * 
+   *
    * If legitimate popups are needed, implement them
    * through controlled IPC calls instead.
    */
@@ -1822,12 +1827,12 @@ app.on('web-contents-created', (_event, contents) => {
 
   /**
    * Webview security hardening.
-   * 
+   *
    * Webviews can be attack vectors because they:
    * - Can load arbitrary content
    * - Might try to access Node.js APIs
    * - Could load malicious preload scripts
-   * 
+   *
    * We strip dangerous capabilities and enforce isolation.
    */
   contents.on('will-attach-webview', (event, webPreferences, _params) => {
@@ -1836,19 +1841,19 @@ app.on('web-contents-created', (_event, contents) => {
     delete webPreferences.preloadURL
 
     // Enforce security settings
-    webPreferences.nodeIntegration = false    // No Node.js access
-    webPreferences.contextIsolation = true   // Isolate contexts
+    webPreferences.nodeIntegration = false // No Node.js access
+    webPreferences.contextIsolation = true // Isolate contexts
   })
 
   /**
    * Navigation security.
-   * 
+   *
    * Restricts navigation to safe protocols only.
    * Blocks potentially dangerous protocols like:
    * - file:// (could access local files)
    * - custom protocols (could launch apps)
    * - javascript: (XSS vector)
-   * 
+   *
    * Only allows:
    * - http:// and https:// for web content
    * - file:// for local app resources
