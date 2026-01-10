@@ -105,29 +105,38 @@ class OAuthManager {
   }
 
   /**
-   * Builds the OAuth start URL.
+   * Builds the OAuth start URL using Clerk's hosted Account Portal.
    *
-   * Opens the web app's /oauth/start page which uses Clerk's SDK to
-   * initiate the proper OAuth flow. This approach is required because:
-   * - Clerk doesn't expose a direct /v1/oauth_authorize endpoint
-   * - Clerk's SDK must be used to start OAuth properly
-   * - The web app handles all Clerk SDK interactions
+   * Uses Clerk's hosted sign-in page which handles all OAuth flows reliably.
+   * This approach is more reliable than custom OAuth initialization because:
+   * - Clerk handles CAPTCHA, rate limiting, and bot protection
+   * - Session context is properly managed by Clerk
+   * - Works reliably in any browser context (including fresh system browser)
    *
-   * @param {string} provider - OAuth provider (e.g., 'google', 'github')
+   * Flow:
+   * 1. User is redirected to Clerk's hosted sign-in page
+   * 2. User clicks "Continue with Google/GitHub" on Clerk's UI
+   * 3. OAuth completes and Clerk redirects to our callback
+   * 4. Callback redirects to deep link
+   *
+   * @param {string} provider - OAuth provider (e.g., 'google', 'github') - currently unused
+   *                           as user selects provider on Clerk's UI
    * @param {string} state - State parameter for CSRF protection
-   * @returns {string} OAuth start URL
+   * @returns {string} Clerk hosted sign-in URL with redirect callback
    */
   buildOAuthURL(provider, state) {
-    // Use the web app's OAuth start page
-    // This page will use Clerk's SDK to initiate the OAuth flow
-    const baseUrl = 'https://corelive.app/oauth/start'
+    // Use Clerk's hosted Account Portal for sign-in
+    // This is more reliable than custom OAuth initialization
+    const accountsUrl = 'https://accounts.corelive.app/sign-in'
+
+    // After sign-in, Clerk will redirect to this URL
+    const callbackUrl = `https://corelive.app/oauth/callback?state=${encodeURIComponent(state)}`
 
     const params = new URLSearchParams({
-      provider,
-      state,
+      redirect_url: callbackUrl,
     })
 
-    return `${baseUrl}?${params.toString()}`
+    return `${accountsUrl}?${params.toString()}`
   }
 
   /**
@@ -165,7 +174,7 @@ class OAuthManager {
       if (this.notificationManager) {
         this.notificationManager.showNotification(
           'Sign In',
-          'Complete sign-in in your browser, then return to CoreLive.',
+          'Sign in with your account in the browser, then return to CoreLive.',
           { type: 'info' },
         )
       }
