@@ -105,32 +105,29 @@ class OAuthManager {
   }
 
   /**
-   * Builds the Clerk OAuth authorization URL.
+   * Builds the OAuth start URL.
+   *
+   * Opens the web app's /oauth/start page which uses Clerk's SDK to
+   * initiate the proper OAuth flow. This approach is required because:
+   * - Clerk doesn't expose a direct /v1/oauth_authorize endpoint
+   * - Clerk's SDK must be used to start OAuth properly
+   * - The web app handles all Clerk SDK interactions
    *
    * @param {string} provider - OAuth provider (e.g., 'google', 'github')
    * @param {string} state - State parameter for CSRF protection
-   * @param {string} codeChallenge - PKCE code challenge
-   * @returns {string} Full OAuth authorization URL
+   * @returns {string} OAuth start URL
    */
-  buildOAuthURL(provider, state, codeChallenge) {
-    // Use production Clerk domain
-    const clerkDomain = 'clerk.corelive.app'
-
-    // Redirect to web app callback, which will then redirect to deep link
-    const redirectUrl = 'https://corelive.app/oauth/callback'
+  buildOAuthURL(provider, state) {
+    // Use the web app's OAuth start page
+    // This page will use Clerk's SDK to initiate the OAuth flow
+    const baseUrl = 'https://corelive.app/oauth/start'
 
     const params = new URLSearchParams({
-      response_type: 'code',
-      redirect_uri: redirectUrl,
-      scope: 'openid profile email',
-      state: state,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
+      provider,
+      state,
     })
 
-    // Clerk uses specific OAuth endpoint format
-    // Provider is specified in the URL path
-    return `https://${clerkDomain}/v1/oauth_authorize?${params.toString()}&strategy=oauth_${provider}`
+    return `${baseUrl}?${params.toString()}`
   }
 
   /**
@@ -143,19 +140,18 @@ class OAuthManager {
     try {
       log.info(`🔐 Starting OAuth flow for provider: ${provider}`)
 
-      // Generate PKCE and state
-      const { verifier, challenge } = this.generatePKCE()
+      // Generate state for CSRF protection
+      // Note: PKCE is now handled by Clerk's SDK on the web app side
       const state = this.generateState()
 
       // Store pending state for verification on callback
       this.pendingStates.set(state, {
-        verifier,
         provider,
         createdAt: Date.now(),
       })
 
-      // Build OAuth URL
-      const oauthUrl = this.buildOAuthURL(provider, state, challenge)
+      // Build OAuth URL (points to web app's /oauth/start page)
+      const oauthUrl = this.buildOAuthURL(provider, state)
 
       log.debug('🔐 Opening OAuth URL in system browser', {
         provider,
@@ -200,13 +196,11 @@ class OAuthManager {
    */
   async handleOAuthCallback(url) {
     try {
-      const code = url.searchParams.get('code')
       const state = url.searchParams.get('state')
       const error = url.searchParams.get('error')
       const errorDescription = url.searchParams.get('error_description')
 
       log.info('🔐 Handling OAuth callback', {
-        hasCode: !!code,
         hasState: !!state,
         error,
       })
@@ -218,11 +212,11 @@ class OAuthManager {
         return { success: false, error: errorDescription || error }
       }
 
-      // Validate required parameters
-      if (!code || !state) {
-        log.error('❌ Missing code or state in OAuth callback')
-        this.sendOAuthError('Invalid OAuth callback: missing parameters')
-        return { success: false, error: 'Missing code or state' }
+      // Validate required parameters (only state needed - Clerk handles everything else)
+      if (!state) {
+        log.error('❌ Missing state in OAuth callback')
+        this.sendOAuthError('Invalid OAuth callback: missing state parameter')
+        return { success: false, error: 'Missing state' }
       }
 
       // Validate state and get pending flow data
@@ -244,32 +238,33 @@ class OAuthManager {
       // Remove state (one-time use)
       this.pendingStates.delete(state)
 
-      log.info('🔐 OAuth state validated, exchanging code for session')
+      log.info('🔐 OAuth state validated, session created by Clerk')
 
-      // Exchange authorization code for session
-      const result = await this.exchangeCodeForSession(
-        code,
-        pendingFlow.verifier,
-        pendingFlow.provider,
-      )
+      // At this point, Clerk has already created a session on the web app side.
+      // The ElectronAuthProvider will automatically sync the auth state.
+      // We just need to notify the renderer that OAuth completed successfully.
 
-      if (result.success) {
-        // Notify renderer of successful authentication
-        this.sendOAuthSuccess(result.user)
-
-        // Show success notification
-        if (this.notificationManager) {
-          this.notificationManager.showNotification(
-            'Signed In',
-            `Welcome back${result.user?.name ? `, ${result.user.name}` : ''}!`,
-            { type: 'success' },
-          )
-        }
-      } else {
-        this.sendOAuthError(result.error || 'Failed to complete sign-in')
+      // Focus the main window to bring app back to foreground
+      if (this.windowManager && this.windowManager.hasMainWindow()) {
+        const mainWindow = this.windowManager.getMainWindow()
+        mainWindow.show()
+        mainWindow.focus()
       }
 
-      return result
+      // Notify renderer of successful authentication
+      // The web app's ElectronAuthProvider will handle the actual session sync
+      this.sendOAuthSuccess({ provider: pendingFlow.provider })
+
+      // Show success notification
+      if (this.notificationManager) {
+        this.notificationManager.showNotification(
+          'Signed In',
+          'Authentication successful! You are now signed in.',
+          { type: 'success' },
+        )
+      }
+
+      return { success: true, provider: pendingFlow.provider }
     } catch (error) {
       log.error('❌ Failed to handle OAuth callback:', error)
       this.sendOAuthError('Failed to complete sign-in. Please try again.')

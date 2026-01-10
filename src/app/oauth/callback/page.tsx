@@ -6,20 +6,23 @@ import { Suspense, useEffect, useState } from 'react'
 /**
  * OAuth Callback Page - Browser-to-Deep-Link Bridge
  *
- * This page is loaded in the system browser after OAuth authentication completes.
- * It extracts the authorization code and state from URL parameters and redirects
- * to the Electron app via deep link.
+ * This page is loaded in the system browser after Clerk completes OAuth.
+ * At this point, Clerk has already created a session - we just need to
+ * redirect back to the Electron app via deep link.
  *
  * Flow:
- * 1. Clerk OAuth redirects here after Google authentication
- * 2. This page extracts code + state from URL
- * 3. Redirects to: corelive://oauth/callback?code=...&state=...
- * 4. Electron's DeepLinkManager receives and processes the callback
+ * 1. User completes OAuth on provider (Google/GitHub)
+ * 2. Provider redirects to Clerk
+ * 3. Clerk creates session and redirects to /oauth/sso-callback
+ * 4. SSO callback completes and redirects here with state parameter
+ * 5. This page redirects to: corelive://oauth/callback?state=...
+ * 6. Electron validates state and syncs auth from web app
  *
  * Why is this needed?
- * - Google OAuth blocks WebView authentication
+ * - Google OAuth blocks WebView authentication (403: disallowed_useragent)
  * - OAuth must complete in system browser
  * - Deep link bridges browser back to Electron app
+ * - Electron receives the state to validate the flow originated from it
  */
 
 type CallbackStatus = 'loading' | 'redirecting' | 'success' | 'error'
@@ -30,7 +33,6 @@ function OAuthCallbackContent() {
   const [errorMessage, setErrorMessage] = useState<string>('')
 
   useEffect(() => {
-    const code = searchParams.get('code')
     const state = searchParams.get('state')
     const error = searchParams.get('error')
     const errorDescription = searchParams.get('error_description')
@@ -43,14 +45,15 @@ function OAuthCallbackContent() {
     }
 
     // Validate required parameters
-    if (!code || !state) {
+    // Note: We only need state - Clerk handles the session creation
+    if (!state) {
       setStatus('error')
-      setErrorMessage('Missing authentication parameters. Please try again.')
+      setErrorMessage('Missing state parameter. Please try again.')
       return
     }
 
-    // Construct deep link
-    const deepLink = `corelive://oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`
+    // Construct deep link (only state needed - Clerk already created the session)
+    const deepLink = `corelive://oauth/callback?state=${encodeURIComponent(state)}`
 
     setStatus('redirecting')
 
