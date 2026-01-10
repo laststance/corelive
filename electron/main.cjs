@@ -339,18 +339,18 @@ async function setActiveUser(userPayload) {
  */
 const CSP_POLICY = [
   "default-src 'self'",
-  // Allow Clerk assets from .dev and .com domains
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
-  "style-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
-  "img-src 'self' data: https: https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
-  "font-src 'self' data: https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
-  // Include Clerk telemetry and .com endpoints in connect-src for development
-  "connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com https://clerk-telemetry.com",
-  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  // Allow Clerk assets from custom domain (clerk.corelive.app), .dev and .com domains
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "style-src 'self' 'unsafe-inline' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "img-src 'self' data: https: https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "font-src 'self' data: https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  // Include Clerk custom domain, telemetry and .com endpoints in connect-src
+  "connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com https://clerk-telemetry.com",
+  "frame-src 'self' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "form-action 'self' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
 ].join('; ')
 
 /**
