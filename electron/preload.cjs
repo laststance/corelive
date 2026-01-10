@@ -57,6 +57,14 @@ const ALLOWED_CHANNELS = {
   'auth-is-authenticated': true,
   'auth-sync-from-web': true,
 
+  // OAuth operations (browser-based OAuth for providers that block WebView)
+  'oauth-start': true,
+  'oauth-get-supported-providers': true,
+  'oauth-cancel': true,
+  'oauth-success': true,
+  'oauth-error': true,
+  'oauth-complete-exchange': true,
+
   // Window operations
   'window-minimize': true,
   'window-close': true,
@@ -754,6 +762,117 @@ contextBridge.exposeInMainWorld('electronAPI', {
         log.error('Failed to sync auth from web:', error)
         throw new Error('Failed to sync authentication')
       }
+    },
+  },
+
+  // OAuth management (browser-based OAuth for providers that block WebView)
+  oauth: {
+    /**
+     * Start OAuth flow in system browser.
+     * Used for providers like Google that block WebView authentication.
+     *
+     * @param {string} provider - OAuth provider (e.g., 'google', 'github')
+     * @returns {Promise<{success: boolean, state?: string, error?: string}>}
+     */
+    start: async (provider) => {
+      if (!provider || typeof provider !== 'string') {
+        throw new Error('OAuth provider is required')
+      }
+
+      const sanitizedProvider = sanitizeData(provider)
+
+      try {
+        return await ipcRenderer.invoke('oauth-start', sanitizedProvider)
+      } catch (error) {
+        log.error('Failed to start OAuth flow:', error)
+        return { success: false, error: error.message }
+      }
+    },
+
+    /**
+     * Get list of supported OAuth providers
+     */
+    getSupportedProviders: async () => {
+      try {
+        return await ipcRenderer.invoke('oauth-get-supported-providers')
+      } catch (error) {
+        log.error('Failed to get supported OAuth providers:', error)
+        return []
+      }
+    },
+
+    /**
+     * Cancel pending OAuth flow
+     */
+    cancel: async (state) => {
+      try {
+        return await ipcRenderer.invoke('oauth-cancel', state || null)
+      } catch (error) {
+        log.error('Failed to cancel OAuth flow:', error)
+        return false
+      }
+    },
+
+    /**
+     * Register callback for OAuth success
+     */
+    onSuccess: (callback) => {
+      if (typeof callback !== 'function') {
+        throw new Error('Callback must be a function')
+      }
+
+      const wrappedCallback = (_event, data) => {
+        try {
+          callback(sanitizeData(data))
+        } catch (error) {
+          log.error('Error in OAuth success callback:', error)
+        }
+      }
+
+      ipcRenderer.on('oauth-success', wrappedCallback)
+      return () => ipcRenderer.removeListener('oauth-success', wrappedCallback)
+    },
+
+    /**
+     * Register callback for OAuth error
+     */
+    onError: (callback) => {
+      if (typeof callback !== 'function') {
+        throw new Error('Callback must be a function')
+      }
+
+      const wrappedCallback = (_event, data) => {
+        try {
+          callback(sanitizeData(data))
+        } catch (error) {
+          log.error('Error in OAuth error callback:', error)
+        }
+      }
+
+      ipcRenderer.on('oauth-error', wrappedCallback)
+      return () => ipcRenderer.removeListener('oauth-error', wrappedCallback)
+    },
+
+    /**
+     * Register callback for OAuth code exchange completion
+     * (Used by web app to complete the Clerk session setup)
+     */
+    onCompleteExchange: (callback) => {
+      if (typeof callback !== 'function') {
+        throw new Error('Callback must be a function')
+      }
+
+      const wrappedCallback = (_event, data) => {
+        try {
+          callback(sanitizeData(data))
+        } catch (error) {
+          log.error('Error in OAuth exchange callback:', error)
+        }
+      }
+
+      ipcRenderer.on('oauth-complete-exchange', wrappedCallback)
+      return () =>
+        ipcRenderer.removeListener('oauth-complete-exchange', wrappedCallback)
     },
   },
 

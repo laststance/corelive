@@ -1,7 +1,7 @@
 {
   "appId": "com.corelive.app",
   "productName": "CoreLive",
-  "copyright": "Copyright © 2025 CoreLive",
+  "copyright": "Copyright © 2026 Laststance",
   "directories": {
     "output": "dist-electron",
     "buildResources": "build"

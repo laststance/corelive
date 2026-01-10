@@ -67,9 +67,22 @@ class DeepLinkManager {
     this.isInitialized = false
     this.pendingUrl = null // URL received before app ready
 
+    // OAuth Manager for browser-based OAuth flows
+    // Set via setOAuthManager() after construction
+    this.oauthManager = null
+
     // Bind methods for event handlers
     this.handleDeepLink = this.handleDeepLink.bind(this)
     this.handleSecondInstance = this.handleSecondInstance.bind(this)
+  }
+
+  /**
+   * Sets the OAuth manager for handling OAuth callbacks.
+   *
+   * @param {OAuthManager} oauthManager - OAuth manager instance
+   */
+  setOAuthManager(oauthManager) {
+    this.oauthManager = oauthManager
   }
 
   /**
@@ -260,6 +273,7 @@ class DeepLinkManager {
         path,
         params,
         hash: parsedUrl.hash,
+        originalUrl: url, // Preserve original URL for handlers that need it
       }
     } catch (error) {
       log.error('Failed to parse deep link URL:', error)
@@ -272,9 +286,13 @@ class DeepLinkManager {
    * @param {Object} parsedUrl - Parsed URL components
    */
   async routeDeepLink(parsedUrl) {
-    const { action, path, params } = parsedUrl
+    const { action, path, params, originalUrl } = parsedUrl
 
     switch (action) {
+      case 'oauth':
+        await this.handleOAuthCallback(path, params, originalUrl)
+        return true
+
       case 'task':
         await this.handleTaskAction(path, params)
         return true
@@ -299,6 +317,59 @@ class DeepLinkManager {
     }
 
     return true
+  }
+
+  /**
+   * Handle OAuth callback deep link.
+   *
+   * Receives: corelive://oauth/callback?code=...&state=...
+   *
+   * @param {string} path - URL path (e.g., '/callback')
+   * @param {Object} params - URL parameters (code, state, error)
+   * @param {string} originalUrl - Original deep link URL
+   */
+  async handleOAuthCallback(path, params, originalUrl) {
+    log.info('🔐 Received OAuth callback deep link', {
+      path,
+      hasCode: !!params.code,
+      hasState: !!params.state,
+    })
+
+    // Ensure main window is visible for auth completion
+    this.ensureWindowVisible()
+
+    if (!this.oauthManager) {
+      log.error('❌ OAuth manager not initialized')
+      if (this.notificationManager) {
+        this.notificationManager.showNotification(
+          'Sign In Error',
+          'OAuth handler not ready. Please try again.',
+          { type: 'error' },
+        )
+      }
+      return
+    }
+
+    // Only handle /callback path
+    if (path !== '/callback' && path !== 'callback') {
+      log.warn(`⚠️ Unknown OAuth path: ${path}`)
+      return
+    }
+
+    try {
+      // Parse the original URL to pass to OAuthManager
+      const url = new URL(originalUrl)
+      await this.oauthManager.handleOAuthCallback(url)
+    } catch (error) {
+      log.error('❌ Failed to handle OAuth callback:', error)
+      if (this.notificationManager) {
+        this.notificationManager.showNotification(
+          'Sign In Error',
+          'Failed to complete sign-in. Please try again.',
+          { type: 'error' },
+        )
+      }
+    }
   }
 
   /**

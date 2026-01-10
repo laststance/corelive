@@ -107,6 +107,33 @@ interface ElectronAPI {
     syncFromWeb: (authData: any) => Promise<boolean>
   }
 
+  // OAuth (browser-based OAuth for providers that block WebView)
+  oauth?: {
+    /**
+     * Start OAuth flow in system browser.
+     * Used for providers like Google that block WebView authentication.
+     */
+    start: (
+      provider: 'google' | 'github' | 'apple',
+    ) => Promise<{ success: boolean; state?: string; error?: string }>
+    /** Get list of supported OAuth providers */
+    getSupportedProviders: () => Promise<string[]>
+    /** Cancel pending OAuth flow */
+    cancel: (state?: string | null) => Promise<boolean>
+    /** Register callback for OAuth success */
+    onSuccess: (callback: (data: { user?: any }) => void) => () => void
+    /** Register callback for OAuth error */
+    onError: (callback: (data: { error: string }) => void) => () => void
+    /** Register callback for OAuth code exchange (used by web app) */
+    onCompleteExchange: (
+      callback: (data: {
+        code: string
+        verifier: string
+        provider: string
+      }) => void,
+    ) => () => void
+  }
+
   // Configuration
   config?: {
     get: (path: string, defaultValue?: any) => Promise<any>

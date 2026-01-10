@@ -116,9 +116,31 @@ let shortcutManager // Global keyboard shortcuts
 let systemIntegrationErrorHandler // OS integration error handling
 let menuManager // Application menu bar
 let deepLinkManager // Custom protocol URL handling
+let oauthManager // Browser-based OAuth flow management
 
 // Current authenticated user information
 let activeUser = null
+
+/**
+ * Ensures the OAuthManager is initialized when needed.
+ *
+ * OAuth manager handles browser-based OAuth flows required for providers
+ * that block WebView authentication (e.g., Google OAuth).
+ *
+ * @returns {OAuthManager|null} The initialized manager or null if dependencies aren't ready
+ */
+function ensureOAuthManager() {
+  if (!windowManager) {
+    return null
+  }
+
+  if (!oauthManager) {
+    const OAuthManager = require('./OAuthManager.cjs')
+    oauthManager = new OAuthManager(windowManager, notificationManager || null)
+  }
+
+  return oauthManager
+}
 
 /**
  * Ensures the DeepLinkManager is initialized when needed.
@@ -147,6 +169,12 @@ function ensureDeepLinkManager() {
       notificationManager || null, // Notifications are optional
       app,
     )
+  }
+
+  // Connect OAuth manager to handle OAuth deep link callbacks
+  const oauth = ensureOAuthManager()
+  if (oauth && !deepLinkManager.oauthManager) {
+    deepLinkManager.setOAuthManager(oauth)
   }
 
   // Initialize if not already done (handles protocol registration)
@@ -1176,6 +1204,39 @@ function setupIPCHandlers() {
     }
   })
 
+  // OAuth IPC handlers for browser-based OAuth flows
+  // Used when WebView OAuth is blocked (e.g., Google OAuth)
+  ipcMain.handle('oauth-start', async (_event, provider) => {
+    try {
+      const oauth = ensureOAuthManager()
+      if (!oauth) {
+        throw new Error('OAuth manager not initialized')
+      }
+
+      if (!oauth.isProviderSupported(provider)) {
+        throw new Error(`Unsupported OAuth provider: ${provider}`)
+      }
+
+      return await oauth.startOAuthFlow(provider)
+    } catch (error) {
+      log.error('Failed to start OAuth flow:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('oauth-get-supported-providers', () => {
+    const oauth = ensureOAuthManager()
+    return oauth ? oauth.getSupportedProviders() : []
+  })
+
+  ipcMain.handle('oauth-cancel', (_event, state) => {
+    const oauth = ensureOAuthManager()
+    if (oauth) {
+      oauth.cancelPendingFlow(state)
+    }
+    return true
+  })
+
   // Performance monitoring IPC handlers
   ipcMain.handle('performance-get-metrics', () => {
     return {
@@ -1350,6 +1411,9 @@ app.on('before-quit', async () => {
   // This ensures dependencies are available during cleanup
 
   // User-facing features (can fail without critical impact)
+  if (oauthManager) {
+    oauthManager.cleanup()
+  }
   if (deepLinkManager) {
     deepLinkManager.cleanup()
   }
