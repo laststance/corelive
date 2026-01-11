@@ -27,14 +27,44 @@ test.describe('Electron Desktop Integration E2E Tests', () => {
         context.floatingNavigator = null
       }
 
-      // Close ALL non-main windows to prevent resource leaks
-      if (context.electronApp) {
+      // Close non-main windows to prevent resource leaks
+      // CRITICAL: Never close the last window on Linux as it causes app.quit()
+      if (context.electronApp && context.mainWindow) {
         const allWindows = context.electronApp.windows()
-        for (const window of allWindows) {
-          if (window !== context.mainWindow && !window.isClosed()) {
-            await window.close().catch(() => {
-              // Ignore close errors - window may already be closing
-            })
+
+        // SAFETY: If only 1 window remains, it's the main window - don't close anything
+        if (allWindows.length <= 1) {
+          console.warn('[afterEach] Only 1 window remaining, skipping cleanup')
+        } else {
+          // Get main window URL for reliable comparison (object reference can differ)
+          let mainWindowUrl: string | null = null
+          try {
+            if (!context.mainWindow.isClosed()) {
+              mainWindowUrl = context.mainWindow.url()
+            }
+          } catch {
+            // Ignore errors getting URL
+          }
+
+          for (const window of allWindows) {
+            if (window.isClosed()) continue
+
+            // Compare by URL to avoid reference comparison issues
+            let windowUrl: string | null = null
+            try {
+              windowUrl = window.url()
+            } catch {
+              continue // Skip windows we can't access
+            }
+
+            const isMainWindow = mainWindowUrl && windowUrl === mainWindowUrl
+
+            if (!isMainWindow) {
+              console.warn(`[afterEach] Closing non-main window: ${windowUrl}`)
+              await window.close().catch(() => {
+                // Ignore close errors - window may already be closing
+              })
+            }
           }
         }
       }
