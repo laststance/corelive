@@ -1357,6 +1357,30 @@ function setupIPCHandlers() {
     }
   })
 
+  // Auto-updater IPC handlers
+  ipcMain.handle('updater-check-for-updates', () => {
+    if (autoUpdater) {
+      autoUpdater.manualCheckForUpdates()
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('updater-quit-and-install', () => {
+    if (autoUpdater) {
+      autoUpdater.quitAndInstall()
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('updater-get-status', () => {
+    if (autoUpdater) {
+      return autoUpdater.getUpdateStatus()
+    }
+    return { updateAvailable: false, updateDownloaded: false }
+  })
+
   // Note: Quick todo operations removed - Floating Navigator uses oRPC via web app
 }
 

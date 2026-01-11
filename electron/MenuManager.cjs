@@ -180,6 +180,10 @@ class MenuManager {
           // accelerator: 'CmdOrCtrl+,',
           click: () => this.openPreferences(),
         },
+        {
+          label: 'Check for Updates...',
+          click: async () => this.checkForUpdates(),
+        },
         { type: 'separator' },
         {
           label: 'Services',
@@ -632,6 +636,43 @@ class MenuManager {
     if (this.mainWindow && this.mainWindow.webContents) {
       this.mainWindow.webContents.send('menu-action', {
         action: 'open-preferences',
+      })
+    }
+  }
+
+  /**
+   * Triggers manual update check via IPC.
+   *
+   * Sends IPC message to main process to trigger the auto-updater.
+   * The AutoUpdater class handles:
+   * - Checking for updates on GitHub releases
+   * - Showing dialog if update is available
+   * - Downloading and installing the update
+   */
+  async checkForUpdates() {
+    try {
+      // Notify renderer that we're checking for updates
+      if (this.mainWindow && this.mainWindow.webContents) {
+        this.mainWindow.webContents.send(
+          'updater-message',
+          'Checking for updates...',
+        )
+      }
+
+      // Trigger the update check using electron-updater directly
+      // MenuManager runs in main process so we can access autoUpdater
+      const { autoUpdater } = require('electron-updater')
+      await autoUpdater.checkForUpdatesAndNotify()
+    } catch (error) {
+      log.error('Failed to check for updates:', error)
+
+      // Show error dialog to user
+      dialog.showMessageBox(this.mainWindow, {
+        type: 'error',
+        title: 'Update Check Failed',
+        message: 'Failed to check for updates.',
+        detail: error.message || 'Please try again later.',
+        buttons: ['OK'],
       })
     }
   }
