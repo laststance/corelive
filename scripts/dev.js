@@ -12,13 +12,14 @@ const __dirname = path.dirname(__filename)
 const port = process.env.PORT || 3011
 
 /**
- * Development server script for CoreLive TODO Electron app
+ * Development server script for CoreLive Electron app
  *
  * This script:
- * 1. Starts the Next.js development server
- * 2. Waits for it to be ready
- * 3. Starts Electron in development mode
- * 4. Handles graceful shutdown
+ * 1. Builds Electron code with electron-vite
+ * 2. Starts the Next.js development server
+ * 3. Waits for Next.js to be ready
+ * 4. Starts Electron in development mode
+ * 5. Handles graceful shutdown
  */
 
 let nextProcess = null
@@ -85,6 +86,32 @@ async function checkServer(_url, maxAttempts = 30, interval = 1000) {
 
 async function startDevelopment() {
   try {
+    // Build Electron code first (required for lazy loading to work)
+    // eslint-disable-next-line no-console
+    console.log('🔨 Building Electron code...')
+    const buildProcess = spawn('pnpm', ['electron:build:ts'], {
+      stdio: 'inherit',
+      shell: true,
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+      },
+    })
+
+    await new Promise((resolve, reject) => {
+      buildProcess.on('exit', (code) => {
+        if (code !== 0 && code !== null) {
+          reject(new Error(`Electron build failed with code ${code}`))
+        } else {
+          resolve()
+        }
+      })
+      buildProcess.on('error', reject)
+    })
+
+    // eslint-disable-next-line no-console
+    console.log('✅ Electron build complete')
+
     // Start Next.js development server
 
     nextProcess = spawn('pnpm', ['dev'], {

@@ -86,8 +86,9 @@ export class ShortcutManager {
   /** Contextual shortcuts (only when app focused) */
   private contextualShortcuts: Set<string>
 
-  /** Global shortcuts (always active) */
-  private globalShortcuts: Set<string>
+  /** Global shortcuts (always active) - stored for future use */
+  // @ts-ignore - Intentionally unused, stored for future features
+  private _globalShortcuts: Set<string>
 
   /** Whether focus listeners are setup */
   private focusListenersSetup: boolean
@@ -122,7 +123,7 @@ export class ShortcutManager {
       'toggleAlwaysOnTop',
       'focusFloatingNavigator',
     ])
-    this.globalShortcuts = new Set(['showMainWindow'])
+    this._globalShortcuts = new Set(['showMainWindow'])
     this.focusListenersSetup = false
     this.focusHandlers = new Map()
 

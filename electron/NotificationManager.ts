@@ -117,8 +117,9 @@ export class NotificationManager {
   /** Notification preferences */
   private preferences: NotificationPreferences
 
-  /** Fallback mode */
-  private fallbackMode: string | null = null
+  /** Fallback mode - stored for debugging/future use */
+  // @ts-ignore - Intentionally unused, stored for debugging
+  private _fallbackMode: string | null = null
 
   /** Fallback methods */
   private fallbackMethods: FallbackMethods | null = null
@@ -299,7 +300,7 @@ export class NotificationManager {
    */
   private handleNotificationUnavailable(_reason: string): void {
     this.preferences.enabled = false
-    this.fallbackMode = 'unavailable'
+    this._fallbackMode = 'unavailable'
   }
 
   /**
@@ -307,7 +308,7 @@ export class NotificationManager {
    */
   private handleNotificationPermissionDenied(reason: string): void {
     this.preferences.enabled = false
-    this.fallbackMode = 'permission_denied'
+    this._fallbackMode = 'permission_denied'
     this.showPermissionDeniedGuidance(reason)
   }
 
@@ -318,7 +319,7 @@ export class NotificationManager {
     _error: string | Error | undefined,
   ): void {
     this.preferences.enabled = false
-    this.fallbackMode = 'test_failed'
+    this._fallbackMode = 'test_failed'
     this.enableFallbackNotificationMethods()
   }
 
@@ -327,7 +328,7 @@ export class NotificationManager {
    */
   private handleNotificationInitializationFailure(error: Error): void {
     this.preferences.enabled = false
-    this.fallbackMode = 'init_failed'
+    this._fallbackMode = 'init_failed'
     log.error('Notification initialization error details:', error)
   }
 

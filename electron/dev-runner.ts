@@ -28,12 +28,8 @@
 import { spawn, type ChildProcess } from 'child_process'
 import http from 'http'
 import path from 'path'
-import { fileURLToPath } from 'url'
 
 import { log } from './logger'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 /**
  * Checks if the Next.js development server is ready.
@@ -100,9 +96,9 @@ async function startElectron(): Promise<void> {
     log.info('✅ Next.js is ready')
 
     // Path to compiled main process (built by electron-vite)
+    // dev-runner is executed from project root, so use process.cwd()
     const mainProcessPath = path.join(
-      __dirname,
-      '..',
+      process.cwd(),
       'dist-electron',
       'main',
       'index.cjs',
@@ -110,7 +106,7 @@ async function startElectron(): Promise<void> {
 
     // Start Electron with development configuration
     const electronProcess: ChildProcess = spawn(
-      path.join(__dirname, '..', 'node_modules', '.bin', 'electron'),
+      path.join(process.cwd(), 'node_modules', '.bin', 'electron'),
       [mainProcessPath],
       {
         stdio: 'inherit', // See Electron logs in console

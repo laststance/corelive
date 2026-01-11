@@ -44,8 +44,9 @@ export class MenuManager {
   /** Window manager reference */
   private windowManager: WindowManager | null
 
-  /** Config manager reference */
-  private configManager: ConfigManager | null
+  /** Config manager reference - stored for future use */
+  // @ts-ignore - Intentionally unused, stored for future features
+  private _configManager: ConfigManager | null
 
   /** Platform is macOS */
   private isMac: boolean
@@ -53,7 +54,7 @@ export class MenuManager {
   constructor() {
     this.mainWindow = null
     this.windowManager = null
-    this.configManager = null
+    this._configManager = null
     this.isMac = process.platform === 'darwin'
   }
 
@@ -77,7 +78,7 @@ export class MenuManager {
 
     this.mainWindow = mainWindow
     this.windowManager = windowManager
-    this.configManager = configManager
+    this._configManager = configManager
 
     log.info('[MenuManager] Creating application menu...')
     try {
@@ -700,7 +701,7 @@ Copyright © 2025 CoreLive`,
   destroy(): void {
     this.mainWindow = null
     this.windowManager = null
-    this.configManager = null
+    this._configManager = null
   }
 }
 

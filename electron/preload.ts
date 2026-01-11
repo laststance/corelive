@@ -134,6 +134,11 @@ const ALLOWED_CHANNELS: AllowedChannelsMap = {
   'deep-link-get-examples': true,
   'deep-link-handle-url': true,
 
+  // Settings operations
+  'settings:setHideAppIcon': true,
+  'settings:setShowInMenuBar': true,
+  'settings:setStartAtLogin': true,
+
   // Notification management
   'notification-show': true,
   'notification-get-preferences': true,
@@ -1587,6 +1592,60 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await ipcRenderer.invoke('deep-link-handle-url', sanitizedUrl)
       } catch (error) {
         log.error('Failed to handle deep link:', error)
+        return false
+      }
+    },
+  },
+
+  // Settings APIs
+  settings: {
+    /**
+     * Set hide app icon (Dock visibility) - macOS only.
+     */
+    setHideAppIcon: async (hide: boolean): Promise<boolean> => {
+      if (typeof hide !== 'boolean') {
+        throw new Error('Hide must be a boolean')
+      }
+
+      try {
+        return await ipcRenderer.invoke('settings:setHideAppIcon', hide)
+      } catch (error) {
+        log.error('Failed to set hide app icon:', error)
+        return false
+      }
+    },
+
+    /**
+     * Set show in menu bar - not yet implemented.
+     */
+    setShowInMenuBar: async (show: boolean): Promise<boolean> => {
+      if (typeof show !== 'boolean') {
+        throw new Error('Show must be a boolean')
+      }
+
+      try {
+        return await ipcRenderer.invoke('settings:setShowInMenuBar', show)
+      } catch (error) {
+        log.error('Failed to set show in menu bar:', error)
+        return false
+      }
+    },
+
+    /**
+     * Set start at login.
+     */
+    setStartAtLogin: async (startAtLogin: boolean): Promise<boolean> => {
+      if (typeof startAtLogin !== 'boolean') {
+        throw new Error('StartAtLogin must be a boolean')
+      }
+
+      try {
+        return await ipcRenderer.invoke(
+          'settings:setStartAtLogin',
+          startAtLogin,
+        )
+      } catch (error) {
+        log.error('Failed to set start at login:', error)
         return false
       }
     },
