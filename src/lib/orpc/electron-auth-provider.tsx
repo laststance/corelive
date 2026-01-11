@@ -261,9 +261,12 @@ export function ElectronAuthProvider({
         if (user) {
           // User is authenticated, sync with Electron
           await window.electronAPI?.auth?.setUser({
+            id: user.id,
             clerkId: user.id,
-            email: user.primaryEmailAddress?.emailAddress ?? null,
-            name: user.fullName ?? user.firstName ?? null,
+            email: user.primaryEmailAddress?.emailAddress ?? '',
+            firstName: user.firstName ?? null,
+            lastName: user.lastName ?? null,
+            imageUrl: user.imageUrl ?? null,
           })
         } else {
           // User is not authenticated, logout from Electron

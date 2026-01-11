@@ -214,8 +214,9 @@ export class ElectronTestHelper {
 
             console.warn('[electron-test] Found window.Clerk.user:', user.id)
             return {
+              id: user.id, // Use clerkId as id for test context
               clerkId: user.id,
-              email: user.primaryEmailAddress?.emailAddress || null,
+              email: user.primaryEmailAddress?.emailAddress || '',
               firstName: user.firstName || null,
               lastName: user.lastName || null,
             }
@@ -242,9 +243,12 @@ export class ElectronTestHelper {
                 const backendUser = userList.data?.[0]
                 if (backendUser) {
                   backendClerkUser = {
+                    id: backendUser.id, // Use clerkId as id for test context
                     clerkId: backendUser.id,
                     email:
-                      backendUser.primaryEmailAddress?.emailAddress || email,
+                      backendUser.primaryEmailAddress?.emailAddress ||
+                      email ||
+                      '',
                     firstName: backendUser.firstName || null,
                     lastName: backendUser.lastName || null,
                   }
@@ -880,10 +884,15 @@ export class ElectronTestHelper {
     })
   }
 
-  static async getWindowBounds(page: Page): Promise<any> {
-    return page.evaluate(() => {
+  static async getWindowBounds(page: Page): Promise<{
+    x: number
+    y: number
+    width: number
+    height: number
+  }> {
+    const bounds = await page.evaluate(async () => {
       return (
-        window.electronAPI?.window?.getBounds?.() || {
+        (await window.electronAPI?.window?.getBounds?.()) || {
           x: 0,
           y: 0,
           width: 800,
@@ -891,32 +900,39 @@ export class ElectronTestHelper {
         }
       )
     })
+    return bounds
   }
 
   static async setWindowBounds(
     page: Page,
     bounds: { x?: number; y?: number; width?: number; height?: number },
   ): Promise<void> {
-    await page.evaluate((bounds) => {
-      window.electronAPI?.window?.setBounds?.(bounds)
+    // Pass bounds directly - partial updates are intentional
+    // The main process handles merging with current window bounds
+    await page.evaluate(async (b) => {
+      await window.electronAPI?.window?.setBounds?.(b)
     }, bounds)
   }
 
   static async isWindowMinimized(page: Page): Promise<boolean> {
-    return page.evaluate(() => {
-      return window.electronAPI?.window?.isMinimized?.() || false
+    const result = await page.evaluate(async () => {
+      return (await window.electronAPI?.window?.isMinimized?.()) || false
     })
+    return result
   }
 
   static async isWindowAlwaysOnTop(page: Page): Promise<boolean> {
-    return page.evaluate(() => {
-      return window.electronAPI?.window?.isAlwaysOnTop?.() || false
+    const result = await page.evaluate(async () => {
+      return (await window.electronAPI?.window?.isAlwaysOnTop?.()) || false
     })
+    return result
   }
 
   static async saveConfiguration(page: Page): Promise<boolean> {
-    return page.evaluate(() => {
-      return window.electronAPI?.config?.save?.() || true
+    return page.evaluate(async () => {
+      const result = await window.electronAPI?.config?.save?.()
+      // save() returns either boolean or Record, coerce to boolean
+      return result !== null && result !== undefined
     })
   }
 
@@ -939,9 +955,10 @@ export class ElectronTestHelper {
   }
 
   static async getAllDisplays(page: Page): Promise<any[]> {
-    return page.evaluate(() => {
-      return window.electronAPI?.display?.getAllDisplays?.() || []
+    const displays = await page.evaluate(async () => {
+      return (await window.electronAPI?.display?.getAllDisplays?.()) || []
     })
+    return displays
   }
 
   static async moveToDisplay(page: Page, displayIndex: number): Promise<void> {

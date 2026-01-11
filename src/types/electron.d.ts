@@ -241,6 +241,22 @@ interface ElectronAPI {
     resetTestState?: () => void
     clearErrors?: () => void
   }
+
+  /**
+   * Electron-specific settings management.
+   * Controls app behavior like dock visibility and startup preferences.
+   *
+   * Note: Canonical type definition is in /electron/types/electron-api.d.ts
+   * Keep this in sync with ElectronAPIInterface.settings
+   */
+  settings?: {
+    /** Set whether the app icon should be hidden from the dock (macOS) */
+    setHideAppIcon: (hide: boolean) => Promise<boolean>
+    /** Set whether the app should show in the menu bar */
+    setShowInMenuBar: (show: boolean) => Promise<boolean>
+    /** Set whether the app should start at system login */
+    setStartAtLogin: (enable: boolean) => Promise<boolean>
+  }
 }
 
 declare global {

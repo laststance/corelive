@@ -78,9 +78,29 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
         window.electronAPI.shortcuts.getStats(),
       ])
 
-      setShortcuts(registered)
-      setDefaultShortcuts(defaults)
-      setStats(currentStats)
+      // Transform ShortcutDefinition[] to ShortcutConfig (key-value pairs)
+      const registeredConfig: ShortcutConfig = {}
+      for (const shortcut of registered) {
+        registeredConfig[shortcut.id] = shortcut.accelerator
+      }
+
+      const defaultsConfig: ShortcutConfig = {}
+      for (const shortcut of defaults) {
+        defaultsConfig[shortcut.id] = shortcut.accelerator
+      }
+
+      // Use stats directly from main process
+      // The IPC response now matches our ShortcutStats type
+      const statsFormatted: ShortcutStats = {
+        totalRegistered: currentStats.totalRegistered,
+        isEnabled: currentStats.isEnabled,
+        platform: currentStats.platform,
+        shortcuts: registeredConfig,
+      }
+
+      setShortcuts(registeredConfig)
+      setDefaultShortcuts(defaultsConfig)
+      setStats(statsFormatted)
       setHasChanges(false)
       setError(null)
     } catch (error) {
@@ -110,9 +130,19 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
       if (!window.electronAPI?.shortcuts) {
         throw new Error('Electron API not available')
       }
-      const success = await window.electronAPI.shortcuts.update(shortcuts)
+      // Update each shortcut individually
+      let allSuccess = true
+      for (const [id, accelerator] of Object.entries(shortcuts)) {
+        const success = await window.electronAPI.shortcuts.update(
+          id,
+          accelerator,
+        )
+        if (!success) {
+          allSuccess = false
+        }
+      }
 
-      if (success) {
+      if (allSuccess) {
         setHasChanges(false)
         await loadShortcuts() // Reload to get current state
       } else {
@@ -141,10 +171,14 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
       if (!window.electronAPI?.shortcuts) {
         throw new Error('Electron API not available')
       }
-      if (stats.isEnabled) {
-        await window.electronAPI.shortcuts.disable()
-      } else {
-        await window.electronAPI.shortcuts.enable()
+      // Toggle each shortcut individually
+      const shortcutIds = Object.keys(shortcuts)
+      for (const id of shortcutIds) {
+        if (stats.isEnabled) {
+          await window.electronAPI.shortcuts.disable(id)
+        } else {
+          await window.electronAPI.shortcuts.enable(id)
+        }
       }
       await loadShortcuts()
     } catch (error) {
@@ -240,7 +274,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-base">Enable Keyboard Shortcuts</Label>
-              <div className="text-muted-foreground text-sm">
+              <div className="text-sm text-muted-foreground">
                 Turn on global keyboard shortcuts
               </div>
             </div>
@@ -256,7 +290,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
           <>
             {/* Error display */}
             {error && (
-              <div className="bg-destructive/10 text-destructive flex items-center gap-2 rounded-md p-3">
+              <div className="bg-destructive/10 flex items-center gap-2 rounded-md p-3 text-destructive">
                 <AlertCircle className="h-4 w-4" />
                 <span className="text-sm">{error}</span>
               </div>
@@ -301,7 +335,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
 
             {/* Platform info */}
             {stats && (
-              <div className="text-muted-foreground text-sm">
+              <div className="text-sm text-muted-foreground">
                 <p>Platform: {stats.platform}</p>
                 <p>Registered shortcuts: {stats.totalRegistered}</p>
                 <p className="mt-2">

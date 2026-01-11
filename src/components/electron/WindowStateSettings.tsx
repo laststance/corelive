@@ -87,13 +87,58 @@ export function WindowStateSettings() {
       if (!window.electronAPI?.windowState) {
         throw new Error('Electron API not available')
       }
-      const [statsData, displaysData] = await Promise.all([
-        window.electronAPI.windowState.getStats(),
-        window.electronAPI.windowState.getAllDisplays(),
-      ])
+      const [apiStats, displaysData, mainState, floatingState] =
+        await Promise.all([
+          window.electronAPI.windowState.getStats(),
+          window.electronAPI.windowState.getAllDisplays(),
+          window.electronAPI.windowState.get('main'),
+          window.electronAPI.windowState.get('floating'),
+        ])
+
+      // Transform API stats to component's expected format
+      const transformedDisplays: Display[] = displaysData.map((d, index) => ({
+        id: d.id,
+        label: d.isPrimary ? 'Primary Display' : `Display ${index + 1}`,
+        bounds: d.bounds,
+        workArea: d.workArea,
+        scaleFactor: d.scaleFactor,
+        isPrimary: d.isPrimary,
+      }))
+
+      const statsData: WindowStateStats = {
+        windowCount: apiStats.windowCount ?? apiStats.saves ?? 0,
+        lastSaved: apiStats.lastSaved ?? 0,
+        displays: transformedDisplays,
+        states: {
+          main: mainState
+            ? {
+                bounds: {
+                  x: mainState.x,
+                  y: mainState.y,
+                  width: mainState.width,
+                  height: mainState.height,
+                },
+                displayId: mainState.displayId ?? 0,
+                lastSaved: mainState.lastSaved ?? 0,
+              }
+            : undefined,
+          floating: floatingState
+            ? {
+                bounds: {
+                  x: floatingState.x,
+                  y: floatingState.y,
+                  width: floatingState.width,
+                  height: floatingState.height,
+                },
+                displayId: floatingState.displayId ?? 0,
+                lastSaved: floatingState.lastSaved ?? 0,
+              }
+            : undefined,
+        },
+      }
 
       setStats(statsData)
-      setDisplays(displaysData)
+      setDisplays(transformedDisplays)
     } catch (error) {
       log.error('Failed to load window state data:', error)
       toast.error('Failed to load window state information')
@@ -102,7 +147,10 @@ export function WindowStateSettings() {
     }
   }
 
-  const moveWindowToDisplay = async (windowType: string, displayId: number) => {
+  const moveWindowToDisplay = async (
+    windowType: 'main' | 'floating',
+    displayId: number,
+  ) => {
     try {
       if (!window.electronAPI?.windowState) {
         throw new Error('Electron API not available')
@@ -123,7 +171,21 @@ export function WindowStateSettings() {
     }
   }
 
-  const snapWindowToEdge = async (windowType: string, edge: string) => {
+  type SnapEdge =
+    | 'left'
+    | 'right'
+    | 'top'
+    | 'bottom'
+    | 'top-left'
+    | 'top-right'
+    | 'bottom-left'
+    | 'bottom-right'
+    | 'maximize'
+
+  const snapWindowToEdge = async (
+    windowType: 'main' | 'floating',
+    edge: SnapEdge,
+  ) => {
     try {
       if (!window.electronAPI?.windowState) {
         throw new Error('Electron API not available')
@@ -144,18 +206,14 @@ export function WindowStateSettings() {
     }
   }
 
-  const resetWindowState = async (windowType: string) => {
+  const resetWindowState = async (windowType: 'main' | 'floating') => {
     try {
       if (!window.electronAPI?.windowState) {
         throw new Error('Electron API not available')
       }
-      const success = await window.electronAPI.windowState.reset(windowType)
-      if (success) {
-        toast.success(`${windowType} window state reset to defaults`)
-        await loadWindowStateData() // Refresh data
-      } else {
-        toast.error(`Failed to reset ${windowType} window state`)
-      }
+      await window.electronAPI.windowState.reset(windowType)
+      toast.success(`${windowType} window state reset to defaults`)
+      await loadWindowStateData() // Refresh data
     } catch (error) {
       log.error('Failed to reset window state:', error)
       toast.error(`Failed to reset ${windowType} window state`)
@@ -230,7 +288,7 @@ export function WindowStateSettings() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="text-muted-foreground text-sm">
+            <div className="text-sm text-muted-foreground">
               {displays.length} display{displays.length !== 1 ? 's' : ''}{' '}
               detected
             </div>
@@ -248,16 +306,16 @@ export function WindowStateSettings() {
                         <Badge variant="secondary">Primary</Badge>
                       )}
                     </div>
-                    <div className="text-muted-foreground text-sm">
+                    <div className="text-sm text-muted-foreground">
                       {display.bounds.width} × {display.bounds.height}
                       {display.scaleFactor !== 1 &&
                         ` (${display.scaleFactor}x)`}
                     </div>
-                    <div className="text-muted-foreground text-xs">
+                    <div className="text-xs text-muted-foreground">
                       Position: ({display.bounds.x}, {display.bounds.y})
                     </div>
                   </div>
-                  <div className="text-muted-foreground text-right text-sm">
+                  <div className="text-right text-sm text-muted-foreground">
                     ID: {display.id}
                   </div>
                 </div>
@@ -280,26 +338,26 @@ export function WindowStateSettings() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-sm font-medium">Position</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   ({stats.states.main.bounds.x}, {stats.states.main.bounds.y})
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium">Size</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   {stats.states.main.bounds.width} ×{' '}
                   {stats.states.main.bounds.height}
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium">Display</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   {getDisplayLabel(stats.states.main.displayId)}
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium">Last Saved</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   {formatLastSaved(stats.states.main.lastSaved)}
                 </div>
               </div>
@@ -431,27 +489,27 @@ export function WindowStateSettings() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-sm font-medium">Position</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   ({stats.states.floating.bounds.x},{' '}
                   {stats.states.floating.bounds.y})
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium">Size</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   {stats.states.floating.bounds.width} ×{' '}
                   {stats.states.floating.bounds.height}
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium">Display</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   {getDisplayLabel(stats.states.floating.displayId)}
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium">Last Saved</div>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   {formatLastSaved(stats.states.floating.lastSaved)}
                 </div>
               </div>
@@ -551,13 +609,13 @@ export function WindowStateSettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-sm font-medium">Windows Tracked</div>
-              <div className="text-muted-foreground text-sm">
+              <div className="text-sm text-muted-foreground">
                 {stats.windowCount}
               </div>
             </div>
             <div>
               <div className="text-sm font-medium">Last State Save</div>
-              <div className="text-muted-foreground text-sm">
+              <div className="text-sm text-muted-foreground">
                 {formatLastSaved(stats.lastSaved)}
               </div>
             </div>
