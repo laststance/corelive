@@ -55,11 +55,8 @@ jobs:
       - name: Generate Prisma Client 🗄️
         run: pnpm prisma generate
 
-      - name: Build Next.js application 🏗️
-        run: pnpm build
-
       - name: Build Electron application ⚡
-        run: ELECTRON_BUILD=true pnpm build && pnpm electron:build:dir
+        run: pnpm electron:build:dir
 
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
