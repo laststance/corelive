@@ -156,6 +156,7 @@
     "electron-builder": "^26.4.0",
     "electron-devtools-installer": "^4.0.0",
     "electron-log": "^5.4.3",
+    "electron-vite": "^5.0.0",
     "eslint": "^9.39.2",
     "eslint-config-next": "16.1.1",
     "eslint-config-ts-prefixer": "^4.1.1",
