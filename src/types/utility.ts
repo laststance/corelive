@@ -1,3 +1,4 @@
+export type AnyFunction = (...args: any[]) => any
 export type TODO = any
 
 // https://stackoverflow.com/a/69288824/8440230
@@ -21,15 +22,4 @@ export type TransformDateToString<T> = {
       : T[K] extends object
         ? TransformDateToString<T[K]>
         : T[K]
-}
-
-export namespace ToastMessage {
-  export type Success = {
-    message: string
-    type: 'success'
-  }
-  export type Error = {
-    message: string
-    type: 'error'
-  }
 }
