@@ -158,7 +158,7 @@ Each Electron build command sets `APP_URL` to determine which web app URL the El
 ```bash
 # Local production testing (connects to corelive.app)
 pnpm electron:build:dir
-open dist-electron/mac/CoreLive.app
+open dist/mac/CoreLive.app
 
 # E2E testing (connects to localhost:3011)
 pnpm build && pnpm electron:build:e2e && pnpm e2e:electron
@@ -167,6 +167,6 @@ pnpm build && pnpm electron:build:e2e && pnpm e2e:electron
 pnpm electron:build:mac
 ```
 
-The built macOS applications (DMG and ZIP) will be available in the `dist-electron/` directory.
+The built macOS applications (DMG and ZIP) will be available in the `dist/` directory.
 
 > **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.

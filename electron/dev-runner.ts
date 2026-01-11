@@ -25,14 +25,11 @@
  * @module electron/dev-runner
  */
 
-const { spawn } = require('child_process')
-const http = require('http')
-const path = require('path')
+import { spawn, type ChildProcess } from 'child_process'
+import http from 'http'
+import path from 'path'
 
-const { log } = require('./logger.cjs')
-
-// Ensure we're in development mode
-process.env.NODE_ENV = 'development'
+import { log } from './logger'
 
 /**
  * Checks if the Next.js development server is ready.
@@ -45,31 +42,43 @@ process.env.NODE_ENV = 'development'
  *
  * This can take 5-30 seconds depending on project size.
  *
- * @param {string} url - URL to check (http://localhost:3011)
- * @param {number} retries - Max attempts (default: 30 = 30 seconds)
- * @returns {Promise<void>} Resolves when server is ready
+ * @param url - URL to check (http://localhost:3011)
+ * @param retries - Max attempts (default: 30 = 30 seconds)
+ * @returns Promise that resolves when server is ready
  */
-async function checkServer(url, retries = 30) {
+async function checkServer(url: string, retries = 30): Promise<void> {
   return new Promise((resolve, reject) => {
-    const check = (attempt) => {
+    let lastError: Error | null = null
+
+    const check = (attempt: number): void => {
       http
         .get(url, (res) => {
+          // Always consume the response stream to free the socket
+          res.resume()
+
           if (res.statusCode === 200) {
             resolve()
           } else {
+            lastError = new Error(
+              `Server returned non-200 status: ${res.statusCode}`,
+            )
             retry(attempt)
           }
         })
-        .on('error', () => {
+        .on('error', (err: Error) => {
+          lastError = err
           retry(attempt)
         })
     }
 
-    const retry = (attempt) => {
+    const retry = (attempt: number): void => {
       if (attempt < retries) {
         setTimeout(() => check(attempt + 1), 1000)
       } else {
-        reject(new Error('Next.js dev server failed to start'))
+        const message = lastError
+          ? `Next.js dev server failed to start: ${lastError.message}`
+          : 'Next.js dev server failed to start after maximum retries'
+        reject(new Error(message))
       }
     }
 
@@ -91,17 +100,26 @@ async function checkServer(url, retries = 30) {
  * - Port conflicts
  * - Missing environment variables
  */
-async function startElectron() {
+async function startElectron(): Promise<void> {
   try {
     // Wait for Next.js to be fully ready
     log.info('⏳ Waiting for Next.js dev server...')
     await checkServer('http://localhost:3011')
     log.info('✅ Next.js is ready')
 
+    // Path to compiled main process (built by electron-vite)
+    // dev-runner is executed from project root, so use process.cwd()
+    const mainProcessPath = path.join(
+      process.cwd(),
+      'dist-electron',
+      'main',
+      'index.cjs',
+    )
+
     // Start Electron with development configuration
-    const electronProcess = spawn(
-      path.join(__dirname, '..', 'node_modules', '.bin', 'electron'),
-      [path.join(__dirname, 'main.cjs')],
+    const electronProcess: ChildProcess = spawn(
+      path.join(process.cwd(), 'node_modules', '.bin', 'electron'),
+      [mainProcessPath],
       {
         stdio: 'inherit', // See Electron logs in console
         env: {
@@ -113,16 +131,48 @@ async function startElectron() {
       },
     )
 
+    /**
+     * Cleanup function to terminate electron process and remove listeners.
+     */
+    const cleanup = (): void => {
+      process.removeListener('SIGINT', handleSignal)
+      process.removeListener('SIGTERM', handleSignal)
+      electronProcess.removeAllListeners('close')
+      electronProcess.removeAllListeners('error')
+    }
+
+    /**
+     * Signal handler for graceful shutdown.
+     *
+     * @param signal - The signal received (SIGINT or SIGTERM)
+     */
+    const handleSignal = (signal: NodeJS.Signals): void => {
+      log.info(`Received ${signal}, shutting down Electron...`)
+      cleanup()
+      electronProcess.kill(signal)
+      // Give the process time to exit gracefully, then force exit
+      setTimeout(() => {
+        process.exit(0)
+      }, 3000)
+    }
+
+    // Register signal handlers for graceful shutdown
+    process.on('SIGINT', handleSignal)
+    process.on('SIGTERM', handleSignal)
+
     electronProcess.on('close', (code) => {
-      process.exit(code)
+      cleanup()
+      process.exit(code ?? 0)
     })
 
     electronProcess.on('error', (error) => {
       log.error('❌ Failed to start Electron:', error)
+      cleanup()
       process.exit(1)
     })
   } catch (error) {
-    log.error('❌ Error starting Electron:', error.message)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('❌ Error starting Electron:', errorMessage)
     process.exit(1)
   }
 }

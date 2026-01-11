@@ -29,7 +29,7 @@ const mockShell = {
 }
 
 // Mock modules using vi.doMock for better CommonJS support
-vi.doMock('../logger.cjs', () => ({
+vi.doMock('../logger.ts', () => ({
   log: mockLog,
 }))
 
@@ -82,7 +82,7 @@ describe('DeepLinkManager', () => {
 
     // Import DeepLinkManager using dynamic ESM import (works with CommonJS modules)
     // CommonJS module.exports becomes .default in ESM
-    const module = await import('../DeepLinkManager.cjs?t=' + Date.now())
+    const module = await import('../DeepLinkManager.ts?t=' + Date.now())
     DeepLinkManager = module.default
     deepLinkManager = new DeepLinkManager(
       mockWindowManager,

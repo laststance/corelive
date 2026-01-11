@@ -332,7 +332,9 @@ export class SystemTrayManager {
 
     let iconDir: string
     if (isDev) {
-      iconDir = path.join(__dirname, '..', 'build', 'icons', 'tray')
+      // In development, __dirname is dist-electron/main/
+      // We need to go up two levels to reach the project root, then into build/icons/tray
+      iconDir = path.join(__dirname, '..', '..', 'build', 'icons', 'tray')
     } else {
       iconDir = path.join(process.resourcesPath, 'tray-icons')
     }
@@ -432,6 +434,18 @@ export class SystemTrayManager {
               this.windowManager.toggleFloatingNavigator()
             } catch (error) {
               log.error('Failed to toggle floating navigator:', error)
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Settings',
+          click: () => {
+            try {
+              this.windowManager.restoreFromTray()
+              this.windowManager.openSettings()
+            } catch (error) {
+              log.error('Failed to open settings:', error)
             }
           },
         },

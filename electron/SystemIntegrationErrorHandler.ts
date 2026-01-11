@@ -111,8 +111,9 @@ export class SystemIntegrationErrorHandler {
   /** Integration status for each feature */
   private integrationStatus: IntegrationStatuses
 
-  /** Track user notifications about failures */
-  private userNotified: UserNotified
+  /** Track user notifications about failures - stored for future use */
+  // @ts-ignore - Intentionally unused, stored for future features
+  private _userNotified: UserNotified
 
   /** Overall status */
   private overallStatus: OverallStatus
@@ -142,7 +143,7 @@ export class SystemIntegrationErrorHandler {
       },
     }
 
-    this.userNotified = {
+    this._userNotified = {
       tray: false,
       notifications: false,
       shortcuts: false,

@@ -101,43 +101,58 @@ export class LazyLoadManager {
   /**
    * Register factories for lazy-loaded components.
    *
-   * Note: We use dynamic imports for TypeScript modules.
-   * The module paths are relative to the compiled output.
+   * Note: With preserveModules enabled in electron-vite, each module is built as a separate file.
+   * Since we're running from dist-electron/main/index.cjs, we can use relative paths
+   * to require the compiled .cjs files in the same directory.
+   *
+   * Important: require() returns the module exports object, not the class directly.
+   * We need to access the named export (e.g., .SystemTrayManager) or .default to get the class.
    */
   private registerComponentFactories(): void {
+    // Files are in the same directory as index.cjs (dist-electron/main/)
+    // So we can use relative paths like ./SystemIntegrationErrorHandler
+    // Note: Each module exports both named and default exports, we use the named export
+
     // System Tray Manager - not critical for startup
     this.componentFactories.set('SystemTrayManager', () => {
-      return require('./SystemTrayManager')
+      const mod = require('./SystemTrayManager.cjs')
+      return mod.SystemTrayManager || mod.default
     })
 
     // Notification Manager - can be loaded when first notification is needed
     this.componentFactories.set('NotificationManager', () => {
-      return require('./NotificationManager')
+      const mod = require('./NotificationManager.cjs')
+      return mod.NotificationManager || mod.default
     })
 
     // Shortcut Manager - can be loaded after window is ready
     this.componentFactories.set('ShortcutManager', () => {
-      return require('./ShortcutManager')
+      const mod = require('./ShortcutManager.cjs')
+      return mod.ShortcutManager || mod.default
     })
 
     // Auto Updater - not needed immediately
     this.componentFactories.set('AutoUpdater', () => {
-      return require('./AutoUpdater')
+      const mod = require('./AutoUpdater.cjs')
+      return mod.AutoUpdater || mod.default
     })
 
     // Menu Manager - needed for application menu
     this.componentFactories.set('MenuManager', () => {
-      return require('./MenuManager')
+      const mod = require('./MenuManager.cjs')
+      return mod.MenuManager || mod.default
     })
 
     // System Integration Error Handler - can be loaded when needed
     this.componentFactories.set('SystemIntegrationErrorHandler', () => {
-      return require('./SystemIntegrationErrorHandler')
+      const mod = require('./SystemIntegrationErrorHandler.cjs')
+      return mod.SystemIntegrationErrorHandler || mod.default
     })
 
     // Deep Link Manager - handles URL scheme registration and processing
     this.componentFactories.set('DeepLinkManager', () => {
-      return require('./DeepLinkManager')
+      const mod = require('./DeepLinkManager.cjs')
+      return mod.DeepLinkManager || mod.default
     })
   }
 

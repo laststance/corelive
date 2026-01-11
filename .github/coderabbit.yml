@@ -1,0 +1,170 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+# CodeRabbit configuration for CoreLive project
+# Next.js + Electron + TypeScript application
+
+language: 'en-US'
+early_access: false
+
+reviews:
+  # Review profile: chill (friendly), balanced (default), or strict
+  profile: 'balanced'
+
+  # Request changes workflow - if true, CodeRabbit can request changes
+  request_changes_workflow: false
+
+  # High-level summary of changes
+  high_level_summary: true
+
+  # Include poem in reviews (fun feature)
+  poem: false
+
+  # Show review status
+  review_status: true
+
+  # Collapse walkthrough sections
+  collapse_walkthrough: false
+
+  # Paths to ignore during reviews
+  ignore:
+    # Build outputs
+    - '**/dist-electron/**'
+    - '**/dist/**'
+    - '**/.next/**'
+    - '**/node_modules/**'
+    - '**/build/**'
+
+    # Generated files
+    - '**/prisma/migrations/**'
+    - '**/.prisma/**'
+    - '**/generated/**'
+
+    # Test artifacts
+    - '**/test-results/**'
+    - '**/playwright-report/**'
+    - '**/screenshots/**'
+    - '**/coverage/**'
+
+    # Logs and temporary files
+    - '**/logs/**'
+    - '**/*.log'
+    - '**/debug-*.log'
+
+    # Lock files (auto-generated)
+    - '**/pnpm-lock.yaml'
+    - '**/package-lock.json'
+    - '**/yarn.lock'
+
+    # Configuration files that are auto-generated or vendor-specific
+    - '**/next-env.d.ts'
+    - '**/tsconfig.tsbuildinfo'
+
+    # Documentation that doesn't need code review
+    - '**/claudedocs/**'
+    - '**/docs/**/*.md'
+
+    # Electron build artifacts
+    - '**/mac/**'
+    - '**/mac-arm64/**'
+
+    # Storybook build outputs
+    - '**/storybook-static/**'
+
+auto_review:
+  # Enable automatic reviews
+  enabled: true
+
+  # Review draft PRs
+  drafts: false
+
+  # Paths to include in auto-review (if empty, all paths are included)
+  include:
+    - 'src/**'
+    - 'electron/**'
+    - 'prisma/schema.prisma'
+    - '*.config.{js,ts,mjs}'
+
+  # Paths to exclude from auto-review
+  exclude:
+    - '**/*.test.{ts,tsx,mjs}'
+    - '**/*.spec.{ts,tsx,mjs}'
+    - '**/__tests__/**'
+    - '**/e2e/**'
+    - '**/*.stories.{ts,tsx,mdx}'
+
+chat:
+  # Auto-reply to comments
+  auto_reply: true
+
+  # Include art in chat responses
+  art: false
+
+# Path-specific configurations
+path_filters:
+  # Electron-specific files
+  - path: 'electron/**'
+    review:
+      # Focus on security and best practices for Electron
+      focus:
+        - 'security'
+        - 'best_practices'
+        - 'performance'
+
+  # Prisma schema files
+  - path: 'prisma/schema.prisma'
+    review:
+      focus:
+        - 'database_design'
+        - 'data_modeling'
+
+  # TypeScript configuration
+  - path: '**/*.config.{ts,js,mjs}'
+    review:
+      focus:
+        - 'configuration'
+        - 'best_practices'
+
+  # Test files - lighter review
+  - path: '**/*.{test,spec}.{ts,tsx,mjs}'
+    review:
+      profile: 'chill'
+      focus:
+        - 'test_quality'
+
+  # Storybook files - lighter review
+  - path: '**/*.stories.{ts,tsx,mdx}'
+    review:
+      profile: 'chill'
+
+# Language-specific settings
+languages:
+  typescript:
+    # Focus areas for TypeScript files
+    focus:
+      - 'type_safety'
+      - 'code_quality'
+      - 'performance'
+
+  javascript:
+    focus:
+      - 'code_quality'
+      - 'best_practices'
+
+  prisma:
+    focus:
+      - 'database_design'
+      - 'data_modeling'
+
+# PR size limits
+pr_size:
+  # Maximum lines changed for a single PR
+  max_lines: 2000
+
+  # Maximum files changed for a single PR
+  max_files: 100
+
+# Commit message review
+commit_message:
+  enabled: true
+  # Require conventional commits format
+  conventional_commits: true

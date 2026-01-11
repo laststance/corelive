@@ -67,7 +67,7 @@ The development script will:
 ```bash
 # Development/Testing (fast, no packaging)
 pnpm electron:build:dir
-open dist-electron/mac/CoreLive.app
+open dist/mac/CoreLive.app
 
 # Production Release (DMG + ZIP + signing + Notarization)
 pnpm electron:build:mac
@@ -84,7 +84,7 @@ pnpm electron:build:mac
 2. **Code signing** (if certificates configured)
 3. **Notarization** (via afterSign hook)
 
-### Build Output (`dist-electron/`)
+### Build Output (`dist/`)
 
 - `CoreLive-{version}-arm64.dmg` - Installer
 - `CoreLive-{version}-arm64-mac.zip` - Archive
