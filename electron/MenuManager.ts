@@ -54,7 +54,7 @@ export class MenuManager {
     this.mainWindow = null
     this.windowManager = null
     this.configManager = null
-    this.isMac = true
+    this.isMac = process.platform === 'darwin'
   }
 
   /**

@@ -100,41 +100,44 @@ export class LazyLoadManager {
 
   /**
    * Register factories for lazy-loaded components.
+   *
+   * Note: We use dynamic imports for TypeScript modules.
+   * The module paths are relative to the compiled output.
    */
   private registerComponentFactories(): void {
     // System Tray Manager - not critical for startup
     this.componentFactories.set('SystemTrayManager', () => {
-      return require('./SystemTrayManager.cjs')
+      return require('./SystemTrayManager')
     })
 
     // Notification Manager - can be loaded when first notification is needed
     this.componentFactories.set('NotificationManager', () => {
-      return require('./NotificationManager.cjs')
+      return require('./NotificationManager')
     })
 
     // Shortcut Manager - can be loaded after window is ready
     this.componentFactories.set('ShortcutManager', () => {
-      return require('./ShortcutManager.cjs')
+      return require('./ShortcutManager')
     })
 
     // Auto Updater - not needed immediately
     this.componentFactories.set('AutoUpdater', () => {
-      return require('./AutoUpdater.cjs')
+      return require('./AutoUpdater')
     })
 
     // Menu Manager - needed for application menu
     this.componentFactories.set('MenuManager', () => {
-      return require('./MenuManager.cjs')
+      return require('./MenuManager')
     })
 
     // System Integration Error Handler - can be loaded when needed
     this.componentFactories.set('SystemIntegrationErrorHandler', () => {
-      return require('./SystemIntegrationErrorHandler.cjs')
+      return require('./SystemIntegrationErrorHandler')
     })
 
     // Deep Link Manager - handles URL scheme registration and processing
     this.componentFactories.set('DeepLinkManager', () => {
-      return require('./DeepLinkManager.cjs')
+      return require('./DeepLinkManager')
     })
   }
 
@@ -307,19 +310,23 @@ export class LazyLoadManager {
 
 /**
  * Component loading priorities.
+ *
+ * Note: Only components registered in LazyLoadManager are included here.
+ * Critical components (WindowManager, ConfigManager, etc.) are loaded
+ * eagerly in main.ts and are not lazily loaded.
  */
 export const LOADING_PRIORITIES: LoadingPriorities = {
-  // Critical components - load immediately
-  critical: ['WindowManager', 'ConfigManager', 'WindowStateManager'],
+  // Critical components - loaded eagerly in main.ts, not via lazy loading
+  critical: [],
 
-  // High priority - load after critical components
-  high: ['IPCErrorHandler', 'APIBridge', 'MenuManager'],
+  // High priority - load after app ready
+  high: ['MenuManager'],
 
   // Medium priority - load in background after startup
   medium: ['SystemTrayManager', 'NotificationManager', 'ShortcutManager'],
 
   // Low priority - load when needed
-  low: ['AutoUpdater', 'SystemIntegrationErrorHandler'],
+  low: ['AutoUpdater', 'SystemIntegrationErrorHandler', 'DeepLinkManager'],
 }
 
 // ============================================================================

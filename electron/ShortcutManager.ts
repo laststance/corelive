@@ -142,15 +142,21 @@ export class ShortcutManager {
 
   /**
    * Returns platform-specific default shortcuts.
+   *
+   * Uses CommandOrControl for cross-platform compatibility:
+   * - macOS: Cmd key
+   * - Windows/Linux: Ctrl key
    */
   getDefaultShortcuts(): ShortcutConfig {
+    // Use CommandOrControl for cross-platform support
+    // Electron will translate this to Cmd on macOS and Ctrl on Windows/Linux
     return {
-      newTask: 'Cmd+N',
-      showMainWindow: 'Cmd+Shift+T',
-      quit: 'Cmd+Q',
-      minimize: 'Cmd+M',
-      toggleAlwaysOnTop: 'Cmd+Shift+A',
-      focusFloatingNavigator: 'Cmd+Shift+N',
+      newTask: 'CommandOrControl+N',
+      showMainWindow: 'CommandOrControl+Shift+T',
+      quit: 'CommandOrControl+Q',
+      minimize: 'CommandOrControl+M',
+      toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
+      focusFloatingNavigator: 'CommandOrControl+Shift+N',
     }
   }
 
@@ -490,6 +496,9 @@ export class ShortcutManager {
 
   /**
    * Generate alternative shortcuts when conflicts occur.
+   *
+   * Uses cross-platform modifiers (CommandOrControl, Alt) to ensure
+   * compatibility across macOS, Windows, and Linux.
    */
   generateAlternativeShortcuts(
     originalAccelerator: string,
@@ -501,15 +510,17 @@ export class ShortcutManager {
     const key = parts[parts.length - 1] ?? ''
     const modifiers = parts.slice(0, -1)
 
+    // Use cross-platform modifier combinations
     const alternativeModifiers = [
-      [...modifiers, 'Option'],
+      [...modifiers, 'Alt'],
       modifiers.map((m) => {
-        if (m === 'Ctrl' || m === 'Control') return 'Option'
-        if (m === 'Alt') return 'Cmd'
+        if (m === 'Ctrl' || m === 'Control' || m === 'CommandOrControl')
+          return 'Alt'
+        if (m === 'Alt') return 'CommandOrControl'
         return m
       }),
       [...modifiers, 'Shift'],
-      ['Cmd', 'Alt', 'Shift'],
+      ['CommandOrControl', 'Alt', 'Shift'],
     ]
 
     for (const altModifiers of alternativeModifiers) {

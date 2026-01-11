@@ -67,7 +67,7 @@ export class SystemTrayManager {
    *
    * @returns The tray instance or null if failed
    */
-  createTray(): Tray | null {
+  async createTray(): Promise<Tray | null> {
     try {
       if (!this.isSystemTraySupported()) {
         log.warn('System tray is not supported on this platform')
@@ -83,7 +83,7 @@ export class SystemTrayManager {
         return null
       }
 
-      this.tray = this.createTrayWithRetry(trayIcon)
+      this.tray = await this.createTrayWithRetry(trayIcon)
       if (!this.tray) {
         log.warn(
           'Failed to create system tray after retries, enabling fallback mode',
@@ -200,12 +200,19 @@ export class SystemTrayManager {
   }
 
   /**
-   * Create tray with retry logic.
+   * Non-blocking delay helper.
    */
-  createTrayWithRetry(
+  private async delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Create tray with retry logic (async to avoid blocking main thread).
+   */
+  async createTrayWithRetry(
     trayIcon: NativeImage,
     maxRetries: number = 3,
-  ): Tray | null {
+  ): Promise<Tray | null> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const tray = new Tray(trayIcon)
@@ -217,11 +224,9 @@ export class SystemTrayManager {
         log.warn(`Tray creation attempt ${attempt} failed:`, error)
 
         if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt - 1) * 100
-          const start = Date.now()
-          while (Date.now() - start < delay) {
-            // Busy wait
-          }
+          // Use async delay instead of blocking busy-wait
+          const delayMs = Math.pow(2, attempt - 1) * 100
+          await this.delay(delayMs)
         }
       }
     }

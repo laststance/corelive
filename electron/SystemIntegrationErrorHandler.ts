@@ -192,7 +192,7 @@ export class SystemIntegrationErrorHandler {
         throw new Error('SystemTrayManager not available')
       }
 
-      const tray = this.systemTrayManager.createTray()
+      const tray = await this.systemTrayManager.createTray()
 
       if (tray) {
         this.integrationStatus.tray = {

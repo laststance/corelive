@@ -75,9 +75,17 @@ interface LastError {
 
 /** Error statistics */
 export interface IPCErrorStats {
+  /** Total number of operations attempted */
+  totalOperations: number
+  /** Total number of errors encountered (may include retries) */
   totalErrors: number
+  /** Number of operations that were retried */
   retriedOperations: number
+  /** Number of operations that succeeded (on first try or after retry) */
+  successfulOperations: number
+  /** Number of operations that failed after exhausting all retries */
   failedOperations: number
+  /** Number of operations that used graceful degradation */
   degradedOperations: number
   lastError: LastError | null
   errorsByType: Record<string, number>
@@ -185,8 +193,10 @@ export class IPCErrorHandler {
     this.logPath = options.logPath ?? path.join(app.getPath('userData'), 'logs')
 
     this.stats = {
+      totalOperations: 0,
       totalErrors: 0,
       retriedOperations: 0,
+      successfulOperations: 0,
       failedOperations: 0,
       degradedOperations: 0,
       lastError: null,
@@ -237,12 +247,18 @@ export class IPCErrorHandler {
     let lastError: Error | null = null
     let attempt = 0
 
+    // Track operation start
+    this.trackOperationStart()
+
     // Retry loop with exponential backoff
     while (attempt <= this.maxRetries) {
       try {
         const result = await operation()
 
-        // Success! Log if we had to retry
+        // Success! Track successful completion
+        this.trackOperationSuccess()
+
+        // Log if we had to retry
         if (attempt > 0) {
           this.logInfo(`Operation succeeded after ${attempt} retries`, {
             channel: channel ?? '',
@@ -437,17 +453,32 @@ export class IPCErrorHandler {
   }
 
   /**
-   * Calculate success rate.
+   * Calculate success rate based on actual tracked operations.
+   *
+   * Success rate = (successful operations / total operations) * 100
    */
   private calculateSuccessRate(): number {
-    const totalOperations =
-      this.stats.totalErrors +
-      this.stats.retriedOperations +
-      this.stats.failedOperations
-    if (totalOperations === 0) return 100
+    if (this.stats.totalOperations === 0) return 100
 
-    const successfulOperations = totalOperations - this.stats.failedOperations
-    return Math.round((successfulOperations / totalOperations) * 100)
+    return Math.round(
+      (this.stats.successfulOperations / this.stats.totalOperations) * 100,
+    )
+  }
+
+  /**
+   * Track the start of an operation.
+   * Call this when beginning an IPC operation.
+   */
+  trackOperationStart(): void {
+    this.stats.totalOperations++
+  }
+
+  /**
+   * Track a successful operation.
+   * Call this when an IPC operation completes successfully.
+   */
+  trackOperationSuccess(): void {
+    this.stats.successfulOperations++
   }
 
   /**
@@ -475,8 +506,10 @@ export class IPCErrorHandler {
    */
   resetStats(): void {
     this.stats = {
+      totalOperations: 0,
       totalErrors: 0,
       retriedOperations: 0,
+      successfulOperations: 0,
       failedOperations: 0,
       degradedOperations: 0,
       lastError: null,

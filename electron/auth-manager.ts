@@ -41,7 +41,40 @@ interface ApiBridge {
 /** Auth sync data from web version */
 interface AuthSyncData {
   userId?: string
+  email?: unknown
+  firstName?: unknown
+  lastName?: unknown
+  imageUrl?: unknown
   [key: string]: unknown
+}
+
+/**
+ * Safely coerce a value to string or return fallback.
+ *
+ * Handles edge cases like objects, arrays, and null.
+ */
+function toStringSafe(value: unknown, fallback: string): string {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (value === null || value === undefined) {
+    return fallback
+  }
+  // Don't convert objects/arrays to string
+  if (typeof value === 'object') {
+    return fallback
+  }
+  return String(value)
+}
+
+/**
+ * Safely coerce a value to string or null.
+ */
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value
+  }
+  return null
 }
 
 // ============================================================================
@@ -70,6 +103,15 @@ export class AuthManager {
   /** Auth state flag */
   private isAuthenticated: boolean
 
+  /** Track registered IPC handlers for cleanup */
+  private static readonly IPC_HANDLERS = [
+    'auth-get-user',
+    'auth-set-user',
+    'auth-logout',
+    'auth-is-authenticated',
+    'auth-sync-from-web',
+  ] as const
+
   constructor(apiBridge: ApiBridge | null) {
     this.apiBridge = apiBridge
     this.currentUser = null
@@ -77,6 +119,21 @@ export class AuthManager {
 
     // Register IPC handlers for auth operations
     this.setupIpcHandlers()
+  }
+
+  /**
+   * Disposes the AuthManager and removes IPC handlers.
+   *
+   * Call this when the manager is no longer needed to prevent
+   * memory leaks and duplicate handler registration.
+   */
+  dispose(): void {
+    for (const channel of AuthManager.IPC_HANDLERS) {
+      ipcMain.removeHandler(channel)
+    }
+    this.currentUser = null
+    this.isAuthenticated = false
+    this.apiBridge = null
   }
 
   /**
@@ -115,14 +172,14 @@ export class AuthManager {
 
     // Sync authentication state from web version
     ipcMain.handle('auth-sync-from-web', (_event, authData: AuthSyncData) => {
-      if (authData && authData.userId) {
+      if (authData && typeof authData.userId === 'string' && authData.userId) {
         this.setUser({
           id: authData.userId,
           clerkId: authData.userId,
-          email: (authData.email as string) || '',
-          firstName: (authData.firstName as string) || null,
-          lastName: (authData.lastName as string) || null,
-          imageUrl: (authData.imageUrl as string) || null,
+          email: toStringSafe(authData.email, ''),
+          firstName: toStringOrNull(authData.firstName),
+          lastName: toStringOrNull(authData.lastName),
+          imageUrl: toStringOrNull(authData.imageUrl),
         })
         return { success: true }
       }
