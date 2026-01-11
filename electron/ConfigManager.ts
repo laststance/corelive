@@ -510,14 +510,15 @@ export class ConfigManager {
     >
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i]
+      const key = keys[i]!
       if (!current[key] || typeof current[key] !== 'object') {
         current[key] = {}
       }
       current = current[key] as Record<string, unknown>
     }
 
-    current[keys[keys.length - 1]] = value
+    const lastKey = keys[keys.length - 1]!
+    current[lastKey] = value
     return this.saveConfig()
   }
 

@@ -11,6 +11,7 @@
   "npmRebuild": false,
   "buildDependenciesFromSource": false,
   "files": [
+    "dist-electron/**/*",
     "electron/**/*",
     "node_modules/**/*",
     "package.json",

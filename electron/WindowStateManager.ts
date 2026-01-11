@@ -60,10 +60,10 @@ interface WindowStates {
 }
 
 /** Window type */
-type WindowType = 'main' | 'floating'
+export type WindowType = 'main' | 'floating'
 
 /** Snap edge type */
-type SnapEdge =
+export type SnapEdge =
   | 'left'
   | 'right'
   | 'top'
@@ -695,15 +695,18 @@ export class WindowStateManager {
       })),
       states: Object.keys(this.windowStates).reduce(
         (acc, key) => {
-          acc[key] = {
-            bounds: {
-              x: this.windowStates[key].x,
-              y: this.windowStates[key].y,
-              width: this.windowStates[key].width,
-              height: this.windowStates[key].height,
-            },
-            displayId: this.windowStates[key].displayId,
-            lastSaved: this.windowStates[key].lastSaved,
+          const state = this.windowStates[key]
+          if (state) {
+            acc[key] = {
+              bounds: {
+                x: state.x,
+                y: state.y,
+                width: state.width,
+                height: state.height,
+              },
+              displayId: state.displayId,
+              lastSaved: state.lastSaved,
+            }
           }
           return acc
         },

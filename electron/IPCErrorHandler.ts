@@ -346,13 +346,17 @@ export class IPCErrorHandler {
 
   /**
    * Wrap IPC handler with error handling.
+   * Accepts both synchronous and asynchronous handlers.
    */
   wrapHandler<T extends unknown[], R>(
-    handler: (...args: T) => Promise<R>,
+    handler: (...args: T) => R | Promise<R>,
     context: IPCOperationContext = {},
   ): (...args: T) => Promise<R | unknown> {
     return async (...args: T): Promise<R | unknown> => {
-      return this.executeWithRetry(async () => handler(...args), context)
+      return this.executeWithRetry(
+        async () => Promise.resolve(handler(...args)),
+        context,
+      )
     }
   }
 
