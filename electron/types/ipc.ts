@@ -312,7 +312,7 @@ export interface IPCChannels {
   }
   'floating-window-get-bounds': {
     request: void
-    response: WindowBounds
+    response: WindowBounds | null
   }
   'floating-window-set-bounds': {
     request: WindowBounds
@@ -420,7 +420,12 @@ export interface IPCChannels {
   }
   'shortcuts-get-stats': {
     request: void
-    response: { total: number; enabled: number; global: number }
+    response: {
+      totalRegistered: number
+      isEnabled: boolean
+      platform: string
+      shortcuts: Record<string, string>
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────

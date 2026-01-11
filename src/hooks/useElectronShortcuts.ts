@@ -58,11 +58,11 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         defaultsMap[shortcut.id] = shortcut.accelerator
       }
 
-      // Transform stats to expected format
+      // Use stats directly from main process
       const formattedStats: ShortcutStats = {
-        totalRegistered: currentStats.total,
-        isEnabled: currentStats.enabled > 0,
-        platform: typeof process !== 'undefined' ? process.platform : 'darwin',
+        totalRegistered: currentStats.totalRegistered,
+        isEnabled: currentStats.isEnabled,
+        platform: currentStats.platform,
         shortcuts: registeredMap,
       }
 
@@ -213,11 +213,11 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
 
     try {
       const currentStats = await window.electronAPI.shortcuts.getStats()
-      // Transform to expected format
+      // Use stats directly from main process
       const formattedStats: ShortcutStats = {
-        totalRegistered: currentStats.total,
-        isEnabled: currentStats.enabled > 0,
-        platform: typeof process !== 'undefined' ? process.platform : 'darwin',
+        totalRegistered: currentStats.totalRegistered,
+        isEnabled: currentStats.isEnabled,
+        platform: currentStats.platform,
         shortcuts,
       }
       setStats(formattedStats)

@@ -129,7 +129,12 @@ export interface ElectronAPI {
     /** Disable shortcut */
     disable: (id: string) => Promise<boolean>
     /** Get shortcut statistics */
-    getStats: () => Promise<{ total: number; enabled: number; global: number }>
+    getStats: () => Promise<{
+      totalRegistered: number
+      isEnabled: boolean
+      platform: string
+      shortcuts: Record<string, string>
+    }>
   }
 
   /**
@@ -217,10 +222,10 @@ export interface ElectronAPI {
     backup: () => Promise<string>
     /** Get config file paths */
     getPaths: () => Promise<{ config: string; backup: string; logs: string }>
-    /** Save config to file (synchronous) */
-    save?: () => boolean
-    /** Load config from file (synchronous) */
-    load?: () => Record<string, unknown>
+    /** Save config to file (async via IPC) */
+    save?: () => Promise<boolean | Record<string, unknown>>
+    /** Load config from file (async via IPC) */
+    load?: () => Promise<Record<string, unknown>>
   }
 
   /**

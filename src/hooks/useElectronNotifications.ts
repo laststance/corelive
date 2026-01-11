@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 
 import { log } from '../lib/logger'
 
+/**
+ * Subset of NotificationPreferences from electron/types/ipc.ts.
+ * The full IPC type includes additional fields (taskReminders, dueDateAlerts,
+ * achievementNotifications, quietHours*, etc.) that this hook doesn't use.
+ * We only track the preferences relevant to task-based notifications.
+ */
 interface NotificationPreferences {
   enabled: boolean
   taskCreated: boolean

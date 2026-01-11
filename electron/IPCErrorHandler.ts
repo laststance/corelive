@@ -384,7 +384,8 @@ export class IPCErrorHandler {
       if (!schema) return { isValid: true, data }
 
       // Basic validation based on schema
-      if (schema.required && !data) {
+      // Use nullish check to allow valid falsy values (0, false, '')
+      if (schema.required && (data === null || data === undefined)) {
         throw new Error('Required data is missing')
       }
 

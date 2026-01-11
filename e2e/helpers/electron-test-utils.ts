@@ -934,8 +934,10 @@ export class ElectronTestHelper {
   }
 
   static async saveConfiguration(page: Page): Promise<boolean> {
-    return page.evaluate(() => {
-      return window.electronAPI?.config?.save?.() || true
+    return page.evaluate(async () => {
+      const result = await window.electronAPI?.config?.save?.()
+      // save() returns either boolean or Record, coerce to boolean
+      return result !== null && result !== undefined
     })
   }
 

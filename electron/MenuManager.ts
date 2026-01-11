@@ -313,36 +313,36 @@ export class MenuManager {
           { type: 'separator' },
           {
             label: 'Navigate to Next Task',
-            accelerator: 'Down',
+            // Note: Bare 'Down' accelerator removed to prevent intercepting system navigation
             click: () => this.sendFloatingNavigatorAction('navigate-next-task'),
           },
           {
             label: 'Navigate to Previous Task',
-            accelerator: 'Up',
+            // Note: Bare 'Up' accelerator removed to prevent intercepting system navigation
             click: () =>
               this.sendFloatingNavigatorAction('navigate-previous-task'),
           },
           { type: 'separator' },
           {
             label: 'Toggle Task Completion',
-            accelerator: 'Space',
+            // Note: Bare 'Space' accelerator removed to prevent intercepting normal typing
             click: () =>
               this.sendFloatingNavigatorAction('toggle-task-completion'),
           },
           {
             label: 'Edit Task',
-            accelerator: 'Enter',
+            // Note: Bare 'Enter' accelerator removed to prevent intercepting form submission
             click: () => this.sendFloatingNavigatorAction('edit-task'),
           },
           {
             label: 'Delete Task',
-            accelerator: 'Delete',
+            // Note: Bare 'Delete' accelerator removed to prevent intercepting text editing
             click: () => this.sendFloatingNavigatorAction('delete-task'),
           },
           { type: 'separator' },
           {
             label: 'Return to Input',
-            accelerator: 'Escape',
+            // Note: Bare 'Escape' accelerator removed to prevent intercepting dialog dismissal
             click: () => this.sendFloatingNavigatorAction('return-to-input'),
           },
           {

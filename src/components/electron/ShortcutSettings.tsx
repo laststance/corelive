@@ -89,11 +89,12 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
         defaultsConfig[shortcut.id] = shortcut.accelerator
       }
 
-      // Transform stats to match component's expected format
+      // Use stats directly from main process
+      // The IPC response now matches our ShortcutStats type
       const statsFormatted: ShortcutStats = {
-        totalRegistered: currentStats.total,
-        isEnabled: currentStats.enabled > 0,
-        platform: typeof process !== 'undefined' ? process.platform : 'darwin',
+        totalRegistered: currentStats.totalRegistered,
+        isEnabled: currentStats.isEnabled,
+        platform: currentStats.platform,
         shortcuts: registeredConfig,
       }
 

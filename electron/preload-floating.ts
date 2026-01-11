@@ -64,6 +64,9 @@ const ALLOWED_CHANNELS: AllowedChannelsMap = {
   'floating-window-focus': true,
   'floating-window-blur': true,
 
+  // Menu action events (from MenuManager)
+  'floating-navigator-menu-action': true,
+
   // Show main window
   'window-show-main': true,
 }
