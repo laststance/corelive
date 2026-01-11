@@ -17,7 +17,7 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
@@ -127,10 +127,18 @@ export class WindowManager {
       ? this.windowStateManager.getWindowOptions('main')
       : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
 
-    // Resolve preload script path (built by electron-vite)
-    const preloadPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'preload', 'preload.cjs')
-      : path.join(__dirname, '..', 'preload', 'preload.cjs')
+    // Resolve preload script path (built by electron-vite).
+    //
+    // IMPORTANT:
+    // - `dist-electron/preload/*` is packaged inside `app.asar` by electron-builder
+    //   (it is included via `files: ["dist-electron/**/*", ...]`).
+    // - Therefore, using `process.resourcesPath/preload/*` will fail in production
+    //   unless we explicitly copy preload scripts to `extraResources`.
+    //
+    // This relative-to-__dirname path works in both dev and packaged builds because:
+    // - Dev: __dirname = dist-electron/main
+    // - Prod: __dirname = .../resources/app.asar/dist-electron/main
+    const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
 
     this.mainWindow = new BrowserWindow({
       ...windowOptions,
@@ -242,10 +250,14 @@ export class WindowManager {
       isDev: this.isDev,
     })
 
-    // Resolve floating preload script path (built by electron-vite)
-    const floatingPreloadPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'preload', 'preload-floating.cjs')
-      : path.join(__dirname, '..', 'preload', 'preload-floating.cjs')
+    // Resolve floating preload script path (built by electron-vite).
+    // See `createMainWindow()` for why we avoid `process.resourcesPath` here.
+    const floatingPreloadPath = path.join(
+      __dirname,
+      '..',
+      'preload',
+      'preload-floating.cjs',
+    )
 
     this.floatingNavigator = new BrowserWindow({
       ...windowOptions,
@@ -458,10 +470,9 @@ export class WindowManager {
 
     log.info('🔧 Creating settings window...')
 
-    // Resolve preload script path (built by electron-vite)
-    const preloadPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'preload', 'preload.cjs')
-      : path.join(__dirname, '..', 'preload', 'preload.cjs')
+    // Resolve preload script path (built by electron-vite).
+    // See `createMainWindow()` for why we avoid `process.resourcesPath` here.
+    const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
 
     this.settingsWindow = new BrowserWindow({
       width: 500,

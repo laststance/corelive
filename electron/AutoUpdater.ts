@@ -8,9 +8,10 @@
 
 import type { BrowserWindow } from 'electron'
 import { dialog } from 'electron'
-import log from 'electron-log'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
+
+import { log } from './logger'
 
 // ============================================================================
 // Type Definitions
@@ -20,6 +21,17 @@ import type { UpdateInfo } from 'electron-updater'
 interface UpdateStatus {
   updateAvailable: boolean
   updateDownloaded: boolean
+}
+
+/**
+ * Minimal logger interface expected by `electron-updater`.
+ * We use our own `pino`-based logger to avoid relying on `electron-log` at runtime.
+ */
+interface UpdaterLogger {
+  info: (...args: unknown[]) => void
+  warn: (...args: unknown[]) => void
+  error: (...args: unknown[]) => void
+  debug: (...args: unknown[]) => void
 }
 
 // ============================================================================
@@ -50,8 +62,13 @@ export class AutoUpdater {
     this.updateAvailable = false
     this.updateDownloaded = false
 
-    log.transports.file.level = 'info'
-    autoUpdater.logger = log
+    const updaterLogger: UpdaterLogger = {
+      info: (...args) => log.info(String(args[0] ?? '')),
+      warn: (...args) => log.warn(String(args[0] ?? '')),
+      error: (...args) => log.error(String(args[0] ?? '')),
+      debug: (...args) => log.debug(String(args[0] ?? '')),
+    }
+    autoUpdater.logger = updaterLogger as unknown as typeof autoUpdater.logger
 
     this.setupAutoUpdater()
   }
@@ -78,7 +95,7 @@ export class AutoUpdater {
     })
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
-      log.info('Update available:', info)
+      log.info('Update available', info)
       this.updateAvailable = true
       this.sendStatusToWindow('Update available')
       this.showUpdateAvailableDialog(info).catch((err) => {
@@ -87,7 +104,7 @@ export class AutoUpdater {
     })
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
-      log.info('Update not available:', info)
+      log.info('Update not available', info)
       // Reset status flags when no update is available
       this.updateAvailable = false
       this.updateDownloaded = false
@@ -113,7 +130,7 @@ export class AutoUpdater {
     })
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-      log.info('Update downloaded:', info)
+      log.info('Update downloaded', info)
       this.updateDownloaded = true
       this.sendStatusToWindow('Update downloaded')
       this.showUpdateDownloadedDialog().catch((err) => {
