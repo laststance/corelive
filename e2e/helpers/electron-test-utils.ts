@@ -187,7 +187,8 @@ export class ElectronTestHelper {
           '[electron-test] Authenticated, attempting to get Clerk user',
         )
         try {
-          let clerkUser = await page.evaluate(async () => {
+          // First, try to get user from window.Clerk (client-side)
+          const windowClerkUser = await page.evaluate(async () => {
             const clerk = (window as any).Clerk
             if (!clerk) {
               console.warn('[electron-test] window.Clerk not available')
@@ -217,7 +218,9 @@ export class ElectronTestHelper {
             }
           })
 
-          if (!clerkUser?.clerkId) {
+          // If window.Clerk didn't work, try backend API
+          let backendClerkUser: typeof windowClerkUser = null
+          if (!windowClerkUser?.clerkId) {
             console.warn(
               '[electron-test] window.Clerk user not available, trying backend API',
             )
@@ -235,7 +238,7 @@ export class ElectronTestHelper {
                 })
                 const backendUser = userList.data?.[0]
                 if (backendUser) {
-                  clerkUser = {
+                  backendClerkUser = {
                     clerkId: backendUser.id,
                     email:
                       backendUser.primaryEmailAddress?.emailAddress || email,
@@ -244,7 +247,7 @@ export class ElectronTestHelper {
                   }
                   console.warn(
                     '[electron-test] Found user via Clerk backend:',
-                    clerkUser.clerkId,
+                    backendClerkUser.clerkId,
                   )
                 } else {
                   console.warn(
@@ -264,6 +267,11 @@ export class ElectronTestHelper {
             }
           }
 
+          // Use whichever source provided a valid user
+          const clerkUser = windowClerkUser?.clerkId
+            ? windowClerkUser
+            : backendClerkUser
+
           if (clerkUser?.clerkId) {
             // Sync user to Electron main process
             const setResult = await page.evaluate(async (user) => {
@@ -277,7 +285,23 @@ export class ElectronTestHelper {
 
             console.warn('[electron-test] setUser result:', setResult)
 
-            // Inject user data into window.Clerk for oRPC client
+            // Set up request interception to add Authorization header to oRPC API calls
+            // This is more reliable than window.Clerk injection which can be overwritten
+            // by the real Clerk SDK when it loads
+            await page.route('**/api/orpc/**', async (route) => {
+              const headers = {
+                ...route.request().headers(),
+                Authorization: `Bearer ${clerkUser.clerkId}`,
+              }
+              await route.continue({ headers })
+            })
+
+            console.warn(
+              '[electron-test] Set up oRPC request interception for auth:',
+              clerkUser.clerkId,
+            )
+
+            // Also inject user data into window.Clerk as a fallback
             // The oRPC client checks window.Clerk.session?.user?.id or window.Clerk.user?.id
             await page.evaluate((user) => {
               const win = window as unknown as {
