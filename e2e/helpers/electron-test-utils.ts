@@ -972,17 +972,47 @@ export class ElectronTestHelper {
     // First unroute any existing handlers to avoid duplicates
     await page.unroute('**/api/orpc/**')
 
-    // Re-register the route handler with simpler approach using route.continue()
+    // Re-register the route handler with response logging (same as original)
     await page.route('**/api/orpc/**', async (route) => {
       const url = route.request().url()
+      const method = route.request().method()
       console.warn(
-        `[electron-test] [RELOAD] Intercepted oRPC request: ${url.slice(0, 100)}`,
+        `[electron-test] [RELOAD] Intercepted ${method} oRPC request: ${url.slice(0, 100)}`,
       )
       const headers = {
         ...route.request().headers(),
         Authorization: `Bearer ${clerkUserId}`,
       }
-      await route.continue({ headers })
+
+      const response = await route.fetch({ headers })
+      const status = response.status()
+      const statusText = response.statusText()
+
+      // Log response details for create and list operations
+      if (url.includes('/create') || url.includes('/list')) {
+        try {
+          const body = await response.text()
+          console.warn(
+            `[electron-test] [RELOAD] ${method} ${url.includes('/create') ? 'CREATE' : 'LIST'} response: status=${status} ${statusText}`,
+          )
+          console.warn(
+            `[electron-test] [RELOAD] Response body preview: ${body.slice(0, 500)}`,
+          )
+          await route.fulfill({
+            status,
+            headers: response.headers(),
+            body,
+          })
+        } catch (bodyError) {
+          console.warn(
+            '[electron-test] [RELOAD] Failed to read response body:',
+            bodyError,
+          )
+          await route.fulfill({ response })
+        }
+      } else {
+        await route.fulfill({ response })
+      }
     })
 
     // Re-inject Clerk user data
