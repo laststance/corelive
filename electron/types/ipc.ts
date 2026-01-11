@@ -69,6 +69,11 @@ export interface NotificationPreferences {
   quietHoursEnabled: boolean
   quietHoursStart?: string
   quietHoursEnd?: string
+  /** Task-specific notification preferences */
+  taskCreated?: boolean
+  taskCompleted?: boolean
+  taskUpdated?: boolean
+  taskDeleted?: boolean
 }
 
 /** Tray icon states */
@@ -108,6 +113,9 @@ export type ConfigSection =
   | 'shortcuts'
   | 'general'
   | 'appearance'
+  | 'tray'
+  | 'behavior'
+  | 'advanced'
 
 /** Deep link examples */
 export interface DeepLinkExamples {
@@ -262,7 +270,20 @@ export interface IPCChannels {
     response: boolean
   }
   'window-state-snap-to-edge': {
-    request: ['main' | 'floating', 'left' | 'right' | 'top' | 'bottom']
+    request: [
+      'main' | 'floating',
+      (
+        | 'left'
+        | 'right'
+        | 'top'
+        | 'bottom'
+        | 'top-left'
+        | 'top-right'
+        | 'bottom-left'
+        | 'bottom-right'
+        | 'maximize'
+      ),
+    ]
     response: boolean
   }
   'window-state-get-display': {
@@ -566,6 +587,14 @@ export interface IPCEventChannels {
   'mark-task-complete': { taskId: string }
   'shortcut-new-task': void
   'shortcut-search': void
+
+  // Todo sync events (for cross-tab/window synchronization)
+  'todo-created': unknown
+  'todo-updated': unknown
+  'todo-deleted': unknown
+
+  // Menu events
+  'menu-action': { action: string; filePath?: string }
 
   // Deep link events
   'deep-link-focus-task': {

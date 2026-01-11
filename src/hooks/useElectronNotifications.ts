@@ -13,6 +13,16 @@ interface NotificationPreferences {
   sound: boolean
 }
 
+/** Default notification preferences */
+const DEFAULT_PREFS: NotificationPreferences = {
+  enabled: true,
+  taskCreated: true,
+  taskCompleted: true,
+  taskUpdated: true,
+  taskDeleted: false,
+  sound: true,
+}
+
 interface UseElectronNotificationsReturn {
   isSupported: boolean
   isEnabled: boolean
@@ -55,7 +65,17 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
       ])
 
       setIsEnabled(enabled)
-      setPreferences(prefs)
+      // Transform API response to match local interface
+      if (prefs) {
+        setPreferences({
+          enabled: prefs.enabled,
+          sound: prefs.sound,
+          taskCreated: prefs.taskCreated ?? DEFAULT_PREFS.taskCreated,
+          taskCompleted: prefs.taskCompleted ?? DEFAULT_PREFS.taskCompleted,
+          taskUpdated: prefs.taskUpdated ?? DEFAULT_PREFS.taskUpdated,
+          taskDeleted: prefs.taskDeleted ?? DEFAULT_PREFS.taskDeleted,
+        })
+      }
       setActiveCount(count)
     } catch (error) {
       log.error('Failed to load notification status:', error)
@@ -84,11 +104,13 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
       if (!isElectron || !window.electronAPI?.notifications) return
 
       try {
-        const updatedPrefs =
+        const currentPrefs = preferences || DEFAULT_PREFS
+        const updatedPrefs = { ...currentPrefs, ...newPreferences }
+        const success =
           await window.electronAPI.notifications.updatePreferences(
             newPreferences,
           )
-        if (updatedPrefs) {
+        if (success) {
           setPreferences(updatedPrefs)
           setIsEnabled(updatedPrefs.enabled)
         }
@@ -97,7 +119,7 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
         throw error
       }
     },
-    [isElectron],
+    [isElectron, preferences],
   )
 
   const clearAll = useCallback(async () => {

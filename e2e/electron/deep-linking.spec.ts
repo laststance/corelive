@@ -50,18 +50,19 @@ test.describe('Electron Deep Linking', () => {
       if (window.electronAPI?.deepLink) {
         return window.electronAPI.deepLink.getExamples()
       }
-      return {}
+      return null
     })
 
+    expect(examples).not.toBeNull()
     expect(examples).toHaveProperty('openTask')
     expect(examples).toHaveProperty('createTask')
     expect(examples).toHaveProperty('searchTasks')
     expect(examples).toHaveProperty('openView')
 
-    expect(examples.openTask).toMatch(/^corelive:\/\/task\//)
-    expect(examples.createTask).toMatch(/^corelive:\/\/create\?/)
-    expect(examples.searchTasks).toMatch(/^corelive:\/\/search\?/)
-    expect(examples.openView).toMatch(/^corelive:\/\/view\//)
+    expect(examples!.openTask).toMatch(/^corelive:\/\/task\//)
+    expect(examples!.createTask).toMatch(/^corelive:\/\/create\?/)
+    expect(examples!.searchTasks).toMatch(/^corelive:\/\/search\?/)
+    expect(examples!.openView).toMatch(/^corelive:\/\/view\//)
   })
 
   test('should handle deep link URL manually', async () => {

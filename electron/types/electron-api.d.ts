@@ -205,9 +205,9 @@ export interface ElectronAPI {
     reset: () => Promise<void>
     /** Reset config section to defaults */
     resetSection: (section: ConfigSection) => Promise<void>
-    /** Validate config values */
+    /** Validate config values (validates current config if none provided) */
     validate: (
-      config: Record<string, unknown>,
+      config?: Record<string, unknown>,
     ) => Promise<{ valid: boolean; errors?: string[] }>
     /** Export config as JSON string */
     export: () => Promise<string>
@@ -217,6 +217,10 @@ export interface ElectronAPI {
     backup: () => Promise<string>
     /** Get config file paths */
     getPaths: () => Promise<{ config: string; backup: string; logs: string }>
+    /** Save config to file (synchronous) */
+    save?: () => boolean
+    /** Load config from file (synchronous) */
+    load?: () => Record<string, unknown>
   }
 
   /**
@@ -242,7 +246,16 @@ export interface ElectronAPI {
     /** Snap window to edge */
     snapToEdge: (
       windowType: 'main' | 'floating',
-      edge: 'left' | 'right' | 'top' | 'bottom',
+      edge:
+        | 'left'
+        | 'right'
+        | 'top'
+        | 'bottom'
+        | 'top-left'
+        | 'top-right'
+        | 'bottom-left'
+        | 'bottom-right'
+        | 'maximize',
     ) => Promise<boolean>
     /** Get current display info */
     getDisplay: (windowType: 'main' | 'floating') => Promise<DisplayInfo | null>
@@ -366,6 +379,46 @@ export interface ElectronAPI {
    * @param channel - Event channel name
    */
   removeAllListeners: (channel: IPCEventChannel) => void
+
+  /**
+   * Display management.
+   */
+  display?: {
+    /** Get all connected displays */
+    getAllDisplays?: () => DisplayInfo[]
+    /** Get primary display */
+    getPrimaryDisplay?: () => DisplayInfo | null
+    /** Get display matching a rectangle */
+    getDisplayMatching?: (rect: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }) => DisplayInfo | null
+  }
+
+  /**
+   * Test utilities (for E2E testing only).
+   * These APIs are only available in test builds.
+   */
+  tray?: {
+    /** Simulate tray icon click */
+    click?: () => void
+  }
+
+  /**
+   * Test utilities (for testing only).
+   */
+  test?: {
+    /** Simulate an error for testing */
+    simulateError?: (type: string) => void
+    /** Get test data */
+    getTestData?: () => unknown
+    /** Reset test state */
+    resetTestState?: () => void
+    /** Clear errors */
+    clearErrors?: () => void
+  }
 }
 
 /**
