@@ -1,11 +1,16 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import React, { useSyncExternalStore } from 'react'
+import React, { useEffect, useSyncExternalStore } from 'react'
 
 import { useORPCUtils } from '@/lib/orpc/react-query'
+import { broadcastTodoSync, subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
+
+const TODO_QUERY_LIMIT = 100
+const TODO_QUERY_OFFSET = 0
+const DECIMAL_RADIX = 10
 
 /**
  * Window interface for Electron floating navigator window controls.
@@ -50,10 +55,12 @@ declare global {
 }
 
 /**
- * Creates a store for tracking mount state (SSR-safe)
- * Uses useSyncExternalStore for proper SSR hydration.
- *
- * @returns Store interface for useSyncExternalStore
+ * Creates a store for tracking mount state (SSR-safe).
+ * @returns
+ * - Store interface compatible with useSyncExternalStore
+ * @example
+ * const store = createMountStore()
+ * store.getSnapshot()
  */
 function createMountStore() {
   let isMounted = false
@@ -87,6 +94,10 @@ const mountStore = createMountStore()
  *
  * This component provides the same functionality as the web app's todo list,
  * but in a compact floating window format with Electron-specific controls.
+ * @returns
+ * - Floating navigator UI for the Electron desktop app
+ * @example
+ * <FloatingNavigatorContainer />
  */
 export function FloatingNavigatorContainer() {
   const orpc = useORPCUtils()
@@ -106,7 +117,11 @@ export function FloatingNavigatorContainer() {
   // Fetch todos using oRPC (same as web app)
   const { data, isLoading, error } = useQuery(
     orpc.todo.list.queryOptions({
-      input: { completed: false, limit: 100, offset: 0 },
+      input: {
+        completed: false,
+        limit: TODO_QUERY_LIMIT,
+        offset: TODO_QUERY_OFFSET,
+      },
     }),
   )
 
@@ -115,6 +130,7 @@ export function FloatingNavigatorContainer() {
     orpc.todo.toggle.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
@@ -124,6 +140,7 @@ export function FloatingNavigatorContainer() {
     orpc.todo.create.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
@@ -133,6 +150,7 @@ export function FloatingNavigatorContainer() {
     orpc.todo.update.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
@@ -142,42 +160,64 @@ export function FloatingNavigatorContainer() {
     orpc.todo.delete.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
 
   /**
-   * Handle task toggle - uses oRPC mutation
+   * Toggles completion state for a floating navigator task.
+   * @param id - Todo identifier as a string.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * handleTaskToggle('42')
    */
   const handleTaskToggle = (id: string) => {
-    const todoId = parseInt(id, 10)
+    const todoId = parseInt(id, DECIMAL_RADIX)
     if (!isNaN(todoId)) {
       toggleMutation.mutate({ id: todoId })
     }
   }
 
   /**
-   * Handle task creation - uses oRPC mutation
+   * Creates a new task from the floating navigator input.
+   * @param title - Task title to create.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * handleTaskCreate('Write report')
    */
   const handleTaskCreate = (title: string) => {
     createMutation.mutate({ text: title })
   }
 
   /**
-   * Handle task edit - uses oRPC mutation
+   * Updates a task title from the floating navigator.
+   * @param id - Todo identifier as a string.
+   * @param title - New task title.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * handleTaskEdit('42', 'Updated title')
    */
   const handleTaskEdit = (id: string, title: string) => {
-    const todoId = parseInt(id, 10)
+    const todoId = parseInt(id, DECIMAL_RADIX)
     if (!isNaN(todoId)) {
       updateMutation.mutate({ id: todoId, data: { text: title } })
     }
   }
 
   /**
-   * Handle task delete - uses oRPC mutation
+   * Deletes a task from the floating navigator.
+   * @param id - Todo identifier as a string.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * handleTaskDelete('42')
    */
   const handleTaskDelete = (id: string) => {
-    const todoId = parseInt(id, 10)
+    const todoId = parseInt(id, DECIMAL_RADIX)
     if (!isNaN(todoId)) {
       deleteMutation.mutate({ id: todoId })
     }
@@ -190,6 +230,12 @@ export function FloatingNavigatorContainer() {
     completed: todo.completed,
     createdAt: new Date(todo.createdAt),
   }))
+
+  useEffect(() => {
+    return subscribeToTodoSync(() => {
+      queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+    })
+  }, [queryClient, orpc])
 
   // Show message if not in Electron floating navigator
   if (!isFloatingNavigator) {
