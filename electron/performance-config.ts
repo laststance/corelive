@@ -300,7 +300,7 @@ export class PerformanceOptimizer {
 
     return (...args: Parameters<T>): void => {
       clearTimeout(timeoutId)
-      timeoutId = setTimeout(() => func.apply(this, args), delay)
+      timeoutId = setTimeout(() => func(...args), delay)
     }
   }
 
@@ -319,7 +319,7 @@ export class PerformanceOptimizer {
 
     return (...args: Parameters<T>): void => {
       if (!inThrottle) {
-        func.apply(this, args)
+        func(...args)
         inThrottle = true
         setTimeout(() => (inThrottle = false), limit)
       }

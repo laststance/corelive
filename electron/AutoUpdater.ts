@@ -39,6 +39,12 @@ export class AutoUpdater {
   /** Track if update is ready */
   private updateDownloaded: boolean
 
+  /** Initial check timeout reference for cleanup */
+  private initialCheckTimeout: ReturnType<typeof setTimeout> | null = null
+
+  /** Periodic check interval reference for cleanup */
+  private periodicCheckInterval: ReturnType<typeof setInterval> | null = null
+
   constructor() {
     this.mainWindow = null
     this.updateAvailable = false
@@ -103,12 +109,12 @@ export class AutoUpdater {
     })
 
     // Initial check after startup
-    setTimeout(() => {
+    this.initialCheckTimeout = setTimeout(() => {
       this.checkForUpdates()
     }, 3000)
 
     // Periodic checks every 4 hours
-    setInterval(
+    this.periodicCheckInterval = setInterval(
       () => {
         this.checkForUpdates()
       },
@@ -214,6 +220,22 @@ export class AutoUpdater {
     return {
       updateAvailable: this.updateAvailable,
       updateDownloaded: this.updateDownloaded,
+    }
+  }
+
+  /**
+   * Cleans up timers and resources.
+   *
+   * Call this when disposing the AutoUpdater to prevent memory leaks.
+   */
+  cleanup(): void {
+    if (this.initialCheckTimeout) {
+      clearTimeout(this.initialCheckTimeout)
+      this.initialCheckTimeout = null
+    }
+    if (this.periodicCheckInterval) {
+      clearInterval(this.periodicCheckInterval)
+      this.periodicCheckInterval = null
     }
   }
 }

@@ -145,7 +145,7 @@ export class MemoryProfiler extends EventEmitter {
     }
 
     // memory-warning is a macOS-specific event not in TS types
-     
+
     ;(app as any).on('memory-warning', this.handleMemoryWarning)
   }
 
@@ -165,7 +165,6 @@ export class MemoryProfiler extends EventEmitter {
     }
 
     process.removeListener('SIGTERM', this.handleMemoryWarning)
-     
     ;(app as any).removeListener('memory-warning', this.handleMemoryWarning)
   }
 
@@ -390,6 +389,10 @@ export class MemoryProfiler extends EventEmitter {
 
     const first = values[0]!
     const last = values[values.length - 1]!
+
+    // Guard against division by zero
+    if (first === 0) return 'stable'
+
     const change = (last - first) / first
 
     if (change > 0.1) return 'increasing'

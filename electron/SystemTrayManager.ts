@@ -582,7 +582,7 @@ export class SystemTrayManager {
    * Update tray tooltip.
    */
   setTrayTooltip(text: string): void {
-    if (this.tray) {
+    if (this.tray && !this.tray.isDestroyed()) {
       this.tray.setToolTip(text)
     }
   }

@@ -256,7 +256,7 @@ export class ConfigManager {
         enabled: true,
         newTask: `${modifier}+N`,
         showMainWindow: `${modifier}+Shift+T`,
-        quit: 'Cmd+Q',
+        quit: `${modifier}+Q`,
         minimize: `${modifier}+M`,
         toggleAlwaysOnTop: `${modifier}+Shift+A`,
         focusFloatingNavigator: `${modifier}+Shift+N`,

@@ -3,7 +3,7 @@
   "productName": "CoreLive",
   "copyright": "Copyright © 2026 Laststance",
   "directories": {
-    "output": "dist-electron",
+    "output": "dist",
     "buildResources": "build"
   },
   "icon": "build/icons/icon.icns",
@@ -12,7 +12,10 @@
   "buildDependenciesFromSource": false,
   "files": [
     "dist-electron/**/*",
-    "electron/**/*",
+    "!electron/**/*.ts",
+    "!electron/**/*.tsx",
+    "!electron/**/tsconfig*.json",
+    "!electron/**/vite*.ts",
     "node_modules/**/*",
     "package.json",
     "public/**/*",
