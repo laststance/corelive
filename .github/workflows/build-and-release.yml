@@ -105,11 +105,11 @@ jobs:
         with:
           name: electron-app-macos
           path: |
-            dist-electron/*.dmg
-            dist-electron/*.zip
-            dist-electron/*.blockmap
-            dist-electron/latest-mac.yml
-            dist-electron/checksums.json
+            dist/*.dmg
+            dist/*.zip
+            dist/*.blockmap
+            dist/latest-mac.yml
+            dist/checksums.json
           retention-days: 30
 
   release:

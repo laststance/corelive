@@ -29,6 +29,7 @@ reviews:
   ignore:
     # Build outputs
     - '**/dist-electron/**'
+    - '**/dist/**'
     - '**/.next/**'
     - '**/node_modules/**'
     - '**/build/**'

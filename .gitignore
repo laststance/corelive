@@ -56,7 +56,9 @@ e2e/.auth
 .playwright-electron/
 
 # Electron
+dist/
 dist-electron/
+dist-electron-dev/
 *.exe
 *.dmg
 *.AppImage
