@@ -56,13 +56,6 @@ export default defineConfig({
       sourcemap: true,
     },
   },
-  renderer: {
-    // Renderer process is handled by Next.js (WebView architecture)
-    // This section is empty as we load https://corelive.app/ directly
-    build: {
-      rollupOptions: {
-        input: {},
-      },
-    },
-  },
+  // Renderer is omitted - Next.js handles it via WebView architecture
+  // (loads https://corelive.app/ directly, no local renderer entry)
 })

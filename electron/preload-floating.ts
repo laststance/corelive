@@ -259,18 +259,27 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     }
   },
 
+  /**
+   * @deprecated Use the cleanup function returned by `on()` instead.
+   *
+   * This method cannot work correctly because `on()` wraps the callback.
+   * The original callback passed here won't match the registered listener.
+   *
+   * @example
+   * // Correct usage:
+   * const cleanup = api.on('channel', callback)
+   * cleanup() // Removes the listener
+   *
+   * // Incorrect (won't work):
+   * api.removeListener('channel', callback)
+   */
   removeListener: (
     channel: string,
-    callback: (...args: unknown[]) => void,
+    _callback: (...args: unknown[]) => void,
   ): void => {
-    if (!validateChannel(channel)) {
-      log.error(
-        `Floating Navigator: Attempted to remove listener from unauthorized channel: ${channel}`,
-      )
-      return
-    }
-
-    ipcRenderer.removeListener(channel, callback)
+    log.warn(
+      `Floating Navigator: removeListener is deprecated. Use the cleanup function returned by on() instead. Channel: ${channel}`,
+    )
   },
 })
 
