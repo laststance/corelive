@@ -12,6 +12,9 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const BUILD_ID_PATH = join(__dirname, '.next', 'BUILD_ID')
 
+// APP_URL: The base URL for the web app (set via npm scripts or defaults to localhost)
+const APP_URL = process.env.APP_URL || 'http://localhost:3011'
+
 if (!existsSync(BUILD_ID_PATH)) {
   execSync('pnpm build', {
     stdio: 'inherit',
@@ -52,7 +55,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:3011',
+    baseURL: APP_URL,
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
     /* Ensure test environment is set */
@@ -103,7 +106,7 @@ export default defineConfig({
 
   webServer: {
     command: 'NODE_ENV=test pnpm start',
-    url: 'http://localhost:3011',
+    url: APP_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
     env: {

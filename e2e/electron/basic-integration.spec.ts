@@ -27,6 +27,7 @@ test.describe('Electron Basic Integration E2E Tests', () => {
       env: {
         ...baseEnv,
         NODE_ENV: 'test',
+        APP_URL: 'http://localhost:3011',
         ELECTRON_IS_DEV: '1',
         ELECTRON_DISABLE_HARDWARE_ACCELERATION: '1',
       },

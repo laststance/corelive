@@ -145,10 +145,25 @@ pnpm electron:dev
 pnpm electron
 ```
 
-### Building Desktop App
+### Electron Build Commands
+
+Each Electron build command sets `APP_URL` to determine which web app URL the Electron app loads:
+
+| Command                   | APP_URL                 | Purpose                                             |
+| ------------------------- | ----------------------- | --------------------------------------------------- |
+| `pnpm electron:build:mac` | `https://corelive.app`  | Production release (DMG + ZIP + signed + notarized) |
+| `pnpm electron:build:dir` | `https://corelive.app`  | Local production testing (unpacked .app only)       |
+| `pnpm electron:build:e2e` | `http://localhost:3011` | E2E testing with local Next.js server               |
 
 ```bash
-# Build for macOS
+# Local production testing (connects to corelive.app)
+pnpm electron:build:dir
+open dist-electron/mac/CoreLive.app
+
+# E2E testing (connects to localhost:3011)
+pnpm build && pnpm electron:build:e2e && pnpm e2e:electron
+
+# Production release
 pnpm electron:build:mac
 ```
 

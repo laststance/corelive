@@ -520,21 +520,12 @@ async function createWindow() {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // Resolve server URL
-    // In production: loads https://corelive.app/ (via WindowManager default)
-    // In development/test: uses local dev server
-    let serverUrl = process.env.ELECTRON_DEV_SERVER_URL
-
-    // In test environment, always use external server if available
-    if (isTestEnvironment && !serverUrl) {
-      serverUrl = 'http://localhost:3011'
-    }
-
-    // In development, use external Next dev server when provided by scripts/dev.js
-    // In production, serverUrl stays null and WindowManager loads https://corelive.app/
-    if (isDev && !serverUrl) {
-      serverUrl = 'http://localhost:3011'
-    }
+    // APP_URL: Single source of truth for the web app URL
+    // Configured at build time via npm scripts:
+    // - electron:build:mac/dir: APP_URL=https://corelive.app (production)
+    // - electron:build:e2e: APP_URL=http://localhost:3011 (E2E testing)
+    // - Development: Set by scripts/dev.js
+    const serverUrl = process.env.APP_URL || 'https://corelive.app'
 
     // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 

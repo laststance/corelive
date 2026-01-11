@@ -415,7 +415,7 @@ pnpm electron:dev
 │ 2. electron/dev-runner.cjs                                 │
 │    - Next.jsの起動を確認 (checkServer)                     │
 │    - Electronプロセスを起動                                 │
-│    - 環境変数: ELECTRON_DEV_SERVER_URL=http://localhost:3011│
+│    - 環境変数: APP_URL=http://localhost:3011                │
 └────────────────────┬────────────────────────────────────────┘
                      │ Electron Start
                      ▼

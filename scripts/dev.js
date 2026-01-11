@@ -129,7 +129,7 @@ async function startDevelopment() {
         env: {
           ...process.env,
           NODE_ENV: 'development',
-          ELECTRON_DEV_SERVER_URL: `http://localhost:${port}`,
+          APP_URL: `http://localhost:${port}`,
           PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9222', // Enable remote debugging for MCP tools
         },
       },

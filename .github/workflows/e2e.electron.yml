@@ -58,8 +58,8 @@ jobs:
       - name: Build Next.js for E2E tests 🏗️
         run: pnpm build
 
-      - name: Build Electron application ⚡
-        run: pnpm electron:build:dir
+      - name: Build Electron application for E2E ⚡
+        run: pnpm electron:build:e2e
 
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium

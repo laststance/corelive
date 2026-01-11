@@ -477,7 +477,7 @@ export class ElectronTestHelper {
     )
 
     const { ELECTRON_RUN_AS_NODE: _ignored, ...baseEnv } = process.env
-    const baseUrl = baseEnv.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3011'
+    const baseUrl = baseEnv.APP_URL || 'http://localhost:3011'
 
     let nextServerProcess: ChildProcess | null = null
     try {
@@ -517,6 +517,7 @@ export class ElectronTestHelper {
       env: {
         ...baseEnv,
         NODE_ENV: 'test',
+        APP_URL: baseUrl,
         ELECTRON_IS_DEV: '1',
         // Disable hardware acceleration for testing
         ELECTRON_DISABLE_HARDWARE_ACCELERATION: '1',

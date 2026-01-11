@@ -98,9 +98,8 @@ const createWindowManagerMock = () => {
         this.windowStateManager.applyWindowState('main', this.mainWindow)
       }
 
-      const startUrl =
-        this.serverUrl ||
-        (this.isDev ? 'http://localhost:3011' : 'http://localhost:3011')
+      // URL provided by main.cjs via APP_URL env var
+      const startUrl = this.serverUrl || 'https://corelive.app'
       this.mainWindow.loadURL(startUrl)
 
       // Set up event listeners
@@ -199,11 +198,9 @@ const createWindowManagerMock = () => {
         titleBarStyle: 'hidden',
       })
 
-      const floatingUrl = this.serverUrl
-        ? `${this.serverUrl}/floating-navigator`
-        : this.isDev
-          ? 'http://localhost:3011/floating-navigator'
-          : 'http://localhost:3011/floating-navigator'
+      // URL provided by main.cjs via APP_URL env var
+      const baseUrl = this.serverUrl || 'https://corelive.app'
+      const floatingUrl = `${baseUrl}/floating-navigator`
 
       this.floatingNavigator.loadURL(floatingUrl)
 
