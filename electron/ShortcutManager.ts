@@ -910,6 +910,8 @@ export class ShortcutManager {
 
   /**
    * Enable shortcuts.
+   * Only registers global shortcuts immediately.
+   * Contextual shortcuts are registered via focus listeners when a window gains focus.
    */
   enable(): void {
     this.isEnabled = true
@@ -918,7 +920,24 @@ export class ShortcutManager {
       this.configManager.set('shortcuts.enabled', true)
     }
 
-    this.registerDefaultShortcuts()
+    // Register global shortcuts (always active)
+    this.registerGlobalShortcuts()
+
+    // Setup focus listeners (handles contextual shortcuts on focus/blur)
+    this.setupFocusListeners()
+
+    // Only register contextual shortcuts if a window is currently focused
+    const mainWindow = this.windowManager.getMainWindow()
+    const floatingWindow = this.windowManager.getFloatingNavigator()
+    const isWindowFocused =
+      (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) ||
+      (floatingWindow &&
+        !floatingWindow.isDestroyed() &&
+        floatingWindow.isFocused())
+
+    if (isWindowFocused) {
+      this.registerContextualShortcuts()
+    }
   }
 
   /**

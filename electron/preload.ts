@@ -351,10 +351,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Get window bounds.
+     * Extracts only x, y, width, height from the full window state.
      */
     getBounds: async (): Promise<WindowBounds> => {
       try {
-        return await ipcRenderer.invoke('window-state-get', 'main')
+        // 'window-state-get' returns full WindowState; extract only bounds
+        const state = await ipcRenderer.invoke('window-state-get', 'main')
+        if (state && typeof state === 'object') {
+          return {
+            x: typeof state.x === 'number' ? state.x : 0,
+            y: typeof state.y === 'number' ? state.y : 0,
+            width: typeof state.width === 'number' ? state.width : 800,
+            height: typeof state.height === 'number' ? state.height : 600,
+          }
+        }
+        return { x: 0, y: 0, width: 800, height: 600 }
       } catch (error) {
         log.error('Failed to get window bounds:', error)
         return { x: 0, y: 0, width: 800, height: 600 }
@@ -1823,7 +1834,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
  */
 contextBridge.exposeInMainWorld('electronEnv', {
   isElectron: true, // Flag to detect Electron environment
-  platform: process.platform,
+  platform: process.platform, // Node's process.platform: 'darwin', 'win32', 'linux', etc.
   versions: {
     node: process.versions.node, // Node.js version
     chrome: process.versions.chrome, // Chromium version

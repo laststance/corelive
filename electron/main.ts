@@ -174,6 +174,25 @@ let activeUser: ActiveUserData | null = null
  */
 let pendingDeepLinkUrl: string | null = null
 
+/**
+ * Sanitizes a URL for safe logging by removing query parameters.
+ * This prevents OAuth tokens, API keys, and other sensitive data from being logged.
+ *
+ * @param url - The full URL to sanitize
+ * @returns A safe representation with only scheme, host, and path (no query string)
+ */
+function sanitizeUrlForLogging(url: string): string {
+  try {
+    const parsed = new URL(url)
+    // Return only scheme://host/path without query string or hash
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`
+  } catch {
+    // If URL parsing fails, return a minimal safe representation
+    const schemeMatch = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/)
+    return schemeMatch ? `${schemeMatch[1]}://[invalid-url]` : '[invalid-url]'
+  }
+}
+
 // ============================================================================
 // Early Event Handlers
 // ============================================================================
@@ -187,8 +206,9 @@ let pendingDeepLinkUrl: string | null = null
  */
 app.on('open-url', (event, url) => {
   event.preventDefault()
+  // Sanitize URL for logging to prevent OAuth tokens from being logged
   log.info('🔗 [Early] Received open-url event:', {
-    url: url.slice(0, 50) + '...',
+    url: sanitizeUrlForLogging(url),
   })
 
   if (deepLinkManager && deepLinkManager.isInitialized) {
@@ -207,7 +227,10 @@ app.on('open-url', (event, url) => {
  */
 function processPendingDeepLinkUrl(): void {
   if (pendingDeepLinkUrl && deepLinkManager && deepLinkManager.isInitialized) {
-    log.info('🔗 Processing queued deep link URL')
+    // Sanitize URL for logging to prevent OAuth tokens from being logged
+    log.info('🔗 Processing queued deep link URL:', {
+      url: sanitizeUrlForLogging(pendingDeepLinkUrl),
+    })
     deepLinkManager.handleDeepLink(pendingDeepLinkUrl)
     pendingDeepLinkUrl = null
   }
@@ -473,7 +496,7 @@ async function setActiveUser(
  * Why these specific rules?
  * - 'self': Only allow resources from our own origin by default
  * - Clerk domains: Required for authentication UI components
- * - 'unsafe-inline'/'unsafe-eval': Unfortunately needed for some React/Next.js features
+ * - 'unsafe-inline': Unfortunately needed for some React/Next.js inline styles
  * - localhost: Development server connections
  * - data: URIs: For inline images and fonts
  *
@@ -482,7 +505,7 @@ async function setActiveUser(
 const CSP_POLICY = [
   "default-src 'self'",
   // Allow Clerk assets from custom domain (clerk.corelive.app), .dev and .com domains
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  "script-src 'self' 'unsafe-inline' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
   "style-src 'self' 'unsafe-inline' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
   "img-src 'self' data: https: https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
   "font-src 'self' data: https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
@@ -1813,6 +1836,9 @@ app.on('before-quit', async () => {
   // This ensures dependencies are available during cleanup
 
   // User-facing features (can fail without critical impact)
+  if (autoUpdater) {
+    autoUpdater.cleanup()
+  }
   if (oauthManager) {
     oauthManager.cleanup()
   }

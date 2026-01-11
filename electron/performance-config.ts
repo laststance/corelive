@@ -240,17 +240,33 @@ export class PerformanceOptimizer {
 
   /**
    * Clear non-essential modules from require cache.
+   *
+   * Protects:
+   * - Essential Node.js/Electron modules
+   * - node_modules dependencies
+   * - Lazy-loaded singleton components (to preserve their instances)
    */
   private clearNonEssentialModuleCache(): void {
     const essentialModules = ['electron', 'path', 'fs', 'os', 'crypto']
 
+    // Get names of lazy-loaded modules to protect them from cache clearing
+    // These are singleton components that must not be re-imported
+    const lazyLoadedModuleNames = Array.from(this.lazyModules.keys())
+
     Object.keys(require.cache).forEach((modulePath) => {
+      // Protect essential Node.js/Electron modules and node_modules
       const isEssential = essentialModules.some(
         (essential) =>
           modulePath.includes(essential) || modulePath.includes('node_modules'),
       )
 
-      if (!isEssential) {
+      // Protect lazy-loaded singleton components
+      // Check if the module path contains any of the lazy-loaded module names
+      const isLazyLoaded = lazyLoadedModuleNames.some((name) =>
+        modulePath.includes(name),
+      )
+
+      if (!isEssential && !isLazyLoaded) {
         delete require.cache[modulePath]
       }
     })

@@ -71,6 +71,9 @@ export class AutoUpdater {
   setupAutoUpdater(): void {
     autoUpdater.on('checking-for-update', () => {
       log.info('Checking for update...')
+      // Reset state flags at the start of each check to ensure consistency
+      this.updateAvailable = false
+      this.updateDownloaded = false
       this.sendStatusToWindow('Checking for update...')
     })
 
@@ -141,11 +144,13 @@ export class AutoUpdater {
       return
     }
 
-    try {
-      autoUpdater.checkForUpdatesAndNotify()
-    } catch (error) {
+    // Handle async rejection from electron-updater Promise
+    void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
       log.error('Failed to check for updates:', error)
-    }
+      // Reset state flags on error to allow retry
+      this.updateAvailable = false
+      this.updateDownloaded = false
+    })
   }
 
   /**
@@ -168,7 +173,11 @@ export class AutoUpdater {
     })
 
     if (result.response === 0) {
-      autoUpdater.downloadUpdate()
+      // Handle async rejection from downloadUpdate Promise
+      void autoUpdater.downloadUpdate().catch((error) => {
+        log.error('Failed to download update:', error)
+        this.sendStatusToWindow('Failed to download update')
+      })
     }
   }
 
@@ -209,7 +218,13 @@ export class AutoUpdater {
    * Manual update check (called from menu or UI).
    */
   manualCheckForUpdates(): void {
-    autoUpdater.checkForUpdatesAndNotify()
+    // Handle async rejection from electron-updater Promise
+    void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      log.error('Failed to manually check for updates:', error)
+      // Reset state flags on error to allow retry
+      this.updateAvailable = false
+      this.updateDownloaded = false
+    })
   }
 
   /**

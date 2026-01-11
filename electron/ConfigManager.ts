@@ -786,11 +786,18 @@ export class ConfigManager {
         .filter(
           (file) => file.startsWith('config-backup-') && file.endsWith('.json'),
         )
-        .map((file) => ({
-          name: file,
-          path: path.join(this.configDir, file),
-          stat: fs.statSync(path.join(this.configDir, file)),
-        }))
+        .flatMap((file) => {
+          // Handle race condition: file may be deleted between readdirSync and statSync
+          const filePath = path.join(this.configDir, file)
+          try {
+            const stat = fs.statSync(filePath)
+            return [{ name: file, path: filePath, stat }]
+          } catch {
+            // File was likely deleted between listing and stat - skip it
+            log.debug(`Skipping backup file (stat failed): ${file}`)
+            return []
+          }
+        })
         .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime())
 
       // Keep only the latest 5 backups
