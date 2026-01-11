@@ -228,7 +228,7 @@ export class ConfigManager {
    * @returns Default configuration object
    */
   getDefaultConfig(): AppConfig {
-    const modifier = 'Cmd'
+    const modifier = 'CommandOrControl'
 
     return {
       version: '1.0.0',

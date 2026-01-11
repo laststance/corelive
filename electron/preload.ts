@@ -238,7 +238,8 @@ function sanitizeData<T>(data: T): T {
       return data.map((item) => sanitizeData(item)) as T
     }
     // Deep clone and sanitize object properties
-    const sanitized: Record<string, SanitizedValue> = {}
+    // Use null prototype to prevent prototype pollution attacks
+    const sanitized = Object.create(null) as Record<string, SanitizedValue>
     for (const [key, value] of Object.entries(data)) {
       // Block prototype pollution attacks
       if (FORBIDDEN_KEYS.includes(key)) {

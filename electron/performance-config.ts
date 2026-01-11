@@ -289,11 +289,9 @@ export class PerformanceOptimizer {
     setImmediate(async () => {
       try {
         await deferredInit()
-        // Calculate total time for potential future use
+        // Log startup completion time for performance analysis
         const totalTime = Date.now() - this.startupMetrics.startTime
-        if (totalTime) {
-          /* Total time available for logging */
-        }
+        log.info(`✅ Startup complete in ${totalTime}ms`)
       } catch (error) {
         log.error('❌ Deferred initialization failed:', error)
       }
