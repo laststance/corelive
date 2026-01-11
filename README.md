@@ -38,7 +38,40 @@ This project supports:
 ### Environment Variables
 
 1. Copy `.env.example` to `.env` in the root of the project
-2. Fill in your actual values in the `.env` file (see `.env.example` for required variables)
+2. Fill in your actual values in the `.env` file
+
+All Next.js environment variables are loaded and validated via `src/env.mjs` using `@t3-oss/env-nextjs`. The app will fail to start if required variables are missing or invalid.
+
+#### Next.js (Required)
+
+| Variable                                       | Side   | Description                              |
+| ---------------------------------------------- | ------ | ---------------------------------------- |
+| `POSTGRES_PRISMA_URL`                          | Server | PostgreSQL connection string             |
+| `WEBHOOK_SECRET`                               | Server | Clerk webhook signing secret             |
+| `CLERK_SECRET_KEY`                             | Server | Clerk API secret key                     |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`            | Client | Clerk publishable key                    |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL`                | Client | Sign-in page path (e.g., `/login`)       |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_URL`                | Client | Sign-up page path (e.g., `/sign-up`)     |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL` | Client | Post-login redirect path (e.g., `/home`) |
+
+#### Electron Build (Required for macOS signing)
+
+| Variable                      | Description                                 |
+| ----------------------------- | ------------------------------------------- |
+| `APPLE_ID`                    | Apple Developer account email               |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization      |
+| `APPLE_TEAM_ID`               | Apple Developer Team ID                     |
+| `GH_TOKEN`                    | GitHub token for release uploads (optional) |
+
+#### E2E Testing (Required)
+
+| Variable                  | Description                                  |
+| ------------------------- | -------------------------------------------- |
+| `E2E_CLERK_USER_USERNAME` | Test user username (registered in Clerk Dev) |
+| `E2E_CLERK_USER_PASSWORD` | Test user password                           |
+| `E2E_CLERK_USER_EMAIL`    | Test user email                              |
+
+> **Note**: E2E tests communicate with the real Clerk Dev instance (not mocked). Test credentials must be registered in Clerk Dashboard.
 
 ### Database Setup
 
