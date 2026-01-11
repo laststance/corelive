@@ -1095,9 +1095,42 @@ export class ElectronTestHelper {
       await page.reload({ waitUntil: 'networkidle' })
       // Re-register route interception after reload
       await this.reRegisterRouteInterception(page)
-      // Wait for React to render
-      await page.waitForTimeout(2000)
+
+      // Wait for the app to be fully loaded (not just networkidle)
+      // Check for the Todo List header to confirm app is ready
+      try {
+        await page
+          .getByText('Todo List', { exact: true })
+          .waitFor({ state: 'visible', timeout: 10_000 })
+        console.warn('[electron-test] App fully loaded after reload')
+      } catch {
+        console.warn('[electron-test] Todo List header not found after reload')
+      }
+
+      // Give extra time for React Query to refetch and render
+      await page.waitForTimeout(3000)
     }
+
+    // Log page state for debugging before checking visibility
+    const pageState = await page.evaluate(() => {
+      const bodyText = document.body?.innerText?.slice(0, 1000) || ''
+      const pendingBadge =
+        document.querySelector('[class*="badge"]')?.textContent
+      const todoItems = document.querySelectorAll(
+        '[class*="rounded-lg"][class*="border"]',
+      )
+      return {
+        hasLoading: bodyText.includes('Loading'),
+        hasTodoList: bodyText.includes('Todo List'),
+        pendingBadge,
+        todoItemCount: todoItems.length,
+        bodyPreview: bodyText.slice(0, 500),
+      }
+    })
+    console.warn(
+      '[electron-test] Page state before check:',
+      JSON.stringify(pageState),
+    )
 
     // Verify task appears with longer timeout for slow CI environments
     await expect(taskLocator).toBeVisible({
