@@ -15,4 +15,4 @@ CREATE TABLE "ElectronSettings" (
 CREATE UNIQUE INDEX "ElectronSettings_userId_key" ON "ElectronSettings"("userId");
 
 -- AddForeignKey
-ALTER TABLE "ElectronSettings" ADD CONSTRAINT "ElectronSettings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "ElectronSettings" ADD CONSTRAINT "ElectronSettings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

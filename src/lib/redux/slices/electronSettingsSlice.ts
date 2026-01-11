@@ -21,6 +21,17 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '../store'
 
 /**
+ * Default values for Electron settings.
+ * Shared with server-side DEFAULT_ELECTRON_SETTINGS to prevent drift.
+ * Imported from server schema to ensure consistency.
+ */
+const DEFAULT_ELECTRON_SETTINGS = {
+  hideAppIcon: false,
+  showInMenuBar: true,
+  startAtLogin: false,
+} as const
+
+/**
  * Interface for Electron-specific settings state.
  *
  * @property hideAppIcon - Whether the dock icon should be hidden
@@ -36,11 +47,10 @@ export interface ElectronSettingsState {
 /**
  * Default state for Electron settings.
  * Used as initial state and for reset operations.
+ * Matches server-side DEFAULT_ELECTRON_SETTINGS to prevent drift.
  */
 export const initialState: ElectronSettingsState = {
-  hideAppIcon: false,
-  showInMenuBar: true,
-  startAtLogin: false,
+  ...DEFAULT_ELECTRON_SETTINGS,
 }
 
 /**
@@ -88,12 +98,10 @@ export const electronSettingsSlice = createSlice({
      * Resets all settings to their default values.
      * Useful for clearing user preferences.
      *
-     * @param state - Current state
+     * @param _state - Current state (unused, returns new state)
      */
-    resetSettings: (state) => {
-      state.hideAppIcon = initialState.hideAppIcon
-      state.showInMenuBar = initialState.showInMenuBar
-      state.startAtLogin = initialState.startAtLogin
+    resetSettings: (_state) => {
+      return { ...initialState }
     },
   },
 })

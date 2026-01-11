@@ -1406,18 +1406,18 @@ function setupIPCHandlers() {
   // Hide App Icon (Dock visibility) IPC handler - macOS only
   ipcMain.handle('settings:setHideAppIcon', (_event, hide) => {
     try {
+      // This API is macOS-only - check platform first
+      if (process.platform !== 'darwin') {
+        log.info('settings:setHideAppIcon - Not supported on this platform')
+        return true // Return true to indicate success (no-op on non-macOS)
+      }
+
       // Validate input type
       if (typeof hide !== 'boolean') {
         log.error(
           'settings:setHideAppIcon - Invalid argument: hide must be a boolean',
         )
         return false
-      }
-
-      // This API is macOS-only
-      if (process.platform !== 'darwin') {
-        log.info('settings:setHideAppIcon - Not supported on this platform')
-        return true // Return true to indicate success (no-op on non-macOS)
       }
 
       if (hide) {

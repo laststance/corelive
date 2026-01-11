@@ -98,7 +98,14 @@ export const upsertElectronSettings = authMiddleware
     try {
       const { user } = context
 
-      log.info({ userId: user.id, input }, 'Upserting Electron settings')
+      // Log only changed keys at debug level to reduce noise
+      const changedKeys = Object.keys(input)
+      if (changedKeys.length > 0) {
+        log.debug(
+          { userId: user.id, changedKeys },
+          'Upserting Electron settings',
+        )
+      }
 
       const settings = await prisma.electronSettings.upsert({
         where: { userId: user.id },

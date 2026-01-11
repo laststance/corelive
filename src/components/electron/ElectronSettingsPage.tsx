@@ -58,58 +58,101 @@ export function ElectronSettingsPage(): React.ReactElement {
 
   /**
    * Handles the Hide App Icon toggle change.
-   * Updates Redux state and notifies Electron main process via settings API.
+   * Updates Redux state only after successful IPC call to maintain consistency.
    *
    * @param checked - New toggle state
    */
   const handleHideAppIconChange = async (checked: boolean): Promise<void> => {
-    dispatch(setHideAppIcon(checked))
-
-    // Notify Electron main process via settings API
+    // Notify Electron main process via settings API first
     if (typeof window !== 'undefined' && window.electronAPI?.settings) {
       try {
-        await window.electronAPI.settings.setHideAppIcon(checked)
+        const success =
+          await window.electronAPI.settings.setHideAppIcon(checked)
+        if (success) {
+          dispatch(setHideAppIcon(checked))
+        } else {
+          // IPC call failed - log error but don't update state
+          if (process.env.NODE_ENV === 'development') {
+            console.error(
+              'Failed to update dock icon visibility: IPC returned false',
+            )
+          }
+        }
       } catch (error) {
-        console.error('Failed to update dock icon visibility:', error)
+        // IPC call threw - log error but don't update state
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to update dock icon visibility:', error)
+        }
       }
+    } else {
+      // Not in Electron - update Redux state anyway for local storage
+      dispatch(setHideAppIcon(checked))
     }
   }
 
   /**
    * Handles the Show in Menu Bar toggle change.
-   * Updates Redux state and notifies Electron main process via settings API.
+   * Updates Redux state only after successful IPC call to maintain consistency.
    *
    * @param checked - New toggle state
    */
   const handleShowInMenuBarChange = async (checked: boolean): Promise<void> => {
-    dispatch(setShowInMenuBar(checked))
-
-    // Notify Electron main process via settings API
+    // Notify Electron main process via settings API first
     if (typeof window !== 'undefined' && window.electronAPI?.settings) {
       try {
-        await window.electronAPI.settings.setShowInMenuBar(checked)
+        const success =
+          await window.electronAPI.settings.setShowInMenuBar(checked)
+        if (success) {
+          dispatch(setShowInMenuBar(checked))
+        } else {
+          // IPC call failed (feature not implemented) - log but don't update state
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Menu bar visibility change not yet implemented')
+          }
+        }
       } catch (error) {
-        console.error('Failed to update menu bar visibility:', error)
+        // IPC call threw - log error but don't update state
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to update menu bar visibility:', error)
+        }
       }
+    } else {
+      // Not in Electron - update Redux state anyway for local storage
+      dispatch(setShowInMenuBar(checked))
     }
   }
 
   /**
    * Handles the Start at Login toggle change.
-   * Updates Redux state and notifies Electron main process via settings API.
+   * Updates Redux state only after successful IPC call to maintain consistency.
    *
    * @param checked - New toggle state
    */
   const handleStartAtLoginChange = async (checked: boolean): Promise<void> => {
-    dispatch(setStartAtLogin(checked))
-
-    // Notify Electron main process via settings API
+    // Notify Electron main process via settings API first
     if (typeof window !== 'undefined' && window.electronAPI?.settings) {
       try {
-        await window.electronAPI.settings.setStartAtLogin(checked)
+        const success =
+          await window.electronAPI.settings.setStartAtLogin(checked)
+        if (success) {
+          dispatch(setStartAtLogin(checked))
+        } else {
+          // IPC call failed - log error but don't update state
+          if (process.env.NODE_ENV === 'development') {
+            console.error(
+              'Failed to update start at login setting: IPC returned false',
+            )
+          }
+        }
       } catch (error) {
-        console.error('Failed to update start at login setting:', error)
+        // IPC call threw - log error but don't update state
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to update start at login setting:', error)
+        }
       }
+    } else {
+      // Not in Electron - update Redux state anyway for local storage
+      dispatch(setStartAtLogin(checked))
     }
   }
 
