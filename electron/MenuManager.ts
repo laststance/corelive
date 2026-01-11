@@ -521,10 +521,22 @@ export class MenuManager {
   }
 
   openPreferences(): void {
-    if (this.mainWindow && this.mainWindow.webContents) {
-      this.mainWindow.webContents.send('menu-action', {
-        action: 'open-preferences',
-      })
+    log.debug('📋 [MenuManager] openPreferences() called')
+
+    // Open the dedicated Settings window
+    if (this.windowManager) {
+      log.debug('📋 [MenuManager] Opening Settings window via windowManager')
+      this.windowManager.openSettings()
+    } else {
+      log.warn(
+        '📋 [MenuManager] windowManager not available, falling back to IPC',
+      )
+      // Fallback: send IPC message if windowManager is not available
+      if (this.mainWindow && this.mainWindow.webContents) {
+        this.mainWindow.webContents.send('menu-action', {
+          action: 'open-preferences',
+        })
+      }
     }
   }
 

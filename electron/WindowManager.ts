@@ -59,6 +59,9 @@ export class WindowManager {
   /** Always-on-top utility window */
   private floatingNavigator: BrowserWindow | null
 
+  /** Settings window */
+  private settingsWindow: BrowserWindow | null
+
   /** Whether running in development mode */
   private isDev: boolean
 
@@ -88,6 +91,7 @@ export class WindowManager {
   ) {
     this.mainWindow = null
     this.floatingNavigator = null
+    this.settingsWindow = null
     this.isDev = process.env.NODE_ENV === 'development'
     this.serverUrl = serverUrl
     this.configManager = configManager
@@ -447,10 +451,120 @@ export class WindowManager {
   }
 
   /**
+   * Creates the settings window with security-first configuration.
+   *
+   * @returns The created settings window
+   */
+  createSettingsWindow(): BrowserWindow {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.focus()
+      return this.settingsWindow
+    }
+
+    log.info('🔧 Creating settings window...')
+
+    // Resolve preload script path (built by electron-vite)
+    const preloadPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'preload', 'preload.cjs')
+      : path.join(__dirname, '..', 'dist-electron', 'preload', 'preload.cjs')
+
+    this.settingsWindow = new BrowserWindow({
+      width: 500,
+      height: 400,
+      minWidth: 400,
+      minHeight: 300,
+      resizable: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: preloadPath,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        sandbox: false,
+        devTools:
+          this.isDev ||
+          (this.configManager?.get('advanced.enableDevTools', false) ?? false),
+      },
+      show: false,
+      titleBarStyle: 'hiddenInset',
+      backgroundColor: '#ffffff',
+      // Modal-like behavior - use mainWindow as parent if available
+      parent: this.mainWindow || undefined,
+      modal: false, // Not truly modal - allows interaction with main window
+    })
+
+    // Load settings page
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    const settingsUrl = `${baseUrl}/settings`
+
+    log.debug('🔧 Loading settings URL:', settingsUrl)
+    this.settingsWindow.loadURL(settingsUrl)
+
+    // Show when ready
+    this.settingsWindow.once('ready-to-show', () => {
+      this.settingsWindow?.show()
+      if (this.isDev) {
+        this.settingsWindow?.webContents.openDevTools()
+      }
+    })
+
+    // Cleanup on close
+    this.settingsWindow.on('closed', () => {
+      log.debug('🔧 Settings window closed')
+      this.settingsWindow = null
+    })
+
+    return this.settingsWindow
+  }
+
+  /**
+   * Opens or focuses the settings window.
+   * Creates the window if it doesn't exist.
+   */
+  openSettings(): void {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.show()
+      this.settingsWindow.focus()
+    } else {
+      this.createSettingsWindow()
+    }
+  }
+
+  /**
+   * Closes the settings window if it exists.
+   * The window reference is nulled by the 'closed' event handler
+   * set up in createSettingsWindow().
+   */
+  closeSettings(): void {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.close()
+      // Note: Don't null here - the 'closed' event handler will do it
+    }
+  }
+
+  /**
+   * Get settings window instance
+   */
+  getSettingsWindow(): BrowserWindow | null {
+    return this.settingsWindow
+  }
+
+  /**
+   * Check if settings window exists and is not destroyed
+   */
+  hasSettingsWindow(): boolean {
+    return this.settingsWindow !== null && !this.settingsWindow.isDestroyed()
+  }
+
+  /**
    * Cleanup and save state before app quit.
    */
   cleanup(): void {
     this.saveWindowState()
+
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.close()
+    }
 
     if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
       this.floatingNavigator.close()
