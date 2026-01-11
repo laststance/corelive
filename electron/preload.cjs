@@ -87,6 +87,14 @@ const ALLOWED_CHANNELS = {
   'deep-link-get-examples': true,
   'deep-link-handle-url': true,
 
+  // Settings window operations
+  'settings:open': true,
+  'settings:close': true,
+  'settings:setHideAppIcon': true,
+  'settings:setShowInMenuBar': true,
+  'settings:setStartAtLogin': true,
+  'settings:getLoginItemSettings': true,
+
   // Notification management
   'notification-show': true,
   'notification-get-preferences': true,
@@ -1512,6 +1520,122 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return false
       }
     },
+  },
+
+  // Settings management APIs
+  settings: {
+    /**
+     * Open settings window
+     * @returns {Promise<boolean>} Always returns a boolean
+     */
+    open: async () => {
+      try {
+        const result = await ipcRenderer.invoke('settings:open')
+        return Boolean(result)
+      } catch (error) {
+        log.error('Failed to open settings:', error)
+        return false
+      }
+    },
+
+    /**
+     * Close settings window
+     * @returns {Promise<boolean>} Always returns a boolean
+     */
+    close: async () => {
+      try {
+        const result = await ipcRenderer.invoke('settings:close')
+        return Boolean(result)
+      } catch (error) {
+        log.error('Failed to close settings:', error)
+        return false
+      }
+    },
+
+    /**
+     * Set hide app icon (dock visibility)
+     * @param {boolean} hide - Whether to hide the dock icon
+     */
+    setHideAppIcon: async (hide) => {
+      if (typeof hide !== 'boolean') {
+        throw new Error('Hide parameter must be a boolean')
+      }
+
+      try {
+        return await ipcRenderer.invoke('settings:setHideAppIcon', hide)
+      } catch (error) {
+        log.error('Failed to set hide app icon:', error)
+        return false
+      }
+    },
+
+    /**
+     * Set show in menu bar
+     * @param {boolean} show - Whether to show in menu bar
+     */
+    setShowInMenuBar: async (show) => {
+      if (typeof show !== 'boolean') {
+        throw new Error('Show parameter must be a boolean')
+      }
+
+      try {
+        return await ipcRenderer.invoke('settings:setShowInMenuBar', show)
+      } catch (error) {
+        log.error('Failed to set show in menu bar:', error)
+        return false
+      }
+    },
+
+    /**
+     * Set start at login
+     * @param {boolean} startAtLogin - Whether to start at login
+     */
+    setStartAtLogin: async (startAtLogin) => {
+      if (typeof startAtLogin !== 'boolean') {
+        throw new Error('Start at login parameter must be a boolean')
+      }
+
+      try {
+        return await ipcRenderer.invoke(
+          'settings:setStartAtLogin',
+          startAtLogin,
+        )
+      } catch (error) {
+        log.error('Failed to set start at login:', error)
+        return false
+      }
+    },
+
+    /**
+     * Get login item settings
+     */
+    getLoginItemSettings: async () => {
+      try {
+        return await ipcRenderer.invoke('settings:getLoginItemSettings')
+      } catch (error) {
+        log.error('Failed to get login item settings:', error)
+        return { openAtLogin: false }
+      }
+    },
+  },
+
+  // Generic invoke method for settings (backward compatibility)
+  invoke: async (channel, ...args) => {
+    // Validate channel using shared ALLOWED_CHANNELS
+    if (!validateChannel(channel)) {
+      log.warn(`Attempted to invoke unauthorized channel: ${channel}`)
+      throw new Error(`Channel ${channel} is not allowed`)
+    }
+
+    // Sanitize all arguments to prevent injection attacks
+    const sanitizedArgs = args.map((arg) => sanitizeData(arg))
+
+    try {
+      return await ipcRenderer.invoke(channel, ...sanitizedArgs)
+    } catch (error) {
+      log.error(`Failed to invoke ${channel}:`, error)
+      throw error
+    }
   },
 
   // Auto-updater operations

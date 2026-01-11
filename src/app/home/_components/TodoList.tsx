@@ -12,12 +12,24 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useORPCUtils } from '@/lib/orpc/react-query'
+import { broadcastTodoSync, subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { AddTodoForm } from './AddTodoForm'
 import { CompletedTodos } from './CompletedTodos'
 import type { Todo } from './TodoItem'
 import { TodoItem } from './TodoItem'
 
+const TODO_QUERY_LIMIT = 100
+const TODO_QUERY_OFFSET = 0
+const DECIMAL_RADIX = 10
+
+/**
+ * Renders the primary todo list view with pending and completed tasks.
+ * @returns
+ * - The todo list UI for the home screen
+ * @example
+ * <TodoList />
+ */
 export function TodoList() {
   const orpc = useORPCUtils()
   const queryClient = useQueryClient()
@@ -25,7 +37,11 @@ export function TodoList() {
   // Fetch pending todos
   const { data: pendingData, isLoading: pendingLoading } = useQuery(
     orpc.todo.list.queryOptions({
-      input: { completed: false, limit: 100, offset: 0 },
+      input: {
+        completed: false,
+        limit: TODO_QUERY_LIMIT,
+        offset: TODO_QUERY_OFFSET,
+      },
     }),
   )
 
@@ -35,6 +51,7 @@ export function TodoList() {
       onSuccess: () => {
         // Invalidate cache
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
       onError: (error) => {
         console.error('Failed to create TODO:', error)
@@ -47,6 +64,7 @@ export function TodoList() {
     orpc.todo.toggle.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
@@ -56,6 +74,7 @@ export function TodoList() {
     orpc.todo.delete.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
@@ -65,6 +84,7 @@ export function TodoList() {
     orpc.todo.update.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
@@ -74,40 +94,92 @@ export function TodoList() {
     orpc.todo.clearCompleted.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+        broadcastTodoSync()
       },
     }),
   )
 
+  /**
+   * Adds a new todo item using the create mutation.
+   * @param text - Todo title to create.
+   * @param notes - Optional notes to attach to the todo.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * addTodo('Buy milk')
+   */
   const addTodo = (text: string, notes?: string) => {
     createMutation.mutate({ text, notes })
   }
 
+  /**
+   * Toggles completion status for the given todo.
+   * @param id - Todo identifier as a string.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * toggleComplete('42')
+   */
   const toggleComplete = (id: string) => {
-    const todoId = parseInt(id, 10)
+    const todoId = parseInt(id, DECIMAL_RADIX)
     if (!isNaN(todoId)) {
       toggleMutation.mutate({ id: todoId })
     }
   }
 
+  /**
+   * Deletes the specified todo item.
+   * @param id - Todo identifier as a string.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * deleteTodo('42')
+   */
   const deleteTodo = (id: string) => {
-    const todoId = parseInt(id, 10)
+    const todoId = parseInt(id, DECIMAL_RADIX)
     if (!isNaN(todoId)) {
       deleteMutation.mutate({ id: todoId })
     }
   }
 
+  /**
+   * Updates the notes for a specific todo item.
+   * @param id - Todo identifier as a string.
+   * @param notes - New notes content.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * updateNotes('42', 'Call supplier')
+   */
   const updateNotes = (id: string, notes: string) => {
-    const todoId = parseInt(id, 10)
+    const todoId = parseInt(id, DECIMAL_RADIX)
     if (!isNaN(todoId)) {
       updateMutation.mutate({ id: todoId, data: { notes } })
     }
   }
 
+  /**
+   * Clears all completed todos via the bulk delete mutation.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * deleteCompleted()
+   */
   const deleteCompleted = () => {
     clearCompletedMutation.mutate({})
   }
 
   // Transform data into Todo component format
+  /**
+   * Converts raw API todo data into UI-ready Todo objects.
+   * @param todos - Raw todo payloads from the API.
+   * @returns
+   * - A normalized list of Todo objects
+   * - An empty list when the input is not an array
+   * @example
+   * mapTodos([{ id: 1, text: 'A', completed: false, createdAt: Date.now() }])
+   * // => [{ id: '1', text: 'A', completed: false, createdAt: Date }]
+   */
   const mapTodos = (todos: unknown): Todo[] => {
     if (!Array.isArray(todos)) {
       return []
@@ -123,6 +195,12 @@ export function TodoList() {
   }
 
   const pendingTodos = mapTodos(pendingData?.todos)
+
+  useEffect(() => {
+    return subscribeToTodoSync(() => {
+      queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+    })
+  }, [queryClient, orpc])
 
   // Listen for Electron IPC events to sync todos when they're created/updated/deleted from other windows
   useEffect(() => {

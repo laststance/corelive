@@ -107,7 +107,7 @@ export default defineConfig({
   webServer: {
     command: 'NODE_ENV=test pnpm start',
     url: APP_URL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120 * 1000,
     env: {
       NODE_ENV: 'test',

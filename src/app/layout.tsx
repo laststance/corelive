@@ -4,6 +4,7 @@ import '@/globals.css'
 
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ORPCProvider } from '@/lib/orpc/react-query'
+import { ReduxProvider } from '@/lib/redux/providers'
 import { cn } from '@/lib/utils'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
@@ -30,7 +31,9 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
             disableTransitionOnChange
           >
             <ORPCProvider>
-              <ElectronAuthProvider>{children}</ElectronAuthProvider>
+              <ReduxProvider>
+                <ElectronAuthProvider>{children}</ElectronAuthProvider>
+              </ReduxProvider>
             </ORPCProvider>
           </ThemeProvider>
         </body>

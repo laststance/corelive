@@ -198,6 +198,25 @@ interface ElectronAPI {
     handleUrl: (url: string) => Promise<boolean>
   }
 
+  // Settings window management
+  settings?: {
+    /** Open settings window */
+    open: () => Promise<boolean>
+    /** Close settings window */
+    close: () => Promise<boolean>
+    /** Set hide app icon (dock visibility) */
+    setHideAppIcon: (hide: boolean) => Promise<boolean>
+    /** Set show in menu bar */
+    setShowInMenuBar: (show: boolean) => Promise<boolean>
+    /** Set start at login */
+    setStartAtLogin: (startAtLogin: boolean) => Promise<boolean>
+    /** Get login item settings */
+    getLoginItemSettings: () => Promise<{ openAtLogin: boolean }>
+  }
+
+  // Generic invoke method (for settings IPC)
+  invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>
+
   // Error handling
   errorHandling?: {
     getStats: () => Promise<any>
