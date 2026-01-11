@@ -37,6 +37,11 @@
       "from": "public",
       "to": "public",
       "filter": ["**/*"]
+    },
+    {
+      "from": "build/icons/tray",
+      "to": "tray-icons",
+      "filter": ["**/*.png"]
     }
   ],
   "asarUnpack": ["node_modules/@img/**"],

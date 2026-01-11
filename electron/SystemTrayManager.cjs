@@ -178,7 +178,21 @@ class SystemTrayManager {
         try {
           trayIcon = nativeImage.createFromPath(iconPath)
           if (!trayIcon.isEmpty()) {
-            // Icons are pre-sized for each platform
+            // On macOS, mark as template image for proper menu bar rendering
+            // Template images are auto-tinted by macOS for light/dark mode
+            if (
+              process.platform === 'darwin' &&
+              iconPath.includes('Template')
+            ) {
+              trayIcon.setTemplateImage(true)
+              log.warn('Set tray icon as Template image for macOS')
+            }
+
+            // Resize for consistency (16x16 for tray)
+            if (process.platform === 'darwin') {
+              trayIcon = trayIcon.resize({ width: 16, height: 16 })
+            }
+
             return trayIcon
           }
         } catch (iconError) {
@@ -361,10 +375,50 @@ class SystemTrayManager {
 
   /**
    * Get appropriate tray icon path based on platform and state
+   *
+   * macOS requires Template images for proper menu bar rendering:
+   * - Named with "Template" suffix (e.g., trayTemplate.png)
+   * - Monochrome (black) with transparent background
+   * - @2x suffix for Retina displays
+   * - macOS auto-tints for light/dark mode
+   *
+   * Path resolution:
+   * - Development: build/icons/tray/
+   * - Production: process.resourcesPath/tray-icons/
    */
   getTrayIconPath(state = 'default') {
-    const iconDir = path.join(__dirname, '..', 'build', 'icons', 'tray')
-    // Determine appropriate size based on platform and DPI
+    const { app } = require('electron')
+    const isDev = !app.isPackaged
+
+    // Determine icon directory based on environment
+    let iconDir
+    if (isDev) {
+      // Development: relative to electron folder
+      iconDir = path.join(__dirname, '..', 'build', 'icons', 'tray')
+    } else {
+      // Production: from extraResources
+      iconDir = path.join(process.resourcesPath, 'tray-icons')
+    }
+
+    log.warn(`Tray icon directory: ${iconDir} (isDev: ${isDev})`)
+
+    // macOS: Use Template images for proper menu bar rendering
+    if (process.platform === 'darwin') {
+      // Try Template icons (preferred for macOS)
+      const templatePaths = [
+        path.join(iconDir, 'trayTemplate.png'),
+        path.join(iconDir, 'checkTemplate.png'),
+      ]
+
+      for (const templatePath of templatePaths) {
+        if (this.fileExists(templatePath)) {
+          log.warn(`Using macOS Template icon: ${templatePath}`)
+          return templatePath
+        }
+      }
+    }
+
+    // Non-macOS or fallback: Use sized icons
     const size = this.getTrayIconSize()
 
     // Try state-specific icon first
@@ -396,6 +450,7 @@ class SystemTrayManager {
       }
     }
 
+    log.warn('No tray icon found in:', iconDir)
     return null
   }
 
