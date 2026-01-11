@@ -155,14 +155,17 @@ export function ElectronSettingsPage(): React.ReactElement {
             />
           </div>
 
-          {/* Show in Menu Bar */}
-          <div className="flex items-center justify-between">
+          {/* Show in Menu Bar - Not yet implemented */}
+          <div className="flex items-center justify-between opacity-60">
             <div className="space-y-0.5">
               <Label
                 htmlFor="show-in-menu-bar"
                 className="text-base font-medium"
               >
-                Show in Menu Bar
+                Show in Menu Bar{' '}
+                <span className="text-xs text-muted-foreground">
+                  (Coming Soon)
+                </span>
               </Label>
               <p className="text-sm text-muted-foreground">
                 Display CoreLive in the system menu bar
@@ -172,6 +175,7 @@ export function ElectronSettingsPage(): React.ReactElement {
               id="show-in-menu-bar"
               checked={showInMenuBar}
               onCheckedChange={handleShowInMenuBarChange}
+              disabled
             />
           </div>
 

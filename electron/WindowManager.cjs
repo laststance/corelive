@@ -497,7 +497,8 @@ class WindowManager {
       show: false,
       titleBarStyle: 'hiddenInset',
       backgroundColor: '#ffffff',
-      parent: this.mainWindow, // Modal-like behavior
+      // Modal-like behavior - use mainWindow as parent if available
+      parent: this.mainWindow || undefined,
       modal: false, // Not truly modal - allows interaction with main window
     })
 
