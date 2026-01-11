@@ -1373,6 +1373,80 @@ function setupIPCHandlers() {
   })
 
   // Note: Quick todo operations removed - Floating Navigator uses oRPC via web app
+
+  // Settings window IPC handlers
+  ipcMain.handle('settings:open', () => {
+    if (windowManager) {
+      windowManager.openSettings()
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('settings:close', () => {
+    if (windowManager) {
+      windowManager.closeSettings()
+      return true
+    }
+    return false
+  })
+
+  // Hide App Icon (Dock visibility) IPC handler
+  ipcMain.handle('settings:setHideAppIcon', (_event, hide) => {
+    try {
+      if (hide) {
+        // Hide from dock - app becomes "accessory" (no dock icon)
+        app.setActivationPolicy('accessory')
+      } else {
+        // Show in dock - app becomes "regular" application
+        app.setActivationPolicy('regular')
+      }
+      log.info(`Dock icon visibility changed: ${hide ? 'hidden' : 'visible'}`)
+      return true
+    } catch (error) {
+      log.error('Failed to change dock icon visibility:', error)
+      return false
+    }
+  })
+
+  // Show in Menu Bar IPC handler (placeholder for future implementation)
+  ipcMain.handle('settings:setShowInMenuBar', (_event, show) => {
+    try {
+      // SystemTrayManager handles menu bar visibility
+      // For now, just log the change
+      log.info(`Menu bar visibility setting changed: ${show ? 'show' : 'hide'}`)
+      // TODO: Implement actual menu bar show/hide logic via SystemTrayManager
+      return true
+    } catch (error) {
+      log.error('Failed to change menu bar visibility:', error)
+      return false
+    }
+  })
+
+  // Start at Login IPC handler
+  ipcMain.handle('settings:setStartAtLogin', (_event, startAtLogin) => {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: startAtLogin,
+        openAsHidden: false,
+      })
+      log.info(`Start at login setting changed: ${startAtLogin}`)
+      return true
+    } catch (error) {
+      log.error('Failed to change start at login setting:', error)
+      return false
+    }
+  })
+
+  // Get current login item settings
+  ipcMain.handle('settings:getLoginItemSettings', () => {
+    try {
+      return app.getLoginItemSettings()
+    } catch (error) {
+      log.error('Failed to get login item settings:', error)
+      return { openAtLogin: false }
+    }
+  })
 }
 
 /**

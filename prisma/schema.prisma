@@ -36,16 +36,17 @@ model Category {
 }
 
 model User {
-  id         Int         @id @default(autoincrement())
-  clerkId    String      @unique
-  email      String?     @unique
-  name       String?
-  bio        String?
-  categories Category[]
-  completed  Completed[]
-  todos      Todo[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id               Int               @id @default(autoincrement())
+  clerkId          String            @unique
+  email            String?           @unique
+  name             String?
+  bio              String?
+  categories       Category[]
+  completed        Completed[]
+  todos            Todo[]
+  electronSettings ElectronSettings?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model Todo {
@@ -57,4 +58,15 @@ model Todo {
   userId    Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ElectronSettings {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  user          User     @relation(fields: [userId], references: [id])
+  hideAppIcon   Boolean  @default(false)
+  showInMenuBar Boolean  @default(true)
+  startAtLogin  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

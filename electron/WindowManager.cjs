@@ -46,6 +46,7 @@ class WindowManager {
     // Window references - kept to manage lifecycle
     this.mainWindow = null // Primary application window
     this.floatingNavigator = null // Always-on-top utility window
+    this.settingsWindow = null // Settings window
 
     // Environment and configuration
     this.isDev = process.env.NODE_ENV === 'development'
@@ -458,10 +459,118 @@ class WindowManager {
   }
 
   /**
+   * Creates the settings window.
+   *
+   * Settings window is a modal-like window that displays
+   * Electron-specific preferences like dock icon visibility.
+   *
+   * @returns {BrowserWindow} The created settings window
+   */
+  createSettingsWindow() {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.focus()
+      return this.settingsWindow
+    }
+
+    log.info('🔧 Creating settings window...')
+
+    this.settingsWindow = new BrowserWindow({
+      width: 500,
+      height: 400,
+      minWidth: 400,
+      minHeight: 300,
+      resizable: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        enableRemoteModule: false,
+        preload: path.join(__dirname, 'preload.cjs'),
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+        sandbox: false,
+        devTools:
+          this.isDev ||
+          (this.configManager &&
+            this.configManager.get('advanced.enableDevTools', false)),
+      },
+      show: false,
+      titleBarStyle: 'hiddenInset',
+      backgroundColor: '#ffffff',
+      parent: this.mainWindow, // Modal-like behavior
+      modal: false, // Not truly modal - allows interaction with main window
+    })
+
+    // Load settings page
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    const settingsUrl = `${baseUrl}/settings`
+
+    log.debug('🔧 Loading settings URL:', settingsUrl)
+    this.settingsWindow.loadURL(settingsUrl)
+
+    // Show when ready
+    this.settingsWindow.once('ready-to-show', () => {
+      this.settingsWindow.show()
+      if (this.isDev) {
+        this.settingsWindow.webContents.openDevTools()
+      }
+    })
+
+    // Cleanup on close
+    this.settingsWindow.on('closed', () => {
+      log.debug('🔧 Settings window closed')
+      this.settingsWindow = null
+    })
+
+    return this.settingsWindow
+  }
+
+  /**
+   * Opens or focuses the settings window.
+   * Creates the window if it doesn't exist.
+   */
+  openSettings() {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.show()
+      this.settingsWindow.focus()
+    } else {
+      this.createSettingsWindow()
+    }
+  }
+
+  /**
+   * Closes the settings window if it exists.
+   */
+  closeSettings() {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.close()
+      this.settingsWindow = null
+    }
+  }
+
+  /**
+   * Get settings window instance
+   */
+  getSettingsWindow() {
+    return this.settingsWindow
+  }
+
+  /**
+   * Check if settings window exists and is not destroyed
+   */
+  hasSettingsWindow() {
+    return this.settingsWindow && !this.settingsWindow.isDestroyed()
+  }
+
+  /**
    * Cleanup and save state before app quit
    */
   cleanup() {
     this.saveWindowState()
+
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.close()
+    }
 
     if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
       this.floatingNavigator.close()

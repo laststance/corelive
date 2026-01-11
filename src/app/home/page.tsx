@@ -12,7 +12,10 @@ import {
   FileText,
   Trash2,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useCallback } from 'react'
 
+import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -46,6 +49,16 @@ import { UserMenu } from './_components/UserMenu'
 
 export default function Home() {
   const { user } = useUser()
+  const isElectron = useIsElectron()
+  const router = useRouter()
+
+  /**
+   * Opens the Settings page.
+   * Navigates to the settings route using Next.js router.
+   */
+  const handleOpenSettings = useCallback(() => {
+    router.push('/settings')
+  }, [router])
 
   return (
     <SidebarProvider>
@@ -161,12 +174,15 @@ export default function Home() {
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <Settings className="h-4 w-4" />
-                    <span>Settings</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                {/* Settings button - only visible in Electron */}
+                {isElectron && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={handleOpenSettings}>
+                      <Settings className="h-4 w-4" />
+                      <span>Settings</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
                 <SidebarMenuItem>
                   <SidebarMenuButton>
                     <Trash2 className="h-4 w-4" />

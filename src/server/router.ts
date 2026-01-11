@@ -1,4 +1,8 @@
 import {
+  getElectronSettings,
+  upsertElectronSettings,
+} from './procedures/electronSettings'
+import {
   listTodos,
   createTodo,
   updateTodo,
@@ -15,6 +19,10 @@ export const router = {
     delete: deleteTodo,
     toggle: toggleTodo,
     clearCompleted: clearCompleted,
+  },
+  electronSettings: {
+    get: getElectronSettings,
+    upsert: upsertElectronSettings,
   },
 }
 
