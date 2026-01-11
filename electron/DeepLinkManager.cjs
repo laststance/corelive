@@ -165,18 +165,15 @@ class DeepLinkManager {
   }
 
   /**
-   * Handle initial URL when app is launched
+   * Handle initial URL when app is launched.
+   *
+   * On macOS, deep links are handled via the 'open-url' event,
+   * which is set up in setupOpenUrlHandler(). This method is
+   * a no-op on macOS as the event-based handling is preferred.
    */
   handleInitialUrl() {
-    // On Windows/Linux, check command line arguments
-    if (process.platform !== 'darwin') {
-      const args = process.argv
-      const urlArg = args.find((arg) => arg.startsWith(`${this.protocol}://`))
-      if (urlArg) {
-        // Store for later processing after window is ready
-        this.pendingUrl = urlArg
-      }
-    }
+    // macOS uses the 'open-url' event for deep links (see setupOpenUrlHandler)
+    // No command line argument parsing needed
   }
 
   /**

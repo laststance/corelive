@@ -63,17 +63,15 @@ class ConfigManager {
    * Defines the default configuration structure with sensible defaults.
    *
    * These defaults are carefully chosen to:
-   * - Work well on all platforms
-   * - Provide good first-run experience
+   * - Provide good first-run experience on macOS
    * - Be accessible (reasonable font sizes, etc.)
-   * - Follow platform conventions (keyboard shortcuts)
+   * - Follow macOS conventions (keyboard shortcuts)
    *
    * @returns {Object} Default configuration object
    */
   getDefaultConfig() {
-    // Platform-specific modifier key for shortcuts
-    const isMac = process.platform === 'darwin'
-    const modifier = isMac ? 'Cmd' : 'Ctrl'
+    // macOS uses Cmd as the primary modifier key
+    const modifier = 'Cmd'
 
     return {
       version: '1.0.0', // Config schema version for migrations
@@ -120,7 +118,7 @@ class ConfigManager {
         enabled: true,
         newTask: `${modifier}+N`, // Create new todo
         showMainWindow: `${modifier}+Shift+T`, // Show/hide main window
-        quit: isMac ? 'Cmd+Q' : 'Ctrl+Q', // Quit app
+        quit: 'Cmd+Q', // Quit app (macOS standard)
         minimize: `${modifier}+M`, // Minimize window
         toggleAlwaysOnTop: `${modifier}+Shift+A`, // Toggle floating on top
         focusFloatingNavigator: `${modifier}+Shift+N`, // Focus floating window

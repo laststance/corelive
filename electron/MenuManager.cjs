@@ -47,8 +47,8 @@ class MenuManager {
     this.windowManager = null
     this.configManager = null
 
-    // Platform detection for menu differences
-    this.isMac = process.platform === 'darwin'
+    // This app is macOS only
+    this.isMac = true
   }
 
   /**
@@ -232,23 +232,7 @@ class MenuManager {
       },
     ]
 
-    // Add Quit for non-macOS platforms
-    if (!this.isMac) {
-      submenu.push(
-        { type: 'separator' },
-        {
-          label: 'Preferences...',
-          // accelerator: 'CmdOrCtrl+,',  // Disabled: conflicts with Cursor Editor
-          click: () => this.openPreferences(),
-        },
-        { type: 'separator' },
-        {
-          label: 'Exit',
-          accelerator: 'CmdOrCtrl+Q',
-          click: () => app.quit(),
-        },
-      )
-    }
+    // On macOS, Quit is in the app menu, not the File menu
 
     return {
       label: 'File',
@@ -550,16 +534,7 @@ class MenuManager {
       },
     ]
 
-    // Add About for non-macOS platforms
-    if (!this.isMac) {
-      submenu.push(
-        { type: 'separator' },
-        {
-          label: `About ${app.getName()}`,
-          click: () => this.showAboutDialog(),
-        },
-      )
-    }
+    // On macOS, About is in the app menu, not the Help menu
 
     return {
       label: 'Help',

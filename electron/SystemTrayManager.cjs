@@ -1,10 +1,7 @@
 /**
- * @fileoverview System Tray Manager for Electron
+ * @fileoverview System Tray Manager for Electron (macOS only)
  *
- * Manages the system tray icon and menu that appears in:
- * - Windows: System tray (bottom-right corner)
- * - macOS: Menu bar (top-right corner)
- * - Linux: System panel (varies by desktop environment)
+ * Manages the menu bar icon and menu that appears in the top-right corner of macOS.
  *
  * System tray provides:
  * - Quick access when app is minimized
@@ -13,17 +10,10 @@
  * - Minimize-to-tray functionality
  * - Background running indicator
  *
- * Why system tray is important:
- * - Users expect desktop apps to minimize to tray
- * - Provides persistent access without taskbar clutter
- * - Shows app is running in background
- * - Quick actions without opening main window
- * - Standard desktop app pattern
- *
- * Platform considerations:
- * - macOS: Limited icon customization, no balloon tooltips
- * - Windows: Full color icons, native notifications
- * - Linux: Varies greatly by desktop environment
+ * macOS considerations:
+ * - Uses Template images for proper menu bar rendering (auto-tinted for light/dark mode)
+ * - Limited icon customization compared to other platforms
+ * - No balloon tooltips (uses native notifications instead)
  *
  * @module electron/SystemTrayManager
  */
@@ -35,20 +25,19 @@ const { Tray, Menu, nativeImage, Notification } = require('electron')
 const { log } = require('./logger.cjs')
 
 /**
- * Manages system tray functionality with robust error handling.
+ * Manages macOS menu bar (system tray) functionality with robust error handling.
  *
  * Features:
- * - Platform-specific tray icon creation
+ * - macOS Template image support for menu bar
  * - Context menu management
- * - Click/double-click handling
+ * - Double-click handling (macOS standard)
  * - Minimize to tray behavior
  * - Status updates (icon, tooltip)
- * - Fallback mode for unsupported systems
+ * - Fallback mode if tray creation fails
  *
  * Error handling is critical because:
- * - Some Linux systems don't support tray
  * - Icon loading can fail
- * - Users may disable system tray
+ * - Users may have system issues
  */
 class SystemTrayManager {
   constructor(windowManager) {
@@ -126,25 +115,13 @@ class SystemTrayManager {
 
   /**
    * Checks if system tray is supported on the current platform.
+   * This app only supports macOS.
    *
-   * Support varies:
-   * - Windows: Always supported
-   * - macOS: Always supported (menu bar)
-   * - Linux: Depends on desktop environment
-   *   - GNOME: Requires extension
-   *   - KDE: Native support
-   *   - XFCE: Native support
-   *
-   * @returns {boolean} True if platform potentially supports tray
+   * @returns {boolean} True if running on macOS
    */
   isSystemTraySupported() {
     try {
-      // Basic platform check - actual support may still fail
-      return (
-        process.platform === 'win32' ||
-        process.platform === 'darwin' ||
-        process.platform === 'linux'
-      )
+      return process.platform === 'darwin'
     } catch (error) {
       log.warn('Error checking system tray support:', error)
       return false
@@ -152,12 +129,11 @@ class SystemTrayManager {
   }
 
   /**
-   * Creates the tray icon with appropriate format and size.
+   * Creates the tray icon with appropriate format and size for macOS.
    *
-   * Icon requirements:
-   * - Windows: 16x16 or 32x32, ICO or PNG
-   * - macOS: 22x22 (Template images, black & transparent)
-   * - Linux: 16x16, 22x22, or 24x24 PNG
+   * macOS icon requirements:
+   * - 22x22 (Template images, black & transparent)
+   * - Template images are auto-tinted by macOS for light/dark mode
    *
    * State support:
    * - default: Normal state
@@ -455,15 +431,12 @@ class SystemTrayManager {
   }
 
   /**
-   * Get appropriate tray icon size based on platform and DPI
+   * Get appropriate tray icon size for macOS menu bar.
+   * macOS typically uses 16x16 for tray icons.
+   *
+   * @returns {number} Icon size in pixels
    */
   getTrayIconSize() {
-    // macOS typically uses 16x16 for tray icons
-    if (process.platform === 'darwin') {
-      return 16
-    }
-    // Windows and Linux can vary, but 16x16 is most common
-    // TODO: Detect DPI and adjust accordingly
     return 16
   }
 
@@ -607,23 +580,16 @@ class SystemTrayManager {
   }
 
   /**
-   * Setup tray event handlers
+   * Setup tray event handlers for macOS.
+   * macOS uses double-click to restore window (standard behavior).
    */
   setupTrayEvents() {
     if (!this.tray) return
 
-    // Handle single click (Windows/Linux) and double click (macOS)
-    if (process.platform === 'darwin') {
-      // macOS: double-click to restore
-      this.tray.on('double-click', () => {
-        this.windowManager.restoreFromTray()
-      })
-    } else {
-      // Windows/Linux: single click to restore
-      this.tray.on('click', () => {
-        this.windowManager.restoreFromTray()
-      })
-    }
+    // macOS: double-click to restore
+    this.tray.on('double-click', () => {
+      this.windowManager.restoreFromTray()
+    })
 
     // Right-click shows context menu (handled automatically by Electron)
   }

@@ -140,8 +140,8 @@ test.describe('Electron Basic Integration E2E Tests', () => {
       })
     })
 
-    // Simulate keyboard shortcut
-    const shortcutKey = process.platform === 'darwin' ? 'Meta+N' : 'Control+N'
+    // Simulate keyboard shortcut (macOS uses Meta/Cmd key)
+    const shortcutKey = 'Meta+N'
     await context.mainWindow.keyboard.press(shortcutKey).catch(() => {})
     await context.mainWindow.waitForTimeout(500)
 

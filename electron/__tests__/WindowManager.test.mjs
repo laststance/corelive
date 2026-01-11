@@ -89,8 +89,7 @@ const createWindowManagerMock = () => {
               this.configManager.get('advanced.enableDevTools', false)),
         },
         show: false,
-        titleBarStyle:
-          process.platform === 'darwin' ? 'hiddenInset' : 'default',
+        titleBarStyle: 'hiddenInset', // macOS native inset title bar
         backgroundColor: '#ffffff',
         autoHideMenuBar: true,
       })

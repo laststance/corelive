@@ -1600,21 +1600,23 @@ const sounds = {
 
 ## 4. インタラクション設計
 
-### 4.1 キーボードショートカット
+### 4.1 キーボードショートカット (macOS)
 
-| アクション               | Windows/Linux        | macOS               |
+> **Note:** This app only supports macOS.
+
+| アクション               | macOS                |
 | ------------------------ | -------------------- | ------------------- |
-| 新規タスク               | Ctrl + T             | Cmd + T             |
-| タスク完了               | Ctrl + Enter         | Cmd + Enter         |
-| 次のタスク               | Ctrl + →             | Cmd + →             |
-| 前のタスク               | Ctrl + ←             | Cmd + ←             |
-| フォーカスモード         | Ctrl + F             | Cmd + F             |
-| **ナビゲーター表示切替** | **Ctrl + N**         | **Cmd + N**         |
-| 検索                     | Ctrl + K             | Cmd + K             |
-| 振り返りビュー           | Ctrl + R             | Cmd + R             |
-| **関連リンク追加**       | **Ctrl + L**         | **Cmd + L**         |
-| **月次達成表示**         | **Ctrl + M**         | **Cmd + M**         |
-| **ダッシュボード設定**   | **Ctrl + ,**         | **Cmd + ,**         |
+| 新規タスク               | Cmd + T              |
+| タスク完了               | Cmd + Enter          |
+| 次のタスク               | Cmd + →              |
+| 前のタスク               | Cmd + ←              |
+| フォーカスモード         | Cmd + F              |
+| **ナビゲーター表示切替** | **Cmd + N**          |
+| 検索                     | Cmd + K              |
+| 振り返りビュー           | Cmd + R              |
+| **関連リンク追加**       | **Cmd + L**          |
+| **月次達成表示**         | **Cmd + M**          |
+| **ダッシュボード設定**   | **Cmd + ,**          |
 | **Lazy Task記録**        | **Ctrl + Shift + T** | **Cmd + Shift + T** |
 | **コンテキスト切替**     | **Ctrl + Shift + N** | **Cmd + Shift + N** |
 | **看板モード切替**       | **Ctrl + Shift + K** | **Cmd + Shift + K** |

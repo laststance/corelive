@@ -9,7 +9,7 @@ Successfully implemented deep linking and URL scheme support for the CoreLive TO
 ### 1. Custom URL Scheme Registration
 
 - **Protocol**: `corelive://`
-- **Cross-platform support**: Windows, macOS, and Linux
+- **Platform**: macOS only
 - **Automatic registration**: App registers as default handler for the protocol
 
 ### 2. URL Scheme Patterns
@@ -35,23 +35,13 @@ The following URL patterns are supported:
 
 - `corelive://search?query=important&filter=pending` - Search tasks
 
-### 3. Platform-Specific Configuration
-
-#### Windows (NSIS Installer)
-
-- Registry entries for URL scheme association
-- Proper uninstallation cleanup
-- Support for both per-user and system-wide installation
-
-#### macOS
+### 3. macOS Configuration
 
 - Info.plist configuration for URL scheme handling
 - Proper app bundle association
+- Uses `open-url` event for handling deep links
 
-#### Linux
-
-- Desktop entry with MIME type association
-- Support for various package formats (AppImage, deb, rpm, snap)
+> **Note:** This app only supports macOS.
 
 ### 4. Single Instance Handling
 
@@ -105,18 +95,8 @@ The following URL patterns are supported:
 
 #### 1. Electron Builder (`electron-builder.json`)
 
-- Protocol registration for all platforms
-- Platform-specific configurations
-
-#### 2. Windows Installer (`build/installer.nsh`)
-
-- Registry manipulation for URL scheme
-- Installation and uninstallation scripts
-
-#### 3. Linux Desktop Entry
-
-- MIME type association
-- Proper desktop integration
+- Protocol registration for macOS
+- macOS-specific configurations (Info.plist, app bundle)
 
 ### API Interface
 

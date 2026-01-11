@@ -110,16 +110,14 @@ class ShortcutManager {
    * @returns {Object} Map of action names to key combinations
    */
   getDefaultShortcuts() {
-    const isMac = process.platform === 'darwin'
-    const modifier = isMac ? 'Cmd' : 'Ctrl'
-
+    // macOS uses Cmd as the primary modifier
     return {
-      newTask: `${modifier}+N`, // Standard "New" shortcut
-      showMainWindow: `${modifier}+Shift+T`, // T for "Todo"
-      quit: isMac ? 'Cmd+Q' : 'Ctrl+Q', // Platform standard quit
-      minimize: `${modifier}+M`, // Standard minimize
-      toggleAlwaysOnTop: `${modifier}+Shift+A`, // A for "Always on top"
-      focusFloatingNavigator: `${modifier}+Shift+N`, // N for "Navigator"
+      newTask: 'Cmd+N', // Standard "New" shortcut
+      showMainWindow: 'Cmd+Shift+T', // T for "Todo"
+      quit: 'Cmd+Q', // macOS standard quit
+      minimize: 'Cmd+M', // Standard minimize
+      toggleAlwaysOnTop: 'Cmd+Shift+A', // A for "Always on top"
+      focusFloatingNavigator: 'Cmd+Shift+N', // N for "Navigator"
     }
   }
 
@@ -493,31 +491,30 @@ class ShortcutManager {
   }
 
   /**
-   * Generate alternative shortcuts when conflicts occur
+   * Generate alternative shortcuts when conflicts occur (macOS).
    */
   generateAlternativeShortcuts(originalAccelerator, id) {
     const alternatives = []
-    const isMac = process.platform === 'darwin'
 
     // Parse the original accelerator
     const parts = originalAccelerator.split('+')
     const key = parts[parts.length - 1]
     const modifiers = parts.slice(0, -1)
 
-    // Try different modifier combinations
+    // Try different modifier combinations for macOS
     const alternativeModifiers = [
-      // Add Alt/Option
-      [...modifiers, isMac ? 'Option' : 'Alt'],
-      // Replace Ctrl with Alt (or vice versa)
+      // Add Option
+      [...modifiers, 'Option'],
+      // Replace Ctrl with Option
       modifiers.map((m) => {
-        if (m === 'Ctrl' || m === 'Control') return isMac ? 'Option' : 'Alt'
-        if (m === 'Alt') return isMac ? 'Cmd' : 'Ctrl'
+        if (m === 'Ctrl' || m === 'Control') return 'Option'
+        if (m === 'Alt') return 'Cmd'
         return m
       }),
       // Add Shift
       [...modifiers, 'Shift'],
       // Try with different base modifier
-      [isMac ? 'Cmd' : 'Ctrl', 'Alt', 'Shift'],
+      ['Cmd', 'Alt', 'Shift'],
     ]
 
     // Generate alternatives

@@ -165,42 +165,33 @@ class NotificationManager {
    */
   async checkNotificationPermissions() {
     try {
-      // Windows/Linux typically allow notifications by default
-      if (process.platform === 'win32' || process.platform === 'linux') {
-        return { granted: true, reason: 'platform_default' }
-      }
+      // macOS requires special handling for notification permissions
+      try {
+        // Try to create a silent test notification
+        const testNotification = new Notification({
+          title: 'Permission Test',
+          body: 'Testing notification permissions',
+          silent: true,
+        })
 
-      // macOS requires special handling
-      if (process.platform === 'darwin') {
-        try {
-          // Try to create a silent test notification
-          const testNotification = new Notification({
-            title: 'Permission Test',
-            body: 'Testing notification permissions',
-            silent: true,
-          })
+        // If we get here, permissions are likely granted
+        testNotification.close()
+        return { granted: true, reason: 'test_successful' }
+      } catch (permissionError) {
+        // Check specific error types
+        if (
+          permissionError.message.includes('permission') ||
+          permissionError.message.includes('denied')
+        ) {
+          return { granted: false, reason: 'permission_denied' }
+        }
 
-          // If we get here, permissions are likely granted
-          testNotification.close()
-          return { granted: true, reason: 'test_successful' }
-        } catch (permissionError) {
-          // Check specific error types
-          if (
-            permissionError.message.includes('permission') ||
-            permissionError.message.includes('denied')
-          ) {
-            return { granted: false, reason: 'permission_denied' }
-          }
-
-          return {
-            granted: false,
-            reason: 'unknown_error',
-            error: permissionError,
-          }
+        return {
+          granted: false,
+          reason: 'unknown_error',
+          error: permissionError,
         }
       }
-
-      return { granted: true, reason: 'unknown_platform' }
     } catch (error) {
       return { granted: false, reason: 'check_failed', error }
     }
@@ -333,19 +324,12 @@ class NotificationManager {
   }
 
   /**
-   * Get platform-specific guidance for enabling notifications
+   * Get macOS-specific guidance for enabling notifications.
+   *
+   * @returns {string} User-friendly instructions for enabling notifications
    */
   getPermissionGuidanceForPlatform() {
-    switch (process.platform) {
-      case 'darwin':
-        return 'Enable notifications in System Preferences > Notifications > TODO App'
-      case 'win32':
-        return 'Enable notifications in Windows Settings > System > Notifications & actions'
-      case 'linux':
-        return 'Check your desktop environment notification settings'
-      default:
-        return 'Check your system notification settings'
-    }
+    return 'Enable notifications in System Preferences > Notifications > TODO App'
   }
 
   /**

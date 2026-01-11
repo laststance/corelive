@@ -128,10 +128,10 @@ class WindowManager {
             this.configManager.get('advanced.enableDevTools', false)),
       },
 
-      // Visual configuration
-      icon: path.join(__dirname, '../public/favicon.ico'),
+      // Visual configuration (macOS)
+      icon: path.join(__dirname, '../build/icons/icon.icns'),
       show: false, // Hidden initially to prevent visual flash
-      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+      titleBarStyle: 'hiddenInset', // macOS native inset title bar
       backgroundColor: '#ffffff', // Prevents white flash on load
     })
 

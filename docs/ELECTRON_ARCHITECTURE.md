@@ -288,11 +288,12 @@ class ConfigManager {
 **設定ファイルの場所:**
 
 - macOS: `~/Library/Application Support/CoreLive/config.json`
-- Windows: `%APPDATA%/CoreLive/config.json`
+
+> **Note:** This app only supports macOS.
 
 #### 2.2.5 `MenuManager.cjs` - アプリケーションメニュー
 
-**役割:** macOS/Windowsメニューバーの構築と管理
+**役割:** macOSメニューバーの構築と管理
 
 ```javascript
 class MenuManager {

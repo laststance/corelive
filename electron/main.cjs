@@ -1434,17 +1434,16 @@ if (!gotTheLock) {
 }
 
 /**
- * Window close behavior - platform specific.
+ * Window close behavior for macOS.
  *
- * - Windows/Linux: Close all windows = quit app (expected behavior)
- * - macOS: Close all windows = app stays in dock (platform convention)
+ * macOS convention: Close all windows = app stays in dock
+ * Users can fully quit via Cmd+Q or the app menu.
  *
- * This follows native platform guidelines for better user experience.
+ * This handler is intentionally empty to follow macOS platform guidelines.
  */
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // macOS: App stays running when all windows are closed (platform convention)
+  // No action needed - this is the default Electron behavior on macOS
 })
 
 /**

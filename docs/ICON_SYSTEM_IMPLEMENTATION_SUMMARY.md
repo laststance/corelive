@@ -13,11 +13,13 @@ This document summarizes the comprehensive implementation of an enhanced icon sy
 - **Purpose**: Automated generation of all required icon sizes and formats
 - **Features**:
   - Generates PNG icons in all required sizes (16x16 to 1024x1024)
-  - Creates platform-specific icon sets for Windows, macOS, and Linux
+  - Creates macOS icon set (.icns)
   - Generates tray icons with multiple states (default, active, notification, disabled)
   - Creates web favicons for browser integration
   - Produces high-resolution app store icons
   - Generates comprehensive icon manifest for tracking
+
+> **Note:** This app only supports macOS.
 
 #### 2. Enhanced SystemTrayManager (`electron/SystemTrayManager.cjs`)
 
@@ -134,11 +136,11 @@ await updateBasedOnState({
 3. **Notification State**: Red notification badge in top-right corner
 4. **Disabled State**: Grayscale with 70% brightness
 
-### Platform Integration
+### macOS Integration
 
-- **macOS**: Uses 16x16 tray icons with proper retina support
-- **Windows**: Supports multiple DPI settings with appropriate icon sizes
-- **Linux**: Compatible with various desktop environments
+- Uses 16x16 tray icons with proper Retina support
+- Template images for proper menu bar rendering in light/dark mode
+- Automatic tinting by macOS for menu bar appearance
 
 ### High-DPI Support
 
@@ -163,18 +165,14 @@ await updateBasedOnState({
 
 ```json
 {
-  "icon": "build/icons/icon-512x512.png",
+  "icon": "build/icons/icon.icns",
   "mac": {
-    "icon": "build/icons/icon-1024x1024.png"
-  },
-  "win": {
-    "icon": "build/icons/icon-256x256.png"
-  },
-  "linux": {
-    "icon": "build/icons/"
+    "icon": "build/icons/icon.icns"
   }
 }
 ```
+
+> **Note:** This app only supports macOS.
 
 ## 🧪 Testing Coverage
 
@@ -313,8 +311,8 @@ await updateBasedOnState({
 
 ### Task 12.2 Requirements
 
-- ✅ **Generate complete icon set**: All platforms (16x16 to 1024x1024)
-- ✅ **Create proper platform files**: .icns for macOS, .ico for Windows
+- ✅ **Generate complete icon set**: macOS (16x16 to 1024x1024)
+- ✅ **Create proper platform files**: .icns for macOS
 - ✅ **Add app icon to system tray**: High-DPI support implemented
 - ✅ **Implement dynamic tray icon states**: Active/inactive, notification badges
 - ✅ **Requirements 1.1, 1.3**: Desktop integration and system tray functionality
@@ -334,7 +332,7 @@ await updateBasedOnState({
 - **All Tests Passing**: ✅ 100% test success rate
 - **TypeScript Compliance**: ✅ Full type safety
 - **Build Integration**: ✅ Automated icon generation
-- **Cross-Platform**: ✅ Windows, macOS, Linux support
+- **macOS Support**: ✅ Full macOS support (macOS only)
 - **Performance**: ✅ Minimal runtime impact
 
 ---

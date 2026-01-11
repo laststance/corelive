@@ -1634,7 +1634,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
  */
 contextBridge.exposeInMainWorld('electronEnv', {
   isElectron: true, // Flag to detect Electron environment
-  platform: process.platform, // 'darwin', 'win32', or 'linux'
+  platform: process.platform, // Always 'darwin' (macOS only)
   versions: {
     node: process.versions.node, // Node.js version
     chrome: process.versions.chrome, // Chromium version
