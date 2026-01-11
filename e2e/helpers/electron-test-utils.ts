@@ -289,6 +289,10 @@ export class ElectronTestHelper {
             // This is more reliable than window.Clerk injection which can be overwritten
             // by the real Clerk SDK when it loads
             await page.route('**/api/orpc/**', async (route) => {
+              const url = route.request().url()
+              console.warn(
+                `[electron-test] Intercepted oRPC request: ${url.slice(0, 100)}`,
+              )
               const headers = {
                 ...route.request().headers(),
                 Authorization: `Bearer ${clerkUser.clerkId}`,
