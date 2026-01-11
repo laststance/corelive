@@ -8,6 +8,8 @@
  */
 import { z } from 'zod'
 
+import { DEFAULT_ELECTRON_SETTINGS } from '@/lib/constants/electronSettings'
+
 /**
  * Helper schema for date fields that accepts Date objects or valid date strings.
  * Rejects invalid dates (NaN) to prevent "Invalid Date" objects.
@@ -56,10 +58,7 @@ export type UpdateElectronSettings = z.infer<
 
 /**
  * Default values for Electron settings.
- * Used when creating new settings records.
+ * Re-exported from shared constants to maintain backward compatibility.
+ * @deprecated Import from '@/lib/constants/electronSettings' instead
  */
-export const DEFAULT_ELECTRON_SETTINGS = {
-  hideAppIcon: false,
-  showInMenuBar: true,
-  startAtLogin: false,
-} as const
+export { DEFAULT_ELECTRON_SETTINGS }

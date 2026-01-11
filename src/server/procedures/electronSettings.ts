@@ -51,16 +51,46 @@ export const getElectronSettings = authMiddleware
     try {
       const { user } = context
 
-      // Use upsert to avoid race conditions when two requests
-      // try to create settings simultaneously (P2002 unique constraint)
-      const settings = await prisma.electronSettings.upsert({
+      // Try to find existing settings first
+      let settings = await prisma.electronSettings.findUnique({
         where: { userId: user.id },
-        update: {}, // No updates - just return existing
-        create: {
-          userId: user.id,
-          ...DEFAULT_ELECTRON_SETTINGS,
-        },
       })
+
+      // If not found, create with defaults
+      if (!settings) {
+        try {
+          settings = await prisma.electronSettings.create({
+            data: {
+              userId: user.id,
+              ...DEFAULT_ELECTRON_SETTINGS,
+            },
+          })
+        } catch (createError: unknown) {
+          // Handle race condition: if another request created settings
+          // between findUnique and create, catch P2002 and re-fetch
+          if (
+            createError &&
+            typeof createError === 'object' &&
+            'code' in createError &&
+            createError.code === 'P2002'
+          ) {
+            // Settings were created by another request - fetch the existing record
+            settings = await prisma.electronSettings.findUnique({
+              where: { userId: user.id },
+            })
+            if (!settings) {
+              // Still not found after race - this shouldn't happen but handle it
+              throw new ORPCError('INTERNAL_SERVER_ERROR', {
+                message: 'Failed to create or retrieve Electron settings',
+                cause: createError,
+              })
+            }
+          } else {
+            // Re-throw non-P2002 errors
+            throw createError
+          }
+        }
+      }
 
       return settings
     } catch (error) {

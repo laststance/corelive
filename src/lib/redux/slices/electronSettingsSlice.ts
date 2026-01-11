@@ -18,18 +18,9 @@
  */
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
-import type { RootState } from '../store'
+import { DEFAULT_ELECTRON_SETTINGS } from '@/lib/constants/electronSettings'
 
-/**
- * Default values for Electron settings.
- * Shared with server-side DEFAULT_ELECTRON_SETTINGS to prevent drift.
- * Imported from server schema to ensure consistency.
- */
-const DEFAULT_ELECTRON_SETTINGS = {
-  hideAppIcon: false,
-  showInMenuBar: true,
-  startAtLogin: false,
-} as const
+import type { RootState } from '../store'
 
 /**
  * Interface for Electron-specific settings state.
