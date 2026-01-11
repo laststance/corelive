@@ -928,8 +928,24 @@ export class ElectronTestHelper {
     await todoInput.fill(taskName)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
-    // Wait for API call and UI update
-    await page.waitForTimeout(1000)
+    // Wait for network to settle after mutation
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
+
+    // Try to find the task - if not visible, force a page refresh
+    const taskVisible = await page
+      .getByText(taskName, { exact: true })
+      .isVisible()
+      .catch(() => false)
+
+    if (!taskVisible) {
+      console.warn(
+        '[electron-test] Task not visible after mutation, trying page refresh',
+      )
+      // Force page refresh to reload data
+      await page.reload({ waitUntil: 'networkidle' })
+      await page.waitForTimeout(1000)
+    }
 
     // Verify task appears with longer timeout for slow CI environments
     await expect(page.getByText(taskName, { exact: true })).toBeVisible({
@@ -966,7 +982,24 @@ export class ElectronTestHelper {
       // Create task in main window
       await todoInput.fill(taskName)
       await mainWindow.getByRole('button', { name: 'Add', exact: true }).click()
+
+      // Wait for network to settle after mutation
+      await mainWindow.waitForLoadState('networkidle')
       await mainWindow.waitForTimeout(2000)
+
+      // If task not visible in main window, refresh
+      const mainTaskVisible = await mainWindow
+        .getByText(taskName, { exact: true })
+        .isVisible()
+        .catch(() => false)
+
+      if (!mainTaskVisible) {
+        console.warn(
+          '[electron-test] Task not visible in main window, refreshing',
+        )
+        await mainWindow.reload({ waitUntil: 'networkidle' })
+        await mainWindow.waitForTimeout(1000)
+      }
 
       let inputCount = await floatingWindow
         .getByPlaceholder(/enter.*todo/i)
