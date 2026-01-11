@@ -972,13 +972,23 @@ export class ElectronTestHelper {
     // First unroute any existing handlers to avoid duplicates
     await page.unroute('**/api/orpc/**')
 
-    // Re-register the route handler with response logging (same as original)
+    // Re-register the route handler with request+response logging
     await page.route('**/api/orpc/**', async (route) => {
       const url = route.request().url()
       const method = route.request().method()
+
+      // Log request body to see the filter being used
+      let requestBody = ''
+      try {
+        requestBody = route.request().postData() || ''
+      } catch {
+        requestBody = '[failed to get body]'
+      }
+
       console.warn(
-        `[electron-test] [RELOAD] Intercepted ${method} oRPC request: ${url.slice(0, 100)}`,
+        `[electron-test] [RELOAD] ${method} ${url.slice(url.lastIndexOf('/') + 1)} request body: ${requestBody.slice(0, 200)}`,
       )
+
       const headers = {
         ...route.request().headers(),
         Authorization: `Bearer ${clerkUserId}`,
@@ -993,10 +1003,7 @@ export class ElectronTestHelper {
         try {
           const body = await response.text()
           console.warn(
-            `[electron-test] [RELOAD] ${method} ${url.includes('/create') ? 'CREATE' : 'LIST'} response: status=${status} ${statusText}`,
-          )
-          console.warn(
-            `[electron-test] [RELOAD] Response body preview: ${body.slice(0, 500)}`,
+            `[electron-test] [RELOAD] ${method} ${url.includes('/create') ? 'CREATE' : 'LIST'} response: status=${status} ${statusText} body: ${body.slice(0, 300)}`,
           )
           await route.fulfill({
             status,
