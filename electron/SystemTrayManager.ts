@@ -442,14 +442,8 @@ export class SystemTrayManager {
           label: 'Settings',
           click: () => {
             try {
-              // Restore window and navigate to settings page
               this.windowManager.restoreFromTray()
-              const mainWindow = this.windowManager.getMainWindow()
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.executeJavaScript(
-                  "window.location.href = '/settings'",
-                )
-              }
+              this.windowManager.openSettings()
             } catch (error) {
               log.error('Failed to open settings:', error)
             }
