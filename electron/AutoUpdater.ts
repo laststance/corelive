@@ -78,7 +78,9 @@ export class AutoUpdater {
       log.info('Update available:', info)
       this.updateAvailable = true
       this.sendStatusToWindow('Update available')
-      this.showUpdateAvailableDialog(info)
+      this.showUpdateAvailableDialog(info).catch((err) => {
+        log.error('Failed to show update available dialog:', err)
+      })
     })
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
@@ -105,7 +107,9 @@ export class AutoUpdater {
       log.info('Update downloaded:', info)
       this.updateDownloaded = true
       this.sendStatusToWindow('Update downloaded')
-      this.showUpdateDownloadedDialog()
+      this.showUpdateDownloadedDialog().catch((err) => {
+        log.error('Failed to show update downloaded dialog:', err)
+      })
     })
 
     // Initial check after startup

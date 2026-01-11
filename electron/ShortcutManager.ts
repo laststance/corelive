@@ -157,10 +157,11 @@ export class ShortcutManager {
   getDefaultShortcuts(): ShortcutConfig {
     // Use CommandOrControl for cross-platform support
     // Electron will translate this to Cmd on macOS and Ctrl on Windows/Linux
+    // Note: 'quit' is not included as macOS already handles Cmd+Q natively
+    // and we don't have a custom quit handler
     return {
       newTask: 'CommandOrControl+N',
       showMainWindow: 'CommandOrControl+Shift+T',
-      quit: 'CommandOrControl+Q',
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       focusFloatingNavigator: 'CommandOrControl+Shift+N',
@@ -177,6 +178,9 @@ export class ShortcutManager {
       log.debug('[ShortcutManager] shortcuts:', this.shortcuts)
 
       const results = this.registerGlobalShortcuts()
+
+      // Setup focus listeners for contextual shortcuts
+      this.setupFocusListeners()
 
       const successCount = results.filter((r) => r.success).length
       const totalCount = results.length
@@ -324,7 +328,11 @@ export class ShortcutManager {
     const shortcuts = this.shortcuts
     const results: ShortcutRegistrationResult[] = []
 
-    if (this.registeredShortcuts.has('newTask')) {
+    // Check if any contextual shortcut is already registered
+    const hasRegisteredContextual = Array.from(this.contextualShortcuts).some(
+      (id) => this.registeredShortcuts.has(id),
+    )
+    if (hasRegisteredContextual) {
       log.debug('[ShortcutManager] Contextual shortcuts already registered')
       return results
     }
@@ -434,6 +442,18 @@ export class ShortcutManager {
 
     if (!this.isEnabled) {
       log.debug(`[registerShortcut] Shortcuts disabled, skipping ${id}`)
+      return false
+    }
+
+    // Validate accelerator to prevent crashes from invalid accelerator strings
+    if (
+      !accelerator ||
+      typeof accelerator !== 'string' ||
+      accelerator.trim() === ''
+    ) {
+      log.warn(
+        `[registerShortcut] Invalid accelerator for ${id}: "${accelerator}"`,
+      )
       return false
     }
 
@@ -561,11 +581,15 @@ export class ShortcutManager {
 
     const alternativeKeys = this.getAlternativeKeysForShortcut(id, key)
     for (const altKey of alternativeKeys) {
-      alternatives.push(`${modifiers.join('+')}+${altKey}`)
+      // Guard against empty modifiers producing invalid accelerators like "+N"
+      if (modifiers.length > 0) {
+        alternatives.push(`${modifiers.join('+')}+${altKey}`)
+      }
     }
 
     return [...new Set(alternatives)].filter(
-      (alt) => alt !== originalAccelerator,
+      (alt) =>
+        alt !== originalAccelerator && alt.length > 0 && !alt.startsWith('+'),
     )
   }
 
@@ -807,6 +831,11 @@ export class ShortcutManager {
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
       this.unregisterAllShortcuts()
+
+      // Sync isEnabled if provided in newShortcuts
+      if (typeof newShortcuts.enabled === 'boolean') {
+        this.isEnabled = newShortcuts.enabled
+      }
 
       this.shortcuts = { ...this.shortcuts, ...newShortcuts }
 

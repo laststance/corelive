@@ -683,8 +683,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Register a single shortcut.
+     *
+     * @param accelerator - Keyboard accelerator (e.g., 'CommandOrControl+N')
+     * @param id - Unique shortcut ID
+     * @param description - Human-readable description
+     * @param options - Optional: enabled and isGlobal flags
      */
-    register: async (accelerator: string, id: string): Promise<boolean> => {
+    register: async (
+      accelerator: string,
+      id: string,
+      description: string = '',
+      options: { enabled?: boolean; isGlobal?: boolean } = {},
+    ): Promise<boolean> => {
       if (!accelerator || typeof accelerator !== 'string') {
         throw new Error('Accelerator is required')
       }
@@ -692,14 +702,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw new Error('Shortcut ID is required')
       }
 
-      const sanitizedAccelerator = sanitizeData(accelerator)
-      const sanitizedId = sanitizeData(id)
+      const shortcutDefinition = sanitizeData({
+        id,
+        accelerator,
+        description: description || id,
+        enabled: options.enabled ?? true,
+        isGlobal: options.isGlobal ?? false,
+      })
 
       try {
         return await ipcRenderer.invoke(
           'shortcuts-register',
-          sanitizedAccelerator,
-          sanitizedId,
+          shortcutDefinition,
         )
       } catch (error) {
         log.error('Failed to register shortcut:', error)
@@ -802,8 +816,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     setUser: async (user: ElectronUserData): Promise<boolean> => {
       try {
-        if (!user || typeof user !== 'object' || !user.clerkId) {
+        if (!user || typeof user !== 'object') {
+          throw new Error('Invalid auth payload: user object is required')
+        }
+        if (!user.clerkId || typeof user.clerkId !== 'string') {
           throw new Error('Invalid auth payload: clerkId is required')
+        }
+        // Validate id if present (optional but must be string if provided)
+        if (
+          'id' in user &&
+          user.id !== undefined &&
+          typeof user.id !== 'string'
+        ) {
+          throw new Error('Invalid auth payload: id must be a string')
         }
 
         return await ipcRenderer.invoke('auth-set-user', sanitizeData(user))
@@ -842,8 +867,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     syncFromWeb: async (authData: ElectronUserData): Promise<boolean> => {
       try {
-        if (!authData || typeof authData !== 'object' || !authData.clerkId) {
+        if (!authData || typeof authData !== 'object') {
+          throw new Error('Invalid auth payload: authData object is required')
+        }
+        if (!authData.clerkId || typeof authData.clerkId !== 'string') {
           throw new Error('Invalid auth payload: clerkId is required')
+        }
+        // Validate id if present (optional but must be string if provided)
+        if (
+          'id' in authData &&
+          authData.id !== undefined &&
+          typeof authData.id !== 'string'
+        ) {
+          throw new Error('Invalid auth payload: id must be a string')
         }
 
         return await ipcRenderer.invoke(
@@ -1056,8 +1092,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw new Error('Menu action is required')
       }
 
+      const sanitizedAction = sanitizeData(action)
+
       try {
-        return await ipcRenderer.invoke('menu-action', { action })
+        return await ipcRenderer.invoke('menu-action', sanitizedAction)
       } catch (error) {
         log.error('Failed to trigger menu action:', error)
         throw new Error('Failed to trigger menu action')
@@ -1223,12 +1261,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Validate configuration.
      */
-    validate: async (): Promise<{ isValid: boolean; errors?: string[] }> => {
+    validate: async (): Promise<{ valid: boolean; errors?: string[] }> => {
       try {
         return await ipcRenderer.invoke('config-validate')
       } catch (error) {
         log.error('Failed to validate config:', error)
-        return { isValid: false, errors: ['Validation failed'] }
+        return { valid: false, errors: ['Validation failed'] }
       }
     },
 

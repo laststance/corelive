@@ -251,7 +251,7 @@ export class PerformanceOptimizer {
           modulePath.includes(essential) || modulePath.includes('node_modules'),
       )
 
-      if (!isEssential && modulePath.includes('electron')) {
+      if (!isEssential) {
         delete require.cache[modulePath]
       }
     })

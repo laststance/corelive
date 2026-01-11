@@ -163,7 +163,7 @@ export class AuthManager {
 
     ipcMain.handle('auth-logout', () => {
       this.logout()
-      return { success: true }
+      // Return void as per IPC channel definition
     })
 
     ipcMain.handle('auth-is-authenticated', () => {
@@ -181,9 +181,9 @@ export class AuthManager {
           lastName: toStringOrNull(authData.lastName),
           imageUrl: toStringOrNull(authData.imageUrl),
         })
-        return { success: true }
+        return true
       }
-      return { success: false }
+      return false
     })
   }
 

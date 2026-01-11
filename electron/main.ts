@@ -231,7 +231,6 @@ function ensureOAuthManager(): OAuthManagerType | null {
   }
 
   if (!oauthManager) {
-     
     const { OAuthManager } = require('./OAuthManager')
     oauthManager = new OAuthManager(windowManager, notificationManager || null)
   }
@@ -259,7 +258,6 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
 
   // First-time initialization
   if (!deepLinkManager) {
-     
     const { DeepLinkManager } = require('./DeepLinkManager')
     deepLinkManager = new DeepLinkManager(
       windowManager,
@@ -1483,12 +1481,133 @@ function setupIPCHandlers(): void {
   // Menu action IPC handlers
   ipcMain.handle(
     'menu-action',
-    (_event: IpcMainInvokeEvent, action: { action: string }) => {
+    (_event: IpcMainInvokeEvent, action: string) => {
       if (menuManager) {
-        menuManager.handleMenuAction(action)
+        menuManager.handleMenuAction({ action })
       }
     },
   )
+
+  // Shortcuts IPC handlers
+  ipcMain.handle('shortcuts-get-registered', () => {
+    if (!shortcutManager) {
+      return []
+    }
+    const registered = shortcutManager.getRegisteredShortcuts()
+    return Object.entries(registered).map(([id, accelerator]) => ({
+      id,
+      accelerator,
+      description: id,
+      enabled: true,
+      isGlobal: id === 'showMainWindow',
+    }))
+  })
+
+  ipcMain.handle('shortcuts-get-defaults', () => {
+    if (!shortcutManager) {
+      return []
+    }
+    const defaults = shortcutManager.getDefaultShortcuts()
+    return Object.entries(defaults)
+      .filter(([key]) => key !== 'enabled')
+      .map(([id, accelerator]) => ({
+        id,
+        accelerator: accelerator as string,
+        description: id,
+        enabled: true,
+        isGlobal: id === 'showMainWindow',
+      }))
+  })
+
+  ipcMain.handle(
+    'shortcuts-update',
+    (
+      _event: IpcMainInvokeEvent,
+      update: { id: string; accelerator: string },
+    ) => {
+      if (!shortcutManager) {
+        return false
+      }
+      return shortcutManager.updateShortcuts({
+        [update.id]: update.accelerator,
+      })
+    },
+  )
+
+  ipcMain.handle(
+    'shortcuts-register',
+    (
+      _event: IpcMainInvokeEvent,
+      definition: {
+        id: string
+        accelerator: string
+        description?: string
+        enabled?: boolean
+        isGlobal?: boolean
+      },
+    ) => {
+      if (!shortcutManager) {
+        return false
+      }
+      const handler = shortcutManager.getHandlerForShortcut(definition.id)
+      if (!handler) {
+        return false
+      }
+      return shortcutManager.registerShortcut(
+        definition.accelerator,
+        definition.id,
+        handler,
+      )
+    },
+  )
+
+  ipcMain.handle(
+    'shortcuts-unregister',
+    (_event: IpcMainInvokeEvent, id: string) => {
+      if (!shortcutManager) {
+        return false
+      }
+      return shortcutManager.unregisterShortcut(id)
+    },
+  )
+
+  ipcMain.handle(
+    'shortcuts-is-registered',
+    (_event: IpcMainInvokeEvent, accelerator: string) => {
+      if (!shortcutManager) {
+        return false
+      }
+      return shortcutManager.isShortcutRegistered(accelerator)
+    },
+  )
+
+  ipcMain.handle('shortcuts-enable', () => {
+    if (!shortcutManager) {
+      return false
+    }
+    shortcutManager.enable()
+    return true
+  })
+
+  ipcMain.handle('shortcuts-disable', () => {
+    if (!shortcutManager) {
+      return false
+    }
+    shortcutManager.disable()
+    return true
+  })
+
+  ipcMain.handle('shortcuts-get-stats', () => {
+    if (!shortcutManager) {
+      return {
+        totalRegistered: 0,
+        isEnabled: false,
+        platform: process.platform,
+        shortcuts: {},
+      }
+    }
+    return shortcutManager.getStats()
+  })
 
   // Deep linking IPC handlers
   ipcMain.handle(

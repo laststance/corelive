@@ -150,6 +150,23 @@ export interface ConfigPaths {
 }
 
 // ============================================================================
+// Security Constants
+// ============================================================================
+
+/** Keys that could be used for prototype pollution attacks */
+const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype']
+
+/**
+ * Check if a key is unsafe (could be used for prototype pollution).
+ *
+ * @param key - Key to check
+ * @returns True if the key is unsafe
+ */
+function isUnsafeKey(key: string): boolean {
+  return FORBIDDEN_KEYS.includes(key)
+}
+
+// ============================================================================
 // Config Manager Class
 // ============================================================================
 
@@ -375,22 +392,18 @@ export class ConfigManager {
    * @returns Merged configuration
    */
   private mergeWithDefaults(loadedConfig: Partial<AppConfig>): AppConfig {
-    // Keys that could be used for prototype pollution attacks
-    const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype']
-
     const merge = (
       target: Record<string, unknown>,
       source: Record<string, unknown>,
     ): Record<string, unknown> => {
       const result = { ...target }
 
-      for (const key in source) {
+      for (const [key, sourceValue] of Object.entries(source)) {
         // Block prototype pollution attacks
-        if (FORBIDDEN_KEYS.includes(key)) {
+        if (isUnsafeKey(key)) {
           continue
         }
 
-        const sourceValue = source[key]
         const targetValue = target[key]
 
         if (
@@ -502,6 +515,11 @@ export class ConfigManager {
     let current: unknown = this.config
 
     for (const key of keys) {
+      // Block prototype pollution attacks
+      if (isUnsafeKey(key)) {
+        return defaultValue as T
+      }
+
       if (current && typeof current === 'object' && key in current) {
         current = (current as Record<string, unknown>)[key]
       } else {
@@ -533,6 +551,10 @@ export class ConfigManager {
 
     for (let i = 0; i < keys.length - 1; i++) {
       const key = keys[i]!
+      // Block prototype pollution attacks
+      if (isUnsafeKey(key)) {
+        return false
+      }
       if (!current[key] || typeof current[key] !== 'object') {
         current[key] = {}
       }
@@ -540,6 +562,10 @@ export class ConfigManager {
     }
 
     const lastKey = keys[keys.length - 1]!
+    // Block prototype pollution attacks on the final key
+    if (isUnsafeKey(lastKey)) {
+      return false
+    }
     current[lastKey] = value
     return this.saveConfig()
   }
