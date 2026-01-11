@@ -20,6 +20,9 @@ export interface ElectronTestContext {
 }
 
 export class ElectronTestHelper {
+  // Static storage for clerkUserId that persists across page reloads
+  private static storedClerkUserId: string | null = null
+
   /**
    * Wait for Next.js server to be ready by checking health
    */
@@ -338,10 +341,12 @@ export class ElectronTestHelper {
               clerkUser.clerkId,
             )
 
-            // Store clerkId on page for re-registration after reload
-            await page.evaluate((userId) => {
-              ;(window as any).__e2eClerkUserId = userId
-            }, clerkUser.clerkId)
+            // Store clerkId for re-registration after reload
+            this.storedClerkUserId = clerkUser.clerkId
+            console.warn(
+              '[electron-test] Stored clerkUserId for route re-registration:',
+              this.storedClerkUserId,
+            )
 
             // Also inject user data into window.Clerk as a fallback
             // The oRPC client checks window.Clerk.session?.user?.id or window.Clerk.user?.id
@@ -949,10 +954,8 @@ export class ElectronTestHelper {
    * This is necessary because Playwright route handlers can be lost after reload.
    */
   static async reRegisterRouteInterception(page: Page): Promise<void> {
-    // Get the stored clerkId from the page
-    const clerkUserId = await page
-      .evaluate(() => (window as any).__e2eClerkUserId)
-      .catch(() => null)
+    // Get the stored clerkId from static property
+    const clerkUserId = this.storedClerkUserId
 
     if (!clerkUserId) {
       console.warn(
@@ -960,6 +963,11 @@ export class ElectronTestHelper {
       )
       return
     }
+
+    console.warn(
+      '[electron-test] [RELOAD] Re-registering routes for clerkUserId:',
+      clerkUserId,
+    )
 
     // Re-register the route handler with response logging
     await page.route('**/api/orpc/**', async (route) => {
@@ -1018,7 +1026,6 @@ export class ElectronTestHelper {
       win.Clerk.user = { id: userId }
       win.Clerk.session = { user: { id: userId } }
       win.Clerk.load = async () => {}
-      ;(window as any).__e2eClerkUserId = userId
       console.warn('[electron-test] [RELOAD] Re-injected Clerk user:', userId)
     }, clerkUserId)
 
@@ -1052,27 +1059,37 @@ export class ElectronTestHelper {
 
     // Wait for network to settle after mutation
     await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(2000)
 
-    // Try to find the task - if not visible, force a page refresh
-    const taskVisible = await page
-      .getByText(taskName, { exact: true })
-      .isVisible()
-      .catch(() => false)
+    // Give React Query time to update the cache and re-render
+    // The API logs show data is available after ~1-2 seconds
+    await page.waitForTimeout(3000)
+
+    // Try to wait for the task element with Playwright's auto-retry
+    const taskLocator = page.getByText(taskName, { exact: true })
+    let taskVisible = false
+
+    try {
+      // Wait up to 5 seconds for the task to appear
+      await taskLocator.waitFor({ state: 'visible', timeout: 5000 })
+      taskVisible = true
+      console.warn('[electron-test] Task became visible after mutation')
+    } catch {
+      console.warn(
+        '[electron-test] Task not visible after 5s, trying page refresh',
+      )
+    }
 
     if (!taskVisible) {
-      console.warn(
-        '[electron-test] Task not visible after mutation, trying page refresh',
-      )
       // Force page refresh to reload data
       await page.reload({ waitUntil: 'networkidle' })
       // Re-register route interception after reload
       await this.reRegisterRouteInterception(page)
-      await page.waitForTimeout(1000)
+      // Wait for React to render
+      await page.waitForTimeout(2000)
     }
 
     // Verify task appears with longer timeout for slow CI environments
-    await expect(page.getByText(taskName, { exact: true })).toBeVisible({
+    await expect(taskLocator).toBeVisible({
       timeout: 20_000,
     })
 
@@ -1109,22 +1126,29 @@ export class ElectronTestHelper {
 
       // Wait for network to settle after mutation
       await mainWindow.waitForLoadState('networkidle')
-      await mainWindow.waitForTimeout(2000)
 
-      // If task not visible in main window, refresh
-      const mainTaskVisible = await mainWindow
-        .getByText(taskName, { exact: true })
-        .isVisible()
-        .catch(() => false)
+      // Give React Query time to update the cache and re-render
+      await mainWindow.waitForTimeout(3000)
+
+      // Try to wait for the task element with Playwright's auto-retry
+      const taskLocator = mainWindow.getByText(taskName, { exact: true })
+      let mainTaskVisible = false
+
+      try {
+        await taskLocator.waitFor({ state: 'visible', timeout: 5000 })
+        mainTaskVisible = true
+        console.warn('[electron-test] Task became visible in main window')
+      } catch {
+        console.warn(
+          '[electron-test] Task not visible in main window after 5s, refreshing',
+        )
+      }
 
       if (!mainTaskVisible) {
-        console.warn(
-          '[electron-test] Task not visible in main window, refreshing',
-        )
         await mainWindow.reload({ waitUntil: 'networkidle' })
         // Re-register route interception after reload
         await this.reRegisterRouteInterception(mainWindow)
-        await mainWindow.waitForTimeout(1000)
+        await mainWindow.waitForTimeout(2000)
       }
 
       let inputCount = await floatingWindow
