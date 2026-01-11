@@ -12,12 +12,12 @@ export default async function notarizing(context) {
 
   // Check if we have the required environment variables
   const appleId = process.env.APPLE_ID
-  const appleIdPassword = process.env.APPLE_ID_PASSWORD
+  const appleAppSpecificPassword = process.env.APPLE_APP_SPECIFIC_PASSWORD
   const teamId = process.env.APPLE_TEAM_ID
 
-  if (!appleId || !appleIdPassword || !teamId) {
+  if (!appleId || !appleAppSpecificPassword || !teamId) {
     console.warn(
-      'Skipping notarization: Missing required environment variables (APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID)',
+      'Skipping notarization: Missing required environment variables (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID)',
     )
     return
   }
@@ -27,7 +27,7 @@ export default async function notarizing(context) {
       appBundleId: 'com.corelive.app',
       appPath: `${appOutDir}/${appName}.app`,
       appleId: appleId,
-      appleIdPassword: appleIdPassword,
+      appleIdPassword: appleAppSpecificPassword,
       teamId: teamId,
     })
   } catch (error) {
