@@ -27,6 +27,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
+import type { ConfigSection } from '../../../electron/types/ipc'
 import { log } from '../../lib/logger'
 
 interface ElectronConfig {
@@ -138,11 +139,14 @@ export function ConfigurationSettings() {
         throw new Error('Electron API not available')
       }
       const allConfig = await window.electronAPI.config.getAll()
-      setConfig(allConfig)
+      setConfig(allConfig as unknown as ElectronConfig)
 
       // Validate configuration
       const validationResult = await window.electronAPI.config.validate()
-      setValidation(validationResult)
+      setValidation({
+        isValid: validationResult.isValid,
+        errors: validationResult.errors ?? [],
+      })
     } catch (error) {
       log.error('Failed to load configuration:', error)
       toast.error('Failed to load configuration')
@@ -185,7 +189,10 @@ export function ConfigurationSettings() {
       }
       const validationResult = await window.electronAPI.config.validate()
       if (!validationResult.isValid) {
-        setValidation(validationResult)
+        setValidation({
+          isValid: validationResult.isValid,
+          errors: validationResult.errors ?? [],
+        })
         toast.error('Configuration validation failed')
         return
       }
@@ -240,7 +247,7 @@ export function ConfigurationSettings() {
     }
   }
 
-  const resetSection = async (section: string) => {
+  const resetSection = async (section: ConfigSection) => {
     if (!isElectron) return
 
     try {
@@ -1136,7 +1143,7 @@ export function ConfigurationSettings() {
           </Button>
         </div>
 
-        <div className="text-muted-foreground text-sm">
+        <div className="text-sm text-muted-foreground">
           Configuration version: {config.version}
         </div>
       </div>

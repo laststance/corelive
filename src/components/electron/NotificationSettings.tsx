@@ -26,6 +26,16 @@ interface NotificationPreferences {
   sound: boolean
 }
 
+/** Default notification preferences for UI state */
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  enabled: true,
+  taskCreated: true,
+  taskCompleted: true,
+  taskUpdated: true,
+  taskDeleted: false,
+  sound: true,
+}
+
 interface NotificationSettingsProps {
   className?: string
 }
@@ -68,7 +78,16 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
       const enabled = await window.electronAPI.notifications.isEnabled()
 
       if (prefs) {
-        setPreferences(prefs)
+        // Transform API response to component's expected format
+        setPreferences({
+          enabled: prefs.enabled,
+          sound: prefs.sound,
+          taskCreated: prefs.taskCreated ?? DEFAULT_PREFERENCES.taskCreated,
+          taskCompleted:
+            prefs.taskCompleted ?? DEFAULT_PREFERENCES.taskCompleted,
+          taskUpdated: prefs.taskUpdated ?? DEFAULT_PREFERENCES.taskUpdated,
+          taskDeleted: prefs.taskDeleted ?? DEFAULT_PREFERENCES.taskDeleted,
+        })
       }
       setIsSupported(enabled)
     } catch (error) {
@@ -103,11 +122,11 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
         throw new Error('Electron API not available')
       }
       const updatedPrefs = { ...preferences, ...newPreferences }
-      const result =
+      const success =
         await window.electronAPI.notifications.updatePreferences(updatedPrefs)
 
-      if (result) {
-        setPreferences(result)
+      if (success) {
+        setPreferences(updatedPrefs)
       }
     } catch (error) {
       log.error('Failed to update notification preferences:', error)
@@ -216,7 +235,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
             <Label htmlFor="notifications-enabled" className="text-base">
               Enable Notifications
             </Label>
-            <div className="text-muted-foreground text-sm">
+            <div className="text-sm text-muted-foreground">
               Turn on desktop notifications for task updates
             </div>
           </div>
@@ -309,7 +328,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
                   )}
                   Notification Sound
                 </Label>
-                <div className="text-muted-foreground text-sm">
+                <div className="text-sm text-muted-foreground">
                   Play sound with notifications
                 </div>
               </div>

@@ -28,7 +28,7 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
   } = options
 
   const handleMenuAction = useCallback(
-    (event: any, menuAction: MenuAction) => {
+    (menuAction: MenuAction) => {
       switch (menuAction.action) {
         case 'new-task':
           onNewTask?.()

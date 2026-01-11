@@ -7,7 +7,7 @@ interface DeepLinkTask {
   id: string
   title: string
   description?: string
-  completed: boolean
+  completed?: boolean
   priority?: string
   dueDate?: string
 }
@@ -47,7 +47,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
 
   // Handle task focus event
   const handleTaskFocus = useCallback(
-    (event: any, data: DeepLinkEventData) => {
+    (data: DeepLinkEventData) => {
       if (data.task && optionsRef.current.onTaskFocus) {
         optionsRef.current.onTaskFocus(data.task, data.params)
       } else if (data.task) {
@@ -60,7 +60,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
 
   // Handle task creation event
   const handleTaskCreate = useCallback(
-    (event: any, data: DeepLinkEventData) => {
+    (data: DeepLinkEventData) => {
       if (optionsRef.current.onTaskCreate) {
         optionsRef.current.onTaskCreate({
           title: data.title,
@@ -84,7 +84,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
 
   // Handle task created event
   const handleTaskCreated = useCallback(
-    (event: any, data: DeepLinkEventData) => {
+    (data: DeepLinkEventData) => {
       if (data.task && optionsRef.current.onTaskCreated) {
         optionsRef.current.onTaskCreated(data.task)
       } else if (data.task) {
@@ -97,7 +97,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
 
   // Handle navigation event
   const handleNavigate = useCallback(
-    (event: any, data: DeepLinkEventData) => {
+    (data: DeepLinkEventData) => {
       if (data.view && optionsRef.current.onNavigate) {
         optionsRef.current.onNavigate(data.view, data.params)
       } else if (data.view) {
@@ -113,7 +113,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
 
   // Handle search event
   const handleSearch = useCallback(
-    (event: any, data: DeepLinkEventData) => {
+    (data: DeepLinkEventData) => {
       if (optionsRef.current.onSearch) {
         optionsRef.current.onSearch(data.query || '', data.filter)
       } else {
