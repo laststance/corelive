@@ -51,20 +51,16 @@ export const getElectronSettings = authMiddleware
     try {
       const { user } = context
 
-      let settings = await prisma.electronSettings.findUnique({
+      // Use upsert to avoid race conditions when two requests
+      // try to create settings simultaneously (P2002 unique constraint)
+      const settings = await prisma.electronSettings.upsert({
         where: { userId: user.id },
+        update: {}, // No updates - just return existing
+        create: {
+          userId: user.id,
+          ...DEFAULT_ELECTRON_SETTINGS,
+        },
       })
-
-      // If no settings exist, create with defaults
-      if (!settings) {
-        log.info({ userId: user.id }, 'Creating default Electron settings')
-        settings = await prisma.electronSettings.create({
-          data: {
-            userId: user.id,
-            ...DEFAULT_ELECTRON_SETTINGS,
-          },
-        })
-      }
 
       return settings
     } catch (error) {

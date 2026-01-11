@@ -1526,10 +1526,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   settings: {
     /**
      * Open settings window
+     * @returns {Promise<boolean>} Always returns a boolean
      */
     open: async () => {
       try {
-        return await ipcRenderer.invoke('settings:open')
+        const result = await ipcRenderer.invoke('settings:open')
+        return Boolean(result)
       } catch (error) {
         log.error('Failed to open settings:', error)
         return false
@@ -1538,10 +1540,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Close settings window
+     * @returns {Promise<boolean>} Always returns a boolean
      */
     close: async () => {
       try {
-        return await ipcRenderer.invoke('settings:close')
+        const result = await ipcRenderer.invoke('settings:close')
+        return Boolean(result)
       } catch (error) {
         log.error('Failed to close settings:', error)
         return false
@@ -1617,23 +1621,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Generic invoke method for settings (backward compatibility)
   invoke: async (channel, ...args) => {
-    // Only allow settings-related channels
-    const allowedChannels = [
-      'settings:setHideAppIcon',
-      'settings:setShowInMenuBar',
-      'settings:setStartAtLogin',
-      'settings:getLoginItemSettings',
-      'settings:open',
-      'settings:close',
-    ]
-
-    if (!allowedChannels.includes(channel)) {
+    // Validate channel using shared ALLOWED_CHANNELS
+    if (!validateChannel(channel)) {
       log.warn(`Attempted to invoke unauthorized channel: ${channel}`)
       throw new Error(`Channel ${channel} is not allowed`)
     }
 
+    // Sanitize all arguments to prevent injection attacks
+    const sanitizedArgs = args.map((arg) => sanitizeData(arg))
+
     try {
-      return await ipcRenderer.invoke(channel, ...args)
+      return await ipcRenderer.invoke(channel, ...sanitizedArgs)
     } catch (error) {
       log.error(`Failed to invoke ${channel}:`, error)
       throw error

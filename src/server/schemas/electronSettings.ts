@@ -9,6 +9,16 @@
 import { z } from 'zod'
 
 /**
+ * Helper schema for date fields that accepts Date objects or valid date strings.
+ * Rejects invalid dates (NaN) to prevent "Invalid Date" objects.
+ */
+const validDateSchema = z.coerce
+  .date()
+  .refine((date) => !isNaN(date.getTime()), {
+    message: 'Invalid date value',
+  })
+
+/**
  * Schema for ElectronSettings database model.
  * Validates the complete settings object returned from the database.
  */
@@ -18,12 +28,8 @@ export const ElectronSettingsSchema = z.object({
   hideAppIcon: z.boolean(),
   showInMenuBar: z.boolean(),
   startAtLogin: z.boolean(),
-  createdAt: z
-    .union([z.date(), z.string()])
-    .transform((val) => (typeof val === 'string' ? new Date(val) : val)),
-  updatedAt: z
-    .union([z.date(), z.string()])
-    .transform((val) => (typeof val === 'string' ? new Date(val) : val)),
+  createdAt: validDateSchema,
+  updatedAt: validDateSchema,
 })
 
 /**

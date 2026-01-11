@@ -5,7 +5,7 @@
  * dock icon visibility, menu bar presence, and startup behavior.
  *
  * This component integrates with Redux for local state management
- * and oRPC for server-side persistence.
+ * and communicates with the Electron main process via IPC.
  *
  * @module components/electron/ElectronSettingsPage
  *
@@ -17,8 +17,7 @@
  */
 'use client'
 
-import { useEffect } from 'react'
-
+import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -40,13 +39,17 @@ import {
  * - Show in Menu Bar: Shows/hides the menu bar icon
  * - Start at Login: Launches the app on system startup
  *
+ * This component is only accessible in Electron environment.
+ * Web users will see a fallback message.
+ *
  * State changes are persisted to localStorage via Redux and
  * communicated to the Electron main process via IPC.
  *
- * @returns Settings page with toggle switches
+ * @returns Settings page with toggle switches, or fallback for web users
  */
-export function ElectronSettingsPage(): React.ReactNode {
+export function ElectronSettingsPage(): React.ReactElement {
   const dispatch = useAppDispatch()
+  const isElectron = useIsElectron() // SSR-safe via useSyncExternalStore
 
   // Redux selectors
   const hideAppIcon = useAppSelector(selectHideAppIcon)
@@ -55,17 +58,17 @@ export function ElectronSettingsPage(): React.ReactNode {
 
   /**
    * Handles the Hide App Icon toggle change.
-   * Updates Redux state and notifies Electron main process via config API.
+   * Updates Redux state and notifies Electron main process via settings API.
    *
    * @param checked - New toggle state
    */
   const handleHideAppIconChange = async (checked: boolean): Promise<void> => {
     dispatch(setHideAppIcon(checked))
 
-    // Notify Electron main process via config API
-    if (typeof window !== 'undefined' && window.electronAPI?.config) {
+    // Notify Electron main process via settings API
+    if (typeof window !== 'undefined' && window.electronAPI?.settings) {
       try {
-        await window.electronAPI.config.set('general.hideAppIcon', checked)
+        await window.electronAPI.settings.setHideAppIcon(checked)
       } catch (error) {
         console.error('Failed to update dock icon visibility:', error)
       }
@@ -74,17 +77,17 @@ export function ElectronSettingsPage(): React.ReactNode {
 
   /**
    * Handles the Show in Menu Bar toggle change.
-   * Updates Redux state and notifies Electron main process via config API.
+   * Updates Redux state and notifies Electron main process via settings API.
    *
    * @param checked - New toggle state
    */
   const handleShowInMenuBarChange = async (checked: boolean): Promise<void> => {
     dispatch(setShowInMenuBar(checked))
 
-    // Notify Electron main process via config API
-    if (typeof window !== 'undefined' && window.electronAPI?.config) {
+    // Notify Electron main process via settings API
+    if (typeof window !== 'undefined' && window.electronAPI?.settings) {
       try {
-        await window.electronAPI.config.set('general.showInMenuBar', checked)
+        await window.electronAPI.settings.setShowInMenuBar(checked)
       } catch (error) {
         console.error('Failed to update menu bar visibility:', error)
       }
@@ -93,42 +96,40 @@ export function ElectronSettingsPage(): React.ReactNode {
 
   /**
    * Handles the Start at Login toggle change.
-   * Updates Redux state and notifies Electron main process via config API.
+   * Updates Redux state and notifies Electron main process via settings API.
    *
    * @param checked - New toggle state
    */
   const handleStartAtLoginChange = async (checked: boolean): Promise<void> => {
     dispatch(setStartAtLogin(checked))
 
-    // Notify Electron main process via config API
-    if (typeof window !== 'undefined' && window.electronAPI?.config) {
+    // Notify Electron main process via settings API
+    if (typeof window !== 'undefined' && window.electronAPI?.settings) {
       try {
-        await window.electronAPI.config.set('general.startAtLogin', checked)
+        await window.electronAPI.settings.setStartAtLogin(checked)
       } catch (error) {
         console.error('Failed to update start at login setting:', error)
       }
     }
   }
 
-  /**
-   * Sync Redux state with Electron main process on mount.
-   * Ensures the main process has the latest settings.
-   */
-  useEffect(() => {
-    const syncSettings = async (): Promise<void> => {
-      if (typeof window !== 'undefined' && window.electronAPI?.config) {
-        try {
-          await window.electronAPI.config.set(
-            'general.hideAppIcon',
-            hideAppIcon,
-          )
-        } catch {
-          // Silently ignore if config API not ready
-        }
-      }
-    }
-    syncSettings()
-  }, [hideAppIcon])
+  // Environment guard: Show fallback for web users
+  if (!isElectron) {
+    return (
+      <div className="mx-auto max-w-2xl p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              These settings are only available in the desktop application.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-2xl p-6">

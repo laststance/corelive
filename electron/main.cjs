@@ -1375,25 +1375,51 @@ function setupIPCHandlers() {
   // Note: Quick todo operations removed - Floating Navigator uses oRPC via web app
 
   // Settings window IPC handlers
-  ipcMain.handle('settings:open', () => {
-    if (windowManager) {
-      windowManager.openSettings()
-      return true
+  ipcMain.handle('settings:open', async () => {
+    try {
+      if (windowManager) {
+        windowManager.openSettings()
+        return true
+      }
+      log.warn('settings:open - windowManager not available')
+      return false
+    } catch (error) {
+      log.error('settings:open - Failed to open settings window:', error)
+      return false
     }
-    return false
   })
 
-  ipcMain.handle('settings:close', () => {
-    if (windowManager) {
-      windowManager.closeSettings()
-      return true
+  ipcMain.handle('settings:close', async () => {
+    try {
+      if (windowManager) {
+        windowManager.closeSettings()
+        return true
+      }
+      log.warn('settings:close - windowManager not available')
+      return false
+    } catch (error) {
+      log.error('settings:close - Failed to close settings window:', error)
+      return false
     }
-    return false
   })
 
-  // Hide App Icon (Dock visibility) IPC handler
+  // Hide App Icon (Dock visibility) IPC handler - macOS only
   ipcMain.handle('settings:setHideAppIcon', (_event, hide) => {
     try {
+      // Validate input type
+      if (typeof hide !== 'boolean') {
+        log.error(
+          'settings:setHideAppIcon - Invalid argument: hide must be a boolean',
+        )
+        return false
+      }
+
+      // This API is macOS-only
+      if (process.platform !== 'darwin') {
+        log.info('settings:setHideAppIcon - Not supported on this platform')
+        return true // Return true to indicate success (no-op on non-macOS)
+      }
+
       if (hide) {
         // Hide from dock - app becomes "accessory" (no dock icon)
         app.setActivationPolicy('accessory')
@@ -1404,7 +1430,10 @@ function setupIPCHandlers() {
       log.info(`Dock icon visibility changed: ${hide ? 'hidden' : 'visible'}`)
       return true
     } catch (error) {
-      log.error('Failed to change dock icon visibility:', error)
+      log.error(
+        'settings:setHideAppIcon - Failed to change dock icon visibility:',
+        error,
+      )
       return false
     }
   })
@@ -1412,13 +1441,26 @@ function setupIPCHandlers() {
   // Show in Menu Bar IPC handler (placeholder for future implementation)
   ipcMain.handle('settings:setShowInMenuBar', (_event, show) => {
     try {
+      // Validate input type
+      if (typeof show !== 'boolean') {
+        log.error(
+          'settings:setShowInMenuBar - Invalid argument: show must be a boolean',
+        )
+        return false
+      }
+
       // SystemTrayManager handles menu bar visibility
-      // For now, just log the change
-      log.info(`Menu bar visibility setting changed: ${show ? 'show' : 'hide'}`)
+      // Currently not implemented - return false to indicate feature is not available
+      log.warn(
+        `settings:setShowInMenuBar - Menu bar visibility (${show ? 'show' : 'hide'}) not yet implemented`,
+      )
       // TODO: Implement actual menu bar show/hide logic via SystemTrayManager
-      return true
+      return false
     } catch (error) {
-      log.error('Failed to change menu bar visibility:', error)
+      log.error(
+        'settings:setShowInMenuBar - Failed to change menu bar visibility:',
+        error,
+      )
       return false
     }
   })
@@ -1426,6 +1468,14 @@ function setupIPCHandlers() {
   // Start at Login IPC handler
   ipcMain.handle('settings:setStartAtLogin', (_event, startAtLogin) => {
     try {
+      // Validate input type
+      if (typeof startAtLogin !== 'boolean') {
+        log.error(
+          'settings:setStartAtLogin - Invalid argument: startAtLogin must be a boolean',
+        )
+        return false
+      }
+
       app.setLoginItemSettings({
         openAtLogin: startAtLogin,
         openAsHidden: false,
@@ -1433,7 +1483,10 @@ function setupIPCHandlers() {
       log.info(`Start at login setting changed: ${startAtLogin}`)
       return true
     } catch (error) {
-      log.error('Failed to change start at login setting:', error)
+      log.error(
+        'settings:setStartAtLogin - Failed to change start at login setting:',
+        error,
+      )
       return false
     }
   })

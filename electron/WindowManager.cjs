@@ -540,11 +540,13 @@ class WindowManager {
 
   /**
    * Closes the settings window if it exists.
+   * The window reference is nulled by the 'closed' event handler
+   * set up in createSettingsWindow().
    */
   closeSettings() {
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
       this.settingsWindow.close()
-      this.settingsWindow = null
+      // Note: Don't null here - the 'closed' event handler will do it
     }
   }
 
