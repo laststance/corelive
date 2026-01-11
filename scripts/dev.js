@@ -121,8 +121,8 @@ async function startDevelopment() {
     // Start Electron
 
     electronProcess = spawn(
-      'node',
-      [path.join(__dirname, '..', 'electron', 'dev-runner.cjs')],
+      'pnpm',
+      ['tsx', path.join(__dirname, '..', 'electron', 'dev-runner.ts')],
       {
         stdio: 'inherit',
         shell: true,

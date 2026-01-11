@@ -25,14 +25,15 @@
  * @module electron/dev-runner
  */
 
-const { spawn } = require('child_process')
-const http = require('http')
-const path = require('path')
+import { spawn, type ChildProcess } from 'child_process'
+import http from 'http'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-const { log } = require('./logger.cjs')
+import { log } from './logger'
 
-// Ensure we're in development mode
-process.env.NODE_ENV = 'development'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 /**
  * Checks if the Next.js development server is ready.
@@ -45,13 +46,13 @@ process.env.NODE_ENV = 'development'
  *
  * This can take 5-30 seconds depending on project size.
  *
- * @param {string} url - URL to check (http://localhost:3011)
- * @param {number} retries - Max attempts (default: 30 = 30 seconds)
- * @returns {Promise<void>} Resolves when server is ready
+ * @param url - URL to check (http://localhost:3011)
+ * @param retries - Max attempts (default: 30 = 30 seconds)
+ * @returns Promise that resolves when server is ready
  */
-async function checkServer(url, retries = 30) {
+async function checkServer(url: string, retries = 30): Promise<void> {
   return new Promise((resolve, reject) => {
-    const check = (attempt) => {
+    const check = (attempt: number): void => {
       http
         .get(url, (res) => {
           if (res.statusCode === 200) {
@@ -65,7 +66,7 @@ async function checkServer(url, retries = 30) {
         })
     }
 
-    const retry = (attempt) => {
+    const retry = (attempt: number): void => {
       if (attempt < retries) {
         setTimeout(() => check(attempt + 1), 1000)
       } else {
@@ -91,17 +92,26 @@ async function checkServer(url, retries = 30) {
  * - Port conflicts
  * - Missing environment variables
  */
-async function startElectron() {
+async function startElectron(): Promise<void> {
   try {
     // Wait for Next.js to be fully ready
     log.info('⏳ Waiting for Next.js dev server...')
     await checkServer('http://localhost:3011')
     log.info('✅ Next.js is ready')
 
+    // Path to compiled main process (built by electron-vite)
+    const mainProcessPath = path.join(
+      __dirname,
+      '..',
+      'dist-electron',
+      'main',
+      'index.cjs',
+    )
+
     // Start Electron with development configuration
-    const electronProcess = spawn(
+    const electronProcess: ChildProcess = spawn(
       path.join(__dirname, '..', 'node_modules', '.bin', 'electron'),
-      [path.join(__dirname, 'main.cjs')],
+      [mainProcessPath],
       {
         stdio: 'inherit', // See Electron logs in console
         env: {
@@ -114,7 +124,7 @@ async function startElectron() {
     )
 
     electronProcess.on('close', (code) => {
-      process.exit(code)
+      process.exit(code ?? 0)
     })
 
     electronProcess.on('error', (error) => {
@@ -122,7 +132,8 @@ async function startElectron() {
       process.exit(1)
     })
   } catch (error) {
-    log.error('❌ Error starting Electron:', error.message)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('❌ Error starting Electron:', errorMessage)
     process.exit(1)
   }
 }

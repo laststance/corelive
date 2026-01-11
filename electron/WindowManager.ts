@@ -15,12 +15,17 @@
  */
 
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, app } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
 import type { WindowStateManager, WindowOptions } from './WindowStateManager'
+
+// Resolve __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // ============================================================================
 // Type Definitions
@@ -117,12 +122,17 @@ export class WindowManager {
       ? this.windowStateManager.getWindowOptions('main')
       : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
 
+    // Resolve preload script path (built by electron-vite)
+    const preloadPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'preload', 'preload.cjs')
+      : path.join(__dirname, '..', 'dist-electron', 'preload', 'preload.cjs')
+
     this.mainWindow = new BrowserWindow({
       ...windowOptions,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, 'preload.cjs'),
+        preload: preloadPath,
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,
@@ -227,12 +237,23 @@ export class WindowManager {
       isDev: this.isDev,
     })
 
+    // Resolve floating preload script path (built by electron-vite)
+    const floatingPreloadPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'preload', 'preload-floating.cjs')
+      : path.join(
+          __dirname,
+          '..',
+          'dist-electron',
+          'preload',
+          'preload-floating.cjs',
+        )
+
     this.floatingNavigator = new BrowserWindow({
       ...windowOptions,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, 'preload-floating.cjs'),
+        preload: floatingPreloadPath,
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,

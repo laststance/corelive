@@ -109,7 +109,7 @@ describe('Icon System', () => {
       }
 
       // Import after mocking
-      const SystemTrayManagerModule = await import('../SystemTrayManager.cjs')
+      const SystemTrayManagerModule = await import('../SystemTrayManager.ts')
       SystemTrayManager = SystemTrayManagerModule.default
 
       mockWindowManager = {
