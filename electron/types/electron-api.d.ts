@@ -419,6 +419,31 @@ export interface ElectronAPI {
     /** Clear errors */
     clearErrors?: () => void
   }
+
+  /**
+   * Electron-specific settings management.
+   * Controls app behavior like dock visibility and startup preferences.
+   */
+  settings?: {
+    /**
+     * Set whether the app icon should be hidden from the dock (macOS).
+     * @param hide - true to hide from dock, false to show
+     * @returns Promise resolving to success status
+     */
+    setHideAppIcon: (hide: boolean) => Promise<boolean>
+    /**
+     * Set whether the app should show in the menu bar.
+     * @param show - true to show in menu bar, false to hide
+     * @returns Promise resolving to success status
+     */
+    setShowInMenuBar: (show: boolean) => Promise<boolean>
+    /**
+     * Set whether the app should start at system login.
+     * @param enable - true to enable start at login, false to disable
+     * @returns Promise resolving to success status
+     */
+    setStartAtLogin: (enable: boolean) => Promise<boolean>
+  }
 }
 
 /**
