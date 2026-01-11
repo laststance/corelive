@@ -8,6 +8,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   NODE_VERSION: '22.21.1'
 
@@ -94,6 +98,9 @@ jobs:
         run: pnpm electron:build:mac
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
+          # electron-builder / @electron/notarize expects this name (see `scripts/notarize.js`)
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          # Keep legacy name too (some tools/docs still refer to APPLE_ID_PASSWORD)
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATES_P12 }}
