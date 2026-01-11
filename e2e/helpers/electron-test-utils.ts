@@ -290,20 +290,58 @@ export class ElectronTestHelper {
             // by the real Clerk SDK when it loads
             await page.route('**/api/orpc/**', async (route) => {
               const url = route.request().url()
+              const method = route.request().method()
               console.warn(
-                `[electron-test] Intercepted oRPC request: ${url.slice(0, 100)}`,
+                `[electron-test] Intercepted ${method} oRPC request: ${url.slice(0, 100)}`,
               )
               const headers = {
                 ...route.request().headers(),
                 Authorization: `Bearer ${clerkUser.clerkId}`,
               }
-              await route.continue({ headers })
+
+              // Fetch the response to log it for debugging
+              const response = await route.fetch({ headers })
+              const status = response.status()
+              const statusText = response.statusText()
+
+              // Log response details for create and list operations
+              if (url.includes('/create') || url.includes('/list')) {
+                try {
+                  const body = await response.text()
+                  console.warn(
+                    `[electron-test] ${method} ${url.includes('/create') ? 'CREATE' : 'LIST'} response: status=${status} ${statusText}`,
+                  )
+                  // Only log first 500 chars to avoid flooding logs
+                  console.warn(
+                    `[electron-test] Response body preview: ${body.slice(0, 500)}`,
+                  )
+                  // Fulfill with the actual response body
+                  await route.fulfill({
+                    status,
+                    headers: response.headers(),
+                    body,
+                  })
+                } catch (bodyError) {
+                  console.warn(
+                    '[electron-test] Failed to read response body:',
+                    bodyError,
+                  )
+                  await route.fulfill({ response })
+                }
+              } else {
+                await route.fulfill({ response })
+              }
             })
 
             console.warn(
               '[electron-test] Set up oRPC request interception for auth:',
               clerkUser.clerkId,
             )
+
+            // Store clerkId on page for re-registration after reload
+            await page.evaluate((userId) => {
+              ;(window as any).__e2eClerkUserId = userId
+            }, clerkUser.clerkId)
 
             // Also inject user data into window.Clerk as a fallback
             // The oRPC client checks window.Clerk.session?.user?.id or window.Clerk.user?.id
@@ -907,6 +945,90 @@ export class ElectronTestHelper {
   }
 
   /**
+   * Re-register oRPC route interception after a page reload.
+   * This is necessary because Playwright route handlers can be lost after reload.
+   */
+  static async reRegisterRouteInterception(page: Page): Promise<void> {
+    // Get the stored clerkId from the page
+    const clerkUserId = await page
+      .evaluate(() => (window as any).__e2eClerkUserId)
+      .catch(() => null)
+
+    if (!clerkUserId) {
+      console.warn(
+        '[electron-test] No stored clerkUserId found, cannot re-register routes',
+      )
+      return
+    }
+
+    // Re-register the route handler with response logging
+    await page.route('**/api/orpc/**', async (route) => {
+      const url = route.request().url()
+      const method = route.request().method()
+      console.warn(
+        `[electron-test] [RELOAD] Intercepted ${method} oRPC request: ${url.slice(0, 100)}`,
+      )
+      const headers = {
+        ...route.request().headers(),
+        Authorization: `Bearer ${clerkUserId}`,
+      }
+
+      const response = await route.fetch({ headers })
+      const status = response.status()
+      const statusText = response.statusText()
+
+      if (url.includes('/create') || url.includes('/list')) {
+        try {
+          const body = await response.text()
+          console.warn(
+            `[electron-test] [RELOAD] ${method} ${url.includes('/create') ? 'CREATE' : 'LIST'} response: status=${status} ${statusText}`,
+          )
+          console.warn(
+            `[electron-test] [RELOAD] Response body preview: ${body.slice(0, 500)}`,
+          )
+          await route.fulfill({
+            status,
+            headers: response.headers(),
+            body,
+          })
+        } catch (bodyError) {
+          console.warn(
+            '[electron-test] [RELOAD] Failed to read response body:',
+            bodyError,
+          )
+          await route.fulfill({ response })
+        }
+      } else {
+        await route.fulfill({ response })
+      }
+    })
+
+    // Re-inject Clerk user data
+    await page.evaluate((userId) => {
+      const win = window as unknown as {
+        Clerk?: {
+          user?: { id?: string }
+          session?: { user?: { id?: string } }
+          load?: () => Promise<void>
+        }
+      }
+      if (!win.Clerk) {
+        win.Clerk = {}
+      }
+      win.Clerk.user = { id: userId }
+      win.Clerk.session = { user: { id: userId } }
+      win.Clerk.load = async () => {}
+      ;(window as any).__e2eClerkUserId = userId
+      console.warn('[electron-test] [RELOAD] Re-injected Clerk user:', userId)
+    }, clerkUserId)
+
+    console.warn(
+      '[electron-test] [RELOAD] Re-registered route interception for:',
+      clerkUserId,
+    )
+  }
+
+  /**
    * Comprehensive workflow test: Create, edit, complete, and delete a task
    */
   static async testCompleteTaskWorkflow(page: Page): Promise<string> {
@@ -944,6 +1066,8 @@ export class ElectronTestHelper {
       )
       // Force page refresh to reload data
       await page.reload({ waitUntil: 'networkidle' })
+      // Re-register route interception after reload
+      await this.reRegisterRouteInterception(page)
       await page.waitForTimeout(1000)
     }
 
@@ -998,6 +1122,8 @@ export class ElectronTestHelper {
           '[electron-test] Task not visible in main window, refreshing',
         )
         await mainWindow.reload({ waitUntil: 'networkidle' })
+        // Re-register route interception after reload
+        await this.reRegisterRouteInterception(mainWindow)
         await mainWindow.waitForTimeout(1000)
       }
 
