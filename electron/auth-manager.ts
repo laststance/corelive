@@ -228,9 +228,9 @@ export class AuthManager {
     this.currentUser = null
     this.isAuthenticated = false
 
-    // Reset API bridge (operations will fail without user)
+    // Reset API bridge with empty userId (operations will fail without valid user)
     if (this.apiBridge) {
-      this.apiBridge.setUserId('electron-user') // Placeholder
+      this.apiBridge.setUserId('')
     }
   }
 

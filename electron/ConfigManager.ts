@@ -339,17 +339,31 @@ export class ConfigManager {
   }
 
   /**
-   * Saves the current configuration to disk.
+   * Saves the current configuration to disk atomically.
+   *
+   * Uses write-then-rename pattern to prevent corruption on crash.
    *
    * @returns True if save successful, false otherwise
    */
   saveConfig(): boolean {
+    const tempPath = `${this.configPath}.tmp`
     try {
       const configData = JSON.stringify(this.config, null, 2)
-      fs.writeFileSync(this.configPath, configData, 'utf8')
+      // Write to temp file first
+      fs.writeFileSync(tempPath, configData, 'utf8')
+      // Atomic rename (safe on POSIX, near-atomic on Windows)
+      fs.renameSync(tempPath, this.configPath)
       return true
     } catch (error) {
       log.error('Failed to save config:', error)
+      // Clean up temp file if it exists
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath)
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
       return false
     }
   }
@@ -361,6 +375,9 @@ export class ConfigManager {
    * @returns Merged configuration
    */
   private mergeWithDefaults(loadedConfig: Partial<AppConfig>): AppConfig {
+    // Keys that could be used for prototype pollution attacks
+    const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype']
+
     const merge = (
       target: Record<string, unknown>,
       source: Record<string, unknown>,
@@ -368,6 +385,11 @@ export class ConfigManager {
       const result = { ...target }
 
       for (const key in source) {
+        // Block prototype pollution attacks
+        if (FORBIDDEN_KEYS.includes(key)) {
+          continue
+        }
+
         const sourceValue = source[key]
         const targetValue = target[key]
 

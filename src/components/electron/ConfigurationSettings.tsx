@@ -144,7 +144,7 @@ export function ConfigurationSettings() {
       // Validate configuration
       const validationResult = await window.electronAPI.config.validate()
       setValidation({
-        isValid: validationResult.valid,
+        isValid: validationResult.isValid,
         errors: validationResult.errors ?? [],
       })
     } catch (error) {
@@ -188,9 +188,9 @@ export function ConfigurationSettings() {
         throw new Error('Electron API not available')
       }
       const validationResult = await window.electronAPI.config.validate()
-      if (!validationResult.valid) {
+      if (!validationResult.isValid) {
         setValidation({
-          isValid: validationResult.valid,
+          isValid: validationResult.isValid,
           errors: validationResult.errors ?? [],
         })
         toast.error('Configuration validation failed')

@@ -106,8 +106,8 @@ export function WindowStateSettings() {
       }))
 
       const statsData: WindowStateStats = {
-        windowCount: apiStats.saves,
-        lastSaved: Date.now(),
+        windowCount: apiStats.windowCount ?? apiStats.saves ?? 0,
+        lastSaved: apiStats.lastSaved ?? 0,
         displays: transformedDisplays,
         states: {
           main: mainState
@@ -119,7 +119,7 @@ export function WindowStateSettings() {
                   height: mainState.height,
                 },
                 displayId: mainState.displayId ?? 0,
-                lastSaved: Date.now(),
+                lastSaved: mainState.lastSaved ?? 0,
               }
             : undefined,
           floating: floatingState
@@ -131,7 +131,7 @@ export function WindowStateSettings() {
                   height: floatingState.height,
                 },
                 displayId: floatingState.displayId ?? 0,
-                lastSaved: Date.now(),
+                lastSaved: floatingState.lastSaved ?? 0,
               }
             : undefined,
         },

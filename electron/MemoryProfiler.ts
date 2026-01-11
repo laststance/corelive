@@ -104,6 +104,15 @@ export class MemoryProfiler extends EventEmitter {
   /** Registered cleanup callbacks */
   private cleanupCallbacks: Set<CleanupCallback>
 
+  /** Guard against cleanup reentrancy */
+  private cleanupInProgress: boolean
+
+  /** Timestamp of last cleanup for cooldown */
+  private lastCleanupAt: number
+
+  /** Minimum cooldown between cleanups in milliseconds */
+  private static readonly CLEANUP_COOLDOWN_MS = 10000
+
   constructor(options: MemoryProfilerOptions = {}) {
     super()
 
@@ -120,6 +129,8 @@ export class MemoryProfiler extends EventEmitter {
     this.monitoringInterval = null
     this.isMonitoring = false
     this.cleanupCallbacks = new Set()
+    this.cleanupInProgress = false
+    this.lastCleanupAt = 0
 
     // Bind methods
     this.handleMemoryWarning = this.handleMemoryWarning.bind(this)
@@ -270,31 +281,55 @@ export class MemoryProfiler extends EventEmitter {
 
   /**
    * Perform memory cleanup.
+   * Includes reentrancy guard and cooldown to prevent cleanup thrashing.
    */
   performCleanup(level: CleanupLevel = 'warning'): void {
-    // Force garbage collection if available
-    if (this.options.enableGC && global.gc) {
-      global.gc()
+    const now = Date.now()
+
+    // Reentrancy guard: prevent overlapping cleanup operations
+    if (this.cleanupInProgress) {
+      log.debug('[MemoryProfiler] Cleanup already in progress, skipping')
+      return
     }
 
-    // Clear require cache for non-essential modules
-    this.clearModuleCache()
-
-    // Run registered cleanup callbacks
-    this.runCleanupCallbacks(level)
-
-    // Clear old memory history
-    if (level === 'critical') {
-      this.memoryHistory = this.memoryHistory.slice(-10)
+    // Cooldown guard: prevent rapid successive cleanups
+    if (now - this.lastCleanupAt < MemoryProfiler.CLEANUP_COOLDOWN_MS) {
+      log.debug('[MemoryProfiler] Cleanup cooldown active, skipping')
+      return
     }
 
-    // Emit cleanup event
-    this.emit('cleanup-performed', { level, timestamp: Date.now() })
+    this.cleanupInProgress = true
+    this.lastCleanupAt = now
 
-    // Log memory usage after cleanup
-    setTimeout(() => {
-      this.checkMemoryUsage()
-    }, 1000)
+    try {
+      // Force garbage collection if available
+      if (this.options.enableGC && global.gc) {
+        global.gc()
+      }
+
+      // Clear require cache for non-essential modules
+      this.clearModuleCache()
+
+      // Run registered cleanup callbacks
+      this.runCleanupCallbacks(level)
+
+      // Clear old memory history
+      if (level === 'critical') {
+        this.memoryHistory = this.memoryHistory.slice(-10)
+      }
+
+      // Emit cleanup event
+      this.emit('cleanup-performed', { level, timestamp: Date.now() })
+
+      // Log memory usage after cleanup
+      setTimeout(() => {
+        this.cleanupInProgress = false
+        this.checkMemoryUsage()
+      }, 1000)
+    } catch (error) {
+      this.cleanupInProgress = false
+      log.error('[MemoryProfiler] Error during cleanup:', error)
+    }
   }
 
   /**

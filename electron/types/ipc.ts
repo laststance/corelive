@@ -38,6 +38,7 @@ export interface WindowState extends WindowBounds {
   isMinimized?: boolean
   alwaysOnTop?: boolean
   displayId?: number
+  lastSaved?: number
 }
 
 /** Display information */
@@ -136,15 +137,40 @@ export interface UpdaterStatus {
   error?: string
 }
 
-/** IPC error statistics */
-export interface IPCErrorStats {
-  totalErrors: number
-  errorsByChannel: Record<string, number>
-  lastError?: {
-    channel: string
-    message: string
-    timestamp: number
+/** Last error information (matches IPCErrorHandler) */
+interface LastError {
+  message: string
+  timestamp: string
+  context: {
+    channel?: string
+    operationType?: string
+    attempt?: number
   }
+}
+
+/**
+ * IPC error statistics.
+ * Matches the IPCErrorStats interface in IPCErrorHandler.ts.
+ */
+export interface IPCErrorStats {
+  /** Total number of operations attempted */
+  totalOperations: number
+  /** Total number of errors encountered (may include retries) */
+  totalErrors: number
+  /** Number of operations that were retried */
+  retriedOperations: number
+  /** Number of operations that succeeded (on first try or after retry) */
+  successfulOperations: number
+  /** Number of operations that failed after exhausting all retries */
+  failedOperations: number
+  /** Number of operations that used graceful degradation */
+  degradedOperations: number
+  /** Last error encountered */
+  lastError: LastError | null
+  /** Error counts grouped by error type */
+  errorsByType: Record<string, number>
+  /** Error counts grouped by IPC channel */
+  errorsByChannel: Record<string, number>
 }
 
 // ============================================================================

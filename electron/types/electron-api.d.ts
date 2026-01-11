@@ -52,8 +52,8 @@ export interface ElectronAPI {
     hideFloatingNavigator: () => Promise<void>
     /** Get current window bounds */
     getBounds: () => Promise<WindowBounds>
-    /** Set window bounds */
-    setBounds: (bounds: WindowBounds) => Promise<void>
+    /** Set window bounds (partial updates supported) */
+    setBounds: (bounds: Partial<WindowBounds>) => Promise<void>
     /** Check if window is minimized */
     isMinimized: () => Promise<boolean>
     /** Check if window is always on top */
@@ -213,7 +213,7 @@ export interface ElectronAPI {
     /** Validate config values (validates current config if none provided) */
     validate: (
       config?: Record<string, unknown>,
-    ) => Promise<{ valid: boolean; errors?: string[] }>
+    ) => Promise<{ isValid: boolean; errors?: string[] }>
     /** Export config as JSON string */
     export: () => Promise<string>
     /** Import config from JSON string */
@@ -222,8 +222,8 @@ export interface ElectronAPI {
     backup: () => Promise<string>
     /** Get config file paths */
     getPaths: () => Promise<{ config: string; backup: string; logs: string }>
-    /** Save config to file (async via IPC) */
-    save?: () => Promise<boolean | Record<string, unknown>>
+    /** Save config to file (no-op - config auto-persists on modification) */
+    save?: () => Promise<boolean>
     /** Load config from file (async via IPC) */
     load?: () => Promise<Record<string, unknown>>
   }
@@ -242,7 +242,13 @@ export interface ElectronAPI {
     /** Reset window state to defaults */
     reset: (windowType: 'main' | 'floating') => Promise<void>
     /** Get window state statistics */
-    getStats: () => Promise<{ saves: number; loads: number; resets: number }>
+    getStats: () => Promise<{
+      windowCount: number
+      lastSaved: number
+      saves?: number
+      loads?: number
+      resets?: number
+    }>
     /** Move window to display */
     moveToDisplay: (
       windowType: 'main' | 'floating',
@@ -280,8 +286,8 @@ export interface ElectronAPI {
     toggleAlwaysOnTop: () => Promise<boolean>
     /** Get floating window bounds */
     getBounds: () => Promise<WindowBounds>
-    /** Set floating window bounds */
-    setBounds: (bounds: WindowBounds) => Promise<void>
+    /** Set floating window bounds (partial updates supported) */
+    setBounds: (bounds: Partial<WindowBounds>) => Promise<void>
     /** Check if always on top */
     isAlwaysOnTop: () => Promise<boolean>
   }
@@ -387,19 +393,20 @@ export interface ElectronAPI {
 
   /**
    * Display management.
+   * Note: All methods are async as they use IPC under the hood.
    */
   display?: {
     /** Get all connected displays */
-    getAllDisplays?: () => DisplayInfo[]
+    getAllDisplays?: () => Promise<DisplayInfo[]>
     /** Get primary display */
-    getPrimaryDisplay?: () => DisplayInfo | null
+    getPrimaryDisplay?: () => Promise<DisplayInfo | null>
     /** Get display matching a rectangle */
     getDisplayMatching?: (rect: {
       x: number
       y: number
       width: number
       height: number
-    }) => DisplayInfo | null
+    }) => Promise<DisplayInfo | null>
   }
 
   /**

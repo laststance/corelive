@@ -907,15 +907,10 @@ export class ElectronTestHelper {
     page: Page,
     bounds: { x?: number; y?: number; width?: number; height?: number },
   ): Promise<void> {
+    // Pass bounds directly - partial updates are intentional
+    // The main process handles merging with current window bounds
     await page.evaluate(async (b) => {
-      // Cast for test utility - actual bounds validation happens in main process
-      const fullBounds = {
-        x: b.x ?? 0,
-        y: b.y ?? 0,
-        width: b.width ?? 800,
-        height: b.height ?? 600,
-      }
-      await window.electronAPI?.window?.setBounds?.(fullBounds)
+      await window.electronAPI?.window?.setBounds?.(b)
     }, bounds)
   }
 
@@ -960,9 +955,10 @@ export class ElectronTestHelper {
   }
 
   static async getAllDisplays(page: Page): Promise<any[]> {
-    return page.evaluate(() => {
-      return window.electronAPI?.display?.getAllDisplays?.() || []
+    const displays = await page.evaluate(async () => {
+      return (await window.electronAPI?.display?.getAllDisplays?.()) || []
     })
+    return displays
   }
 
   static async moveToDisplay(page: Page, displayIndex: number): Promise<void> {

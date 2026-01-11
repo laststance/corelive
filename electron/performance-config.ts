@@ -287,6 +287,7 @@ export class PerformanceOptimizer {
 
   /**
    * Create a debounced function to prevent excessive calls.
+   * Preserves the caller's `this` context.
    *
    * @param func - Function to debounce
    * @param delay - Delay in milliseconds
@@ -298,14 +299,16 @@ export class PerformanceOptimizer {
   ): (...args: Parameters<T>) => void {
     let timeoutId: ReturnType<typeof setTimeout> | undefined
 
-    return (...args: Parameters<T>): void => {
+    // Use regular function to preserve `this` context
+    return function (this: unknown, ...args: Parameters<T>): void {
       clearTimeout(timeoutId)
-      timeoutId = setTimeout(() => func(...args), delay)
+      timeoutId = setTimeout(() => func.apply(this, args), delay)
     }
   }
 
   /**
    * Create a throttled function to limit call frequency.
+   * Preserves the caller's `this` context.
    *
    * @param func - Function to throttle
    * @param limit - Time limit in milliseconds
@@ -317,9 +320,10 @@ export class PerformanceOptimizer {
   ): (...args: Parameters<T>) => void {
     let inThrottle = false
 
-    return (...args: Parameters<T>): void => {
+    // Use regular function to preserve `this` context
+    return function (this: unknown, ...args: Parameters<T>): void {
       if (!inThrottle) {
-        func(...args)
+        func.apply(this, args)
         inThrottle = true
         setTimeout(() => (inThrottle = false), limit)
       }

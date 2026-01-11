@@ -265,7 +265,6 @@ export class IPCErrorHandler {
             operationType,
             attempt,
           })
-          this.stats.retriedOperations++
         }
 
         return result
@@ -303,6 +302,9 @@ export class IPCErrorHandler {
             delay,
           },
         )
+
+        // Track retry attempt (regardless of eventual success/failure)
+        this.stats.retriedOperations++
 
         // Wait before retry
         await this.sleep(delay)

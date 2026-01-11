@@ -98,6 +98,12 @@ export class ShortcutManager {
   /** Current shortcut configuration */
   private shortcuts: ShortcutConfig
 
+  /** Stored focus handlers for cleanup */
+  private focusHandlers: Map<
+    number,
+    { focus: () => void; blur: () => void; window: BrowserWindow }
+  >
+
   constructor(
     windowManager: WindowManager,
     notificationManager: NotificationManager | null,
@@ -118,6 +124,7 @@ export class ShortcutManager {
     ])
     this.globalShortcuts = new Set(['showMainWindow'])
     this.focusListenersSetup = false
+    this.focusHandlers = new Map()
 
     this.isEnabled = true
     this.shortcuts = this.getDefaultShortcuts()
@@ -221,18 +228,29 @@ export class ShortcutManager {
       const floatingWindow = this.windowManager.getFloatingNavigator()
 
       if (mainWindow) {
-        mainWindow.on('focus', () => {
+        // Create named handlers for cleanup
+        const focusHandler = (): void => {
           log.debug(
             '[ShortcutManager] Main window focused - registering contextual shortcuts',
           )
           this.registerContextualShortcuts()
-        })
+        }
 
-        mainWindow.on('blur', () => {
+        const blurHandler = (): void => {
           log.debug(
             '[ShortcutManager] Main window blurred - unregistering contextual shortcuts',
           )
           this.unregisterContextualShortcuts()
+        }
+
+        mainWindow.on('focus', focusHandler)
+        mainWindow.on('blur', blurHandler)
+
+        // Store handlers for cleanup
+        this.focusHandlers.set(mainWindow.id, {
+          focus: focusHandler,
+          blur: blurHandler,
+          window: mainWindow,
         })
 
         if (mainWindow.isFocused()) {
@@ -241,18 +259,29 @@ export class ShortcutManager {
       }
 
       if (floatingWindow) {
-        floatingWindow.on('focus', () => {
+        // Create named handlers for cleanup
+        const focusHandler = (): void => {
           log.debug(
             '[ShortcutManager] Floating window focused - registering contextual shortcuts',
           )
           this.registerContextualShortcuts()
-        })
+        }
 
-        floatingWindow.on('blur', () => {
+        const blurHandler = (): void => {
           log.debug(
             '[ShortcutManager] Floating window blurred - unregistering contextual shortcuts',
           )
           this.unregisterContextualShortcuts()
+        }
+
+        floatingWindow.on('focus', focusHandler)
+        floatingWindow.on('blur', blurHandler)
+
+        // Store handlers for cleanup
+        this.focusHandlers.set(floatingWindow.id, {
+          focus: focusHandler,
+          blur: blurHandler,
+          window: floatingWindow,
         })
 
         if (floatingWindow.isFocused()) {
@@ -877,11 +906,20 @@ export class ShortcutManager {
   }
 
   /**
-   * Unregister all shortcuts.
+   * Unregister all shortcuts managed by this ShortcutManager.
+   * Only unregisters shortcuts registered by this instance, not system-wide.
    */
   unregisterAllShortcuts(): void {
     try {
-      globalShortcut.unregisterAll()
+      // Selectively unregister only shortcuts managed by this instance
+      // instead of globalShortcut.unregisterAll() which removes all app shortcuts
+      for (const [id, shortcut] of this.registeredShortcuts) {
+        try {
+          globalShortcut.unregister(shortcut.accelerator)
+        } catch (error) {
+          log.warn(`Failed to unregister shortcut ${id}:`, error)
+        }
+      }
       this.registeredShortcuts.clear()
     } catch (error) {
       log.error('Error unregistering all shortcuts:', error)
@@ -901,10 +939,28 @@ export class ShortcutManager {
   }
 
   /**
-   * Cleanup - unregister all shortcuts.
+   * Cleanup - unregister all shortcuts and remove focus listeners.
    */
   cleanup(): void {
     this.unregisterAllShortcuts()
+
+    // Remove focus listeners from windows
+    for (const [windowId, handlers] of this.focusHandlers) {
+      try {
+        const { focus, blur, window } = handlers
+        if (window && !window.isDestroyed()) {
+          window.removeListener('focus', focus)
+          window.removeListener('blur', blur)
+        }
+      } catch (error) {
+        log.warn(
+          `Failed to remove focus listeners for window ${windowId}:`,
+          error,
+        )
+      }
+    }
+    this.focusHandlers.clear()
+    this.focusListenersSetup = false
   }
 }
 

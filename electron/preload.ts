@@ -113,6 +113,8 @@ const ALLOWED_CHANNELS: AllowedChannelsMap = {
   'oauth-success': true,
   'oauth-error': true,
   'oauth-complete-exchange': true,
+  'oauth-get-pending-token': true,
+  'oauth-clear-pending-token': true,
   'clerk-sign-in-token': true, // Sign-in token from browser OAuth for WebView session
 
   // Window operations
@@ -229,6 +231,9 @@ function validateChannel(channel: string): boolean {
  * @returns Sanitized data
  */
 function sanitizeData<T>(data: T): T {
+  // Keys that could be used for prototype pollution attacks
+  const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype']
+
   if (typeof data === 'string') {
     return data.trim() as T
   }
@@ -239,6 +244,11 @@ function sanitizeData<T>(data: T): T {
     // Deep clone and sanitize object properties
     const sanitized: Record<string, SanitizedValue> = {}
     for (const [key, value] of Object.entries(data)) {
+      // Block prototype pollution attacks
+      if (FORBIDDEN_KEYS.includes(key)) {
+        continue
+      }
+
       if (typeof value === 'string') {
         sanitized[key] = value.trim()
       } else if (typeof value === 'number' || typeof value === 'boolean') {
@@ -1081,15 +1091,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     /**
-     * Save configuration (alias for set).
+     * Save configuration to disk.
+     *
+     * Note: Config auto-persists on every set/update call, so this is
+     * effectively a no-op. Returns true to indicate the config is persisted.
+     *
+     * @returns Always true (config auto-saves on modification)
      */
-    save: async (): Promise<Record<string, unknown> | boolean> => {
-      try {
-        return await ipcRenderer.invoke('config-get-all')
-      } catch (error) {
-        log.error('Failed to save config:', error)
-        return true
-      }
+    save: async (): Promise<boolean> => {
+      // Config auto-persists on every set/update operation
+      // This method exists for API compatibility but is a no-op
+      return true
     },
 
     /**

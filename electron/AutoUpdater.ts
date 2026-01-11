@@ -224,11 +224,12 @@ export class AutoUpdater {
   }
 
   /**
-   * Cleans up timers and resources.
+   * Cleans up timers, event listeners, and resources.
    *
    * Call this when disposing the AutoUpdater to prevent memory leaks.
    */
   cleanup(): void {
+    // Clear timers
     if (this.initialCheckTimeout) {
       clearTimeout(this.initialCheckTimeout)
       this.initialCheckTimeout = null
@@ -237,6 +238,17 @@ export class AutoUpdater {
       clearInterval(this.periodicCheckInterval)
       this.periodicCheckInterval = null
     }
+
+    // Remove all event listeners registered on autoUpdater
+    autoUpdater.removeAllListeners('checking-for-update')
+    autoUpdater.removeAllListeners('update-available')
+    autoUpdater.removeAllListeners('update-not-available')
+    autoUpdater.removeAllListeners('error')
+    autoUpdater.removeAllListeners('download-progress')
+    autoUpdater.removeAllListeners('update-downloaded')
+
+    // Clear window reference
+    this.mainWindow = null
   }
 }
 
