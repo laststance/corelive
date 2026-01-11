@@ -62,13 +62,16 @@ export class AutoUpdater {
     this.updateAvailable = false
     this.updateDownloaded = false
 
+    // Type for pino logger methods that accept rest parameters
+    type LogMethod = (...args: unknown[]) => void
+
     const updaterLogger: UpdaterLogger = {
-      info: (...args) => log.info(String(args[0] ?? '')),
-      warn: (...args) => log.warn(String(args[0] ?? '')),
-      error: (...args) => log.error(String(args[0] ?? '')),
-      debug: (...args) => log.debug(String(args[0] ?? '')),
+      info: (...args) => (log.info as LogMethod)(...args),
+      warn: (...args) => (log.warn as LogMethod)(...args),
+      error: (...args) => (log.error as LogMethod)(...args),
+      debug: (...args) => (log.debug as LogMethod)(...args),
     }
-    autoUpdater.logger = updaterLogger as unknown as typeof autoUpdater.logger
+    autoUpdater.logger = updaterLogger as typeof autoUpdater.logger
 
     this.setupAutoUpdater()
   }

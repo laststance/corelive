@@ -48,16 +48,25 @@ import { log } from './logger'
  */
 async function checkServer(url: string, retries = 30): Promise<void> {
   return new Promise((resolve, reject) => {
+    let lastError: Error | null = null
+
     const check = (attempt: number): void => {
       http
         .get(url, (res) => {
+          // Always consume the response stream to free the socket
+          res.resume()
+
           if (res.statusCode === 200) {
             resolve()
           } else {
+            lastError = new Error(
+              `Server returned non-200 status: ${res.statusCode}`,
+            )
             retry(attempt)
           }
         })
-        .on('error', () => {
+        .on('error', (err: Error) => {
+          lastError = err
           retry(attempt)
         })
     }
@@ -66,7 +75,10 @@ async function checkServer(url: string, retries = 30): Promise<void> {
       if (attempt < retries) {
         setTimeout(() => check(attempt + 1), 1000)
       } else {
-        reject(new Error('Next.js dev server failed to start'))
+        const message = lastError
+          ? `Next.js dev server failed to start: ${lastError.message}`
+          : 'Next.js dev server failed to start after maximum retries'
+        reject(new Error(message))
       }
     }
 
@@ -119,12 +131,43 @@ async function startElectron(): Promise<void> {
       },
     )
 
+    /**
+     * Cleanup function to terminate electron process and remove listeners.
+     */
+    const cleanup = (): void => {
+      process.removeListener('SIGINT', handleSignal)
+      process.removeListener('SIGTERM', handleSignal)
+      electronProcess.removeAllListeners('close')
+      electronProcess.removeAllListeners('error')
+    }
+
+    /**
+     * Signal handler for graceful shutdown.
+     *
+     * @param signal - The signal received (SIGINT or SIGTERM)
+     */
+    const handleSignal = (signal: NodeJS.Signals): void => {
+      log.info(`Received ${signal}, shutting down Electron...`)
+      cleanup()
+      electronProcess.kill(signal)
+      // Give the process time to exit gracefully, then force exit
+      setTimeout(() => {
+        process.exit(0)
+      }, 3000)
+    }
+
+    // Register signal handlers for graceful shutdown
+    process.on('SIGINT', handleSignal)
+    process.on('SIGTERM', handleSignal)
+
     electronProcess.on('close', (code) => {
+      cleanup()
       process.exit(code ?? 0)
     })
 
     electronProcess.on('error', (error) => {
       log.error('❌ Failed to start Electron:', error)
+      cleanup()
       process.exit(1)
     })
   } catch (error) {

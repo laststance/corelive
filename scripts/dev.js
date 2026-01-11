@@ -24,9 +24,15 @@ const port = process.env.PORT || 3011
 
 let nextProcess = null
 let electronProcess = null
+let buildProcess = null
 
 // Cleanup function
 function cleanup() {
+  if (buildProcess) {
+    buildProcess.kill('SIGTERM')
+    buildProcess = null
+  }
+
   if (electronProcess) {
     electronProcess.kill('SIGTERM')
     electronProcess = null
@@ -89,7 +95,7 @@ async function startDevelopment() {
     // Build Electron code first (required for lazy loading to work)
     // eslint-disable-next-line no-console
     console.log('🔨 Building Electron code...')
-    const buildProcess = spawn('pnpm', ['electron:build:ts'], {
+    buildProcess = spawn('pnpm', ['electron:build:ts'], {
       stdio: 'inherit',
       shell: true,
       env: {
@@ -100,13 +106,18 @@ async function startDevelopment() {
 
     await new Promise((resolve, reject) => {
       buildProcess.on('exit', (code) => {
+        // Clear tracked reference after build completes
+        buildProcess = null
         if (code !== 0 && code !== null) {
           reject(new Error(`Electron build failed with code ${code}`))
         } else {
           resolve()
         }
       })
-      buildProcess.on('error', reject)
+      buildProcess.on('error', (err) => {
+        buildProcess = null
+        reject(err)
+      })
     })
 
     // eslint-disable-next-line no-console
