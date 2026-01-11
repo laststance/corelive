@@ -80,10 +80,9 @@ pnpm electron:build:mac
 
 ### Build Process
 
-1. **Next.js build** with `ELECTRON_BUILD=true`
-2. **Electron build** via electron-builder
-3. **Code signing** (if certificates configured)
-4. **Notarization** (via afterSign hook)
+1. **Electron build** via electron-builder (no Next.js build needed - Full WebView loads remote URL)
+2. **Code signing** (if certificates configured)
+3. **Notarization** (via afterSign hook)
 
 ### Build Output (`dist-electron/`)
 

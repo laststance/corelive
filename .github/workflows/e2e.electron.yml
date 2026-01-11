@@ -55,6 +55,9 @@ jobs:
       - name: Generate Prisma Client 🗄️
         run: pnpm prisma generate
 
+      - name: Build Next.js for E2E tests 🏗️
+        run: pnpm build
+
       - name: Build Electron application ⚡
         run: pnpm electron:build:dir
 

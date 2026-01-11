@@ -16,8 +16,7 @@ const nextConfig = {
   },
   // Performance optimizations
   experimental: {
-    // Disable optimizeCss for Electron builds due to critters dependency issue
-    optimizeCss: !process.env.ELECTRON_BUILD,
+    optimizeCss: true,
     optimizePackageImports: [
       '@radix-ui/react-accordion',
       '@radix-ui/react-alert-dialog',
@@ -71,17 +70,6 @@ const nextConfig = {
       }
     }
 
-    // Handle Electron environment
-    if (process.env.ELECTRON_BUILD) {
-      // Handle Node.js modules in Electron renderer
-      config.externals = config.externals || []
-      if (!isServer) {
-        config.externals.push({
-          electron: 'require("electron")',
-        })
-      }
-    }
-
     // Performance optimizations for production
     if (!dev) {
       // Enable tree shaking for better bundle size
@@ -129,10 +117,6 @@ const nextConfig = {
 
     return config
   },
-  // Output configuration for Electron
-  output: process.env.ELECTRON_BUILD ? 'standalone' : undefined,
-  trailingSlash: !!process.env.ELECTRON_BUILD,
-  distDir: process.env.ELECTRON_BUILD ? '.next' : '.next',
 }
 
 export default nextConfig

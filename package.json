@@ -51,9 +51,9 @@
     "e2e:electron": "playwright test --project=electron",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
-    "electron:build:mac": "cross-env ELECTRON_BUILD=true next build --webpack && electron-builder --mac",
-    "electron:build:dir": "cross-env ELECTRON_BUILD=true next build --webpack && electron-builder --dir",
-    "electron:publish": "cross-env ELECTRON_BUILD=true next build --webpack && electron-builder --publish=always",
+    "electron:build:mac": "electron-builder --mac",
+    "electron:build:dir": "electron-builder --dir",
+    "electron:publish": "electron-builder --publish=always",
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run"
   },
   "dependencies": {
