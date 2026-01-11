@@ -85,11 +85,17 @@ export class AutoUpdater {
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
       log.info('Update not available:', info)
+      // Reset status flags when no update is available
+      this.updateAvailable = false
+      this.updateDownloaded = false
       this.sendStatusToWindow('Update not available')
     })
 
     autoUpdater.on('error', (err: Error) => {
       log.error('Error in auto-updater:', err)
+      // Reset status flags on error to allow retry
+      this.updateAvailable = false
+      this.updateDownloaded = false
       this.sendStatusToWindow('Error in auto-updater')
     })
 
@@ -253,6 +259,10 @@ export class AutoUpdater {
 
     // Clear window reference
     this.mainWindow = null
+
+    // Reset status flags
+    this.updateAvailable = false
+    this.updateDownloaded = false
   }
 }
 

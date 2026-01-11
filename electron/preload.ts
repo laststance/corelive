@@ -28,7 +28,11 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 
 import { log } from './logger'
-import type { NotificationOptions, TrayIconState } from './types/ipc'
+import type {
+  NotificationOptions,
+  TrayIconState,
+  WindowBounds,
+} from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -52,14 +56,6 @@ interface TrayTaskItem {
   id: string
   title: string
   completed?: boolean
-}
-
-/** Window bounds */
-interface WindowBounds {
-  x: number
-  y: number
-  width: number
-  height: number
 }
 
 /** User data */
@@ -1827,7 +1823,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
  */
 contextBridge.exposeInMainWorld('electronEnv', {
   isElectron: true, // Flag to detect Electron environment
-  platform: process.platform, // Always 'darwin' (macOS only)
+  platform: process.platform,
   versions: {
     node: process.versions.node, // Node.js version
     chrome: process.versions.chrome, // Chromium version

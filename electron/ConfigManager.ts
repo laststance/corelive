@@ -572,14 +572,39 @@ export class ConfigManager {
 
   /**
    * Updates multiple configuration values at once.
+   * Uses a batched approach to avoid N+1 disk writes.
    *
    * @param updates - Object with path:value pairs
    * @returns True if save successful
    */
   update(updates: Record<string, unknown>): boolean {
     for (const [configPath, value] of Object.entries(updates)) {
-      this.set(configPath, value)
+      // Set value in memory without saving to disk
+      const keys = configPath.split('.')
+      let current: Record<string, unknown> = this.config as unknown as Record<
+        string,
+        unknown
+      >
+
+      for (let i = 0; i < keys.length - 1; i++) {
+        const key = keys[i]!
+        // Block prototype pollution attacks
+        if (isUnsafeKey(key)) {
+          continue
+        }
+        if (!current[key] || typeof current[key] !== 'object') {
+          current[key] = {}
+        }
+        current = current[key] as Record<string, unknown>
+      }
+
+      const lastKey = keys[keys.length - 1]!
+      // Block prototype pollution attacks on the final key
+      if (!isUnsafeKey(lastKey)) {
+        current[lastKey] = value
+      }
     }
+    // Single disk write after all updates
     return this.saveConfig()
   }
 

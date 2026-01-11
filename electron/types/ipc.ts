@@ -437,11 +437,11 @@ export interface IPCChannels {
     response: boolean
   }
   'shortcuts-enable': {
-    request: string
+    request: void
     response: boolean
   }
   'shortcuts-disable': {
-    request: string
+    request: void
     response: boolean
   }
   'shortcuts-get-stats': {

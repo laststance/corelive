@@ -1024,6 +1024,24 @@ function setupIPCHandlers(): void {
           throw new Error('Edge must be provided as a string')
         }
 
+        // Validate edge against allowed SnapEdge values
+        const validEdges: SnapEdge[] = [
+          'left',
+          'right',
+          'top',
+          'bottom',
+          'top-left',
+          'top-right',
+          'bottom-left',
+          'bottom-right',
+          'maximize',
+        ]
+        if (!validEdges.includes(edge as SnapEdge)) {
+          throw new Error(
+            `Invalid edge value: ${edge}. Must be one of: ${validEdges.join(', ')}`,
+          )
+        }
+
         const type = toWindowType(windowType)
         const stateManager = ensureWindowStateManagerInstance()
         const targetWindow = getBrowserWindowForType(type)

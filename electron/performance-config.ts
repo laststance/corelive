@@ -22,7 +22,6 @@
  * @module electron/performance-config
  */
 
-import 'path'
 import { app } from 'electron'
 
 import { log } from './logger'
