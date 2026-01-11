@@ -128,32 +128,9 @@ export class WindowManager {
       : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
 
     // Resolve preload script path (built by electron-vite)
-    // #region agent log
-    const __dirnameDebug = __dirname
-    const fs = require('fs')
-    // #endregion
     const preloadPath = app.isPackaged
       ? path.join(process.resourcesPath, 'preload', 'preload.cjs')
       : path.join(__dirname, '..', 'preload', 'preload.cjs')
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/06318591-ee19-4dea-834c-55d9b97f663a', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'WindowManager.ts:133',
-        message: 'Preload path resolved (main window)',
-        data: {
-          preloadPath,
-          exists: fs.existsSync(preloadPath),
-          __dirname: __dirnameDebug,
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'A',
-      }),
-    }).catch(() => {})
-    // #endregion
 
     this.mainWindow = new BrowserWindow({
       ...windowOptions,
