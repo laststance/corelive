@@ -149,25 +149,6 @@ All PrismaClient instantiations updated to use the PostgreSQL adapter with Direc
 +const prisma = new PrismaClient({ adapter })
 ```
 
-#### File: `electron/api-bridge.cjs` (CommonJS)
-
-```diff
-+require('dotenv/config')
-+
--const { PrismaClient } = require('@prisma/client')
-+const { PrismaClient } = require('../src/generated/prisma')
-+const { PrismaPg } = require('@prisma/adapter-pg')
-
- class APIBridge {
-   constructor() {
-+    const adapter = new PrismaPg({
-+      connectionString: process.env.POSTGRES_PRISMA_URL,
-+    })
-+
--    this.prisma = new PrismaClient()
-+    this.prisma = new PrismaClient({ adapter })
-```
-
 ### 5. Package.json Updates
 
 **File:** `package.json`
@@ -231,7 +212,6 @@ The generated client location is now: `src/generated/prisma/`
 - ✅ `src/lib/prisma.ts` - Main Prisma client singleton
 - ✅ `prisma/seed.ts` - Database seeding script
 - ✅ `src/app/api/webhooks/route.ts` - Webhook handler
-- ✅ `electron/api-bridge.cjs` - Electron API bridge (CommonJS)
 
 ### Dependencies
 

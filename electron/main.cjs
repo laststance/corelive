@@ -45,9 +45,6 @@ if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
  * These are essential for app startup and must be available right away.
  */
 
-// Note: APIBridge is no longer needed in WebView architecture
-// The Floating Navigator uses oRPC to communicate with https://corelive.app/
-// const { APIBridge } = require('./api-bridge.cjs')
 // Manages user preferences and application configuration
 const ConfigManager = require('./ConfigManager.cjs')
 // Handles IPC errors with retry logic to ensure reliable communication
@@ -57,9 +54,6 @@ const { lazyLoadManager } = require('./LazyLoadManager.cjs')
 const { log } = require('./logger.cjs')
 // Monitors memory usage to prevent leaks and optimize performance
 const { memoryProfiler } = require('./MemoryProfiler.cjs')
-// Note: NextServerManager is no longer needed in WebView architecture
-// The app loads https://corelive.app/ directly in production
-// const { NextServerManager } = require('./next-server.cjs')
 // Performance configuration based on environment (dev/prod)
 const {
   performanceOptimizer,

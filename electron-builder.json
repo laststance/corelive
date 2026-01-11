@@ -15,7 +15,6 @@
     "node_modules/**/*",
     "package.json",
     "public/**/*",
-    "!electron/generated/**/*",
     "!src/**/*",
     "!**/*.test.*",
     "!**/*.spec.*",
