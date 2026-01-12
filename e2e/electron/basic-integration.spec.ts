@@ -20,7 +20,7 @@ test.describe('Electron Basic Integration E2E Tests', () => {
     // Launch Electron app
     const electronApp = await electron.launch({
       args: [
-        path.join(__dirname, '../../electron/main.cjs'),
+        path.join(__dirname, '../../dist-electron/main/index.cjs'),
         // Disable sandbox in CI environments due to permission requirements
         ...(process.env.CI ? ['--no-sandbox'] : []),
       ],

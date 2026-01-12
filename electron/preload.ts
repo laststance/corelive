@@ -1901,3 +1901,15 @@ contextBridge.exposeInMainWorld('electronEnv', {
     electron: process.versions.electron, // Electron version
   },
 })
+
+/**
+ * E2E Testing Mode Flag
+ *
+ * When E2E_MODE environment variable is set, expose __E2E_MODE__ flag
+ * to disable Electron-specific behavior (like ElectronLoginForm).
+ * This allows E2E tests to use standard Clerk <SignIn> component
+ * which is compatible with setupClerkTestingToken.
+ */
+if (process.env.E2E_MODE === 'true') {
+  contextBridge.exposeInMainWorld('__E2E_MODE__', true)
+}

@@ -87,10 +87,18 @@ export function ElectronLoginForm() {
       dispatch({ type: 'START_LOADING' })
 
       try {
-        const result = await signIn.create({
+        let result = await signIn.create({
           identifier: state.email,
           password: state.password,
         })
+
+        // Handle needs_first_factor: attempt password verification
+        if (result.status === 'needs_first_factor') {
+          result = await signIn.attemptFirstFactor({
+            strategy: 'password',
+            password: state.password,
+          })
+        }
 
         if (result.status === 'complete' && result.createdSessionId) {
           await setActive({ session: result.createdSessionId })

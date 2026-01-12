@@ -22,7 +22,7 @@ export function createLink() {
 
       const clerk = window.Clerk
       if (!clerk) {
-        // when Clerk hasn't loaded yet (e.g. Playwright immediately after navigation)
+        // Clerk hasn't loaded yet (e.g. Playwright immediately after navigation)
         return {}
       }
 

@@ -3,7 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 import { createClerkClient } from '@clerk/backend'
-import { setupClerkTestingToken, clerk } from '@clerk/testing/playwright'
+import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import type { ElectronApplication, Page, Route } from '@playwright/test'
 import { _electron as electron, expect } from '@playwright/test'
 
@@ -124,62 +124,82 @@ export class ElectronTestHelper {
       const email = process.env.E2E_CLERK_USER_EMAIL
       const password = process.env.E2E_CLERK_USER_PASSWORD
 
-      if (!username || !password) {
-        throw new Error('Missing E2E Clerk credentials')
+      // Use email for Clerk sign-in (Clerk expects email as identifier)
+      const identifier = email || username
+      if (!identifier || !password) {
+        throw new Error(
+          'Missing E2E Clerk credentials (email/username and password required)',
+        )
       }
 
       await setupClerkTestingToken({ page })
 
-      await page.goto(baseUrl, { waitUntil: 'domcontentloaded' })
-      await page.waitForTimeout(2000)
+      // Navigate to login with e2e=true to force use of standard Clerk <SignIn> component
+      // instead of ElectronLoginForm (which doesn't work with setupClerkTestingToken)
+      await page.goto(`${baseUrl}/login?e2e=true`, {
+        waitUntil: 'domcontentloaded',
+      })
 
-      let signedIn = false
-      try {
-        await clerk.signIn({
-          page,
-          signInParams: {
-            strategy: 'password',
-            identifier: username,
-            password,
-          },
-        })
-        signedIn = true
-      } catch (signInError) {
-        console.warn(
-          '[electron-test] Clerk signIn helper failed, fallback',
-          signInError,
+      // Wait for Clerk SignIn component to fully render
+      const identifierInput = page
+        .locator(
+          'input[name="identifier"], input[type="email"], input[type="text"]',
         )
-      }
+        .first()
+      await identifierInput.waitFor({ state: 'visible', timeout: 30000 })
 
-      if (!signedIn) {
-        await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' })
-        await page.waitForTimeout(1000)
+      // Fill email
+      await identifierInput.fill(identifier)
 
-        const usernameInput = page
-          .locator(
-            'input[name="identifier"], input[type="text"], input[type="email"]',
-          )
-          .first()
-        const passwordInput = page.locator('input[type="password"]').first()
+      // Check if password field is already visible (single-page form)
+      const passwordInput = page.locator('input[type="password"]').first()
+      const passwordAlreadyVisible = await passwordInput
+        .isVisible()
+        .catch(() => false)
 
-        await usernameInput.fill(username)
+      if (passwordAlreadyVisible) {
+        // Single-page form: fill password directly without pressing Enter
         await passwordInput.fill(password)
-        await page.locator('button[type="submit"]').first().click()
-        await page.waitForTimeout(3000)
+        // Submit with Enter key on password field (more reliable than clicking button)
+        await passwordInput.press('Enter')
+      } else {
+        // 2-step flow: press Enter to reveal password field
+        await identifierInput.press('Enter')
+        await passwordInput.waitFor({ state: 'visible', timeout: 10000 })
+        await passwordInput.fill(password)
+        await passwordInput.press('Enter')
       }
 
-      await page.goto(`${baseUrl}/home`, { waitUntil: 'domcontentloaded' })
+      // Wait for redirect to /home
+      await page.waitForURL('**/home{,/}', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      })
+
       await page.waitForLoadState('networkidle')
 
-      const isAuthenticated = await page.evaluate(() => {
+      const authCheckResult = await page.evaluate(() => {
         const hasTasksHeader = document.body?.innerText?.includes('Tasks')
         const hasTodoList = document.body?.innerText?.includes('Todo List')
         const hasPending = document.body?.innerText?.includes('pending')
         const hasAddTodo =
           document.querySelector('input[placeholder*="todo"]') !== null
+        const currentUrl = window.location.href
+        const bodyPreview = document.body?.innerText?.slice(0, 300) || ''
 
-        return hasTasksHeader || hasTodoList || hasPending || hasAddTodo
+        return {
+          isAuthenticated:
+            hasTasksHeader || hasTodoList || hasPending || hasAddTodo,
+          hasTasksHeader,
+          hasTodoList,
+          hasPending,
+          hasAddTodo,
+          currentUrl,
+          bodyPreview,
+        }
       })
+
+      const isAuthenticated = authCheckResult.isAuthenticated
 
       log.debug('[electron-test] authentication check', {
         isAuthenticated,
@@ -512,7 +532,7 @@ export class ElectronTestHelper {
 
     const electronApp = await electron.launch({
       args: [
-        path.join(__dirname, '../../electron/main.cjs'),
+        path.join(__dirname, '../../dist-electron/main/index.cjs'),
         // Use unique user data directory to avoid singleton conflicts
         `--user-data-dir=${uniqueUserDataDir}`,
         // Disable sandbox in CI environments due to permission requirements
@@ -525,6 +545,9 @@ export class ElectronTestHelper {
         ELECTRON_IS_DEV: '1',
         // Disable hardware acceleration for testing
         ELECTRON_DISABLE_HARDWARE_ACCELERATION: '1',
+        // Enable E2E mode to disable Electron-specific auth behavior
+        // (ElectronLoginForm doesn't work with setupClerkTestingToken)
+        E2E_MODE: 'true',
       },
     })
 
@@ -825,6 +848,39 @@ export class ElectronTestHelper {
         })
         // Give UI a moment to render
         await context.floatingNavigator.waitForTimeout(500)
+
+        // Set up route interception for FloatingNavigator window
+        const storedUserId = this.storedClerkUserId
+        if (storedUserId) {
+          await context.floatingNavigator.route(
+            '**/api/orpc/**',
+            async (route) => {
+              const headers = {
+                ...route.request().headers(),
+                Authorization: `Bearer ${storedUserId}`,
+              }
+              const response = await route.fetch({ headers })
+              await route.fulfill({ response })
+            },
+          )
+
+          // Also inject Clerk user into FloatingNavigator window
+          await context.floatingNavigator.evaluate((userId) => {
+            const win = window as unknown as {
+              Clerk?: {
+                user?: { id?: string }
+                session?: { user?: { id?: string } }
+                load?: () => Promise<void>
+              }
+            }
+            if (!win.Clerk) {
+              win.Clerk = {}
+            }
+            win.Clerk.user = { id: userId }
+            win.Clerk.session = { user: { id: userId } }
+            win.Clerk.load = async () => {}
+          }, storedUserId)
+        }
       } catch (error) {
         log.warn('Floating navigator DOM load timeout:', error)
       }
