@@ -54,7 +54,7 @@
     "electron:build:ts": "electron-vite build",
     "electron:build:mac": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --mac",
     "electron:build:dir": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --dir",
-    "electron:build:e2e": "pnpm electron:build:ts && cross-env APP_URL=http://localhost:3011 electron-builder --dir",
+    "electron:build:e2e": "pnpm electron:build:ts && cross-env APP_URL=http://localhost:3011 electron-builder --config electron-builder.e2e.json",
     "electron:publish": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --publish=always",
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run"
   },
