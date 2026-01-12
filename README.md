@@ -2,7 +2,6 @@
 [![Lint](https://github.com/laststance/unfarely/actions/workflows/lint.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/lint.yml)
 [![Test](https://github.com/laststance/unfarely/actions/workflows/test.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/test.yml)
 [![Typecheck](https://github.com/laststance/unfarely/actions/workflows/typecheck.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/typecheck.yml)
-[![E2E Tests (Electron)](https://github.com/laststance/corelive/actions/workflows/e2e.electron.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/e2e.electron.yml)
 [![E2E Tests (Web)](https://github.com/laststance/corelive/actions/workflows/e2e.web.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/e2e.web.yml)
 [![Storybook Testing](https://github.com/laststance/corelive/actions/workflows/storybook-test.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/storybook-test.yml)
 [![Covered by Argos Visual Testing](https://argos-ci.com/badge-large.svg)](https://app.argos-ci.com/ryota-murakami/corelive/reference)
@@ -149,19 +148,15 @@ pnpm electron
 
 Each Electron build command sets `APP_URL` to determine which web app URL the Electron app loads:
 
-| Command                   | APP_URL                 | Purpose                                             |
-| ------------------------- | ----------------------- | --------------------------------------------------- |
-| `pnpm electron:build:mac` | `https://corelive.app`  | Production release (DMG + ZIP + signed + notarized) |
-| `pnpm electron:build:dir` | `https://corelive.app`  | Local production testing (unpacked .app only)       |
-| `pnpm electron:build:e2e` | `http://localhost:3011` | E2E testing with local Next.js server               |
+| Command                   | APP_URL                | Purpose                                             |
+| ------------------------- | ---------------------- | --------------------------------------------------- |
+| `pnpm electron:build:mac` | `https://corelive.app` | Production release (DMG + ZIP + signed + notarized) |
+| `pnpm electron:build:dir` | `https://corelive.app` | Local production testing (unpacked .app only)       |
 
 ```bash
 # Local production testing (connects to corelive.app)
 pnpm electron:build:dir
 open dist/mac/CoreLive.app
-
-# E2E testing (connects to localhost:3011)
-pnpm build && pnpm electron:build:e2e && pnpm e2e:electron
 
 # Production release
 pnpm electron:build:mac

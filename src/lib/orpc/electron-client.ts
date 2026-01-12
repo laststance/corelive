@@ -20,17 +20,10 @@
  * Detects Electron by checking for window.electronAPI which is exposed
  * by the preload script in the main window.
  *
- * Note: Returns false when E2E testing mode is detected via:
- * - `?e2e=true` URL parameter, OR
- * - `window.__E2E_MODE__` global flag (set by preload script when E2E_MODE env is set)
- *
- * This ensures the standard Clerk `<SignIn>` component is used during E2E tests,
- * which is compatible with setupClerkTestingToken.
- *
  * @returns true if running in Electron main window, false otherwise
  * @example
  * isElectronEnvironment() // => true (in Electron)
- * isElectronEnvironment() // => false (in browser or E2E test)
+ * isElectronEnvironment() // => false (in browser)
  */
 export const isElectronEnvironment = (): boolean => {
   return (

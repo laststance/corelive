@@ -82,22 +82,6 @@ export default defineConfig({
       testMatch: /^(?!.*electron).*\.spec\.ts$/,
       dependencies: ['setup'], // Run setup project first
     },
-
-    // Electron desktop integration tests
-    {
-      name: 'electron',
-      testMatch: /.*electron.*\.spec\.ts/,
-      // Run electron tests sequentially to avoid singleton lock conflicts
-      workers: 1,
-      use: {
-        // Electron-specific configuration
-        trace: 'on-first-retry',
-        screenshot: 'only-on-failure',
-        // Electron tests handle auth via IPC mocking, not web cookies
-        // No storageState needed - tests accept both login and authenticated states
-      },
-      // No dependencies - Electron tests run independently with their own auth handling
-    },
   ],
 
   // One-time hooks

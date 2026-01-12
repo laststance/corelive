@@ -688,7 +688,6 @@ async function createWindow(): Promise<BrowserWindow> {
     // APP_URL: Single source of truth for the web app URL
     // Configured at build time via npm scripts:
     // - electron:build:mac/dir: APP_URL=https://corelive.app (production)
-    // - electron:build:e2e: APP_URL=http://localhost:3011 (E2E testing)
     // - Development: Set by scripts/dev.js
     const serverUrl = process.env.APP_URL || 'https://corelive.app'
 

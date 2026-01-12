@@ -48,13 +48,11 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "e2e:web": "APP_URL=http://localhost:3011 playwright test --project=web",
-    "e2e:electron": "playwright test --project=electron",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
     "electron:build:ts": "electron-vite build",
     "electron:build:mac": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --mac",
     "electron:build:dir": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --dir",
-    "electron:build:e2e": "pnpm electron:build:ts && cross-env APP_URL=http://localhost:3011 electron-builder --config electron-builder.e2e.json",
     "electron:publish": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --publish=always",
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run"
   },
