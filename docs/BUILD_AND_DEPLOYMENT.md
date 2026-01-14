@@ -27,7 +27,7 @@ This guide covers building and deploying the CoreLive Electron application.
 ```bash
 # macOS Code Signing and Notarization
 APPLE_ID=your_apple_id@example.com
-APPLE_ID_PASSWORD=your_app_specific_password
+APPLE_APP_SPECIFIC_PASSWORD=your_app_specific_password
 APPLE_TEAM_ID=YOUR_TEAM_ID
 ```
 
@@ -125,7 +125,7 @@ Runs on version tags (`v*`):
 
 ```
 APPLE_ID
-APPLE_ID_PASSWORD
+APPLE_APP_SPECIFIC_PASSWORD
 APPLE_TEAM_ID
 APPLE_CERTIFICATES_P12
 APPLE_CERTIFICATES_PASSWORD
