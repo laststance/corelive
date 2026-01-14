@@ -101,10 +101,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           # electron-builder / @electron/notarize expects this name (see `scripts/notarize.js`)
-          # Prefer dedicated secret name; fall back to legacy APPLE_ID_PASSWORD for backward compatibility.
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || secrets.APPLE_ID_PASSWORD }}
-          # Keep legacy name too (some tools/docs still refer to APPLE_ID_PASSWORD)
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
