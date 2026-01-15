@@ -42,6 +42,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { log } from '@/lib/logger'
+import { isEnterKeyPress } from '@/lib/utils'
 
 // Icon fallback component for loading state
 const IconFallback = () => (
@@ -105,8 +106,7 @@ export function FloatingNavigator({
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    // IME変換中はEnterキーでSubmitしない
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+    if (isEnterKeyPress(e)) {
       handleCreateTask()
     }
   }
