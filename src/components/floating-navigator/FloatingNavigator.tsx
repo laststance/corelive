@@ -143,7 +143,6 @@ export function FloatingNavigator({
   }
 
   const handleEditKeyPress = (e: React.KeyboardEvent) => {
-    // IME変換中はEnterキーでSubmitしない
     if (isEnterKeyPress(e)) {
       saveEdit()
     } else if (e.key === 'Escape') {
