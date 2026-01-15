@@ -41,8 +41,7 @@ const ExternalLink = lazy(async () =>
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-
-import { log } from '../../lib/logger'
+import { log } from '@/lib/logger'
 
 // Icon fallback component for loading state
 const IconFallback = () => (
