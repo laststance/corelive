@@ -37,6 +37,7 @@ export default defineConfig({
             'electron/SystemIntegrationErrorHandler.ts',
           ),
           DeepLinkManager: resolve(__dirname, 'electron/DeepLinkManager.ts'),
+          OAuthManager: resolve(__dirname, 'electron/OAuthManager.ts'),
         },
         output: {
           format: 'cjs',

@@ -256,7 +256,7 @@ function ensureOAuthManager(): OAuthManagerType | null {
   }
 
   if (!oauthManager) {
-    const { OAuthManager } = require('./OAuthManager')
+    const { OAuthManager } = require('./OAuthManager.cjs')
     oauthManager = new OAuthManager(windowManager, notificationManager || null)
   }
 
