@@ -27,6 +27,7 @@ interface ShortcutConfig {
   minimize?: string
   toggleAlwaysOnTop?: string
   focusFloatingNavigator?: string
+  toggleFloatingNavigator?: string
   [key: string]: string | boolean | undefined
 }
 
@@ -123,7 +124,10 @@ export class ShortcutManager {
       'toggleAlwaysOnTop',
       'focusFloatingNavigator',
     ])
-    this._globalShortcuts = new Set(['showMainWindow'])
+    this._globalShortcuts = new Set([
+      'showMainWindow',
+      'toggleFloatingNavigator',
+    ])
     this.focusListenersSetup = false
     this.focusHandlers = new Map()
 
@@ -135,12 +139,14 @@ export class ShortcutManager {
 
   /**
    * Loads shortcut settings from user configuration.
+   * Merges with defaults to ensure new shortcuts have their default values.
    */
   loadSettings(): void {
     if (this.configManager) {
       const shortcutConfig = this.configManager.getSection('shortcuts')
       this.isEnabled = shortcutConfig.enabled !== false
-      this.shortcuts = { ...shortcutConfig }
+      // Merge defaults with loaded config so new shortcuts have default values
+      this.shortcuts = { ...this.getDefaultShortcuts(), ...shortcutConfig }
       delete this.shortcuts.enabled
     } else {
       this.isEnabled = true
@@ -166,6 +172,7 @@ export class ShortcutManager {
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       focusFloatingNavigator: 'CommandOrControl+Shift+N',
+      toggleFloatingNavigator: 'Alt+Space',
     }
   }
 
@@ -315,6 +322,17 @@ export class ShortcutManager {
         'showMainWindow',
         () => {
           this.handleShowMainWindow()
+        },
+      ),
+    })
+
+    results.push({
+      id: 'toggleFloatingNavigator',
+      success: this.registerShortcut(
+        shortcuts.toggleFloatingNavigator as string,
+        'toggleFloatingNavigator',
+        () => {
+          this.handleToggleFloatingNavigator()
         },
       ),
     })
@@ -604,6 +622,7 @@ export class ShortcutManager {
       minimize: ['H', 'Down', 'Minus'],
       toggleAlwaysOnTop: ['T', 'Up', 'P'],
       focusFloatingNavigator: ['W', 'Space', 'F'],
+      toggleFloatingNavigator: ['F12', 'Backquote', 'F'],
     }
 
     return alternatives[id] || []
@@ -658,6 +677,7 @@ export class ShortcutManager {
       minimize: 'Minimize',
       toggleAlwaysOnTop: 'Toggle Always On Top',
       focusFloatingNavigator: 'Focus Floating Navigator',
+      toggleFloatingNavigator: 'Toggle Floating Navigator',
     }
 
     return displayNames[id] || id
@@ -827,6 +847,18 @@ export class ShortcutManager {
   }
 
   /**
+   * Handle toggle floating navigator shortcut (global shortcut).
+   * This is a global shortcut that works even when the app is not focused.
+   */
+  handleToggleFloatingNavigator(): void {
+    try {
+      this.windowManager.toggleFloatingNavigator()
+    } catch (error) {
+      log.error('Error handling toggle floating navigator shortcut:', error)
+    }
+  }
+
+  /**
    * Update shortcuts with new configuration.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
@@ -872,6 +904,7 @@ export class ShortcutManager {
       minimize: () => this.handleMinimizeWindow(),
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
       focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),
+      toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
     }
 
     return handlers[id]
