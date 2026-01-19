@@ -283,7 +283,7 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
 
   // First-time initialization
   if (!deepLinkManager) {
-    const { DeepLinkManager } = require('./DeepLinkManager')
+    const { DeepLinkManager } = require('./DeepLinkManager.cjs')
     deepLinkManager = new DeepLinkManager(
       windowManager,
       null, // apiBridge no longer used in WebView architecture
