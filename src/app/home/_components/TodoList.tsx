@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { useORPCUtils } from '@/lib/orpc/react-query'
+import { useORPCUtils } from '@/hooks/react-query'
 import { broadcastTodoSync, subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { AddTodoForm } from './AddTodoForm'

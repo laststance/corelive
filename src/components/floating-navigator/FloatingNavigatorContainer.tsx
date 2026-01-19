@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useSyncExternalStore } from 'react'
 
-import { useORPCUtils } from '@/lib/orpc/react-query'
+import { useORPCUtils } from '@/hooks/react-query'
 import { broadcastTodoSync, subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'

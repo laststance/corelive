@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { useORPCUtils } from '@/lib/orpc/react-query'
+import { useORPCUtils } from '@/hooks/react-query'
 
 import { TodoItem } from './TodoItem'
 import type { Todo } from './TodoItem'
@@ -137,7 +137,7 @@ export function CompletedTodos({
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-1 items-center justify-center p-8">
-          <div className="text-muted-foreground text-center">
+          <div className="text-center text-muted-foreground">
             <p className="text-red-500">An error occurred</p>
           </div>
         </CardContent>
@@ -156,7 +156,7 @@ export function CompletedTodos({
           <CardDescription>Completed tasks will appear here</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-1 items-center justify-center p-8">
-          <div className="text-muted-foreground text-center">
+          <div className="text-center text-muted-foreground">
             <CheckCircle2 className="mx-auto mb-4 h-12 w-12 opacity-50" />
             <p>No completed tasks yet</p>
           </div>
@@ -200,7 +200,7 @@ export function CompletedTodos({
             return (
               <div key={`date-${date}`}>
                 {dateIndex > 0 && <Separator className="mb-3" />}
-                <h3 className="text-muted-foreground mb-3 text-sm font-medium">
+                <h3 className="mb-3 text-sm font-medium text-muted-foreground">
                   {date}
                 </h3>
                 <div className="space-y-3">
@@ -219,7 +219,7 @@ export function CompletedTodos({
 
           {isFetchingNextPage && (
             <div className="flex justify-center p-4">
-              <div className="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"></div>
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
             </div>
           )}
 
@@ -227,7 +227,7 @@ export function CompletedTodos({
           {hasNextPage && <div ref={observerRef} className="h-1"></div>}
 
           {!hasNextPage && allTodos.length > ITEMS_PER_PAGE && (
-            <div className="text-muted-foreground p-4 text-center text-sm">
+            <div className="p-4 text-center text-sm text-muted-foreground">
               All completed tasks loaded
             </div>
           )}
