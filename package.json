@@ -1,6 +1,6 @@
 {
   "name": "corelive",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A comprehensive design system and web application built with Next.js, featuring authentication, database integration, and desktop support",
   "author": "Ryota Murakami <dojce1048@gmail.com> (https://github.com/ryota-murakami)",
   "private": true,
