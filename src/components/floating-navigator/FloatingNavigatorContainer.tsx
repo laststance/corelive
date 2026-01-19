@@ -1,10 +1,11 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useSyncExternalStore } from 'react'
 
 import { useORPCUtils } from '@/hooks/react-query'
-import { broadcastTodoSync, subscribeToTodoSync } from '@/lib/todo-sync-channel'
+import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
 
@@ -103,6 +104,10 @@ export function FloatingNavigatorContainer() {
   const orpc = useORPCUtils()
   const queryClient = useQueryClient()
 
+  // Mutations with optimistic updates
+  const { createMutation, toggleMutation, deleteMutation, updateMutation } =
+    useTodoMutations()
+
   // SSR-safe mount detection using useSyncExternalStore
   const isMounted = useSyncExternalStore(
     mountStore.subscribe,
@@ -121,46 +126,6 @@ export function FloatingNavigatorContainer() {
         completed: false,
         limit: TODO_QUERY_LIMIT,
         offset: TODO_QUERY_OFFSET,
-      },
-    }),
-  )
-
-  // Todo toggle mutation
-  const toggleMutation = useMutation(
-    orpc.todo.toggle.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-    }),
-  )
-
-  // Todo create mutation
-  const createMutation = useMutation(
-    orpc.todo.create.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-    }),
-  )
-
-  // Todo update mutation
-  const updateMutation = useMutation(
-    orpc.todo.update.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-    }),
-  )
-
-  // Todo delete mutation
-  const deleteMutation = useMutation(
-    orpc.todo.delete.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
       },
     }),
   )

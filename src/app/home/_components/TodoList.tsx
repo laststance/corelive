@@ -1,5 +1,5 @@
 'use client'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
 import React, { useEffect } from 'react'
 
@@ -12,7 +12,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useORPCUtils } from '@/hooks/react-query'
-import { broadcastTodoSync, subscribeToTodoSync } from '@/lib/todo-sync-channel'
+import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { AddTodoForm } from './AddTodoForm'
 import { CompletedTodos } from './CompletedTodos'
@@ -34,6 +35,15 @@ export function TodoList() {
   const orpc = useORPCUtils()
   const queryClient = useQueryClient()
 
+  // Mutations with optimistic updates
+  const {
+    createMutation,
+    toggleMutation,
+    deleteMutation,
+    updateMutation,
+    clearCompletedMutation,
+  } = useTodoMutations()
+
   // Fetch pending todos
   const { data: pendingData, isLoading: pendingLoading } = useQuery(
     orpc.todo.list.queryOptions({
@@ -41,60 +51,6 @@ export function TodoList() {
         completed: false,
         limit: TODO_QUERY_LIMIT,
         offset: TODO_QUERY_OFFSET,
-      },
-    }),
-  )
-
-  // Todo creation mutation
-  const createMutation = useMutation(
-    orpc.todo.create.mutationOptions({
-      onSuccess: () => {
-        // Invalidate cache
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-      onError: (error) => {
-        console.error('Failed to create TODO:', error)
-      },
-    }),
-  )
-
-  // Todo completion toggle mutation
-  const toggleMutation = useMutation(
-    orpc.todo.toggle.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-    }),
-  )
-
-  // Todo deletion mutation
-  const deleteMutation = useMutation(
-    orpc.todo.delete.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-    }),
-  )
-
-  // Todo update mutation
-  const updateMutation = useMutation(
-    orpc.todo.update.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
-      },
-    }),
-  )
-
-  // Mutation to delete all completed todos
-  const clearCompletedMutation = useMutation(
-    orpc.todo.clearCompleted.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-        broadcastTodoSync()
       },
     }),
   )
