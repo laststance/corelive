@@ -11,8 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { useORPCUtils } from '@/hooks/react-query'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { AddTodoForm } from './AddTodoForm'
@@ -32,7 +32,6 @@ const DECIMAL_RADIX = 10
  * <TodoList />
  */
 export function TodoList() {
-  const orpc = useORPCUtils()
   const queryClient = useQueryClient()
 
   // Mutations with optimistic updates
@@ -156,7 +155,7 @@ export function TodoList() {
     return subscribeToTodoSync(() => {
       queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
     })
-  }, [queryClient, orpc])
+  }, [queryClient])
 
   // Listen for Electron IPC events to sync todos when they're created/updated/deleted from other windows
   useEffect(() => {
@@ -190,7 +189,7 @@ export function TodoList() {
       if (typeof cleanupUpdated === 'function') cleanupUpdated()
       if (typeof cleanupDeleted === 'function') cleanupDeleted()
     }
-  }, [queryClient, orpc])
+  }, [queryClient])
 
   if (pendingLoading) {
     return (

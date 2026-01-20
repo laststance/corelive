@@ -3,8 +3,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useSyncExternalStore } from 'react'
 
-import { useORPCUtils } from '@/hooks/react-query'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
@@ -101,7 +101,6 @@ const mountStore = createMountStore()
  * <FloatingNavigatorContainer />
  */
 export function FloatingNavigatorContainer() {
-  const orpc = useORPCUtils()
   const queryClient = useQueryClient()
 
   // Mutations with optimistic updates
@@ -200,7 +199,7 @@ export function FloatingNavigatorContainer() {
     return subscribeToTodoSync(() => {
       queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
     })
-  }, [queryClient, orpc])
+  }, [queryClient])
 
   // Show message if not in Electron floating navigator
   if (!isFloatingNavigator) {

@@ -3,9 +3,8 @@
 import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
 
+import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 import { log } from '../logger'
-
-import { isElectronEnvironment } from './electron-client'
 
 /**
  * Component that synchronizes Clerk authentication state with Electron.

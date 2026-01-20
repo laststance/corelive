@@ -2,10 +2,10 @@ import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
 import '@/globals.css'
 
-import { ORPCProvider } from '@/hooks/react-query'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ReduxProvider } from '@/lib/redux/providers'
 import { cn } from '@/lib/utils'
+import { QueryClientProvider } from '@/providers/QueryClientProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
 export const metadata: Metadata = {
@@ -30,11 +30,11 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
             defaultTheme="light"
             disableTransitionOnChange
           >
-            <ORPCProvider>
+            <QueryClientProvider>
               <ReduxProvider>
                 <ElectronAuthProvider>{children}</ElectronAuthProvider>
               </ReduxProvider>
-            </ORPCProvider>
+            </QueryClientProvider>
           </ThemeProvider>
         </body>
       </html>
