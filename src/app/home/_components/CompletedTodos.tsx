@@ -166,7 +166,7 @@ export function CompletedTodos({
 
   return (
     <Card className="flex h-full flex-col">
-      <CardHeader className="flex-shrink-0">
+      <CardHeader className="shrink-0">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5" />
