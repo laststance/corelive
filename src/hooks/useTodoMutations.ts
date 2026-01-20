@@ -3,9 +3,8 @@
 import type { InfiniteData } from '@tanstack/react-query'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
-
-import { useORPCUtils } from './react-query'
 
 /**
  * Todo item structure from server.
@@ -57,7 +56,6 @@ const COMPLETED_INPUT = { completed: true, limit: 10, offset: 0 } as const
  * toggleMutation.mutate({ id: 42 })
  */
 export function useTodoMutations() {
-  const orpc = useORPCUtils()
   const queryClient = useQueryClient()
 
   // Query keys for cache operations

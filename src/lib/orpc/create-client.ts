@@ -6,7 +6,13 @@ import type { AppRouter } from '@/server/router'
 
 import { log } from '../logger'
 
-// Mock client creation function for development environment
+/**
+ * Creates an RPCLink for client-side oRPC requests with Clerk authentication.
+ * This link automatically attaches the user's Clerk session ID as a Bearer token.
+ *
+ * @returns RPCLink configured for the current origin's /api/orpc endpoint
+ * @throws Error if called on the server side (SSR)
+ */
 export function createLink() {
   return new RPCLink({
     url: () => {
@@ -60,7 +66,12 @@ export function createLink() {
   })
 }
 
-// Create client
+/**
+ * Creates a type-safe oRPC client for client-side usage.
+ * Uses Clerk authentication via RPCLink headers.
+ *
+ * @returns RouterClient instance typed to AppRouter
+ */
 export const createClient = (): RouterClient<AppRouter> => {
   return createORPCClient(createLink())
 }

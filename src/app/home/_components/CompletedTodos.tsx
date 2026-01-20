@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { useORPCUtils } from '@/hooks/react-query'
+import { orpc } from '@/lib/orpc/client-query'
 
 import { TodoItem } from './TodoItem'
 import type { Todo } from './TodoItem'
@@ -32,7 +32,6 @@ export function CompletedTodos({
   onDelete,
   onClearCompleted,
 }: CompletedTodosProps) {
-  const orpc = useORPCUtils()
   const observerRef = useRef<HTMLDivElement>(null)
 
   // Infinite scroll query

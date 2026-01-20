@@ -4,7 +4,8 @@ import { useUser } from '@clerk/nextjs'
 import { useCallback, useEffect, useReducer, useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { isElectronEnvironment } from '@/lib/orpc/electron-client'
+
+import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 
 type OAuthState = {
   isLoading: string | null

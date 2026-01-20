@@ -8,7 +8,8 @@ import { useCallback, useReducer, useState, useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { isElectronEnvironment } from '@/lib/orpc/electron-client'
+
+import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 
 type FormState = {
   email: string
