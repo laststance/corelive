@@ -43,7 +43,7 @@ export function TodoItem({
   }
 
   return (
-    <div className="bg-card rounded-lg border transition-shadow hover:shadow-sm">
+    <div className="rounded-lg border bg-card transition-shadow hover:shadow-sm">
       <div className="flex items-center gap-3 p-4">
         <Checkbox
           checked={todo.completed}
@@ -61,7 +61,7 @@ export function TodoItem({
           >
             {todo.text}
           </div>
-          <p className="text-muted-foreground mt-1 text-xs">
+          <p className="mt-1 text-xs text-muted-foreground">
             {todo.createdAt.toLocaleDateString('en-US')}
           </p>
         </div>
@@ -92,7 +92,7 @@ export function TodoItem({
             variant="ghost"
             size="sm"
             onClick={() => onDelete(todo.id)}
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="hover:bg-destructive/10 text-destructive hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
             <span className="sr-only">Delete</span>
@@ -107,7 +107,7 @@ export function TodoItem({
                 placeholder="Add notes..."
                 value={notes}
                 onChange={(e) => handleNotesChange(e.target.value)}
-                className="min-h-[80px] resize-none"
+                className="min-h-20 resize-none"
               />
             </div>
           </CollapsibleContent>
