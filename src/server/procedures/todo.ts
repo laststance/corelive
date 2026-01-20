@@ -46,7 +46,6 @@ export const listTodos = authMiddleware
         nextOffset: hasMore ? offset + limit : undefined,
       }
     } catch (error) {
-      // TODO: Use Logger Library
       log.error('Error in listTodos:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch todos',
