@@ -32,9 +32,6 @@ interface TodoResponse {
 /** Query input for pending todos list. */
 const PENDING_INPUT = { completed: false, limit: 100, offset: 0 } as const
 
-/** Query input for completed todos list (infinite query). */
-const COMPLETED_INPUT = { completed: true, limit: 10, offset: 0 } as const
-
 /**
  * Custom hook providing TODO mutations with optimistic updates.
  *
@@ -59,10 +56,14 @@ export function useTodoMutations() {
   const queryClient = useQueryClient()
 
   // Query keys for cache operations
-  const baseKey = orpc.todo.key()
-  const pendingKey = orpc.todo.list.key({ input: PENDING_INPUT })
-  const completedInfiniteKey = orpc.todo.list.key({ input: COMPLETED_INPUT })
-
+  // - pendingKey: exact match for useQuery in TodoList
+  // - completedBaseKey: partial match for useInfiniteQuery in CompletedTodos
+  //   (infiniteOptions with function input generates unpredictable keys,
+  //    so we use partial matching for completed list operations)
+  const pendingKey = orpc.todo.list.queryOptions({
+    input: PENDING_INPUT,
+  }).queryKey
+  const completedBaseKey = orpc.todo.list.key({ input: { completed: true } })
   // ============================================
   // CREATE MUTATION - Optimistic add to pending
   // ============================================
@@ -70,7 +71,7 @@ export function useTodoMutations() {
     ...orpc.todo.create.mutationOptions({}),
     onMutate: async (newTodo) => {
       // 1. Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: baseKey })
+      await queryClient.cancelQueries({ queryKey: pendingKey })
 
       // 2. Snapshot previous value
       const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
@@ -106,7 +107,7 @@ export function useTodoMutations() {
     },
     onSettled: () => {
       // Always refetch to sync with server
-      queryClient.invalidateQueries({ queryKey: baseKey })
+      queryClient.invalidateQueries({ queryKey: pendingKey })
       broadcastTodoSync()
     },
   })
@@ -117,13 +118,14 @@ export function useTodoMutations() {
   const toggleMutation = useMutation({
     ...orpc.todo.toggle.mutationOptions({}),
     onMutate: async ({ id }) => {
-      await queryClient.cancelQueries({ queryKey: baseKey })
+      await queryClient.cancelQueries({ queryKey: pendingKey })
+      await queryClient.cancelQueries({ queryKey: completedBaseKey })
 
       const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
-      const previousCompleted =
-        queryClient.getQueryData<InfiniteData<TodoResponse>>(
-          completedInfiniteKey,
-        )
+      // Get all completed queries (partial match) for snapshot
+      const previousCompletedQueries = queryClient.getQueriesData<
+        InfiniteData<TodoResponse>
+      >({ queryKey: completedBaseKey })
 
       // Find todo in pending list
       const todoInPending = previousPending?.todos.find((t) => t.id === id)
@@ -139,16 +141,16 @@ export function useTodoMutations() {
           }
         })
 
-        // Add to first page of completed (infinite query)
-        queryClient.setQueryData<InfiniteData<TodoResponse>>(
-          completedInfiniteKey,
+        // Add to first page of all completed queries (partial match)
+        const toggledTodo = {
+          ...todoInPending,
+          completed: true,
+          updatedAt: new Date(),
+        }
+        queryClient.setQueriesData<InfiniteData<TodoResponse>>(
+          { queryKey: completedBaseKey },
           (old) => {
             if (!old || !old.pages[0]) return old
-            const toggledTodo = {
-              ...todoInPending,
-              completed: true,
-              updatedAt: new Date(),
-            }
             return {
               ...old,
               pages: [
@@ -163,17 +165,24 @@ export function useTodoMutations() {
           },
         )
       } else {
-        // Moving: completed → pending (find in infinite query)
+        // Moving: completed → pending (find in any completed query)
         let todoInCompleted: Todo | undefined
-        previousCompleted?.pages.forEach((page) => {
-          const found = page.todos.find((t) => t.id === id)
-          if (found) todoInCompleted = found
-        })
+        for (const [, data] of previousCompletedQueries) {
+          if (!data) continue
+          for (const page of data.pages) {
+            const found = page.todos.find((t) => t.id === id)
+            if (found) {
+              todoInCompleted = found
+              break
+            }
+          }
+          if (todoInCompleted) break
+        }
 
         if (todoInCompleted) {
-          // Remove from completed
-          queryClient.setQueryData<InfiniteData<TodoResponse>>(
-            completedInfiniteKey,
+          // Remove from all completed queries
+          queryClient.setQueriesData<InfiniteData<TodoResponse>>(
+            { queryKey: completedBaseKey },
             (old) => {
               if (!old) return old
               return {
@@ -190,35 +199,38 @@ export function useTodoMutations() {
           // Add to pending
           queryClient.setQueryData<TodoResponse>(pendingKey, (old) => {
             if (!old) return old
-            const toggledTodo = {
+            const toggledTodoToPending = {
               ...todoInCompleted!,
               completed: false,
               updatedAt: new Date(),
             }
             return {
               ...old,
-              todos: [toggledTodo, ...old.todos],
+              todos: [toggledTodoToPending, ...old.todos],
               total: old.total + 1,
             }
           })
         }
       }
 
-      return { previousPending, previousCompleted }
+      return { previousPending, previousCompletedQueries }
     },
     onError: (_err, _input, context) => {
       if (context?.previousPending) {
         queryClient.setQueryData(pendingKey, context.previousPending)
       }
-      if (context?.previousCompleted) {
-        queryClient.setQueryData(
-          completedInfiniteKey,
-          context.previousCompleted,
-        )
+      // Restore all completed queries from snapshot
+      if (context?.previousCompletedQueries) {
+        for (const [queryKey, data] of context.previousCompletedQueries) {
+          if (data) {
+            queryClient.setQueryData(queryKey, data)
+          }
+        }
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: baseKey })
+      queryClient.invalidateQueries({ queryKey: pendingKey })
+      queryClient.invalidateQueries({ queryKey: completedBaseKey })
       broadcastTodoSync()
     },
   })
@@ -229,13 +241,13 @@ export function useTodoMutations() {
   const deleteMutation = useMutation({
     ...orpc.todo.delete.mutationOptions({}),
     onMutate: async ({ id }) => {
-      await queryClient.cancelQueries({ queryKey: baseKey })
+      await queryClient.cancelQueries({ queryKey: pendingKey })
+      await queryClient.cancelQueries({ queryKey: completedBaseKey })
 
       const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
-      const previousCompleted =
-        queryClient.getQueryData<InfiniteData<TodoResponse>>(
-          completedInfiniteKey,
-        )
+      const previousCompletedQueries = queryClient.getQueriesData<
+        InfiniteData<TodoResponse>
+      >({ queryKey: completedBaseKey })
 
       // Try removing from pending
       const isInPending = previousPending?.todos.some((t) => t.id === id)
@@ -249,9 +261,9 @@ export function useTodoMutations() {
           }
         })
       } else {
-        // Remove from completed (infinite query)
-        queryClient.setQueryData<InfiniteData<TodoResponse>>(
-          completedInfiniteKey,
+        // Remove from all completed queries (partial match)
+        queryClient.setQueriesData<InfiniteData<TodoResponse>>(
+          { queryKey: completedBaseKey },
           (old) => {
             if (!old) return old
             return {
@@ -266,21 +278,23 @@ export function useTodoMutations() {
         )
       }
 
-      return { previousPending, previousCompleted }
+      return { previousPending, previousCompletedQueries }
     },
     onError: (_err, _input, context) => {
       if (context?.previousPending) {
         queryClient.setQueryData(pendingKey, context.previousPending)
       }
-      if (context?.previousCompleted) {
-        queryClient.setQueryData(
-          completedInfiniteKey,
-          context.previousCompleted,
-        )
+      if (context?.previousCompletedQueries) {
+        for (const [queryKey, data] of context.previousCompletedQueries) {
+          if (data) {
+            queryClient.setQueryData(queryKey, data)
+          }
+        }
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: baseKey })
+      queryClient.invalidateQueries({ queryKey: pendingKey })
+      queryClient.invalidateQueries({ queryKey: completedBaseKey })
       broadcastTodoSync()
     },
   })
@@ -291,13 +305,13 @@ export function useTodoMutations() {
   const updateMutation = useMutation({
     ...orpc.todo.update.mutationOptions({}),
     onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: baseKey })
+      await queryClient.cancelQueries({ queryKey: pendingKey })
+      await queryClient.cancelQueries({ queryKey: completedBaseKey })
 
       const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
-      const previousCompleted =
-        queryClient.getQueryData<InfiniteData<TodoResponse>>(
-          completedInfiniteKey,
-        )
+      const previousCompletedQueries = queryClient.getQueriesData<
+        InfiniteData<TodoResponse>
+      >({ queryKey: completedBaseKey })
 
       // Update in pending list
       queryClient.setQueryData<TodoResponse>(pendingKey, (old) => {
@@ -310,9 +324,9 @@ export function useTodoMutations() {
         }
       })
 
-      // Update in completed list (infinite query)
-      queryClient.setQueryData<InfiniteData<TodoResponse>>(
-        completedInfiniteKey,
+      // Update in all completed queries (partial match)
+      queryClient.setQueriesData<InfiniteData<TodoResponse>>(
+        { queryKey: completedBaseKey },
         (old) => {
           if (!old) return old
           return {
@@ -327,21 +341,23 @@ export function useTodoMutations() {
         },
       )
 
-      return { previousPending, previousCompleted }
+      return { previousPending, previousCompletedQueries }
     },
     onError: (_err, _input, context) => {
       if (context?.previousPending) {
         queryClient.setQueryData(pendingKey, context.previousPending)
       }
-      if (context?.previousCompleted) {
-        queryClient.setQueryData(
-          completedInfiniteKey,
-          context.previousCompleted,
-        )
+      if (context?.previousCompletedQueries) {
+        for (const [queryKey, data] of context.previousCompletedQueries) {
+          if (data) {
+            queryClient.setQueryData(queryKey, data)
+          }
+        }
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: baseKey })
+      queryClient.invalidateQueries({ queryKey: pendingKey })
+      queryClient.invalidateQueries({ queryKey: completedBaseKey })
       broadcastTodoSync()
     },
   })
@@ -352,34 +368,36 @@ export function useTodoMutations() {
   const clearCompletedMutation = useMutation({
     ...orpc.todo.clearCompleted.mutationOptions({}),
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: baseKey })
+      await queryClient.cancelQueries({ queryKey: pendingKey })
+      await queryClient.cancelQueries({ queryKey: completedBaseKey })
 
-      const previousCompleted =
-        queryClient.getQueryData<InfiniteData<TodoResponse>>(
-          completedInfiniteKey,
-        )
+      const previousCompletedQueries = queryClient.getQueriesData<
+        InfiniteData<TodoResponse>
+      >({ queryKey: completedBaseKey })
 
-      // Clear all pages
-      queryClient.setQueryData<InfiniteData<TodoResponse>>(
-        completedInfiniteKey,
+      // Clear all completed queries (partial match)
+      queryClient.setQueriesData<InfiniteData<TodoResponse>>(
+        { queryKey: completedBaseKey },
         () => ({
           pages: [{ todos: [], total: 0, hasMore: false }],
           pageParams: [0],
         }),
       )
 
-      return { previousCompleted }
+      return { previousCompletedQueries }
     },
     onError: (_err, _input, context) => {
-      if (context?.previousCompleted) {
-        queryClient.setQueryData(
-          completedInfiniteKey,
-          context.previousCompleted,
-        )
+      if (context?.previousCompletedQueries) {
+        for (const [queryKey, data] of context.previousCompletedQueries) {
+          if (data) {
+            queryClient.setQueryData(queryKey, data)
+          }
+        }
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: baseKey })
+      queryClient.invalidateQueries({ queryKey: pendingKey })
+      queryClient.invalidateQueries({ queryKey: completedBaseKey })
       broadcastTodoSync()
     },
   })

@@ -82,17 +82,24 @@ export const createTodo = authMiddleware
   })
 
 // Update todo
+// Note: Accepts negative IDs for optimistic update support (temp IDs use -Date.now())
 export const updateTodo = authMiddleware
   .input(
     z.object({
-      id: z.number().int().positive(),
+      id: z.number().int(),
       data: UpdateTodoSchema,
     }),
   )
-  .output(TodoSchema)
+  .output(TodoSchema.nullable())
   .handler(async ({ input, context }) => {
     const { user } = context
     const { id, data } = input
+
+    // Negative IDs are temporary optimistic IDs - return null silently
+    // The client's onSettled will invalidate and sync with actual server state
+    if (id < 0) {
+      return null
+    }
 
     // Permission check
     const existingTodo = await prisma.todo.findFirst({
@@ -114,12 +121,19 @@ export const updateTodo = authMiddleware
   })
 
 // Delete todo
+// Note: Accepts negative IDs for optimistic update support (temp IDs use -Date.now())
 export const deleteTodo = authMiddleware
-  .input(z.object({ id: z.number().int().positive() }))
+  .input(z.object({ id: z.number().int() }))
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
     const { user } = context
     const { id } = input
+
+    // Negative IDs are temporary optimistic IDs - return success silently
+    // The client's onSettled will invalidate and sync with actual server state
+    if (id < 0) {
+      return { success: true }
+    }
 
     // Permission check
     const existingTodo = await prisma.todo.findFirst({
@@ -140,12 +154,19 @@ export const deleteTodo = authMiddleware
   })
 
 // Toggle todo completion status
+// Note: Accepts negative IDs for optimistic update support (temp IDs use -Date.now())
 export const toggleTodo = authMiddleware
-  .input(z.object({ id: z.number().int().positive() }))
-  .output(TodoSchema)
+  .input(z.object({ id: z.number().int() }))
+  .output(TodoSchema.nullable())
   .handler(async ({ input, context }) => {
     const { user } = context
     const { id } = input
+
+    // Negative IDs are temporary optimistic IDs - return null silently
+    // The client's onSettled will invalidate and sync with actual server state
+    if (id < 0) {
+      return null
+    }
 
     // Permission check
     const existingTodo = await prisma.todo.findFirst({

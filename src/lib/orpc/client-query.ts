@@ -1,4 +1,4 @@
-import { createORPCReactQueryUtils } from '@orpc/react-query'
+import { createTanstackQueryUtils } from '@orpc/tanstack-query'
 
 import { createClient } from './create-client'
 
@@ -18,4 +18,4 @@ const client = createClient()
  * const mutation = useMutation(orpc.todo.create.mutationOptions())
  * ```
  */
-export const orpc = createORPCReactQueryUtils(client)
+export const orpc = createTanstackQueryUtils(client)

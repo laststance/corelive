@@ -26,6 +26,9 @@ importers:
       '@orpc/server':
         specifier: ^1.13.4
         version: 1.13.4(ws@8.19.0)
+      '@orpc/tanstack-query':
+        specifier: ^1.13.4
+        version: 1.13.4(@orpc/client@1.13.4)(@tanstack/query-core@5.90.19)
       '@prisma/adapter-pg':
         specifier: ^7.2.0
         version: 7.2.0

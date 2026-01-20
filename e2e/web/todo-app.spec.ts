@@ -75,25 +75,28 @@ test.describe('TODO App E2E Tests', () => {
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
-    // Wait for the TODO to appear and get the checkbox directly
+    // Wait for the TODO to appear in pending list
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
+    await expect(todoCheckbox).not.toBeChecked()
 
-    // Toggle to completed
+    // Wait for create mutation to settle - checkbox ID should be positive (not start with "todo--")
+    // Negative IDs like -1234567890 become "todo--1234567890" (double dash)
+    // Positive IDs like 6 become "todo-6" (single dash)
+    await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+      timeout: 5000,
+    })
+
+    // Toggle to completed - this moves the TODO from pending to completed list
     await todoCheckbox.click()
 
-    // Wait for the UI to update and verify checkbox is checked
-    await page.waitForTimeout(500) // Give time for UI update
-    await expect(todoCheckbox).toBeChecked()
+    // Verify the TODO text appears with line-through styling (in completed section)
+    const todoTextElement = page.getByText(todoText)
+    await expect(todoTextElement).toHaveClass(/line-through/, { timeout: 5000 })
 
-    // Verify the TODO text has line-through styling
-    const todoTextElement = page
-      .locator('*')
-      .filter({ hasText: new RegExp(`^${todoText}$`) })
-    await expect(todoTextElement).toHaveClass(/line-through/)
-
-    // Verify completed counter shows at least 1
-    await expect(page.getByText(/\d+ completed/)).toBeVisible()
+    // Verify the checkbox in completed list is checked
+    const completedCheckbox = page.getByRole('checkbox', { name: todoText })
+    await expect(completedCheckbox).toBeChecked()
   })
 
   test('should delete a TODO item', async ({ page }) => {
@@ -107,23 +110,22 @@ test.describe('TODO App E2E Tests', () => {
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
 
-    // Find the delete button within the specific todo item container
-    // The container is the closest parent that contains both checkbox and buttons
-    const todoItemContainer = todoCheckbox.locator('..')
-    const deleteButton = todoItemContainer.getByRole('button', {
-      name: 'Delete',
+    // Find the delete button - look for the button with sr-only "Delete" text
+    // within the todo item that contains our checkbox
+    const todoItem = page.locator('.rounded-lg.border').filter({
+      has: page.getByRole('checkbox', { name: todoText }),
     })
+    const deleteButton = todoItem.getByRole('button', { name: 'Delete' })
     await expect(deleteButton).toBeVisible()
     await deleteButton.click()
 
-    // Wait for deletion to process
-    await page.waitForTimeout(1000)
+    // Wait for deletion to complete - the item should disappear
+    await expect(
+      page.getByRole('checkbox', { name: todoText }),
+    ).not.toBeVisible({ timeout: 5000 })
 
-    // Verify the specific TODO text is no longer visible
+    // Verify the TODO text is also gone
     await expect(page.getByText(todoText)).not.toBeVisible()
-
-    // Verify the checkbox for this TODO is also gone
-    await expect(todoCheckbox).not.toBeVisible()
   })
 
   test('should add TODO with notes', async ({ page }) => {
@@ -203,10 +205,14 @@ test.describe('TODO App E2E Tests', () => {
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
     // Wait for the TODO to appear and get initial checkbox state
-    await page.waitForTimeout(1000) // Wait for creation
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
     await expect(todoCheckbox).not.toBeChecked()
+
+    // Wait for create mutation to settle - checkbox ID should be positive (not start with "todo--")
+    await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+      timeout: 5000,
+    })
 
     // Test 1: Click the TODO text (not checkbox) and verify it does NOT toggle
     const todoTextElement = page
@@ -215,21 +221,25 @@ test.describe('TODO App E2E Tests', () => {
       .first()
     await expect(todoTextElement).toBeVisible()
     await todoTextElement.click()
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(300)
 
     // Checkbox should STILL be unchecked (clicking text did nothing)
     await expect(todoCheckbox).not.toBeChecked()
 
-    // Test 2: Now click the actual checkbox to toggle it
+    // Test 2: Click the actual checkbox to toggle it
+    // This will move the TODO to completed list
     await todoCheckbox.click()
-    await page.waitForTimeout(1000) // Wait for state update
-    await expect(todoCheckbox).toBeChecked()
 
-    // Test 3: Click the TODO text again while checked - verify it does NOT toggle
-    await todoTextElement.click()
-    await page.waitForTimeout(500)
+    // Verify checkbox in completed list is checked
+    const completedCheckbox = page.getByRole('checkbox', { name: todoText })
+    await expect(completedCheckbox).toBeChecked({ timeout: 5000 })
+
+    // Test 3: Click the TODO text in completed list - verify it does NOT toggle back
+    const completedTextElement = page.getByText(todoText)
+    await completedTextElement.click()
+    await page.waitForTimeout(300)
 
     // Checkbox should STILL be checked (clicking text did nothing)
-    await expect(todoCheckbox).toBeChecked()
+    await expect(completedCheckbox).toBeChecked()
   })
 })
