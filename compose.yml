@@ -26,6 +26,26 @@ services:
     networks:
       - corelive-network
 
+  # Sidecar container to simulate production network latency (5 seconds delay)
+  # Uses Linux Traffic Control (tc) with netem to add delay to PostgreSQL network
+  network-delay:
+    image: alpine:latest
+    container_name: corelive-network-delay
+    network_mode: 'service:postgres'
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "
+        apk add --no-cache iproute2 &&
+        tc qdisc add dev eth0 root netem delay 100ms &&
+        echo '✅ Network delay of 100ms applied to PostgreSQL' &&
+        sleep infinity
+      "
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
