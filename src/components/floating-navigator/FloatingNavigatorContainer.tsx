@@ -14,47 +14,7 @@ const TODO_QUERY_LIMIT = 100
 const TODO_QUERY_OFFSET = 0
 const DECIMAL_RADIX = 10
 
-/**
- * Window interface for Electron floating navigator window controls.
- *
- * In WebView architecture, data operations use oRPC (same as web).
- * This interface only exposes window controls via Electron IPC.
- */
-declare global {
-  interface Window {
-    floatingNavigatorAPI?: {
-      window: {
-        close(): Promise<void>
-        minimize(): Promise<void>
-        toggleAlwaysOnTop(): Promise<boolean>
-        focusMainWindow(): Promise<void>
-        getBounds(): Promise<{
-          x: number
-          y: number
-          width: number
-          height: number
-        } | null>
-        setBounds(bounds: {
-          x?: number
-          y?: number
-          width?: number
-          height?: number
-        }): Promise<void>
-        isAlwaysOnTop(): Promise<boolean>
-      }
-      on(channel: string, callback: (...args: unknown[]) => void): () => void
-      removeListener(
-        channel: string,
-        callback: (...args: unknown[]) => void,
-      ): void
-    }
-    floatingNavigatorEnv?: {
-      isElectron: boolean
-      isFloatingNavigator: boolean
-      platform: string
-    }
-  }
-}
+// Types are declared in electron/types/electron-api.d.ts
 
 /**
  * FloatingNavigatorContainer - Container component for Floating Navigator.
