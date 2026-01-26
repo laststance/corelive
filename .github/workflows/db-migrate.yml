@@ -69,7 +69,9 @@ jobs:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
         run: |
           echo "📋 Checking pending migrations..."
-          pnpm prisma:status
+          # Note: prisma migrate status exits with code 1 if there are pending migrations
+          # This is expected before deployment, so we ignore the exit code here
+          pnpm prisma:status || true
 
       - name: Deploy migrations
         if: ${{ github.event.inputs.dry_run != 'true' }}
