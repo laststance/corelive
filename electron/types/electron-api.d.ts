@@ -474,6 +474,59 @@ export interface ElectronEnv {
   }
 }
 
+/**
+ * Floating Navigator API exposed via contextBridge in preload-floating.ts.
+ * Provides window control APIs for the floating navigator window.
+ */
+export interface FloatingNavigatorAPI {
+  /** Window control operations */
+  window: {
+    /** Close floating navigator window */
+    close: () => Promise<void>
+    /** Minimize floating navigator window */
+    minimize: () => Promise<void>
+    /** Toggle always on top behavior */
+    toggleAlwaysOnTop: () => Promise<boolean>
+    /** Focus main application window */
+    focusMainWindow: () => Promise<void>
+    /** Get current window bounds */
+    getBounds: () => Promise<{
+      x: number
+      y: number
+      width: number
+      height: number
+    } | null>
+    /** Set window bounds */
+    setBounds: (bounds: {
+      x?: number
+      y?: number
+      width?: number
+      height?: number
+    }) => Promise<void>
+    /** Check if window is always on top */
+    isAlwaysOnTop: () => Promise<boolean>
+  }
+  /** Subscribe to IPC events */
+  on: (channel: string, callback: (...args: unknown[]) => void) => () => void
+  /** @deprecated Use the cleanup function returned by `on()` instead */
+  removeListener: (
+    channel: string,
+    callback: (...args: unknown[]) => void,
+  ) => void
+}
+
+/**
+ * Floating Navigator environment information exposed via preload-floating.ts.
+ */
+export interface FloatingNavigatorEnv {
+  /** Whether running in Electron */
+  isElectron: boolean
+  /** Whether this is the floating navigator window */
+  isFloatingNavigator: boolean
+  /** Platform identifier */
+  platform: string
+}
+
 // ============================================================================
 // Global Window Augmentation
 // ============================================================================
@@ -491,6 +544,18 @@ declare global {
      * Only available when running in Electron environment.
      */
     electronEnv?: ElectronEnv
+
+    /**
+     * Floating Navigator API exposed via contextBridge.
+     * Only available when running in floating navigator window.
+     */
+    floatingNavigatorAPI?: FloatingNavigatorAPI
+
+    /**
+     * Floating Navigator environment information.
+     * Only available when running in floating navigator window.
+     */
+    floatingNavigatorEnv?: FloatingNavigatorEnv
   }
 }
 
