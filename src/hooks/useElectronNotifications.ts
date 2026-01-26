@@ -173,40 +173,6 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
     loadNotificationStatus()
   }, [loadNotificationStatus])
 
-  // Set up event listeners for notification updates
-  useEffect(() => {
-    if (!isElectron || !window.electronAPI?.on) return
-
-    // Listen for todo events to update active count
-    const handleTodoCreated = async () => refreshActiveCount()
-    const handleTodoUpdated = async () => refreshActiveCount()
-    const handleTodoDeleted = async () => refreshActiveCount()
-
-    const cleanupCreated = window.electronAPI.on(
-      'todo-created',
-      handleTodoCreated,
-    )
-    const cleanupUpdated = window.electronAPI.on(
-      'todo-updated',
-      handleTodoUpdated,
-    )
-    const cleanupDeleted = window.electronAPI.on(
-      'todo-deleted',
-      handleTodoDeleted,
-    )
-
-    return () => {
-      // Event cleanup functions may not exist in all implementations
-      try {
-        if (typeof cleanupCreated === 'function') cleanupCreated()
-        if (typeof cleanupUpdated === 'function') cleanupUpdated()
-        if (typeof cleanupDeleted === 'function') cleanupDeleted()
-      } catch (error) {
-        log.warn('Error cleaning up event listeners:', error)
-      }
-    }
-  }, [isElectron, refreshActiveCount])
-
   return {
     isSupported,
     isEnabled,

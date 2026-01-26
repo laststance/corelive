@@ -573,9 +573,9 @@ describe('Floating Navigator Integration Tests', () => {
   describe('Event Listener Integration', () => {
     it('should set up event listeners correctly', () => {
       const mockEventHandlers = {
-        'todo-updated': vi.fn(),
-        'todo-created': vi.fn(),
-        'todo-deleted': vi.fn(),
+        'window-focus': vi.fn(),
+        'window-blur': vi.fn(),
+        'auth-state-changed': vi.fn(),
       }
 
       // Simulate setting up event listeners
@@ -594,16 +594,16 @@ describe('Floating Navigator Integration Tests', () => {
 
       expect(mockFloatingNavigatorAPI.on).toHaveBeenCalledTimes(3)
       expect(mockFloatingNavigatorAPI.on).toHaveBeenCalledWith(
-        'todo-updated',
-        mockEventHandlers['todo-updated'],
+        'window-focus',
+        mockEventHandlers['window-focus'],
       )
       expect(mockFloatingNavigatorAPI.on).toHaveBeenCalledWith(
-        'todo-created',
-        mockEventHandlers['todo-created'],
+        'window-blur',
+        mockEventHandlers['window-blur'],
       )
       expect(mockFloatingNavigatorAPI.on).toHaveBeenCalledWith(
-        'todo-deleted',
-        mockEventHandlers['todo-deleted'],
+        'auth-state-changed',
+        mockEventHandlers['auth-state-changed'],
       )
       expect(cleanupFunctions).toHaveLength(3)
     })
@@ -614,7 +614,7 @@ describe('Floating Navigator Integration Tests', () => {
 
       // Simulate event listener cleanup
       const setupAndCleanupEventListener = () => {
-        const cleanup = mockFloatingNavigatorAPI.on('todo-updated', vi.fn())
+        const cleanup = mockFloatingNavigatorAPI.on('window-focus', vi.fn())
 
         // Simulate component unmount
         if (cleanup) {

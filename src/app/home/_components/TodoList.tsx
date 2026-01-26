@@ -230,40 +230,6 @@ export function TodoList() {
     })
   }, [queryClient])
 
-  // Listen for Electron IPC events to sync todos when they're created/updated/deleted from other windows
-  useEffect(() => {
-    // Only set up listeners in Electron environment
-    if (typeof window === 'undefined' || !window.electronAPI?.on) {
-      return
-    }
-
-    // Handler to invalidate React Query cache when todos change
-    const handleTodoChange = () => {
-      queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
-    }
-
-    // Set up event listeners for todo operations
-    const cleanupCreated = window.electronAPI.on(
-      'todo-created',
-      handleTodoChange,
-    )
-    const cleanupUpdated = window.electronAPI.on(
-      'todo-updated',
-      handleTodoChange,
-    )
-    const cleanupDeleted = window.electronAPI.on(
-      'todo-deleted',
-      handleTodoChange,
-    )
-
-    // Return cleanup function to remove listeners
-    return () => {
-      if (typeof cleanupCreated === 'function') cleanupCreated()
-      if (typeof cleanupUpdated === 'function') cleanupUpdated()
-      if (typeof cleanupDeleted === 'function') cleanupDeleted()
-    }
-  }, [queryClient])
-
   // Show loading during initial query OR while persister restores cached data
   // This ensures server-rendered HTML matches client hydration (prevents hydration error)
   if (pendingLoading || isRestoring) {

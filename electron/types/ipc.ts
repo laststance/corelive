@@ -619,11 +619,6 @@ export interface IPCEventChannels {
   'shortcut-new-task': void
   'shortcut-search': void
 
-  // Todo sync events (for cross-tab/window synchronization)
-  'todo-created': unknown
-  'todo-updated': unknown
-  'todo-deleted': unknown
-
   // Menu events
   'menu-action': { action: string; filePath?: string }
 

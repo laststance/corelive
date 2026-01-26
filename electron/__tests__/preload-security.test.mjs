@@ -425,8 +425,7 @@ describe('Preload Script Security Tests', () => {
   describe('Event Listener Security', () => {
     it('should validate event channels before adding listeners', () => {
       const ALLOWED_CHANNELS = {
-        'todo-updated': true,
-        'todo-created': true,
+        'auth-state-changed': true,
         'window-focus': true,
         'window-blur': true,
       }
@@ -447,7 +446,7 @@ describe('Preload Script Security Tests', () => {
       }
 
       // Test allowed channels
-      expect(secureEventListener('todo-updated', vi.fn())).toBe(true)
+      expect(secureEventListener('auth-state-changed', vi.fn())).toBe(true)
       expect(secureEventListener('window-focus', vi.fn())).toBe(true)
 
       // Test disallowed channels
@@ -455,8 +454,10 @@ describe('Preload Script Security Tests', () => {
       expect(secureEventListener('file-system-event', vi.fn())).toBe(false)
 
       // Test invalid callback
-      expect(secureEventListener('todo-updated', 'not-a-function')).toBe(false)
-      expect(secureEventListener('todo-updated', null)).toBe(false)
+      expect(secureEventListener('auth-state-changed', 'not-a-function')).toBe(
+        false,
+      )
+      expect(secureEventListener('auth-state-changed', null)).toBe(false)
     })
 
     it('should sanitize event data in callbacks', () => {
@@ -491,7 +492,7 @@ describe('Preload Script Security Tests', () => {
       const eventListeners = new Map()
 
       const secureOn = (channel, callback) => {
-        const ALLOWED_CHANNELS = { 'todo-updated': true }
+        const ALLOWED_CHANNELS = { 'window-focus': true }
 
         if (!ALLOWED_CHANNELS[channel]) {
           return null
@@ -520,14 +521,14 @@ describe('Preload Script Security Tests', () => {
       }
 
       const callback = vi.fn()
-      const cleanup = secureOn('todo-updated', callback)
+      const cleanup = secureOn('window-focus', callback)
 
       expect(cleanup).toBeInstanceOf(Function)
-      expect(eventListeners.get('todo-updated')).toHaveLength(1)
+      expect(eventListeners.get('window-focus')).toHaveLength(1)
 
       // Test cleanup
       cleanup()
-      expect(eventListeners.get('todo-updated')).toHaveLength(0)
+      expect(eventListeners.get('window-focus')).toHaveLength(0)
     })
   })
 
