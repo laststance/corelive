@@ -1,7 +1,8 @@
 'use client'
 
+import { arrayMove } from '@dnd-kit/sortable'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
@@ -34,8 +35,16 @@ export function FloatingNavigatorContainer() {
   const queryClient = useQueryClient()
 
   // Mutations with optimistic updates
-  const { createMutation, toggleMutation, deleteMutation, updateMutation } =
-    useTodoMutations()
+  const {
+    createMutation,
+    toggleMutation,
+    deleteMutation,
+    updateMutation,
+    reorderMutation,
+  } = useTodoMutations()
+
+  // Local state for optimistic reordering
+  const [localPendingTodos, setLocalPendingTodos] = useState<FloatingTodo[]>([])
 
   // SSR-safe mount detection using useSyncExternalStore
   const isMounted = useMounted()
@@ -113,13 +122,57 @@ export function FloatingNavigatorContainer() {
     }
   }
 
+  /**
+   * Handles drag-and-drop reordering of tasks.
+   * Optimistically updates local state and syncs with server.
+   * @param activeId - The ID of the dragged task.
+   * @param overId - The ID of the task being dragged over.
+   * @returns
+   * - No return value; the mutation updates server state.
+   * @example
+   * handleTaskReorder('1', '3')
+   */
+  const handleTaskReorder = (activeId: string, overId: string) => {
+    const oldIndex = localPendingTodos.findIndex((t) => t.id === activeId)
+    const newIndex = localPendingTodos.findIndex((t) => t.id === overId)
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return
+    }
+
+    // Optimistically update local state
+    const reordered = arrayMove(localPendingTodos, oldIndex, newIndex)
+    setLocalPendingTodos(reordered)
+
+    // Build reorder items with new order values
+    const items = reordered.map((t, i) => ({
+      id: parseInt(t.id, DECIMAL_RADIX),
+      order: i,
+    }))
+
+    // Call reorder mutation
+    reorderMutation.mutate({ items })
+  }
+
   // Transform todos to FloatingTodo format
-  const todos: FloatingTodo[] = (data?.todos ?? []).map((todo) => ({
+  const todosFromQuery: FloatingTodo[] = (data?.todos ?? []).map((todo) => ({
     id: todo.id.toString(),
     text: todo.text,
     completed: todo.completed,
     createdAt: new Date(todo.createdAt),
   }))
+
+  // Sync local state with query data when it changes
+  useEffect(() => {
+    setLocalPendingTodos(todosFromQuery.filter((t) => !t.completed))
+  }, [data])
+
+  // Use local state for pending todos to enable optimistic reordering
+  const pendingTodos = localPendingTodos
+  const completedTodos = todosFromQuery.filter((t) => t.completed)
+
+  // Combine for passing to FloatingNavigator
+  const todos = [...pendingTodos, ...completedTodos]
 
   useEffect(() => {
     return subscribeToTodoSync(() => {
@@ -174,6 +227,7 @@ export function FloatingNavigatorContainer() {
       onTaskCreate={handleTaskCreate}
       onTaskEdit={handleTaskEdit}
       onTaskDelete={handleTaskDelete}
+      onTaskReorder={handleTaskReorder}
     />
   )
 }

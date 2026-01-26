@@ -1,5 +1,19 @@
 'use client'
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import React, {
   useState,
   useEffect,
@@ -8,6 +22,14 @@ import React, {
   Suspense,
   useCallback,
 } from 'react'
+
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { log } from '@/lib/logger'
+import { isEnterKeyPress } from '@/lib/utils'
+
+import { SortableFloatingTodoItem } from './SortableFloatingTodoItem'
 
 // Lazy load icons to reduce initial bundle size
 const Plus = lazy(async () =>
@@ -37,12 +59,9 @@ const PinOff = lazy(async () =>
 const ExternalLink = lazy(async () =>
   import('lucide-react').then((mod) => ({ default: mod.ExternalLink })),
 )
-
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { log } from '@/lib/logger'
-import { isEnterKeyPress } from '@/lib/utils'
+const GripVertical = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.GripVertical })),
+)
 
 // Icon fallback component for loading state
 const IconFallback = () => (
@@ -62,6 +81,7 @@ interface FloatingNavigatorProps {
   onTaskCreate: (title: string) => void
   onTaskEdit: (id: string, title: string) => void
   onTaskDelete: (id: string) => void
+  onTaskReorder?: (activeId: string, overId: string) => void
 }
 
 export function FloatingNavigator({
@@ -70,6 +90,7 @@ export function FloatingNavigator({
   onTaskCreate,
   onTaskEdit,
   onTaskDelete,
+  onTaskReorder,
 }: FloatingNavigatorProps) {
   const [newTaskText, setNewTaskText] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -81,6 +102,35 @@ export function FloatingNavigator({
   const editInputRef = useRef<HTMLInputElement>(null)
   const taskListRef = useRef<HTMLDivElement>(null)
   const skipLinkRef = useRef<HTMLAnchorElement>(null)
+
+  // Configure dnd-kit sensors for pointer and keyboard interactions
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum drag distance before activation
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  /**
+   * Handles drag end event to reorder todos.
+   * Calls parent's onTaskReorder callback with active and over IDs.
+   */
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over || active.id === over.id) {
+      return
+    }
+
+    if (onTaskReorder) {
+      onTaskReorder(active.id as string, over.id as string)
+      announceToScreenReader('Task reordered')
+    }
+  }
 
   // Check if we're in floating navigator environment
   const isFloatingNavigator =
@@ -470,126 +520,167 @@ export function FloatingNavigator({
         role="main"
         aria-label="Task list"
       >
-        {/* Pending tasks */}
+        {/* Pending tasks with drag-and-drop reordering */}
         {pendingTodos.length > 0 && (
           <section className="p-2" aria-label="Pending tasks">
-            <div
-              className="space-y-1"
-              role="list"
-              aria-label={`${pendingTodos.length} pending task${pendingTodos.length !== 1 ? 's' : ''}`}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
             >
-              {pendingTodos.map((todo, index) => (
+              <SortableContext
+                items={pendingTodos.map((todo) => todo.id)}
+                strategy={verticalListSortingStrategy}
+              >
                 <div
-                  key={todo.id}
-                  className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${
-                    focusedTaskIndex === index
-                      ? 'bg-muted/50 ring-2 ring-ring ring-offset-2'
-                      : ''
-                  }`}
-                  role="listitem"
-                  tabIndex={focusedTaskIndex === index ? 0 : -1}
-                  aria-label={`Task: ${todo.text}, ${todo.completed ? 'completed' : 'pending'}`}
-                  aria-describedby={`task-${todo.id}-actions`}
+                  className="space-y-1"
+                  role="list"
+                  aria-label={`${pendingTodos.length} pending task${pendingTodos.length !== 1 ? 's' : ''}`}
                 >
-                  <Checkbox
-                    checked={todo.completed}
-                    onCheckedChange={() =>
-                      handleTaskToggleWithAnnouncement(todo.id)
-                    }
-                    className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
-                  />
+                  {pendingTodos.map((todo, index) => (
+                    <SortableFloatingTodoItem key={todo.id} todo={todo}>
+                      {({ dragHandleProps, isDragging }) => (
+                        <div
+                          className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${
+                            focusedTaskIndex === index
+                              ? 'bg-muted/50 ring-2 ring-ring ring-offset-2'
+                              : ''
+                          } ${isDragging ? 'ring-primary/20 shadow-lg ring-2' : ''}`}
+                          role="listitem"
+                          tabIndex={focusedTaskIndex === index ? 0 : -1}
+                          aria-label={`Task: ${todo.text}, ${todo.completed ? 'completed' : 'pending'}`}
+                          aria-describedby={`task-${todo.id}-actions`}
+                        >
+                          {/* Drag handle */}
+                          <button
+                            type="button"
+                            className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                            aria-label="Drag to reorder"
+                            {...dragHandleProps}
+                          >
+                            <Suspense fallback={<IconFallback />}>
+                              <GripVertical
+                                className="h-3 w-3"
+                                aria-hidden="true"
+                              />
+                            </Suspense>
+                          </button>
 
-                  {editingId === todo.id ? (
-                    <div
-                      className="flex flex-1 gap-1"
-                      role="group"
-                      aria-label="Edit task"
-                    >
-                      <Input
-                        ref={editInputRef}
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        onKeyDown={handleEditKeyPress}
-                        className="h-6 flex-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        aria-label="Edit task title"
-                        aria-describedby={`edit-help-${todo.id}`}
-                      />
-                      <div id={`edit-help-${todo.id}`} className="sr-only">
-                        Press Enter to save, Escape to cancel
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={saveEdit}
-                        className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        aria-label="Save changes"
-                        title="Save (Enter)"
-                      >
-                        <Suspense fallback={<IconFallback />}>
-                          <Check className="h-3 w-3" aria-hidden="true" />
-                        </Suspense>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={cancelEdit}
-                        className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        aria-label="Cancel editing"
-                        title="Cancel (Escape)"
-                      >
-                        <Suspense fallback={<IconFallback />}>
-                          <X className="h-3 w-3" aria-hidden="true" />
-                        </Suspense>
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        onClick={() => startEditing(todo)}
-                        title={`${todo.text} - Click to edit`}
-                        aria-label={`Edit task: ${todo.text}`}
-                      >
-                        {todo.text}
-                      </button>
-                      <div
-                        id={`task-${todo.id}-actions`}
-                        className="flex gap-1 opacity-0 focus-within:opacity-100 group-hover:opacity-100"
-                        role="group"
-                        aria-label="Task actions"
-                      >
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => startEditing(todo)}
-                          className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          aria-label={`Edit task: ${todo.text}`}
-                          title="Edit task (Enter)"
-                        >
-                          <Suspense fallback={<IconFallback />}>
-                            <Edit2 className="h-3 w-3" aria-hidden="true" />
-                          </Suspense>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            handleTaskDeleteWithAnnouncement(todo.id)
-                          }
-                          className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          aria-label={`Delete task: ${todo.text}`}
-                          title="Delete task (Delete)"
-                        >
-                          <Suspense fallback={<IconFallback />}>
-                            <Trash2 className="h-3 w-3" aria-hidden="true" />
-                          </Suspense>
-                        </Button>
-                      </div>
-                    </>
-                  )}
+                          <Checkbox
+                            checked={todo.completed}
+                            onCheckedChange={() =>
+                              handleTaskToggleWithAnnouncement(todo.id)
+                            }
+                            className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
+                          />
+
+                          {editingId === todo.id ? (
+                            <div
+                              className="flex flex-1 gap-1"
+                              role="group"
+                              aria-label="Edit task"
+                            >
+                              <Input
+                                ref={editInputRef}
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                onKeyDown={handleEditKeyPress}
+                                className="h-6 flex-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                aria-label="Edit task title"
+                                aria-describedby={`edit-help-${todo.id}`}
+                              />
+                              <div
+                                id={`edit-help-${todo.id}`}
+                                className="sr-only"
+                              >
+                                Press Enter to save, Escape to cancel
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={saveEdit}
+                                className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                aria-label="Save changes"
+                                title="Save (Enter)"
+                              >
+                                <Suspense fallback={<IconFallback />}>
+                                  <Check
+                                    className="h-3 w-3"
+                                    aria-hidden="true"
+                                  />
+                                </Suspense>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={cancelEdit}
+                                className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                aria-label="Cancel editing"
+                                title="Cancel (Escape)"
+                              >
+                                <Suspense fallback={<IconFallback />}>
+                                  <X className="h-3 w-3" aria-hidden="true" />
+                                </Suspense>
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                onClick={() => startEditing(todo)}
+                                title={`${todo.text} - Click to edit`}
+                                aria-label={`Edit task: ${todo.text}`}
+                              >
+                                {todo.text}
+                              </button>
+                              <div
+                                id={`task-${todo.id}-actions`}
+                                className="flex gap-1 opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+                                role="group"
+                                aria-label="Task actions"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => startEditing(todo)}
+                                  className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                  aria-label={`Edit task: ${todo.text}`}
+                                  title="Edit task (Enter)"
+                                >
+                                  <Suspense fallback={<IconFallback />}>
+                                    <Edit2
+                                      className="h-3 w-3"
+                                      aria-hidden="true"
+                                    />
+                                  </Suspense>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    handleTaskDeleteWithAnnouncement(todo.id)
+                                  }
+                                  className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                  aria-label={`Delete task: ${todo.text}`}
+                                  title="Delete task (Delete)"
+                                >
+                                  <Suspense fallback={<IconFallback />}>
+                                    <Trash2
+                                      className="h-3 w-3"
+                                      aria-hidden="true"
+                                    />
+                                  </Suspense>
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </SortableFloatingTodoItem>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           </section>
         )}
 
