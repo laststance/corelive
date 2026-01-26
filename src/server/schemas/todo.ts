@@ -5,6 +5,7 @@ export const TodoSchema = z.object({
   text: z.string().min(1, 'Please enter a task'),
   completed: z.boolean(),
   notes: z.string().optional().nullable(),
+  order: z.number().int().min(0).optional().nullable(),
   userId: z.number().int().positive(),
   createdAt: z
     .union([z.date(), z.string()])
@@ -36,4 +37,17 @@ export const TodoResponseSchema = z.object({
   total: z.number().int().min(0),
   hasMore: z.boolean(),
   nextOffset: z.number().int().min(0).optional(),
+})
+
+/**
+ * Schema for reordering todos via drag-and-drop.
+ * Accepts an array of {id, order} pairs to batch update sort order.
+ */
+export const ReorderTodosSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      order: z.number().int().min(0),
+    }),
+  ),
 })

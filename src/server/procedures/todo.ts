@@ -11,6 +11,7 @@ import {
   UpdateTodoSchema,
   TodoListSchema,
   TodoResponseSchema,
+  ReorderTodosSchema,
 } from '../schemas/todo'
 
 // Fetch todo list
@@ -32,7 +33,7 @@ export const listTodos = authMiddleware
           where,
           take: limit,
           skip: offset,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
         }),
         prisma.todo.count({ where }),
       ])
@@ -201,4 +202,54 @@ export const clearCompleted = authMiddleware
     })
 
     return { deletedCount: result.count }
+  })
+
+/**
+ * Reorder todos by updating their order field.
+ * Used for drag-and-drop reordering functionality.
+ * Accepts an array of {id, order} pairs and batch updates in a transaction.
+ */
+export const reorderTodos = authMiddleware
+  .input(ReorderTodosSchema)
+  .output(z.object({ success: z.boolean() }))
+  .handler(async ({ input, context }) => {
+    const { user } = context
+    const { items } = input
+
+    if (items.length === 0) {
+      return { success: true }
+    }
+
+    // Verify ownership of all todos
+    const todoIds = items.map((item) => item.id)
+    const existingTodos = await prisma.todo.findMany({
+      where: {
+        id: { in: todoIds },
+        userId: user.id,
+      },
+      select: { id: true },
+    })
+
+    const existingIds = new Set(existingTodos.map((t) => t.id))
+    const unauthorizedIds = todoIds.filter((id) => !existingIds.has(id))
+
+    if (unauthorizedIds.length > 0) {
+      throw new ORPCError('NOT_FOUND', {
+        message: `Todos not found: ${unauthorizedIds.join(', ')}`,
+      })
+    }
+
+    // Batch update order values in a transaction
+    // Note: Don't use async here - $transaction expects PrismaPromise[], not Promise[]
+    await prisma.$transaction(
+      // eslint-disable-next-line @typescript-eslint/promise-function-async -- PrismaPromise is not a regular Promise
+      items.map((item) =>
+        prisma.todo.update({
+          where: { id: item.id },
+          data: { order: item.order },
+        }),
+      ),
+    )
+
+    return { success: true }
   })

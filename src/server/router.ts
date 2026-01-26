@@ -9,6 +9,7 @@ import {
   deleteTodo,
   toggleTodo,
   clearCompleted,
+  reorderTodos,
 } from './procedures/todo'
 
 export const router = {
@@ -19,6 +20,7 @@ export const router = {
     delete: deleteTodo,
     toggle: toggleTodo,
     clearCompleted: clearCompleted,
+    reorder: reorderTodos,
   },
   electronSettings: {
     get: getElectronSettings,

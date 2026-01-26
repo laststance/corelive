@@ -54,6 +54,7 @@ model Todo {
   text      String   @db.VarChar(255)
   completed Boolean  @default(false)
   notes     String?  @db.Text
+  order     Int?     // Sort order for drag-and-drop reordering (nullable for backwards compatibility)
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
   createdAt DateTime @default(now())

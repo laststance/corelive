@@ -402,11 +402,61 @@ export function useTodoMutations() {
     },
   })
 
+  // ============================================
+  // REORDER MUTATION - Drag-and-drop reordering
+  // ============================================
+  const reorderMutation = useMutation({
+    ...orpc.todo.reorder.mutationOptions({}),
+    onMutate: async ({ items }) => {
+      // 1. Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: pendingKey })
+
+      // 2. Snapshot previous value
+      const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
+
+      // 3. Optimistically update order in cache
+      // Note: The local state in TodoList handles the visual reorder,
+      // but we also update the query cache for consistency
+      if (previousPending) {
+        const todoMap = new Map(previousPending.todos.map((t) => [t.id, t]))
+        const orderedTodos = items
+          .map((item) => todoMap.get(item.id))
+          .filter((t): t is Todo => t !== undefined)
+
+        // Add any todos that weren't in the reorder items
+        const reorderedIds = new Set(items.map((i) => i.id))
+        const remainingTodos = previousPending.todos.filter(
+          (t) => !reorderedIds.has(t.id),
+        )
+
+        queryClient.setQueryData<TodoResponse>(pendingKey, {
+          ...previousPending,
+          todos: [...orderedTodos, ...remainingTodos],
+        })
+      }
+
+      // 4. Return context for rollback
+      return { previousPending }
+    },
+    onError: (_err, _input, context) => {
+      // Rollback on error
+      if (context?.previousPending) {
+        queryClient.setQueryData(pendingKey, context.previousPending)
+      }
+    },
+    onSettled: () => {
+      // Always refetch to sync with server
+      queryClient.invalidateQueries({ queryKey: pendingKey })
+      broadcastTodoSync()
+    },
+  })
+
   return {
     createMutation,
     toggleMutation,
     deleteMutation,
     updateMutation,
     clearCompletedMutation,
+    reorderMutation,
   }
 }

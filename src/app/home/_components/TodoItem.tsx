@@ -1,4 +1,10 @@
-import { Trash2, StickyNote, ChevronDown, ChevronRight } from 'lucide-react'
+import {
+  Trash2,
+  StickyNote,
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+} from 'lucide-react'
 import React, { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
@@ -19,11 +25,22 @@ export interface Todo {
   notes?: string | null
 }
 
+/**
+ * Props passed from SortableTodoItem for drag handle functionality.
+ */
+interface DragHandleProps {
+  [key: string]: unknown
+}
+
 interface TodoItemProps {
   todo: Todo
   onToggleComplete: (id: string) => void
   onDelete: (id: string) => void
   onUpdateNotes?: (id: string, notes: string) => void
+  /** Props from useSortable for drag handle */
+  dragHandleProps?: DragHandleProps
+  /** Whether item is currently being dragged */
+  isDragging?: boolean
 }
 
 export function TodoItem({
@@ -31,6 +48,8 @@ export function TodoItem({
   onToggleComplete,
   onDelete,
   onUpdateNotes,
+  dragHandleProps,
+  isDragging,
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const [notes, setNotes] = useState(todo.notes ?? '')
@@ -43,8 +62,22 @@ export function TodoItem({
   }
 
   return (
-    <div className="rounded-lg border bg-card transition-shadow hover:shadow-sm">
+    <div
+      className={`rounded-lg border bg-card transition-shadow hover:shadow-sm ${
+        isDragging ? 'ring-primary/20 shadow-lg ring-2' : ''
+      }`}
+    >
       <div className="flex items-center gap-3 p-4">
+        {dragHandleProps && (
+          <button
+            type="button"
+            className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            aria-label="Drag to reorder"
+            {...dragHandleProps}
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+        )}
         <Checkbox
           checked={todo.completed}
           onCheckedChange={() => onToggleComplete(todo.id)}

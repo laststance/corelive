@@ -6,7 +6,6 @@ import {
   defaultShouldDehydrateQuery,
   QueryClient,
 } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 
 import { serializer } from '@/lib/orpc/serializer'
@@ -72,7 +71,6 @@ export function QueryClientProvider({
     return (
       <TanstackQueryClientProvider client={queryClient}>
         {children}
-        <ReactQueryDevtools initialIsOpen={false} />
       </TanstackQueryClientProvider>
     )
   }
@@ -83,7 +81,6 @@ export function QueryClientProvider({
       persistOptions={{ persister }}
     >
       {children}
-      <ReactQueryDevtools initialIsOpen={false} />
     </PersistQueryClientProvider>
   )
 }

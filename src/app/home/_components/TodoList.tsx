@@ -1,7 +1,22 @@
 'use client'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import React, { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -17,8 +32,8 @@ import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { AddTodoForm } from './AddTodoForm'
 import { CompletedTodos } from './CompletedTodos'
+import { SortableTodoItem } from './SortableTodoItem'
 import type { Todo } from './TodoItem'
-import { TodoItem } from './TodoItem'
 
 const TODO_QUERY_LIMIT = 100
 const TODO_QUERY_OFFSET = 0
@@ -33,6 +48,20 @@ const DECIMAL_RADIX = 10
  */
 export function TodoList() {
   const queryClient = useQueryClient()
+  // Track if persister is still restoring cached data - prevents hydration mismatch
+  const isRestoring = useIsRestoring()
+
+  // Configure dnd-kit sensors for pointer and keyboard interactions
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum drag distance before activation
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
 
   // Mutations with optimistic updates
   const {
@@ -41,7 +70,11 @@ export function TodoList() {
     deleteMutation,
     updateMutation,
     clearCompletedMutation,
+    reorderMutation,
   } = useTodoMutations()
+
+  // Local state for optimistic reordering
+  const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
 
   // Fetch pending todos
   const { data: pendingData, isLoading: pendingLoading } = useQuery(
@@ -149,7 +182,47 @@ export function TodoList() {
     }))
   }
 
-  const pendingTodos = mapTodos(pendingData?.todos)
+  const pendingTodosFromQuery = mapTodos(pendingData?.todos)
+
+  // Sync local state with query data when it changes
+  useEffect(() => {
+    setLocalPendingTodos(pendingTodosFromQuery)
+  }, [pendingData])
+
+  // Use local state for rendering to enable optimistic reordering
+  const pendingTodos = localPendingTodos
+
+  /**
+   * Handles drag end event to reorder todos.
+   * Updates local state optimistically and syncs with server.
+   */
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over || active.id === over.id) {
+      return
+    }
+
+    const oldIndex = pendingTodos.findIndex((todo) => todo.id === active.id)
+    const newIndex = pendingTodos.findIndex((todo) => todo.id === over.id)
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return
+    }
+
+    // Optimistically update local state
+    const reorderedTodos = arrayMove(pendingTodos, oldIndex, newIndex)
+    setLocalPendingTodos(reorderedTodos)
+
+    // Build reorder items with new order values
+    const items = reorderedTodos.map((todo, index) => ({
+      id: parseInt(todo.id, DECIMAL_RADIX),
+      order: index,
+    }))
+
+    // Call reorder mutation
+    reorderMutation.mutate({ items })
+  }
 
   useEffect(() => {
     return subscribeToTodoSync(() => {
@@ -191,7 +264,9 @@ export function TodoList() {
     }
   }, [queryClient])
 
-  if (pendingLoading) {
+  // Show loading during initial query OR while persister restores cached data
+  // This ensures server-rendered HTML matches client hydration (prevents hydration error)
+  if (pendingLoading || isRestoring) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -229,17 +304,28 @@ export function TodoList() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {pendingTodos.map((todo) => (
-              <TodoItem
-                key={todo.id}
-                todo={todo}
-                onToggleComplete={toggleComplete}
-                onDelete={deleteTodo}
-                onUpdateNotes={updateNotes}
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={pendingTodos.map((todo) => todo.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-3">
+                {pendingTodos.map((todo) => (
+                  <SortableTodoItem
+                    key={todo.id}
+                    todo={todo}
+                    onToggleComplete={toggleComplete}
+                    onDelete={deleteTodo}
+                    onUpdateNotes={updateNotes}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
