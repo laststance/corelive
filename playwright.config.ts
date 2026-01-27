@@ -1,29 +1,6 @@
-import { execSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { cpus } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { defineConfig, devices } from '@playwright/test'
 
 import 'dotenv/config'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const BUILD_ID_PATH = join(__dirname, '.next', 'BUILD_ID')
-
-// APP_URL: The base URL for the web app (set via npm scripts or defaults to localhost)
-const APP_URL = process.env.APP_URL || 'http://localhost:3011'
-
-if (!existsSync(BUILD_ID_PATH)) {
-  execSync('pnpm build', {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      NODE_ENV: 'production',
-    },
-  })
-}
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -37,7 +14,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Limit workers to 50% CPU cores to prevent resource saturation (community best practice) */
-  workers: process.env.CI ? 1 : Math.max(1, Math.floor(cpus().length / 2)),
+  workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     // Use "dot" reporter on CI, "list" otherwise (Playwright default).
@@ -55,7 +32,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: APP_URL,
+    baseURL: 'http://localhost:3011',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
     /* Ensure test environment is set */
@@ -89,12 +66,9 @@ export default defineConfig({
   globalTeardown: './e2e/global-teardown.ts',
 
   webServer: {
-    command: 'NODE_ENV=test pnpm start',
-    url: APP_URL,
+    command: 'pnpm start',
+    url: 'http://localhost:3011',
     reuseExistingServer: false,
     timeout: 120 * 1000,
-    env: {
-      NODE_ENV: 'test',
-    },
   },
 })

@@ -10,7 +10,6 @@ export default async function globalTeardown() {
     stdio: 'pipe', // Suppress stdout/stderr for cleaner output
     env: {
       ...process.env,
-      NODE_ENV: 'test',
       DEBUG: '', // Disable debug logging
     },
   })

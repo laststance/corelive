@@ -98,7 +98,7 @@ const createWindowManagerMock = () => {
         this.windowStateManager.applyWindowState('main', this.mainWindow)
       }
 
-      // URL provided by main.cjs via APP_URL env var
+      // Production web app URL
       const startUrl = this.serverUrl || 'https://corelive.app'
       this.mainWindow.loadURL(startUrl)
 
@@ -198,7 +198,7 @@ const createWindowManagerMock = () => {
         titleBarStyle: 'hidden',
       })
 
-      // URL provided by main.cjs via APP_URL env var
+      // Production web app URL
       const baseUrl = this.serverUrl || 'https://corelive.app'
       const floatingUrl = `${baseUrl}/floating-navigator`
 

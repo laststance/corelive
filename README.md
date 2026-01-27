@@ -146,12 +146,10 @@ pnpm electron
 
 ### Electron Build Commands
 
-Each Electron build command sets `APP_URL` to determine which web app URL the Electron app loads:
-
-| Command                   | APP_URL                | Purpose                                             |
-| ------------------------- | ---------------------- | --------------------------------------------------- |
-| `pnpm electron:build:mac` | `https://corelive.app` | Production release (DMG + ZIP + signed + notarized) |
-| `pnpm electron:build:dir` | `https://corelive.app` | Local production testing (unpacked .app only)       |
+| Command                   | Purpose                                             |
+| ------------------------- | --------------------------------------------------- |
+| `pnpm electron:build:mac` | Production release (DMG + ZIP + signed + notarized) |
+| `pnpm electron:build:dir` | Local production testing (unpacked .app only)       |
 
 ```bash
 # Local production testing (connects to corelive.app)

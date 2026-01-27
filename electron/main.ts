@@ -685,11 +685,8 @@ async function createWindow(): Promise<BrowserWindow> {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // APP_URL: Single source of truth for the web app URL
-    // Configured at build time via npm scripts:
-    // - electron:build:mac/dir: APP_URL=https://corelive.app (production)
-    // - Development: Set by scripts/dev.js
-    const serverUrl = process.env.APP_URL || 'https://corelive.app'
+    // Production web app URL (Electron loads this directly)
+    const serverUrl = 'https://corelive.app'
 
     // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 

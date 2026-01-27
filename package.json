@@ -48,13 +48,13 @@
     "db:truncate": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate reset --skip-seed --force",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "e2e:web": "APP_URL=http://localhost:3011 playwright test --project=web",
+    "e2e:web": "playwright test --project=web",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
     "electron:build:ts": "electron-vite build",
-    "electron:build:mac": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --mac",
-    "electron:build:dir": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --dir",
-    "electron:publish": "pnpm electron:build:ts && cross-env APP_URL=https://corelive.app electron-builder --publish=always",
+    "electron:build:mac": "pnpm electron:build:ts && electron-builder --mac",
+    "electron:build:dir": "pnpm electron:build:ts && electron-builder --dir",
+    "electron:publish": "pnpm electron:build:ts && electron-builder --publish=always",
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run"
   },
   "dependencies": {
