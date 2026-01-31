@@ -334,7 +334,7 @@ export function ConfigurationSettings() {
           <Button
             onClick={saveConfiguration}
             disabled={saving || !hasChanges}
-            className="min-w-[100px]"
+            className="min-w-24"
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </Button>

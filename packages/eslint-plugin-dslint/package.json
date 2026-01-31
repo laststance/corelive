@@ -1,0 +1,56 @@
+{
+  "name": "eslint-plugin-dslint",
+  "version": "0.1.0",
+  "description": "Design System Lint - Enforce design token compliance in Tailwind CSS",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "dslint": "./bin/dslint.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "css-tree": "^2.3.1",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/css-tree": "^2.3.10",
+    "@types/eslint": "^9.6.0",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  },
+  "peerDependencies": {
+    "eslint": ">=9.0.0"
+  },
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "design-system",
+    "tailwind",
+    "lint",
+    "design-tokens"
+  ],
+  "author": "Ryota Murakami",
+  "license": "MIT"
+}
