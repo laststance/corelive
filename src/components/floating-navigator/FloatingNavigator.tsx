@@ -14,15 +14,9 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  lazy,
-  Suspense,
-  useCallback,
-} from 'react'
+import React, { useState, useRef, lazy, Suspense, useCallback } from 'react'
 
+import { useFloatingNavigatorMenuActions } from '@/components/floating-navigator/useFloatingNavigatorMenuActions'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -98,11 +92,36 @@ export function FloatingNavigator({
   const [editText, setEditText] = useState('')
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true)
   const [focusedTaskIndex, setFocusedTaskIndex] = useState<number>(-1)
-  const [announceText, setAnnounceText] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const taskListRef = useRef<HTMLDivElement>(null)
-  const skipLinkRef = useRef<HTMLAnchorElement>(null)
+
+  // Separate todos by completion status
+  const pendingTodos = todos.filter((todo) => !todo.completed)
+  const completedTodos = todos.filter((todo) => todo.completed)
+
+  const startEditing = useCallback((todo: FloatingTodo) => {
+    setEditingId(todo.id)
+    setEditText(todo.text)
+    // Focus and select input after DOM update
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.focus()
+        editInputRef.current.select()
+      }
+    }, 0)
+  }, [])
+
+  useFloatingNavigatorMenuActions({
+    inputRef,
+    focusedTaskIndex,
+    setFocusedTaskIndex,
+    pendingTodos,
+    completedTodos,
+    onTaskToggle,
+    onTaskDelete,
+    startEditing,
+  })
 
   // Configure dnd-kit sensors for pointer and keyboard interactions
   const sensors = useSensors(
@@ -129,27 +148,14 @@ export function FloatingNavigator({
 
     if (onTaskReorder) {
       onTaskReorder(active.id as string, over.id as string)
-      announceToScreenReader('Task reordered')
     }
   }
-
-  // Separate todos by completion status
-  const pendingTodos = todos.filter((todo) => !todo.completed)
-  const completedTodos = todos.filter((todo) => todo.completed)
 
   const handleCreateTask = () => {
     if (newTaskText.trim()) {
       onTaskCreate(newTaskText.trim())
       setNewTaskText('')
-      announceToScreenReader(`Task "${newTaskText.trim()}" created`)
     }
-  }
-
-  // Screen reader announcements
-  const announceToScreenReader = (message: string) => {
-    setAnnounceText(message)
-    // Clear after a short delay to allow screen readers to announce
-    setTimeout(() => setAnnounceText(''), 1000)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -158,33 +164,15 @@ export function FloatingNavigator({
     }
   }
 
-  const startEditing = useCallback((todo: FloatingTodo) => {
-    setEditingId(todo.id)
-    setEditText(todo.text)
-    announceToScreenReader(`Editing task: ${todo.text}`)
-    // Focus and select input after DOM update
-    setTimeout(() => {
-      if (editInputRef.current) {
-        editInputRef.current.focus()
-        editInputRef.current.select()
-      }
-    }, 0)
-  }, [])
-
   const saveEdit = () => {
     if (editingId && editText.trim()) {
-      const originalText = todos.find((t) => t.id === editingId)?.text
       onTaskEdit(editingId, editText.trim())
-      announceToScreenReader(
-        `Task updated from "${originalText}" to "${editText.trim()}"`,
-      )
     }
     setEditingId(null)
     setEditText('')
   }
 
   const cancelEdit = () => {
-    announceToScreenReader('Edit cancelled')
     setEditingId(null)
     setEditText('')
   }
@@ -240,132 +228,19 @@ export function FloatingNavigator({
     }
   }
 
-  // Listen for IPC messages from Electron menu
-  useEffect(() => {
-    if (!isFloatingNavigator()) return
-
-    const handleMenuAction = (event: CustomEvent) => {
-      const action = event.detail?.action
-      if (!action) return
-
-      switch (action) {
-        case 'focus-new-task':
-          inputRef.current?.focus()
-          announceToScreenReader('New task input focused')
-          break
-        case 'navigate-next-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex < allTodos.length - 1) {
-              setFocusedTaskIndex(focusedTaskIndex + 1)
-              announceToScreenReader(
-                `Task ${focusedTaskIndex + 2} of ${allTodos.length}: ${allTodos[focusedTaskIndex + 1]?.text}`,
-              )
-            }
-          }
-          break
-        case 'navigate-previous-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex > 0) {
-              setFocusedTaskIndex(focusedTaskIndex - 1)
-              announceToScreenReader(
-                `Task ${focusedTaskIndex} of ${allTodos.length}: ${allTodos[focusedTaskIndex - 1]?.text}`,
-              )
-            } else if (focusedTaskIndex === 0) {
-              setFocusedTaskIndex(-1)
-              inputRef.current?.focus()
-              announceToScreenReader('Focused on new task input')
-            }
-          }
-          break
-        case 'toggle-task-completion':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-              const task = allTodos[focusedTaskIndex]
-              if (task) {
-                onTaskToggle(task.id)
-                announceToScreenReader(
-                  `Task "${task.text}" ${task.completed ? 'uncompleted' : 'completed'}`,
-                )
-              }
-            }
-          }
-          break
-        case 'edit-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-              const task = allTodos[focusedTaskIndex]
-              if (task) {
-                startEditing(task)
-              }
-            }
-          }
-          break
-        case 'delete-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-              const task = allTodos[focusedTaskIndex]
-              if (task) {
-                onTaskDelete(task.id)
-                announceToScreenReader(`Task "${task.text}" deleted`)
-                // Adjust focus after deletion
-                if (focusedTaskIndex >= allTodos.length - 1) {
-                  setFocusedTaskIndex(Math.max(0, allTodos.length - 2))
-                }
-              }
-            }
-          }
-          break
-        case 'return-to-input':
-          setFocusedTaskIndex(-1)
-          inputRef.current?.focus()
-          announceToScreenReader('Returned to new task input')
-          break
-        case 'show-help':
-          announceToScreenReader(
-            'Floating Navigator: Use View menu to access all functions',
-          )
-          break
-      }
-    }
-
-    // Listen for custom events dispatched from preload script
-    const eventHandler = handleMenuAction as EventListener
-    window.addEventListener('floating-navigator-menu-action', eventHandler)
-    return () => {
-      window.removeEventListener('floating-navigator-menu-action', eventHandler)
-    }
-  }, [
-    isFloatingNavigator,
-    focusedTaskIndex,
-    pendingTodos,
-    completedTodos,
-    onTaskToggle,
-    onTaskDelete,
-    startEditing,
-  ])
-
-  // Handle task toggle with announcements
-  const handleTaskToggleWithAnnouncement = (id: string) => {
+  // Handle task toggle
+  const handleTaskToggle = (id: string) => {
     const task = todos.find((t) => t.id === id)
     if (task) {
       onTaskToggle(id)
-      announceToScreenReader(
-        `Task "${task.text}" ${task.completed ? 'uncompleted' : 'completed'}`,
-      )
     }
   }
 
-  // Handle task deletion with announcements
-  const handleTaskDeleteWithAnnouncement = (id: string) => {
+  // Handle task deletion
+  const handleTaskDelete = (id: string) => {
     const task = todos.find((t) => t.id === id)
     if (task) {
       onTaskDelete(id)
-      announceToScreenReader(`Task "${task.text}" deleted`)
     }
   }
 
@@ -375,26 +250,6 @@ export function FloatingNavigator({
       role="application"
       aria-label="Floating Task Navigator"
     >
-      {/* Skip link for keyboard navigation */}
-      <a
-        ref={skipLinkRef}
-        href="#task-input"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-primary focus:px-2 focus:py-1 focus:text-primary-foreground"
-        onFocus={() => announceToScreenReader('Skip to task input')}
-      >
-        Skip to task input
-      </a>
-
-      {/* Screen reader announcements */}
-      <div
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-        role="status"
-      >
-        {announceText}
-      </div>
-
       {/* Header with window controls */}
       <header
         className="bg-muted/50 drag-handle flex cursor-move items-center justify-between border-b px-3 py-2"
@@ -565,9 +420,7 @@ export function FloatingNavigator({
 
                           <Checkbox
                             checked={todo.completed}
-                            onCheckedChange={() =>
-                              handleTaskToggleWithAnnouncement(todo.id)
-                            }
+                            onCheckedChange={() => handleTaskToggle(todo.id)}
                             className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
                           />
@@ -654,9 +507,7 @@ export function FloatingNavigator({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() =>
-                                    handleTaskDeleteWithAnnouncement(todo.id)
-                                  }
+                                  onClick={() => handleTaskDelete(todo.id)}
                                   className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                   aria-label={`Delete task: ${todo.text}`}
                                   title="Delete task (Delete)"
@@ -710,9 +561,7 @@ export function FloatingNavigator({
                 >
                   <Checkbox
                     checked={todo.completed}
-                    onCheckedChange={() =>
-                      handleTaskToggleWithAnnouncement(todo.id)
-                    }
+                    onCheckedChange={() => handleTaskToggle(todo.id)}
                     className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     aria-label={`Mark completed task "${todo.text}" as incomplete`}
                   />
@@ -726,7 +575,7 @@ export function FloatingNavigator({
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleTaskDeleteWithAnnouncement(todo.id)}
+                    onClick={() => handleTaskDelete(todo.id)}
                     className="h-6 w-6 p-0 text-destructive opacity-0 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
                     aria-label={`Delete completed task: ${todo.text}`}
                     title="Delete task"

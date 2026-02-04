@@ -685,8 +685,8 @@ async function createWindow(): Promise<BrowserWindow> {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // Production web app URL (Electron loads this directly)
-    const serverUrl = 'https://corelive.app'
+    // Development uses local Next.js server, production uses web app
+    const serverUrl = isDev ? 'http://localhost:3011' : 'https://corelive.app'
 
     // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 
