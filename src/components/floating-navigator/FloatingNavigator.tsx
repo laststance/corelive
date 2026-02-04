@@ -242,7 +242,7 @@ export function FloatingNavigator({
 
   // Listen for IPC messages from Electron menu
   useEffect(() => {
-    if (!isFloatingNavigator) return
+    if (!isFloatingNavigator()) return
 
     const handleMenuAction = (event: CustomEvent) => {
       const action = event.detail?.action
