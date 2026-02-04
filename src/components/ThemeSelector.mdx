@@ -3,7 +3,6 @@ import {
   Story,
   Canvas,
   Source,
-  Description,
   ArgTypes,
   Primary,
   Controls,
@@ -14,40 +13,23 @@ import * as ThemeSelectorStories from './ThemeSelector.stories'
 
 # ThemeSelector
 
-The `ThemeSelector` component provides a user-friendly interface for switching between different themes in the CoreLive application.
+Theme switching component for the CoreLive application.
 
 <Primary />
 
 <Controls />
 
-## Overview
+## Components
 
-The ThemeSelector is a dropdown menu component that displays available themes organized by category. It shows:
-
-- Current theme name
-- Theme categories (Free, Premium Dark, Premium Light, etc.)
-- Visual preview color for each theme
-- Premium badge for paid themes
-- "Coming Soon" indicator for themes not yet implemented
-
-## Features
-
-- **Live Preview**: Instant theme switching with real-time preview
-- **Persistent Selection**: Theme choice is saved in localStorage
-- **Category Organization**: Themes grouped by category for easy navigation
-- **Visual Indicators**: Preview colors and status badges
-- **Responsive Design**: Works on both desktop and mobile devices
-- **Keyboard Navigation**: Full keyboard support for accessibility
-
-## Theme Categories
-
-### Free Themes
-
-- **Default Themes**: Light and Dark (shadcn/ui default)
+| Component               | Use Case                         |
+| ----------------------- | -------------------------------- |
+| `ThemeSelector`         | Standalone dropdown button       |
+| `ThemeSelectorCompact`  | Native select element            |
+| `ThemeSelectorMenuItem` | Embed in existing dropdown menus |
 
 ## Usage
 
-### Basic Usage
+### Standalone Dropdown
 
 <Canvas>
   <Story id="ui-themeselector--default" />
@@ -55,40 +37,22 @@ The ThemeSelector is a dropdown menu component that displays available themes or
 
 <Source language="tsx" code={`import { ThemeSelector } from '@/components/ThemeSelector'
 
-export function MyComponent() {
-  return (
-    <div className="flex justify-end p-4">
-      <ThemeSelector />
-    </div>
-  )
+export function Header() {
+  return <ThemeSelector />
 }
 `} />
 
-### In a User Dropdown Menu
+### In User Dropdown Menu
 
-<Canvas>
-  <Story id="ui-themeselector--in-user-dropdown" />
-</Canvas>
-
-<Source language="tsx" code={`import { ThemeSelector } from '@/components/ThemeSelector'
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+<Source language="tsx" code={`import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 export function UserMenu() {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
-        <Avatar>
-          <AvatarFallback>U</AvatarFallback>
-        </Avatar>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger>...</DropdownMenuTrigger>
       <DropdownMenuContent>
-        {/* Other menu items */}
-        <ThemeSelector />
+        <ThemeSelectorMenuItem />
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -97,124 +61,58 @@ export function UserMenu() {
 
 ### Compact Version
 
-For smaller spaces, use the `ThemeSelectorCompact` component:
-
 <Canvas>
   <Story id="ui-themeselector--compact" />
 </Canvas>
 
 <Source language="tsx" code={`import { ThemeSelectorCompact } from '@/components/ThemeSelector'
 
-export function CompactThemeSelector() {
-  return <ThemeSelectorCompact className="w-48" />
+export function Settings() {
+  return <ThemeSelectorCompact />
 }
 `} />
 
-## Props
-
-### ThemeSelector
-
-<ArgTypes of={ThemeSelectorStories.Default} />
-
-### ThemeSelectorCompact
-
-| Prop        | Type     | Default | Description                                           |
-| ----------- | -------- | ------- | ----------------------------------------------------- |
-| `className` | `string` | -       | Additional CSS classes to apply to the select element |
-
 ## Theme Provider Setup
-
-The ThemeSelector component requires the `ThemeProvider` to be wrapped around your application:
 
 <Source language="tsx" code={`// app/layout.tsx
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   )
 }
 `} />
 
-## Accessing Theme Data
-
-Use the `useTheme` hook from `next-themes` and `useThemeContext` for theme metadata:
+## Using Theme in Components
 
 <Source language="tsx" code={`import { useTheme } from 'next-themes'
-import { useThemeContext } from '@/providers/ThemeProvider'
+import { THEME_META } from '@/providers/ThemeProvider'
 
 export function MyComponent() {
   const { theme, setTheme } = useTheme()
-  const { categories, metadata } = useThemeContext()
+  const meta = theme ? THEME_META[theme] : null
   
-  const currentThemeData = theme ? metadata[theme] : null
-  
-  return (
-    <div>
-      Current theme: {currentThemeData?.name || theme}
-    </div>
-  )
+  return <p>Current: {meta?.name}</p>
 }
 `} />
 
-## Testing
+## Adding New Themes
 
-The ThemeSelector includes comprehensive Storybook tests covering:
+1. Add theme id to `THEMES` array in `ThemeProvider.tsx`
+2. Add metadata to `THEME_META` object
+3. Add CSS variables in `globals.css`:
 
-- Default theme verification
-- Theme switching functionality
-- Theme persistence across reloads
-- UI element theme application
-- Visual state management
-
-Run the tests with:
-
-```bash
-pnpm test:storybook
-```
-
-## Accessibility
-
-- Full keyboard navigation support
-- ARIA labels for screen readers
-- Focus indicators
-- Proper role attributes
-- Semantic HTML structure
-
-## Browser Support
-
-The ThemeSelector component works in all modern browsers that support:
-
-- CSS Custom Properties
-- OKLCH color format (with LAB fallback)
-- LocalStorage API
-
-## Contributing
-
-When adding new themes:
-
-1. Add theme definition to `CORELIVE_THEMES` in `ThemeProvider.tsx`
-2. Add metadata to `THEME_METADATA` object
-3. Add CSS variables for the theme in `globals.css` using `[data-theme='theme-name']` selector
-4. Test the theme in various components
-
-## Examples with UI Elements
-
-<Canvas>
-  <Story id="ui-themeselector--with-ui-elements" />
-</Canvas>
-
-This example shows how different UI elements adapt to the selected theme, including:
-
-- Card backgrounds and borders
-- Button variants (primary, secondary, outline, ghost)
-- Text colors
-- Border colors
-
-All UI elements automatically inherit the theme tokens, providing a consistent look across your application.
+<Source
+  language="css"
+  code={`[data-theme='my-theme'] {
+  --background: oklch(98% 0 0);
+  --foreground: oklch(10% 0 0);
+  /* ... other tokens */
+}
+`}
+/>

@@ -2,71 +2,25 @@
 
 import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import type { ThemeProviderProps as NextThemesProviderProps } from 'next-themes'
-import React, { createContext, useContext } from 'react'
+import React from 'react'
 
 /**
- * Theme names for the CoreLive DesignSystem
- * Supports light and dark themes with system preference detection
+ * Available themes in the application.
+ * To add a new theme:
+ * 1. Add the theme id to this array
+ * 2. Add CSS variables in globals.css with `[data-theme='theme-id']` selector
  */
-export const CORELIVE_THEMES = {
-  DEFAULT: {
-    LIGHT: 'light',
-    DARK: 'dark',
-  },
-} as const
+export const THEMES = ['light', 'dark'] as const
 
-// Extract all theme values into a flat array
-export const ALL_THEMES = Object.values(CORELIVE_THEMES).flatMap((category) =>
-  Object.values(category),
-)
+export type ThemeId = (typeof THEMES)[number]
 
-// Theme categories
-export const THEME_CATEGORIES = {
-  DEFAULT: [...Object.values(CORELIVE_THEMES.DEFAULT)],
-} as const
-
-// Theme metadata for UI display
-export const THEME_METADATA: Record<
-  string,
-  {
-    name: string
-    category: 'dark' | 'light'
-    isPremium: boolean
-    description?: string
-    preview?: string // Preview color or gradient
-  }
-> = {
-  [CORELIVE_THEMES.DEFAULT.LIGHT]: {
-    name: 'Light',
-    category: 'light',
-    isPremium: false,
-    description: 'Clean and minimal light theme',
-    preview: '#ffffff',
-  },
-  [CORELIVE_THEMES.DEFAULT.DARK]: {
-    name: 'Dark',
-    category: 'dark',
-    isPremium: false,
-    description: 'Modern dark theme',
-    preview: '#1a1a1a',
-  },
-}
-
-// Context for theme-related utilities
-interface ThemeContextValue {
-  themes: typeof ALL_THEMES
-  categories: typeof THEME_CATEGORIES
-  metadata: typeof THEME_METADATA
-}
-
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
-
-export function useThemeContext() {
-  const context = useContext(ThemeContext)
-  if (!context) {
-    throw new Error('useThemeContext must be used within ThemeProvider')
-  }
-  return context
+/**
+ * Theme display metadata for UI components.
+ * Key = theme id, value = display properties
+ */
+export const THEME_META: Record<ThemeId, { name: string; preview: string }> = {
+  light: { name: 'Light', preview: '#ffffff' },
+  dark: { name: 'Dark', preview: '#1a1a1a' },
 }
 
 interface ThemeProviderProps extends Omit<NextThemesProviderProps, 'themes'> {
@@ -74,16 +28,12 @@ interface ThemeProviderProps extends Omit<NextThemesProviderProps, 'themes'> {
 }
 
 /**
- * CoreLive ThemeProvider component
- * Wraps next-themes provider with our custom theme configuration
+ * Theme provider for the application.
+ * Wraps next-themes with CoreLive theme configuration.
+ * @param children - Child components
+ * @returns Provider component
  */
 export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
-  const themeContextValue: ThemeContextValue = {
-    themes: ALL_THEMES,
-    categories: THEME_CATEGORIES,
-    metadata: THEME_METADATA,
-  }
-
   return (
     <NextThemesProvider
       attribute="data-theme"
@@ -91,13 +41,11 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
       enableSystem
       enableColorScheme={false}
       disableTransitionOnChange={false}
-      themes={ALL_THEMES}
+      themes={[...THEMES]}
       storageKey="corelive-theme"
       {...props}
     >
-      <ThemeContext.Provider value={themeContextValue}>
-        {children}
-      </ThemeContext.Provider>
+      {children}
     </NextThemesProvider>
   )
 }
