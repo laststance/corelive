@@ -1,30 +1,18 @@
-import { useEffect, type SetState } from 'react'
+import { useEffect } from 'react'
 
-import type { FloatingTodo } from '@/components/floating-navigator/FloatingNavigator'
 import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
 
 interface UseFloatingNavigatorMenuActionsProps {
   inputRef: React.RefObject<HTMLInputElement | null>
-
-  focusedTaskIndex: number
-  setFocusedTaskIndex: SetState<number>
-  pendingTodos: FloatingTodo[]
-  completedTodos: FloatingTodo[]
-  onTaskToggle: (id: string) => void
-  onTaskDelete: (id: string) => void
-  startEditing: (todo: FloatingTodo) => void
 }
 
-// Listen for IPC messages from Electron menu
+/**
+ * Listens for IPC messages from Electron menu and handles menu actions.
+ * Currently only supports focusing the new task input.
+ * @param props.inputRef - Reference to the new task input element.
+ */
 export function useFloatingNavigatorMenuActions({
   inputRef,
-  focusedTaskIndex,
-  setFocusedTaskIndex,
-  pendingTodos,
-  completedTodos,
-  onTaskToggle,
-  onTaskDelete,
-  startEditing,
 }: UseFloatingNavigatorMenuActionsProps) {
   useEffect(() => {
     if (!isFloatingNavigatorEnvironment()) return
@@ -37,67 +25,6 @@ export function useFloatingNavigatorMenuActions({
         case 'focus-new-task':
           inputRef.current?.focus()
           break
-        case 'navigate-next-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex < allTodos.length - 1) {
-              setFocusedTaskIndex(focusedTaskIndex + 1)
-            }
-          }
-          break
-        case 'navigate-previous-task':
-          {
-            if (focusedTaskIndex > 0) {
-              setFocusedTaskIndex(focusedTaskIndex - 1)
-            } else if (focusedTaskIndex === 0) {
-              setFocusedTaskIndex(-1)
-              inputRef.current?.focus()
-            }
-          }
-          break
-        case 'toggle-task-completion':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-              const task = allTodos[focusedTaskIndex]
-              if (task) {
-                onTaskToggle(task.id)
-              }
-            }
-          }
-          break
-        case 'edit-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-              const task = allTodos[focusedTaskIndex]
-              if (task) {
-                startEditing(task)
-              }
-            }
-          }
-          break
-        case 'delete-task':
-          {
-            const allTodos = [...pendingTodos, ...completedTodos]
-            if (focusedTaskIndex >= 0 && focusedTaskIndex < allTodos.length) {
-              const task = allTodos[focusedTaskIndex]
-              if (task) {
-                onTaskDelete(task.id)
-                // Adjust focus after deletion
-                if (focusedTaskIndex >= allTodos.length - 1) {
-                  setFocusedTaskIndex(Math.max(0, allTodos.length - 2))
-                }
-              }
-            }
-          }
-          break
-        case 'return-to-input':
-          setFocusedTaskIndex(-1)
-          inputRef.current?.focus()
-          break
-        case 'show-help':
-          break
       }
     }
 
@@ -107,13 +34,5 @@ export function useFloatingNavigatorMenuActions({
     return () => {
       window.removeEventListener('floating-navigator-menu-action', eventHandler)
     }
-  }, [
-    focusedTaskIndex,
-    pendingTodos,
-    completedTodos,
-    inputRef,
-    onTaskToggle,
-    onTaskDelete,
-    startEditing,
-  ])
+  }, [inputRef])
 }

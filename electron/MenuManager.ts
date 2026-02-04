@@ -302,54 +302,10 @@ export class MenuManager {
             label: 'Toggle Floating Navigator',
             click: () => this.toggleFloatingNavigator(),
           },
-          {
-            label: 'Search Tasks',
-            click: () => this.handleSearchAction(),
-          },
           { type: 'separator' },
           {
             label: 'Focus New Task Input',
             click: () => this.sendFloatingNavigatorAction('focus-new-task'),
-          },
-          { type: 'separator' },
-          {
-            label: 'Navigate to Next Task',
-            // Note: Bare 'Down' accelerator removed to prevent intercepting system navigation
-            click: () => this.sendFloatingNavigatorAction('navigate-next-task'),
-          },
-          {
-            label: 'Navigate to Previous Task',
-            // Note: Bare 'Up' accelerator removed to prevent intercepting system navigation
-            click: () =>
-              this.sendFloatingNavigatorAction('navigate-previous-task'),
-          },
-          { type: 'separator' },
-          {
-            label: 'Toggle Task Completion',
-            // Note: Bare 'Space' accelerator removed to prevent intercepting normal typing
-            click: () =>
-              this.sendFloatingNavigatorAction('toggle-task-completion'),
-          },
-          {
-            label: 'Edit Task',
-            // Note: Bare 'Enter' accelerator removed to prevent intercepting form submission
-            click: () => this.sendFloatingNavigatorAction('edit-task'),
-          },
-          {
-            label: 'Delete Task',
-            // Note: Bare 'Delete' accelerator removed to prevent intercepting text editing
-            click: () => this.sendFloatingNavigatorAction('delete-task'),
-          },
-          { type: 'separator' },
-          {
-            label: 'Return to Input',
-            // Note: Bare 'Escape' accelerator removed to prevent intercepting dialog dismissal
-            click: () => this.sendFloatingNavigatorAction('return-to-input'),
-          },
-          {
-            label: 'Show Help',
-            accelerator: 'CmdOrCtrl+/',
-            click: () => this.sendFloatingNavigatorAction('show-help'),
           },
         ],
       },
@@ -473,23 +429,6 @@ export class MenuManager {
       this.windowManager.toggleFloatingNavigator()
     } else {
       console.error('[MenuManager] windowManager is not available!')
-    }
-  }
-
-  handleSearchAction(): void {
-    log.debug('[MenuManager] handleSearchAction() called')
-
-    try {
-      if (this.windowManager) {
-        this.windowManager.restoreFromTray()
-
-        if (this.windowManager.hasMainWindow()) {
-          const mainWindow = this.windowManager.getMainWindow()
-          mainWindow?.webContents.send('shortcut-search')
-        }
-      }
-    } catch (error) {
-      log.error('[MenuManager] Error handling search action:', error)
     }
   }
 

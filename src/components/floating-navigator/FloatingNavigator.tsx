@@ -26,7 +26,6 @@ import { isEnterKeyPress } from '@/lib/utils'
 
 import { SortableFloatingTodoItem } from './SortableFloatingTodoItem'
 
-
 // Lazy load icons to reduce initial bundle size
 const Plus = lazy(async () =>
   import('lucide-react').then((mod) => ({ default: mod.Plus })),
@@ -92,7 +91,6 @@ export function FloatingNavigator({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true)
-  const [focusedTaskIndex, setFocusedTaskIndex] = useState<number>(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const taskListRef = useRef<HTMLDivElement>(null)
@@ -115,13 +113,6 @@ export function FloatingNavigator({
 
   useFloatingNavigatorMenuActions({
     inputRef,
-    focusedTaskIndex,
-    setFocusedTaskIndex,
-    pendingTodos,
-    completedTodos,
-    onTaskToggle,
-    onTaskDelete,
-    startEditing,
   })
 
   // Configure dnd-kit sensors for pointer and keyboard interactions
@@ -390,17 +381,12 @@ export function FloatingNavigator({
                   role="list"
                   aria-label={`${pendingTodos.length} pending task${pendingTodos.length !== 1 ? 's' : ''}`}
                 >
-                  {pendingTodos.map((todo, index) => (
+                  {pendingTodos.map((todo) => (
                     <SortableFloatingTodoItem key={todo.id} todo={todo}>
                       {({ dragHandleProps, isDragging }) => (
                         <div
-                          className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${
-                            focusedTaskIndex === index
-                              ? 'bg-muted/50 ring-2 ring-ring ring-offset-2'
-                              : ''
-                          } ${isDragging ? 'ring-primary/20 shadow-lg ring-2' : ''}`}
+                          className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${isDragging ? 'ring-primary/20 shadow-lg ring-2' : ''}`}
                           role="listitem"
-                          tabIndex={focusedTaskIndex === index ? 0 : -1}
                           aria-label={`Task: ${todo.text}, ${todo.completed ? 'completed' : 'pending'}`}
                           aria-describedby={`task-${todo.id}-actions`}
                         >
@@ -546,18 +532,11 @@ export function FloatingNavigator({
               role="list"
               aria-label={`${completedTodos.length} completed task${completedTodos.length !== 1 ? 's' : ''}`}
             >
-              {completedTodos.slice(0, 3).map((todo, index) => (
+              {completedTodos.slice(0, 3).map((todo) => (
                 <div
                   key={todo.id}
-                  className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 opacity-60 ${
-                    focusedTaskIndex === pendingTodos.length + index
-                      ? 'bg-muted/50 ring-2 ring-ring ring-offset-2'
-                      : ''
-                  }`}
+                  className="hover:bg-muted/50 group flex items-center gap-2 rounded p-2 opacity-60"
                   role="listitem"
-                  tabIndex={
-                    focusedTaskIndex === pendingTodos.length + index ? 0 : -1
-                  }
                   aria-label={`Completed task: ${todo.text}`}
                 >
                   <Checkbox
