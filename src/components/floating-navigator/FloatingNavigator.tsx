@@ -20,11 +20,12 @@ import { useFloatingNavigatorMenuActions } from '@/components/floating-navigator
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { isFloatingNavigator } from '@/lib/electron/utils'
+import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
 import { log } from '@/lib/logger'
 import { isEnterKeyPress } from '@/lib/utils'
 
 import { SortableFloatingTodoItem } from './SortableFloatingTodoItem'
+
 
 // Lazy load icons to reduce initial bundle size
 const Plus = lazy(async () =>
@@ -187,7 +188,7 @@ export function FloatingNavigator({
 
   // Window control functions
   const handleMinimize = async () => {
-    if (isFloatingNavigator()) {
+    if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.minimize()
       } catch (error) {
@@ -197,7 +198,7 @@ export function FloatingNavigator({
   }
 
   const handleClose = async () => {
-    if (isFloatingNavigator()) {
+    if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.close()
       } catch (error) {
@@ -207,7 +208,7 @@ export function FloatingNavigator({
   }
 
   const handleToggleAlwaysOnTop = async () => {
-    if (isFloatingNavigator()) {
+    if (isFloatingNavigatorEnvironment()) {
       try {
         const newState =
           await window.floatingNavigatorAPI!.window.toggleAlwaysOnTop()
@@ -219,7 +220,7 @@ export function FloatingNavigator({
   }
 
   const handleFocusMainWindow = async () => {
-    if (isFloatingNavigator()) {
+    if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.focusMainWindow()
       } catch (error) {
@@ -265,7 +266,7 @@ export function FloatingNavigator({
           </p>
         </div>
 
-        {isFloatingNavigator() && (
+        {isFloatingNavigatorEnvironment() && (
           <div
             className="pointer-events-auto flex items-center gap-1"
             role="toolbar"
