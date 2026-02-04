@@ -26,6 +26,7 @@ import React, {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { isFloatingNavigator } from '@/lib/electron/utils'
 import { log } from '@/lib/logger'
 import { isEnterKeyPress } from '@/lib/utils'
 
@@ -132,10 +133,6 @@ export function FloatingNavigator({
     }
   }
 
-  // Check if we're in floating navigator environment
-  const isFloatingNavigator =
-    typeof window !== 'undefined' && window.floatingNavigatorAPI
-
   // Separate todos by completion status
   const pendingTodos = todos.filter((todo) => !todo.completed)
   const completedTodos = todos.filter((todo) => todo.completed)
@@ -202,7 +199,7 @@ export function FloatingNavigator({
 
   // Window control functions
   const handleMinimize = async () => {
-    if (isFloatingNavigator) {
+    if (isFloatingNavigator()) {
       try {
         await window.floatingNavigatorAPI!.window.minimize()
       } catch (error) {
@@ -212,7 +209,7 @@ export function FloatingNavigator({
   }
 
   const handleClose = async () => {
-    if (isFloatingNavigator) {
+    if (isFloatingNavigator()) {
       try {
         await window.floatingNavigatorAPI!.window.close()
       } catch (error) {
@@ -222,7 +219,7 @@ export function FloatingNavigator({
   }
 
   const handleToggleAlwaysOnTop = async () => {
-    if (isFloatingNavigator) {
+    if (isFloatingNavigator()) {
       try {
         const newState =
           await window.floatingNavigatorAPI!.window.toggleAlwaysOnTop()
@@ -234,7 +231,7 @@ export function FloatingNavigator({
   }
 
   const handleFocusMainWindow = async () => {
-    if (isFloatingNavigator) {
+    if (isFloatingNavigator()) {
       try {
         await window.floatingNavigatorAPI!.window.focusMainWindow()
       } catch (error) {
@@ -413,7 +410,7 @@ export function FloatingNavigator({
           </p>
         </div>
 
-        {isFloatingNavigator && (
+        {isFloatingNavigator() && (
           <div
             className="pointer-events-auto flex items-center gap-1"
             role="toolbar"
