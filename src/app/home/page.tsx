@@ -11,9 +11,10 @@ import {
   MoreHorizontal,
   FileText,
   Trash2,
+  Download,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
@@ -42,15 +43,37 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
+import { isAppleSilicon } from '@/lib/utils'
+
+import packageJson from '../../../package.json'
 
 import './page.css'
+import { LogoutButton } from './_components/LogoutButton'
 import { TodoList } from './_components/TodoList'
-import { UserMenu } from './_components/UserMenu'
+
+/** GitHub repository info for download URLs */
+const GITHUB_REPO = 'laststance/corelive'
 
 export default function Home() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const router = useRouter()
+
+  /**
+   * Generates the Mac app download URL based on detected architecture.
+   * @returns
+   * - ARM DMG URL for Apple Silicon Macs
+   * - Intel DMG URL for Intel Macs
+   */
+  const macDownloadUrl = useMemo(() => {
+    const version = packageJson.version
+    const isArm = isAppleSilicon()
+    const filename = isArm
+      ? `CoreLive-${version}-arm64.dmg`
+      : `CoreLive-${version}.dmg`
+
+    return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${filename}`
+  }, [])
 
   /**
    * Opens the Settings page.
@@ -131,9 +154,24 @@ export default function Home() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <ThemeSelectorMenuItem />
-                  <UserMenu />
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>Get Mac app</DropdownMenuItem>
+                  <LogoutButton />
+                  {/* Show Mac app download only in web browser, not in Electron */}
+                  {!isElectron && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={macDownloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Get Mac app</span>
+                        </a>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

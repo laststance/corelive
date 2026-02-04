@@ -4,10 +4,9 @@ import { useClerk } from '@clerk/nextjs'
 import { LogOut } from 'lucide-react'
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { log } from '@/lib/logger'
 
-import { log } from '../../../lib/logger'
-
-export function UserMenu() {
+export function LogoutButton() {
   const { signOut } = useClerk()
 
   const handleLogout = async () => {
@@ -21,7 +20,7 @@ export function UserMenu() {
   return (
     <DropdownMenuItem
       onClick={handleLogout}
-      className="text-destructive focus:text-destructive cursor-pointer"
+      className="cursor-pointer text-destructive focus:text-destructive"
     >
       <LogOut className="mr-2 h-4 w-4" />
       <span>Log out</span>
