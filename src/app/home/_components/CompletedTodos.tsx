@@ -20,6 +20,7 @@ import type { Todo } from './TodoItem'
 interface CompletedTodosProps {
   onDelete: (id: string) => void
   onClearCompleted: () => void
+  onToggleComplete: (id: string) => void
 }
 
 interface GroupedTodos {
@@ -31,6 +32,7 @@ const ITEMS_PER_PAGE = 10
 export function CompletedTodos({
   onDelete,
   onClearCompleted,
+  onToggleComplete,
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
 
@@ -207,7 +209,7 @@ export function CompletedTodos({
                     <TodoItem
                       key={todo.id}
                       todo={todo}
-                      onToggleComplete={() => {}} // Completed todos do not require toggling
+                      onToggleComplete={onToggleComplete}
                       onDelete={onDelete}
                     />
                   ))}

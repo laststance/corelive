@@ -195,6 +195,53 @@ test.describe('TODO App E2E Tests', () => {
     }
   })
 
+  test('should move completed TODO back to pending when clicking checkbox', async ({
+    page,
+  }) => {
+    const todoText = `UncheckTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+
+    // Step 1: Add a new TODO
+    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page.getByRole('button', { name: 'Add', exact: true }).click()
+
+    // Wait for the TODO to appear in pending list
+    const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+    await expect(todoCheckbox).toBeVisible()
+    await expect(todoCheckbox).not.toBeChecked()
+
+    // Wait for create mutation to settle (positive ID means server confirmed)
+    await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+      timeout: 5000,
+    })
+
+    // Step 2: Mark as completed - moves to Completed Tasks section
+    await todoCheckbox.click()
+
+    // Verify it moved to completed section (checkbox is checked, text has line-through)
+    const completedCheckbox = page.getByRole('checkbox', { name: todoText })
+    await expect(completedCheckbox).toBeChecked({ timeout: 5000 })
+    await expect(page.getByText(todoText)).toHaveClass(/line-through/)
+
+    // Step 3: Click checkbox in Completed Tasks section to move back to pending
+    await completedCheckbox.click()
+
+    // Step 4: Verify it moved back to pending section
+    // - Checkbox should be unchecked
+    // - Text should NOT have line-through styling
+    const pendingCheckbox = page.getByRole('checkbox', { name: todoText })
+    await expect(pendingCheckbox).not.toBeChecked({ timeout: 5000 })
+    await expect(page.getByText(todoText)).not.toHaveClass(/line-through/)
+
+    // Verify the item is in the pending list (left column) by checking for drag handle
+    const todoItem = page.locator('.rounded-lg.border').filter({
+      has: page.getByRole('checkbox', { name: todoText }),
+    })
+    // Pending items have drag handle (GripVertical icon), completed items don't
+    await expect(
+      todoItem.getByRole('button', { name: 'Drag to reorder' }),
+    ).toBeVisible()
+  })
+
   test('should only toggle completion when clicking checkbox, not text', async ({
     page,
   }) => {

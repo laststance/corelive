@@ -300,6 +300,7 @@ export function TodoList() {
         <CompletedTodos
           onDelete={deleteTodo}
           onClearCompleted={deleteCompleted}
+          onToggleComplete={toggleComplete}
         />
       </div>
     </div>
