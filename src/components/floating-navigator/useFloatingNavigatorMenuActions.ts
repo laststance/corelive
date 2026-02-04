@@ -1,7 +1,7 @@
 import { useEffect, type SetState } from 'react'
 
 import type { FloatingTodo } from '@/components/floating-navigator/FloatingNavigator'
-import { isFloatingNavigator } from '@/lib/electron/utils'
+import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
 
 interface UseFloatingNavigatorMenuActionsProps {
   inputRef: React.RefObject<HTMLInputElement | null>
@@ -27,7 +27,7 @@ export function useFloatingNavigatorMenuActions({
   startEditing,
 }: UseFloatingNavigatorMenuActionsProps) {
   useEffect(() => {
-    if (!isFloatingNavigator()) return
+    if (!isFloatingNavigatorEnvironment()) return
 
     const handleMenuAction = (event: CustomEvent) => {
       const action = event.detail?.action

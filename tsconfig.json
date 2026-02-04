@@ -24,7 +24,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/electron/*": ["./electron/*"]
     },
     "lib": ["dom", "dom.iterable", "esnext"],
     "incremental": true,
