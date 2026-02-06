@@ -67,7 +67,7 @@ test.describe('Category Feature E2E Tests', () => {
       await nameInput.fill(categoryName)
 
       // Click Create button
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
 
       // Wait for popover to close and category to appear in sidebar
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
@@ -89,7 +89,7 @@ test.describe('Category Feature E2E Tests', () => {
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
       await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
       await expect(sidebar.getByText(categoryName)).toBeVisible({
         timeout: 5000,
@@ -156,7 +156,7 @@ test.describe('Category Feature E2E Tests', () => {
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
       await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
 
       // Select the category
@@ -205,7 +205,7 @@ test.describe('Category Feature E2E Tests', () => {
 
       // Fill name and create
       await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
 
       // Category should appear in sidebar
       await expect(sidebar.getByText(categoryName)).toBeVisible({
@@ -246,7 +246,7 @@ test.describe('Category Feature E2E Tests', () => {
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
       await nameInput.fill(originalName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
       await expect(sidebar.getByText(originalName)).toBeVisible({
         timeout: 5000,
@@ -312,7 +312,7 @@ test.describe('Category Feature E2E Tests', () => {
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
       await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
       await expect(sidebar.getByText(categoryName)).toBeVisible({
         timeout: 5000,
@@ -371,7 +371,7 @@ test.describe('Category Feature E2E Tests', () => {
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
       await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
 
       // Select the category
@@ -418,7 +418,7 @@ test.describe('Category Feature E2E Tests', () => {
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
       await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create' }).click()
+      await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
 
       // Select category and add todo

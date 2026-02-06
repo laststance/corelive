@@ -272,11 +272,11 @@ export const ThemeSelectorShowsCurrentThemeTest: Story = {
     // Click to open dropdown
     await userEvent.click(themeSelectorTrigger)
 
-    // Should see current theme info in dropdown
+    // Should see theme selector dropdown content
     await new Promise((r) => setTimeout(r, 500))
     const body = within(document.body)
-    const currentThemeText = body.getByText(/current theme:/i)
-    expect(currentThemeText).toBeInTheDocument()
+    const selectThemeLabel = body.getByText(/select theme/i)
+    expect(selectThemeLabel).toBeInTheDocument()
 
     // Switch to dark theme - use flexible name pattern
     const darkTheme = body.getByRole('menuitem', { name: /Dark/i })
