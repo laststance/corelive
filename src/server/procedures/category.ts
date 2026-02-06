@@ -166,7 +166,7 @@ export const updateCategory = authMiddleware
         (error as { code: string }).code === 'P2002'
       ) {
         throw new ORPCError('CONFLICT', {
-          message: `Category "${input.data.name}" already exists`,
+          message: `Category "${input.data.name ?? 'unknown'}" already exists`,
         })
       }
       if (error instanceof ORPCError) throw error

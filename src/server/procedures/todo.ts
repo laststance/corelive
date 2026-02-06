@@ -87,7 +87,7 @@ export const createTodo = authMiddleware
 
       return todo
     } catch (error) {
-      // TODO: Use Logger Library
+      if (error instanceof ORPCError) throw error
       log.error('Error in createTodo:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to create todo',

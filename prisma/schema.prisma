@@ -23,6 +23,8 @@ model Completed {
   categoryId Int?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  @@index([categoryId])
 }
 
 model Category {
@@ -65,6 +67,8 @@ model Todo {
   categoryId Int?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  @@index([categoryId])
 }
 
 model ElectronSettings {
