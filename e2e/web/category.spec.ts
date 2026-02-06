@@ -37,7 +37,9 @@ test.describe('Category Feature E2E Tests', () => {
       page,
     }) => {
       // Category sidebar is visible on desktop (lg:block)
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await expect(sidebar).toBeVisible()
 
       // "All" item should always be present
@@ -56,7 +58,9 @@ test.describe('Category Feature E2E Tests', () => {
       const categoryName = uniqueName('CatCreate')
 
       // Click "Add Category" to open popover
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
 
       // Wait for popover to appear
@@ -84,7 +88,9 @@ test.describe('Category Feature E2E Tests', () => {
       const todoWithoutCategory = uniqueName('TodoNoCat')
 
       // Step 1: Create a category
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
@@ -151,7 +157,9 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoBadge')
 
       // Create a category
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
@@ -190,7 +198,9 @@ test.describe('Category Feature E2E Tests', () => {
       const categoryName = uniqueName('CatColor')
 
       // Open Add Category popover
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
 
       const nameInput = page.getByPlaceholder('Category name')
@@ -224,7 +234,9 @@ test.describe('Category Feature E2E Tests', () => {
   test.describe('Category Management Dialog', () => {
     test('should open manage dialog from sidebar', async ({ page }) => {
       // Click the manage (gear) button
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByRole('button', { name: 'Manage categories' }).click()
 
       // Dialog should open
@@ -241,7 +253,9 @@ test.describe('Category Feature E2E Tests', () => {
       const newName = uniqueName('CatRenamed')
 
       // First create a category
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
@@ -306,7 +320,9 @@ test.describe('Category Feature E2E Tests', () => {
       const categoryName = uniqueName('CatDelete')
 
       // Create a category
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
@@ -367,7 +383,9 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoAutoAssign')
 
       // Create a category
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
@@ -402,7 +420,9 @@ test.describe('Category Feature E2E Tests', () => {
 
     test('should show pending count next to categories', async ({ page }) => {
       // The "All" item should show a count
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       const allButton = sidebar
         .locator('button')
         .filter({ hasText: 'All' })
@@ -417,7 +437,9 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoKeepTask')
 
       // Create a category and add a todo to it
-      const sidebar = page.locator('.rounded-lg.border.bg-card').first()
+      const sidebar = page
+        .locator('.rounded-lg.border.bg-card')
+        .filter({ hasText: 'Add Category' })
       await sidebar.getByText('Add Category').click()
       const nameInput = page.getByPlaceholder('Category name')
       await expect(nameInput).toBeVisible({ timeout: 5000 })
