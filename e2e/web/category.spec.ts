@@ -1,5 +1,5 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type Locator } from '@playwright/test'
 
 /**
  * Generates a unique name for test data isolation.
@@ -24,6 +24,54 @@ async function waitForAppReady(page: Page) {
   }
 }
 
+/**
+ * Returns a locator for the category sidebar.
+ * @param page - Playwright page object
+ * @returns Locator scoped to the sidebar element containing "Add Category"
+ */
+function getSidebar(page: Page) {
+  return page
+    .locator('.rounded-lg.border.bg-card')
+    .filter({ hasText: 'Add Category' })
+}
+
+/**
+ * Creates a category via the sidebar popover and waits for server confirmation.
+ * @param page - Playwright page object
+ * @param sidebar - Sidebar locator
+ * @param categoryName - Name of the category to create
+ * @param color - Optional color to select (e.g., 'green')
+ */
+async function createCategory(
+  page: Page,
+  sidebar: Locator,
+  categoryName: string,
+  color?: string,
+) {
+  await sidebar.getByText('Add Category').click()
+  const nameInput = page.getByPlaceholder('Category name')
+  await expect(nameInput).toBeVisible({ timeout: 5000 })
+
+  if (color) {
+    const colorButton = page.getByRole('button', {
+      name: `Select ${color} color`,
+    })
+    await expect(colorButton).toBeVisible()
+    await colorButton.click()
+  }
+
+  await nameInput.fill(categoryName)
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+
+  // Wait for popover to close
+  await expect(nameInput).not.toBeVisible({ timeout: 5000 })
+
+  // Wait for server response to complete (category appears in sidebar)
+  await expect(sidebar.getByText(categoryName)).toBeVisible({
+    timeout: 15000,
+  })
+}
+
 test.describe('Category Feature E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
@@ -37,9 +85,7 @@ test.describe('Category Feature E2E Tests', () => {
       page,
     }) => {
       // Category sidebar is visible on desktop (lg:block)
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
+      const sidebar = getSidebar(page)
       await expect(sidebar).toBeVisible()
 
       // "All" item should always be present
@@ -56,30 +102,8 @@ test.describe('Category Feature E2E Tests', () => {
 
     test('should create a new category from sidebar', async ({ page }) => {
       const categoryName = uniqueName('CatCreate')
-
-      // Click "Add Category" to open popover
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-
-      // Wait for popover to appear
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-
-      // Type category name
-      await nameInput.fill(categoryName)
-
-      // Click Create button
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-
-      // Wait for popover to close and category to appear in sidebar
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
-
-      // Category should now appear in the sidebar
-      await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 5000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
     })
 
     test('should filter todos by category selection', async ({ page }) => {
@@ -88,23 +112,11 @@ test.describe('Category Feature E2E Tests', () => {
       const todoWithoutCategory = uniqueName('TodoNoCat')
 
       // Step 1: Create a category
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-      await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
-      await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 5000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
 
       // Step 2: Select the new category in sidebar
       await sidebar.getByText(categoryName).click()
-
-      // Wait for filter to apply
       await page.waitForTimeout(500)
 
       // Step 3: Add a todo (should be auto-assigned to the selected category)
@@ -157,15 +169,8 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoBadge')
 
       // Create a category
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-      await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
 
       // Select the category
       await sidebar.getByText(categoryName).click()
@@ -196,31 +201,8 @@ test.describe('Category Feature E2E Tests', () => {
 
     test('should select a color when creating a category', async ({ page }) => {
       const categoryName = uniqueName('CatColor')
-
-      // Open Add Category popover
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-
-      // Select a different color (e.g., green)
-      const greenButton = page.getByRole('button', {
-        name: 'Select green color',
-      })
-      await expect(greenButton).toBeVisible()
-      await greenButton.click()
-
-      // Fill name and create
-      await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-
-      // Category should appear in sidebar
-      await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 5000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName, 'green')
 
       // The category should have a green color dot (bg-green-500)
       const categoryButton = sidebar
@@ -234,9 +216,7 @@ test.describe('Category Feature E2E Tests', () => {
   test.describe('Category Management Dialog', () => {
     test('should open manage dialog from sidebar', async ({ page }) => {
       // Click the manage (gear) button
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
+      const sidebar = getSidebar(page)
       await sidebar.getByRole('button', { name: 'Manage categories' }).click()
 
       // Dialog should open
@@ -253,18 +233,8 @@ test.describe('Category Feature E2E Tests', () => {
       const newName = uniqueName('CatRenamed')
 
       // First create a category
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-      await nameInput.fill(originalName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
-      await expect(sidebar.getByText(originalName)).toBeVisible({
-        timeout: 5000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, originalName)
 
       // Open manage dialog
       await sidebar.getByRole('button', { name: 'Manage categories' }).click()
@@ -300,38 +270,25 @@ test.describe('Category Feature E2E Tests', () => {
         })
       await saveButton.click()
 
-      // Wait for the rename to take effect
-      await page.waitForTimeout(1000)
-
-      // New name should appear in dialog
+      // Wait for the rename to take effect (server response)
       await expect(
         page.locator('[role="dialog"]').getByText(newName),
-      ).toBeVisible({ timeout: 5000 })
+      ).toBeVisible({ timeout: 15000 })
 
       // Close dialog
       await page.keyboard.press('Escape')
       await page.waitForTimeout(500)
 
       // New name should appear in sidebar
-      await expect(sidebar.getByText(newName)).toBeVisible({ timeout: 5000 })
+      await expect(sidebar.getByText(newName)).toBeVisible({ timeout: 10000 })
     })
 
     test('should delete a category with confirmation', async ({ page }) => {
       const categoryName = uniqueName('CatDelete')
 
       // Create a category
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-      await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
-      await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 5000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
 
       // Open manage dialog
       await sidebar.getByRole('button', { name: 'Manage categories' }).click()
@@ -383,18 +340,8 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoAutoAssign')
 
       // Create a category
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-      await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
-      await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 10000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
 
       // Select the category
       await sidebar.getByText(categoryName).click()
@@ -414,15 +361,13 @@ test.describe('Category Feature E2E Tests', () => {
         .filter({ hasText: categoryName })
       // The count should show at least "1"
       await expect(categoryButton.getByText('1')).toBeVisible({
-        timeout: 5000,
+        timeout: 10000,
       })
     })
 
     test('should show pending count next to categories', async ({ page }) => {
       // The "All" item should show a count
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
+      const sidebar = getSidebar(page)
       const allButton = sidebar
         .locator('button')
         .filter({ hasText: 'All' })
@@ -437,18 +382,8 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoKeepTask')
 
       // Create a category and add a todo to it
-      const sidebar = page
-        .locator('.rounded-lg.border.bg-card')
-        .filter({ hasText: 'Add Category' })
-      await sidebar.getByText('Add Category').click()
-      const nameInput = page.getByPlaceholder('Category name')
-      await expect(nameInput).toBeVisible({ timeout: 5000 })
-      await nameInput.fill(categoryName)
-      await page.getByRole('button', { name: 'Create', exact: true }).click()
-      await expect(nameInput).not.toBeVisible({ timeout: 5000 })
-      await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 10000,
-      })
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
 
       // Select category and add todo
       await sidebar.getByText(categoryName).click()
