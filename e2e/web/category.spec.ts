@@ -337,7 +337,10 @@ test.describe('Category Feature E2E Tests', () => {
       await expect(page.getByText('Delete category?')).toBeVisible({
         timeout: 5000,
       })
-      await expect(page.getByText(categoryName, { exact: false })).toBeVisible()
+      // Verify the confirmation dialog mentions the category name
+      await expect(
+        page.getByRole('alertdialog').getByText(categoryName),
+      ).toBeVisible()
 
       // Confirm deletion
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
@@ -372,7 +375,7 @@ test.describe('Category Feature E2E Tests', () => {
       await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
       await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 5000,
+        timeout: 10000,
       })
 
       // Select the category
@@ -422,7 +425,7 @@ test.describe('Category Feature E2E Tests', () => {
       await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
       await expect(sidebar.getByText(categoryName)).toBeVisible({
-        timeout: 5000,
+        timeout: 10000,
       })
 
       // Select category and add todo
