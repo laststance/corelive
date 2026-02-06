@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -88,8 +88,12 @@ export function TodoList() {
 
   // Fetch categories for name/color lookup
   const { data: categoryData } = useQuery(orpc.category.list.queryOptions({}))
-  const categoryMap = new Map<number, CategoryWithCount>(
-    (categoryData?.categories ?? []).map((c) => [c.id, c]),
+  const categoryMap = useMemo(
+    () =>
+      new Map<number, CategoryWithCount>(
+        (categoryData?.categories ?? []).map((c) => [c.id, c]),
+      ),
+    [categoryData],
   )
 
   // Fetch pending todos (filtered by selected category)

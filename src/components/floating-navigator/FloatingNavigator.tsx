@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
+import { COLOR_DOT_CLASSES } from '@/lib/category-colors'
 import { log } from '@/lib/logger'
 import { isEnterKeyPress } from '@/lib/utils'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -91,16 +92,6 @@ interface FloatingNavigatorProps {
   selectedCategoryId?: number | null
   /** Callback when category filter changes */
   onCategoryChange?: (id: number | null) => void
-}
-
-/** Tailwind bg classes for category color dots */
-const COLOR_DOT_CLASSES: Record<string, string> = {
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  violet: 'bg-violet-500',
-  orange: 'bg-orange-500',
 }
 
 export function FloatingNavigator({

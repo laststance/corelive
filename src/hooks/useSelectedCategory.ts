@@ -28,7 +28,7 @@ const getSnapshot = (): number | null => {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored === null) return null
     const parsed = Number(stored)
-    return Number.isFinite(parsed) ? parsed : null
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
   } catch {
     return null
   }

@@ -16,19 +16,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { Textarea } from '@/components/ui/textarea'
-
-/** Maps category color names to Tailwind bg classes */
-const COLOR_CLASSES: Record<string, string> = {
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  violet: 'bg-violet-500',
-  orange: 'bg-orange-500',
-}
-
-const getCategoryColorClass = (color?: string | null): string =>
-  (color && COLOR_CLASSES[color]) ?? 'bg-muted-foreground'
+import { getColorDotClass } from '@/lib/category-colors'
 
 export interface Todo {
   id: string
@@ -115,7 +103,7 @@ export function TodoItem({
             {todo.categoryName && (
               <span className="flex items-center gap-1">
                 <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${getCategoryColorClass(todo.categoryColor)}`}
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${getColorDotClass(todo.categoryColor)}`}
                 />
                 {todo.categoryName}
               </span>

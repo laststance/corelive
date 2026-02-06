@@ -46,18 +46,26 @@ export const listCategories = authMiddleware
     try {
       const { user } = context
 
-      const categories = await prisma.category.findMany({
-        where: { userId: user.id },
-        include: {
-          _count: {
-            select: { todos: { where: { completed: false } } },
+      const [categories, uncategorizedCount] = await Promise.all([
+        prisma.category.findMany({
+          where: { userId: user.id },
+          include: {
+            _count: {
+              select: { todos: { where: { completed: false } } },
+            },
           },
-        },
-        orderBy: { createdAt: 'asc' },
-      })
+          orderBy: { createdAt: 'asc' },
+        }),
+        prisma.todo.count({
+          where: { userId: user.id, completed: false, categoryId: null },
+        }),
+      ])
 
       // Prisma returns color as string; cast to satisfy the enum-typed output schema
-      return { categories: categories as CategoryWithCount[] }
+      return {
+        categories: categories as CategoryWithCount[],
+        uncategorizedCount,
+      }
     } catch (error) {
       log.error({ error }, 'Error in listCategories')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -81,19 +89,6 @@ export const createCategory = authMiddleware
     try {
       const { user } = context
 
-      // Check for duplicate name per user
-      const existing = await prisma.category.findUnique({
-        where: {
-          name_userId: { name: input.name, userId: user.id },
-        },
-      })
-
-      if (existing) {
-        throw new ORPCError('CONFLICT', {
-          message: `Category "${input.name}" already exists`,
-        })
-      }
-
       const category = await prisma.category.create({
         data: {
           name: input.name,
@@ -105,6 +100,16 @@ export const createCategory = authMiddleware
       // Prisma returns color as string; cast to satisfy the enum-typed output schema
       return category as Category
     } catch (error) {
+      // Prisma P2002 = unique constraint violation (@@unique([name, userId]))
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: string }).code === 'P2002'
+      ) {
+        throw new ORPCError('CONFLICT', {
+          message: `Category "${input.name}" already exists`,
+        })
+      }
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in createCategory')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -131,42 +136,46 @@ export const updateCategory = authMiddleware
   )
   .output(CategorySchema)
   .handler(async ({ input, context }) => {
-    const { user } = context
-    const { id, data } = input
+    try {
+      const { user } = context
+      const { id, data } = input
 
-    // Permission check
-    const existing = await prisma.category.findFirst({
-      where: { id, userId: user.id },
-    })
-
-    if (!existing) {
-      throw new ORPCError('NOT_FOUND', {
-        message: 'Category not found',
-      })
-    }
-
-    // Check for duplicate name if renaming
-    if (data.name && data.name !== existing.name) {
-      const duplicate = await prisma.category.findUnique({
-        where: {
-          name_userId: { name: data.name, userId: user.id },
-        },
+      // Permission check
+      const existing = await prisma.category.findFirst({
+        where: { id, userId: user.id },
       })
 
-      if (duplicate) {
-        throw new ORPCError('CONFLICT', {
-          message: `Category "${data.name}" already exists`,
+      if (!existing) {
+        throw new ORPCError('NOT_FOUND', {
+          message: 'Category not found',
         })
       }
+
+      const category = await prisma.category.update({
+        where: { id },
+        data,
+      })
+
+      // Prisma returns color as string; cast to satisfy the enum-typed output schema
+      return category as Category
+    } catch (error) {
+      // Prisma P2002 = unique constraint violation on rename
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: string }).code === 'P2002'
+      ) {
+        throw new ORPCError('CONFLICT', {
+          message: `Category "${input.data.name}" already exists`,
+        })
+      }
+      if (error instanceof ORPCError) throw error
+      log.error({ error }, 'Error in updateCategory')
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to update category',
+        cause: error,
+      })
     }
-
-    const category = await prisma.category.update({
-      where: { id },
-      data,
-    })
-
-    // Prisma returns color as string; cast to satisfy the enum-typed output schema
-    return category as Category
   })
 
 /**
@@ -179,24 +188,34 @@ export const deleteCategory = authMiddleware
   .input(z.object({ id: z.number().int().positive() }))
   .output(z.object({ success: z.boolean() }))
   .handler(async ({ input, context }) => {
-    const { user } = context
-    const { id } = input
+    try {
+      const { user } = context
+      const { id } = input
 
-    // Permission check
-    const existing = await prisma.category.findFirst({
-      where: { id, userId: user.id },
-    })
+      // Permission check
+      const existing = await prisma.category.findFirst({
+        where: { id, userId: user.id },
+      })
 
-    if (!existing) {
-      throw new ORPCError('NOT_FOUND', {
-        message: 'Category not found',
+      if (!existing) {
+        throw new ORPCError('NOT_FOUND', {
+          message: 'Category not found',
+        })
+      }
+
+      // Both Todo.categoryId and Completed.categoryId use onDelete: SetNull,
+      // so PostgreSQL automatically nullifies references when the category is removed.
+      await prisma.category.delete({
+        where: { id },
+      })
+
+      return { success: true }
+    } catch (error) {
+      if (error instanceof ORPCError) throw error
+      log.error({ error }, 'Error in deleteCategory')
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to delete category',
+        cause: error,
       })
     }
-
-    // ON DELETE SET NULL handles orphaning todos automatically via FK constraint
-    await prisma.category.delete({
-      where: { id },
-    })
-
-    return { success: true }
   })

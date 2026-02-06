@@ -8,9 +8,11 @@ import type { CategoryWithCount } from '@/server/schemas/category'
 
 /**
  * Response structure for category list queries.
+ * Must match CategoryListResponseSchema from server/schemas/category.
  */
 interface CategoryListResponse {
   categories: CategoryWithCount[]
+  uncategorizedCount: number
 }
 
 /**

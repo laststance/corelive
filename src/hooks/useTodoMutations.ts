@@ -15,6 +15,7 @@ interface Todo {
   text: string
   completed: boolean
   notes: string | null
+  categoryId: number | null
   userId: number
   createdAt: Date
   updatedAt: Date
@@ -82,6 +83,7 @@ export function useTodoMutations() {
         id: -Date.now(), // Negative temp ID to avoid collision
         text: newTodo.text,
         notes: newTodo.notes ?? null,
+        categoryId: newTodo.categoryId ?? null,
         completed: false,
         userId: 0,
         createdAt: new Date(),
@@ -368,7 +370,10 @@ export function useTodoMutations() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // Refresh category counts (todo may have changed category)
+      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       broadcastTodoSync()
+      broadcastCategorySync()
     },
   })
 

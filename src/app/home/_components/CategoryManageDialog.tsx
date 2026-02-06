@@ -24,25 +24,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
+import { getColorDotClass } from '@/lib/category-colors'
 import { orpc } from '@/lib/orpc/client-query'
 import {
   CATEGORY_COLORS,
   type CategoryColor,
   type CategoryWithCount,
 } from '@/server/schemas/category'
-
-/** Tailwind background color classes mapped to category color names */
-const COLOR_DOT_CLASSES: Record<string, string> = {
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  violet: 'bg-violet-500',
-  orange: 'bg-orange-500',
-}
-
-const getColorDotClass = (color: string): string =>
-  COLOR_DOT_CLASSES[color] ?? 'bg-muted-foreground'
 
 interface CategoryManageDialogProps {
   open: boolean
@@ -75,6 +63,19 @@ export function CategoryManageDialog({
   // Fetch categories
   const { data } = useQuery(orpc.category.list.queryOptions({}))
   const categories: CategoryWithCount[] = data?.categories ?? []
+
+  /**
+   * Wraps onOpenChange to reset editing state when the dialog closes.
+   * Prevents stale inline-edit UI from reappearing on reopen.
+   */
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setEditingId(null)
+      setEditName('')
+      setEditColor('blue')
+    }
+    onOpenChange(nextOpen)
+  }
 
   /**
    * Enters inline edit mode for a category.
@@ -113,7 +114,7 @@ export function CategoryManageDialog({
    * Confirms and executes category deletion.
    */
   const confirmDelete = () => {
-    if (!deleteTarget) return
+    if (!deleteTarget || deleteMutation.isPending) return
 
     deleteMutation.mutate(
       { id: deleteTarget.id },
@@ -123,7 +124,7 @@ export function CategoryManageDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>
@@ -258,9 +259,10 @@ export function CategoryManageDialog({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
               className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- shadcn destructive tokens
             >
-              Delete
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

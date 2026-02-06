@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import { getColorDotClass } from '@/lib/category-colors'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import {
@@ -21,24 +22,6 @@ import {
   type CategoryColor,
   type CategoryWithCount,
 } from '@/server/schemas/category'
-
-/** Tailwind background color classes mapped to category color names */
-const COLOR_DOT_CLASSES: Record<string, string> = {
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  violet: 'bg-violet-500',
-  orange: 'bg-orange-500',
-}
-
-/**
- * Returns the Tailwind bg class for a category color.
- * @param color - Category color name
- * @returns Tailwind bg-* class string
- */
-const getColorDotClass = (color: string): string =>
-  COLOR_DOT_CLASSES[color] ?? 'bg-muted-foreground'
 
 /**
  * Linear-style sidebar for filtering todos by category.
@@ -68,11 +51,10 @@ export function CategorySidebar({
   const { data } = useQuery(orpc.category.list.queryOptions({}))
   const categories: CategoryWithCount[] = data?.categories ?? []
 
-  // Compute total pending count across all categories + uncategorized
-  const totalPendingCount = categories.reduce(
-    (sum, cat) => sum + cat._count.todos,
-    0,
-  )
+  // Total pending = categorized + uncategorized
+  const totalPendingCount =
+    categories.reduce((sum, cat) => sum + cat._count.todos, 0) +
+    (data?.uncategorizedCount ?? 0)
 
   // Cross-tab sync for categories
   useEffect(() => {

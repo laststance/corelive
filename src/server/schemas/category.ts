@@ -73,7 +73,9 @@ export type CategoryWithCount = z.infer<typeof CategoryWithCountSchema>
 
 /**
  * Response schema for the list categories endpoint.
+ * Includes uncategorizedCount for computing the total "All" badge.
  */
 export const CategoryListResponseSchema = z.object({
   categories: z.array(CategoryWithCountSchema),
+  uncategorizedCount: z.number().int().min(0),
 })
