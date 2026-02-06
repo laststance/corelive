@@ -258,12 +258,11 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // Find the category row and click edit (pencil) button
+      // Find the category row (direct flex container with the name text)
       const categoryRow = page
         .locator('[role="dialog"]')
-        .locator('div')
-        .filter({ hasText: originalName })
-        .first()
+        .locator('.flex.items-center')
+        .filter({ has: page.locator(`text="${originalName}"`) })
       const editButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-pencil'),
       })
@@ -324,12 +323,11 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // Find category row and click delete (trash) button
+      // Find the category row (direct flex container with the name text)
       const categoryRow = page
         .locator('[role="dialog"]')
-        .locator('div')
-        .filter({ hasText: categoryName })
-        .first()
+        .locator('.flex.items-center')
+        .filter({ has: page.locator(`text="${categoryName}"`) })
       const deleteButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-trash-2'),
       })
@@ -373,6 +371,9 @@ test.describe('Category Feature E2E Tests', () => {
       await nameInput.fill(categoryName)
       await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
+      await expect(sidebar.getByText(categoryName)).toBeVisible({
+        timeout: 5000,
+      })
 
       // Select the category
       await sidebar.getByText(categoryName).click()
@@ -420,6 +421,9 @@ test.describe('Category Feature E2E Tests', () => {
       await nameInput.fill(categoryName)
       await page.getByRole('button', { name: 'Create', exact: true }).click()
       await expect(nameInput).not.toBeVisible({ timeout: 5000 })
+      await expect(sidebar.getByText(categoryName)).toBeVisible({
+        timeout: 5000,
+      })
 
       // Select category and add todo
       await sidebar.getByText(categoryName).click()
@@ -440,11 +444,11 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
+      // Find the category row (direct flex container with the name text)
       const categoryRow = page
         .locator('[role="dialog"]')
-        .locator('div')
-        .filter({ hasText: categoryName })
-        .first()
+        .locator('.flex.items-center')
+        .filter({ has: page.locator(`text="${categoryName}"`) })
       const deleteButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-trash-2'),
       })
