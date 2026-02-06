@@ -31,10 +31,15 @@ const todoFormSchema = z.object({
 type TodoFormValues = z.infer<typeof todoFormSchema>
 
 interface AddTodoFormProps {
-  onAddTodo: (text: string, notes?: string) => void
+  onAddTodo: (text: string, notes?: string, categoryId?: number | null) => void
+  /** Category ID to auto-assign to new todos (from sidebar selection) */
+  selectedCategoryId?: number | null
 }
 
-export function AddTodoForm({ onAddTodo }: AddTodoFormProps) {
+export function AddTodoForm({
+  onAddTodo,
+  selectedCategoryId,
+}: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
 
   const form = useForm<TodoFormValues>({
@@ -46,7 +51,7 @@ export function AddTodoForm({ onAddTodo }: AddTodoFormProps) {
   })
 
   const handleSubmit = (values: TodoFormValues) => {
-    onAddTodo(values.text, values.notes || undefined)
+    onAddTodo(values.text, values.notes || undefined, selectedCategoryId)
     form.reset()
     setIsNotesOpen(false)
   }

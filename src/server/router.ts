@@ -1,4 +1,10 @@
 import {
+  listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} from './procedures/category'
+import {
   getElectronSettings,
   upsertElectronSettings,
 } from './procedures/electronSettings'
@@ -13,6 +19,12 @@ import {
 } from './procedures/todo'
 
 export const router = {
+  category: {
+    list: listCategories,
+    create: createCategory,
+    update: updateCategory,
+    delete: deleteCategory,
+  },
   todo: {
     list: listTodos,
     create: createTodo,

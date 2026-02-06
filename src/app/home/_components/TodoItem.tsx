@@ -17,12 +17,28 @@ import {
 } from '@/components/ui/collapsible'
 import { Textarea } from '@/components/ui/textarea'
 
+/** Maps category color names to Tailwind bg classes */
+const COLOR_CLASSES: Record<string, string> = {
+  blue: 'bg-blue-500',
+  green: 'bg-green-500',
+  amber: 'bg-amber-500',
+  rose: 'bg-rose-500',
+  violet: 'bg-violet-500',
+  orange: 'bg-orange-500',
+}
+
+const getCategoryColorClass = (color?: string | null): string =>
+  (color && COLOR_CLASSES[color]) ?? 'bg-muted-foreground'
+
 export interface Todo {
   id: string
   text: string
   completed: boolean
   createdAt: Date
   notes?: string | null
+  categoryId?: number | null
+  categoryName?: string | null
+  categoryColor?: string | null
 }
 
 /**
@@ -94,9 +110,17 @@ export function TodoItem({
           >
             {todo.text}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {todo.createdAt.toLocaleDateString('en-US')}
-          </p>
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{todo.createdAt.toLocaleDateString('en-US')}</span>
+            {todo.categoryName && (
+              <span className="flex items-center gap-1">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${getCategoryColorClass(todo.categoryColor)}`}
+                />
+                {todo.categoryName}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={todo.completed ? 'secondary' : 'default'}>

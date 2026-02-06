@@ -51,5 +51,5 @@
     ".storybook/*.tsx",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", ".next", "next", "examples-with-next"]
+  "exclude": ["node_modules", ".next", "next", "examples-with-next", "_trials"]
 }

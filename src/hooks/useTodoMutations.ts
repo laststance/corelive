@@ -3,6 +3,7 @@
 import type { InfiniteData } from '@tanstack/react-query'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 
@@ -108,7 +109,10 @@ export function useTodoMutations() {
     onSettled: () => {
       // Always refetch to sync with server
       queryClient.invalidateQueries({ queryKey: pendingKey })
+      // Refresh category counts (todo was added to a category)
+      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       broadcastTodoSync()
+      broadcastCategorySync()
     },
   })
 
@@ -231,7 +235,10 @@ export function useTodoMutations() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // Refresh category counts (todo moved between pending/completed)
+      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       broadcastTodoSync()
+      broadcastCategorySync()
     },
   })
 
@@ -295,7 +302,10 @@ export function useTodoMutations() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // Refresh category counts (todo was deleted from a category)
+      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       broadcastTodoSync()
+      broadcastCategorySync()
     },
   })
 
@@ -398,7 +408,10 @@ export function useTodoMutations() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // Refresh category counts (completed todos were cleared)
+      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       broadcastTodoSync()
+      broadcastCategorySync()
     },
   })
 

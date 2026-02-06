@@ -20,9 +20,17 @@ import { useFloatingNavigatorMenuActions } from '@/components/floating-navigator
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
 import { log } from '@/lib/logger'
 import { isEnterKeyPress } from '@/lib/utils'
+import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { SortableFloatingTodoItem } from './SortableFloatingTodoItem'
 
@@ -77,6 +85,22 @@ interface FloatingNavigatorProps {
   onTaskEdit: (id: string, title: string) => void
   onTaskDelete: (id: string) => void
   onTaskReorder?: (activeId: string, overId: string) => void
+  /** Categories for the filter dropdown */
+  categories?: CategoryWithCount[]
+  /** Currently selected category ID (null = All) */
+  selectedCategoryId?: number | null
+  /** Callback when category filter changes */
+  onCategoryChange?: (id: number | null) => void
+}
+
+/** Tailwind bg classes for category color dots */
+const COLOR_DOT_CLASSES: Record<string, string> = {
+  blue: 'bg-blue-500',
+  green: 'bg-green-500',
+  amber: 'bg-amber-500',
+  rose: 'bg-rose-500',
+  violet: 'bg-violet-500',
+  orange: 'bg-orange-500',
 }
 
 export function FloatingNavigator({
@@ -86,6 +110,9 @@ export function FloatingNavigator({
   onTaskEdit,
   onTaskDelete,
   onTaskReorder,
+  categories = [],
+  selectedCategoryId = null,
+  onCategoryChange,
 }: FloatingNavigatorProps) {
   const [newTaskText, setNewTaskText] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -256,6 +283,35 @@ export function FloatingNavigator({
               `, ${completedTodos.length} completed`}
           </p>
         </div>
+
+        {/* Category filter dropdown */}
+        {categories.length > 0 && onCategoryChange && (
+          <div className="pointer-events-auto mr-1">
+            <Select
+              value={selectedCategoryId?.toString() ?? 'all'}
+              onValueChange={(value) =>
+                onCategoryChange(value === 'all' ? null : Number(value))
+              }
+            >
+              <SelectTrigger className="h-6 w-24 border-0 bg-transparent px-2 text-xs">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id.toString()}>
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={`h-2 w-2 rounded-full ${COLOR_DOT_CLASSES[cat.color] ?? 'bg-muted-foreground'}`}
+                      />
+                      {cat.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {isFloatingNavigatorEnvironment() && (
           <div

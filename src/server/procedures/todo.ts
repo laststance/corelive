@@ -20,12 +20,13 @@ export const listTodos = authMiddleware
   .output(TodoResponseSchema)
   .handler(async ({ input, context }) => {
     try {
-      const { limit, offset, completed } = input
+      const { limit, offset, completed, categoryId } = input
       const { user } = context
 
       const where = {
         userId: user.id,
         ...(completed !== undefined && { completed }),
+        ...(categoryId !== undefined && { categoryId }),
       }
 
       const [todos, total] = await Promise.all([
@@ -67,6 +68,7 @@ export const createTodo = authMiddleware
         data: {
           text: input.text,
           notes: input.notes,
+          categoryId: input.categoryId,
           userId: user.id,
         },
       })
