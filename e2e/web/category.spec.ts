@@ -289,19 +289,49 @@ test.describe('Category Feature E2E Tests', () => {
       await expect(colorDot).toHaveClass(/bg-green-500/)
     })
 
-    test('should show empty state CTA when no categories exist', async ({
+    test('should show empty state CTA and open popover on click', async ({
       page,
     }) => {
+      const categoryName = uniqueName('CatCTA')
       const sidebar = getSidebar(page)
 
-      // When no categories exist, "Add your first category" CTA should appear
-      // and "Manage" button should NOT be visible
-      const hasCategories = await sidebar
+      // Create a category so we can delete it to guarantee an empty state
+      await createCategory(page, sidebar, categoryName)
+
+      // Verify CTA is NOT visible when categories exist
+      await expect(
+        sidebar.getByText('Add your first category'),
+      ).not.toBeVisible()
+
+      // Delete the category via manage dialog
+      await openManageDialog(page, sidebar)
+      const categoryRow = page
+        .locator('[role="dialog"]')
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: categoryName })
+      await expect(categoryRow).toBeVisible({ timeout: 5000 })
+      await categoryRow
+        .locator('button')
+        .filter({ has: page.locator('svg.lucide-trash-2') })
+        .click()
+      await expect(page.getByText('Delete category?')).toBeVisible({
+        timeout: 5000,
+      })
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page.waitForLoadState('networkidle')
+      await page.keyboard.press('Escape')
+      await expect(page.getByText('Manage Categories')).not.toBeVisible({
+        timeout: 5000,
+      })
+
+      // Now check if we're in an empty state (no other test-created categories)
+      const hasOtherCategories = await sidebar
         .getByRole('button', { name: 'Manage' })
         .isVisible()
         .catch(() => false)
 
-      if (!hasCategories) {
+      if (!hasOtherCategories) {
+        // CTA should be visible when no categories exist
         await expect(sidebar.getByText('Add your first category')).toBeVisible()
 
         // Clicking the CTA should open the category creation popover
@@ -309,8 +339,6 @@ test.describe('Category Feature E2E Tests', () => {
         await expect(page.getByPlaceholder('Category name')).toBeVisible({
           timeout: 5000,
         })
-
-        // Close the popover
         await page.keyboard.press('Escape')
       }
     })
@@ -521,8 +549,18 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should show pending count next to categories', async ({ page }) => {
-      // The "All" item should show a count badge
+      const todoText = uniqueName('TodoCnt')
       const sidebar = getSidebar(page)
+
+      // Create a todo to ensure at least one pending task exists
+      const todoInput = page.getByPlaceholder('Add a new todo...')
+      await todoInput.fill(todoText)
+      await todoInput.press('Enter')
+      await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
+        timeout: 5000,
+      })
+
+      // The "All" item should show a count badge
       const allItem = sidebar
         .locator('[data-slot="sidebar-menu-item"]')
         .filter({ hasText: 'All' })

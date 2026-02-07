@@ -88,7 +88,7 @@ export function Category({ onOpenManage }: { onOpenManage: () => void }) {
    */
   const handleCreateCategory = () => {
     const trimmedName = newName.trim()
-    if (!trimmedName) return
+    if (!trimmedName || createMutation.isPending) return
 
     createMutation.mutate(
       { name: trimmedName, color: newColor },
