@@ -3,11 +3,15 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 
 /**
  * Generates a unique name for test data isolation.
- * @param prefix - Test identifier prefix
- * @returns Unique string like "CatCreate-1706000000000-a1b2c3"
+ * Category names have maxLength=30 in the UI input, so keep prefixes short (<=7 chars).
+ * @param prefix - Test identifier prefix (keep short for category names)
+ * @returns Unique string like "CatNew-1706000000000-a1b2c"
+ * @example
+ * uniqueName('CatNew')  // => "CatNew-1706000000000-a1b2c" (26 chars)
+ * uniqueName('TodoLong') // => "TodoLong-1706000000000-a1b2c" (28 chars)
  */
 const uniqueName = (prefix: string) =>
-  `${prefix}-${Date.now()}-${Math.random().toString(36).substring(7)}`
+  `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
 
 /**
  * Waits for the Todo List heading to appear, handling the Loading... state.
@@ -33,6 +37,46 @@ function getSidebar(page: Page) {
   return page
     .locator('.rounded-lg.border.bg-card')
     .filter({ hasText: 'Add Category' })
+}
+
+/**
+ * Selects a category in the sidebar, ensuring the real server ID is used.
+ * After optimistic category creation, the ID may still be negative (-Date.now()).
+ * This helper clicks the category, checks if the stored ID is negative (optimistic),
+ * and if so, waits for the category list to refresh and clicks again.
+ * @param page - Playwright page object
+ * @param sidebar - Sidebar locator
+ * @param categoryName - Name of the category to click
+ */
+async function selectCategory(
+  page: Page,
+  sidebar: Locator,
+  categoryName: string,
+) {
+  // Click the category
+  await sidebar.getByText(categoryName).click()
+
+  // After optimistic category creation, the first click may store a negative (temp) ID.
+  // Wait for the category list refetch to bring real IDs, then re-click if needed.
+  const storedId = await page.evaluate(() =>
+    localStorage.getItem('corelive-selected-category'),
+  )
+  if (storedId && Number(storedId) < 0) {
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(1000)
+    await sidebar.getByText(categoryName).click()
+  }
+
+  // Verify we now have a positive (real) server ID
+  await page.waitForFunction(
+    () => {
+      const val = localStorage.getItem('corelive-selected-category')
+      if (val === null) return false
+      const num = Number(val)
+      return Number.isInteger(num) && num > 0
+    },
+    { timeout: 10000 },
+  )
 }
 
 /**
@@ -66,10 +110,40 @@ async function createCategory(
   // Wait for popover to close
   await expect(nameInput).not.toBeVisible({ timeout: 5000 })
 
-  // Wait for server response to complete (category appears in sidebar)
+  // Wait for server response to complete (category appears in sidebar with real ID)
   await expect(sidebar.getByText(categoryName)).toBeVisible({
     timeout: 15000,
   })
+
+  // Wait for query invalidation + refetch to complete (ensures real server IDs replace optimistic ones)
+  await page.waitForLoadState('networkidle')
+}
+
+/**
+ * Opens the Manage Categories dialog and ensures it shows real server IDs.
+ * Waits for networkidle first, then also waits for any in-flight category list
+ * API response to complete (handles race where the dialog triggers a refetch).
+ * @param page - Playwright page object
+ * @param sidebar - Sidebar locator
+ */
+async function openManageDialog(page: Page, sidebar: Locator) {
+  // Set up the response listener BEFORE clicking to capture any refetch triggered by the dialog
+  const listResponsePromise = page
+    .waitForResponse(
+      (resp) =>
+        resp.url().includes('orpc') &&
+        resp.url().includes('category') &&
+        resp.url().includes('list'),
+      { timeout: 5000 },
+    )
+    .catch(() => null) // OK if no request is made (data already cached)
+  await sidebar.getByRole('button', { name: 'Manage categories' }).click()
+  await expect(page.getByText('Manage Categories')).toBeVisible({
+    timeout: 5000,
+  })
+  await listResponsePromise
+  // Extra wait for any pending cache updates
+  await page.waitForLoadState('networkidle')
 }
 
 test.describe('Category Feature E2E Tests', () => {
@@ -116,18 +190,21 @@ test.describe('Category Feature E2E Tests', () => {
       await createCategory(page, sidebar, categoryName)
 
       // Step 2: Select the new category in sidebar
-      await sidebar.getByText(categoryName).click()
-      await page.waitForTimeout(500)
+      // Wait for real server ID (optimistic IDs are negative) before clicking
+      await selectCategory(page, sidebar, categoryName)
 
       // Step 3: Add a todo (should be auto-assigned to the selected category)
       await page.getByPlaceholder('Enter a new todo...').fill(todoWithCategory)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
 
-      // Wait for todo to appear
+      // Wait for todo to appear with server-confirmed ID
       const catTodoCheckbox = page.getByRole('checkbox', {
         name: todoWithCategory,
       })
       await expect(catTodoCheckbox).toBeVisible({ timeout: 5000 })
+      await expect(catTodoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+        timeout: 10000,
+      })
 
       // Step 4: Switch to "All" view
       await sidebar.getByText('All').click()
@@ -172,18 +249,20 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
-      // Select the category
-      await sidebar.getByText(categoryName).click()
-      await page.waitForTimeout(500)
+      // Select the category (wait for real server ID)
+      await selectCategory(page, sidebar, categoryName)
 
       // Add a todo
       await page.getByPlaceholder('Enter a new todo...').fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
 
-      // Wait for todo to appear
+      // Wait for todo to appear with server-confirmed ID
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 5000,
       })
+      await expect(
+        page.getByRole('checkbox', { name: todoText }),
+      ).toHaveAttribute('id', /^todo-[^-]/, { timeout: 10000 })
 
       // Switch to "All" view to see the category badge
       await sidebar.getByText('All').click()
@@ -229,24 +308,22 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should rename a category in manage dialog', async ({ page }) => {
-      const originalName = uniqueName('CatRename')
-      const newName = uniqueName('CatRenamed')
+      const originalName = uniqueName('CatRen')
+      const newName = uniqueName('CatRen2')
 
       // First create a category
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, originalName)
 
-      // Open manage dialog
-      await sidebar.getByRole('button', { name: 'Manage categories' }).click()
-      await expect(page.getByText('Manage Categories')).toBeVisible({
-        timeout: 5000,
-      })
+      // Open manage dialog (waits for real server IDs)
+      await openManageDialog(page, sidebar)
 
-      // Find the category row (direct flex container with the name text)
+      // Find the category row (rounded-md p-2 is unique to category rows)
       const categoryRow = page
         .locator('[role="dialog"]')
-        .locator('.flex.items-center')
-        .filter({ has: page.locator(`text="${originalName}"`) })
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: originalName })
+      await expect(categoryRow).toBeVisible({ timeout: 5000 })
       const editButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-pencil'),
       })
@@ -257,30 +334,22 @@ test.describe('Category Feature E2E Tests', () => {
       await expect(editInput).toBeVisible({ timeout: 3000 })
       await expect(editInput).toHaveValue(originalName)
 
-      // Clear and type new name
-      await editInput.clear()
+      // Replace with new name using fill
       await editInput.fill(newName)
+      await expect(editInput).toHaveValue(newName)
+      await editInput.press('Enter')
 
-      // Click the check (save) button
-      const saveButton = page
-        .locator('[role="dialog"]')
-        .locator('button')
-        .filter({
-          has: page.locator('svg.lucide-check'),
-        })
-      await saveButton.click()
-
-      // Wait for the rename to take effect (server response)
-      await expect(
-        page.locator('[role="dialog"]').getByText(newName),
-      ).toBeVisible({ timeout: 15000 })
+      // Wait for edit mode to exit (input disappears after successful mutation)
+      await expect(editInput).not.toBeVisible({ timeout: 10000 })
 
       // Close dialog
       await page.keyboard.press('Escape')
-      await page.waitForTimeout(500)
 
-      // New name should appear in sidebar
-      await expect(sidebar.getByText(newName)).toBeVisible({ timeout: 10000 })
+      // Wait for query refetch to complete
+      await page.waitForLoadState('networkidle')
+
+      // New name should appear in sidebar (the source of truth after refetch)
+      await expect(sidebar.getByText(newName)).toBeVisible({ timeout: 15000 })
     })
 
     test('should delete a category with confirmation', async ({ page }) => {
@@ -290,17 +359,15 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
-      // Open manage dialog
-      await sidebar.getByRole('button', { name: 'Manage categories' }).click()
-      await expect(page.getByText('Manage Categories')).toBeVisible({
-        timeout: 5000,
-      })
+      // Open manage dialog (waits for real server IDs)
+      await openManageDialog(page, sidebar)
 
-      // Find the category row (direct flex container with the name text)
+      // Find the category row (rounded-md p-2 is unique to category rows)
       const categoryRow = page
         .locator('[role="dialog"]')
-        .locator('.flex.items-center')
-        .filter({ has: page.locator(`text="${categoryName}"`) })
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: categoryName })
+      await expect(categoryRow).toBeVisible({ timeout: 5000 })
       const deleteButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-trash-2'),
       })
@@ -318,8 +385,11 @@ test.describe('Category Feature E2E Tests', () => {
       // Confirm deletion
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
 
-      // Wait for deletion to complete
-      await page.waitForTimeout(1000)
+      // Wait for deletion mutation + query invalidation to complete
+      await page.waitForLoadState('networkidle')
+
+      // Category should disappear from manage dialog
+      await expect(categoryRow).not.toBeVisible({ timeout: 10000 })
 
       // Close dialog
       await page.keyboard.press('Escape')
@@ -336,16 +406,15 @@ test.describe('Category Feature E2E Tests', () => {
     test('should auto-assign category when adding todo with category selected', async ({
       page,
     }) => {
-      const categoryName = uniqueName('CatAutoAssign')
-      const todoText = uniqueName('TodoAutoAssign')
+      const categoryName = uniqueName('CatAuto')
+      const todoText = uniqueName('TodoAuto')
 
       // Create a category
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
-      // Select the category
-      await sidebar.getByText(categoryName).click()
-      await page.waitForTimeout(500)
+      // Select the category (wait for real server ID)
+      await selectCategory(page, sidebar, categoryName)
 
       // Add a todo
       await page.getByPlaceholder('Enter a new todo...').fill(todoText)
@@ -359,8 +428,8 @@ test.describe('Category Feature E2E Tests', () => {
       const categoryButton = sidebar
         .locator('button')
         .filter({ hasText: categoryName })
-      // The count should show at least "1"
-      await expect(categoryButton.getByText('1')).toBeVisible({
+      // The count badge (span.tabular-nums) should show "1"
+      await expect(categoryButton.locator('.tabular-nums')).toHaveText('1', {
         timeout: 10000,
       })
     })
@@ -378,16 +447,15 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should keep tasks when deleting their category', async ({ page }) => {
-      const categoryName = uniqueName('CatKeepTasks')
-      const todoText = uniqueName('TodoKeepTask')
+      const categoryName = uniqueName('CatKeep')
+      const todoText = uniqueName('TodoKeep')
 
       // Create a category and add a todo to it
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
-      // Select category and add todo
-      await sidebar.getByText(categoryName).click()
-      await page.waitForTimeout(500)
+      // Select category (wait for real server ID) and add todo
+      await selectCategory(page, sidebar, categoryName)
       await page.getByPlaceholder('Enter a new todo...').fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
@@ -398,17 +466,15 @@ test.describe('Category Feature E2E Tests', () => {
       await sidebar.getByText('All').click()
       await page.waitForTimeout(500)
 
-      // Delete the category
-      await sidebar.getByRole('button', { name: 'Manage categories' }).click()
-      await expect(page.getByText('Manage Categories')).toBeVisible({
-        timeout: 5000,
-      })
+      // Delete the category (openManageDialog waits for real server IDs)
+      await openManageDialog(page, sidebar)
 
-      // Find the category row (direct flex container with the name text)
+      // Find the category row (rounded-md p-2 is unique to category rows)
       const categoryRow = page
         .locator('[role="dialog"]')
-        .locator('.flex.items-center')
-        .filter({ has: page.locator(`text="${categoryName}"`) })
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: categoryName })
+      await expect(categoryRow).toBeVisible({ timeout: 5000 })
       const deleteButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-trash-2'),
       })
@@ -420,15 +486,21 @@ test.describe('Category Feature E2E Tests', () => {
       })
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
 
-      await page.waitForTimeout(1000)
+      // Wait for alert dialog to close and deletion to complete
+      await expect(page.getByText('Delete category?')).not.toBeVisible({
+        timeout: 5000,
+      })
+      await page.waitForLoadState('networkidle')
 
       // Close manage dialog
       await page.keyboard.press('Escape')
-      await page.waitForTimeout(500)
+      await expect(page.getByText('Manage Categories')).not.toBeVisible({
+        timeout: 5000,
+      })
 
       // The todo should still exist (now uncategorized) in "All" view
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
-        timeout: 5000,
+        timeout: 10000,
       })
     })
   })
