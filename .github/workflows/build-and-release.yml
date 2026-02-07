@@ -96,16 +96,20 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
 
-      - name: Build Electron app (macOS)
+      - name: Build Electron app (macOS) — signed release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         run: pnpm electron:build:mac
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          # electron-builder / @electron/notarize expects this name (see `scripts/notarize.js`)
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Electron app (macOS) — unsigned PR check
+        if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))"
+        run: pnpm electron:build:dir
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
