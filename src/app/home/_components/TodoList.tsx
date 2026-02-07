@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -26,11 +26,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
+import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { AddTodoForm } from './AddTodoForm'
+import { CategoryManageDialog } from './CategoryManageDialog'
+import { CategorySidebar } from './CategorySidebar'
 import { CompletedTodos } from './CompletedTodos'
 import { SortableTodoItem } from './SortableTodoItem'
 import type { Todo } from './TodoItem'
@@ -50,6 +54,12 @@ export function TodoList() {
   const queryClient = useQueryClient()
   // Track if persister is still restoring cached data - prevents hydration mismatch
   const isRestoring = useIsRestoring()
+
+  // Category filter state (persisted to localStorage)
+  const [selectedCategoryId] = useSelectedCategory()
+
+  // Category management dialog state
+  const [manageDialogOpen, setManageDialogOpen] = useState(false)
 
   // Configure dnd-kit sensors for pointer and keyboard interactions
   const sensors = useSensors(
@@ -76,13 +86,24 @@ export function TodoList() {
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
 
-  // Fetch pending todos
+  // Fetch categories for name/color lookup
+  const { data: categoryData } = useQuery(orpc.category.list.queryOptions({}))
+  const categoryMap = useMemo(
+    () =>
+      new Map<number, CategoryWithCount>(
+        (categoryData?.categories ?? []).map((c) => [c.id, c]),
+      ),
+    [categoryData],
+  )
+
+  // Fetch pending todos (filtered by selected category)
   const { data: pendingData, isLoading: pendingLoading } = useQuery(
     orpc.todo.list.queryOptions({
       input: {
         completed: false,
         limit: TODO_QUERY_LIMIT,
         offset: TODO_QUERY_OFFSET,
+        ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
       },
     }),
   )
@@ -96,8 +117,16 @@ export function TodoList() {
    * @example
    * addTodo('Buy milk')
    */
-  const addTodo = (text: string, notes?: string) => {
-    createMutation.mutate({ text, notes })
+  const addTodo = (
+    text: string,
+    notes?: string,
+    categoryId?: number | null,
+  ) => {
+    createMutation.mutate({
+      text,
+      notes,
+      ...(categoryId !== null && categoryId !== undefined && { categoryId }),
+    })
   }
 
   /**
@@ -173,13 +202,19 @@ export function TodoList() {
       return []
     }
 
-    return todos.map((todo) => ({
-      id: todo.id.toString(),
-      text: todo.text,
-      completed: todo.completed,
-      createdAt: new Date(todo.createdAt),
-      notes: todo.notes,
-    }))
+    return todos.map((todo) => {
+      const category = todo.categoryId ? categoryMap.get(todo.categoryId) : null
+      return {
+        id: todo.id.toString(),
+        text: todo.text,
+        completed: todo.completed,
+        createdAt: new Date(todo.createdAt),
+        notes: todo.notes,
+        categoryId: todo.categoryId,
+        categoryName: category?.name ?? null,
+        categoryColor: category?.color ?? null,
+      }
+    })
   }
 
   const pendingTodosFromQuery = mapTodos(pendingData?.todos)
@@ -241,8 +276,14 @@ export function TodoList() {
   }
 
   return (
-    <div className="grid h-full grid-cols-1 gap-8 lg:grid-cols-2">
-      {/* Left Column - Pending Tasks */}
+    // eslint-disable-next-line dslint/token-only -- 3-column grid layout for category sidebar
+    <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-[200px_1fr_1fr]">
+      {/* Category Sidebar */}
+      <div className="hidden rounded-lg border bg-card lg:block">
+        <CategorySidebar onOpenManage={() => setManageDialogOpen(true)} />
+      </div>
+
+      {/* Pending Tasks Column */}
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -256,7 +297,10 @@ export function TodoList() {
             <CardDescription>Manage your tasks efficiently</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <AddTodoForm onAddTodo={addTodo} />
+            <AddTodoForm
+              onAddTodo={addTodo}
+              selectedCategoryId={selectedCategoryId}
+            />
           </CardContent>
         </Card>
 
@@ -295,7 +339,7 @@ export function TodoList() {
         )}
       </div>
 
-      {/* Right Column - Completed Tasks */}
+      {/* Completed Tasks Column */}
       <div className="h-full">
         <CompletedTodos
           onDelete={deleteTodo}
@@ -303,6 +347,12 @@ export function TodoList() {
           onToggleComplete={toggleComplete}
         />
       </div>
+
+      {/* Category Management Dialog */}
+      <CategoryManageDialog
+        open={manageDialogOpen}
+        onOpenChange={setManageDialogOpen}
+      />
     </div>
   )
 }

@@ -5,9 +5,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useState } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
+import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
+import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
 
@@ -34,6 +37,9 @@ const DECIMAL_RADIX = 10
 export function FloatingNavigatorContainer() {
   const queryClient = useQueryClient()
 
+  // Category filter state (shared with main app via localStorage)
+  const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
+
   // Mutations with optimistic updates
   const {
     createMutation,
@@ -53,13 +59,18 @@ export function FloatingNavigatorContainer() {
   const isFloatingNavigator =
     isMounted && typeof window !== 'undefined' && window.floatingNavigatorAPI
 
-  // Fetch todos using oRPC (same as web app)
+  // Fetch categories for the dropdown
+  const { data: categoryData } = useQuery(orpc.category.list.queryOptions({}))
+  const categories: CategoryWithCount[] = categoryData?.categories ?? []
+
+  // Fetch todos filtered by selected category
   const { data, isLoading, error } = useQuery(
     orpc.todo.list.queryOptions({
       input: {
         completed: false,
         limit: TODO_QUERY_LIMIT,
         offset: TODO_QUERY_OFFSET,
+        ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
       },
     }),
   )
@@ -88,7 +99,10 @@ export function FloatingNavigatorContainer() {
    * handleTaskCreate('Write report')
    */
   const handleTaskCreate = (title: string) => {
-    createMutation.mutate({ text: title })
+    createMutation.mutate({
+      text: title,
+      ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
+    })
   }
 
   /**
@@ -180,6 +194,13 @@ export function FloatingNavigatorContainer() {
     })
   }, [queryClient])
 
+  // Cross-window category sync
+  useEffect(() => {
+    return subscribeToCategorySync(() => {
+      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+    })
+  }, [queryClient])
+
   // Show message if not in Electron floating navigator
   if (!isFloatingNavigator) {
     return (
@@ -228,6 +249,9 @@ export function FloatingNavigatorContainer() {
       onTaskEdit={handleTaskEdit}
       onTaskDelete={handleTaskDelete}
       onTaskReorder={handleTaskReorder}
+      categories={categories}
+      selectedCategoryId={selectedCategoryId}
+      onCategoryChange={setSelectedCategoryId}
     />
   )
 }

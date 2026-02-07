@@ -16,6 +16,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { Textarea } from '@/components/ui/textarea'
+import { getColorDotClass } from '@/lib/category-colors'
 
 export interface Todo {
   id: string
@@ -23,6 +24,9 @@ export interface Todo {
   completed: boolean
   createdAt: Date
   notes?: string | null
+  categoryId?: number | null
+  categoryName?: string | null
+  categoryColor?: string | null
 }
 
 /**
@@ -94,9 +98,17 @@ export function TodoItem({
           >
             {todo.text}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {todo.createdAt.toLocaleDateString('en-US')}
-          </p>
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{todo.createdAt.toLocaleDateString('en-US')}</span>
+            {todo.categoryName && (
+              <span className="flex items-center gap-1">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${getColorDotClass(todo.categoryColor)}`}
+                />
+                {todo.categoryName}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={todo.completed ? 'secondary' : 'default'}>

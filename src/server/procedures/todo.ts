@@ -20,12 +20,13 @@ export const listTodos = authMiddleware
   .output(TodoResponseSchema)
   .handler(async ({ input, context }) => {
     try {
-      const { limit, offset, completed } = input
+      const { limit, offset, completed, categoryId } = input
       const { user } = context
 
       const where = {
         userId: user.id,
         ...(completed !== undefined && { completed }),
+        ...(categoryId !== undefined && { categoryId }),
       }
 
       const [todos, total] = await Promise.all([
@@ -63,17 +64,30 @@ export const createTodo = authMiddleware
     try {
       const { user } = context
 
+      // Verify category ownership if provided
+      if (input.categoryId) {
+        const category = await prisma.category.findFirst({
+          where: { id: input.categoryId, userId: user.id },
+        })
+        if (!category) {
+          throw new ORPCError('NOT_FOUND', {
+            message: 'Category not found',
+          })
+        }
+      }
+
       const todo = await prisma.todo.create({
         data: {
           text: input.text,
           notes: input.notes,
+          categoryId: input.categoryId,
           userId: user.id,
         },
       })
 
       return todo
     } catch (error) {
-      // TODO: Use Logger Library
+      if (error instanceof ORPCError) throw error
       log.error('Error in createTodo:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to create todo',

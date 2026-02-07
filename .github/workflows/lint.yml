@@ -10,5 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/prepare
+      - name: Build workspace packages
+        run: pnpm --filter eslint-plugin-dslint build
       - name: Lint
         run: pnpm lint

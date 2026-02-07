@@ -22,6 +22,7 @@ export default defineConfig([
       '.playwright-electron/**',
       '.playwright-mcp/**',
       'packages/**',
+      '_trials/**',
     ],
   },
   ...tsPrefixer,
