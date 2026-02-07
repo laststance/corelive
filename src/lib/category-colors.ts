@@ -1,6 +1,6 @@
 /**
  * Shared mapping from category color names to Tailwind background classes.
- * Used by CategorySidebar, CategoryManageDialog, FloatingNavigator, and TodoItem.
+ * Used by Category, CategoryManageDialog, FloatingNavigator, and TodoItem.
  *
  * @example
  * getColorDotClass('blue')  // => 'bg-blue-500'
