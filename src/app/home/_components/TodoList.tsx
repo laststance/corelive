@@ -33,8 +33,6 @@ import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { AddTodoForm } from './AddTodoForm'
-import { CategoryManageDialog } from './CategoryManageDialog'
-import { CategorySidebar } from './CategorySidebar'
 import { CompletedTodos } from './CompletedTodos'
 import { SortableTodoItem } from './SortableTodoItem'
 import type { Todo } from './TodoItem'
@@ -57,9 +55,6 @@ export function TodoList() {
 
   // Category filter state (persisted to localStorage)
   const [selectedCategoryId] = useSelectedCategory()
-
-  // Category management dialog state
-  const [manageDialogOpen, setManageDialogOpen] = useState(false)
 
   // Configure dnd-kit sensors for pointer and keyboard interactions
   const sensors = useSensors(
@@ -276,13 +271,7 @@ export function TodoList() {
   }
 
   return (
-    // eslint-disable-next-line dslint/token-only -- 3-column grid layout for category sidebar
-    <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-[200px_1fr_1fr]">
-      {/* Category Sidebar */}
-      <div className="hidden rounded-lg border bg-card lg:block">
-        <CategorySidebar onOpenManage={() => setManageDialogOpen(true)} />
-      </div>
-
+    <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-2">
       {/* Pending Tasks Column */}
       <div className="space-y-6">
         <Card>
@@ -347,12 +336,6 @@ export function TodoList() {
           onToggleComplete={toggleComplete}
         />
       </div>
-
-      {/* Category Management Dialog */}
-      <CategoryManageDialog
-        open={manageDialogOpen}
-        onOpenChange={setManageDialogOpen}
-      />
     </div>
   )
 }

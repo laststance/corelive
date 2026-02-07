@@ -14,7 +14,7 @@ import {
   Download,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
@@ -48,6 +48,8 @@ import { isAppleSilicon } from '@/lib/utils'
 import packageJson from '../../../package.json'
 
 import './page.css'
+import { Category } from './_components/Category'
+import { CategoryManageDialog } from './_components/CategoryManageDialog'
 import { LogoutButton } from './_components/LogoutButton'
 import { TodoList } from './_components/TodoList'
 
@@ -58,6 +60,7 @@ export default function Home() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const router = useRouter()
+  const [manageDialogOpen, setManageDialogOpen] = useState(false)
 
   /**
    * Generates the Mac app download URL based on detected architecture.
@@ -206,6 +209,8 @@ export default function Home() {
 
           <SidebarSeparator />
 
+          <Category onOpenManage={() => setManageDialogOpen(true)} />
+
           <div className="flex-1" />
 
           {/* Bottom Navigation */}
@@ -258,6 +263,10 @@ export default function Home() {
           <TodoList />
         </div>
       </SidebarInset>
+      <CategoryManageDialog
+        open={manageDialogOpen}
+        onOpenChange={setManageDialogOpen}
+      />
     </SidebarProvider>
   )
 }

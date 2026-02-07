@@ -29,14 +29,12 @@ async function waitForAppReady(page: Page) {
 }
 
 /**
- * Returns a locator for the category sidebar.
+ * Returns a locator for the app sidebar (shadcn Sidebar).
  * @param page - Playwright page object
- * @returns Locator scoped to the sidebar element containing "Add Category"
+ * @returns Locator scoped to the sidebar element with data-slot="sidebar"
  */
 function getSidebar(page: Page) {
-  return page
-    .locator('.rounded-lg.border.bg-card')
-    .filter({ hasText: 'Add Category' })
+  return page.locator('[data-slot="sidebar"]')
 }
 
 /**
@@ -92,7 +90,7 @@ async function createCategory(
   categoryName: string,
   color?: string,
 ) {
-  await sidebar.getByText('Add Category').click()
+  await sidebar.getByRole('button', { name: 'Add category' }).click()
   const nameInput = page.getByPlaceholder('Category name')
   await expect(nameInput).toBeVisible({ timeout: 5000 })
 
@@ -137,7 +135,7 @@ async function openManageDialog(page: Page, sidebar: Locator) {
       { timeout: 5000 },
     )
     .catch(() => null) // OK if no request is made (data already cached)
-  await sidebar.getByRole('button', { name: 'Manage categories' }).click()
+  await sidebar.getByRole('button', { name: 'Manage' }).click()
   await expect(page.getByText('Manage Categories')).toBeVisible({
     timeout: 5000,
   })
@@ -158,19 +156,19 @@ test.describe('Category Feature E2E Tests', () => {
     test('should display category sidebar with "All" item', async ({
       page,
     }) => {
-      // Category sidebar is visible on desktop (lg:block)
+      // Category section is visible in the app sidebar
       const sidebar = getSidebar(page)
       await expect(sidebar).toBeVisible()
+
+      // "Categories" group label should be present
+      await expect(sidebar.getByText('Categories')).toBeVisible()
 
       // "All" item should always be present
       await expect(sidebar.getByText('All')).toBeVisible()
 
-      // "Add Category" button should be visible
-      await expect(sidebar.getByText('Add Category')).toBeVisible()
-
-      // Manage button (gear icon) should be visible
+      // "Add category" button (+ icon) should be visible
       await expect(
-        sidebar.getByRole('button', { name: 'Manage categories' }),
+        sidebar.getByRole('button', { name: 'Add category' }),
       ).toBeVisible()
     })
 
@@ -284,19 +282,107 @@ test.describe('Category Feature E2E Tests', () => {
       await createCategory(page, sidebar, categoryName, 'green')
 
       // The category should have a green color dot (bg-green-500)
-      const categoryButton = sidebar
-        .locator('button')
+      const categoryItem = sidebar
+        .locator('[data-slot="sidebar-menu-item"]')
         .filter({ hasText: categoryName })
-      const colorDot = categoryButton.locator('.rounded-full')
+      const colorDot = categoryItem.locator('.rounded-full')
       await expect(colorDot).toHaveClass(/bg-green-500/)
+    })
+
+    test('should show empty state CTA when no categories exist', async ({
+      page,
+    }) => {
+      const sidebar = getSidebar(page)
+
+      // When no categories exist, "Add your first category" CTA should appear
+      // and "Manage" button should NOT be visible
+      const hasCategories = await sidebar
+        .getByRole('button', { name: 'Manage' })
+        .isVisible()
+        .catch(() => false)
+
+      if (!hasCategories) {
+        await expect(sidebar.getByText('Add your first category')).toBeVisible()
+
+        // Clicking the CTA should open the category creation popover
+        await sidebar.getByText('Add your first category').click()
+        await expect(page.getByPlaceholder('Category name')).toBeVisible({
+          timeout: 5000,
+        })
+
+        // Close the popover
+        await page.keyboard.press('Escape')
+      }
+    })
+
+    test('should hide badge count when category has zero todos', async ({
+      page,
+    }) => {
+      const categoryName = uniqueName('CatZero')
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
+
+      // Category with 0 todos should NOT show a badge (Linear style)
+      const categoryItem = sidebar
+        .locator('[data-slot="sidebar-menu-item"]')
+        .filter({ hasText: categoryName })
+      await expect(categoryItem).toBeVisible()
+      await expect(
+        categoryItem.locator('[data-slot="sidebar-menu-badge"]'),
+      ).not.toBeVisible()
+    })
+
+    test('should highlight active category selection', async ({ page }) => {
+      const categoryName = uniqueName('CatActive')
+      const sidebar = getSidebar(page)
+      await createCategory(page, sidebar, categoryName)
+
+      // "All" should be active by default
+      const allButton = sidebar
+        .locator('[data-slot="sidebar-menu-button"]')
+        .filter({ hasText: 'All' })
+      await expect(allButton).toHaveAttribute('data-active', 'true')
+
+      // Click category — it becomes active, "All" becomes inactive
+      await selectCategory(page, sidebar, categoryName)
+      const categoryButton = sidebar
+        .locator('[data-slot="sidebar-menu-button"]')
+        .filter({ hasText: categoryName })
+      await expect(categoryButton).toHaveAttribute('data-active', 'true')
+      await expect(allButton).not.toHaveAttribute('data-active', 'true')
+
+      // Click "All" — it becomes active again
+      await sidebar.getByText('All').click()
+      await expect(allButton).toHaveAttribute('data-active', 'true')
+      await expect(categoryButton).not.toHaveAttribute('data-active', 'true')
+    })
+
+    test('should show Manage button when categories exist', async ({
+      page,
+    }) => {
+      const categoryName = uniqueName('CatMgBtn')
+      const sidebar = getSidebar(page)
+
+      // Create a category
+      await createCategory(page, sidebar, categoryName)
+
+      // "Manage" should be visible when at least one category exists
+      await expect(sidebar.getByRole('button', { name: 'Manage' })).toBeVisible(
+        { timeout: 5000 },
+      )
     })
   })
 
   test.describe('Category Management Dialog', () => {
     test('should open manage dialog from sidebar', async ({ page }) => {
-      // Click the manage (gear) button
       const sidebar = getSidebar(page)
-      await sidebar.getByRole('button', { name: 'Manage categories' }).click()
+
+      // "Manage" button only appears when categories exist, so create one first
+      const categoryName = uniqueName('CatMgr')
+      await createCategory(page, sidebar, categoryName)
+
+      // Click the "Manage" button in sidebar
+      await sidebar.getByRole('button', { name: 'Manage' }).click()
 
       // Dialog should open
       await expect(page.getByText('Manage Categories')).toBeVisible({
@@ -425,25 +511,27 @@ test.describe('Category Feature E2E Tests', () => {
       await expect(todoCheckbox).toBeVisible({ timeout: 5000 })
 
       // The sidebar should show count increment for this category
-      const categoryButton = sidebar
-        .locator('button')
+      const categoryItem = sidebar
+        .locator('[data-slot="sidebar-menu-item"]')
         .filter({ hasText: categoryName })
-      // The count badge (span.tabular-nums) should show "1"
-      await expect(categoryButton.locator('.tabular-nums')).toHaveText('1', {
-        timeout: 10000,
-      })
+      // The count badge (SidebarMenuBadge) should show "1"
+      await expect(
+        categoryItem.locator('[data-slot="sidebar-menu-badge"]'),
+      ).toHaveText('1', { timeout: 10000 })
     })
 
     test('should show pending count next to categories', async ({ page }) => {
-      // The "All" item should show a count
+      // The "All" item should show a count badge
       const sidebar = getSidebar(page)
-      const allButton = sidebar
-        .locator('button')
+      const allItem = sidebar
+        .locator('[data-slot="sidebar-menu-item"]')
         .filter({ hasText: 'All' })
         .first()
 
-      // Should have a numeric count
-      await expect(allButton.locator('.tabular-nums')).toBeVisible()
+      // Should have a badge with a numeric count
+      await expect(
+        allItem.locator('[data-slot="sidebar-menu-badge"]'),
+      ).toBeVisible()
     })
 
     test('should keep tasks when deleting their category', async ({ page }) => {
