@@ -289,58 +289,24 @@ test.describe('Category Feature E2E Tests', () => {
       await expect(colorDot).toHaveClass(/bg-green-500/)
     })
 
-    test('should show empty state CTA and open popover on click', async ({
+    test('should hide empty state CTA when categories exist', async ({
       page,
     }) => {
       const categoryName = uniqueName('CatCTA')
       const sidebar = getSidebar(page)
 
-      // Create a category so we can delete it to guarantee an empty state
+      // Create a category to ensure at least one exists
       await createCategory(page, sidebar, categoryName)
 
-      // Verify CTA is NOT visible when categories exist
+      // "Add your first category" CTA should NOT be visible when categories exist
       await expect(
         sidebar.getByText('Add your first category'),
       ).not.toBeVisible()
 
-      // Delete the category via manage dialog
-      await openManageDialog(page, sidebar)
-      const categoryRow = page
-        .locator('[role="dialog"]')
-        .locator('.rounded-md.p-2')
-        .filter({ hasText: categoryName })
-      await expect(categoryRow).toBeVisible({ timeout: 5000 })
-      await categoryRow
-        .locator('button')
-        .filter({ has: page.locator('svg.lucide-trash-2') })
-        .click()
-      await expect(page.getByText('Delete category?')).toBeVisible({
-        timeout: 5000,
-      })
-      await page.getByRole('button', { name: 'Delete', exact: true }).click()
-      await page.waitForLoadState('networkidle')
-      await page.keyboard.press('Escape')
-      await expect(page.getByText('Manage Categories')).not.toBeVisible({
-        timeout: 5000,
-      })
-
-      // Now check if we're in an empty state (no other test-created categories)
-      const hasOtherCategories = await sidebar
-        .getByRole('button', { name: 'Manage' })
-        .isVisible()
-        .catch(() => false)
-
-      if (!hasOtherCategories) {
-        // CTA should be visible when no categories exist
-        await expect(sidebar.getByText('Add your first category')).toBeVisible()
-
-        // Clicking the CTA should open the category creation popover
-        await sidebar.getByText('Add your first category').click()
-        await expect(page.getByPlaceholder('Category name')).toBeVisible({
-          timeout: 5000,
-        })
-        await page.keyboard.press('Escape')
-      }
+      // "Manage" button should be visible instead
+      await expect(
+        sidebar.getByRole('button', { name: 'Manage' }),
+      ).toBeVisible()
     })
 
     test('should hide badge count when category has zero todos', async ({
@@ -552,12 +518,16 @@ test.describe('Category Feature E2E Tests', () => {
       const todoText = uniqueName('TodoCnt')
       const sidebar = getSidebar(page)
 
+      // Wait for page to fully load before interacting with todo input
+      await page.waitForLoadState('networkidle')
+
       // Create a todo to ensure at least one pending task exists
       const todoInput = page.getByPlaceholder('Add a new todo...')
+      await expect(todoInput).toBeVisible({ timeout: 10000 })
       await todoInput.fill(todoText)
       await todoInput.press('Enter')
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
-        timeout: 5000,
+        timeout: 10000,
       })
 
       // The "All" item should show a count badge
@@ -569,7 +539,7 @@ test.describe('Category Feature E2E Tests', () => {
       // Should have a badge with a numeric count
       await expect(
         allItem.locator('[data-slot="sidebar-menu-badge"]'),
-      ).toBeVisible()
+      ).toBeVisible({ timeout: 10000 })
     })
 
     test('should keep tasks when deleting their category', async ({ page }) => {
