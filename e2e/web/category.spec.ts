@@ -522,7 +522,7 @@ test.describe('Category Feature E2E Tests', () => {
       await page.waitForLoadState('networkidle')
 
       // Create a todo to ensure at least one pending task exists
-      const todoInput = page.getByPlaceholder('Add a new todo...')
+      const todoInput = page.getByPlaceholder('Enter a new todo...')
       await expect(todoInput).toBeVisible({ timeout: 10000 })
       await todoInput.fill(todoText)
       await todoInput.press('Enter')
