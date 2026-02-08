@@ -76,6 +76,7 @@ logs/
 # Claude Code
 .mcp.json
 claudedocs/
+_trials/
 
 # Cursor
 .cursor
