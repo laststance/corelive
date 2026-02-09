@@ -239,13 +239,28 @@ export default function Home() {
 
         <SidebarFooter className="border-t p-2">
           <div className="flex items-center justify-between px-2 pt-2">
-            <Button variant="ghost" size="icon" className="h-6 w-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              aria-label="Documents"
+            >
               <FileText className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              aria-label="Edit"
+            >
               <Edit className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              aria-label="More options"
+            >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </div>

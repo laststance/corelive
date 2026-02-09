@@ -2,6 +2,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
 import '@/globals.css'
 
+import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ReduxProvider } from '@/lib/redux/providers'
 import { cn } from '@/lib/utils'
@@ -33,6 +34,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
             <QueryClientProvider>
               <ReduxProvider>
                 <ElectronAuthProvider>{children}</ElectronAuthProvider>
+                <Toaster />
               </ReduxProvider>
             </QueryClientProvider>
           </ThemeProvider>

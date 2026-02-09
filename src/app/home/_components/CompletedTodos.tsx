@@ -1,7 +1,17 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Trash2 } from 'lucide-react'
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,6 +45,7 @@ export function CompletedTodos({
   onToggleComplete,
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
 
   // Infinite scroll query
   const {
@@ -167,73 +178,101 @@ export function CompletedTodos({
   }
 
   return (
-    <Card className="flex h-full flex-col">
-      <CardHeader className="shrink-0">
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5" />
-            Completed Tasks
-          </div>
-          <Badge variant="secondary" className="flex items-center gap-1">
-            {data?.pages[0]?.total ?? 0} completed
-          </Badge>
-        </CardTitle>
-        <CardDescription>Recently completed tasks</CardDescription>
-        {allTodos.length > 0 && (
-          <div className="flex justify-end pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onClearCompleted}
-              className="text-destructive hover:text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Clear all
-            </Button>
-          </div>
-        )}
-      </CardHeader>
+    <>
+      <Card className="flex h-full flex-col">
+        <CardHeader className="shrink-0">
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Completed Tasks
+            </div>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              {data?.pages[0]?.total ?? 0} completed
+            </Badge>
+          </CardTitle>
+          <CardDescription>Recently completed tasks</CardDescription>
+          {allTodos.length > 0 && (
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setClearDialogOpen(true)}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Clear all
+              </Button>
+            </div>
+          )}
+        </CardHeader>
 
-      <CardContent className="flex-1 overflow-hidden">
-        <div className="-mr-2 h-full space-y-4 overflow-y-auto pr-2">
-          {sortedDates.map((date, dateIndex) => {
-            const todosForDate = groupedTodos[date]
-            return (
-              <div key={`date-${date}`}>
-                {dateIndex > 0 && <Separator className="mb-3" />}
-                <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-                  {date}
-                </h3>
-                <div className="space-y-3">
-                  {todosForDate?.map((todo) => (
-                    <TodoItem
-                      key={todo.id}
-                      todo={todo}
-                      onToggleComplete={onToggleComplete}
-                      onDelete={onDelete}
-                    />
-                  ))}
+        <CardContent className="flex-1 overflow-hidden">
+          <div className="-mr-2 h-full space-y-4 overflow-y-auto pr-2">
+            {sortedDates.map((date, dateIndex) => {
+              const todosForDate = groupedTodos[date]
+              return (
+                <div key={`date-${date}`}>
+                  {dateIndex > 0 && <Separator className="mb-3" />}
+                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">
+                    {date}
+                  </h3>
+                  <div className="space-y-3">
+                    {todosForDate?.map((todo) => (
+                      <TodoItem
+                        key={todo.id}
+                        todo={todo}
+                        onToggleComplete={onToggleComplete}
+                        onDelete={onDelete}
+                      />
+                    ))}
+                  </div>
                 </div>
+              )
+            })}
+
+            {isFetchingNextPage && (
+              <div className="flex justify-center p-4">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
               </div>
-            )
-          })}
+            )}
 
-          {isFetchingNextPage && (
-            <div className="flex justify-center p-4">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-            </div>
-          )}
+            {/* Intersection observer target */}
+            {hasNextPage && <div ref={observerRef} className="h-1"></div>}
 
-          {/* Intersection observer target */}
-          {hasNextPage && <div ref={observerRef} className="h-1"></div>}
+            {!hasNextPage && allTodos.length > ITEMS_PER_PAGE && (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                All completed tasks loaded
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-          {!hasNextPage && allTodos.length > ITEMS_PER_PAGE && (
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              All completed tasks loaded
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all completed tasks?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete{' '}
+              {data?.pages[0]?.total ?? allTodos.length} completed task
+              {(data?.pages[0]?.total ?? allTodos.length) !== 1 ? 's' : ''}.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onClearCompleted()
+                setClearDialogOpen(false)
+              }}
+              className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- shadcn destructive tokens
+            >
+              Clear all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

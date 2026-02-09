@@ -90,7 +90,7 @@ export function TodoItem({
         />
         <div className="min-w-0 flex-1">
           <div
-            className={`block ${
+            className={`block break-words ${
               todo.completed
                 ? 'text-muted-foreground line-through'
                 : 'text-foreground'
