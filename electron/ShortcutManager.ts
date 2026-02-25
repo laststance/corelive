@@ -22,7 +22,6 @@ import type { WindowManager } from './WindowManager'
 interface ShortcutConfig {
   enabled?: boolean
   newTask?: string
-  showMainWindow?: string
   quit?: string
   minimize?: string
   toggleAlwaysOnTop?: string
@@ -124,10 +123,7 @@ export class ShortcutManager {
       'toggleAlwaysOnTop',
       'focusFloatingNavigator',
     ])
-    this._globalShortcuts = new Set([
-      'showMainWindow',
-      'toggleFloatingNavigator',
-    ])
+    this._globalShortcuts = new Set(['toggleFloatingNavigator'])
     this.focusListenersSetup = false
     this.focusHandlers = new Map()
 
@@ -168,7 +164,6 @@ export class ShortcutManager {
     // and we don't have a custom quit handler
     return {
       newTask: 'CommandOrControl+N',
-      showMainWindow: 'CommandOrControl+Shift+T',
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       focusFloatingNavigator: 'CommandOrControl+Shift+N',
@@ -314,17 +309,6 @@ export class ShortcutManager {
   registerGlobalShortcuts(): ShortcutRegistrationResult[] {
     const shortcuts = this.shortcuts
     const results: ShortcutRegistrationResult[] = []
-
-    results.push({
-      id: 'showMainWindow',
-      success: this.registerShortcut(
-        shortcuts.showMainWindow as string,
-        'showMainWindow',
-        () => {
-          this.handleShowMainWindow()
-        },
-      ),
-    })
 
     results.push({
       id: 'toggleFloatingNavigator',
@@ -618,7 +602,6 @@ export class ShortcutManager {
   getAlternativeKeysForShortcut(id: string, _originalKey: string): string[] {
     const alternatives: Record<string, string[]> = {
       newTask: ['Insert', 'Plus', 'T'],
-      showMainWindow: ['Home', 'Return', 'Enter'],
       minimize: ['H', 'Down', 'Minus'],
       toggleAlwaysOnTop: ['T', 'Up', 'P'],
       focusFloatingNavigator: ['W', 'Space', 'F'],
@@ -673,7 +656,6 @@ export class ShortcutManager {
   getShortcutDisplayName(id: string): string {
     const displayNames: Record<string, string> = {
       newTask: 'New Task',
-      showMainWindow: 'Show Main Window',
       minimize: 'Minimize',
       toggleAlwaysOnTop: 'Toggle Always On Top',
       focusFloatingNavigator: 'Focus Floating Navigator',
@@ -767,17 +749,6 @@ export class ShortcutManager {
       }
     } catch (error) {
       log.error('Error handling new task shortcut:', error)
-    }
-  }
-
-  /**
-   * Handle show main window shortcut.
-   */
-  handleShowMainWindow(): void {
-    try {
-      this.windowManager.restoreFromTray()
-    } catch (error) {
-      log.error('Error handling show main window shortcut:', error)
     }
   }
 
@@ -900,7 +871,6 @@ export class ShortcutManager {
   getHandlerForShortcut(id: string): (() => void) | undefined {
     const handlers: Record<string, () => void> = {
       newTask: () => this.handleNewTaskShortcut(),
-      showMainWindow: () => this.handleShowMainWindow(),
       minimize: () => this.handleMinimizeWindow(),
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
       focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),

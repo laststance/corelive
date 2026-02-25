@@ -74,7 +74,6 @@ interface TrayConfig {
 interface ShortcutsConfig {
   enabled: boolean
   newTask: string
-  showMainWindow: string
   quit: string
   minimize: string
   toggleAlwaysOnTop: string
@@ -272,7 +271,6 @@ export class ConfigManager {
       shortcuts: {
         enabled: true,
         newTask: `${modifier}+N`,
-        showMainWindow: `${modifier}+Shift+T`,
         quit: `${modifier}+Q`,
         minimize: `${modifier}+M`,
         toggleAlwaysOnTop: `${modifier}+Shift+A`,

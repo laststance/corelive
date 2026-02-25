@@ -1702,7 +1702,7 @@ function setupIPCHandlers(): void {
       accelerator,
       description: id,
       enabled: true,
-      isGlobal: id === 'showMainWindow',
+      isGlobal: id === 'toggleFloatingNavigator',
     }))
   })
 
@@ -1718,7 +1718,7 @@ function setupIPCHandlers(): void {
         accelerator: accelerator as string,
         description: id,
         enabled: true,
-        isGlobal: id === 'showMainWindow',
+        isGlobal: id === 'toggleFloatingNavigator',
       }))
   })
 
