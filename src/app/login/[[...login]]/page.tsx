@@ -36,7 +36,7 @@ export default function Page() {
   if (!isLoaded || user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
       </div>
     )
   }
@@ -44,15 +44,15 @@ export default function Page() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       {isElectron ? (
-        <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-lg">
-          <h1 className="mb-6 text-center text-2xl font-semibold text-gray-900">
+        <div className="w-full max-w-sm rounded-lg bg-card p-8 shadow-lg">
+          <h1 className="mb-6 text-center text-2xl font-semibold text-card-foreground">
             Sign in to CoreLive
           </h1>
           <ElectronLoginForm />
-          <div className="mt-6 border-t pt-4">
-            <p className="text-center text-xs text-gray-500">
+          <div className="mt-6 border-t border-border pt-4">
+            <p className="text-center text-xs text-muted-foreground">
               Don&apos;t have an account?{' '}
-              <a href="/sign-up" className="text-blue-600 hover:underline">
+              <a href="/sign-up" className="text-primary hover:underline">
                 Sign up
               </a>
             </p>

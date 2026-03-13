@@ -22,15 +22,15 @@ export default function Page() {
   return (
     <div className="grid h-screen place-items-center">
       {isElectron ? (
-        <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-lg">
-          <h1 className="mb-6 text-center text-2xl font-semibold text-gray-900">
+        <div className="w-full max-w-sm rounded-lg bg-card p-8 shadow-lg">
+          <h1 className="mb-6 text-center text-2xl font-semibold text-card-foreground">
             Create your account
           </h1>
           <ElectronSignUpForm />
-          <div className="mt-6 border-t pt-4">
-            <p className="text-center text-xs text-gray-500">
+          <div className="mt-6 border-t border-border pt-4">
+            <p className="text-center text-xs text-muted-foreground">
               Already have an account?{' '}
-              <a href="/login" className="text-blue-600 hover:underline">
+              <a href="/login" className="text-primary hover:underline">
                 Sign in
               </a>
             </p>
