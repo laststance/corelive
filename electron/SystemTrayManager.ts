@@ -443,7 +443,6 @@ export class SystemTrayManager {
           label: 'Settings',
           click: () => {
             try {
-              this.windowManager.restoreFromTray()
               this.windowManager.openSettings()
             } catch (error) {
               log.error('Failed to open settings:', error)
@@ -650,6 +649,23 @@ export class SystemTrayManager {
    */
   getTray(): Tray | null {
     return this.tray
+  }
+
+  /**
+   * Returns the bounding rectangle of the tray icon for window positioning.
+   *
+   * @returns Tray icon bounds or null if tray is unavailable
+   * @example
+   * const bounds = trayManager.getTrayBounds()
+   * // bounds = { x: 1200, y: 0, width: 22, height: 22 } or null
+   */
+  getTrayBounds(): Electron.Rectangle | null {
+    if (!this.tray || this.tray.isDestroyed()) return null
+    try {
+      return this.tray.getBounds()
+    } catch {
+      return null
+    }
   }
 
   /**
