@@ -17,7 +17,7 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
@@ -78,6 +78,9 @@ export class WindowManager {
   /** Fallback mode for when window minimize to tray fails */
   private trayFallbackMode: boolean
 
+  /** Callback to get tray icon bounds for popover positioning */
+  private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
+
   /**
    * Creates a new WindowManager instance.
    *
@@ -98,6 +101,71 @@ export class WindowManager {
     this.configManager = configManager
     this.windowStateManager = windowStateManager
     this.trayFallbackMode = false
+    this.getTrayBoundsProvider = null
+  }
+
+  /**
+   * Sets the callback used to retrieve tray icon bounds for popover positioning.
+   *
+   * @param provider - Callback returning tray icon rectangle or null
+   * @example
+   * windowManager.setTrayBoundsProvider(() => trayManager.getTrayBounds())
+   */
+  setTrayBoundsProvider(provider: () => Electron.Rectangle | null): void {
+    this.getTrayBoundsProvider = provider
+  }
+
+  /**
+   * Calculates the position for the settings popover window.
+   * Centers horizontally under the tray icon with screen-edge clamping.
+   * Falls back to primary display center if tray is unavailable.
+   *
+   * @param windowWidth - Width of the popover window
+   * @param windowHeight - Height of the popover window
+   * @returns Coordinates for window placement
+   */
+  private calculateSettingsPopoverPosition(
+    windowWidth: number,
+    windowHeight: number,
+  ): { x: number; y: number } {
+    const trayBounds = this.getTrayBoundsProvider?.()
+
+    if (trayBounds) {
+      // Center horizontally under the tray icon with 4px gap below
+      let x = Math.round(trayBounds.x + trayBounds.width / 2 - windowWidth / 2)
+      let y = trayBounds.y + trayBounds.height + 4
+
+      // Clamp to the display containing the tray icon
+      const display = screen.getDisplayNearestPoint({
+        x: trayBounds.x,
+        y: trayBounds.y,
+      })
+      const { workArea } = display
+
+      // Prevent going off right edge
+      if (x + windowWidth > workArea.x + workArea.width) {
+        x = workArea.x + workArea.width - windowWidth
+      }
+      // Prevent going off left edge
+      if (x < workArea.x) {
+        x = workArea.x
+      }
+      // If window would go below screen, show above tray instead
+      if (y + windowHeight > workArea.y + workArea.height) {
+        y = trayBounds.y - windowHeight - 4
+      }
+
+      return { x, y }
+    }
+
+    // Fallback: center on primary display
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const { width: screenWidth, height: screenHeight } =
+      primaryDisplay.workAreaSize
+    return {
+      x: Math.round((screenWidth - windowWidth) / 2),
+      y: Math.round((screenHeight - windowHeight) / 2),
+    }
   }
 
   /**
@@ -468,18 +536,37 @@ export class WindowManager {
       return this.settingsWindow
     }
 
-    log.info('🔧 Creating settings window...')
+    log.info('🔧 Creating settings popover window...')
+
+    const windowWidth = 360
+    const windowHeight = 380
+    const { x, y } = this.calculateSettingsPopoverPosition(
+      windowWidth,
+      windowHeight,
+    )
 
     // Resolve preload script path (built by electron-vite).
     // See `createMainWindow()` for why we avoid `process.resourcesPath` here.
     const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
 
     this.settingsWindow = new BrowserWindow({
-      width: 500,
-      height: 400,
-      minWidth: 400,
-      minHeight: 300,
-      resizable: true,
+      width: windowWidth,
+      height: windowHeight,
+      x,
+      y,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      frame: false,
+      transparent: true,
+      vibrancy: 'popover',
+      visualEffectState: 'active',
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: true,
+      backgroundColor: '#00000000',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -492,11 +579,6 @@ export class WindowManager {
           (this.configManager?.get('advanced.enableDevTools', false) ?? false),
       },
       show: false,
-      titleBarStyle: 'hiddenInset',
-      backgroundColor: '#ffffff',
-      // Modal-like behavior - use mainWindow as parent if available
-      parent: this.mainWindow || undefined,
-      modal: false, // Not truly modal - allows interaction with main window
     })
 
     // Load settings page
@@ -509,14 +591,18 @@ export class WindowManager {
     // Show when ready
     this.settingsWindow.once('ready-to-show', () => {
       this.settingsWindow?.show()
-      if (this.isDev) {
-        this.settingsWindow?.webContents.openDevTools()
+    })
+
+    // Auto-hide on blur (popover behavior)
+    this.settingsWindow.on('blur', () => {
+      if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+        this.settingsWindow.hide()
       }
     })
 
     // Cleanup on close
     this.settingsWindow.on('closed', () => {
-      log.debug('🔧 Settings window closed')
+      log.debug('🔧 Settings popover closed')
       this.settingsWindow = null
     })
 
@@ -529,6 +615,10 @@ export class WindowManager {
    */
   openSettings(): void {
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      // Reposition in case tray icon moved (e.g., display change)
+      const { width, height } = this.settingsWindow.getBounds()
+      const { x, y } = this.calculateSettingsPopoverPosition(width, height)
+      this.settingsWindow.setPosition(x, y)
       this.settingsWindow.show()
       this.settingsWindow.focus()
     } else {
