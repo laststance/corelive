@@ -175,19 +175,19 @@ export function ElectronSettingsPage(): React.ReactElement {
   }
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Settings</CardTitle>
+    <div className="h-full p-4">
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="px-2 pb-2 pt-0">
+          <CardTitle className="text-lg">Settings</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 px-2">
           {/* Hide App Icon */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="hide-app-icon" className="text-base font-medium">
+              <Label htmlFor="hide-app-icon" className="text-sm font-medium">
                 Hide App Icon
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Hide the CoreLive icon from the Dock
               </p>
             </div>
@@ -201,16 +201,13 @@ export function ElectronSettingsPage(): React.ReactElement {
           {/* Show in Menu Bar - Not yet implemented */}
           <div className="flex items-center justify-between opacity-60">
             <div className="space-y-0.5">
-              <Label
-                htmlFor="show-in-menu-bar"
-                className="text-base font-medium"
-              >
+              <Label htmlFor="show-in-menu-bar" className="text-sm font-medium">
                 Show in Menu Bar{' '}
                 <span className="text-xs text-muted-foreground">
                   (Coming Soon)
                 </span>
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Display CoreLive in the system menu bar
               </p>
             </div>
@@ -225,10 +222,10 @@ export function ElectronSettingsPage(): React.ReactElement {
           {/* Start at Login */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="start-at-login" className="text-base font-medium">
+              <Label htmlFor="start-at-login" className="text-sm font-medium">
                 Start at Login
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Automatically launch CoreLive when you log in
               </p>
             </div>

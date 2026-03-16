@@ -745,6 +745,9 @@ async function createWindow(): Promise<BrowserWindow> {
         'SystemTrayManager',
       )) as new (...args: unknown[]) => SystemTrayManagerType
       systemTrayManager = new SystemTrayManagerCls(windowManager)
+      windowManager.setTrayBoundsProvider(
+        () => systemTrayManager?.getTrayBounds() ?? null,
+      )
       log.info('✅ [DEFERRED] SystemTrayManager loaded')
 
       log.info('🔧 [DEFERRED] Loading NotificationManager...')
