@@ -154,17 +154,20 @@ export class WindowManager {
       if (y + windowHeight > workArea.y + workArea.height) {
         y = trayBounds.y - windowHeight - 4
       }
+      // Ensure top edge is still visible
+      if (y < workArea.y) {
+        y = workArea.y
+      }
 
       return { x, y }
     }
 
     // Fallback: center on primary display
     const primaryDisplay = screen.getPrimaryDisplay()
-    const { width: screenWidth, height: screenHeight } =
-      primaryDisplay.workAreaSize
+    const { workArea } = primaryDisplay
     return {
-      x: Math.round((screenWidth - windowWidth) / 2),
-      y: Math.round((screenHeight - windowHeight) / 2),
+      x: Math.round(workArea.x + (workArea.width - windowWidth) / 2),
+      y: Math.round(workArea.y + (workArea.height - windowHeight) / 2),
     }
   }
 
