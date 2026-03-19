@@ -56,7 +56,7 @@ function formReducer(state: FormState, action: FormAction): FormState {
  * @returns Login form with email/password fields and optional Google OAuth fallback
  */
 export function ElectronLoginForm() {
-  const { isLoaded, signIn, setActive } = useSignIn()
+  const { signIn, fetchStatus } = useSignIn()
   const { user } = useUser()
   const router = useRouter()
   const [state, dispatch] = useReducer(formReducer, {
@@ -74,13 +74,13 @@ export function ElectronLoginForm() {
 
   /**
    * Handle email/password form submission.
-   * Uses Clerk's signIn.create with identifier/password strategy.
+   * Uses Clerk's signIn.create with identifier then signIn.password for verification.
    */
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
 
-      if (!isLoaded || !signIn || !setActive) {
+      if (!signIn) {
         dispatch({ type: 'SET_ERROR', error: 'Authentication not ready' })
         return
       }
@@ -88,23 +88,43 @@ export function ElectronLoginForm() {
       dispatch({ type: 'START_LOADING' })
 
       try {
-        let result = await signIn.create({
+        // Create sign-in with identifier
+        const { error: createError } = await signIn.create({
           identifier: state.email,
+        })
+
+        if (createError) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: createError.message ?? 'Failed to sign in',
+          })
+          return
+        }
+
+        // Submit password as first factor
+        const { error: passwordError } = await signIn.password({
           password: state.password,
         })
 
-        // Handle needs_first_factor: attempt password verification
-        if (result.status === 'needs_first_factor') {
-          result = await signIn.attemptFirstFactor({
-            strategy: 'password',
-            password: state.password,
+        if (passwordError) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: passwordError.message ?? 'Invalid password',
           })
+          return
         }
 
-        if (result.status === 'complete' && result.createdSessionId) {
-          await setActive({ session: result.createdSessionId })
+        if (signIn.status === 'complete') {
+          const { error: finalizeError } = await signIn.finalize()
+          if (finalizeError) {
+            dispatch({
+              type: 'SET_ERROR',
+              error: finalizeError.message ?? 'Failed to complete sign-in',
+            })
+            return
+          }
           router.push('/home')
-        } else if (result.status === 'needs_second_factor') {
+        } else if (signIn.status === 'needs_second_factor') {
           // MFA is required - for now, show error with guidance
           dispatch({
             type: 'SET_ERROR',
@@ -128,7 +148,7 @@ export function ElectronLoginForm() {
         dispatch({ type: 'SET_ERROR', error: errorMessage })
       }
     },
-    [isLoaded, signIn, setActive, state.email, state.password, router],
+    [signIn, state.email, state.password, router],
   )
 
   /**
@@ -159,7 +179,8 @@ export function ElectronLoginForm() {
     }
   }, [])
 
-  const isFormDisabled = isLoading || isGoogleLoading
+  const isFormDisabled =
+    isLoading || isGoogleLoading || fetchStatus === 'fetching'
   const canSubmit =
     state.email.trim() && state.password.trim() && !isFormDisabled
 

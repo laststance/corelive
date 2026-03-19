@@ -63,7 +63,7 @@ function formReducer(state: FormState, action: FormAction): FormState {
  * @returns Sign-up form with email/password fields and optional Google OAuth fallback
  */
 export function ElectronSignUpForm() {
-  const { isLoaded, signUp, setActive } = useSignUp()
+  const { signUp, fetchStatus } = useSignUp()
   const { user } = useUser()
   const router = useRouter()
   const [state, dispatch] = useReducer(formReducer, {
@@ -83,13 +83,13 @@ export function ElectronSignUpForm() {
 
   /**
    * Handle sign-up form submission.
-   * Creates account and sends email verification.
+   * Creates account with email, sets password, and sends email verification.
    */
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
 
-      if (!isLoaded || !signUp) {
+      if (!signUp) {
         dispatch({ type: 'SET_ERROR', error: 'Sign-up not ready' })
         return
       }
@@ -97,15 +97,43 @@ export function ElectronSignUpForm() {
       dispatch({ type: 'START_LOADING' })
 
       try {
-        await signUp.create({
+        // Create sign-up with email
+        const { error: createError } = await signUp.create({
           emailAddress: state.email,
+        })
+
+        if (createError) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: createError.message ?? 'Failed to create account',
+          })
+          return
+        }
+
+        // Set password
+        const { error: passwordError } = await signUp.password({
           password: state.password,
         })
 
+        if (passwordError) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: passwordError.message ?? 'Failed to set password',
+          })
+          return
+        }
+
         // Send email verification code
-        await signUp.prepareEmailAddressVerification({
-          strategy: 'email_code',
-        })
+        const { error: sendCodeError } =
+          await signUp.verifications.sendEmailCode()
+
+        if (sendCodeError) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: sendCodeError.message ?? 'Failed to send verification code',
+          })
+          return
+        }
 
         dispatch({ type: 'SET_PENDING_VERIFICATION' })
       } catch (err) {
@@ -119,7 +147,7 @@ export function ElectronSignUpForm() {
         dispatch({ type: 'SET_ERROR', error: errorMessage })
       }
     },
-    [isLoaded, signUp, state.email, state.password],
+    [signUp, state.email, state.password],
   )
 
   /**
@@ -129,7 +157,7 @@ export function ElectronSignUpForm() {
     async (e: React.FormEvent) => {
       e.preventDefault()
 
-      if (!isLoaded || !signUp || !setActive) {
+      if (!signUp) {
         dispatch({ type: 'SET_ERROR', error: 'Verification not ready' })
         return
       }
@@ -137,12 +165,28 @@ export function ElectronSignUpForm() {
       dispatch({ type: 'START_LOADING' })
 
       try {
-        const result = await signUp.attemptEmailAddressVerification({
-          code: state.code,
-        })
+        const { error: verifyError } =
+          await signUp.verifications.verifyEmailCode({
+            code: state.code,
+          })
 
-        if (result.status === 'complete' && result.createdSessionId) {
-          await setActive({ session: result.createdSessionId })
+        if (verifyError) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: verifyError.message ?? 'Invalid verification code',
+          })
+          return
+        }
+
+        if (signUp.status === 'complete') {
+          const { error: finalizeError } = await signUp.finalize()
+          if (finalizeError) {
+            dispatch({
+              type: 'SET_ERROR',
+              error: finalizeError.message ?? 'Failed to complete registration',
+            })
+            return
+          }
           router.push('/home')
         } else {
           dispatch({
@@ -161,7 +205,7 @@ export function ElectronSignUpForm() {
         dispatch({ type: 'SET_ERROR', error: errorMessage })
       }
     },
-    [isLoaded, signUp, setActive, state.code, router],
+    [signUp, state.code, router],
   )
 
   /**
@@ -190,7 +234,8 @@ export function ElectronSignUpForm() {
     }
   }, [])
 
-  const isFormDisabled = isLoading || isGoogleLoading
+  const isFormDisabled =
+    isLoading || isGoogleLoading || fetchStatus === 'fetching'
 
   // Verification code form
   if (state.pendingVerification) {

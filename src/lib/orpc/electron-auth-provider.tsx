@@ -23,7 +23,7 @@ export function ElectronAuthProvider({
   children: React.ReactNode
 }) {
   const { user, isLoaded } = useUser()
-  const { signIn, setActive, isLoaded: isSignInLoaded } = useSignIn()
+  const { signIn, fetchStatus: signInFetchStatus } = useSignIn()
   const { signOut } = useClerk()
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
@@ -38,11 +38,10 @@ export function ElectronAuthProvider({
 
     // Wait for Clerk signIn to be available before registering callback
     // This prevents race condition where callback runs before signIn is ready
-    if (!isSignInLoaded || !signIn || !setActive) {
+    if (!signIn) {
       log.debug('[OAuth] Waiting for Clerk signIn to be available...', {
-        isSignInLoaded,
+        signInFetchStatus,
         hasSignIn: !!signIn,
-        hasSetActive: !!setActive,
       })
       return
     }
@@ -114,25 +113,40 @@ export function ElectronAuthProvider({
       })
 
       try {
-        log.debug('[OAuth] Calling signIn.create with ticket strategy')
-        // Use the ticket strategy to create a session from the sign-in token
-        const result = await signIn.create({
-          strategy: 'ticket',
+        log.debug('[OAuth] Calling signIn.ticket with token')
+        // Use the ticket method to create a session from the sign-in token
+        const { error: ticketError } = await signIn.ticket({
           ticket: token,
         })
 
-        log.debug('[OAuth] signIn.create result', {
-          status: result.status,
-          hasSessionId: !!result.createdSessionId,
+        if (ticketError) {
+          log.error('[OAuth] signIn.ticket error', { error: ticketError })
+          window.dispatchEvent(
+            new CustomEvent('electron-oauth-error', {
+              detail: ticketError.message ?? 'Token exchange failed',
+            }),
+          )
+          return
+        }
+
+        log.debug('[OAuth] signIn.ticket result', {
+          status: signIn.status,
+          hasSessionId: !!signIn.createdSessionId,
         })
 
-        if (result.status === 'complete' && result.createdSessionId) {
-          // Set the new session as active
-          log.debug('[OAuth] Setting active session', {
-            sessionId: result.createdSessionId,
+        if (signIn.status === 'complete' && signIn.createdSessionId) {
+          // Finalize the sign-in to set the new session as active
+          log.debug('[OAuth] Finalizing sign-in', {
+            sessionId: signIn.createdSessionId,
           })
-          await setActive({ session: result.createdSessionId })
-          log.info('[OAuth] Successfully signed in via browser OAuth token')
+          const { error: finalizeError } = await signIn.finalize()
+          if (finalizeError) {
+            log.error('[OAuth] signIn.finalize error', {
+              error: finalizeError,
+            })
+          } else {
+            log.info('[OAuth] Successfully signed in via browser OAuth token')
+          }
 
           // Clear any pending token in main process
           await window.electronAPI?.oauth?.clearPendingToken()
@@ -142,12 +156,12 @@ export function ElectronAuthProvider({
           // This is done via the Clerk session change which triggers useUser() update
         } else {
           log.warn('Sign-in token exchange did not complete', {
-            status: result.status,
+            status: signIn.status,
           })
           // Dispatch error event to reset OAuth button loading state
           window.dispatchEvent(
             new CustomEvent('electron-oauth-error', {
-              detail: `Sign-in incomplete: ${result.status}`,
+              detail: `Sign-in incomplete: ${signIn.status}`,
             }),
           )
         }
@@ -215,12 +229,12 @@ export function ElectronAuthProvider({
       log.debug('[OAuth] Cleaning up main listener')
       cleanup?.()
     }
-  }, [signIn, setActive, isSignInLoaded, user, signOut])
+  }, [signIn, signInFetchStatus, user, signOut])
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
     if (!isElectronEnvironment()) return
-    if (isSignInLoaded && signIn) {
+    if (signIn) {
       log.debug('[OAuth] Temp effect: signIn ready, skipping temp listener')
       return // Already ready, main effect will handle
     }
@@ -241,7 +255,7 @@ export function ElectronAuthProvider({
       log.debug('[OAuth] Cleaning up temporary listener')
       tempCleanup?.()
     }
-  }, [isSignInLoaded, signIn])
+  }, [signIn])
 
   // Sync auth state with Electron main process
   useEffect(() => {

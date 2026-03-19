@@ -1,7 +1,7 @@
 'use client'
 
 import { useSignIn, useSignUp } from '@clerk/nextjs'
-import type { OAuthStrategy } from '@clerk/types'
+import type { OAuthStrategy } from '@clerk/shared/types'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 
@@ -13,7 +13,7 @@ import { Suspense, useEffect, useState } from 'react'
  *
  * Flow:
  * 1. Electron opens: https://corelive.app/oauth/start?provider=google&state=xxx
- * 2. This page uses Clerk's signIn.authenticateWithRedirect() to start OAuth
+ * 2. This page uses Clerk's signIn.sso() to start OAuth
  * 3. Clerk redirects to OAuth provider (Google/GitHub)
  * 4. Provider redirects back to Clerk
  * 5. Clerk redirects to /oauth/callback (specified in redirectUrl)
@@ -29,8 +29,8 @@ type StartStatus = 'loading' | 'starting' | 'error'
 
 function OAuthStartContent() {
   const searchParams = useSearchParams()
-  const { signIn, isLoaded: isSignInLoaded } = useSignIn()
-  const { signUp, isLoaded: isSignUpLoaded } = useSignUp()
+  const { signIn } = useSignIn()
+  const { signUp } = useSignUp()
   const [status, setStatus] = useState<StartStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
@@ -39,7 +39,7 @@ function OAuthStartContent() {
 
   useEffect(() => {
     // Wait for Clerk to load
-    if (!isSignInLoaded || !isSignUpLoaded) return
+    if (!signIn || !signUp) return
 
     // Validate parameters
     if (!provider || !['google', 'github'].includes(provider)) {
@@ -61,13 +61,13 @@ function OAuthStartContent() {
       try {
         const strategy: OAuthStrategy = `oauth_${provider}`
 
-        // Use Clerk's authenticateWithRedirect to start the OAuth flow
-        // The redirectUrl is where Clerk will send the user after OAuth completes
+        // Use Clerk's sso method to start the OAuth flow
+        // The redirectCallbackUrl is where Clerk will send the user after OAuth completes
         // We include the state parameter in the URL so we can pass it back to Electron
-        await signIn?.authenticateWithRedirect({
+        await signIn.sso({
           strategy,
           redirectUrl: `/oauth/sso-callback?state=${encodeURIComponent(state)}`,
-          redirectUrlComplete: `/oauth/callback?state=${encodeURIComponent(state)}`,
+          redirectCallbackUrl: `/oauth/callback?state=${encodeURIComponent(state)}`,
         })
       } catch (err) {
         console.error('OAuth start error:', err)
@@ -76,10 +76,10 @@ function OAuthStartContent() {
         try {
           const strategy: OAuthStrategy = `oauth_${provider}`
 
-          await signUp?.authenticateWithRedirect({
+          await signUp.sso({
             strategy,
             redirectUrl: `/oauth/sso-callback?state=${encodeURIComponent(state)}`,
-            redirectUrlComplete: `/oauth/callback?state=${encodeURIComponent(state)}`,
+            redirectCallbackUrl: `/oauth/callback?state=${encodeURIComponent(state)}`,
           })
         } catch (signUpErr) {
           console.error('OAuth sign-up error:', signUpErr)
@@ -92,7 +92,7 @@ function OAuthStartContent() {
     }
 
     void startOAuth()
-  }, [isSignInLoaded, isSignUpLoaded, provider, state, signIn, signUp])
+  }, [signIn, signUp, provider, state])
 
   return (
     <div className="bg-linear-to-b flex min-h-screen flex-col items-center justify-center from-gray-50 to-gray-100 p-4">
