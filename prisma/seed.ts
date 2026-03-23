@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   // console.log('🌱 Starting database seed...')
 
   // Create test user based on Clerk test account
-  await prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { clerkId: 'user_32MtPR8Z8ywubMj2jwG9DdSbzPq' },
     update: {},
     create: {
@@ -25,6 +25,18 @@ async function main(): Promise<void> {
       email: 'test@test.com',
       name: 'test01',
       bio: 'Test account for development and E2E testing',
+    },
+  })
+
+  // Create default "General" category for test user
+  await prisma.category.upsert({
+    where: { name_userId: { name: 'General', userId: user.id } },
+    update: { isDefault: true },
+    create: {
+      name: 'General',
+      color: 'blue',
+      isDefault: true,
+      userId: user.id,
     },
   })
 }

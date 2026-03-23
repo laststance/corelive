@@ -56,18 +56,37 @@ export const listTodos = authMiddleware
     }
   })
 
-// Create todo
+/**
+ * Create a new todo for the authenticated user.
+ * If no categoryId is provided, auto-assigns to the user's default (General) category.
+ *
+ * @param input.text - Todo text (1-255 chars)
+ * @param input.notes - Optional notes
+ * @param input.categoryId - Category to assign (auto-fills with default if omitted)
+ * @returns The newly created todo
+ */
 export const createTodo = authMiddleware
   .input(CreateTodoSchema)
   .output(TodoSchema)
   .handler(async ({ input, context }) => {
     try {
       const { user } = context
+      let categoryId = input.categoryId
 
-      // Verify category ownership if provided
-      if (input.categoryId) {
+      // Auto-assign to default (General) category if not specified
+      if (!categoryId) {
+        const defaultCategory = await prisma.category.findFirst({
+          where: { userId: user.id, isDefault: true },
+        })
+        if (defaultCategory) {
+          categoryId = defaultCategory.id
+        }
+      }
+
+      // Verify category ownership
+      if (categoryId) {
         const category = await prisma.category.findFirst({
-          where: { id: input.categoryId, userId: user.id },
+          where: { id: categoryId, userId: user.id },
         })
         if (!category) {
           throw new ORPCError('NOT_FOUND', {
@@ -80,7 +99,7 @@ export const createTodo = authMiddleware
         data: {
           text: input.text,
           notes: input.notes,
-          categoryId: input.categoryId,
+          categoryId,
           userId: user.id,
         },
       })

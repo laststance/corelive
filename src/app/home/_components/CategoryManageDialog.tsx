@@ -129,8 +129,8 @@ export function CategoryManageDialog({
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>
             <DialogDescription>
-              Rename, recolor, or delete categories. Deleting a category makes
-              its tasks uncategorized.
+              Rename, recolor, or delete categories. Deleting a category moves
+              its tasks to the default category.
             </DialogDescription>
           </DialogHeader>
 
@@ -212,14 +212,16 @@ export function CategoryManageDialog({
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(category)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {!category.isDefault && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(category)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -247,8 +249,8 @@ export function CategoryManageDialog({
                     <>
                       {' '}
                       {deleteTarget._count.todos} task
-                      {deleteTarget._count.todos > 1 ? 's' : ''} will become
-                      uncategorized.
+                      {deleteTarget._count.todos > 1 ? 's' : ''} will be moved
+                      to the default category.
                     </>
                   )}
                 </>

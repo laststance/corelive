@@ -58,6 +58,7 @@ export function useCategoryMutations() {
         id: -Date.now(),
         name: newCategory.name,
         color: newCategory.color ?? 'blue',
+        isDefault: false,
         userId: 0,
         _count: { todos: 0 },
         createdAt: new Date(),

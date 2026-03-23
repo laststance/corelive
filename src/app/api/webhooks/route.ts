@@ -69,12 +69,23 @@ export async function POST(req: Request) {
     const name =
       userData.username || `${firstName} ${lastName}`.trim() || 'Unknown User'
 
-    await prisma.user.create({
-      data: {
-        clerkId: userData.id,
-        name,
-        email: emailAddress,
-      },
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          clerkId: userData.id,
+          name,
+          email: emailAddress,
+        },
+      })
+
+      await tx.category.create({
+        data: {
+          name: 'General',
+          color: 'blue',
+          isDefault: true,
+          userId: user.id,
+        },
+      })
     })
   }
 

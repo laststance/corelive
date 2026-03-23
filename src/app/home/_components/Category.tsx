@@ -193,19 +193,6 @@ export function Category({
             </SidebarMenuItem>
           ))}
 
-          {/* Empty state CTA */}
-          {categories.length === 0 && (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                className="text-sidebar-foreground/50"
-                onClick={() => setAddOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add your first category</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )}
-
           {/* Manage */}
           {categories.length > 0 && (
             <SidebarMenuItem>

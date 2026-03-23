@@ -184,6 +184,13 @@ export const updateCategory = authMiddleware
  * @param input.id - Category ID to delete
  * @returns Success status
  */
+/**
+ * Delete a category. Tasks in this category are reassigned to the user's default (General) category.
+ * The default category itself cannot be deleted.
+ *
+ * @param input.id - Category ID to delete
+ * @returns Success status
+ */
 export const deleteCategory = authMiddleware
   .input(z.object({ id: z.number().int().positive() }))
   .output(z.object({ success: z.boolean() }))
@@ -203,10 +210,31 @@ export const deleteCategory = authMiddleware
         })
       }
 
-      // Both Todo.categoryId and Completed.categoryId use onDelete: SetNull,
-      // so PostgreSQL automatically nullifies references when the category is removed.
-      await prisma.category.delete({
-        where: { id },
+      // Block deletion of default category
+      if (existing.isDefault) {
+        throw new ORPCError('FORBIDDEN', {
+          message: 'Cannot delete the default category',
+        })
+      }
+
+      // Find user's default category to reassign todos
+      const defaultCategory = await prisma.category.findFirst({
+        where: { userId: user.id, isDefault: true },
+      })
+
+      // Reassign todos to default category, then delete
+      await prisma.$transaction(async (tx) => {
+        if (defaultCategory) {
+          await tx.todo.updateMany({
+            where: { categoryId: id },
+            data: { categoryId: defaultCategory.id },
+          })
+          await tx.completed.updateMany({
+            where: { categoryId: id },
+            data: { categoryId: defaultCategory.id },
+          })
+        }
+        await tx.category.delete({ where: { id } })
       })
 
       return { success: true }

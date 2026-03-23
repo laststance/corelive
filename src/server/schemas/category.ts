@@ -30,6 +30,7 @@ export const CategorySchema = z.object({
   id: z.number().int().positive(),
   name: z.string().min(1).max(30),
   color: CategoryColorSchema,
+  isDefault: z.boolean(),
   userId: z.number().int().positive(),
   createdAt: z
     .union([z.date(), z.string()])
