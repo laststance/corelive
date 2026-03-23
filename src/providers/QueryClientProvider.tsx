@@ -28,8 +28,7 @@ const queryClient = new QueryClient({
       gcTime: 1000 * 60 * 60 * 24 * 7, // 1 week - required for persistence
     },
     dehydrate: {
-      shouldDehydrateQuery: (query) =>
-        defaultShouldDehydrateQuery(query) || query.state.status === 'pending',
+      shouldDehydrateQuery: defaultShouldDehydrateQuery,
       serializeData(data) {
         const [json, meta] = serializer.serialize(data)
         return { json, meta }
