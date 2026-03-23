@@ -8,10 +8,13 @@ const nextConfig = {
   },
   // Turbopack configuration (Next.js 16+)
   // code-inspector-plugin enables Alt+click to jump to source code in IDE
+  // dev: true is required because turbopack.rules is evaluated at config load time,
+  // before Next.js sets NODE_ENV=development. Without it, the plugin returns {} (no-op).
   turbopack: {
     rules: codeInspectorPlugin({
       bundler: 'turbopack',
       hotKeys: ['altKey'],
+      dev: true,
     }),
   },
   // Performance optimizations
