@@ -482,6 +482,224 @@ test.describe('Category Feature E2E Tests', () => {
     })
   })
 
+  test.describe('Default General Category', () => {
+    test('should always display General category in sidebar', async ({
+      page,
+    }) => {
+      const sidebar = getSidebar(page)
+
+      // General category should always be visible (seeded as isDefault)
+      await expect(sidebar.getByText('General')).toBeVisible({ timeout: 5000 })
+
+      // General should have a blue color dot
+      const generalItem = sidebar
+        .locator('[data-slot="sidebar-menu-item"]')
+        .filter({ hasText: 'General' })
+      const colorDot = generalItem.locator('.rounded-full')
+      await expect(colorDot).toHaveClass(/bg-blue-500/)
+
+      // Manage button should be visible (General counts as an existing category)
+      await expect(
+        sidebar.getByRole('button', { name: 'Manage' }),
+      ).toBeVisible()
+    })
+
+    test('should not allow deleting the default General category', async ({
+      page,
+    }) => {
+      const sidebar = getSidebar(page)
+
+      // Open manage dialog
+      await openManageDialog(page, sidebar)
+
+      // Find the General category row
+      const generalRow = page
+        .locator('[role="dialog"]')
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: 'General' })
+      await expect(generalRow).toBeVisible({ timeout: 5000 })
+
+      // Edit button should be present (renaming is allowed)
+      const editButton = generalRow.locator('button').filter({
+        has: page.locator('svg.lucide-pencil'),
+      })
+      await expect(editButton).toBeVisible()
+
+      // Delete button should NOT be present (isDefault categories are protected)
+      const deleteButton = generalRow.locator('button').filter({
+        has: page.locator('svg.lucide-trash-2'),
+      })
+      await expect(deleteButton).not.toBeVisible()
+    })
+
+    test('should allow renaming the default General category', async ({
+      page,
+    }) => {
+      const sidebar = getSidebar(page)
+      const newName = uniqueName('GenRen')
+
+      // Open manage dialog
+      await openManageDialog(page, sidebar)
+
+      // Find General row and click edit
+      const generalRow = page
+        .locator('[role="dialog"]')
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: 'General' })
+      await expect(generalRow).toBeVisible({ timeout: 5000 })
+      const editButton = generalRow.locator('button').filter({
+        has: page.locator('svg.lucide-pencil'),
+      })
+      await editButton.click()
+
+      // Rename
+      const editInput = page.locator('[role="dialog"]').locator('input')
+      await expect(editInput).toBeVisible({ timeout: 3000 })
+      await editInput.fill(newName)
+      await editInput.press('Enter')
+
+      // Wait for edit mode to exit
+      await expect(editInput).not.toBeVisible({ timeout: 10000 })
+
+      // Close dialog
+      await page.keyboard.press('Escape')
+      await page.waitForLoadState('networkidle')
+
+      // New name should appear in sidebar
+      await expect(sidebar.getByText(newName)).toBeVisible({ timeout: 15000 })
+
+      // Rename back to "General" for test isolation
+      await openManageDialog(page, sidebar)
+      const renamedRow = page
+        .locator('[role="dialog"]')
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: newName })
+      await expect(renamedRow).toBeVisible({ timeout: 5000 })
+      const editButton2 = renamedRow.locator('button').filter({
+        has: page.locator('svg.lucide-pencil'),
+      })
+      await editButton2.click()
+
+      const editInput2 = page.locator('[role="dialog"]').locator('input')
+      await expect(editInput2).toBeVisible({ timeout: 3000 })
+      await editInput2.fill('General')
+      await editInput2.press('Enter')
+      await expect(editInput2).not.toBeVisible({ timeout: 10000 })
+      await page.keyboard.press('Escape')
+      await page.waitForLoadState('networkidle')
+
+      // Verify restored
+      await expect(sidebar.getByText('General')).toBeVisible({ timeout: 15000 })
+    })
+
+    test('should auto-assign new todo to General when no category selected', async ({
+      page,
+    }) => {
+      const todoText = uniqueName('TodoGen')
+      const sidebar = getSidebar(page)
+
+      // Ensure "All" is selected (default state)
+      await sidebar.getByText('All').click()
+      await page.waitForTimeout(500)
+
+      // Add a todo without selecting any specific category
+      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page.getByRole('button', { name: 'Add', exact: true }).click()
+
+      // Wait for todo to appear with server-confirmed ID
+      const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+      await expect(todoCheckbox).toBeVisible({ timeout: 5000 })
+      await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+        timeout: 10000,
+      })
+
+      // The todo item should display "General" as its category badge
+      const todoItem = page.locator('.rounded-lg.border').filter({
+        has: page.getByRole('checkbox', { name: todoText }),
+      })
+      await expect(todoItem.getByText('General')).toBeVisible({
+        timeout: 5000,
+      })
+
+      // General category in sidebar should show a count badge
+      const generalItem = sidebar
+        .locator('[data-slot="sidebar-menu-item"]')
+        .filter({ hasText: 'General' })
+      await expect(
+        generalItem.locator('[data-slot="sidebar-menu-badge"]'),
+      ).toBeVisible({ timeout: 10000 })
+    })
+
+    test('should reassign todos to General when their category is deleted', async ({
+      page,
+    }) => {
+      const categoryName = uniqueName('CatDel')
+      const todoText = uniqueName('TodoDel')
+      const sidebar = getSidebar(page)
+
+      // Create a new category and add a todo to it
+      await createCategory(page, sidebar, categoryName)
+      await selectCategory(page, sidebar, categoryName)
+      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page.getByRole('button', { name: 'Add', exact: true }).click()
+      await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
+        timeout: 5000,
+      })
+
+      // Switch to "All" view before deleting
+      await sidebar.getByText('All').click()
+      await page.waitForTimeout(500)
+
+      // Delete the category
+      await openManageDialog(page, sidebar)
+      const categoryRow = page
+        .locator('[role="dialog"]')
+        .locator('.rounded-md.p-2')
+        .filter({ hasText: categoryName })
+      await expect(categoryRow).toBeVisible({ timeout: 5000 })
+      const deleteButton = categoryRow.locator('button').filter({
+        has: page.locator('svg.lucide-trash-2'),
+      })
+      await deleteButton.click()
+
+      // Confirm deletion
+      await expect(page.getByText('Delete category?')).toBeVisible({
+        timeout: 5000,
+      })
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await expect(page.getByText('Delete category?')).not.toBeVisible({
+        timeout: 5000,
+      })
+      await page.waitForLoadState('networkidle')
+
+      // Close manage dialog
+      await page.keyboard.press('Escape')
+      await expect(page.getByText('Manage Categories')).not.toBeVisible({
+        timeout: 5000,
+      })
+
+      // The todo should still exist in "All" view
+      await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
+        timeout: 10000,
+      })
+
+      // The todo should now show "General" as its category (reassigned from deleted category)
+      const todoItem = page.locator('.rounded-lg.border').filter({
+        has: page.getByRole('checkbox', { name: todoText }),
+      })
+      await expect(todoItem.getByText('General')).toBeVisible({
+        timeout: 5000,
+      })
+
+      // Filter by General — the todo should be visible
+      await sidebar.getByText('General').click()
+      await page.waitForTimeout(1000)
+      await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
+        timeout: 5000,
+      })
+    })
+  })
+
   test.describe('Category + Todo Integration', () => {
     test('should auto-assign category when adding todo with category selected', async ({
       page,
@@ -574,7 +792,8 @@ test.describe('Category Feature E2E Tests', () => {
       const deleteButton = categoryRow.locator('button').filter({
         has: page.locator('svg.lucide-trash-2'),
       })
-      await deleteButton.click()
+      // Dialog may overflow viewport with many test categories — dispatch click via JS
+      await deleteButton.dispatchEvent('click')
 
       // Confirm deletion
       await expect(page.getByText('Delete category?')).toBeVisible({
@@ -594,7 +813,7 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // The todo should still exist (now uncategorized) in "All" view
+      // The todo should still exist (now reassigned to General) in "All" view
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 10000,
       })

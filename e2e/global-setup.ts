@@ -8,11 +8,20 @@ import { clerkSetup } from '@clerk/testing/playwright'
  */
 export default async function globalSetup() {
   // Reset database for clean test state
+  // Note: Prisma 7's `migrate reset --force` does not auto-run the seed,
+  // so we run it explicitly after reset to ensure test fixtures exist.
   execSync('pnpm db:reset', {
     stdio: 'pipe', // Suppress stdout/stderr for cleaner output
     env: {
       ...process.env,
       DEBUG: '', // Disable debug logging
+    },
+  })
+  execSync('pnpm prisma:seed', {
+    stdio: 'pipe',
+    env: {
+      ...process.env,
+      DEBUG: '',
     },
   })
 
