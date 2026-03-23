@@ -1,1 +1,11 @@
+# Lockfile integrity check: ensure pnpm-lock.yaml is in sync with package.json
+if git diff --cached --name-only | grep -qE '^(package\.json|pnpm-lock\.yaml)$'; then
+  echo "📦 Checking lockfile integrity..."
+  pnpm install --frozen-lockfile --ignore-scripts > /dev/null 2>&1 || {
+    echo "❌ pnpm-lock.yaml is out of sync with package.json"
+    echo "   Run 'pnpm install' and stage the updated lockfile."
+    exit 1
+  }
+fi
+
 pnpm lint-staged
