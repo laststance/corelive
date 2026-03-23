@@ -38,12 +38,16 @@ import {
  * Displays "All" + user categories with color dots and pending todo counts.
  * Uses shadcn Sidebar primitives (SidebarMenu, SidebarMenuBadge, etc.).
  *
- * @param onOpenManage - Callback to open the category management dialog
+ * @param onOpenManageAction - Opens the category management dialog (Next.js: `*Action` suffix for callable props)
  *
  * @example
- * <Category onOpenManage={() => setManageOpen(true)} />
+ * <Category onOpenManageAction={() => setManageOpen(true)} />
  */
-export function Category({ onOpenManage }: { onOpenManage: () => void }) {
+export function Category({
+  onOpenManageAction,
+}: {
+  onOpenManageAction: () => void
+}) {
   const queryClient = useQueryClient()
   const { setOpenMobile, isMobile } = useSidebar()
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
@@ -207,7 +211,7 @@ export function Category({ onOpenManage }: { onOpenManage: () => void }) {
             <SidebarMenuItem>
               <SidebarMenuButton
                 className="text-sidebar-foreground/70"
-                onClick={onOpenManage}
+                onClick={onOpenManageAction}
               >
                 <Settings className="h-4 w-4" />
                 <span>Manage</span>

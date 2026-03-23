@@ -209,7 +209,7 @@ export default function Home() {
 
           <SidebarSeparator />
 
-          <Category onOpenManage={() => setManageDialogOpen(true)} />
+          <Category onOpenManageAction={() => setManageDialogOpen(true)} />
 
           <div className="flex-1" />
 
