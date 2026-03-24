@@ -34,6 +34,7 @@ import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { AddTodoForm } from './AddTodoForm'
 import { CompletedTodos } from './CompletedTodos'
+import { ContributionGraph } from './ContributionGraph'
 import { SortableTodoItem } from './SortableTodoItem'
 import type { Todo } from './TodoItem'
 
@@ -329,7 +330,8 @@ export function TodoList() {
       </div>
 
       {/* Completed Tasks Column */}
-      <div className="h-full">
+      <div className="space-y-6">
+        <ContributionGraph />
         <CompletedTodos
           onDelete={deleteTodo}
           onClearCompleted={deleteCompleted}

@@ -101,6 +101,7 @@
     "@tanstack/query-sync-storage-persister": "^5.95.0",
     "@tanstack/react-query": "^5.95.0",
     "@tanstack/react-query-persist-client": "^5.95.0",
+    "@uiw/react-heat-map": "^2.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
