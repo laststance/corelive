@@ -141,14 +141,16 @@ export function ElectronAuthProvider({
             sessionId: signIn.createdSessionId,
           })
           const { error: finalizeError } = await signIn.finalize({
-            navigate: ({ decorateUrl }) => {
+            navigate: ({ session, decorateUrl }) => {
+              if (session?.currentTask) {
+                log.warn('[OAuth] Session has pending task', {
+                  task: session.currentTask,
+                })
+                return
+              }
               const url = decorateUrl('/home')
               log.info('[OAuth] Finalize navigating to', { url })
-              if (url.startsWith('http')) {
-                window.location.href = url
-              } else {
-                window.location.href = url
-              }
+              window.location.href = url
             },
           })
           if (finalizeError) {

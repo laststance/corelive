@@ -3,7 +3,13 @@
 import { useSignIn, useUser } from '@clerk/nextjs'
 import { Eye, EyeOff, Loader2, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useReducer, useState, useSyncExternalStore } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useSyncExternalStore,
+} from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +21,7 @@ type FormState = {
   email: string
   password: string
   isLoading: boolean
+  isGoogleLoading: boolean
   error: string | null
   showPassword: boolean
 }
@@ -23,6 +30,8 @@ type FormAction =
   | { type: 'SET_EMAIL'; email: string }
   | { type: 'SET_PASSWORD'; password: string }
   | { type: 'START_LOADING' }
+  | { type: 'START_GOOGLE_LOADING' }
+  | { type: 'STOP_GOOGLE_LOADING' }
   | { type: 'SET_ERROR'; error: string }
   | { type: 'RESET_ERROR' }
   | { type: 'TOGGLE_PASSWORD_VISIBILITY' }
@@ -35,8 +44,17 @@ function formReducer(state: FormState, action: FormAction): FormState {
       return { ...state, password: action.password, error: null }
     case 'START_LOADING':
       return { ...state, isLoading: true, error: null }
+    case 'START_GOOGLE_LOADING':
+      return { ...state, isGoogleLoading: true, error: null }
+    case 'STOP_GOOGLE_LOADING':
+      return { ...state, isGoogleLoading: false }
     case 'SET_ERROR':
-      return { ...state, isLoading: false, error: action.error }
+      return {
+        ...state,
+        isLoading: false,
+        isGoogleLoading: false,
+        error: action.error,
+      }
     case 'RESET_ERROR':
       return { ...state, error: null }
     case 'TOGGLE_PASSWORD_VISIBILITY':
@@ -63,13 +81,61 @@ export function ElectronLoginForm() {
     email: '',
     password: '',
     isLoading: false,
+    isGoogleLoading: false,
     error: null,
     showPassword: false,
   })
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const googleLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+
+  // Listen for OAuth errors from ElectronAuthProvider to reset loading state
+  useEffect(() => {
+    const handleOAuthError = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      dispatch({
+        type: 'SET_ERROR',
+        error: detail || 'Google sign-in failed',
+      })
+    }
+
+    window.addEventListener('electron-oauth-error', handleOAuthError)
+    return () => {
+      window.removeEventListener('electron-oauth-error', handleOAuthError)
+    }
+  }, [])
+
+  // Safety timeout: reset Google loading after 60s
+  useEffect(() => {
+    if (state.isGoogleLoading) {
+      googleLoadingTimeoutRef.current = setTimeout(() => {
+        dispatch({
+          type: 'SET_ERROR',
+          error: 'Google sign-in timed out. Please try again.',
+        })
+      }, 60_000)
+    } else if (googleLoadingTimeoutRef.current) {
+      clearTimeout(googleLoadingTimeoutRef.current)
+      googleLoadingTimeoutRef.current = null
+    }
+
+    return () => {
+      if (googleLoadingTimeoutRef.current) {
+        clearTimeout(googleLoadingTimeoutRef.current)
+      }
+    }
+  }, [state.isGoogleLoading])
+
+  // Reset Google loading if user becomes authenticated
+  useEffect(() => {
+    if (user && state.isGoogleLoading) {
+      dispatch({ type: 'STOP_GOOGLE_LOADING' })
+    }
+  }, [user, state.isGoogleLoading])
 
   // Reset loading if user becomes authenticated
   const isLoading = user ? false : state.isLoading
+  const isGoogleLoading = user ? false : state.isGoogleLoading
   const error = user ? null : state.error
 
   /**
@@ -117,7 +183,11 @@ export function ElectronLoginForm() {
         if (signIn.status === 'complete') {
           // Clerk v7 requires a navigate callback for session activation
           const { error: finalizeError } = await signIn.finalize({
-            navigate: ({ decorateUrl }) => {
+            navigate: ({ session, decorateUrl }) => {
+              if (session?.currentTask) {
+                // Handle pending session tasks (e.g., mandatory password change)
+                return
+              }
               const url = decorateUrl('/home')
               if (url.startsWith('http')) {
                 window.location.href = url
@@ -170,7 +240,7 @@ export function ElectronLoginForm() {
       return
     }
 
-    setIsGoogleLoading(true)
+    dispatch({ type: 'START_GOOGLE_LOADING' })
 
     try {
       const result = await window.electronAPI.oauth.start('google')
@@ -179,12 +249,10 @@ export function ElectronLoginForm() {
           type: 'SET_ERROR',
           error: result.error || 'Failed to start Google sign-in',
         })
-        setIsGoogleLoading(false)
       }
       // If successful, browser opens and callback handles the rest
     } catch {
       dispatch({ type: 'SET_ERROR', error: 'Failed to start Google sign-in' })
-      setIsGoogleLoading(false)
     }
   }, [])
 
