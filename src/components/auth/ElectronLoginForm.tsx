@@ -115,7 +115,17 @@ export function ElectronLoginForm() {
         }
 
         if (signIn.status === 'complete') {
-          const { error: finalizeError } = await signIn.finalize()
+          // Clerk v7 requires a navigate callback for session activation
+          const { error: finalizeError } = await signIn.finalize({
+            navigate: ({ decorateUrl }) => {
+              const url = decorateUrl('/home')
+              if (url.startsWith('http')) {
+                window.location.href = url
+              } else {
+                router.push(url)
+              }
+            },
+          })
           if (finalizeError) {
             dispatch({
               type: 'SET_ERROR',
@@ -123,7 +133,6 @@ export function ElectronLoginForm() {
             })
             return
           }
-          router.push('/home')
         } else if (signIn.status === 'needs_second_factor') {
           // MFA is required - for now, show error with guidance
           dispatch({

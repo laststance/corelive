@@ -136,24 +136,38 @@ export function ElectronAuthProvider({
 
         if (signIn.status === 'complete' && signIn.createdSessionId) {
           // Finalize the sign-in to set the new session as active
+          // Clerk v7 requires a navigate callback for session activation
           log.debug('[OAuth] Finalizing sign-in', {
             sessionId: signIn.createdSessionId,
           })
-          const { error: finalizeError } = await signIn.finalize()
+          const { error: finalizeError } = await signIn.finalize({
+            navigate: ({ decorateUrl }) => {
+              const url = decorateUrl('/home')
+              log.info('[OAuth] Finalize navigating to', { url })
+              if (url.startsWith('http')) {
+                window.location.href = url
+              } else {
+                window.location.href = url
+              }
+            },
+          })
           if (finalizeError) {
             log.error('[OAuth] signIn.finalize error', {
               error: finalizeError,
             })
-          } else {
-            log.info('[OAuth] Successfully signed in via browser OAuth token')
+            window.dispatchEvent(
+              new CustomEvent('electron-oauth-error', {
+                detail: finalizeError.message ?? 'Failed to complete sign-in',
+              }),
+            )
+            return
           }
+
+          log.info('[OAuth] Successfully signed in via browser OAuth token')
 
           // Clear any pending token in main process
           await window.electronAPI?.oauth?.clearPendingToken()
           hasRetriedAfterSignOut.current = false
-
-          // Notify ElectronOAuthButtons that auth succeeded (resets loading state)
-          // This is done via the Clerk session change which triggers useUser() update
         } else {
           log.warn('Sign-in token exchange did not complete', {
             status: signIn.status,
