@@ -148,8 +148,10 @@ export function ElectronAuthProvider({
         await window.electronAPI?.oauth?.clearPendingToken()
         hasRetriedAfterSignOut.current = false
 
-        // Reload page to activate the session from the cookie
-        window.location.href = '/home'
+        // Reload current page to activate the session from the cookie.
+        // Don't navigate to /home directly — let the app's authenticated
+        // routing handle the redirect after session is recognized.
+        window.location.reload()
       } catch (error) {
         // Check if error is "session_exists" - Clerk thinks there's a session
         // but useUser() doesn't see it (stale state issue)
