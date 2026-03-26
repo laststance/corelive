@@ -1,7 +1,7 @@
 'use client'
 
 import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 import { log } from '../logger'
@@ -24,17 +24,9 @@ export function ElectronAuthProvider({
 }) {
   const { user, isLoaded } = useUser()
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn()
-  const { signOut, setActive } = useClerk()
+  const { signOut } = useClerk()
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
-  const hasRetriedAfterSignOut = useRef(false)
-  const [shouldActivateSession, setShouldActivateSession] = useState(false)
-  const [, forceRender] = useState(0)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Read signal-based getters in render phase.
-  const signInStatus = signIn?.status
-  const signInSessionId = signIn?.createdSessionId
 
   // Handle sign-in token from browser OAuth
   useEffect(() => {
@@ -94,20 +86,31 @@ export function ElectronAuthProvider({
       }
     }
 
+    /**
+     * Exchange a sign-in token for a Clerk session.
+     *
+     * Key insight (clerk/javascript#8044): signIn.ticket() silently fails
+     * when FAPI has an active session — no error is thrown but the ticket
+     * is not consumed and signIn.status never becomes 'complete'.
+     * Fix: always signOut() before ticket() to clear any stale FAPI session.
+     *
+     * @param token - The sign-in token from browser OAuth
+     * @param provider - The OAuth provider name (e.g., 'google')
+     * @example
+     * // Token arrives via deep link → processSignInToken('tok_xxx', 'google')
+     * // → signOut() → ticket() → finalize() → navigate to /home
+     */
     const processSignInToken = async (token: string, provider: string) => {
       if (isProcessingToken.current) {
         log.debug('[OAuth] Sign-in token already being processed, skipping')
         return
       }
 
-      // Check if user is already authenticated via useUser()
-      // This can happen if the WebView already has a valid session
+      // If user is already authenticated and visible to React, skip
       if (user) {
         log.info(
           '[OAuth] User already authenticated, skipping token exchange',
-          {
-            userId: user.id,
-          },
+          { userId: user.id },
         )
         await window.electronAPI?.oauth?.clearPendingToken()
         return
@@ -120,6 +123,17 @@ export function ElectronAuthProvider({
       })
 
       try {
+        // clerk/javascript#8044: Always sign out first to clear any stale
+        // FAPI session that's invisible to useUser(). Without this,
+        // ticket() silently fails — no error, but ticket not consumed.
+        log.info('[OAuth] Signing out to clear any stale FAPI session')
+        try {
+          await signOut()
+        } catch {
+          // signOut may fail if there's no session — that's fine
+          log.debug('[OAuth] signOut before ticket (no session to clear)')
+        }
+
         log.debug('[OAuth] Calling signIn.ticket with token')
         const { error: ticketError } = await signIn.ticket({
           ticket: token,
@@ -136,78 +150,46 @@ export function ElectronAuthProvider({
         }
 
         await window.electronAPI?.oauth?.clearPendingToken()
-        hasRetriedAfterSignOut.current = false
 
-        // Clerk v7 Signal API: signIn.status/createdSessionId only update
-        // during React render phase, NOT in async closures. Set a flag to
-        // trigger re-render so a separate useEffect can read the fresh values.
-        log.info('[OAuth] Ticket exchanged, triggering session activation')
-        setShouldActivateSession(true)
+        log.info('[OAuth] Ticket exchanged, calling finalize', {
+          status: signIn.status,
+          hasSessionId: !!signIn.createdSessionId,
+        })
 
-        // Force periodic re-renders so React re-evaluates Clerk v7 signal
-        // getters (signIn.status, signIn.createdSessionId). Clerk signals
-        // don't trigger React re-renders on their own after ticket().
-        let pollCount = 0
-        const maxPolls = 100 // 100 × 100ms = 10s
-        pollIntervalRef.current = setInterval(() => {
-          pollCount++
-          forceRender((c) => c + 1)
-          if (pollCount >= maxPolls) {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
+        // Clerk v7: finalize() activates the session and navigates.
+        // Must be called in the same async context after ticket().
+        const { error: finalizeError } = await signIn.finalize({
+          navigate: ({ session, decorateUrl }) => {
+            if (session?.currentTask) {
+              log.warn('[OAuth] Session has pending task', {
+                task: session.currentTask,
+              })
+              return
             }
-            if (isProcessingToken.current) {
-              log.error('[OAuth] Session activation timed out after 10s')
-              isProcessingToken.current = false
-              setShouldActivateSession(false)
-              window.dispatchEvent(
-                new CustomEvent('electron-oauth-error', {
-                  detail: 'Sign-in timed out. Please try again.',
-                }),
-              )
-            }
-          }
-        }, 100)
-      } catch (error) {
-        // Check if error is "session_exists" - Clerk thinks there's a session
-        // but useUser() doesn't see it (stale state issue)
-        const clerkError = error as { errors?: Array<{ code?: string }> }
-        const isSessionExists = clerkError?.errors?.some(
-          (e) => e.code === 'session_exists',
-        )
+            const url = decorateUrl('/home')
+            log.info('[OAuth] Finalize navigating to', { url })
+            window.location.href = url
+          },
+        })
 
-        if (isSessionExists && !hasRetriedAfterSignOut.current) {
-          // Try signing out to clear stale session state, then retry
-          log.info('[OAuth] Session exists error - signing out and retrying')
-          hasRetriedAfterSignOut.current = true
-          isProcessingToken.current = false
-
-          try {
-            await signOut()
-            log.info('[OAuth] Signed out, retrying token exchange')
-            // Retry the token exchange after sign out
-            await processSignInToken(token, provider)
-          } catch (signOutError) {
-            log.error('[OAuth] Failed to sign out:', signOutError)
-            // If sign out fails, just reload the page
-            window.location.reload()
-          }
-          return
-        } else if (isSessionExists) {
-          // Already retried, just reload the page
-          log.info('[OAuth] Session exists after retry - reloading page')
-          await window.electronAPI?.oauth?.clearPendingToken()
-          window.location.reload()
-        } else {
-          log.error('Failed to exchange sign-in token for session:', error)
-          // Dispatch error event to reset OAuth button loading state
-          const errorMessage =
-            error instanceof Error ? error.message : 'Token exchange failed'
+        if (finalizeError) {
+          log.error('[OAuth] signIn.finalize error', { error: finalizeError })
           window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', { detail: errorMessage }),
+            new CustomEvent('electron-oauth-error', {
+              detail: finalizeError.message ?? 'Failed to complete sign-in',
+            }),
           )
+          return
         }
+
+        log.info('[OAuth] Successfully signed in via browser OAuth')
+      } catch (error) {
+        log.error('[OAuth] Token exchange failed:', error)
+        const errorMessage =
+          error instanceof Error ? error.message : 'Token exchange failed'
+        window.dispatchEvent(
+          new CustomEvent('electron-oauth-error', { detail: errorMessage }),
+        )
       } finally {
         isProcessingToken.current = false
       }
@@ -234,46 +216,6 @@ export function ElectronAuthProvider({
       cleanup?.()
     }
   }, [signIn, signInFetchStatus, user, signOut])
-
-  // Activate session after ticket exchange. Dependencies use render-phase
-  // evaluated values (signInStatus, signInSessionId) so React detects when
-  // Clerk v7 signals propagate, instead of comparing the signIn object ref.
-  /* eslint-disable react-you-might-not-need-an-effect/no-event-handler, react-you-might-not-need-an-effect/no-chain-state-updates */
-  useEffect(() => {
-    if (!shouldActivateSession) return
-    if (signInStatus !== 'complete' || !signInSessionId) {
-      log.info('[OAuth] Activation effect waiting for signIn to complete', {
-        status: signInStatus,
-        hasSessionId: !!signInSessionId,
-      })
-      return
-    }
-
-    // Stop polling re-renders
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-    setShouldActivateSession(false)
-    isProcessingToken.current = false
-    log.info('[OAuth] Activating session via setActive', {
-      sessionId: signInSessionId,
-    })
-    setActive({ session: signInSessionId })
-      .then(() => {
-        log.info('[OAuth] Session activated, navigating to /home')
-        window.location.href = '/home'
-      })
-      .catch((err) => {
-        log.error('[OAuth] setActive failed', err)
-        window.dispatchEvent(
-          new CustomEvent('electron-oauth-error', {
-            detail: 'Failed to activate session. Please try again.',
-          }),
-        )
-      })
-  }, [shouldActivateSession, signInStatus, signInSessionId, setActive])
-  /* eslint-enable react-you-might-not-need-an-effect/no-event-handler, react-you-might-not-need-an-effect/no-chain-state-updates */
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
