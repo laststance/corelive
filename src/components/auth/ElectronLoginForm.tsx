@@ -140,7 +140,9 @@ export function ElectronLoginForm() {
 
   /**
    * Handle email/password form submission.
-   * Uses Clerk's signIn.create with identifier then signIn.password for verification.
+   * Uses Clerk v7 signIn.password() with emailAddress + password in a single call.
+   * @example
+   * // User submits form → signIn.password() → finalize() → redirect to /home
    */
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -154,28 +156,16 @@ export function ElectronLoginForm() {
       dispatch({ type: 'START_LOADING' })
 
       try {
-        // Create sign-in with identifier
-        const { error: createError } = await signIn.create({
-          identifier: state.email,
-        })
-
-        if (createError) {
-          dispatch({
-            type: 'SET_ERROR',
-            error: createError.message ?? 'Failed to sign in',
-          })
-          return
-        }
-
-        // Submit password as first factor
+        // Clerk v7: single-step sign-in with email + password
         const { error: passwordError } = await signIn.password({
+          emailAddress: state.email,
           password: state.password,
         })
 
         if (passwordError) {
           dispatch({
             type: 'SET_ERROR',
-            error: passwordError.message ?? 'Invalid password',
+            error: passwordError.message ?? 'Invalid email or password',
           })
           return
         }
@@ -204,11 +194,16 @@ export function ElectronLoginForm() {
             return
           }
         } else if (signIn.status === 'needs_second_factor') {
-          // MFA is required - for now, show error with guidance
           dispatch({
             type: 'SET_ERROR',
             error:
               'Multi-factor authentication is required. Please use browser sign-in.',
+          })
+        } else if (signIn.status === 'needs_client_trust') {
+          dispatch({
+            type: 'SET_ERROR',
+            error:
+              'Device verification is required. Please use browser sign-in.',
           })
         } else {
           dispatch({
