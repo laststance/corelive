@@ -28,6 +28,7 @@ export function ElectronAuthProvider({
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
   const hasRetriedAfterSignOut = useRef(false)
+  const ticketExchanged = useRef(false)
 
   // Handle sign-in token from browser OAuth
   useEffect(() => {
@@ -134,24 +135,15 @@ export function ElectronAuthProvider({
           hasSessionId: !!signIn.createdSessionId,
         })
 
-        // Clerk v7 Signal API limitation: signIn.status does not update
-        // inside a useEffect async closure — signals require a React
-        // re-render cycle to propagate. Since ticket() succeeded without
-        // error, the session is already created server-side and the
-        // session cookie is set. Skip finalize() and reload the page
-        // to pick up the authenticated session.
-        log.info(
-          '[OAuth] Ticket exchange successful, reloading to activate session',
-        )
+        // Clerk v7 Signal API: signIn.status does not update inside a
+        // useEffect async closure. The signal needs a React re-render to
+        // propagate. Set a ref flag and let a separate useEffect handle
+        // finalize() after the re-render picks up the updated signIn.
+        log.info('[OAuth] Ticket exchange successful, waiting for signal')
 
-        // Clear any pending token in main process
         await window.electronAPI?.oauth?.clearPendingToken()
         hasRetriedAfterSignOut.current = false
-
-        // Reload current page to activate the session from the cookie.
-        // Don't navigate to /home directly — let the app's authenticated
-        // routing handle the redirect after session is recognized.
-        window.location.reload()
+        ticketExchanged.current = true
       } catch (error) {
         // Check if error is "session_exists" - Clerk thinks there's a session
         // but useUser() doesn't see it (stale state issue)
@@ -217,6 +209,69 @@ export function ElectronAuthProvider({
       cleanup?.()
     }
   }, [signIn, signInFetchStatus, user, signOut])
+
+  // Finalize sign-in after Clerk v7 signal propagation.
+  // When ticket() succeeds, it updates the signIn signal internally.
+  // React re-renders this component with the updated signIn object,
+  // and this effect picks up signIn.status === 'complete' to call finalize().
+  useEffect(() => {
+    if (!isElectronEnvironment()) return
+    if (!signIn || !ticketExchanged.current) return
+    if (user) {
+      // Already authenticated — ticket was already finalized
+      ticketExchanged.current = false
+      return
+    }
+
+    if (signIn.status !== 'complete') {
+      log.debug('[OAuth] Finalize effect: status not yet complete', {
+        status: signIn.status,
+      })
+      return
+    }
+
+    ticketExchanged.current = false
+    log.info('[OAuth] Signal propagated, finalizing sign-in', {
+      status: signIn.status,
+      hasSessionId: !!signIn.createdSessionId,
+    })
+
+    signIn
+      .finalize({
+        navigate: ({ session, decorateUrl }) => {
+          if (session?.currentTask) {
+            log.warn('[OAuth] Session has pending task', {
+              task: session.currentTask,
+            })
+            return
+          }
+          const url = decorateUrl('/home')
+          log.info('[OAuth] Finalize navigating to', { url })
+          window.location.href = url
+        },
+      })
+      .then(({ error: finalizeError }) => {
+        if (finalizeError) {
+          log.error('[OAuth] signIn.finalize error', { error: finalizeError })
+          window.dispatchEvent(
+            new CustomEvent('electron-oauth-error', {
+              detail: finalizeError.message ?? 'Failed to complete sign-in',
+            }),
+          )
+        }
+      })
+      .catch((error: unknown) => {
+        log.error('[OAuth] finalize threw', error)
+        window.dispatchEvent(
+          new CustomEvent('electron-oauth-error', {
+            detail:
+              error instanceof Error
+                ? error.message
+                : 'Failed to complete sign-in',
+          }),
+        )
+      })
+  }, [signIn, user])
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
