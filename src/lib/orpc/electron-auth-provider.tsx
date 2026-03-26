@@ -30,6 +30,12 @@ export function ElectronAuthProvider({
   const hasRetriedAfterSignOut = useRef(false)
   const [shouldActivateSession, setShouldActivateSession] = useState(false)
 
+  // Read signal-based getters in render phase so React can track changes.
+  // In Clerk v7, signIn.status and signIn.createdSessionId are signal getters
+  // that only return fresh values when read during React's render cycle.
+  const signInStatus = signIn?.status
+  const signInSessionId = signIn?.createdSessionId
+
   // Handle sign-in token from browser OAuth
   useEffect(() => {
     // Only run in Electron environment
@@ -137,6 +143,20 @@ export function ElectronAuthProvider({
         // trigger re-render so a separate useEffect can read the fresh values.
         log.info('[OAuth] Ticket exchanged, triggering session activation')
         setShouldActivateSession(true)
+
+        // Safety timeout: if signal never propagates, reset UI after 10s
+        setTimeout(() => {
+          if (isProcessingToken.current) {
+            log.error('[OAuth] Session activation timed out after 10s')
+            isProcessingToken.current = false
+            setShouldActivateSession(false)
+            window.dispatchEvent(
+              new CustomEvent('electron-oauth-error', {
+                detail: 'Sign-in timed out. Please try again.',
+              }),
+            )
+          }
+        }, 10_000)
       } catch (error) {
         // Check if error is "session_exists" - Clerk thinks there's a session
         // but useUser() doesn't see it (stale state issue)
@@ -203,40 +223,39 @@ export function ElectronAuthProvider({
     }
   }, [signIn, signInFetchStatus, user, signOut])
 
-  // Activate session after ticket exchange — Clerk v7 signal-based getters
-  // (signIn.status, signIn.createdSessionId) only return fresh values during
-  // React's render/commit phase. This effect reads them after re-render
-  // triggered by setShouldActivateSession(true) in processSignInToken.
+  // Activate session after ticket exchange. Dependencies use render-phase
+  // evaluated values (signInStatus, signInSessionId) so React detects when
+  // Clerk v7 signals propagate, instead of comparing the signIn object ref.
   /* eslint-disable react-you-might-not-need-an-effect/no-event-handler, react-you-might-not-need-an-effect/no-chain-state-updates */
   useEffect(() => {
     if (!shouldActivateSession) return
-    if (!signIn) return
-
-    log.info('[OAuth] Activation effect checking signIn state', {
-      status: signIn.status,
-      hasSessionId: !!signIn.createdSessionId,
-    })
-
-    if (signIn.status === 'complete' && signIn.createdSessionId) {
-      setShouldActivateSession(false)
-      log.info('[OAuth] Activating session', {
-        sessionId: signIn.createdSessionId,
+    if (signInStatus !== 'complete' || !signInSessionId) {
+      log.info('[OAuth] Activation effect waiting for signIn to complete', {
+        status: signInStatus,
+        hasSessionId: !!signInSessionId,
       })
-      setActive({ session: signIn.createdSessionId })
-        .then(() => {
-          log.info('[OAuth] Session activated, navigating to /home')
-          window.location.href = '/home'
-        })
-        .catch((err) => {
-          log.error('[OAuth] setActive failed', err)
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: 'Failed to activate session. Please try again.',
-            }),
-          )
-        })
+      return
     }
-  }, [shouldActivateSession, signIn, setActive])
+
+    setShouldActivateSession(false)
+    isProcessingToken.current = false
+    log.info('[OAuth] Activating session via setActive', {
+      sessionId: signInSessionId,
+    })
+    setActive({ session: signInSessionId })
+      .then(() => {
+        log.info('[OAuth] Session activated, navigating to /home')
+        window.location.href = '/home'
+      })
+      .catch((err) => {
+        log.error('[OAuth] setActive failed', err)
+        window.dispatchEvent(
+          new CustomEvent('electron-oauth-error', {
+            detail: 'Failed to activate session. Please try again.',
+          }),
+        )
+      })
+  }, [shouldActivateSession, signInStatus, signInSessionId, setActive])
   /* eslint-enable react-you-might-not-need-an-effect/no-event-handler, react-you-might-not-need-an-effect/no-chain-state-updates */
 
   // Store token if it arrives before signIn is ready
