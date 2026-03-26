@@ -24,7 +24,7 @@ export function ElectronAuthProvider({
 }) {
   const { user, isLoaded } = useUser()
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn()
-  const { signOut } = useClerk()
+  const { signOut, setActive } = useClerk()
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
   const hasRetriedAfterSignOut = useRef(false)
@@ -113,77 +113,34 @@ export function ElectronAuthProvider({
       })
 
       try {
-        log.debug('[OAuth] Calling signIn.ticket with token')
-        // Use the ticket method to create a session from the sign-in token
-        const { error: ticketError } = await signIn.ticket({
+        // Use signIn.create() which returns the result directly,
+        // bypassing Clerk v7 Signal API stale closure issue
+        log.debug('[OAuth] Calling signIn.create with ticket strategy')
+        const signInAttempt = await signIn.create({
+          strategy: 'ticket',
           ticket: token,
         })
 
-        if (ticketError) {
-          log.error('[OAuth] signIn.ticket error', { error: ticketError })
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: ticketError.message ?? 'Token exchange failed',
-            }),
-          )
-          return
-        }
-
-        log.debug('[OAuth] signIn.ticket result', {
-          status: signIn.status,
-          hasSessionId: !!signIn.createdSessionId,
+        log.info('[OAuth] signIn.create result', {
+          status: signInAttempt.status,
+          hasSessionId: !!signInAttempt.createdSessionId,
         })
 
         await window.electronAPI?.oauth?.clearPendingToken()
         hasRetriedAfterSignOut.current = false
 
-        // Clerk v7: signIn.status getter reads from an internal signal
-        // that updates asynchronously. Poll until it becomes 'complete',
-        // then call finalize(). Max 30 attempts × 100ms = 3s timeout.
-        log.info('[OAuth] Ticket exchange successful, polling for status')
-        let attempts = 0
-        const maxAttempts = 30
-        while (signIn.status !== 'complete' && attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 100))
-          attempts++
-        }
-
-        log.info('[OAuth] Poll result', {
-          status: signIn.status,
-          attempts,
-          hasSessionId: !!signIn.createdSessionId,
-        })
-
-        if (signIn.status !== 'complete') {
-          log.error('[OAuth] Sign-in did not complete after polling')
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: 'Sign-in timed out. Please try again.',
-            }),
-          )
-          return
-        }
-
-        const { error: finalizeError } = await signIn.finalize({
-          navigate: ({ session, decorateUrl }) => {
-            if (session?.currentTask) {
-              log.warn('[OAuth] Session has pending task', {
-                task: session.currentTask,
-              })
-              return
-            }
-            const url = decorateUrl('/home')
-            log.info('[OAuth] Finalize navigating to', { url })
-            window.location.href = url
-          },
-        })
-        if (finalizeError) {
-          log.error('[OAuth] signIn.finalize error', {
-            error: finalizeError,
+        if (signInAttempt.status === 'complete') {
+          // Activate the session directly via setActive()
+          await setActive({ session: signInAttempt.createdSessionId })
+          log.info('[OAuth] Session activated, navigating to /home')
+          window.location.href = '/home'
+        } else {
+          log.error('[OAuth] Sign-in not complete', {
+            status: signInAttempt.status,
           })
           window.dispatchEvent(
             new CustomEvent('electron-oauth-error', {
-              detail: finalizeError.message ?? 'Failed to complete sign-in',
+              detail: `Sign-in status: ${signInAttempt.status}. Please try again.`,
             }),
           )
           return
@@ -254,7 +211,7 @@ export function ElectronAuthProvider({
       log.debug('[OAuth] Cleaning up main listener')
       cleanup?.()
     }
-  }, [signIn, signInFetchStatus, user, signOut])
+  }, [signIn, signInFetchStatus, user, signOut, setActive])
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
