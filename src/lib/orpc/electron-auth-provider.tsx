@@ -29,10 +29,10 @@ export function ElectronAuthProvider({
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
   const hasRetriedAfterSignOut = useRef(false)
   const [shouldActivateSession, setShouldActivateSession] = useState(false)
+  const [, forceRender] = useState(0)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Read signal-based getters in render phase so React can track changes.
-  // In Clerk v7, signIn.status and signIn.createdSessionId are signal getters
-  // that only return fresh values when read during React's render cycle.
+  // Read signal-based getters in render phase.
   const signInStatus = signIn?.status
   const signInSessionId = signIn?.createdSessionId
 
@@ -144,19 +144,31 @@ export function ElectronAuthProvider({
         log.info('[OAuth] Ticket exchanged, triggering session activation')
         setShouldActivateSession(true)
 
-        // Safety timeout: if signal never propagates, reset UI after 10s
-        setTimeout(() => {
-          if (isProcessingToken.current) {
-            log.error('[OAuth] Session activation timed out after 10s')
-            isProcessingToken.current = false
-            setShouldActivateSession(false)
-            window.dispatchEvent(
-              new CustomEvent('electron-oauth-error', {
-                detail: 'Sign-in timed out. Please try again.',
-              }),
-            )
+        // Force periodic re-renders so React re-evaluates Clerk v7 signal
+        // getters (signIn.status, signIn.createdSessionId). Clerk signals
+        // don't trigger React re-renders on their own after ticket().
+        let pollCount = 0
+        const maxPolls = 100 // 100 × 100ms = 10s
+        pollIntervalRef.current = setInterval(() => {
+          pollCount++
+          forceRender((c) => c + 1)
+          if (pollCount >= maxPolls) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            if (isProcessingToken.current) {
+              log.error('[OAuth] Session activation timed out after 10s')
+              isProcessingToken.current = false
+              setShouldActivateSession(false)
+              window.dispatchEvent(
+                new CustomEvent('electron-oauth-error', {
+                  detail: 'Sign-in timed out. Please try again.',
+                }),
+              )
+            }
           }
-        }, 10_000)
+        }, 100)
       } catch (error) {
         // Check if error is "session_exists" - Clerk thinks there's a session
         // but useUser() doesn't see it (stale state issue)
@@ -237,6 +249,11 @@ export function ElectronAuthProvider({
       return
     }
 
+    // Stop polling re-renders
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
     setShouldActivateSession(false)
     isProcessingToken.current = false
     log.info('[OAuth] Activating session via setActive', {
