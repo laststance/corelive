@@ -146,9 +146,29 @@ export function ElectronAuthProvider({
           return
         }
 
-        // In Clerk v7, signIn.status may not immediately reflect 'complete'
-        // due to signal propagation timing after ticket(). Proceed directly
-        // to finalize() — it will return an error if sign-in isn't ready.
+        // Clerk v7 Signal API: signIn.status may not reflect 'complete'
+        // immediately after ticket() in a useEffect closure. Yield to the
+        // event loop so the signal can propagate before checking status.
+        await new Promise((resolve) => setTimeout(resolve, 50))
+
+        log.debug('[OAuth] Post-yield sign-in state', {
+          status: signIn.status,
+          hasSessionId: !!signIn.createdSessionId,
+        })
+
+        if (signIn.status !== 'complete') {
+          log.error('[OAuth] Sign-in not complete after ticket exchange', {
+            status: signIn.status,
+            hasSessionId: !!signIn.createdSessionId,
+          })
+          window.dispatchEvent(
+            new CustomEvent('electron-oauth-error', {
+              detail: 'Sign-in could not be completed. Please try again.',
+            }),
+          )
+          return
+        }
+
         log.debug('[OAuth] Finalizing sign-in', {
           status: signIn.status,
           sessionId: signIn.createdSessionId,
