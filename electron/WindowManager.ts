@@ -221,9 +221,7 @@ export class WindowManager {
         allowRunningInsecureContent: false,
         sandbox: false,
         spellcheck: false,
-        devTools:
-          this.isDev ||
-          (this.configManager?.get('advanced.enableDevTools', false) ?? false),
+        devTools: true, // TODO: revert after debugging OAuth sign-in
       },
       icon: path.join(__dirname, '../build/icons/icon.icns'),
       show: false,
@@ -240,9 +238,8 @@ export class WindowManager {
 
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow?.show()
-      if (this.isDev) {
-        this.mainWindow?.webContents.openDevTools()
-      }
+      // TODO: revert after debugging OAuth sign-in
+      this.mainWindow?.webContents.openDevTools()
     })
 
     // Track window state changes with debouncing
