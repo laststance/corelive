@@ -134,75 +134,22 @@ export function ElectronAuthProvider({
           hasSessionId: !!signIn.createdSessionId,
         })
 
-        // Guard: MFA required — user must sign in via browser
-        if (signIn.status === 'needs_second_factor') {
-          log.warn('[OAuth] MFA required, cannot complete in Electron')
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail:
-                'Multi-factor authentication required. Please use browser sign-in.',
-            }),
-          )
-          return
-        }
-
-        // Clerk v7 Signal API: signIn.status may not reflect 'complete'
-        // immediately after ticket() in a useEffect closure. Yield to the
-        // event loop so the signal can propagate before checking status.
-        await new Promise((resolve) => setTimeout(resolve, 50))
-
-        log.debug('[OAuth] Post-yield sign-in state', {
-          status: signIn.status,
-          hasSessionId: !!signIn.createdSessionId,
-        })
-
-        if (signIn.status !== 'complete') {
-          log.error('[OAuth] Sign-in not complete after ticket exchange', {
-            status: signIn.status,
-            hasSessionId: !!signIn.createdSessionId,
-          })
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: 'Sign-in could not be completed. Please try again.',
-            }),
-          )
-          return
-        }
-
-        log.debug('[OAuth] Finalizing sign-in', {
-          status: signIn.status,
-          sessionId: signIn.createdSessionId,
-        })
-        const { error: finalizeError } = await signIn.finalize({
-          navigate: ({ session, decorateUrl }) => {
-            if (session?.currentTask) {
-              log.warn('[OAuth] Session has pending task', {
-                task: session.currentTask,
-              })
-              return
-            }
-            const url = decorateUrl('/home')
-            log.info('[OAuth] Finalize navigating to', { url })
-            window.location.href = url
-          },
-        })
-        if (finalizeError) {
-          log.error('[OAuth] signIn.finalize error', {
-            error: finalizeError,
-          })
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: finalizeError.message ?? 'Failed to complete sign-in',
-            }),
-          )
-          return
-        }
-
-        log.info('[OAuth] Successfully signed in via browser OAuth token')
+        // Clerk v7 Signal API limitation: signIn.status does not update
+        // inside a useEffect async closure — signals require a React
+        // re-render cycle to propagate. Since ticket() succeeded without
+        // error, the session is already created server-side and the
+        // session cookie is set. Skip finalize() and reload the page
+        // to pick up the authenticated session.
+        log.info(
+          '[OAuth] Ticket exchange successful, reloading to activate session',
+        )
 
         // Clear any pending token in main process
         await window.electronAPI?.oauth?.clearPendingToken()
         hasRetriedAfterSignOut.current = false
+
+        // Reload page to activate the session from the cookie
+        window.location.href = '/home'
       } catch (error) {
         // Check if error is "session_exists" - Clerk thinks there's a session
         // but useUser() doesn't see it (stale state issue)
