@@ -1,7 +1,7 @@
 'use client'
 
 import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 import { log } from '../logger'
@@ -28,6 +28,7 @@ export function ElectronAuthProvider({
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
   const hasRetriedAfterSignOut = useRef(false)
+  const [shouldActivateSession, setShouldActivateSession] = useState(false)
 
   // Handle sign-in token from browser OAuth
   useEffect(() => {
@@ -113,40 +114,29 @@ export function ElectronAuthProvider({
       })
 
       try {
-        // Use signIn.create() which returns the result directly,
-        // bypassing Clerk v7 Signal API stale closure issue
-        log.debug('[OAuth] Calling signIn.create with ticket strategy')
-        const signInAttempt = await signIn.create({
-          strategy: 'ticket',
+        log.debug('[OAuth] Calling signIn.ticket with token')
+        const { error: ticketError } = await signIn.ticket({
           ticket: token,
         })
 
-        log.info('[OAuth] signIn.create result', {
-          status: signInAttempt.status,
-          hasSessionId: !!signInAttempt.createdSessionId,
-        })
-
-        await window.electronAPI?.oauth?.clearPendingToken()
-        hasRetriedAfterSignOut.current = false
-
-        if (signInAttempt.status === 'complete') {
-          // Activate the session directly via setActive()
-          await setActive({ session: signInAttempt.createdSessionId })
-          log.info('[OAuth] Session activated, navigating to /home')
-          window.location.href = '/home'
-        } else {
-          log.error('[OAuth] Sign-in not complete', {
-            status: signInAttempt.status,
-          })
+        if (ticketError) {
+          log.error('[OAuth] signIn.ticket error', { error: ticketError })
           window.dispatchEvent(
             new CustomEvent('electron-oauth-error', {
-              detail: `Sign-in status: ${signInAttempt.status}. Please try again.`,
+              detail: ticketError.message ?? 'Token exchange failed',
             }),
           )
           return
         }
 
-        log.info('[OAuth] Successfully signed in via browser OAuth')
+        await window.electronAPI?.oauth?.clearPendingToken()
+        hasRetriedAfterSignOut.current = false
+
+        // Clerk v7 Signal API: signIn.status/createdSessionId only update
+        // during React render phase, NOT in async closures. Set a flag to
+        // trigger re-render so a separate useEffect can read the fresh values.
+        log.info('[OAuth] Ticket exchanged, triggering session activation')
+        setShouldActivateSession(true)
       } catch (error) {
         // Check if error is "session_exists" - Clerk thinks there's a session
         // but useUser() doesn't see it (stale state issue)
@@ -211,7 +201,43 @@ export function ElectronAuthProvider({
       log.debug('[OAuth] Cleaning up main listener')
       cleanup?.()
     }
-  }, [signIn, signInFetchStatus, user, signOut, setActive])
+  }, [signIn, signInFetchStatus, user, signOut])
+
+  // Activate session after ticket exchange — Clerk v7 signal-based getters
+  // (signIn.status, signIn.createdSessionId) only return fresh values during
+  // React's render/commit phase. This effect reads them after re-render
+  // triggered by setShouldActivateSession(true) in processSignInToken.
+  /* eslint-disable react-you-might-not-need-an-effect/no-event-handler, react-you-might-not-need-an-effect/no-chain-state-updates */
+  useEffect(() => {
+    if (!shouldActivateSession) return
+    if (!signIn) return
+
+    log.info('[OAuth] Activation effect checking signIn state', {
+      status: signIn.status,
+      hasSessionId: !!signIn.createdSessionId,
+    })
+
+    if (signIn.status === 'complete' && signIn.createdSessionId) {
+      setShouldActivateSession(false)
+      log.info('[OAuth] Activating session', {
+        sessionId: signIn.createdSessionId,
+      })
+      setActive({ session: signIn.createdSessionId })
+        .then(() => {
+          log.info('[OAuth] Session activated, navigating to /home')
+          window.location.href = '/home'
+        })
+        .catch((err) => {
+          log.error('[OAuth] setActive failed', err)
+          window.dispatchEvent(
+            new CustomEvent('electron-oauth-error', {
+              detail: 'Failed to activate session. Please try again.',
+            }),
+          )
+        })
+    }
+  }, [shouldActivateSession, signIn, setActive])
+  /* eslint-enable react-you-might-not-need-an-effect/no-event-handler, react-you-might-not-need-an-effect/no-chain-state-updates */
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
