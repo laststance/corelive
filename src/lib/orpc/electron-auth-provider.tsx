@@ -89,16 +89,17 @@ export function ElectronAuthProvider({
     /**
      * Exchange a sign-in token for a Clerk session.
      *
-     * Key insight (clerk/javascript#8044): signIn.ticket() silently fails
-     * when FAPI has an active session — no error is thrown but the ticket
-     * is not consumed and signIn.status never becomes 'complete'.
-     * Fix: always signOut() before ticket() to clear any stale FAPI session.
+     * Uses the __clerk_ticket URL parameter approach: instead of calling
+     * signIn.ticket() + finalize() (which has closure staleness issues
+     * with Clerk v7 signals), navigate to the app URL with the token as
+     * a query parameter. ClerkProvider automatically consumes it and
+     * creates a session on page load.
      *
      * @param token - The sign-in token from browser OAuth
      * @param provider - The OAuth provider name (e.g., 'google')
      * @example
-     * // Token arrives via deep link → processSignInToken('tok_xxx', 'google')
-     * // → signOut() → ticket() → finalize() → navigate to /home
+     * // Token arrives via deep link → navigate to /home?__clerk_ticket=TOKEN
+     * // → ClerkProvider auto-consumes ticket → session created → authenticated
      */
     const processSignInToken = async (token: string, provider: string) => {
       if (isProcessingToken.current) {
@@ -123,75 +124,22 @@ export function ElectronAuthProvider({
       })
 
       try {
-        // clerk/javascript#8044: Always sign out first to clear any stale
-        // FAPI session that's invisible to useUser(). Without this,
-        // ticket() silently fails — no error, but ticket not consumed.
-        log.info('[OAuth] Signing out to clear any stale FAPI session')
-        try {
-          await signOut()
-        } catch {
-          // signOut may fail if there's no session — that's fine
-          log.debug('[OAuth] signOut before ticket (no session to clear)')
-        }
-
-        log.debug('[OAuth] Calling signIn.ticket with token')
-        const { error: ticketError } = await signIn.ticket({
-          ticket: token,
-        })
-
-        if (ticketError) {
-          log.error('[OAuth] signIn.ticket error', { error: ticketError })
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: ticketError.message ?? 'Token exchange failed',
-            }),
-          )
-          return
-        }
-
         await window.electronAPI?.oauth?.clearPendingToken()
 
-        log.info('[OAuth] Ticket exchanged, calling finalize', {
-          status: signIn.status,
-          hasSessionId: !!signIn.createdSessionId,
-        })
-
-        // Clerk v7: finalize() activates the session and navigates.
-        // Must be called in the same async context after ticket().
-        const { error: finalizeError } = await signIn.finalize({
-          navigate: ({ session, decorateUrl }) => {
-            if (session?.currentTask) {
-              log.warn('[OAuth] Session has pending task', {
-                task: session.currentTask,
-              })
-              return
-            }
-            const url = decorateUrl('/home')
-            log.info('[OAuth] Finalize navigating to', { url })
-            window.location.href = url
-          },
-        })
-
-        if (finalizeError) {
-          log.error('[OAuth] signIn.finalize error', { error: finalizeError })
-          window.dispatchEvent(
-            new CustomEvent('electron-oauth-error', {
-              detail: finalizeError.message ?? 'Failed to complete sign-in',
-            }),
-          )
-          return
-        }
-
-        log.info('[OAuth] Successfully signed in via browser OAuth')
+        // Bypass the SDK's signIn.ticket() + finalize() entirely.
+        // ClerkProvider detects __clerk_ticket on page load, exchanges
+        // it for a session via FAPI, and removes the parameter from URL.
+        // This avoids all closure/signal issues with Clerk v7.
+        log.info('[OAuth] Navigating with __clerk_ticket parameter')
+        window.location.href = `/home?__clerk_ticket=${encodeURIComponent(token)}`
       } catch (error) {
         log.error('[OAuth] Token exchange failed:', error)
+        isProcessingToken.current = false
         const errorMessage =
           error instanceof Error ? error.message : 'Token exchange failed'
         window.dispatchEvent(
           new CustomEvent('electron-oauth-error', { detail: errorMessage }),
         )
-      } finally {
-        isProcessingToken.current = false
       }
     }
 
