@@ -129,9 +129,12 @@ export function ElectronAuthProvider({
         // Bypass the SDK's signIn.ticket() + finalize() entirely.
         // ClerkProvider detects __clerk_ticket on page load, exchanges
         // it for a session via FAPI, and removes the parameter from URL.
-        // This avoids all closure/signal issues with Clerk v7.
+        // Must navigate to a PUBLIC page (/login) — protected routes like
+        // /home are blocked by proxy.ts before ClerkProvider can consume
+        // the ticket. After session is created, Clerk auto-redirects to
+        // NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL (/home).
         log.info('[OAuth] Navigating with __clerk_ticket parameter')
-        window.location.href = `/home?__clerk_ticket=${encodeURIComponent(token)}`
+        window.location.href = `/login?__clerk_ticket=${encodeURIComponent(token)}`
       } catch (error) {
         log.error('[OAuth] Token exchange failed:', error)
         isProcessingToken.current = false
