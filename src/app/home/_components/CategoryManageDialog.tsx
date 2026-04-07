@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { getColorDotClass } from '@/lib/category-colors'
 import { orpc } from '@/lib/orpc/client-query'
 import {
@@ -49,6 +50,7 @@ export function CategoryManageDialog({
   onOpenChange,
 }: CategoryManageDialogProps) {
   const { updateMutation, deleteMutation } = useCategoryMutations()
+  const isClerkQueryReady = useClerkQueryReady()
 
   // Editing state
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -61,7 +63,10 @@ export function CategoryManageDialog({
   )
 
   // Fetch categories
-  const { data } = useQuery(orpc.category.list.queryOptions({}))
+  const { data } = useQuery({
+    ...orpc.category.list.queryOptions({}),
+    enabled: open && isClerkQueryReady,
+  })
   const categories: CategoryWithCount[] = data?.categories ?? []
 
   /**

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useState } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
@@ -36,6 +37,7 @@ const DECIMAL_RADIX = 10
  */
 export function FloatingNavigatorContainer() {
   const queryClient = useQueryClient()
+  const isClerkQueryReady = useClerkQueryReady()
 
   // Category filter state (shared with main app via localStorage)
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
@@ -60,12 +62,15 @@ export function FloatingNavigatorContainer() {
     isMounted && typeof window !== 'undefined' && window.floatingNavigatorAPI
 
   // Fetch categories for the dropdown
-  const { data: categoryData } = useQuery(orpc.category.list.queryOptions({}))
+  const { data: categoryData } = useQuery({
+    ...orpc.category.list.queryOptions({}),
+    enabled: isClerkQueryReady,
+  })
   const categories: CategoryWithCount[] = categoryData?.categories ?? []
 
   // Fetch todos filtered by selected category
-  const { data, isLoading, error } = useQuery(
-    orpc.todo.list.queryOptions({
+  const { data, isLoading, error } = useQuery({
+    ...orpc.todo.list.queryOptions({
       input: {
         completed: false,
         limit: TODO_QUERY_LIMIT,
@@ -73,7 +78,8 @@ export function FloatingNavigatorContainer() {
         ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
       },
     }),
-  )
+    enabled: isClerkQueryReady,
+  })
 
   /**
    * Toggles completion state for a floating navigator task.

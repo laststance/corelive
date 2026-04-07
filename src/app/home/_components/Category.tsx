@@ -23,6 +23,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { getColorDotClass } from '@/lib/category-colors'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
@@ -52,6 +53,7 @@ export function Category({
   const { setOpenMobile, isMobile } = useSidebar()
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
   const { createMutation } = useCategoryMutations()
+  const isClerkQueryReady = useClerkQueryReady()
 
   // Add Category popover state
   const [addOpen, setAddOpen] = useState(false)
@@ -59,7 +61,10 @@ export function Category({
   const [newColor, setNewColor] = useState<CategoryColor>('blue')
 
   // Fetch categories with todo counts
-  const { data } = useQuery(orpc.category.list.queryOptions({}))
+  const { data } = useQuery({
+    ...orpc.category.list.queryOptions({}),
+    enabled: isClerkQueryReady,
+  })
   const categories: CategoryWithCount[] = data?.categories ?? []
 
   // Total pending = categorized + uncategorized

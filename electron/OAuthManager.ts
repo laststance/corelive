@@ -19,6 +19,12 @@ import type { WindowManager } from './WindowManager'
 // Type Definitions
 // ============================================================================
 
+/** Production web app origin used as a safe fallback. */
+const DEFAULT_APP_ORIGIN = 'https://corelive.app'
+
+/** Route that starts the browser-side OAuth flow. */
+const OAUTH_START_PATH = '/oauth/start'
+
 /** PKCE code pair */
 interface PKCEPair {
   verifier: string
@@ -134,21 +140,53 @@ export class OAuthManager {
   }
 
   /**
-   * Builds the OAuth start URL using Clerk's hosted Account Portal.
+   * Builds the OAuth start URL using the currently loaded web app origin.
    *
-   * @param provider - OAuth provider (currently unused as user selects on Clerk's UI)
+   * Using the same origin as the BrowserWindow keeps Clerk environment
+   * selection aligned in both development and production. This prevents
+   * development Electron from creating OAuth state on production pages and
+   * later trying to consume the returned sign-in ticket with development keys.
+   *
+   * @param provider - OAuth provider selected in the Electron login screen.
    * @param state - State parameter for CSRF protection
-   * @returns Clerk hosted sign-in URL with redirect callback
+   * @returns Application URL that starts browser OAuth on the matching environment.
    */
-  buildOAuthURL(_provider: string, state: string): string {
-    const accountsUrl = 'https://accounts.corelive.app/sign-in'
-    const callbackUrl = `https://corelive.app/oauth/callback?state=${encodeURIComponent(state)}`
-
+  buildOAuthURL(provider: string, state: string): string {
     const params = new URLSearchParams({
-      redirect_url: callbackUrl,
+      provider,
+      state,
     })
 
-    return `${accountsUrl}?${params.toString()}`
+    return `${this.getWebAppOrigin()}${OAUTH_START_PATH}?${params.toString()}`
+  }
+
+  /**
+   * Resolves the web app origin from the current BrowserWindow URL.
+   *
+   * @returns
+   * - The current app origin, such as `http://localhost:3011` in development.
+   * - The production origin fallback when no window URL is available.
+   * @example
+   * // Dev BrowserWindow URL: http://localhost:3011/login
+   * // => 'http://localhost:3011'
+   * @example
+   * // Production BrowserWindow URL: https://corelive.app/home
+   * // => 'https://corelive.app'
+   */
+  private getWebAppOrigin(): string {
+    const mainWindow = this.windowManager.getMainWindow()
+    const currentUrl = mainWindow?.webContents.getURL()
+
+    if (!currentUrl) {
+      return DEFAULT_APP_ORIGIN
+    }
+
+    try {
+      return new URL(currentUrl).origin
+    } catch (error) {
+      log.error('Failed to parse BrowserWindow URL for OAuth origin:', error)
+      return DEFAULT_APP_ORIGIN
+    }
   }
 
   /**

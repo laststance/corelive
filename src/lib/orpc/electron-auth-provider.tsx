@@ -24,7 +24,7 @@ export function ElectronAuthProvider({
 }) {
   const { user, isLoaded } = useUser()
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn()
-  const { signOut } = useClerk()
+  const { client, setActive } = useClerk()
   const isProcessingToken = useRef(false)
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
 
@@ -37,8 +37,9 @@ export function ElectronAuthProvider({
 
     // Wait for Clerk signIn to be available before registering callback
     // This prevents race condition where callback runs before signIn is ready
-    if (!signIn) {
+    if (!signIn || !client?.signIn) {
       log.debug('[OAuth] Waiting for Clerk signIn to be available...', {
+        hasClientSignIn: !!client?.signIn,
         signInFetchStatus,
         hasSignIn: !!signIn,
       })
@@ -46,6 +47,61 @@ export function ElectronAuthProvider({
     }
 
     log.info('[OAuth] Clerk signIn is ready, registering token listener')
+
+    /**
+     * Notify the renderer that OAuth failed and reset the in-flight state.
+     *
+     * @param message - Human-readable error shown by the Electron login form.
+     * @returns Nothing. The function emits a browser event for UI consumers.
+     * @example
+     * dispatchOAuthError('Google sign-in failed')
+     */
+    const dispatchOAuthError = (message: string) => {
+      isProcessingToken.current = false
+      window.dispatchEvent(
+        new CustomEvent('electron-oauth-error', { detail: message }),
+      )
+    }
+
+    /**
+     * Complete a successful Clerk sign-in by activating the new session.
+     *
+     * @param createdSessionId - The Clerk session that was created by ticket exchange.
+     * @returns Promise that resolves when finalization either succeeds or emits an error.
+     * @example
+     * await activateOAuthSession('sess_123')
+     */
+    const activateOAuthSession = async (createdSessionId: string) => {
+      try {
+        log.info('[OAuth] Activating Electron session after ticket exchange', {
+          createdSessionId,
+        })
+
+        await setActive({
+          navigate: ({ session, decorateUrl }) => {
+            if (session?.currentTask) {
+              dispatchOAuthError(
+                'Additional sign-in steps are required. Please complete sign-in in the browser.',
+              )
+              return
+            }
+
+            const url = decorateUrl('/home')
+            window.location.href = url
+          },
+          session: createdSessionId,
+        })
+      } catch (error) {
+        log.error('[OAuth] Session activation failed:', error)
+        dispatchOAuthError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to complete Google sign-in',
+        )
+      } finally {
+        isProcessingToken.current = false
+      }
+    }
 
     // Process any pending token that arrived before signIn was ready
     const processPendingToken = async () => {
@@ -89,17 +145,17 @@ export function ElectronAuthProvider({
     /**
      * Exchange a sign-in token for a Clerk session.
      *
-     * Uses the __clerk_ticket URL parameter approach: instead of calling
-     * signIn.ticket() + finalize() (which has closure staleness issues
-     * with Clerk v7 signals), navigate to the app URL with the token as
-     * a query parameter. ClerkProvider automatically consumes it and
-     * creates a session on page load.
+     * This uses Clerk's documented `create({ strategy: 'ticket' })` flow for
+     * backend-created sign-in tokens. The returned attempt exposes the
+     * current status and created session immediately, so Electron does not
+     * have to wait for a later render to determine whether authentication
+     * succeeded.
      *
      * @param token - The sign-in token from browser OAuth
      * @param provider - The OAuth provider name (e.g., 'google')
      * @example
-     * // Token arrives via deep link → navigate to /home?__clerk_ticket=TOKEN
-     * // → ClerkProvider auto-consumes ticket → session created → authenticated
+     * // Token arrives via deep link → client.signIn.create({ strategy: 'ticket', ticket })
+     * // → complete attempt returns createdSessionId → setActive() activates session
      */
     const processSignInToken = async (token: string, provider: string) => {
       if (isProcessingToken.current) {
@@ -124,24 +180,47 @@ export function ElectronAuthProvider({
       })
 
       try {
+        // Clear the main-process fallback before consuming the token so a
+        // failed exchange does not retry the same one-time ticket again.
         await window.electronAPI?.oauth?.clearPendingToken()
 
-        // Bypass the SDK's signIn.ticket() + finalize() entirely.
-        // ClerkProvider detects __clerk_ticket on page load, exchanges
-        // it for a session via FAPI, and removes the parameter from URL.
-        // Must navigate to a PUBLIC page (/login) — protected routes like
-        // /home are blocked by proxy.ts before ClerkProvider can consume
-        // the ticket. After session is created, Clerk auto-redirects to
-        // NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL (/home).
-        log.info('[OAuth] Navigating with __clerk_ticket parameter')
-        window.location.href = `/login?__clerk_ticket=${encodeURIComponent(token)}`
+        const signInAttempt = await client.signIn.create({
+          strategy: 'ticket',
+          ticket: token,
+        })
+
+        log.info('[OAuth] Clerk ticket exchange finished', {
+          createdSessionId: signInAttempt.createdSessionId,
+          provider,
+          status: signInAttempt.status,
+        })
+
+        if (signInAttempt.status === 'complete') {
+          const createdSessionId = signInAttempt.createdSessionId
+          if (!createdSessionId) {
+            dispatchOAuthError(
+              'Google sign-in completed without a session. Please try again.',
+            )
+            return
+          }
+
+          await activateOAuthSession(createdSessionId)
+          return
+        }
+
+        const statusError = getElectronOAuthStatusError(signInAttempt.status)
+        if (statusError) {
+          dispatchOAuthError(statusError)
+          return
+        }
+
+        dispatchOAuthError(
+          `Google sign-in did not complete in Electron. Clerk status: ${signInAttempt.status ?? 'unknown'}`,
+        )
       } catch (error) {
         log.error('[OAuth] Token exchange failed:', error)
-        isProcessingToken.current = false
-        const errorMessage =
-          error instanceof Error ? error.message : 'Token exchange failed'
-        window.dispatchEvent(
-          new CustomEvent('electron-oauth-error', { detail: errorMessage }),
+        dispatchOAuthError(
+          error instanceof Error ? error.message : 'Token exchange failed',
         )
       }
     }
@@ -166,7 +245,7 @@ export function ElectronAuthProvider({
       log.debug('[OAuth] Cleaning up main listener')
       cleanup?.()
     }
-  }, [signIn, signInFetchStatus, user, signOut])
+  }, [client, setActive, signIn, signInFetchStatus, user])
 
   // Store token if it arrives before signIn is ready
   useEffect(() => {
@@ -265,5 +344,30 @@ export function useElectronAuth() {
     isElectron,
     getElectronUser,
     isElectronAuthenticated,
+  }
+}
+
+/**
+ * Convert Clerk sign-in statuses into user-facing Electron OAuth errors.
+ *
+ * @param status - Current Clerk sign-in status.
+ * @returns
+ * - A human-readable error when the status requires user intervention.
+ * - `null` when the status may still resolve on a later render.
+ * @example
+ * getElectronOAuthStatusError('needs_second_factor') // => 'Multi-factor authentication is required. Please use browser sign-in.'
+ * @example
+ * getElectronOAuthStatusError('complete') // => null
+ */
+function getElectronOAuthStatusError(
+  status: string | null | undefined,
+): string | null {
+  switch (status) {
+    case 'needs_second_factor':
+      return 'Multi-factor authentication is required. Please use browser sign-in.'
+    case 'needs_client_trust':
+      return 'Device verification is required. Please use browser sign-in.'
+    default:
+      return null
   }
 }

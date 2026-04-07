@@ -26,6 +26,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { orpc } from '@/lib/orpc/client-query'
@@ -53,6 +54,7 @@ export function TodoList() {
   const queryClient = useQueryClient()
   // Track if persister is still restoring cached data - prevents hydration mismatch
   const isRestoring = useIsRestoring()
+  const isClerkQueryReady = useClerkQueryReady()
 
   // Category filter state (persisted to localStorage)
   const [selectedCategoryId] = useSelectedCategory()
@@ -83,7 +85,10 @@ export function TodoList() {
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
 
   // Fetch categories for name/color lookup
-  const { data: categoryData } = useQuery(orpc.category.list.queryOptions({}))
+  const { data: categoryData } = useQuery({
+    ...orpc.category.list.queryOptions({}),
+    enabled: isClerkQueryReady,
+  })
   const categoryMap = useMemo(
     () =>
       new Map<number, CategoryWithCount>(
@@ -93,8 +98,8 @@ export function TodoList() {
   )
 
   // Fetch pending todos (filtered by selected category)
-  const { data: pendingData, isLoading: pendingLoading } = useQuery(
-    orpc.todo.list.queryOptions({
+  const { data: pendingData, isLoading: pendingLoading } = useQuery({
+    ...orpc.todo.list.queryOptions({
       input: {
         completed: false,
         limit: TODO_QUERY_LIMIT,
@@ -102,7 +107,8 @@ export function TodoList() {
         ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
       },
     }),
-  )
+    enabled: isClerkQueryReady,
+  })
 
   /**
    * Adds a new todo item using the create mutation.
@@ -263,7 +269,7 @@ export function TodoList() {
 
   // Show loading during initial query OR while persister restores cached data
   // This ensures server-rendered HTML matches client hydration (prevents hydration error)
-  if (pendingLoading || isRestoring) {
+  if (!isClerkQueryReady || pendingLoading || isRestoring) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>

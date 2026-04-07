@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { orpc } from '@/lib/orpc/client-query'
 
 /**
@@ -42,9 +43,11 @@ export type HeatmapDay = {
  * // dataByDate.get("2026-03-24") => { date: "2026-03-24", count: 5, categories: [...] }
  */
 export function useHeatmapData(days: number = 365) {
-  const { data, isLoading, isError } = useQuery(
-    orpc.completed.heatmap.queryOptions({ input: { days } }),
-  )
+  const isClerkQueryReady = useClerkQueryReady()
+  const { data, isLoading, isError } = useQuery({
+    ...orpc.completed.heatmap.queryOptions({ input: { days } }),
+    enabled: isClerkQueryReady,
+  })
 
   const heatmapValues =
     data?.data.map((d) => ({
@@ -61,7 +64,7 @@ export function useHeatmapData(days: number = 365) {
     dataByDate,
     streaks: data?.streaks ?? { current: 0, longest: 0 },
     total: data?.total ?? 0,
-    isLoading,
+    isLoading: !isClerkQueryReady || isLoading,
     isError,
   }
 }
