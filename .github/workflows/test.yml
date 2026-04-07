@@ -7,11 +7,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Tokyo
     steps:
-      - uses: szenius/set-timezone@v1.2
-        with:
-          timezoneLinux: 'Asia/Tokyo'
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/prepare
       - name: Set environment variables
         run: |
@@ -32,7 +31,7 @@ jobs:
       - name: Run Electron tests
         run: pnpm test:electron --run
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info

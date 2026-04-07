@@ -9,22 +9,22 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '22.17.1'
+  NODE_VERSION: '24.13.0'
 
 jobs:
   storybook-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,7 +40,7 @@ jobs:
 
       - name: Upload Storybook test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: storybook-test-results
           path: storybook-test-results/

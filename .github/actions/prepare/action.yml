@@ -5,11 +5,11 @@ name: Prepare
 runs:
   steps:
     - name: Install pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v5
     - name: Use Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
-        node-version: '22.19.0'
+        node-version: '24.13.0'
         cache: 'pnpm'
         cache-dependency-path: |
           pnpm-lock.yaml
