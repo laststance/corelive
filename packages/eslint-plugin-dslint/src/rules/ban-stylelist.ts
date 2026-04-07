@@ -51,7 +51,6 @@ export const banStylelist: Rule.RuleModule = {
     type: 'suggestion',
     docs: {
       description: 'Forbid hardcoded values in Tailwind classes',
-      category: 'Design System',
       recommended: false,
       url: 'https://github.com/laststance/corelive/tree/main/packages/eslint-plugin-dslint#ban-stylelist',
     },

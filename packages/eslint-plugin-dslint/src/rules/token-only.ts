@@ -44,7 +44,6 @@ export const tokenOnly: Rule.RuleModule = {
     docs: {
       description:
         'Only allow Tailwind classes defined in tailwind.config.ts design tokens',
-      category: 'Design System',
       recommended: true,
       url: 'https://github.com/laststance/corelive/tree/main/packages/eslint-plugin-dslint#token-only',
     },
