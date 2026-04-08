@@ -62,7 +62,6 @@ select {
   background: linear-gradient(
     180deg,
     var(--st-bg-deep) 0%,
-    #0e1326 50%,
     var(--st-bg-mid) 100%
   );
 }
@@ -122,65 +121,13 @@ select {
   animation-delay: 2.7s;
 }
 
-/* Drop burst ring — expands from 0 to 40 then fades. */
-@keyframes st-burst {
-  0% {
-    r: 0;
-    opacity: 1;
-  }
-  100% {
-    r: 40;
-    opacity: 0;
-  }
-}
-.st-burst-ring {
-  animation: st-burst 500ms ease-out forwards;
-}
-
-/* Floating "+1 XP" text. */
-@keyframes st-float-up {
-  0% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-30px);
-    opacity: 0;
-  }
-}
-.st-float-text {
-  animation: st-float-up 800ms ease-out forwards;
-}
-
-/* Level up flash + spring. */
-@keyframes st-level-up {
-  0% {
-    filter: brightness(3);
-    transform: scale(1);
-  }
-  30% {
-    filter: brightness(1);
-    transform: scale(1.3);
-  }
-  100% {
-    filter: brightness(1);
-    transform: scale(1);
-  }
-}
-.st-level-up {
-  animation: st-level-up 400ms ease-out;
-}
-
-/* Reduced motion — kill all animations + transitions. */
+/* Reduced motion — kill hover pulse + ambient animations. */
 @media (prefers-reduced-motion: reduce) {
   [data-skill-tree='true'] .st-node-group,
   [data-skill-tree='true'] .st-mastered-ring,
-  [data-skill-tree='true'] .st-twinkle-star,
-  [data-skill-tree='true'] .st-burst-ring,
-  [data-skill-tree='true'] .st-float-text,
-  [data-skill-tree='true'] .st-level-up {
-    animation: none !important;
-    transition: none !important;
+  [data-skill-tree='true'] .st-twinkle-star {
+    animation: none;
+    transition: none;
   }
 }
 

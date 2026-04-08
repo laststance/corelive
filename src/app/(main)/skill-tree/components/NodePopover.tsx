@@ -105,20 +105,23 @@ export function NodePopover({
               <div
                 key={todo.id}
                 role="listitem"
-                className="flex items-center justify-between gap-2 rounded-md bg-[var(--st-surface)] px-2 py-1.5"
+                className="flex items-center justify-between gap-2 rounded-md bg-[var(--st-surface)] pl-2 pr-1"
               >
                 <span className="truncate text-xs">{todo.text}</span>
                 <Button
                   type="button"
                   size="icon"
                   variant="ghost"
-                  // Hover bg uses --st-bg-mid instead of --st-border-rune so
-                  // the cream text on hover stays readable in parchment mode.
-                  // New parchment border-rune (#4a3520) and cream (#3a2818)
-                  // are both dark earth tones — their contrast is only 1.18:1
-                  // which would make the X icon invisible on hover. bg-mid
-                  // gives 9.97:1 in parchment and 8.54:1 in dark mode.
-                  className="h-6 w-6 text-[var(--st-muted)] hover:bg-[var(--st-bg-mid)] hover:text-[var(--st-cream)]"
+                  // 44x44 tap target (Apple HIG min). The visible icon stays
+                  // small (h-3 w-3) so the row doesn't look dominated by a
+                  // giant X. `shrink-0` keeps the button from being squeezed
+                  // when text is long.
+                  // Hover bg uses --st-bg-mid (not --st-border-rune) so the
+                  // cream X icon stays readable in parchment mode. In the
+                  // ink-on-parchment palette, border-rune and cream are both
+                  // dark earth tones (~1.18:1), which would make the icon
+                  // invisible on hover. See styles.css for token values.
+                  className="h-11 w-11 shrink-0 text-[var(--st-muted)] hover:bg-[var(--st-bg-mid)] hover:text-[var(--st-cream)]"
                   aria-label={`Unassign ${todo.text}`}
                   onClick={() => onUnassign(todo.id)}
                 >

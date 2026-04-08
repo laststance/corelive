@@ -86,18 +86,33 @@ export function SkillTreeView() {
     applyAssignment,
   )
 
+  // Lookup for rendering task text anywhere — pool card, popover list, drag
+  // overlay. Must include BOTH the pool (newly-completed, not yet assigned)
+  // AND the tree assignments (already assigned, may not be in the pool at
+  // all). Without the tree half, unassigning a server-loaded assignment would
+  // surface a card with "Task #${id}" placeholder until the next full refetch.
+  // The tree side uses the `todoText` snapshot column which is populated at
+  // assign time and survives the source todo being deleted.
   const todoTextById = useMemo(() => {
     const map = new Map<number, string>()
     pool?.forEach((t) => map.set(t.id, t.text))
-    // tree assignments only have todoId; text for already-assigned todos
-    // is not available from the pool query. Falls back to "Task #${id}".
-    // A future task may add a dedicated "get todo by id" fetch.
+    tree?.nodes.forEach((node) => {
+      node.assignments.forEach((a) => {
+        if (a.todoId !== null) {
+          map.set(a.todoId, a.todoText)
+        }
+      })
+    })
     return map
-  }, [pool])
+  }, [pool, tree])
 
+  // Invalidation lives in `onSettled` (not `onSuccess`) so failed mutations
+  // also reconcile optimistic state. On error: refetch → baseState updates →
+  // useOptimistic rebases away the bad optimistic value. Without this, the
+  // UI would stay wrong until the user manually refreshes.
   const assignMutation = useMutation({
     ...orpc.skillTree.assignTask.mutationOptions({}),
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: orpc.skillTree.getMyTree.key(),
       })
@@ -112,7 +127,7 @@ export function SkillTreeView() {
 
   const unassignMutation = useMutation({
     ...orpc.skillTree.unassignTask.mutationOptions({}),
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: orpc.skillTree.getMyTree.key(),
       })
@@ -199,21 +214,37 @@ export function SkillTreeView() {
     )
   }
 
-  const canvasNodes = tree.nodes.map((n) => ({
-    id: n.id,
-    name: n.name,
-    x: n.x,
-    y: n.y,
-    xp: optimisticState.assignmentsByNode[n.id]?.length ?? 0,
-  }))
+  // XP count = live optimistic assignments + frozen orphaned receipts.
+  // Orphaned rows (todoId = null) are assignments whose source Todo has been
+  // deleted via clearCompleted/deleteTodo. They're preserved as XP snapshots
+  // but can't be dragged/unassigned, so they live outside the optimistic
+  // state and are added back here.
+  const canvasNodes = tree.nodes.map((n) => {
+    const orphanedCount = n.assignments.filter((a) => a.todoId === null).length
+    const activeCount = optimisticState.assignmentsByNode[n.id]?.length ?? 0
+    return {
+      id: n.id,
+      name: n.name,
+      x: n.x,
+      y: n.y,
+      xp: activeCount + orphanedCount,
+    }
+  })
   const canvasEdges = tree.edges.map((e) => ({
     id: e.id,
     fromNodeId: e.fromNodeId,
     toNodeId: e.toNodeId,
   }))
-  const poolTodos = pool
-    .filter((t) => optimisticState.unassignedTodoIds.includes(t.id))
-    .map((t) => ({ id: t.id, text: t.text }))
+  // Build poolTodos from `unassignedTodoIds` (driven by optimistic state)
+  // rather than filtering `pool`. After an optimistic unassign of a
+  // server-loaded assignment, the todoId is in `unassignedTodoIds` but NOT
+  // in `pool`; the filter-`pool` version would render nothing until refetch.
+  // `todoTextById` is the unified pool-plus-tree-snapshot lookup so we
+  // always have a label.
+  const poolTodos = optimisticState.unassignedTodoIds.map((id) => ({
+    id,
+    text: todoTextById.get(id) ?? `Task #${id}`,
+  }))
 
   const hasAnyCompletedTodos =
     optimisticState.unassignedTodoIds.length > 0 ||

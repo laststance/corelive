@@ -66,21 +66,33 @@ export function applyAssignment(
 
 /**
  * Builds an OptimisticState snapshot from a server-fetched SkillTree and pool.
+ *
+ * Orphaned assignments (rows with `todoId === null` because the source Todo
+ * was deleted via clearCompleted) are intentionally dropped from the
+ * optimistic state. They can't be dragged/unassigned — they're frozen XP
+ * receipts. SkillTreeView adds their count back when computing canvas XP, so
+ * users still see the XP they earned.
+ *
  * @param nodes - Array of SkillNode objects with `assignments` included.
+ *   `assignments[i].todoId` may be `null` for orphaned rows; those are
+ *   filtered out.
  * @param poolTodoIds - IDs of completed Todos not yet assigned.
  * @returns Initial state for `useOptimistic`.
  * @example
  * const state = buildInitialState(skillTree.nodes, poolTodoIds)
  */
 export function buildInitialState(
-  nodes: Array<{ id: number; assignments: Array<{ todoId: number }> }>,
+  nodes: Array<{
+    id: number
+    assignments: Array<{ todoId: number | null }>
+  }>,
   poolTodoIds: number[],
 ): OptimisticState {
   const assignmentsByNode: Record<number, { todoId: number }[]> = {}
   for (const node of nodes) {
-    assignmentsByNode[node.id] = node.assignments.map((a) => ({
-      todoId: a.todoId,
-    }))
+    assignmentsByNode[node.id] = node.assignments
+      .filter((a): a is { todoId: number } => a.todoId !== null)
+      .map((a) => ({ todoId: a.todoId }))
   }
   return { assignmentsByNode, unassignedTodoIds: poolTodoIds }
 }
