@@ -13,8 +13,20 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Limit workers to 50% CPU cores to prevent resource saturation (community best practice) */
-  workers: process.env.CI ? 1 : undefined,
+  /* Force single-worker execution for both local and CI runs.
+   *
+   * All web E2E tests share one seeded Clerk user (`test@test.com`) and a
+   * single PostgreSQL database. Running multiple workers in parallel causes
+   * cross-file data races — e.g. `qa-fixes.spec.ts`'s "Clear all completed"
+   * test calls the `clearCompleted` procedure which `deleteMany`s every
+   * completed todo for the user, cascading into `NodeAssignment` rows. If
+   * this races with `skill-tree.spec.ts`, it silently deletes the todos
+   * those tests just seeded.
+   *
+   * `fullyParallel: false` only guarantees serial execution WITHIN a file;
+   * different files can still run on separate workers. `workers: 1` is the
+   * only way to serialize across files when they share DB state. */
+  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     // Use "dot" reporter on CI, "list" otherwise (Playwright default).

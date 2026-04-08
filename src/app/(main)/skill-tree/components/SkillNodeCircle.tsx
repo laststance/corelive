@@ -60,6 +60,13 @@ export function SkillNodeCircle({
       role="button"
       aria-label={ariaLabel}
       tabIndex={0}
+      // Data attributes for reliable E2E selection. Chromium's SVG
+      // accessibility tree is inconsistent about exposing aria-label on <g>
+      // elements (even with <title> child), so tests query by data-testid +
+      // data-level instead. Screen readers still get the name via aria-label.
+      data-testid="skill-node"
+      data-level={level}
+      data-node-id={id}
       onClick={() => onClick?.(id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -69,6 +76,10 @@ export function SkillNodeCircle({
       }}
       style={{ cursor: 'pointer' }}
     >
+      {/* SVG-native accessible name — required for reliable name computation
+          in Chromium's accessibility tree. `aria-label` on SVG <g> is not
+          universally honored; <title> is the SVG AAM canonical source. */}
+      <title>{ariaLabel}</title>
       {/* Invisible 44x44 hit target */}
       <rect x={cx - 22} y={cy - 22} width={44} height={44} fill="transparent" />
 

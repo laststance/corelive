@@ -106,7 +106,6 @@ export function ConstellationCanvas({
       width="100%"
       height="100%"
       style={{ display: 'block' }}
-      role="img"
       aria-label="Skill tree constellation"
     >
       <defs>
