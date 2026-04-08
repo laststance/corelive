@@ -31,12 +31,31 @@ import './styles.css'
 export function SkillTreeView() {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const { data: tree, isLoading: treeLoading } = useQuery(
-    orpc.skillTree.getMyTree.queryOptions(),
-  )
-  const { data: pool, isLoading: poolLoading } = useQuery(
-    orpc.skillTree.getUnassignedPool.queryOptions(),
-  )
+  const {
+    data: tree,
+    isLoading: treeLoading,
+    isError: treeError,
+  } = useQuery(orpc.skillTree.getMyTree.queryOptions())
+  const {
+    data: pool,
+    isLoading: poolLoading,
+    isError: poolError,
+  } = useQuery(orpc.skillTree.getUnassignedPool.queryOptions())
+
+  if (treeError || poolError) {
+    return (
+      <div
+        data-skill-tree="true"
+        // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css
+        className="st-canvas-bg flex h-full w-full items-center justify-center"
+        role="alert"
+      >
+        <div className="text-[var(--st-muted)]">
+          Failed to load skill tree. Please refresh the page.
+        </div>
+      </div>
+    )
+  }
 
   if (treeLoading || poolLoading || !tree || !pool) {
     return (
@@ -44,6 +63,8 @@ export function SkillTreeView() {
         data-skill-tree="true"
         // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css
         className="st-canvas-bg flex h-full w-full items-center justify-center"
+        role="status"
+        aria-live="polite"
       >
         <div className="text-[var(--st-muted)]">Loading skill tree…</div>
       </div>

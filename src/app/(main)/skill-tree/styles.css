@@ -1,5 +1,22 @@
 /* Scoped to [data-skill-tree='true'] to prevent token leakage. */
 
+/* Electron window chrome — duplicated from home/page.css so /skill-tree works
+   when navigated to directly (CSS chunks are per-page in Next.js App Router,
+   and without these the Electron title bar is not draggable). TODO(post-v1):
+   lift into (main)/layout.css and remove the duplicate in home/page.css. */
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag,
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-app-region: no-drag;
+}
+
 /* Default = Dark Fantasy (the chosen visual identity for this feature). */
 [data-skill-tree='true'] {
   --st-bg-deep: #0a0e1e;
