@@ -2,9 +2,9 @@ import { ORPCError } from '@orpc/server'
 import { z } from 'zod'
 
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '@/app/(main)/skill-tree/lib/template'
+import { createModuleLogger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
 
-import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
 import {
   AssignTaskInputSchema,
@@ -12,6 +12,8 @@ import {
   SkillTreeSchema,
   UnassignedPoolSchema,
 } from '../schemas/skillTree'
+
+const log = createModuleLogger('skillTree')
 
 /**
  * Imports the default template as a new SkillTree for a user.
@@ -73,7 +75,7 @@ async function importDefaultTemplate(userId: number) {
 /**
  * Ensures the given nodeId and todoId both belong to the user.
  * Throws ORPCError('FORBIDDEN') if either does not.
- * @param userId - The user's Prisma ID.
+ * @param userId - The user's Prisma ID (not Clerk ID).
  * @param nodeId - Skill node ID to verify ownership of.
  * @param todoId - Todo ID to verify ownership of.
  * @example
@@ -122,7 +124,8 @@ export const getMyTree = authMiddleware
       }
       return tree
     } catch (error) {
-      log.error('Error in getMyTree:', error)
+      if (error instanceof ORPCError) throw error
+      log.error({ error }, 'Error in getMyTree')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch skill tree',
         cause: error,
@@ -147,7 +150,8 @@ export const getUnassignedPool = authMiddleware
         orderBy: { updatedAt: 'desc' },
       })
     } catch (error) {
-      log.error('Error in getUnassignedPool:', error)
+      if (error instanceof ORPCError) throw error
+      log.error({ error }, 'Error in getUnassignedPool')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch unassigned pool',
         cause: error,
