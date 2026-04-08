@@ -251,23 +251,41 @@ export function SkillTreeView() {
             onNodeClick={(nodeId) => setActivePopoverNodeId(nodeId)}
           />
           {activePopoverNode && (
-            <NodePopover
-              open={activePopoverNodeId !== null}
-              onOpenChange={(open) => {
-                if (!open) setActivePopoverNodeId(null)
+            // Position-based anchor: Radix Popover needs an HTML trigger, but
+            // SkillNodeCircle renders inside an SVG. Instead of using
+            // foreignObject (fragile in dnd-kit), we render a transparent
+            // anchor span at the node's normalized coordinates. The SVG uses
+            // `viewBox="0 0 1000 1000"` with default preserveAspectRatio so
+            // this is exact when the container is square; in wider viewports
+            // the anchor sits slightly off due to letterboxing — acceptable
+            // V1 tradeoff (manual a11y QA in Task 24 will confirm).
+            <div
+              className="pointer-events-auto absolute"
+              style={{
+                left: `${activePopoverNode.x * 100}%`,
+                top: `${activePopoverNode.y * 100}%`,
+                transform: 'translate(-50%, -50%)',
               }}
-              node={{
-                id: activePopoverNode.id,
-                name: activePopoverNode.name,
-                xp: assignedTodosForPopover.length,
-              }}
-              assignedTodos={assignedTodosForPopover}
-              onUnassign={(todoId) =>
-                handleUnassign(activePopoverNode.id, todoId)
-              }
             >
-              <span className="sr-only">Node popover trigger</span>
-            </NodePopover>
+              <NodePopover
+                open={activePopoverNodeId !== null}
+                onOpenChange={(open) => {
+                  if (!open) setActivePopoverNodeId(null)
+                }}
+                node={{
+                  id: activePopoverNode.id,
+                  name: activePopoverNode.name,
+                  xp: assignedTodosForPopover.length,
+                }}
+                assignedTodos={assignedTodosForPopover}
+                onUnassign={(todoId) =>
+                  handleUnassign(activePopoverNode.id, todoId)
+                }
+              >
+                {/* Invisible anchor element for Radix Popover positioning. */}
+                <span className="block h-1 w-1" aria-hidden="true" />
+              </NodePopover>
+            </div>
           )}
           <TaskPoolDrawer
             todos={poolTodos}
