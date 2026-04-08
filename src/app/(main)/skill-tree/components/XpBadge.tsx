@@ -32,8 +32,16 @@ export function XpBadge({ xp }: { xp: number }) {
         )}
       </div>
       {next !== null && (
+        // Track uses --st-surface (not --st-border-rune) so the gold fill
+        // meets WCAG 2.2 SC 1.4.11 non-text contrast (3:1) against the
+        // empty portion of the track in BOTH themes:
+        //   dark:      gold #f4d06f vs surface #2a3055 → 8.34:1 ✅
+        //   parchment: gold #8b5a2b vs surface #ddc89c → 3.48:1 ✅
+        // Using --st-border-rune here would pass in dark mode (4.86:1) but
+        // fail in parchment mode (2.07:1) because the new ink-on-parchment
+        // palette puts gold and border-rune at similar low luminance values.
         <div
-          className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--st-border-rune)]"
+          className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--st-surface)]"
           role="progressbar"
           aria-label="XP progress"
           aria-valuenow={progress}

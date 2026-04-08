@@ -112,7 +112,13 @@ export function NodePopover({
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="h-6 w-6 text-[var(--st-muted)] hover:bg-[var(--st-border-rune)] hover:text-[var(--st-cream)]"
+                  // Hover bg uses --st-bg-mid instead of --st-border-rune so
+                  // the cream text on hover stays readable in parchment mode.
+                  // New parchment border-rune (#4a3520) and cream (#3a2818)
+                  // are both dark earth tones — their contrast is only 1.18:1
+                  // which would make the X icon invisible on hover. bg-mid
+                  // gives 9.97:1 in parchment and 8.54:1 in dark mode.
+                  className="h-6 w-6 text-[var(--st-muted)] hover:bg-[var(--st-bg-mid)] hover:text-[var(--st-cream)]"
                   aria-label={`Unassign ${todo.text}`}
                   onClick={() => onUnassign(todo.id)}
                 >

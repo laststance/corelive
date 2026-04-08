@@ -29,16 +29,32 @@ select {
   --st-border-rune: #4a5580;
 }
 
-/* Light theme override → parchment variant. */
+/* Light theme override → parchment variant.
+ *
+ * WCAG 2.2 AA contrast (computed against bg-deep #f5ecd4, relative luminance
+ * ≈0.85). All foreground text/stroke colors meet the 4.5:1 minimum for normal
+ * text and 3:1 for UI components. The earlier palette used mid-lightness
+ * browns on mid-lightness parchment (cream 1.57:1, gold 2.17:1) which is
+ * unreadable and failed AA by a wide margin. The new palette is an
+ * "ink on aged parchment" aesthetic — dark earth tones on warm paper —
+ * which is both authentic to illuminated-manuscript fantasy and passes AA
+ * by comfortable margins.
+ *
+ *   --st-cream  #3a2818 → ≈11.9:1 (primary ink / node stroke)
+ *   --st-gold   #8b5a2b → ≈4.89:1 (accent / highlighted node / progress fill)
+ *   --st-arcane #1e5a8b → ≈6.04:1 (focus ring / arcane edge)
+ *   --st-muted  #5a4a3a → ≈7.27:1 (secondary text / locked edges)
+ *   --st-border-rune #4a3520 → ≈9.48:1 (card borders)
+ */
 [data-theme='light'] [data-skill-tree='true'] {
   --st-bg-deep: #f5ecd4;
   --st-bg-mid: #e8d9b0;
   --st-surface: #ddc89c;
-  --st-gold: #c99933;
-  --st-cream: #d4b985;
-  --st-arcane: #8b5a2b;
-  --st-muted: #8b7a5a;
-  --st-border-rune: #8b5a2b;
+  --st-gold: #8b5a2b;
+  --st-cream: #3a2818;
+  --st-arcane: #1e5a8b;
+  --st-muted: #5a4a3a;
+  --st-border-rune: #4a3520;
 }
 
 /* Canvas background. */
@@ -165,5 +181,19 @@ select {
   [data-skill-tree='true'] .st-level-up {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Increase-contrast mode (macOS "Increase Contrast", Windows High Contrast).
+ * Strengthens node circle strokes (2 → 3) and the focus indicator (3 → 4) so
+ * the skill-tree constellation stays clearly readable for users who rely on
+ * the OS accessibility preference. WCAG 2.2 SC 1.4.11 (non-text contrast)
+ * does not require this, but macOS HIG recommends honoring it. */
+@media (prefers-contrast: more) {
+  [data-skill-tree='true'] .st-node-group circle {
+    stroke-width: 3;
+  }
+  [data-skill-tree='true'] .st-node-group:focus-visible circle {
+    stroke-width: 4;
   }
 }
