@@ -12,15 +12,16 @@ export interface LevelInfo {
 }
 
 /**
- * Thresholds define the CUMULATIVE XP at which each level begins.
- * xp < 5     → level 0 (Dormant)
- * xp < 15    → level 1
- * xp < 30    → level 2
- * xp < 50    → level 3
- * xp < 75    → level 4
- * xp >= 75   → level 5 (Mastered)
+ * Cumulative XP boundaries for each level, encoded as `[floor, ceil]` tuples.
+ * `ceil - floor` is the size of that level's XP bar.
+ *
+ *     xp < 5     → level 0 (Dormant)
+ *     xp < 15    → level 1
+ *     xp < 30    → level 2
+ *     xp < 50    → level 3
+ *     xp < 75    → level 4
+ *     xp >= 75   → level 5 (Mastered, handled separately in xpToLevel)
  */
-/** Each entry is [levelFloor, levelCeil] where ceil - floor = bar size. */
 const LEVEL_RANGES: ReadonlyArray<[floor: number, ceil: number]> = [
   [0, 5], // level 0: 5 XP bar
   [5, 15], // level 1: 10 XP bar
