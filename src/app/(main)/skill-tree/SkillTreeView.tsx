@@ -215,6 +215,39 @@ export function SkillTreeView() {
     .filter((t) => optimisticState.unassignedTodoIds.includes(t.id))
     .map((t) => ({ id: t.id, text: t.text }))
 
+  const hasAnyCompletedTodos =
+    optimisticState.unassignedTodoIds.length > 0 ||
+    Object.values(optimisticState.assignmentsByNode).some((a) => a.length > 0)
+
+  if (!hasAnyCompletedTodos) {
+    return (
+      <div data-skill-tree="true" className="flex h-full w-full flex-col">
+        <header className="window-drag-region flex h-16 shrink-0 items-center gap-2 border-b border-[var(--st-border-rune)] bg-[var(--st-bg-deep)] px-4 text-[var(--st-cream)]">
+          <SidebarTrigger className="no-drag -ml-1" />
+          <h2 className="text-lg font-medium text-[var(--st-gold)]">
+            Skill Tree
+          </h2>
+        </header>
+        <div
+          // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css
+          className="st-canvas-bg flex flex-1 items-center justify-center"
+        >
+          <div className="max-w-md space-y-3 text-center text-[var(--st-cream)]">
+            <div className="text-5xl" aria-hidden="true">
+              ✨
+            </div>
+            <div className="text-lg font-medium text-[var(--st-gold)]">
+              Your tree awaits
+            </div>
+            <div className="text-sm text-[var(--st-muted)]">
+              Complete some tasks on the Home page to start earning XP.
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const activeTodoText =
     activeDragId !== null
       ? (pool.find((t) => t.id === activeDragId)?.text ??
