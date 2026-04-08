@@ -1,0 +1,143 @@
+/* Scoped to [data-skill-tree='true'] to prevent token leakage. */
+
+/* Default = Dark Fantasy (the chosen visual identity for this feature). */
+[data-skill-tree='true'] {
+  --st-bg-deep: #0a0e1e;
+  --st-bg-mid: #1a1e3a;
+  --st-surface: #2a3055;
+  --st-gold: #f4d06f;
+  --st-cream: #c7b99c;
+  --st-arcane: #5a9bd4;
+  --st-muted: #8b9dc3;
+  --st-border-rune: #4a5580;
+}
+
+/* Light theme override → parchment variant. */
+[data-theme='light'] [data-skill-tree='true'] {
+  --st-bg-deep: #f5ecd4;
+  --st-bg-mid: #e8d9b0;
+  --st-surface: #ddc89c;
+  --st-gold: #c99933;
+  --st-cream: #d4b985;
+  --st-arcane: #8b5a2b;
+  --st-muted: #8b7a5a;
+  --st-border-rune: #8b5a2b;
+}
+
+/* Canvas background. */
+.st-canvas-bg {
+  background: linear-gradient(
+    180deg,
+    var(--st-bg-deep) 0%,
+    #0e1326 50%,
+    var(--st-bg-mid) 100%
+  );
+}
+
+/* Hover pulse on nodes. */
+.st-node-group {
+  transform-origin: center;
+  transition:
+    transform 300ms ease-out,
+    opacity 300ms ease-out;
+}
+.st-node-group:hover,
+.st-node-group:focus-within {
+  transform: scale(1.08);
+}
+
+/* Mastered shimmer (outer ring opacity breathing). */
+@keyframes st-mastered-shimmer {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+.st-mastered-ring {
+  animation: st-mastered-shimmer 2s ease-in-out infinite;
+}
+
+/* Twinkling gold stars in the background. */
+@keyframes st-twinkle {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.st-twinkle-star {
+  animation: st-twinkle 4s ease-in-out infinite;
+}
+.st-twinkle-star--delay-1 {
+  animation-delay: 1.3s;
+}
+.st-twinkle-star--delay-2 {
+  animation-delay: 2.7s;
+}
+
+/* Drop burst ring — expands from 0 to 40 then fades. */
+@keyframes st-burst {
+  0% {
+    r: 0;
+    opacity: 1;
+  }
+  100% {
+    r: 40;
+    opacity: 0;
+  }
+}
+.st-burst-ring {
+  animation: st-burst 500ms ease-out forwards;
+}
+
+/* Floating "+1 XP" text. */
+@keyframes st-float-up {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+}
+.st-float-text {
+  animation: st-float-up 800ms ease-out forwards;
+}
+
+/* Level up flash + spring. */
+@keyframes st-level-up {
+  0% {
+    filter: brightness(3);
+    transform: scale(1);
+  }
+  30% {
+    filter: brightness(1);
+    transform: scale(1.3);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+}
+.st-level-up {
+  animation: st-level-up 400ms ease-out;
+}
+
+/* Reduced motion — kill all animations + transitions. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skill-tree='true'] .st-node-group,
+  [data-skill-tree='true'] .st-mastered-ring,
+  [data-skill-tree='true'] .st-twinkle-star,
+  [data-skill-tree='true'] .st-burst-ring,
+  [data-skill-tree='true'] .st-float-text,
+  [data-skill-tree='true'] .st-level-up {
+    animation: none !important;
+    transition: none !important;
+  }
+}
