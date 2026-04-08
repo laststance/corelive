@@ -151,16 +151,22 @@ export function SkillTreeView() {
     const nodeId = parseNodeDropId(over.id)
     if (todoId === null || nodeId === null) return
 
-    startTransition(() => {
+    // Async transition is required for useOptimistic to hold its optimistic
+    // value across the network round-trip. A sync transition completes the
+    // moment mutate() returns (fire-and-forget), causing React to revert the
+    // optimistic state before the server responds — flashing the UI.
+    startTransition(async () => {
       applyOptimistic({ type: 'assign', nodeId, todoId })
-      assignMutation.mutate({ nodeId, todoId })
+      // Errors are surfaced through the useMutation onError toast; the .catch
+      // here just prevents an unhandled-rejection warning in the transition.
+      await assignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
     })
   }
 
   function handleUnassign(nodeId: number, todoId: number) {
-    startTransition(() => {
+    startTransition(async () => {
       applyOptimistic({ type: 'unassign', nodeId, todoId })
-      unassignMutation.mutate({ nodeId, todoId })
+      await unassignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
     })
   }
 
@@ -281,34 +287,47 @@ export function SkillTreeView() {
 
 /**
  * Parses a draggable DnD id of the form `todo-<number>` into its numeric todo id.
+ * Rejects zero and negative ids because Prisma autoincrement ids are always
+ * positive integers — guards against `Number('')` coercing `"todo-"` to `0`.
  * @param id - The raw `UniqueIdentifier` from `@dnd-kit/core`.
  * @returns
- * - The todo id as a number when the id has the `todo-` prefix and a valid integer suffix.
- * - `null` when the id does not have the `todo-` prefix or the suffix is not a valid integer.
+ * - The todo id as a positive integer when the id has the `todo-` prefix
+ *   and the suffix is a positive integer.
+ * - `null` when the prefix is missing or the suffix is empty, non-numeric,
+ *   non-integer, zero, or negative.
  * @example
- * parseTodoDragId('todo-42') // => 42
- * parseTodoDragId('node-3')  // => null
+ * parseTodoDragId('todo-42')   // => 42
+ * parseTodoDragId('todo-')     // => null
+ * parseTodoDragId('todo-abc')  // => null
+ * parseTodoDragId('todo-0')    // => null
+ * parseTodoDragId('node-3')    // => null
  */
 function parseTodoDragId(id: UniqueIdentifier): number | null {
   const s = String(id)
   if (!s.startsWith('todo-')) return null
   const n = Number(s.slice('todo-'.length))
-  return Number.isInteger(n) ? n : null
+  return Number.isInteger(n) && n > 0 ? n : null
 }
 
 /**
  * Parses a droppable DnD id of the form `node-<number>` into its numeric node id.
+ * Rejects zero and negative ids because Prisma autoincrement ids are always
+ * positive integers — guards against `Number('')` coercing `"node-"` to `0`.
  * @param id - The raw `UniqueIdentifier` from `@dnd-kit/core`.
  * @returns
- * - The node id as a number when the id has the `node-` prefix and a valid integer suffix.
- * - `null` when the id does not have the `node-` prefix or the suffix is not a valid integer.
+ * - The node id as a positive integer when the id has the `node-` prefix
+ *   and the suffix is a positive integer.
+ * - `null` when the prefix is missing or the suffix is empty, non-numeric,
+ *   non-integer, zero, or negative.
  * @example
- * parseNodeDropId('node-3')  // => 3
- * parseNodeDropId('todo-42') // => null
+ * parseNodeDropId('node-3')    // => 3
+ * parseNodeDropId('node-')     // => null
+ * parseNodeDropId('node-0')    // => null
+ * parseNodeDropId('todo-42')   // => null
  */
 function parseNodeDropId(id: UniqueIdentifier): number | null {
   const s = String(id)
   if (!s.startsWith('node-')) return null
   const n = Number(s.slice('node-'.length))
-  return Number.isInteger(n) ? n : null
+  return Number.isInteger(n) && n > 0 ? n : null
 }
