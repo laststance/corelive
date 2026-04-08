@@ -97,7 +97,8 @@ model SkillTree {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  @@index([userId])
+  // One tree per user. Prevents duplicate-tree race on concurrent first-load.
+  @@unique([userId])
 }
 
 model SkillNode {
@@ -115,7 +116,11 @@ model SkillNode {
   assignments NodeAssignment[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // @default(now()) matches the DB-level DEFAULT CURRENT_TIMESTAMP that the
+  // 20260409000000_skill_tree_v1_hardening migration adds. Without it, the
+  // next `prisma migrate dev` would detect drift and silently drop the
+  // default, undoing the hardening fix.
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([skillTreeId])
 }
@@ -138,13 +143,22 @@ model NodeEdge {
 model NodeAssignment {
   id        Int      @id @default(autoincrement())
   nodeId    Int
-  todoId    Int
+  // Nullable so the row survives after the source Todo is deleted (clearCompleted,
+  // deleteTodo). Earned XP must persist even if the originating task is gone.
+  todoId    Int?
+  // Snapshot of the Todo text at assignment time. Read path prefers this over
+  // the live Todo.text so the popover still shows something sensible after the
+  // Todo is deleted. Default is an empty string only for safe backfill on
+  // the migration; application code (assignTask) always provides a real value
+  // at create time.
+  todoText  String   @default("") @db.VarChar(255)
   createdAt DateTime @default(now())
 
   node SkillNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  todo Todo      @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  todo Todo?     @relation(fields: [todoId], references: [id], onDelete: SetNull)
 
-  @@unique([nodeId, todoId])
+  // One assignment per todo, ever. Prevents multi-node XP inflation exploit.
+  // PostgreSQL treats NULLs as distinct, so orphaned (todoId = null) rows are fine.
+  @@unique([todoId])
   @@index([nodeId])
-  @@index([todoId])
 }

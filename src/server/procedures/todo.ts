@@ -213,9 +213,22 @@ export const toggleTodo = authMiddleware
       })
     }
 
-    const todo = await prisma.todo.update({
-      where: { id },
-      data: { completed: !existingTodo.completed },
+    // When toggling completed → incomplete, also clean up any NodeAssignment
+    // rows so the user can't exploit: complete → assign → un-complete →
+    // re-complete → assign to a different node for double XP. The assignTask
+    // completed check alone isn't enough — the stale assignment would survive
+    // the un-complete and still grant XP until the todo is re-assigned.
+    // Wrapped in a transaction so an orphaned assignment can't linger if the
+    // toggle succeeds but the cleanup fails.
+    const nextCompleted = !existingTodo.completed
+    const todo = await prisma.$transaction(async (tx) => {
+      if (existingTodo.completed && !nextCompleted) {
+        await tx.nodeAssignment.deleteMany({ where: { todoId: id } })
+      }
+      return tx.todo.update({
+        where: { id },
+        data: { completed: nextCompleted },
+      })
     })
 
     return todo
