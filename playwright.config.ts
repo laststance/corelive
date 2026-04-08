@@ -25,7 +25,14 @@ export default defineConfig({
    *
    * `fullyParallel: false` only guarantees serial execution WITHIN a file;
    * different files can still run on separate workers. `workers: 1` is the
-   * only way to serialize across files when they share DB state. */
+   * only way to serialize across files when they share DB state.
+   *
+   * EXIT CRITERION: this halves CI throughput across the whole suite and
+   * should NOT be permanent. The clean fix is per-worker Clerk users so
+   * each worker owns its own Prisma user row, making `clearCompleted`
+   * naturally scoped to one worker's data. Tracked as a post-v1 follow-up
+   * task ("Post-v1: Restore parallel E2E workers via per-worker Clerk
+   * users") — once that lands, flip this back to `workers: undefined`. */
   workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [

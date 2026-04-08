@@ -99,6 +99,13 @@ export function ConstellationCanvas({
   ] as const
 
   return (
+    // NOTE: no explicit role="img" here — that would atomize the SVG into a
+    // single a11y leaf and hide the inner <SkillNodeCircle> buttons from the
+    // accessibility tree (and from Playwright's getByRole). The SVG still
+    // exposes itself as `graphics-document` / `img` via SVG-AAM based on the
+    // aria-label below, so screen readers still announce it. See the matching
+    // comment in SkillNodeCircle.tsx (the <title> child there is the
+    // SVG-AAM canonical accessible-name source for each button).
     <svg
       // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
       className="st-canvas-bg"

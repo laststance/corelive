@@ -41,6 +41,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
  *    reliable.
  */
 test.describe('Skill Tree E2E', () => {
+  // Tests in this describe MUST run in order: test 2 (unassign) depends on
+  // the DB state left by test 1 (happy path). `fullyParallel: false` in
+  // playwright.config enforces within-file serialization today, but this
+  // configure() call documents the dependency at the describe level so it
+  // survives any future config flip or targeted `--grep unassign` runs.
+  test.describe.configure({ mode: 'serial' })
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
   })
@@ -304,10 +311,12 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
  * @param source - Draggable locator to pick up.
  * @param target - Droppable locator to drop onto.
  * @returns
- * - Resolves once `mouse.up()` has fired and React has had a chance to flush
- *   the drop handler.
+ * - Resolves once `mouse.up()` has fired. The caller is responsible for
+ *   asserting the post-drop state via `expect(...).toBeVisible(...)` or a
+ *   `waitForResponse` — this helper does not block on React's drop handler.
  * @example
  * await mouseDrag(page, poolCard, firstDormantNode)
+ * await expect(firstDormantNode).toHaveAttribute('aria-label', /1 of 5/)
  */
 async function mouseDrag(
   page: Page,
@@ -339,6 +348,9 @@ async function mouseDrag(
   // collision detection sees the pointer cross the droppable's rect.
   await page.mouse.move(endX, endY, { steps: 20 })
   await page.mouse.up()
-  // Give React a tick to flush the drop handler.
-  await page.waitForTimeout(100)
+  // No arbitrary sleep here — callers are expected to follow up with an
+  // explicit `expect(...).toBeVisible({ timeout })` assertion that polls
+  // for the optimistic drop state, which gives React all the time it needs
+  // to flush the drop handler without baking a flaky wall-clock wait into
+  // the helper.
 }
