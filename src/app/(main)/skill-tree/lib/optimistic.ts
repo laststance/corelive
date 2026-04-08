@@ -14,12 +14,18 @@ export type OptimisticAction =
 
 /**
  * Pure reducer for optimistic drag-and-drop assignments.
- * Called from `useOptimistic`'s reducer argument.
+ * Called from `useOptimistic`'s reducer argument. Never mutates the input.
  * @param state - The current optimistic snapshot.
  * @param action - The assign or unassign event.
- * @returns A new state object — never mutates the input.
+ * @returns
+ * - The same `state` reference when the action is a no-op (idempotent assign
+ *   or unassign). This lets `useOptimistic` skip re-renders via `Object.is`.
+ * - A new state object with the assign/unassign applied otherwise.
  * @example
+ * // Happy path — new state
  * const next = applyAssignment(state, { type: 'assign', nodeId: 2, todoId: 100 })
+ * // No-op — same reference returned
+ * applyAssignment(state, { type: 'assign', nodeId: 2, todoId: 100 }) === state // true
  */
 export function applyAssignment(
   state: OptimisticState,
