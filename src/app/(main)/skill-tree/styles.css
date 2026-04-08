@@ -42,8 +42,17 @@
     opacity 300ms ease-out;
 }
 .st-node-group:hover,
-.st-node-group:focus-within {
+.st-node-group:focus-within,
+.st-node-group:focus-visible {
   transform: scale(1.08);
+}
+
+/* WCAG 2.2 AA SC 2.4.11 — keyboard focus indicator for SVG nodes.
+   SVG <g> does not render CSS `outline`, so we override the stroke
+   of descendant circles with an arcane highlight when focused. */
+.st-node-group:focus-visible circle {
+  stroke: var(--st-arcane);
+  stroke-width: 3;
 }
 
 /* Mastered shimmer (outer ring opacity breathing). */

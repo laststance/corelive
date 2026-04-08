@@ -8,7 +8,16 @@ import { xpToLevel } from '../lib/xp'
 
 /**
  * A single skill tree node rendered as SVG.
- * Wraps an invisible 44x44 hit target for easy tapping and dragging drop.
+ * Wraps an invisible 44x44 hit target for easy tapping and drop.
+ *
+ * @remarks
+ * Requires the parent SVG to define `<defs>` with the following IDs:
+ * - `st-cream-glow` — SVG filter used by levels 2 and 3
+ * - `st-gold-glow` — SVG filter used by levels 4 and 5
+ * - `st-mastered-core` — radialGradient used by level 5
+ *
+ * The Storybook decorator provides these for isolated stories; in the app,
+ * `<ConstellationCanvas>` (Task 13) is the canonical defs location.
  *
  * @example
  * <SkillNodeCircle id={1} name="APIs" cx={50} cy={50} xp={30} onClick={(id) => console.log(id)} />
@@ -39,7 +48,9 @@ export function SkillNodeCircle({
   xp,
   onClick,
 }: SkillNodeCircleProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: String(id) })
+  // dnd-kit ID namespace: node-* for SkillNode droppables, todo-* for Todo draggables (Task 14).
+  // Prevents collision since both Prisma models use autoincrement integers.
+  const { setNodeRef, isOver } = useDroppable({ id: `node-${id}` })
   const { level, progress, next } = xpToLevel(xp)
 
   const ariaLabel =
@@ -51,6 +62,7 @@ export function SkillNodeCircle({
 
   return (
     <g
+      // @dnd-kit/core types setNodeRef as HTMLElement; SVGGElement is safe at runtime.
       ref={setNodeRef as unknown as React.Ref<SVGGElement>}
       // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
       className="st-node-group"
