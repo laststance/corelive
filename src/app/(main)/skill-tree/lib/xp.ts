@@ -12,6 +12,29 @@ export interface LevelInfo {
 }
 
 /**
+ * Display labels for each level. Shared by `SkillNodeCircle` (for the node's
+ * `aria-label`) and `XpBadge` (for the visible level headline).
+ *
+ * Typed as `Record<0 | 1 | 2 | 3 | 4 | 5, string>` — not `Record<number, string>` —
+ * so `LEVEL_LABEL[level]` narrows to `string` (not `string | undefined`) under
+ * `noUncheckedIndexedAccess: true`, because the index type exactly matches the
+ * `LevelInfo['level']` union and every key is always present.
+ *
+ * @example
+ * LEVEL_LABEL[0] // => 'Dormant'
+ * LEVEL_LABEL[3] // => 'Level 3'
+ * LEVEL_LABEL[5] // => 'Mastered'
+ */
+export const LEVEL_LABEL: Record<0 | 1 | 2 | 3 | 4 | 5, string> = {
+  0: 'Dormant',
+  1: 'Level 1',
+  2: 'Level 2',
+  3: 'Level 3',
+  4: 'Level 4',
+  5: 'Mastered',
+}
+
+/**
  * Cumulative XP boundaries for each level, encoded as `[floor, ceil]` tuples.
  * `ceil - floor` is the size of that level's XP bar.
  *

@@ -4,7 +4,7 @@ import { useDroppable } from '@dnd-kit/core'
 import React from 'react'
 import { match } from 'ts-pattern'
 
-import { xpToLevel } from '../lib/xp'
+import { LEVEL_LABEL, xpToLevel } from '../lib/xp'
 
 /**
  * A single skill tree node rendered as SVG.
@@ -29,15 +29,6 @@ export interface SkillNodeCircleProps {
   cy: number
   xp: number
   onClick?: (nodeId: number) => void
-}
-
-const LEVEL_LABEL: Record<number, string> = {
-  0: 'Dormant',
-  1: 'Level 1',
-  2: 'Level 2',
-  3: 'Level 3',
-  4: 'Level 4',
-  5: 'Mastered',
 }
 
 export function SkillNodeCircle({
