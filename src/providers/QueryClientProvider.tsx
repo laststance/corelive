@@ -1,12 +1,17 @@
 'use client'
 
+import { useAuth } from '@clerk/nextjs'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import {
   QueryClientProvider as TanstackQueryClientProvider,
   defaultShouldDehydrateQuery,
   QueryClient,
 } from '@tanstack/react-query'
-import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import {
+  PersistQueryClientProvider,
+  type Persister,
+} from '@tanstack/react-query-persist-client'
+import { useEffect, useRef } from 'react'
 
 import { serializer } from '@/lib/orpc/serializer'
 
@@ -56,6 +61,38 @@ const persister =
 export { orpc } from '@/lib/orpc/client-query'
 
 /**
+ * Watches Clerk auth state and clears the persisted cache on sign-out.
+ *
+ * Why: the TanStack Query cache is persisted to plain localStorage with no
+ * per-user key namespacing. On a shared device, user A's cached queries
+ * (todos, skill tree, etc.) would survive into user B's session until
+ * background refetches replaced them — leaking A's data to B.
+ *
+ * The fix: detect the signed-in → signed-out transition and nuke both the
+ * persister and the in-memory QueryClient. A ref tracks the prior signed-in
+ * state so we only clear on the actual transition, not on first mount.
+ *
+ * @returns null — this is a side-effect-only component.
+ */
+function PersisterSignOutGuard({ persister }: { persister: Persister }) {
+  const { isSignedIn, isLoaded } = useAuth()
+  const wasSignedIn = useRef<boolean | null>(null)
+
+  useEffect(() => {
+    if (!isLoaded) return
+    if (wasSignedIn.current === true && isSignedIn === false) {
+      // Remove persisted cache from localStorage, then clear in-memory
+      // state so the next signed-in user starts fresh.
+      void persister.removeClient()
+      queryClient.clear()
+    }
+    wasSignedIn.current = isSignedIn ?? false
+  }, [isSignedIn, isLoaded, persister])
+
+  return null
+}
+
+/**
  * Provider component that wraps the app with TanStack Query context and localStorage persistence.
  * Cache is persisted to localStorage and restored on page reload for instant UI rendering.
  * @param children - React child components
@@ -79,6 +116,7 @@ export function QueryClientProvider({
       client={queryClient}
       persistOptions={{ persister }}
     >
+      <PersisterSignOutGuard persister={persister} />
       {children}
     </PersistQueryClientProvider>
   )

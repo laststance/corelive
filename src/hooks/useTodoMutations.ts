@@ -239,6 +239,16 @@ export function useTodoMutations() {
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
       // Refresh category counts (todo moved between pending/completed)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+      // Toggling completed↔incomplete changes what's in the skill tree
+      // unassigned pool, and un-completing a todo now clears its
+      // NodeAssignment (see todo.ts toggleTodo). Without these, Tab A's
+      // skill tree view stays stale after a mutation in Tab B.
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getMyTree.key(),
+      })
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getUnassignedPool.key(),
+      })
       broadcastTodoSync()
       broadcastCategorySync()
     },
@@ -306,6 +316,15 @@ export function useTodoMutations() {
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
       // Refresh category counts (todo was deleted from a category)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+      // Deleting a todo removes it from the skill tree pool and orphans
+      // any NodeAssignment (todoId → NULL; snapshot text persists). Both
+      // skill tree queries need to refetch so the UI stays coherent.
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getMyTree.key(),
+      })
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getUnassignedPool.key(),
+      })
       broadcastTodoSync()
       broadcastCategorySync()
     },
@@ -372,6 +391,12 @@ export function useTodoMutations() {
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
       // Refresh category counts (todo may have changed category)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+      // Updating the text of a completed todo changes its label in the
+      // skill tree unassigned pool. (Assigned rows use the frozen snapshot
+      // and don't update — that's by design.)
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getUnassignedPool.key(),
+      })
       broadcastTodoSync()
       broadcastCategorySync()
     },
@@ -415,6 +440,16 @@ export function useTodoMutations() {
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
       // Refresh category counts (completed todos were cleared)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+      // clearCompleted wipes every completed todo, which empties the pool
+      // and orphans every NodeAssignment row (todoId → NULL). XP persists
+      // via the todoText snapshot, but both skill tree queries must
+      // refetch so the view reflects the new state.
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getMyTree.key(),
+      })
+      queryClient.invalidateQueries({
+        queryKey: orpc.skillTree.getUnassignedPool.key(),
+      })
       broadcastTodoSync()
       broadcastCategorySync()
     },
