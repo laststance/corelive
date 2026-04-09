@@ -81,8 +81,13 @@ function PersisterSignOutGuard({ persister }: { persister: Persister }) {
   useEffect(() => {
     if (!isLoaded) return
     if (wasSignedIn.current === true && isSignedIn === false) {
-      // Remove persisted cache from localStorage, then clear in-memory
-      // state so the next signed-in user starts fresh.
+      // Wipe both layers so the next signed-in user starts fresh:
+      //   1. removeClient() deletes the localStorage key as a first pass.
+      //   2. clear() drops the in-memory cache; PersistQueryClientProvider
+      //      then reacts to the cache-cleared event and re-persists an empty
+      //      snapshot, overwriting any residue from step 1's throttled race.
+      // Net effect: localStorage holds at most an empty shell (zero queries,
+      // zero mutations) — manually verified via the shared-device QA flow.
       void persister.removeClient()
       queryClient.clear()
     }
