@@ -1,4 +1,5 @@
 import { ORPCError } from '@orpc/server'
+import type { Prisma } from '@prisma/client'
 
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '@/app/(main)/skill-tree/lib/template'
 import { createModuleLogger } from '@/lib/logger'
@@ -13,6 +14,36 @@ import {
 } from '../schemas/skillTree'
 
 const log = createModuleLogger('skillTree')
+
+/**
+ * Shared Prisma `include` for `getMyTree` reads and the post-import re-fetch.
+ *
+ * Explicit `orderBy: { id: 'asc' }` on every relation keeps SVG DOM order and
+ * keyboard focus order deterministic across environments. Without it, Postgres
+ * is free to hand back rows in any order (typically insertion order, but not
+ * guaranteed), which makes the tab-through experience drift between dev and
+ * CI and causes intermittent E2E failures that key off positional selectors.
+ *
+ * The assignment `where` filter surfaces orphaned rows (`todoId = null`) as
+ * well as assignments whose source todo is still completed — orphans are the
+ * frozen XP receipts left behind when a user deletes a completed task.
+ */
+const skillTreeInclude = {
+  nodes: {
+    orderBy: { id: 'asc' },
+    include: {
+      assignments: {
+        where: {
+          OR: [{ todoId: null }, { todo: { completed: true } }],
+        },
+        orderBy: { id: 'asc' },
+      },
+    },
+  },
+  edges: {
+    orderBy: { id: 'asc' },
+  },
+} satisfies Prisma.SkillTreeInclude
 
 /**
  * Imports the default template as a new SkillTree for a user. Uses batched
@@ -80,24 +111,12 @@ async function importDefaultTemplate(userId: number) {
       await tx.nodeEdge.createMany({ data: edgeRows })
     }
 
-    // Re-fetch the full tree with relations for the response
+    // Re-fetch the full tree with relations for the response. Reuses the
+    // shared include with deterministic orderBy so the caller sees the same
+    // ordering it will see on subsequent reads.
     const fullTree = await tx.skillTree.findUniqueOrThrow({
       where: { id: tree.id },
-      include: {
-        nodes: {
-          include: {
-            assignments: {
-              // Only surface assignments whose source todo is still completed.
-              // Orphaned rows (todoId = null) are also returned so earned XP
-              // persists after the source todo is cleared/deleted.
-              where: {
-                OR: [{ todoId: null }, { todo: { completed: true } }],
-              },
-            },
-          },
-        },
-        edges: true,
-      },
+      include: skillTreeInclude,
     })
     return fullTree
   })
@@ -161,18 +180,7 @@ export const getMyTree = authMiddleware
     try {
       let tree = await prisma.skillTree.findUnique({
         where: { userId: context.user.id },
-        include: {
-          nodes: {
-            include: {
-              assignments: {
-                where: {
-                  OR: [{ todoId: null }, { todo: { completed: true } }],
-                },
-              },
-            },
-          },
-          edges: true,
-        },
+        include: skillTreeInclude,
       })
       if (!tree) {
         try {
@@ -188,18 +196,7 @@ export const getMyTree = authMiddleware
           ) {
             const winner = await prisma.skillTree.findUnique({
               where: { userId: context.user.id },
-              include: {
-                nodes: {
-                  include: {
-                    assignments: {
-                      where: {
-                        OR: [{ todoId: null }, { todo: { completed: true } }],
-                      },
-                    },
-                  },
-                },
-                edges: true,
-              },
+              include: skillTreeInclude,
             })
             if (!winner) throw error
             tree = winner
@@ -293,11 +290,15 @@ export const assignTask = authMiddleware
       if (error instanceof ORPCError) throw error
       // P2003 = FK violation, P2025 = record not found. Both can happen if
       // the todo is deleted between assertOwnership and the transaction
-      // create (TOCTOU). Translate to NOT_FOUND so clients see a consistent
-      // "missing resource" shape instead of a generic 500.
+      // create (TOCTOU). P2002 = unique violation on `@@unique([todoId])`,
+      // which can happen when two concurrent `assignTask` calls both pass
+      // `assertOwnership`, both run `deleteMany`, and then the loser races
+      // past the deleted row into `create`. Translate all three to NOT_FOUND
+      // so the client converges on a single consistent final assignment
+      // instead of surfacing a 500 for the loser of a harmless race.
       if (error instanceof Error && 'code' in error) {
         const code = (error as { code?: string }).code
-        if (code === 'P2003' || code === 'P2025') {
+        if (code === 'P2002' || code === 'P2003' || code === 'P2025') {
           throw new ORPCError('NOT_FOUND', {
             message: 'Todo no longer exists',
           })
@@ -314,9 +315,22 @@ export const assignTask = authMiddleware
 /**
  * Removes the assignment of a Todo from a skill node.
  *
- * @param input.nodeId - Node ID to unassign from.
+ * Only targets live (non-orphaned) assignments: orphaned rows (`todoId = null`
+ * left behind when a completed todo is deleted) are intentionally frozen XP
+ * receipts and are unreachable through this mutation by design — the
+ * `AssignTaskInputSchema` requires a positive integer `todoId`, and the
+ * schema's `@@unique([todoId])` means `todoId` identifies at most one row.
+ *
+ * Verifies the found row's `nodeId` matches `input.nodeId` so the API is
+ * honest about what it targets: a caller that passes a wrong `nodeId` gets
+ * `null` back instead of silently unassigning whatever row happens to hold
+ * the todo. `assertOwnership` still guards against cross-user abuse.
+ *
+ * @param input.nodeId - Node ID the caller believes holds the assignment.
  * @param input.todoId - Todo ID to unassign.
- * @returns The deleted NodeAssignment row (for optimistic rollback).
+ * @returns The deleted NodeAssignment row, or `null` when no matching
+ *   assignment exists (already unassigned, nodeId mismatch, or the row was
+ *   removed by a concurrent call).
  */
 export const unassignTask = authMiddleware
   .input(AssignTaskInputSchema)
@@ -326,15 +340,23 @@ export const unassignTask = authMiddleware
       requireCompleted: false,
     })
     try {
+      // Verify the assignment actually belongs to the node the caller named.
+      // `todoId` is globally unique (`@@unique([todoId])`), so this is a
+      // single-row lookup. If the row exists but points at a different
+      // node, return null — the caller's mental model is out of sync and
+      // `onSettled` query invalidation will rebase their optimistic state.
+      const existing = await prisma.nodeAssignment.findUnique({
+        where: { todoId: input.todoId },
+      })
+      if (!existing || existing.nodeId !== input.nodeId) {
+        return null
+      }
       return await prisma.nodeAssignment.delete({
-        where: {
-          // The unique key is now just todoId, not the (nodeId, todoId) pair.
-          todoId: input.todoId,
-        },
+        where: { todoId: input.todoId },
       })
     } catch (error) {
-      // P2025 = record not found. Already unassigned is OK — return null so
-      // the client can reconcile optimistic state.
+      // P2025 = record not found. A concurrent unassign call won the race —
+      // already-gone is OK, return null so the client can reconcile.
       if (
         error instanceof Error &&
         'code' in error &&

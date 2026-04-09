@@ -122,6 +122,12 @@ model SkillNode {
   // default, undoing the hardening fix.
   updatedAt DateTime @default(now()) @updatedAt
 
+  // Composite unique is the target for NodeEdge's cross-endpoint FKs. Without
+  // it, an edge could reference (fromNodeId, toNodeId) that belong to
+  // different skill trees — a data integrity violation the single-column FK
+  // can't catch. `@@unique([skillTreeId, id])` lets Postgres enforce at the
+  // FK level that both endpoints share the edge's own tree.
+  @@unique([skillTreeId, id])
   @@index([skillTreeId])
 }
 
@@ -131,9 +137,16 @@ model NodeEdge {
   fromNodeId  Int
   toNodeId    Int
 
+  // The `skillTree` relation keeps Cascade so deleting a SkillTree directly
+  // removes its NodeEdges. `fromNode`/`toNode` now reference the composite
+  // `(skillTreeId, id)` on SkillNode, enforcing that both endpoints belong
+  // to the same tree as the edge. These two composite FKs must use
+  // `NoAction` because Prisma forbids overlapping Cascade paths on a shared
+  // scalar field (`skillTreeId`) — the cascade still works end-to-end via
+  // the `skillTree` relation, so edges vanish on SkillTree delete.
   skillTree SkillTree @relation(fields: [skillTreeId], references: [id], onDelete: Cascade)
-  fromNode  SkillNode @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
-  toNode    SkillNode @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
+  fromNode  SkillNode @relation("FromNode", fields: [skillTreeId, fromNodeId], references: [skillTreeId, id], onDelete: NoAction, onUpdate: NoAction)
+  toNode    SkillNode @relation("ToNode", fields: [skillTreeId, toNodeId], references: [skillTreeId, id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([fromNodeId, toNodeId])
   @@index([skillTreeId])

@@ -162,17 +162,21 @@ test.describe('Skill Tree E2E', () => {
     await page.evaluate(() =>
       window.localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE'),
     )
-    await page.reload()
-    // Wait for the fresh fetch that now has to happen because the cache is
-    // gone. Once this response arrives, the component will render the
-    // authoritative DB state.
-    await page.waitForResponse(
+    // Arm the response listener BEFORE triggering the reload. If we await
+    // `page.reload()` first and then set up `waitForResponse`, the fresh
+    // getMyTree POST can land between those two statements and we miss it,
+    // causing the later `toBeVisible` assertion to race the refetch and
+    // flake. Playwright's guidance for reload+response is to create the
+    // waiter first, then run the trigger, then await both.
+    const reloadTreeFetchPromise = page.waitForResponse(
       (resp) =>
         resp.url().includes(ORPC_PATHS.getMyTree) &&
         resp.request().method() === 'POST' &&
         resp.status() === 200,
       { timeout: 10000 },
     )
+    await page.reload()
+    await reloadTreeFetchPromise
     // After reload, the drawer is closed, so the canvas isn't aria-hidden
     // and we can use getByRole against the real a11y tree (which is what
     // users' screen readers see).

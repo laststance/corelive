@@ -246,9 +246,19 @@ export function SkillTreeView() {
     text: todoTextById.get(id) ?? `Task #${id}`,
   }))
 
+  // Orphan assignments (todoId === null) are frozen XP receipts left behind
+  // when a user clearCompleted/deletes a completed todo. They live on the
+  // server-side `tree` only — `optimisticState.assignmentsByNode` is keyed on
+  // live todoIds, so orphans never appear there. Include them in the
+  // "has any earned XP" check so a user who nuked their todo list but still
+  // has XP receipts sees their constellation instead of the onboarding empty
+  // state.
   const hasAnyCompletedTodos =
     optimisticState.unassignedTodoIds.length > 0 ||
-    Object.values(optimisticState.assignmentsByNode).some((a) => a.length > 0)
+    Object.values(optimisticState.assignmentsByNode).some(
+      (a) => a.length > 0,
+    ) ||
+    tree.nodes.some((n) => n.assignments.some((a) => a.todoId === null))
 
   if (!hasAnyCompletedTodos) {
     return (
@@ -294,6 +304,14 @@ export function SkillTreeView() {
         }),
       )
     : []
+  // Popover XP must match what ConstellationCanvas renders on the node circle:
+  // live optimistic assignments + frozen orphaned receipts. Using
+  // `assignedTodosForPopover.length` alone would under-count whenever the user
+  // has any orphans, making the popover badge drift from the canvas badge.
+  const activePopoverNodeXp = activePopoverNode
+    ? assignedTodosForPopover.length +
+      activePopoverNode.assignments.filter((a) => a.todoId === null).length
+    : 0
 
   return (
     <DndContext
@@ -339,7 +357,7 @@ export function SkillTreeView() {
                 node={{
                   id: activePopoverNode.id,
                   name: activePopoverNode.name,
-                  xp: assignedTodosForPopover.length,
+                  xp: activePopoverNodeXp,
                 }}
                 assignedTodos={assignedTodosForPopover}
                 onUnassign={(todoId) =>

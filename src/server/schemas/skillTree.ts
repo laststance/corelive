@@ -3,10 +3,19 @@ import { z } from 'zod'
 /**
  * Coerces a DB/JSON date value to a Date. oRPC wire format hands us strings
  * after JSON round-trip; Prisma hands us Dates directly. This accepts either.
+ *
+ * For string inputs we require a strict ISO-8601 UTC datetime (the format
+ * `Date.prototype.toJSON()` produces — always `Z`-suffixed), so garbage like
+ * `'not-a-date'` is rejected at the schema boundary instead of sneaking
+ * through as an `Invalid Date`.
  */
-const dateLike = z
-  .union([z.date(), z.string()])
-  .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+const dateLike = z.union([
+  z.date(),
+  z
+    .string()
+    .datetime()
+    .transform((val) => new Date(val)),
+])
 
 /** A single NodeAssignment row. todoId is nullable once the source Todo is gone. */
 const AssignmentRowSchema = z.object({

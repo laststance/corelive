@@ -135,8 +135,13 @@ select {
  * Strengthens node circle strokes (2 → 3) and the focus indicator (3 → 4) so
  * the skill-tree constellation stays clearly readable for users who rely on
  * the OS accessibility preference. WCAG 2.2 SC 1.4.11 (non-text contrast)
- * does not require this, but macOS HIG recommends honoring it. */
-@media (prefers-contrast: more) {
+ * does not require this, but macOS HIG recommends honoring it.
+ *
+ * `forced-colors: active` covers Windows High Contrast Mode (which does NOT
+ * always set `prefers-contrast: more`) so Edge/Chromium users on Windows get
+ * the same stroke-width boost. Both queries are ORed into one rule set
+ * because the styling is identical. */
+@media (prefers-contrast: more), (forced-colors: active) {
   [data-skill-tree='true'] .st-node-group circle {
     stroke-width: 3;
   }
