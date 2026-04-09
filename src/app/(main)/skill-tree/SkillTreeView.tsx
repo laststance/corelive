@@ -157,6 +157,13 @@ export function SkillTreeView() {
     }
   }
 
+  // dnd-kit fires onDragCancel (not onDragEnd) when the user presses Escape
+  // mid-drag. Without this handler, activeDragId would stay set and the drag
+  // overlay would remain rendered until the next successful drop.
+  function handleDragCancel() {
+    setActiveDragId(null)
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     setActiveDragId(null)
     const { active, over } = event
@@ -289,10 +296,15 @@ export function SkillTreeView() {
     )
   }
 
+  // Use todoTextById (unified: pool + assignment snapshots) rather than `pool`
+  // alone. During the optimistic unassign window, the task lives in
+  // `unassignedTodoIds` before `getUnassignedPool` refetches, so `pool` is
+  // momentarily stale and `pool.find(...)` falls through to the placeholder.
+  // `todoTextById` already carries the snapshot text via assignments, so it
+  // survives the refetch gap.
   const activeTodoText =
     activeDragId !== null
-      ? (pool.find((t) => t.id === activeDragId)?.text ??
-        `Task #${activeDragId}`)
+      ? (todoTextById.get(activeDragId) ?? `Task #${activeDragId}`)
       : ''
 
   const activePopoverNode = tree.nodes.find((n) => n.id === activePopoverNodeId)
@@ -317,6 +329,7 @@ export function SkillTreeView() {
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
       <div data-skill-tree="true" className="flex h-full w-full flex-col">
