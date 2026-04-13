@@ -71,7 +71,7 @@ export function TodoList() {
     }),
   )
 
-  // Mutations with optimistic updates
+  // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
     createMutation,
     toggleMutation,
@@ -79,7 +79,7 @@ export function TodoList() {
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
-  } = useTodoMutations()
+  } = useTodoMutations(selectedCategoryId)
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
@@ -291,7 +291,10 @@ export function TodoList() {
             <CardDescription>Manage your tasks efficiently</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <AddTodoForm onAddTodo={addTodo} />
+            <AddTodoForm
+              onAddTodo={addTodo}
+              disabled={selectedCategoryId === null}
+            />
           </CardContent>
         </Card>
 

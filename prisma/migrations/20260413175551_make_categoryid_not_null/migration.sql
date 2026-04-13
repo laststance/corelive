@@ -26,6 +26,27 @@ WHERE comp."categoryId" IS NULL
   AND c."userId" = comp."userId"
   AND c."isDefault" = true;
 
+-- Guard: abort if any user with NULL categoryId has no default category
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM (
+      SELECT DISTINCT "userId" FROM "Todo" WHERE "categoryId" IS NULL
+      UNION
+      SELECT DISTINCT "userId" FROM "Completed" WHERE "categoryId" IS NULL
+    ) u
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM "Category" c
+      WHERE c."userId" = u."userId"
+        AND c."isDefault" = true
+    )
+  ) THEN
+    RAISE EXCEPTION 'Cannot set categoryId NOT NULL: some users have NULL categoryId but no default category';
+  END IF;
+END $$;
+
 -- AlterTable
 ALTER TABLE "Completed" ALTER COLUMN "categoryId" SET NOT NULL;
 

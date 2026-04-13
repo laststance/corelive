@@ -123,7 +123,13 @@ export function useAutoSelectDefaultCategory(
 ) {
   /* eslint-disable react-you-might-not-need-an-effect/no-pass-data-to-parent -- writes to localStorage external store, not React parent state */
   useEffect(() => {
-    if (selectedCategoryId === null && categories.length > 0) {
+    if (categories.length === 0) return
+
+    const hasValidSelection =
+      selectedCategoryId !== null &&
+      categories.some((c) => c.id === selectedCategoryId)
+
+    if (!hasValidSelection) {
       const defaultCategory = categories.find((c) => c.isDefault)
       if (defaultCategory) {
         setSelectedCategoryId(defaultCategory.id)

@@ -45,14 +45,14 @@ export function FloatingNavigatorContainer() {
   // Category filter state (shared with main app via localStorage)
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
 
-  // Mutations with optimistic updates
+  // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
     createMutation,
     toggleMutation,
     deleteMutation,
     updateMutation,
     reorderMutation,
-  } = useTodoMutations()
+  } = useTodoMutations(selectedCategoryId)
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<FloatingTodo[]>([])

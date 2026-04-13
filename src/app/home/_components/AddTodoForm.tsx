@@ -32,9 +32,11 @@ type TodoFormValues = z.infer<typeof todoFormSchema>
 
 interface AddTodoFormProps {
   onAddTodo: (text: string, notes?: string) => void
+  /** Disables the form (e.g. while category selection is loading). */
+  disabled?: boolean
 }
 
-export function AddTodoForm({ onAddTodo }: AddTodoFormProps) {
+export function AddTodoForm({ onAddTodo, disabled }: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
 
   const form = useForm<TodoFormValues>({
@@ -95,7 +97,9 @@ export function AddTodoForm({ onAddTodo }: AddTodoFormProps) {
               <Button
                 type="submit"
                 disabled={
-                  !form.formState.isValid || form.formState.isSubmitting
+                  disabled ||
+                  !form.formState.isValid ||
+                  form.formState.isSubmitting
                 }
               >
                 <Plus className="h-4 w-4" />
