@@ -58,11 +58,10 @@ export const listTodos = authMiddleware
 
 /**
  * Create a new todo for the authenticated user.
- * If no categoryId is provided, auto-assigns to the user's default (General) category.
  *
  * @param input.text - Todo text (1-255 chars)
  * @param input.notes - Optional notes
- * @param input.categoryId - Category to assign (auto-fills with default if omitted)
+ * @param input.categoryId - Category to assign (required, must belong to the user)
  * @returns The newly created todo
  */
 export const createTodo = authMiddleware

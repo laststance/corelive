@@ -173,12 +173,6 @@ export const updateCategory = authMiddleware
   })
 
 /**
- * Delete a category. Tasks in this category become uncategorized (categoryId: null).
- *
- * @param input.id - Category ID to delete
- * @returns Success status
- */
-/**
  * Delete a category. Tasks in this category are reassigned to the user's default (General) category.
  * The default category itself cannot be deleted.
  *

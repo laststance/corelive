@@ -88,7 +88,7 @@ interface FloatingNavigatorProps {
   onTaskReorder?: (activeId: string, overId: string) => void
   /** Categories for the filter dropdown */
   categories?: CategoryWithCount[]
-  /** Currently selected category ID (null = All) */
+  /** Currently selected category ID (null = no category selected yet) */
   selectedCategoryId?: number | null
   /** Callback when category filter changes */
   onCategoryChange?: (id: number | null) => void
