@@ -6,7 +6,7 @@ export const TodoSchema = z.object({
   completed: z.boolean(),
   notes: z.string().optional().nullable(),
   order: z.number().int().min(0).optional().nullable(),
-  categoryId: z.number().int().positive().optional().nullable(),
+  categoryId: z.number().int().positive(),
   userId: z.number().int().positive(),
   createdAt: z
     .union([z.date(), z.string()])
@@ -33,7 +33,7 @@ export const TodoListSchema = z.object({
   limit: z.number().int().min(1).max(100).default(10),
   offset: z.number().int().min(0).default(0),
   completed: z.boolean().optional(),
-  categoryId: z.number().int().positive().optional().nullable(),
+  categoryId: z.number().int().positive().optional(),
 })
 
 export const TodoResponseSchema = z.object({

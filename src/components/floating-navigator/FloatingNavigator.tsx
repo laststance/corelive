@@ -88,7 +88,7 @@ interface FloatingNavigatorProps {
   onTaskReorder?: (activeId: string, overId: string) => void
   /** Categories for the filter dropdown */
   categories?: CategoryWithCount[]
-  /** Currently selected category ID (null = All) */
+  /** Currently selected category ID (null = no category selected yet) */
   selectedCategoryId?: number | null
   /** Callback when category filter changes */
   onCategoryChange?: (id: number | null) => void
@@ -276,33 +276,32 @@ export function FloatingNavigator({
         </div>
 
         {/* Category filter dropdown */}
-        {categories.length > 0 && onCategoryChange && (
-          <div className="pointer-events-auto mr-1">
-            <Select
-              value={selectedCategoryId?.toString() ?? 'all'}
-              onValueChange={(value) =>
-                onCategoryChange(value === 'all' ? null : Number(value))
-              }
-            >
-              <SelectTrigger className="h-6 w-24 border-0 bg-transparent px-2 text-xs">
-                <SelectValue placeholder="All" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id.toString()}>
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className={`h-2 w-2 rounded-full ${COLOR_DOT_CLASSES[cat.color] ?? 'bg-muted-foreground'}`}
-                      />
-                      {cat.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        {categories.length > 0 &&
+          onCategoryChange &&
+          selectedCategoryId !== null && (
+            <div className="pointer-events-auto mr-1">
+              <Select
+                value={selectedCategoryId.toString()}
+                onValueChange={(value) => onCategoryChange(Number(value))}
+              >
+                <SelectTrigger className="h-6 w-24 border-0 bg-transparent px-2 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${COLOR_DOT_CLASSES[cat.color] ?? 'bg-muted-foreground'}`}
+                        />
+                        {cat.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
         {isFloatingNavigatorEnvironment() && (
           <div

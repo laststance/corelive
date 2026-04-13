@@ -14,15 +14,15 @@ datasource db {
 }
 
 model Completed {
-  id         Int       @id @default(autoincrement())
-  archived   Boolean   @default(false)
-  title      String    @db.VarChar(255)
-  user       User      @relation(fields: [userId], references: [id])
+  id         Int      @id @default(autoincrement())
+  archived   Boolean  @default(false)
+  title      String   @db.VarChar(255)
+  user       User     @relation(fields: [userId], references: [id])
   userId     Int
-  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  categoryId Int?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([categoryId])
 }
@@ -57,17 +57,17 @@ model User {
 }
 
 model Todo {
-  id         Int       @id @default(autoincrement())
-  text       String    @db.VarChar(255)
-  completed  Boolean   @default(false)
-  notes      String?   @db.Text
-  order      Int?      // Sort order for drag-and-drop reordering (nullable for backwards compatibility)
-  user       User      @relation(fields: [userId], references: [id])
+  id         Int      @id @default(autoincrement())
+  text       String   @db.VarChar(255)
+  completed  Boolean  @default(false)
+  notes      String?  @db.Text
+  order      Int?     // Sort order for drag-and-drop reordering (nullable for backwards compatibility)
+  user       User     @relation(fields: [userId], references: [id])
   userId     Int
-  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  categoryId Int?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([categoryId])
 }
