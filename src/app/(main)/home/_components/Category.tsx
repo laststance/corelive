@@ -24,7 +24,10 @@ import {
 } from '@/components/ui/sidebar'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import {
+  useAutoSelectDefaultCategory,
+  useSelectedCategory,
+} from '@/hooks/useSelectedCategory'
 import { getColorDotClass } from '@/lib/category-colors'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
@@ -36,7 +39,8 @@ import {
 
 /**
  * Category section for the app Sidebar.
- * Displays "All" + user categories with color dots and pending todo counts.
+ * Displays user categories with color dots and pending todo counts.
+ * Auto-selects the default (General) category when none is selected.
  * Uses shadcn Sidebar primitives (SidebarMenu, SidebarMenuBadge, etc.).
  *
  * @param onOpenManageAction - Opens the category management dialog (Next.js: `*Action` suffix for callable props)
@@ -67,10 +71,12 @@ export function Category({
   })
   const categories: CategoryWithCount[] = data?.categories ?? []
 
-  // Total pending = categorized + uncategorized
-  const totalPendingCount =
-    categories.reduce((sum, cat) => sum + cat._count.todos, 0) +
-    (data?.uncategorizedCount ?? 0)
+  // Auto-select the default (General) category when none is selected
+  useAutoSelectDefaultCategory(
+    selectedCategoryId,
+    setSelectedCategoryId,
+    categories,
+  )
 
   // Cross-tab sync for categories
   useEffect(() => {
@@ -83,9 +89,9 @@ export function Category({
 
   /**
    * Handles selecting a category and closing mobile sidebar.
-   * @param categoryId - Category ID to select, or null for "All"
+   * @param categoryId - Category ID to select.
    */
-  const handleSelect = (categoryId: number | null) => {
+  const handleSelect = (categoryId: number) => {
     setSelectedCategoryId(categoryId)
     if (isMobile) {
       setOpenMobile(false)
@@ -166,20 +172,6 @@ export function Category({
       </Popover>
       <SidebarGroupContent>
         <SidebarMenu>
-          {/* "All" item */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={selectedCategoryId === null}
-              onClick={() => handleSelect(null)}
-            >
-              <span className="h-2 w-2 shrink-0 rounded-full bg-foreground" />
-              <span>All</span>
-            </SidebarMenuButton>
-            {totalPendingCount > 0 && (
-              <SidebarMenuBadge>{totalPendingCount}</SidebarMenuBadge>
-            )}
-          </SidebarMenuItem>
-
           {/* Category items */}
           {categories.map((category) => (
             <SidebarMenuItem key={category.id}>

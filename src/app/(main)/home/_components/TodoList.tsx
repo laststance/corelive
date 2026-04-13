@@ -71,7 +71,7 @@ export function TodoList() {
     }),
   )
 
-  // Mutations with optimistic updates
+  // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
     createMutation,
     toggleMutation,
@@ -79,7 +79,7 @@ export function TodoList() {
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
-  } = useTodoMutations()
+  } = useTodoMutations(selectedCategoryId)
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
@@ -112,6 +112,7 @@ export function TodoList() {
 
   /**
    * Adds a new todo item using the create mutation.
+   * Always assigns the currently selected category (auto-selected to General on load).
    * @param text - Todo title to create.
    * @param notes - Optional notes to attach to the todo.
    * @returns
@@ -119,15 +120,12 @@ export function TodoList() {
    * @example
    * addTodo('Buy milk')
    */
-  const addTodo = (
-    text: string,
-    notes?: string,
-    categoryId?: number | null,
-  ) => {
+  const addTodo = (text: string, notes?: string) => {
+    if (selectedCategoryId === null) return
     createMutation.mutate({
       text,
       notes,
-      ...(categoryId !== null && categoryId !== undefined && { categoryId }),
+      categoryId: selectedCategoryId,
     })
   }
 
@@ -295,7 +293,7 @@ export function TodoList() {
           <CardContent className="space-y-4">
             <AddTodoForm
               onAddTodo={addTodo}
-              selectedCategoryId={selectedCategoryId}
+              disabled={selectedCategoryId === null}
             />
           </CardContent>
         </Card>

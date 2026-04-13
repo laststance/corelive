@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 
 const STORAGE_KEY = 'corelive-selected-category'
 
@@ -21,7 +21,7 @@ const emitChange = () => {
 
 /**
  * Reads the selected category ID from localStorage.
- * @returns The selected category ID, or null for "All" categories
+ * @returns The selected category ID, or null when no category is selected yet
  */
 const getSnapshot = (): number | null => {
   try {
@@ -35,7 +35,7 @@ const getSnapshot = (): number | null => {
 }
 
 /**
- * SSR fallback — always returns null (show all categories).
+ * SSR fallback — always returns null (no category selected during SSR).
  */
 const getServerSnapshot = (): number | null => null
 
@@ -67,14 +67,14 @@ const subscribe = (callback: () => void): (() => void) => {
  * Uses useSyncExternalStore for SSR-safe subscription.
  *
  * @returns [selectedCategoryId, setSelectedCategoryId]
- * - selectedCategoryId: number | null (null = "All" categories)
+ * - selectedCategoryId: number | null (null = no category selected yet)
  * - setSelectedCategoryId: (id: number | null) => void
  *
  * @example
  * const [categoryId, setCategoryId] = useSelectedCategory()
  * // Select a category
  * setCategoryId(3)
- * // Show all categories
+ * // Clear selection
  * setCategoryId(null)
  */
 export function useSelectedCategory(): [
@@ -101,4 +101,40 @@ export function useSelectedCategory(): [
   }, [])
 
   return [selectedCategoryId, setSelectedCategoryId]
+}
+
+/**
+ * Auto-selects the default (isDefault=true) category when none is selected.
+ * Extracts the shared auto-select logic used by both Category sidebar and FloatingNavigator.
+ *
+ * @param selectedCategoryId - Current selected category ID from useSelectedCategory
+ * @param setSelectedCategoryId - Setter from useSelectedCategory
+ * @param categories - Categories with an isDefault flag
+ *
+ * @example
+ * const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
+ * const categories = useCategoryQuery()
+ * useAutoSelectDefaultCategory(selectedCategoryId, setSelectedCategoryId, categories)
+ */
+export function useAutoSelectDefaultCategory(
+  selectedCategoryId: number | null,
+  setSelectedCategoryId: (id: number | null) => void,
+  categories: { id: number; isDefault: boolean }[],
+) {
+  /* eslint-disable react-you-might-not-need-an-effect/no-pass-data-to-parent -- writes to localStorage external store, not React parent state */
+  useEffect(() => {
+    if (categories.length === 0) return
+
+    const hasValidSelection =
+      selectedCategoryId !== null &&
+      categories.some((c) => c.id === selectedCategoryId)
+
+    if (!hasValidSelection) {
+      const defaultCategory = categories.find((c) => c.isDefault)
+      if (defaultCategory) {
+        setSelectedCategoryId(defaultCategory.id)
+      }
+    }
+  }, [selectedCategoryId, categories, setSelectedCategoryId])
+  /* eslint-enable react-you-might-not-need-an-effect/no-pass-data-to-parent */
 }

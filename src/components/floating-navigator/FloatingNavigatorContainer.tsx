@@ -6,7 +6,10 @@ import React, { useEffect, useState } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import {
+  useAutoSelectDefaultCategory,
+  useSelectedCategory,
+} from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
@@ -42,14 +45,14 @@ export function FloatingNavigatorContainer() {
   // Category filter state (shared with main app via localStorage)
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
 
-  // Mutations with optimistic updates
+  // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
     createMutation,
     toggleMutation,
     deleteMutation,
     updateMutation,
     reorderMutation,
-  } = useTodoMutations()
+  } = useTodoMutations(selectedCategoryId)
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<FloatingTodo[]>([])
@@ -67,6 +70,13 @@ export function FloatingNavigatorContainer() {
     enabled: isClerkQueryReady,
   })
   const categories: CategoryWithCount[] = categoryData?.categories ?? []
+
+  // Auto-select the default (General) category when none is selected
+  useAutoSelectDefaultCategory(
+    selectedCategoryId,
+    setSelectedCategoryId,
+    categories,
+  )
 
   // Fetch todos filtered by selected category
   const { data, isLoading, error } = useQuery({
@@ -105,9 +115,10 @@ export function FloatingNavigatorContainer() {
    * handleTaskCreate('Write report')
    */
   const handleTaskCreate = (title: string) => {
+    if (selectedCategoryId === null) return
     createMutation.mutate({
       text: title,
-      ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
+      categoryId: selectedCategoryId,
     })
   }
 

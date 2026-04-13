@@ -153,7 +153,7 @@ test.describe('Category Feature E2E Tests', () => {
   })
 
   test.describe('Category Sidebar', () => {
-    test('should display category sidebar with "All" item', async ({
+    test('should display category sidebar with General selected by default', async ({
       page,
     }) => {
       // Category section is visible in the app sidebar
@@ -163,8 +163,12 @@ test.describe('Category Feature E2E Tests', () => {
       // "Categories" group label should be present
       await expect(sidebar.getByText('Categories')).toBeVisible()
 
-      // "All" item should always be present
-      await expect(sidebar.getByText('All')).toBeVisible()
+      // General (default) category should be visible and active
+      await expect(sidebar.getByText('General')).toBeVisible()
+      const generalButton = sidebar
+        .locator('[data-slot="sidebar-menu-button"]')
+        .filter({ hasText: 'General' })
+      await expect(generalButton).toHaveAttribute('data-active', 'true')
 
       // "Add category" button (+ icon) should be visible
       await expect(
@@ -180,62 +184,46 @@ test.describe('Category Feature E2E Tests', () => {
 
     test('should filter todos by category selection', async ({ page }) => {
       const categoryName = uniqueName('CatFilter')
-      const todoWithCategory = uniqueName('TodoCat')
-      const todoWithoutCategory = uniqueName('TodoNoCat')
+      const todoInGeneral = uniqueName('TodoGen')
+      const todoInCategory = uniqueName('TodoCat')
 
-      // Step 1: Create a category
       const sidebar = getSidebar(page)
-      await createCategory(page, sidebar, categoryName)
 
-      // Step 2: Select the new category in sidebar
-      // Wait for real server ID (optimistic IDs are negative) before clicking
-      await selectCategory(page, sidebar, categoryName)
-
-      // Step 3: Add a todo (should be auto-assigned to the selected category)
-      await page.getByPlaceholder('Enter a new todo...').fill(todoWithCategory)
+      // Step 1: General is auto-selected on load — add a todo to General
+      await selectCategory(page, sidebar, 'General')
+      await page.getByPlaceholder('Enter a new todo...').fill(todoInGeneral)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
-
-      // Wait for todo to appear with server-confirmed ID
-      const catTodoCheckbox = page.getByRole('checkbox', {
-        name: todoWithCategory,
-      })
-      await expect(catTodoCheckbox).toBeVisible({ timeout: 5000 })
-      await expect(catTodoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
-        timeout: 10000,
-      })
-
-      // Step 4: Switch to "All" view
-      await sidebar.getByText('All').click()
-      await page.waitForTimeout(500)
-
-      // Step 5: Add a todo without category (while "All" is selected)
-      await page
-        .getByPlaceholder('Enter a new todo...')
-        .fill(todoWithoutCategory)
-      await page.getByRole('button', { name: 'Add', exact: true }).click()
-
-      // Wait for the uncategorized todo to appear
-      const noCatTodoCheckbox = page.getByRole('checkbox', {
-        name: todoWithoutCategory,
-      })
-      await expect(noCatTodoCheckbox).toBeVisible({ timeout: 5000 })
-
-      // Step 6: Both todos should be visible in "All" view
-      await expect(catTodoCheckbox).toBeVisible()
-      await expect(noCatTodoCheckbox).toBeVisible()
-
-      // Step 7: Filter by the category
-      await sidebar.getByText(categoryName).click()
-      await page.waitForTimeout(1000)
-
-      // The categorized todo should still be visible
       await expect(
-        page.getByRole('checkbox', { name: todoWithCategory }),
+        page.getByRole('checkbox', { name: todoInGeneral }),
       ).toBeVisible({ timeout: 5000 })
 
-      // The uncategorized todo should NOT be visible
+      // Step 2: Create a new category and add a todo to it
+      await createCategory(page, sidebar, categoryName)
+      await selectCategory(page, sidebar, categoryName)
+      await page.getByPlaceholder('Enter a new todo...').fill(todoInCategory)
+      await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(
-        page.getByRole('checkbox', { name: todoWithoutCategory }),
+        page.getByRole('checkbox', { name: todoInCategory }),
+      ).toBeVisible({ timeout: 5000 })
+
+      // Step 3: Filter by General — only General's todo should be visible
+      await selectCategory(page, sidebar, 'General')
+      await page.waitForTimeout(1000)
+      await expect(
+        page.getByRole('checkbox', { name: todoInGeneral }),
+      ).toBeVisible({ timeout: 5000 })
+      await expect(
+        page.getByRole('checkbox', { name: todoInCategory }),
+      ).not.toBeVisible({ timeout: 5000 })
+
+      // Step 4: Filter by the new category — only its todo should be visible
+      await selectCategory(page, sidebar, categoryName)
+      await page.waitForTimeout(1000)
+      await expect(
+        page.getByRole('checkbox', { name: todoInCategory }),
+      ).toBeVisible({ timeout: 5000 })
+      await expect(
+        page.getByRole('checkbox', { name: todoInGeneral }),
       ).not.toBeVisible({ timeout: 5000 })
     })
 
@@ -262,11 +250,7 @@ test.describe('Category Feature E2E Tests', () => {
         page.getByRole('checkbox', { name: todoText }),
       ).toHaveAttribute('id', /^todo-[^-]/, { timeout: 10000 })
 
-      // Switch to "All" view to see the category badge
-      await sidebar.getByText('All').click()
-      await page.waitForTimeout(1000)
-
-      // The todo item should display the category name
+      // The todo item should display the category name badge
       // TodoItem renders categoryName in a <span> near the date
       const todoItem = page.locator('.rounded-lg.border').filter({
         has: page.getByRole('checkbox', { name: todoText }),
@@ -331,23 +315,23 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
-      // "All" should be active by default
-      const allButton = sidebar
+      // General should be active by default
+      const generalButton = sidebar
         .locator('[data-slot="sidebar-menu-button"]')
-        .filter({ hasText: 'All' })
-      await expect(allButton).toHaveAttribute('data-active', 'true')
+        .filter({ hasText: 'General' })
+      await expect(generalButton).toHaveAttribute('data-active', 'true')
 
-      // Click category — it becomes active, "All" becomes inactive
+      // Click category — it becomes active, General becomes inactive
       await selectCategory(page, sidebar, categoryName)
       const categoryButton = sidebar
         .locator('[data-slot="sidebar-menu-button"]')
         .filter({ hasText: categoryName })
       await expect(categoryButton).toHaveAttribute('data-active', 'true')
-      await expect(allButton).not.toHaveAttribute('data-active', 'true')
+      await expect(generalButton).not.toHaveAttribute('data-active', 'true')
 
-      // Click "All" — it becomes active again
-      await sidebar.getByText('All').click()
-      await expect(allButton).toHaveAttribute('data-active', 'true')
+      // Click General — it becomes active again
+      await selectCategory(page, sidebar, 'General')
+      await expect(generalButton).toHaveAttribute('data-active', 'true')
       await expect(categoryButton).not.toHaveAttribute('data-active', 'true')
     })
 
@@ -592,17 +576,13 @@ test.describe('Category Feature E2E Tests', () => {
       await expect(sidebar.getByText('General')).toBeVisible({ timeout: 15000 })
     })
 
-    test('should auto-assign new todo to General when no category selected', async ({
+    test('should auto-assign new todo to General by default', async ({
       page,
     }) => {
       const todoText = uniqueName('TodoGen')
       const sidebar = getSidebar(page)
 
-      // Ensure "All" is selected (default state)
-      await sidebar.getByText('All').click()
-      await page.waitForTimeout(500)
-
-      // Add a todo without selecting any specific category
+      // General is auto-selected on page load — add a todo directly
       await page.getByPlaceholder('Enter a new todo...').fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
 
@@ -646,8 +626,8 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // Switch to "All" view before deleting
-      await sidebar.getByText('All').click()
+      // Switch to General before deleting the category
+      await selectCategory(page, sidebar, 'General')
       await page.waitForTimeout(500)
 
       // Delete the category
@@ -678,23 +658,18 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // The todo should still exist in "All" view
+      // The todo should be reassigned to General and visible
+      await selectCategory(page, sidebar, 'General')
+      await page.waitForTimeout(1000)
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 10000,
       })
 
-      // The todo should now show "General" as its category (reassigned from deleted category)
+      // The todo should show "General" as its category (reassigned from deleted category)
       const todoItem = page.locator('.rounded-lg.border').filter({
         has: page.getByRole('checkbox', { name: todoText }),
       })
       await expect(todoItem.getByText('General')).toBeVisible({
-        timeout: 5000,
-      })
-
-      // Filter by General — the todo should be visible
-      await sidebar.getByText('General').click()
-      await page.waitForTimeout(1000)
-      await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 5000,
       })
     })
@@ -739,7 +714,7 @@ test.describe('Category Feature E2E Tests', () => {
       // Wait for page to fully load before interacting with todo input
       await page.waitForLoadState('networkidle')
 
-      // Create a todo to ensure at least one pending task exists
+      // General is auto-selected — create a todo to ensure at least one pending task
       const todoInput = page.getByPlaceholder('Enter a new todo...')
       await expect(todoInput).toBeVisible({ timeout: 10000 })
       await todoInput.fill(todoText)
@@ -748,15 +723,15 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 10000,
       })
 
-      // The "All" item should show a count badge
-      const allItem = sidebar
+      // General should show a count badge
+      const generalItem = sidebar
         .locator('[data-slot="sidebar-menu-item"]')
-        .filter({ hasText: 'All' })
+        .filter({ hasText: 'General' })
         .first()
 
       // Should have a badge with a numeric count
       await expect(
-        allItem.locator('[data-slot="sidebar-menu-badge"]'),
+        generalItem.locator('[data-slot="sidebar-menu-badge"]'),
       ).toBeVisible({ timeout: 10000 })
     })
 
@@ -776,8 +751,8 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // Switch to "All" view first
-      await sidebar.getByText('All').click()
+      // Switch to General before deleting the category
+      await selectCategory(page, sidebar, 'General')
       await page.waitForTimeout(500)
 
       // Delete the category (openManageDialog waits for real server IDs)
@@ -813,7 +788,9 @@ test.describe('Category Feature E2E Tests', () => {
         timeout: 5000,
       })
 
-      // The todo should still exist (now reassigned to General) in "All" view
+      // The todo should still exist (now reassigned to General)
+      await selectCategory(page, sidebar, 'General')
+      await page.waitForTimeout(1000)
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 10000,
       })

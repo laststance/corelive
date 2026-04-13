@@ -15,7 +15,7 @@ interface Todo {
   text: string
   completed: boolean
   notes: string | null
-  categoryId: number | null
+  categoryId: number
   userId: number
   createdAt: Date
   updatedAt: Date
@@ -31,9 +31,6 @@ interface TodoResponse {
   nextOffset?: number
 }
 
-/** Query input for pending todos list. */
-const PENDING_INPUT = { completed: false, limit: 100, offset: 0 } as const
-
 /**
  * Custom hook providing TODO mutations with optimistic updates.
  *
@@ -42,28 +39,31 @@ const PENDING_INPUT = { completed: false, limit: 100, offset: 0 } as const
  * 2. onError: Rollback using snapshot
  * 3. onSettled: Always invalidate to sync with server
  *
+ * @param categoryId - Currently selected category ID for correct cache key matching.
+ *   Must match the categoryId used in the todo list query so optimistic updates
+ *   target the right cache entry.
  * @returns Object containing all todo mutations with optimistic updates
- * @returns createMutation - Add new todo with instant UI feedback
- * @returns toggleMutation - Toggle completion with instant list transfer
- * @returns deleteMutation - Remove todo with instant disappearance
- * @returns updateMutation - Update todo with instant in-place change
- * @returns clearCompletedMutation - Clear all completed with instant removal
  *
  * @example
- * const { createMutation, toggleMutation } = useTodoMutations()
- * createMutation.mutate({ text: 'New task' })
+ * const { createMutation, toggleMutation } = useTodoMutations(selectedCategoryId)
+ * createMutation.mutate({ text: 'New task', categoryId: 5 })
  * toggleMutation.mutate({ id: 42 })
  */
-export function useTodoMutations() {
+export function useTodoMutations(categoryId: number | null) {
   const queryClient = useQueryClient()
 
   // Query keys for cache operations
-  // - pendingKey: exact match for useQuery in TodoList
+  // - pendingKey: exact match for useQuery in TodoList (includes categoryId filter)
   // - completedBaseKey: partial match for useInfiniteQuery in CompletedTodos
   //   (infiniteOptions with function input generates unpredictable keys,
   //    so we use partial matching for completed list operations)
   const pendingKey = orpc.todo.list.queryOptions({
-    input: PENDING_INPUT,
+    input: {
+      completed: false,
+      limit: 100,
+      offset: 0,
+      ...(categoryId !== null && { categoryId }),
+    },
   }).queryKey
   const completedBaseKey = orpc.todo.list.key({ input: { completed: true } })
   // ============================================
@@ -83,7 +83,7 @@ export function useTodoMutations() {
         id: -Date.now(), // Negative temp ID to avoid collision
         text: newTodo.text,
         notes: newTodo.notes ?? null,
-        categoryId: newTodo.categoryId ?? null,
+        categoryId: newTodo.categoryId,
         completed: false,
         userId: 0,
         createdAt: new Date(),

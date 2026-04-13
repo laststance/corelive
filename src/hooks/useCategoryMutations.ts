@@ -12,7 +12,6 @@ import type { CategoryWithCount } from '@/server/schemas/category'
  */
 interface CategoryListResponse {
   categories: CategoryWithCount[]
-  uncategorizedCount: number
 }
 
 /**
@@ -148,7 +147,7 @@ export function useCategoryMutations() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: categoryKey })
-      // Also invalidate todos since deleted category's todos become uncategorized
+      // Also invalidate todos since deleted category's todos are reassigned to default
       queryClient.invalidateQueries({ queryKey: todoBaseKey })
       broadcastCategorySync()
     },
