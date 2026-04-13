@@ -4,6 +4,7 @@ import { useUser } from '@clerk/nextjs'
 import {
   Search,
   Home as HomeIcon,
+  Sparkles,
   Plus,
   Settings,
   ChevronDown,
@@ -13,9 +14,13 @@ import {
   Trash2,
   Download,
 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 
+import { Category } from '@/app/(main)/home/_components/Category'
+import { CategoryManageDialog } from '@/app/(main)/home/_components/CategoryManageDialog'
+import { LogoutButton } from '@/app/(main)/home/_components/LogoutButton'
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -35,63 +40,47 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
-  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarProvider,
   SidebarSeparator,
-  SidebarTrigger,
 } from '@/components/ui/sidebar'
 import { isAppleSilicon } from '@/lib/utils'
 
-import packageJson from '../../../package.json'
+import packageJson from '../../package.json'
 
-import './page.css'
-import { Category } from './_components/Category'
-import { CategoryManageDialog } from './_components/CategoryManageDialog'
-import { LogoutButton } from './_components/LogoutButton'
-import { TodoList } from './_components/TodoList'
-
-/** GitHub repository info for download URLs */
 const GITHUB_REPO = 'laststance/corelive'
 
-export default function Home() {
+/**
+ * The shared application sidebar used across all `(main)` routes.
+ * Renders user profile, navigation links, categories, and bottom actions.
+ * Uses `usePathname()` to highlight the active route.
+ */
+export function AppSidebar() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const router = useRouter()
+  const pathname = usePathname()
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
 
-  /**
-   * Generates the Mac app download URL based on detected architecture.
-   * @returns
-   * - ARM DMG URL for Apple Silicon Macs
-   * - Intel DMG URL for Intel Macs
-   */
   const macDownloadUrl = useMemo(() => {
     const version = packageJson.version
     const isArm = isAppleSilicon()
     const filename = isArm
       ? `CoreLive-${version}-arm64.dmg`
       : `CoreLive-${version}.dmg`
-
     return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${filename}`
   }, [])
 
-  /**
-   * Opens the Settings page.
-   * Navigates to the settings route using Next.js router.
-   */
   const handleOpenSettings = useCallback(() => {
     router.push('/settings')
   }, [router])
 
   return (
-    <SidebarProvider>
+    <>
       <Sidebar className="border-r">
         <SidebarHeader className="px-4 pb-4">
           <div className="flex items-center justify-between">
-            {/* User Profile Section */}
             <div className="flex flex-1 items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -158,7 +147,6 @@ export default function Home() {
                   <DropdownMenuSeparator />
                   <ThemeSelectorMenuItem />
                   <LogoutButton />
-                  {/* Show Mac app download only in web browser, not in Electron */}
                   {!isElectron && (
                     <>
                       <DropdownMenuSeparator />
@@ -182,7 +170,6 @@ export default function Home() {
         </SidebarHeader>
 
         <SidebarContent className="px-2">
-          {/* Search */}
           <div className="mb-2 px-2">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -193,14 +180,27 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Main Navigation */}
+          {/* Main Navigation — now Link-based with active state */}
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <HomeIcon className="h-4 w-4" />
-                    <span>Home</span>
+                  <SidebarMenuButton asChild isActive={pathname === '/home'}>
+                    <Link href="/home">
+                      <HomeIcon className="h-4 w-4" />
+                      <span>Home</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === '/skill-tree'}
+                  >
+                    <Link href="/skill-tree">
+                      <Sparkles className="h-4 w-4" />
+                      <span>Skill Tree</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -213,11 +213,9 @@ export default function Home() {
 
           <div className="flex-1" />
 
-          {/* Bottom Navigation */}
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {/* Settings button - only visible in Electron */}
                 {isElectron && (
                   <SidebarMenuItem>
                     <SidebarMenuButton onClick={handleOpenSettings}>
@@ -266,22 +264,10 @@ export default function Home() {
           </div>
         </SidebarFooter>
       </Sidebar>
-
-      <SidebarInset>
-        <header className="window-drag-region flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="no-drag -ml-1" />
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-medium">Tasks</h2>
-          </div>
-        </header>
-        <div className="flex flex-1 flex-col gap-4 p-4">
-          <TodoList />
-        </div>
-      </SidebarInset>
       <CategoryManageDialog
         open={manageDialogOpen}
         onOpenChange={setManageDialogOpen}
       />
-    </SidebarProvider>
+    </>
   )
 }

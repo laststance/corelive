@@ -1,0 +1,151 @@
+/* Scoped to [data-skill-tree='true'] to prevent token leakage. */
+
+/* Electron window chrome — duplicated from home/page.css so /skill-tree works
+   when navigated to directly (CSS chunks are per-page in Next.js App Router,
+   and without these the Electron title bar is not draggable). TODO(post-v1):
+   lift into (main)/layout.css and remove the duplicate in home/page.css. */
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag,
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-app-region: no-drag;
+}
+
+/* Default = Dark Fantasy (the chosen visual identity for this feature). */
+[data-skill-tree='true'] {
+  --st-bg-deep: #0a0e1e;
+  --st-bg-mid: #1a1e3a;
+  --st-surface: #2a3055;
+  --st-gold: #f4d06f;
+  --st-cream: #c7b99c;
+  --st-arcane: #5a9bd4;
+  --st-muted: #8b9dc3;
+  --st-border-rune: #4a5580;
+}
+
+/* Light theme override → parchment variant.
+ *
+ * WCAG 2.2 AA contrast (computed against bg-deep #f5ecd4, relative luminance
+ * ≈0.85). All foreground text/stroke colors meet the 4.5:1 minimum for normal
+ * text and 3:1 for UI components. The earlier palette used mid-lightness
+ * browns on mid-lightness parchment (cream 1.57:1, gold 2.17:1) which is
+ * unreadable and failed AA by a wide margin. The new palette is an
+ * "ink on aged parchment" aesthetic — dark earth tones on warm paper —
+ * which is both authentic to illuminated-manuscript fantasy and passes AA
+ * by comfortable margins.
+ *
+ *   --st-cream  #3a2818 → ≈11.9:1 (primary ink / node stroke)
+ *   --st-gold   #8b5a2b → ≈4.89:1 (accent / highlighted node / progress fill)
+ *   --st-arcane #1e5a8b → ≈6.04:1 (focus ring / arcane edge)
+ *   --st-muted  #5a4a3a → ≈7.27:1 (secondary text / locked edges)
+ *   --st-border-rune #4a3520 → ≈9.48:1 (card borders)
+ */
+[data-theme='light'] [data-skill-tree='true'] {
+  --st-bg-deep: #f5ecd4;
+  --st-bg-mid: #e8d9b0;
+  --st-surface: #ddc89c;
+  --st-gold: #8b5a2b;
+  --st-cream: #3a2818;
+  --st-arcane: #1e5a8b;
+  --st-muted: #5a4a3a;
+  --st-border-rune: #4a3520;
+}
+
+/* Canvas background. */
+.st-canvas-bg {
+  background: linear-gradient(
+    180deg,
+    var(--st-bg-deep) 0%,
+    var(--st-bg-mid) 100%
+  );
+}
+
+/* Hover pulse on nodes. */
+.st-node-group {
+  transform-origin: center;
+  transition:
+    transform 300ms ease-out,
+    opacity 300ms ease-out;
+}
+.st-node-group:hover,
+.st-node-group:focus-within,
+.st-node-group:focus-visible {
+  transform: scale(1.08);
+}
+
+/* WCAG 2.2 AA SC 2.4.11 — keyboard focus indicator for SVG nodes.
+   SVG <g> does not render CSS `outline`, so we override the stroke
+   of descendant circles with an arcane highlight when focused. */
+.st-node-group:focus-visible circle {
+  stroke: var(--st-arcane);
+  stroke-width: 3;
+}
+
+/* Mastered shimmer (outer ring opacity breathing). */
+@keyframes st-mastered-shimmer {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+.st-mastered-ring {
+  animation: st-mastered-shimmer 2s ease-in-out infinite;
+}
+
+/* Twinkling gold stars in the background. */
+@keyframes st-twinkle {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.st-twinkle-star {
+  animation: st-twinkle 4s ease-in-out infinite;
+}
+.st-twinkle-star--delay-1 {
+  animation-delay: 1.3s;
+}
+.st-twinkle-star--delay-2 {
+  animation-delay: 2.7s;
+}
+
+/* Reduced motion — kill hover pulse + ambient animations. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skill-tree='true'] .st-node-group,
+  [data-skill-tree='true'] .st-mastered-ring,
+  [data-skill-tree='true'] .st-twinkle-star {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Increase-contrast mode (macOS "Increase Contrast", Windows High Contrast).
+ * Strengthens node circle strokes (2 → 3) and the focus indicator (3 → 4) so
+ * the skill-tree constellation stays clearly readable for users who rely on
+ * the OS accessibility preference. WCAG 2.2 SC 1.4.11 (non-text contrast)
+ * does not require this, but macOS HIG recommends honoring it.
+ *
+ * `forced-colors: active` covers Windows High Contrast Mode (which does NOT
+ * always set `prefers-contrast: more`) so Edge/Chromium users on Windows get
+ * the same stroke-width boost. Both queries are ORed into one rule set
+ * because the styling is identical. */
+@media (prefers-contrast: more), (forced-colors: active) {
+  [data-skill-tree='true'] .st-node-group circle {
+    stroke-width: 3;
+  }
+  [data-skill-tree='true'] .st-node-group:focus-visible circle {
+    stroke-width: 4;
+  }
+}

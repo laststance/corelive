@@ -2,7 +2,10 @@ import { z } from 'zod'
 
 export const TodoSchema = z.object({
   id: z.number().int().positive(),
-  text: z.string().min(1, 'Please enter a task'),
+  text: z
+    .string()
+    .min(1, 'Please enter a task')
+    .max(255, 'Todo text is too long (255 char max)'),
   completed: z.boolean(),
   notes: z.string().optional().nullable(),
   order: z.number().int().min(0).optional().nullable(),

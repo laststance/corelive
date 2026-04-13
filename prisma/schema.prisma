@@ -52,22 +52,24 @@ model User {
   completed        Completed[]
   todos            Todo[]
   electronSettings ElectronSettings?
+  skillTrees       SkillTree[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
 
 model Todo {
-  id         Int      @id @default(autoincrement())
-  text       String   @db.VarChar(255)
-  completed  Boolean  @default(false)
-  notes      String?  @db.Text
-  order      Int?     // Sort order for drag-and-drop reordering (nullable for backwards compatibility)
-  user       User     @relation(fields: [userId], references: [id])
-  userId     Int
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryId Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          Int              @id @default(autoincrement())
+  text        String           @db.VarChar(255)
+  completed   Boolean          @default(false)
+  notes       String?          @db.Text
+  order       Int?             // Sort order for drag-and-drop reordering (nullable for backwards compatibility)
+  user        User             @relation(fields: [userId], references: [id])
+  userId      Int
+  category    Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId  Int
+  assignments NodeAssignment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   @@index([categoryId])
 }
@@ -81,4 +83,95 @@ model ElectronSettings {
   startAtLogin  Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model SkillTree {
+  id          Int     @id @default(autoincrement())
+  userId      Int
+  name        String
+  templateKey String?
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodes     SkillNode[]
+  edges     NodeEdge[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // One tree per user. Prevents duplicate-tree race on concurrent first-load.
+  @@unique([userId])
+}
+
+model SkillNode {
+  id          Int     @id @default(autoincrement())
+  skillTreeId Int
+  name        String
+  description String? @db.Text
+  icon        String?
+  x           Float // 0.0-1.0 normalized
+  y           Float // 0.0-1.0 normalized
+
+  skillTree   SkillTree        @relation(fields: [skillTreeId], references: [id], onDelete: Cascade)
+  outEdges    NodeEdge[]       @relation("FromNode")
+  inEdges     NodeEdge[]       @relation("ToNode")
+  assignments NodeAssignment[]
+
+  createdAt DateTime @default(now())
+  // @default(now()) matches the DB-level DEFAULT CURRENT_TIMESTAMP that the
+  // 20260409000000_skill_tree_v1_hardening migration adds. Without it, the
+  // next `prisma migrate dev` would detect drift and silently drop the
+  // default, undoing the hardening fix.
+  updatedAt DateTime @default(now()) @updatedAt
+
+  // Composite unique is the target for NodeEdge's cross-endpoint FKs. Without
+  // it, an edge could reference (fromNodeId, toNodeId) that belong to
+  // different skill trees — a data integrity violation the single-column FK
+  // can't catch. `@@unique([skillTreeId, id])` lets Postgres enforce at the
+  // FK level that both endpoints share the edge's own tree.
+  @@unique([skillTreeId, id])
+  @@index([skillTreeId])
+}
+
+model NodeEdge {
+  id          Int @id @default(autoincrement())
+  skillTreeId Int
+  fromNodeId  Int
+  toNodeId    Int
+
+  // The `skillTree` relation keeps Cascade so deleting a SkillTree directly
+  // removes its NodeEdges. `fromNode`/`toNode` now reference the composite
+  // `(skillTreeId, id)` on SkillNode, enforcing that both endpoints belong
+  // to the same tree as the edge. These two composite FKs must use
+  // `NoAction` because Prisma forbids overlapping Cascade paths on a shared
+  // scalar field (`skillTreeId`) — the cascade still works end-to-end via
+  // the `skillTree` relation, so edges vanish on SkillTree delete.
+  skillTree SkillTree @relation(fields: [skillTreeId], references: [id], onDelete: Cascade)
+  fromNode  SkillNode @relation("FromNode", fields: [skillTreeId, fromNodeId], references: [skillTreeId, id], onDelete: NoAction, onUpdate: NoAction)
+  toNode    SkillNode @relation("ToNode", fields: [skillTreeId, toNodeId], references: [skillTreeId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([fromNodeId, toNodeId])
+  @@index([skillTreeId])
+  @@index([toNodeId])
+}
+
+model NodeAssignment {
+  id        Int      @id @default(autoincrement())
+  nodeId    Int
+  // Nullable so the row survives after the source Todo is deleted (clearCompleted,
+  // deleteTodo). Earned XP must persist even if the originating task is gone.
+  todoId    Int?
+  // Snapshot of the Todo text at assignment time. Read path prefers this over
+  // the live Todo.text so the popover still shows something sensible after the
+  // Todo is deleted. Default is an empty string only for safe backfill on
+  // the migration; application code (assignTask) always provides a real value
+  // at create time.
+  todoText  String   @default("") @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  node SkillNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  todo Todo?     @relation(fields: [todoId], references: [id], onDelete: SetNull)
+
+  // One assignment per todo, ever. Prevents multi-node XP inflation exploit.
+  // PostgreSQL treats NULLs as distinct, so orphaned (todoId = null) rows are fine.
+  @@unique([todoId])
+  @@index([nodeId])
 }

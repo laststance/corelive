@@ -40,7 +40,7 @@ V1 ships a "Minimum" scope: one hardcoded "Backend Developer Core" template, cor
 
 ## User Flow
 
-```
+```text
 1. User clicks "Skill Tree" in the sidebar
     ↓
 2. /skill-tree loads the user's tree (or auto-imports default template on first visit)
@@ -66,7 +66,7 @@ V1 ships a "Minimum" scope: one hardcoded "Backend Developer Core" template, cor
 
 ## Architecture Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────┐
 │ Browser / Electron WebView                                       │
 │                                                                  │
@@ -106,10 +106,16 @@ V1 ships a "Minimum" scope: one hardcoded "Backend Developer Core" template, cor
 
 Four new models, following the project's existing pattern of `Int` autoincrement IDs.
 
+> **Note:** This section reflects the schema that actually shipped in the V1
+> hardening pass (migrations `20260409000000_skill_tree_v1_hardening` and
+> `20260409080000_skill_tree_v1_edge_composite_fk`). The earlier draft in the
+> original spec has been updated in place so future readers don't get a stale
+> mental model of the invariants.
+
 ```prisma
 model SkillTree {
   id          Int         @id @default(autoincrement())
-  userId      Int         // FK to User.id (NOT unique — preserves future multi-tree)
+  userId      Int
   name        String
   templateKey String?     // which template this was cloned from (nullable for future custom trees)
 
@@ -119,7 +125,10 @@ model SkillTree {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  @@index([userId])
+  // One tree per user. Prevents duplicate-tree race on concurrent first-load.
+  // The hardening pass upgraded the original index to a UNIQUE so two
+  // parallel first-visit imports can't both win.
+  @@unique([userId])
 }
 
 model SkillNode {
@@ -136,6 +145,13 @@ model SkillNode {
   inEdges     NodeEdge[]       @relation("ToNode")
   assignments NodeAssignment[]
 
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+
+  // Composite unique is the target for NodeEdge's cross-endpoint FKs — it
+  // enforces at the DB level that both edge endpoints belong to the same
+  // tree as the edge itself.
+  @@unique([skillTreeId, id])
   @@index([skillTreeId])
 }
 
@@ -145,26 +161,42 @@ model NodeEdge {
   fromNodeId  Int
   toNodeId    Int
 
+  // `fromNode`/`toNode` reference the composite `(skillTreeId, id)` on
+  // SkillNode so an edge's two endpoints can't straddle different trees.
+  // `NoAction` on the composite FKs is required because Prisma forbids
+  // overlapping Cascade paths on a shared scalar (`skillTreeId`); the
+  // cascade still flows through the `skillTree` relation below.
   skillTree   SkillTree @relation(fields: [skillTreeId], references: [id], onDelete: Cascade)
-  fromNode    SkillNode @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
-  toNode      SkillNode @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
+  fromNode    SkillNode @relation("FromNode", fields: [skillTreeId, fromNodeId], references: [skillTreeId, id], onDelete: NoAction, onUpdate: NoAction)
+  toNode      SkillNode @relation("ToNode", fields: [skillTreeId, toNodeId], references: [skillTreeId, id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([fromNodeId, toNodeId])
   @@index([skillTreeId])
+  @@index([toNodeId])
 }
 
 model NodeAssignment {
-  id              Int        @id @default(autoincrement())
-  nodeId          Int
-  completedTaskId Int
-  createdAt       DateTime   @default(now())
+  id        Int       @id @default(autoincrement())
+  nodeId    Int
+  // Nullable so the row survives after the source Todo is deleted
+  // (clearCompleted, deleteTodo). Earned XP must persist even if the
+  // originating task is gone.
+  todoId    Int?
+  // Snapshot of the Todo text at assignment time. The read path prefers
+  // this over `Todo.text` so the popover still shows something sensible
+  // after the Todo is deleted.
+  todoText  String    @default("") @db.VarChar(255)
+  createdAt DateTime  @default(now())
 
-  node            SkillNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  completed       Completed  @relation(fields: [completedTaskId], references: [id], onDelete: Cascade)
+  node      SkillNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  todo      Todo?     @relation(fields: [todoId], references: [id], onDelete: SetNull)
 
-  @@unique([nodeId, completedTaskId])
+  // One assignment per todo, ever. Prevents the multi-node XP inflation
+  // exploit (same todoId across multiple nodes). PostgreSQL treats NULLs
+  // as distinct in UNIQUE constraints, so multiple orphaned rows
+  // (todoId = NULL) coexist just fine.
+  @@unique([todoId])
   @@index([nodeId])
-  @@index([completedTaskId])
 }
 ```
 
@@ -176,22 +208,26 @@ model User {
   skillTrees SkillTree[]
 }
 
-model Completed {
+model Todo {
   // ...existing fields
   assignments NodeAssignment[]
 }
 ```
 
+**Note on the `Completed` model:** The project has a legacy `Completed` model that is defined in `schema.prisma` but never queried anywhere in the codebase (`grep "prisma\.completed\."` → 0 results). All completed tasks live on the `Todo` model with `completed: true` — this is what `CompletedTodos.tsx` and `getHeatmap` both use. The skill tree therefore links `NodeAssignment` to `Todo`, not to `Completed`. The `Completed` model remains untouched (removal is out of scope).
+
 ### Rationale
 
-| Decision                               | Why                                                                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **XP is computed**, not stored         | `xp = count(NodeAssignment where nodeId = X)`. Always accurate, no denormalization drift. Perf is fine at V1 scale.            |
-| **Unique `(nodeId, completedTaskId)`** | Dropping the same task on the same node twice should be a no-op (via upsert), not a double-count.                              |
-| **`userId` not unique on SkillTree**   | Future-proofs multi-tree without requiring a migration. V1 code uses the first tree per user.                                  |
-| **Cascade deletes**                    | Deleting a Completed task also removes any assignments referencing it (matches existing `Completed → User` cascade semantics). |
-| **`x`, `y` normalized (0–1)**          | Decouples node positions from canvas pixel size. Allows responsive scaling without DB updates.                                 |
-| **`templateKey` on SkillTree**         | Lets us trace which template a tree was cloned from. Nullable because future custom trees won't have one.                      |
+| Decision                               | Why                                                                                                                                                                                                                                                |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **XP is computed**, not stored         | `xp = count(NodeAssignment where nodeId = X)`. Always accurate, no denormalization drift. Perf is fine at V1 scale.                                                                                                                                |
+| **Unique `todoId` (global)**           | One assignment per todo, ever. Blocks the multi-node XP inflation exploit (drag the same todo onto five different nodes for 5×XP). PostgreSQL treats NULLs as distinct, so orphan receipts (`todoId = NULL`) coexist fine.                         |
+| **Unique `userId` on SkillTree**       | One tree per user at V1. Prevents the concurrent first-visit race where two template imports could both succeed. Future multi-tree will migrate this off, but the single-tree invariant makes V1 queries trivial.                                  |
+| **Nullable `todoId` + `SET NULL`**     | Deleting a completed Todo used to cascade-delete its assignments, silently nuking XP the user already earned. Switched to nullable with `ON DELETE SET NULL` so the assignment row survives as a frozen XP receipt — the popover reads `todoText`. |
+| **`todoText` snapshot column**         | The popover needs a label for orphaned receipts (rows whose source Todo is gone). Snapshotting the text at assign time means the label stays stable and doesn't fall back to `Task #${id}`.                                                        |
+| **Composite FK on NodeEdge endpoints** | `(skillTreeId, fromNodeId)` and `(skillTreeId, toNodeId)` both reference `SkillNode(skillTreeId, id)`, so an edge physically cannot connect nodes from two different trees. Enforced at the DB level, not just in application code.                |
+| **`x`, `y` normalized (0–1)**          | Decouples node positions from canvas pixel size. Allows responsive scaling without DB updates.                                                                                                                                                     |
+| **`templateKey` on SkillTree**         | Lets us trace which template a tree was cloned from. Nullable because future custom trees won't have one.                                                                                                                                          |
 
 ### Level / XP rules
 
@@ -220,7 +256,7 @@ This lets the UI render a simple `progress / next` bar without recomputing thres
 
 Use Next.js App Router's **Route Group** feature to share the sidebar between `/home` and `/skill-tree` without affecting URL paths.
 
-```
+```text
 src/app/
 ├── (main)/                       ← Route Group (parentheses = not in URL)
 │   ├── layout.tsx                ← NEW: shared sidebar layout
@@ -249,7 +285,7 @@ src/app/
 
 Current `/home/page.tsx` embeds `<SidebarProvider>` inline. For two pages to share the sidebar, extract it into a reusable component.
 
-```
+```text
 src/components/
 └── AppSidebar.tsx     ← NEW: exported sidebar with Link-based nav + isActive via usePathname()
 ```
@@ -420,16 +456,16 @@ function onDragEnd(event: DragEndEvent) {
   if (!over) return
 
   const nodeId = Number(over.id)
-  const completedTaskId = Number(active.id)
+  const todoId = Number(active.id)
 
   // 1. Optimistic state dispatch, wrapped in a transition
   startTransition(() => {
-    setOptimisticAssignments({ type: 'assign', nodeId, completedTaskId })
+    setOptimisticAssignments({ type: 'assign', nodeId, todoId })
   })
 
   // 2. Fire mutation via TanStack Query + oRPC
   assignMutation.mutate(
-    { nodeId, completedTaskId },
+    { nodeId, todoId },
     {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['skillTree'] })
@@ -455,7 +491,7 @@ Clicking a node opens a shadcn `Popover` listing the tasks currently assigned to
 | Empty drawer                            | Show "✨ All tasks allocated — nice work" state                             |
 | Empty tree (no completed tasks)         | Show "Complete some tasks to start earning XP" state                        |
 | Network failure                         | Optimistic state reverts, `toast.error` displayed                           |
-| User deletes an assigned Completed task | Cascade delete removes the NodeAssignment, node XP decrements automatically |
+| User deletes / clears an assigned Todo  | Cascade delete removes the NodeAssignment, node XP decrements automatically |
 | User signs out and back in              | Tree persists via `userId` FK                                               |
 
 ## oRPC API
@@ -464,51 +500,48 @@ New procedures under `src/server/procedures/skillTree.ts`:
 
 ```typescript
 // GET my tree (auto-imports default template on first visit)
-getMyTree: procedure.query(async ({ ctx }) => {
-  const userId = await resolveUserIdFromClerk(ctx)
-  let tree = await db.skillTree.findFirst({
-    where: { userId },
+getMyTree: authMiddleware.handler(async ({ context }) => {
+  let tree = await prisma.skillTree.findFirst({
+    where: { userId: context.user.id },
     include: {
       nodes: { include: { assignments: true } },
       edges: true,
     },
   })
   if (!tree) {
-    tree = await importDefaultTemplate(userId)
+    tree = await importDefaultTemplate(context.user.id)
   }
   return tree
 })
 
-// GET unassigned pool — Completed tasks not yet assigned to any node
-getUnassignedPool: procedure.query(async ({ ctx }) => {
-  const userId = await resolveUserIdFromClerk(ctx)
-  return db.completed.findMany({
+// GET unassigned pool — completed Todos not yet assigned to any node
+getUnassignedPool: authMiddleware.handler(async ({ context }) => {
+  return prisma.todo.findMany({
     where: {
-      userId,
-      archived: false,
+      userId: context.user.id,
+      completed: true,
       assignments: { none: {} },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { updatedAt: 'desc' },
   })
 })
 
 // Assign a task to a node (upsert, idempotent)
-assignTask: procedure
+assignTask: authMiddleware
   .input(
     z.object({
       nodeId: z.number().int().positive(),
-      completedTaskId: z.number().int().positive(),
+      todoId: z.number().int().positive(),
     }),
   )
-  .mutation(async ({ input, ctx }) => {
-    const userId = await resolveUserIdFromClerk(ctx)
-    // Verify ownership of both node and task
-    await assertOwnership(userId, input.nodeId, input.completedTaskId)
-    return db.nodeAssignment.upsert({
+  .handler(async ({ input, context }) => {
+    // Verify ownership of both node and todo
+    await assertOwnership(context.user.id, input.nodeId, input.todoId)
+    return prisma.nodeAssignment.upsert({
       where: {
-        nodeId_completedTaskId: {
+        nodeId_todoId: {
           nodeId: input.nodeId,
-          completedTaskId: input.completedTaskId,
+          todoId: input.todoId,
         },
       },
       create: input,
@@ -517,21 +550,20 @@ assignTask: procedure
   })
 
 // Unassign a task from a node
-unassignTask: procedure
+unassignTask: authMiddleware
   .input(
     z.object({
       nodeId: z.number().int().positive(),
-      completedTaskId: z.number().int().positive(),
+      todoId: z.number().int().positive(),
     }),
   )
-  .mutation(async ({ input, ctx }) => {
-    const userId = await resolveUserIdFromClerk(ctx)
-    await assertOwnership(userId, input.nodeId, input.completedTaskId)
-    return db.nodeAssignment.delete({
+  .handler(async ({ input, context }) => {
+    await assertOwnership(context.user.id, input.nodeId, input.todoId)
+    return prisma.nodeAssignment.delete({
       where: {
-        nodeId_completedTaskId: {
+        nodeId_todoId: {
           nodeId: input.nodeId,
-          completedTaskId: input.completedTaskId,
+          todoId: input.todoId,
         },
       },
     })
@@ -609,7 +641,7 @@ xpToLevel(xp: number): { level: 0|1|2|3|4|5, progress: number, next: number | nu
 | `75`  | `{ level: 5, progress: 0, next: null }`          |
 | `200` | `{ level: 5, progress: 0, next: null }` (capped) |
 
-Also test the optimistic reducer: `applyAssignment(state, { type: 'assign' | 'unassign', nodeId, completedTaskId })`.
+Also test the optimistic reducer: `applyAssignment(state, { type: 'assign' | 'unassign', nodeId, todoId })`.
 
 ### Component tests (Vitest + Testing Library)
 

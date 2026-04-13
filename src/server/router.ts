@@ -10,6 +10,12 @@ import {
   upsertElectronSettings,
 } from './procedures/electronSettings'
 import {
+  assignTask,
+  getMyTree,
+  getUnassignedPool,
+  unassignTask,
+} from './procedures/skillTree'
+import {
   listTodos,
   createTodo,
   updateTodo,
@@ -41,6 +47,12 @@ export const router = {
   electronSettings: {
     get: getElectronSettings,
     upsert: upsertElectronSettings,
+  },
+  skillTree: {
+    getMyTree,
+    getUnassignedPool,
+    assignTask,
+    unassignTask,
   },
 }
 
