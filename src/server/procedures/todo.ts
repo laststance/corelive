@@ -71,28 +71,16 @@ export const createTodo = authMiddleware
   .handler(async ({ input, context }) => {
     try {
       const { user } = context
-      let categoryId = input.categoryId
-
-      // Auto-assign to default (General) category if not specified
-      if (!categoryId) {
-        const defaultCategory = await prisma.category.findFirst({
-          where: { userId: user.id, isDefault: true },
-        })
-        if (defaultCategory) {
-          categoryId = defaultCategory.id
-        }
-      }
+      const { categoryId } = input
 
       // Verify category ownership
-      if (categoryId) {
-        const category = await prisma.category.findFirst({
-          where: { id: categoryId, userId: user.id },
+      const category = await prisma.category.findFirst({
+        where: { id: categoryId, userId: user.id },
+      })
+      if (!category) {
+        throw new ORPCError('NOT_FOUND', {
+          message: 'Category not found',
         })
-        if (!category) {
-          throw new ORPCError('NOT_FOUND', {
-            message: 'Category not found',
-          })
-        }
       }
 
       const todo = await prisma.todo.create({

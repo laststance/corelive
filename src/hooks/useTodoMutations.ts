@@ -15,7 +15,7 @@ interface Todo {
   text: string
   completed: boolean
   notes: string | null
-  categoryId: number | null
+  categoryId: number
   userId: number
   createdAt: Date
   updatedAt: Date

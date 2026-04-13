@@ -68,6 +68,16 @@ export function FloatingNavigatorContainer() {
   })
   const categories: CategoryWithCount[] = categoryData?.categories ?? []
 
+  // Auto-select the default (General) category when none is selected
+  useEffect(() => {
+    if (selectedCategoryId === null && categories.length > 0) {
+      const defaultCategory = categories.find((c) => c.isDefault)
+      if (defaultCategory) {
+        setSelectedCategoryId(defaultCategory.id)
+      }
+    }
+  }, [selectedCategoryId, categories, setSelectedCategoryId])
+
   // Fetch todos filtered by selected category
   const { data, isLoading, error } = useQuery({
     ...orpc.todo.list.queryOptions({
@@ -105,9 +115,10 @@ export function FloatingNavigatorContainer() {
    * handleTaskCreate('Write report')
    */
   const handleTaskCreate = (title: string) => {
+    if (selectedCategoryId === null) return
     createMutation.mutate({
       text: title,
-      ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
+      categoryId: selectedCategoryId,
     })
   }
 

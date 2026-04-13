@@ -46,25 +46,19 @@ export const listCategories = authMiddleware
     try {
       const { user } = context
 
-      const [categories, uncategorizedCount] = await Promise.all([
-        prisma.category.findMany({
-          where: { userId: user.id },
-          include: {
-            _count: {
-              select: { todos: { where: { completed: false } } },
-            },
+      const categories = await prisma.category.findMany({
+        where: { userId: user.id },
+        include: {
+          _count: {
+            select: { todos: { where: { completed: false } } },
           },
-          orderBy: { createdAt: 'asc' },
-        }),
-        prisma.todo.count({
-          where: { userId: user.id, completed: false, categoryId: null },
-        }),
-      ])
+        },
+        orderBy: { createdAt: 'asc' },
+      })
 
       // Prisma returns color as string; cast to satisfy the enum-typed output schema
       return {
         categories: categories as CategoryWithCount[],
-        uncategorizedCount,
       }
     } catch (error) {
       log.error({ error }, 'Error in listCategories')
