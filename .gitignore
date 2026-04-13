@@ -81,3 +81,4 @@ _trials/
 
 # Cursor
 .cursor
+.gstack/
