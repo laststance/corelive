@@ -6,7 +6,10 @@ import React, { useEffect, useState } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import {
+  useAutoSelectDefaultCategory,
+  useSelectedCategory,
+} from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
@@ -69,14 +72,11 @@ export function FloatingNavigatorContainer() {
   const categories: CategoryWithCount[] = categoryData?.categories ?? []
 
   // Auto-select the default (General) category when none is selected
-  useEffect(() => {
-    if (selectedCategoryId === null && categories.length > 0) {
-      const defaultCategory = categories.find((c) => c.isDefault)
-      if (defaultCategory) {
-        setSelectedCategoryId(defaultCategory.id)
-      }
-    }
-  }, [selectedCategoryId, categories, setSelectedCategoryId])
+  useAutoSelectDefaultCategory(
+    selectedCategoryId,
+    setSelectedCategoryId,
+    categories,
+  )
 
   // Fetch todos filtered by selected category
   const { data, isLoading, error } = useQuery({

@@ -83,7 +83,7 @@ export function useTodoMutations() {
         id: -Date.now(), // Negative temp ID to avoid collision
         text: newTodo.text,
         notes: newTodo.notes ?? null,
-        categoryId: newTodo.categoryId ?? null,
+        categoryId: newTodo.categoryId,
         completed: false,
         userId: 0,
         createdAt: new Date(),

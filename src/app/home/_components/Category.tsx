@@ -24,7 +24,10 @@ import {
 } from '@/components/ui/sidebar'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import {
+  useAutoSelectDefaultCategory,
+  useSelectedCategory,
+} from '@/hooks/useSelectedCategory'
 import { getColorDotClass } from '@/lib/category-colors'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
@@ -69,14 +72,11 @@ export function Category({
   const categories: CategoryWithCount[] = data?.categories ?? []
 
   // Auto-select the default (General) category when none is selected
-  useEffect(() => {
-    if (selectedCategoryId === null && categories.length > 0) {
-      const defaultCategory = categories.find((c) => c.isDefault)
-      if (defaultCategory) {
-        setSelectedCategoryId(defaultCategory.id)
-      }
-    }
-  }, [selectedCategoryId, categories, setSelectedCategoryId])
+  useAutoSelectDefaultCategory(
+    selectedCategoryId,
+    setSelectedCategoryId,
+    categories,
+  )
 
   // Cross-tab sync for categories
   useEffect(() => {

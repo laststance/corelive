@@ -276,30 +276,32 @@ export function FloatingNavigator({
         </div>
 
         {/* Category filter dropdown */}
-        {categories.length > 0 && onCategoryChange && selectedCategoryId && (
-          <div className="pointer-events-auto mr-1">
-            <Select
-              value={selectedCategoryId.toString()}
-              onValueChange={(value) => onCategoryChange(Number(value))}
-            >
-              <SelectTrigger className="h-6 w-24 border-0 bg-transparent px-2 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id.toString()}>
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className={`h-2 w-2 rounded-full ${COLOR_DOT_CLASSES[cat.color] ?? 'bg-muted-foreground'}`}
-                      />
-                      {cat.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        {categories.length > 0 &&
+          onCategoryChange &&
+          selectedCategoryId !== null && (
+            <div className="pointer-events-auto mr-1">
+              <Select
+                value={selectedCategoryId.toString()}
+                onValueChange={(value) => onCategoryChange(Number(value))}
+              >
+                <SelectTrigger className="h-6 w-24 border-0 bg-transparent px-2 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${COLOR_DOT_CLASSES[cat.color] ?? 'bg-muted-foreground'}`}
+                        />
+                        {cat.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
         {isFloatingNavigatorEnvironment() && (
           <div
