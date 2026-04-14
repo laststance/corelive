@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useState } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
+import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import {
   useAutoSelectDefaultCategory,
@@ -14,7 +15,10 @@ import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
-import type { CategoryWithCount } from '@/server/schemas/category'
+import type {
+  CategoryColor,
+  CategoryWithCount,
+} from '@/server/schemas/category'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
 
@@ -53,6 +57,13 @@ export function FloatingNavigatorContainer() {
     updateMutation,
     reorderMutation,
   } = useTodoMutations(selectedCategoryId)
+
+  // Category CRUD mutations with optimistic updates
+  const {
+    createMutation: categoryCreateMutation,
+    updateMutation: categoryUpdateMutation,
+    deleteMutation: categoryDeleteMutation,
+  } = useCategoryMutations()
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<FloatingTodo[]>([])
@@ -185,6 +196,47 @@ export function FloatingNavigatorContainer() {
     reorderMutation.mutate({ items })
   }
 
+  /**
+   * Creates a new category from the floating navigator.
+   * @param name - Category display name (1-30 chars)
+   * @param color - One of the predefined color options
+   * @example
+   * handleCategoryCreate('Work', 'blue')
+   */
+  const handleCategoryCreate = (name: string, color: CategoryColor) => {
+    categoryCreateMutation.mutate({ name, color })
+  }
+
+  /**
+   * Updates a category name or color from the floating navigator.
+   * @param id - Category ID to update
+   * @param data - Partial update with name and/or color
+   * @example
+   * handleCategoryUpdate(1, { name: 'Personal', color: 'green' })
+   */
+  const handleCategoryUpdate = (
+    id: number,
+    data: { name?: string; color?: CategoryColor },
+  ) => {
+    categoryUpdateMutation.mutate({ id, data })
+  }
+
+  /**
+   * Deletes a category and resets selection if it was the active filter.
+   * The server reassigns orphaned todos to the default (General) category.
+   * @param id - Category ID to delete
+   * @example
+   * handleCategoryDelete(3)
+   */
+  const handleCategoryDelete = (id: number) => {
+    categoryDeleteMutation.mutate({ id })
+    // If the deleted category was the active filter, clear selection
+    // so useAutoSelectDefaultCategory picks the General category
+    if (id === selectedCategoryId) {
+      setSelectedCategoryId(null)
+    }
+  }
+
   // Transform todos to FloatingTodo format
   const todosFromQuery: FloatingTodo[] = (data?.todos ?? []).map((todo) => ({
     id: todo.id.toString(),
@@ -269,6 +321,12 @@ export function FloatingNavigatorContainer() {
       categories={categories}
       selectedCategoryId={selectedCategoryId}
       onCategoryChange={setSelectedCategoryId}
+      onCategoryCreate={handleCategoryCreate}
+      onCategoryUpdate={handleCategoryUpdate}
+      onCategoryDelete={handleCategoryDelete}
+      isCategoryCreatePending={categoryCreateMutation.isPending}
+      isCategoryUpdatePending={categoryUpdateMutation.isPending}
+      isCategoryDeletePending={categoryDeleteMutation.isPending}
     />
   )
 }
