@@ -16,7 +16,14 @@
  * @module electron/main
  */
 
-import { app, BrowserWindow, session, Notification, screen } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  session,
+  Notification,
+  screen,
+} from 'electron'
 import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
@@ -1236,15 +1243,43 @@ function setupIPCHandlers(): void {
     return configManager.validate()
   })
 
-  typedHandle('config-export', (_event, filePath) => {
+  // Security: filesystem paths are chosen by main-process dialogs, never
+  // accepted from renderer input. A compromised renderer can trigger the
+  // dialog but cannot write/read arbitrary paths.
+  typedHandle('config-export', async () => {
     if (!configManager) {
       return false
     }
-    return configManager.exportConfig(filePath)
+    const mainWindow = windowManager.getMainWindow()
+    const result = await dialog.showSaveDialog(
+      mainWindow ?? (undefined as unknown as BrowserWindow),
+      {
+        title: 'Export configuration',
+        defaultPath: 'corelive-config.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      },
+    )
+    if (result.canceled || !result.filePath) {
+      return false
+    }
+    return configManager.exportConfig(result.filePath)
   })
 
-  typedHandle('config-import', (_event, filePath) => {
+  typedHandle('config-import', async () => {
     if (!configManager) {
+      return false
+    }
+    const mainWindow = windowManager.getMainWindow()
+    const result = await dialog.showOpenDialog(
+      mainWindow ?? (undefined as unknown as BrowserWindow),
+      {
+        title: 'Import configuration',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      },
+    )
+    const filePath = result.filePaths[0]
+    if (result.canceled || !filePath) {
       return false
     }
     return configManager.importConfig(filePath)

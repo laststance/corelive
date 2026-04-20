@@ -23,6 +23,36 @@ import type { IPCChannel } from '../types/ipc'
  *   // Tuple-arg channel (multiple positional args)
  *   'config-set': z.tuple([z.string(), z.unknown()]),
  */
+const notificationActionSchema = z.strictObject({
+  type: z.literal('button'),
+  text: z.string(),
+})
+
+const notificationOptionsSchema = z.strictObject({
+  type: z.enum(['info', 'warning', 'error', 'success']).optional(),
+  silent: z.boolean().optional(),
+  tag: z.string().optional(),
+  urgency: z.enum(['low', 'normal', 'critical']).optional(),
+  timeoutMs: z.number().optional(),
+  icon: z.string().optional(),
+  actions: z.array(notificationActionSchema).optional(),
+})
+
+const notificationPreferencesUpdateSchema = z.strictObject({
+  enabled: z.boolean().optional(),
+  taskCreated: z.boolean().optional(),
+  taskCompleted: z.boolean().optional(),
+  taskUpdated: z.boolean().optional(),
+  taskDeleted: z.boolean().optional(),
+  sound: z.boolean().optional(),
+  showInTray: z.boolean().optional(),
+  autoHide: z.boolean().optional(),
+  autoHideDelay: z.number().optional(),
+  position: z
+    .enum(['topRight', 'topLeft', 'bottomRight', 'bottomLeft'])
+    .optional(),
+})
+
 export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // App (all void-arg)
@@ -51,18 +81,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'tray-show-notification': z.tuple([
     z.string(),
     z.string(),
-    z
-      .object({
-        urgency: z.enum(['low', 'normal', 'critical']).optional(),
-        type: z.enum(['info', 'warning', 'error', 'success']).optional(),
-        silent: z.boolean().optional(),
-        timeoutType: z.enum(['default', 'never']).optional(),
-        actions: z
-          .array(z.object({ type: z.string(), text: z.string() }))
-          .optional(),
-      })
-      .passthrough()
-      .optional(),
+    notificationOptionsSchema.optional(),
   ]),
   'tray-update-menu': z.tuple([
     z.array(
@@ -84,22 +103,11 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'notification-show': z.tuple([
     z.string(),
     z.string(),
-    z
-      .object({
-        urgency: z.enum(['low', 'normal', 'critical']).optional(),
-        type: z.enum(['info', 'warning', 'error', 'success']).optional(),
-        silent: z.boolean().optional(),
-        timeoutType: z.enum(['default', 'never']).optional(),
-        actions: z
-          .array(z.object({ type: z.string(), text: z.string() }))
-          .optional(),
-      })
-      .passthrough()
-      .optional(),
+    notificationOptionsSchema.optional(),
   ]),
   'notification-get-preferences': z.tuple([]),
   'notification-update-preferences': z.tuple([
-    z.record(z.string(), z.unknown()),
+    notificationPreferencesUpdateSchema,
   ]),
   'notification-clear-all': z.tuple([]),
   'notification-clear': z.tuple([z.string()]),
@@ -160,8 +168,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
     ]),
   ]),
   'config-validate': z.tuple([]),
-  'config-export': z.tuple([z.string()]),
-  'config-import': z.tuple([z.string()]),
+  'config-export': z.tuple([]),
+  'config-import': z.tuple([]),
   'config-backup': z.tuple([]),
   'config-get-paths': z.tuple([]),
 

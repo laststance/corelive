@@ -208,10 +208,10 @@ export interface ElectronAPI {
     resetSection: (section: ConfigSection) => Promise<boolean>
     /** Validate config values */
     validate: () => Promise<{ isValid: boolean; errors: string[] }>
-    /** Export config to file */
-    export: (filePath: string) => Promise<boolean>
-    /** Import config from file */
-    import: (filePath: string) => Promise<boolean>
+    /** Export config — main process shows a save dialog; no path from renderer */
+    export: () => Promise<boolean>
+    /** Import config — main process shows an open dialog; no path from renderer */
+    import: () => Promise<boolean>
     /** Create config backup */
     backup: () => Promise<string | null>
     /** Get config file paths */

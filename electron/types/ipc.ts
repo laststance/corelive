@@ -73,8 +73,15 @@ export type DisplayInfo = WindowManagerDisplayInfo
 
 export type { WindowStats }
 
-/** Notification options (matches NotificationManager) */
-export interface NotificationOptions {
+/**
+ * Notification options safe to serialize across IPC.
+ *
+ * Contains only IPC-serializable fields — no callbacks. Used in all IPC
+ * request/event payloads where notification options cross the main↔renderer
+ * boundary. Callbacks (`onClick`, `onAction`) live in `NotificationOptions`
+ * below, which extends this for in-process NotificationManager use only.
+ */
+export interface SerializableNotificationOptions {
   type?: 'info' | 'warning' | 'error' | 'success'
   silent?: boolean
   tag?: string
@@ -82,6 +89,15 @@ export interface NotificationOptions {
   timeoutMs?: number
   icon?: string
   actions?: Array<{ type: 'button'; text: string }>
+}
+
+/**
+ * Notification options for in-process NotificationManager use.
+ *
+ * Extends SerializableNotificationOptions with renderer-only callbacks that
+ * must NOT be sent over IPC (functions aren't structured-clone serializable).
+ */
+export interface NotificationOptions extends SerializableNotificationOptions {
   /** Renderer-only callbacks (not serialized across IPC) */
   onClick?: () => Promise<void> | void
   onAction?: (actionIndex: number) => Promise<void> | void
@@ -334,7 +350,7 @@ export interface IPCChannels {
   // System Tray
   // ──────────────────────────────────────────────────────────────────────────
   'tray-show-notification': {
-    request: [string, string, NotificationOptions?]
+    request: [string, string, SerializableNotificationOptions?]
     response: { id: string } | null
   }
   'tray-update-menu': {
@@ -362,7 +378,7 @@ export interface IPCChannels {
   // Notifications
   // ──────────────────────────────────────────────────────────────────────────
   'notification-show': {
-    request: [string, string, NotificationOptions?]
+    request: [string, string, SerializableNotificationOptions?]
     response: { id: string } | null
   }
   'notification-get-preferences': {
@@ -471,11 +487,11 @@ export interface IPCChannels {
     response: { isValid: boolean; errors: string[] }
   }
   'config-export': {
-    request: string
+    request: void
     response: boolean
   }
   'config-import': {
-    request: string
+    request: void
     response: boolean
   }
   'config-backup': {
@@ -629,7 +645,7 @@ export interface IPCEventChannels {
   'show-fallback-notification': {
     title: string
     body: string
-    options?: NotificationOptions
+    options?: SerializableNotificationOptions
   }
 
   // System integration status broadcast (from SystemIntegrationErrorHandler)

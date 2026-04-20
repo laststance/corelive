@@ -42,6 +42,7 @@ export default defineConfig([
     files: ['electron/**/*.ts', 'electron/**/*.tsx'],
     ignores: [
       'electron/ipc/typedHandle.ts',
+      'electron/ipc/typedInvoke.ts',
       'electron/ipc/typedSend.ts',
       'electron/auth-manager.ts', // Dead code — see comment at top of file
       'electron/__tests__/**',
@@ -54,6 +55,12 @@ export default defineConfig([
             "CallExpression[callee.object.name='ipcMain'][callee.property.name='handle']",
           message:
             'Use typedHandle from electron/ipc/typedHandle.ts instead of raw ipcMain.handle — raw handlers bypass IPCChannels contract + Zod validation.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='ipcRenderer'][callee.property.name='invoke']",
+          message:
+            'Use typedInvoke from electron/ipc/typedInvoke.ts instead of raw ipcRenderer.invoke — raw invokes bypass IPCChannels contract.',
         },
         {
           selector:

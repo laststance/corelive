@@ -32,7 +32,6 @@ import { log } from './logger'
 import type {
   ConfigSection,
   DeepLinkExamples,
-  IPCChannel,
   IPCEventChannel,
   NotificationOptions,
   NotificationPreferences,
@@ -47,13 +46,16 @@ import type {
 // ============================================================================
 
 /**
- * Allowed IPC channels map.
+ * Allowed event-channel map for the generic `on/removeListener/removeAllListeners`
+ * entry points.
  *
- * The `satisfies` check at the assignment site (`ALLOWED_CHANNELS`) guarantees
- * every `IPCChannel` and `IPCEventChannel` is present — unknown keys are a
- * type error.
+ * Request/response channels are already guarded by `typedInvoke` — the typed
+ * wrapper constrains channel names to `IPCChannel` at compile-time. The
+ * whitelist below only protects the untyped listener surface, which is solely
+ * for one-way events (main → renderer). Including request/response channels
+ * here would needlessly widen the listener-management attack surface.
  */
-type AllowedChannelsMap = Record<IPCChannel | IPCEventChannel, true>
+type AllowedChannelsMap = Record<IPCEventChannel, true>
 
 /** Sanitized data type */
 type SanitizedValue =
@@ -109,122 +111,13 @@ interface OAuthCallbackData {
  * `on()` / `removeListener()` / `removeAllListeners()` entry points below.
  *
  * The `satisfies AllowedChannelsMap` assertion forces exhaustive enumeration
- * of every `IPCChannel | IPCEventChannel`. Adding a channel in `types/ipc.ts`
+ * of every `IPCEventChannel`. Adding an event channel in `types/ipc.ts`
  * without listing it here is a compile error. This is the single source of
  * truth — no hand-maintained subset is allowed to drift.
  */
 const ALLOWED_CHANNELS = {
-  // Authentication
-  'auth-get-user': true,
-  'auth-set-user': true,
-  'auth-logout': true,
-  'auth-is-authenticated': true,
-  'auth-sync-from-web': true,
-
-  // OAuth (browser-based for providers that block WebView)
-  'oauth-start': true,
-  'oauth-get-supported-providers': true,
-  'oauth-cancel': true,
-  'oauth-get-pending-token': true,
-  'oauth-clear-pending-token': true,
-
-  // Window controls
-  'window-minimize': true,
-  'window-close': true,
-  'window-toggle-floating-navigator': true,
-  'window-show-floating-navigator': true,
-  'window-hide-floating-navigator': true,
-  'window-show-main': true,
-
-  // Floating window
-  'floating-window-close': true,
-  'floating-window-minimize': true,
-  'floating-window-toggle-always-on-top': true,
-  'floating-window-get-bounds': true,
-  'floating-window-set-bounds': true,
-  'floating-window-is-always-on-top': true,
-
-  // System tray
-  'tray-show-notification': true,
-  'tray-update-menu': true,
-  'tray-set-tooltip': true,
-  'tray-set-icon-state': true,
-
-  // Menu actions (invoke)
-  'menu-action': true,
-
-  // Deep linking
-  'deep-link-generate': true,
-  'deep-link-get-examples': true,
-  'deep-link-handle-url': true,
-
-  // Settings
-  'settings:open': true,
-  'settings:close': true,
-  'settings:setHideAppIcon': true,
-  'settings:setShowInMenuBar': true,
-  'settings:setStartAtLogin': true,
-  'settings:getLoginItemSettings': true,
-
-  // Notifications
-  'notification-show': true,
-  'notification-get-preferences': true,
-  'notification-update-preferences': true,
-  'notification-clear-all': true,
-  'notification-clear': true,
-  'notification-is-enabled': true,
-  'notification-get-active-count': true,
-
-  // Keyboard shortcuts
-  'shortcuts-get-registered': true,
-  'shortcuts-get-defaults': true,
-  'shortcuts-update': true,
-  'shortcuts-register': true,
-  'shortcuts-unregister': true,
-  'shortcuts-is-registered': true,
-  'shortcuts-enable': true,
-  'shortcuts-disable': true,
-  'shortcuts-get-stats': true,
-
-  // Configuration
-  'config-get': true,
-  'config-set': true,
-  'config-get-all': true,
-  'config-get-section': true,
-  'config-update': true,
-  'config-reset': true,
-  'config-reset-section': true,
-  'config-validate': true,
-  'config-export': true,
-  'config-import': true,
-  'config-backup': true,
-  'config-get-paths': true,
-
-  // Window state
-  'window-state-get': true,
-  'window-state-set': true,
-  'window-state-reset': true,
-  'window-state-get-stats': true,
-  'window-state-move-to-display': true,
-  'window-state-snap-to-edge': true,
-  'window-state-get-display': true,
-  'window-state-get-all-displays': true,
-
-  // App
-  'app-version': true,
-  'app-quit': true,
-
-  // Auto-updater (invoke)
-  'updater-check-for-updates': true,
-  'updater-quit-and-install': true,
-  'updater-get-status': true,
-
-  // Performance
-  'performance-get-metrics': true,
-  'performance-trigger-cleanup': true,
-  'performance-get-startup-time': true,
-
-  // Event channels (main → renderer)
+  // Event channels (main → renderer) — the only surface guarded here,
+  // since request/response channels go through typedInvoke (compile-time safe).
   'oauth-success': true,
   'oauth-error': true,
   'oauth-complete-exchange': true,
@@ -239,6 +132,7 @@ const ALLOWED_CHANNELS = {
   'mark-task-complete': true,
   'shortcut-new-task': true,
   'shortcut-search': true,
+  'menu-action': true,
   'deep-link-focus-task': true,
   'deep-link-create-task': true,
   'deep-link-task-created': true,
@@ -1324,16 +1218,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Export configuration to file.
+     *
+     * The file path is chosen via a main-process save dialog — the renderer
+     * cannot supply a path, so a compromised renderer cannot write to
+     * arbitrary filesystem locations.
      */
-    export: async (filePath: string): Promise<boolean> => {
-      if (!filePath || typeof filePath !== 'string') {
-        throw new Error('File path is required')
-      }
-
-      const sanitizedPath = sanitizeData(filePath)
-
+    export: async (): Promise<boolean> => {
       try {
-        return await typedInvoke('config-export', sanitizedPath as string)
+        return await typedInvoke('config-export')
       } catch (error) {
         log.error('Failed to export config:', error)
         throw new Error('Failed to export configuration')
@@ -1342,16 +1234,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Import configuration from file.
+     *
+     * The file path is chosen via a main-process open dialog — the renderer
+     * cannot supply a path, so a compromised renderer cannot read from
+     * arbitrary filesystem locations.
      */
-    import: async (filePath: string): Promise<boolean> => {
-      if (!filePath || typeof filePath !== 'string') {
-        throw new Error('File path is required')
-      }
-
-      const sanitizedPath = sanitizeData(filePath)
-
+    import: async (): Promise<boolean> => {
       try {
-        return await typedInvoke('config-import', sanitizedPath as string)
+        return await typedInvoke('config-import')
       } catch (error) {
         log.error('Failed to import config:', error)
         throw new Error('Failed to import configuration')
@@ -1768,11 +1658,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     click: async (): Promise<void> => {
       try {
-        return await ipcRenderer.invoke(
-          'tray-show-notification',
-          'Test',
-          'Tray clicked',
-        )
+        await typedInvoke('tray-show-notification', 'Test', 'Tray clicked')
       } catch (error) {
         log.error('Failed to click tray:', error)
       }
