@@ -9,7 +9,7 @@
  */
 
 import type {
-  ElectronUser,
+  AuthUserPayload,
   WindowBounds,
   WindowState,
   DisplayInfo,
@@ -23,7 +23,6 @@ import type {
   ConfigSection,
   DeepLinkExamples,
   UpdaterStatus,
-  IPCErrorStats,
   IPCEventChannel,
   IPCEventData,
 } from './ipc'
@@ -142,18 +141,15 @@ export interface ElectronAPI {
    */
   auth: {
     /** Get current user */
-    getUser: () => Promise<ElectronUser | null>
+    getUser: () => Promise<AuthUserPayload | null>
     /** Set current user */
-    setUser: (user: ElectronUser) => Promise<boolean>
+    setUser: (user: AuthUserPayload) => Promise<AuthUserPayload>
     /** Logout current user */
-    logout: () => Promise<void>
+    logout: () => Promise<boolean>
     /** Check if authenticated */
     isAuthenticated: () => Promise<boolean>
     /** Sync auth state from web */
-    syncFromWeb: (data: {
-      token: string
-      user: ElectronUser
-    }) => Promise<boolean>
+    syncFromWeb: (user: AuthUserPayload) => Promise<boolean>
   }
 
   /**
@@ -207,21 +203,23 @@ export interface ElectronAPI {
     /** Update multiple config values */
     update: (updates: Record<string, unknown>) => Promise<boolean>
     /** Reset all config to defaults */
-    reset: () => Promise<void>
+    reset: () => Promise<boolean>
     /** Reset config section to defaults */
-    resetSection: (section: ConfigSection) => Promise<void>
-    /** Validate config values (validates current config if none provided) */
-    validate: (
-      config?: Record<string, unknown>,
-    ) => Promise<{ isValid: boolean; errors?: string[] }>
-    /** Export config as JSON string */
-    export: () => Promise<string>
-    /** Import config from JSON string */
-    import: (json: string) => Promise<boolean>
+    resetSection: (section: ConfigSection) => Promise<boolean>
+    /** Validate config values */
+    validate: () => Promise<{ isValid: boolean; errors: string[] }>
+    /** Export config to file */
+    export: (filePath: string) => Promise<boolean>
+    /** Import config from file */
+    import: (filePath: string) => Promise<boolean>
     /** Create config backup */
-    backup: () => Promise<string>
+    backup: () => Promise<string | null>
     /** Get config file paths */
-    getPaths: () => Promise<{ config: string; backup: string; logs: string }>
+    getPaths: () => Promise<{
+      config: string
+      windowState: string
+      directory: string
+    }>
     /** Save config to file (no-op - config auto-persists on modification) */
     save?: () => Promise<boolean>
     /** Load config from file (async via IPC) */
@@ -312,7 +310,7 @@ export interface ElectronAPI {
       params?: Record<string, string>,
     ) => Promise<string>
     /** Get example deep link URLs */
-    getExamples: () => Promise<DeepLinkExamples>
+    getExamples: () => Promise<DeepLinkExamples | null>
     /** Handle incoming deep link URL */
     handleUrl: (url: string) => Promise<boolean>
   }
@@ -334,18 +332,6 @@ export interface ElectronAPI {
         message?: string
       }) => void,
     ) => () => void
-  }
-
-  /**
-   * IPC error handling.
-   */
-  errorHandling: {
-    /** Get error statistics */
-    getStats: () => Promise<IPCErrorStats>
-    /** Health check */
-    healthCheck: () => Promise<{ healthy: boolean; issues?: string[] }>
-    /** Reset error statistics */
-    resetStats: () => Promise<void>
   }
 
   /**

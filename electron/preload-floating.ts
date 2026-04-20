@@ -17,7 +17,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 
+import { typedInvoke } from './ipc/typedInvoke'
 import { log } from './logger'
+import type { WindowBounds as IPCWindowBounds } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -35,14 +37,6 @@ type SanitizedValue =
   | undefined
   | SanitizedValue[]
   | { [key: string]: SanitizedValue }
-
-/** Window bounds */
-interface WindowBounds {
-  x?: number
-  y?: number
-  width?: number
-  height?: number
-}
 
 // ============================================================================
 // Allowed Channels
@@ -135,9 +129,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Close floating navigator window.
      */
-    close: async (): Promise<void> => {
+    close: async () => {
       try {
-        return await ipcRenderer.invoke('floating-window-close')
+        return await typedInvoke('floating-window-close')
       } catch (error) {
         log.error('Floating Navigator: Failed to close window:', error)
       }
@@ -146,9 +140,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Minimize floating navigator window.
      */
-    minimize: async (): Promise<void> => {
+    minimize: async () => {
       try {
-        return await ipcRenderer.invoke('floating-window-minimize')
+        return await typedInvoke('floating-window-minimize')
       } catch (error) {
         log.error('Floating Navigator: Failed to minimize window:', error)
       }
@@ -157,9 +151,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Toggle always on top behavior.
      */
-    toggleAlwaysOnTop: async (): Promise<boolean | undefined> => {
+    toggleAlwaysOnTop: async () => {
       try {
-        return await ipcRenderer.invoke('floating-window-toggle-always-on-top')
+        return await typedInvoke('floating-window-toggle-always-on-top')
       } catch (error) {
         log.error('Floating Navigator: Failed to toggle always on top:', error)
       }
@@ -168,9 +162,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Focus main application window.
      */
-    focusMainWindow: async (): Promise<void> => {
+    focusMainWindow: async () => {
       try {
-        return await ipcRenderer.invoke('window-show-main')
+        return await typedInvoke('window-show-main')
       } catch (error) {
         log.error('Floating Navigator: Failed to focus main window:', error)
       }
@@ -179,9 +173,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Get current window bounds.
      */
-    getBounds: async (): Promise<WindowBounds | null> => {
+    getBounds: async () => {
       try {
-        return await ipcRenderer.invoke('floating-window-get-bounds')
+        return await typedInvoke('floating-window-get-bounds')
       } catch (error) {
         log.error('Floating Navigator: Failed to get window bounds:', error)
         return null
@@ -191,18 +185,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Set window bounds.
      */
-    setBounds: async (bounds: WindowBounds): Promise<void> => {
-      if (!bounds || typeof bounds !== 'object') {
-        throw new Error('Invalid bounds data')
-      }
-
-      const sanitizedBounds = sanitizeData(bounds)
-
+    setBounds: async (bounds: IPCWindowBounds) => {
       try {
-        return await ipcRenderer.invoke(
-          'floating-window-set-bounds',
-          sanitizedBounds,
-        )
+        return await typedInvoke('floating-window-set-bounds', bounds)
       } catch (error) {
         log.error('Floating Navigator: Failed to set window bounds:', error)
       }
@@ -211,9 +196,9 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     /**
      * Check if window is always on top.
      */
-    isAlwaysOnTop: async (): Promise<boolean> => {
+    isAlwaysOnTop: async () => {
       try {
-        return await ipcRenderer.invoke('floating-window-is-always-on-top')
+        return await typedInvoke('floating-window-is-always-on-top')
       } catch (error) {
         log.error(
           'Floating Navigator: Failed to check always on top status:',

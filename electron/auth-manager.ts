@@ -1,23 +1,18 @@
 /**
  * @fileoverview Authentication Manager for Electron
  *
- * Manages authentication state in the main process, coordinating
- * between Clerk (web-based auth) and the Electron app.
+ * DEAD CODE — this class is never instantiated. Auth handlers are currently
+ * registered in `electron/main.ts` using `typedHandle` against the
+ * `AuthUserPayload`-based contract. This file is kept as reference material
+ * for a potential future manager-class refactor (richer `ElectronUser` shape,
+ * `ApiBridge` integration). It is exempt from the `no-raw-ipc` ESLint rule
+ * (see `eslint.config.js`) for the same reason.
  *
- * Authentication flow:
- * 1. User signs in via Clerk in renderer (web page)
- * 2. Renderer sends auth data to main process via IPC
- * 3. This manager updates the auth state
- * 4. API bridge is notified of user context
- *
- * Why separate auth management?
- * - Main process needs to track authenticated user
- * - Security: Validate auth state in trusted process
- * - Coordinate between multiple windows
- * - Single source of truth for auth state
- *
- * Note: This is a simplified auth manager. In production,
- * consider token validation, refresh, and expiration.
+ * If you revive this class:
+ *  1. Remove the raw `ipcMain.handle` calls in `main.ts`
+ *  2. Switch the handlers below to `typedHandle`
+ *  3. Reconcile the `ElectronUser`/`AuthUserPayload` contract mismatch
+ *  4. Remove this file's exemption from `eslint.config.js`
  *
  * @module electron/auth-manager
  */

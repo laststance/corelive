@@ -217,13 +217,6 @@ interface ElectronAPI {
   // Generic invoke method (for settings IPC)
   invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>
 
-  // Error handling
-  errorHandling?: {
-    getStats: () => Promise<any>
-    performHealthCheck: () => Promise<any>
-    resetStats: () => Promise<boolean>
-  }
-
   // Display management
   display?: {
     getAllDisplays?: () => any[]

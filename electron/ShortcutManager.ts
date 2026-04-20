@@ -10,6 +10,7 @@
 import { BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { WindowManager } from './WindowManager'
@@ -737,7 +738,9 @@ export class ShortcutManager {
 
       if (this.windowManager.hasMainWindow()) {
         const mainWindow = this.windowManager.getMainWindow()
-        mainWindow?.webContents.send('shortcut-new-task')
+        if (mainWindow) {
+          typedSend(mainWindow.webContents, 'shortcut-new-task')
+        }
       }
 
       if (this.notificationManager) {

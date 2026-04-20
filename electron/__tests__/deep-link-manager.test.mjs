@@ -58,6 +58,7 @@ describe('DeepLinkManager', () => {
       focus: vi.fn(),
       webContents: {
         send: vi.fn(),
+        isDestroyed: vi.fn(() => false),
       },
     }
 

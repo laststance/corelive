@@ -16,16 +16,13 @@
  * @module electron/main
  */
 
-import { app, BrowserWindow, ipcMain, session, Notification } from 'electron'
-import type {
-  IpcMainInvokeEvent,
-  WebContents,
-  Event as ElectronEvent,
-} from 'electron'
+import { app, BrowserWindow, session, Notification, screen } from 'electron'
+import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
 import { ConfigManager } from './ConfigManager'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
+import { typedHandle } from './ipc/typedHandle'
 import { IPCErrorHandler } from './IPCErrorHandler'
 import { lazyLoadManager } from './LazyLoadManager'
 import { log } from './logger'
@@ -40,12 +37,11 @@ import type {
   SystemTrayManager as SystemTrayManagerType,
   TaskItem,
 } from './SystemTrayManager'
-import type { WindowBounds } from './types/ipc'
+import type { AuthUserPayload, WindowBounds } from './types/ipc'
 import { WindowManager } from './WindowManager'
 import {
   WindowStateManager,
   type WindowType,
-  type WindowState,
   type SnapEdge,
 } from './WindowStateManager'
 
@@ -53,19 +49,7 @@ import {
 // Type Definitions
 // ============================================================================
 
-/** User data structure */
-interface ActiveUserData {
-  clerkId: string
-  emailAddresses?: string[]
-  firstName?: string | null
-}
-
-/** User payload for setActiveUser */
-interface UserPayload {
-  clerkId: string
-  emailAddresses?: string[]
-  firstName?: string | null
-}
+// `AuthUserPayload` from `./types/ipc` is the canonical shape — single source of truth.
 
 /** Performance optimization configuration */
 interface OptimizationConfig {
@@ -167,7 +151,7 @@ let deepLinkManager: DeepLinkManagerType | null = null
 let oauthManager: OAuthManagerType | null = null
 
 // Current authenticated user information
-let activeUser: ActiveUserData | null = null
+let activeUser: AuthUserPayload | null = null
 
 /**
  * Queue for deep link URLs received before DeepLinkManager is ready.
@@ -511,8 +495,8 @@ function syncWindowBoundsToBrowserWindow(
  * @returns The active user object
  */
 async function setActiveUser(
-  userPayload: UserPayload,
-): Promise<ActiveUserData> {
+  userPayload: AuthUserPayload,
+): Promise<AuthUserPayload> {
   // Validate payload to prevent security issues
   if (!userPayload || typeof userPayload !== 'object' || !userPayload.clerkId) {
     throw new Error('Invalid user payload: clerkId is required')
@@ -903,276 +887,134 @@ function setupIPCHandlers(): void {
    */
 
   // Returns current app version for display in UI
-  ipcMain.handle('app-version', () => {
+  typedHandle('app-version', () => {
     return app.getVersion()
   })
 
   // Allows renderer to trigger app shutdown
-  ipcMain.handle('app-quit', () => {
+  typedHandle('app-quit', () => {
     app.quit()
   })
 
   // Note: Todo IPC handlers removed - Floating Navigator uses oRPC via web app
 
-  // Window management IPC handlers with error handling
-  ipcMain.handle(
-    'window-minimize',
-    ipcErrorHandler.wrapHandler(
-      () => {
-        if (!windowManager) {
-          throw new Error('Window manager not initialized')
-        }
+  // Window management IPC handlers (Zod-validated)
+  typedHandle('window-minimize', () => {
+    if (!windowManager) {
+      throw new Error('Window manager not initialized')
+    }
+    if (!windowManager.hasMainWindow()) {
+      throw new Error('Main window not available')
+    }
+    windowManager.minimizeToTray()
+    return true
+  })
 
-        if (!windowManager.hasMainWindow()) {
-          throw new Error('Main window not available')
-        }
+  typedHandle('window-close', () => {
+    if (!windowManager) {
+      throw new Error('Window manager not initialized')
+    }
+    if (!windowManager.hasMainWindow()) {
+      throw new Error('Main window not available')
+    }
+    windowManager.minimizeToTray()
+    return true
+  })
 
-        windowManager.minimizeToTray()
-        return true
-      },
-      {
-        channel: 'window-minimize',
-        operationType: 'windowOperation',
-        enableDegradation: true,
-      },
-    ),
-  )
+  typedHandle('window-toggle-floating-navigator', () => {
+    if (!windowManager) {
+      throw new Error('Window manager not initialized')
+    }
+    windowManager.toggleFloatingNavigator()
+    return true
+  })
 
-  ipcMain.handle(
-    'window-close',
-    ipcErrorHandler.wrapHandler(
-      () => {
-        if (!windowManager) {
-          throw new Error('Window manager not initialized')
-        }
+  typedHandle('window-state-get', (_event, windowType) => {
+    const type = toWindowType(windowType)
+    const stateManager = ensureWindowStateManagerInstance()
+    return stateManager.getWindowState(type)
+  })
 
-        if (!windowManager.hasMainWindow()) {
-          throw new Error('Main window not available')
-        }
+  typedHandle('window-state-set', (_event, windowType, properties) => {
+    const type = toWindowType(windowType)
+    const stateManager = ensureWindowStateManagerInstance()
+    stateManager.setWindowState(type, properties)
+    syncWindowBoundsToBrowserWindow(type)
+    return stateManager.getWindowState(type)
+  })
 
-        windowManager.minimizeToTray()
-        return true
-      },
-      {
-        channel: 'window-close',
-        operationType: 'windowOperation',
-        enableDegradation: true,
-      },
-    ),
-  )
+  typedHandle('window-state-reset', (_event, windowType) => {
+    const type = toWindowType(windowType)
+    const stateManager = ensureWindowStateManagerInstance()
+    stateManager.resetWindowState(type)
+    syncWindowBoundsToBrowserWindow(type)
+    return stateManager.getWindowState(type)
+  })
 
-  ipcMain.handle(
-    'window-toggle-floating-navigator',
-    ipcErrorHandler.wrapHandler(
-      () => {
-        if (!windowManager) {
-          throw new Error('Window manager not initialized')
-        }
+  typedHandle('window-state-get-stats', () => {
+    const stateManager = ensureWindowStateManagerInstance()
+    return stateManager.getStats()
+  })
 
-        windowManager.toggleFloatingNavigator()
-        return true
-      },
-      {
-        channel: 'window-toggle-floating-navigator',
-        operationType: 'windowOperation',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'window-state-get',
-    ipcErrorHandler.wrapHandler(
-      (_event: IpcMainInvokeEvent, windowType: string = 'main') => {
-        const type = toWindowType(windowType)
-        const stateManager = ensureWindowStateManagerInstance()
-        return stateManager.getWindowState(type)
-      },
-      {
-        channel: 'window-state-get',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'window-state-set',
-    ipcErrorHandler.wrapHandler(
-      (
-        _event: IpcMainInvokeEvent,
-        windowType: string = 'main',
-        properties: Partial<WindowState> = {},
-      ) => {
-        if (!properties || typeof properties !== 'object') {
-          throw new Error('Window state properties must be an object')
-        }
-
-        const type = toWindowType(windowType)
-        const stateManager = ensureWindowStateManagerInstance()
-        stateManager.setWindowState(type, properties)
-        syncWindowBoundsToBrowserWindow(type)
-        return stateManager.getWindowState(type)
-      },
-      {
-        channel: 'window-state-set',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'window-state-reset',
-    ipcErrorHandler.wrapHandler(
-      (_event: IpcMainInvokeEvent, windowType: string = 'main') => {
-        const type = toWindowType(windowType)
-        const stateManager = ensureWindowStateManagerInstance()
-        stateManager.resetWindowState(type)
-        syncWindowBoundsToBrowserWindow(type)
-        return stateManager.getWindowState(type)
-      },
-      {
-        channel: 'window-state-reset',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'window-state-get-stats',
-    ipcErrorHandler.wrapHandler(
-      () => {
-        const stateManager = ensureWindowStateManagerInstance()
-        return stateManager.getStats()
-      },
-      {
-        channel: 'window-state-get-stats',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
+  typedHandle(
     'window-state-move-to-display',
-    ipcErrorHandler.wrapHandler(
-      (
-        _event: IpcMainInvokeEvent,
-        windowType: string = 'main',
-        displayId: number,
-      ) => {
-        if (typeof displayId !== 'number') {
-          throw new Error('Display ID must be a number')
-        }
-
-        const type = toWindowType(windowType)
-        const stateManager = ensureWindowStateManagerInstance()
-        const targetWindow = getBrowserWindowForType(type)
-        return stateManager.moveWindowToDisplay(type, displayId, targetWindow)
-      },
-      {
-        channel: 'window-state-move-to-display',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
+    (_event, windowType, displayId) => {
+      const type = toWindowType(windowType)
+      const stateManager = ensureWindowStateManagerInstance()
+      const targetWindow = getBrowserWindowForType(type)
+      return stateManager.moveWindowToDisplay(type, displayId, targetWindow)
+    },
   )
 
-  ipcMain.handle(
-    'window-state-snap-to-edge',
-    ipcErrorHandler.wrapHandler(
-      (
-        _event: IpcMainInvokeEvent,
-        windowType: string = 'main',
-        edge: string,
-      ) => {
-        if (!edge || typeof edge !== 'string') {
-          throw new Error('Edge must be provided as a string')
-        }
+  typedHandle('window-state-snap-to-edge', (_event, windowType, edge) => {
+    const type = toWindowType(windowType)
+    const stateManager = ensureWindowStateManagerInstance()
+    const targetWindow = getBrowserWindowForType(type)
+    return stateManager.snapWindowToEdge(type, edge as SnapEdge, targetWindow)
+  })
 
-        // Validate edge against allowed SnapEdge values
-        const validEdges: SnapEdge[] = [
-          'left',
-          'right',
-          'top',
-          'bottom',
-          'top-left',
-          'top-right',
-          'bottom-left',
-          'bottom-right',
-          'maximize',
-        ]
-        if (!validEdges.includes(edge as SnapEdge)) {
-          throw new Error(
-            `Invalid edge value: ${edge}. Must be one of: ${validEdges.join(', ')}`,
-          )
-        }
+  typedHandle('window-state-get-display', (_event, windowType) => {
+    const type = toWindowType(windowType)
+    const stateManager = ensureWindowStateManagerInstance()
+    const display = stateManager.getWindowDisplay(type)
+    if (!display) return null
+    return {
+      id: display.id,
+      label: display.label || `Display ${display.id}`,
+      bounds: display.bounds,
+      workArea: display.workArea,
+      scaleFactor: display.scaleFactor,
+      rotation: display.rotation,
+      touchSupport: display.touchSupport,
+      monochrome: display.monochrome,
+      accelerometerSupport: display.accelerometerSupport,
+      colorSpace: display.colorSpace,
+      colorDepth: display.colorDepth,
+      depthPerComponent: display.depthPerComponent,
+      isPrimary: display.id === screen.getPrimaryDisplay().id,
+    }
+  })
 
-        const type = toWindowType(windowType)
-        const stateManager = ensureWindowStateManagerInstance()
-        const targetWindow = getBrowserWindowForType(type)
-        return stateManager.snapWindowToEdge(
-          type,
-          edge as SnapEdge,
-          targetWindow,
-        )
-      },
-      {
-        channel: 'window-state-snap-to-edge',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'window-state-get-display',
-    ipcErrorHandler.wrapHandler(
-      (_event: IpcMainInvokeEvent, windowType: string = 'main') => {
-        const type = toWindowType(windowType)
-        const stateManager = ensureWindowStateManagerInstance()
-        return stateManager.getWindowDisplay(type)
-      },
-      {
-        channel: 'window-state-get-display',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle(
-    'window-state-get-all-displays',
-    ipcErrorHandler.wrapHandler(
-      () => {
-        const stateManager = ensureWindowStateManagerInstance()
-        return stateManager.getAllDisplays()
-      },
-      {
-        channel: 'window-state-get-all-displays',
-        operationType: 'windowState',
-        enableDegradation: true,
-      },
-    ),
-  )
+  typedHandle('window-state-get-all-displays', () => {
+    const stateManager = ensureWindowStateManagerInstance()
+    return stateManager.getAllDisplays()
+  })
 
   // System tray IPC handlers
-  ipcMain.handle('window-show-floating-navigator', () => {
+  typedHandle('window-show-floating-navigator', () => {
     if (windowManager) {
       windowManager.showFloatingNavigator()
     }
   })
 
-  ipcMain.handle('window-hide-floating-navigator', () => {
+  typedHandle('window-hide-floating-navigator', () => {
     if (windowManager) {
       windowManager.hideFloatingNavigator()
     }
   })
 
-  // Floating window control IPC handlers
-  ipcMain.handle('floating-window-close', () => {
+  // Floating window control IPC handlers (Zod-validated)
+  typedHandle('floating-window-close', () => {
     try {
       if (windowManager && windowManager.hasFloatingNavigator()) {
         const floatingWindow = windowManager.getFloatingNavigator()
@@ -1187,7 +1029,7 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('floating-window-minimize', () => {
+  typedHandle('floating-window-minimize', () => {
     try {
       if (windowManager && windowManager.hasFloatingNavigator()) {
         const floatingWindow = windowManager.getFloatingNavigator()
@@ -1202,7 +1044,7 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('floating-window-toggle-always-on-top', () => {
+  typedHandle('floating-window-toggle-always-on-top', () => {
     try {
       if (windowManager && windowManager.hasFloatingNavigator()) {
         const floatingWindow = windowManager.getFloatingNavigator()
@@ -1219,7 +1061,7 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('floating-window-get-bounds', () => {
+  typedHandle('floating-window-get-bounds', () => {
     try {
       if (windowManager && windowManager.hasFloatingNavigator()) {
         const floatingWindow = windowManager.getFloatingNavigator()
@@ -1234,29 +1076,22 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle(
-    'floating-window-set-bounds',
-    (_event: IpcMainInvokeEvent, bounds: WindowBounds) => {
-      try {
-        if (!bounds || typeof bounds !== 'object') {
-          throw new Error('Invalid bounds data')
+  typedHandle('floating-window-set-bounds', (_event, bounds) => {
+    try {
+      if (windowManager && windowManager.hasFloatingNavigator()) {
+        const floatingWindow = windowManager.getFloatingNavigator()
+        if (floatingWindow && !floatingWindow.isDestroyed()) {
+          floatingWindow.setBounds(bounds)
         }
-
-        if (windowManager && windowManager.hasFloatingNavigator()) {
-          const floatingWindow = windowManager.getFloatingNavigator()
-          if (floatingWindow && !floatingWindow.isDestroyed()) {
-            floatingWindow.setBounds(bounds)
-          }
-        }
-        return true
-      } catch (error) {
-        log.error('Failed to set floating window bounds:', error)
-        return false
       }
-    },
-  )
+      return true
+    } catch (error) {
+      log.error('Failed to set floating window bounds:', error)
+      return false
+    }
+  })
 
-  ipcMain.handle('floating-window-is-always-on-top', () => {
+  typedHandle('floating-window-is-always-on-top', () => {
     try {
       if (windowManager && windowManager.hasFloatingNavigator()) {
         const floatingWindow = windowManager.getFloatingNavigator()
@@ -1271,207 +1106,199 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle(
-    'tray-show-notification',
-    (
-      _event: IpcMainInvokeEvent,
-      title: string,
-      body: string,
-      options?: Record<string, unknown>,
-    ) => {
-      if (systemTrayManager) {
-        return systemTrayManager.showNotification(title, body, options)
-      }
-    },
-  )
+  typedHandle('tray-show-notification', (_event, title, body, options) => {
+    if (systemTrayManager) {
+      const notif = systemTrayManager.showNotification(title, body, options)
+      return notif ? { id: String(Date.now()) } : null
+    }
+    return null
+  })
 
-  ipcMain.handle(
-    'tray-update-menu',
-    (_event: IpcMainInvokeEvent, tasks: unknown[]) => {
-      if (systemTrayManager) {
-        systemTrayManager.updateTrayMenu(tasks as TaskItem[])
-      }
-    },
-  )
+  typedHandle('tray-update-menu', (_event, tasks) => {
+    if (systemTrayManager) {
+      systemTrayManager.updateTrayMenu(tasks as TaskItem[])
+    }
+  })
 
-  ipcMain.handle(
-    'tray-set-tooltip',
-    (_event: IpcMainInvokeEvent, text: string) => {
-      if (systemTrayManager) {
-        systemTrayManager.setTrayTooltip(text)
-      }
-    },
-  )
+  typedHandle('tray-set-tooltip', (_event, text) => {
+    if (systemTrayManager) {
+      systemTrayManager.setTrayTooltip(text)
+    }
+  })
 
-  ipcMain.handle(
-    'tray-set-icon-state',
-    (_event: IpcMainInvokeEvent, state: string) => {
-      if (systemTrayManager) {
-        return systemTrayManager.setTrayIconState(state)
-      }
-      return false
-    },
-  )
+  typedHandle('tray-set-icon-state', (_event, state) => {
+    if (systemTrayManager) {
+      return systemTrayManager.setTrayIconState(state)
+    }
+    return false
+  })
 
-  // Notification management IPC handlers with error handling and lazy loading
-  ipcMain.handle(
-    'notification-show',
-    ipcErrorHandler.wrapHandler(
-      async (
-        _event: IpcMainInvokeEvent,
-        title: string,
-        body: string,
-        options?: Record<string, unknown>,
-      ) => {
-        // Validate input
-        const titleValidation = ipcErrorHandler.validateInput(title, {
-          type: 'string',
-          required: true,
-        })
+  // Notification management IPC handlers (Zod-validated, lazy-loaded)
+  typedHandle('notification-show', async (_event, title, body, options) => {
+    const manager = await ensureNotificationManager()
+    const notif = manager.showNotification(title, body, options || {})
+    return notif ? { id: String(Date.now()) } : null
+  })
 
-        if (!titleValidation.isValid) {
-          throw new Error(
-            `Invalid notification title: ${titleValidation.error}`,
-          )
-        }
-
-        const bodyValidation = ipcErrorHandler.validateInput(body, {
-          type: 'string',
-          required: true,
-        })
-
-        if (!bodyValidation.isValid) {
-          throw new Error(`Invalid notification body: ${bodyValidation.error}`)
-        }
-
-        // Use ensureNotificationManager to prevent race conditions
-        const manager = await ensureNotificationManager()
-        return manager.showNotification(title, body, options || {})
-      },
-      {
-        channel: 'notification-show',
-        operationType: 'notification',
-        enableDegradation: true,
-      },
-    ),
-  )
-
-  ipcMain.handle('notification-get-preferences', () => {
+  typedHandle('notification-get-preferences', () => {
     if (notificationManager) {
       return notificationManager.getPreferences()
     }
     return null
   })
 
-  ipcMain.handle(
-    'notification-update-preferences',
-    (_event: IpcMainInvokeEvent, preferences: Record<string, unknown>) => {
-      if (notificationManager) {
-        notificationManager.updatePreferences(preferences)
-        return notificationManager.getPreferences()
-      }
+  typedHandle('notification-update-preferences', (_event, preferences) => {
+    if (notificationManager) {
+      notificationManager.updatePreferences(preferences)
+      return notificationManager.getPreferences()
+    }
+    return null
+  })
+
+  typedHandle('notification-clear-all', () => {
+    notificationManager?.clearAllNotifications()
+  })
+
+  typedHandle('notification-clear', (_event, tag) => {
+    notificationManager?.clearNotification(tag)
+  })
+
+  typedHandle('notification-is-enabled', () => {
+    return notificationManager?.isEnabled() ?? false
+  })
+
+  typedHandle('notification-get-active-count', () => {
+    return notificationManager?.getActiveNotificationCount() ?? 0
+  })
+
+  // Configuration management IPC handlers (Zod-validated)
+  typedHandle('config-get', (_event, path, defaultValue) => {
+    if (!configManager) {
+      throw new Error('Configuration manager not initialized')
+    }
+    return configManager.get(path, defaultValue)
+  })
+
+  typedHandle('config-set', (_event, path, value) => {
+    if (!configManager) {
+      throw new Error('Configuration manager not initialized')
+    }
+    return configManager.set(path, value)
+  })
+
+  typedHandle('config-get-all', () => {
+    if (!configManager) {
+      return {}
+    }
+    return configManager.getAll() as Record<string, unknown>
+  })
+
+  typedHandle('config-get-section', (_event, section) => {
+    if (!configManager) {
       return null
-    },
-  )
+    }
+    const result = configManager.getSection(
+      section as keyof ReturnType<typeof configManager.getAll>,
+    )
+    return result as Record<string, unknown> | null
+  })
 
-  // Configuration management IPC handlers with error handling
-  ipcMain.handle(
-    'config-get',
-    ipcErrorHandler.wrapHandler(
-      (_event: IpcMainInvokeEvent, path: string, defaultValue?: unknown) => {
-        // Validate input
-        const validation = ipcErrorHandler.validateInput(path, {
-          type: 'string',
-          required: true,
-        })
+  typedHandle('config-update', (_event, updates) => {
+    if (!configManager) {
+      return false
+    }
+    return configManager.update(updates)
+  })
 
-        if (!validation.isValid) {
-          throw new Error(`Invalid config path: ${validation.error}`)
-        }
+  typedHandle('config-reset', () => {
+    if (!configManager) {
+      return false
+    }
+    return configManager.reset()
+  })
 
-        if (!configManager) {
-          throw new Error('Configuration manager not initialized')
-        }
+  typedHandle('config-reset-section', (_event, section) => {
+    if (!configManager) {
+      return false
+    }
+    return configManager.resetSection(
+      section as keyof ReturnType<typeof configManager.getAll>,
+    )
+  })
 
-        return configManager.get(path, defaultValue)
-      },
-      {
-        channel: 'config-get',
-        operationType: 'getConfig',
-        enableDegradation: true,
-      },
-    ),
-  )
+  typedHandle('config-validate', () => {
+    if (!configManager) {
+      return {
+        isValid: false,
+        errors: ['Configuration manager not initialized'],
+      }
+    }
+    return configManager.validate()
+  })
 
-  ipcMain.handle(
-    'config-set',
-    ipcErrorHandler.wrapHandler(
-      (_event: IpcMainInvokeEvent, path: string, value: unknown) => {
-        // Validate input
-        const validation = ipcErrorHandler.validateInput(path, {
-          type: 'string',
-          required: true,
-        })
+  typedHandle('config-export', (_event, filePath) => {
+    if (!configManager) {
+      return false
+    }
+    return configManager.exportConfig(filePath)
+  })
 
-        if (!validation.isValid) {
-          throw new Error(`Invalid config path: ${validation.error}`)
-        }
+  typedHandle('config-import', (_event, filePath) => {
+    if (!configManager) {
+      return false
+    }
+    return configManager.importConfig(filePath)
+  })
 
-        if (!configManager) {
-          throw new Error('Configuration manager not initialized')
-        }
+  typedHandle('config-backup', () => {
+    if (!configManager) {
+      return null
+    }
+    return configManager.backup()
+  })
 
-        return configManager.set(path, value)
-      },
-      {
-        channel: 'config-set',
-        operationType: 'setConfig',
-        enableDegradation: true,
-      },
-    ),
-  )
+  typedHandle('config-get-paths', () => {
+    if (!configManager) {
+      return { config: '', windowState: '', directory: '' }
+    }
+    return configManager.getConfigPaths()
+  })
 
   // Authentication IPC handlers (basic implementations for testing)
-  ipcMain.handle('auth-get-user', () => {
+  typedHandle('auth-get-user', () => {
     return activeUser
   })
 
-  ipcMain.handle(
-    'auth-set-user',
-    async (_event: IpcMainInvokeEvent, user: UserPayload) => {
-      try {
-        return await setActiveUser(user)
-      } catch (error) {
-        log.error('Failed to set active user:', error)
-        throw error
-      }
-    },
-  )
+  typedHandle('auth-set-user', async (_event, user) => {
+    try {
+      return await setActiveUser(user)
+    } catch (error) {
+      log.error('Failed to set active user:', error)
+      throw error
+    }
+  })
 
-  ipcMain.handle('auth-logout', async () => {
+  typedHandle('auth-logout', () => {
     activeUser = null
     return true
   })
 
-  ipcMain.handle('auth-is-authenticated', () => {
+  typedHandle('auth-is-authenticated', () => {
     return Boolean(activeUser)
   })
 
-  ipcMain.handle(
-    'auth-sync-from-web',
-    async (_event: IpcMainInvokeEvent, authData: UserPayload) => {
-      try {
-        await setActiveUser(authData)
-        return true
-      } catch (error) {
-        log.error('Failed to sync auth from web:', error)
-        return false
-      }
-    },
-  )
+  typedHandle('auth-sync-from-web', async (_event, authData) => {
+    try {
+      await setActiveUser(authData)
+      return true
+    } catch (error) {
+      log.error('Failed to sync auth from web:', error)
+      return false
+    }
+  })
 
   // Settings window IPC handlers
-  ipcMain.handle('settings:open', async () => {
+  typedHandle('settings:open', () => {
     try {
       if (windowManager) {
         windowManager.openSettings()
@@ -1485,7 +1312,7 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('settings:close', async () => {
+  typedHandle('settings:close', () => {
     try {
       if (windowManager) {
         windowManager.closeSettings()
@@ -1500,104 +1327,70 @@ function setupIPCHandlers(): void {
   })
 
   // Hide App Icon (Dock visibility) IPC handler - macOS only
-  ipcMain.handle(
-    'settings:setHideAppIcon',
-    (_event: IpcMainInvokeEvent, hide: boolean) => {
-      try {
-        // This API is macOS-only - check platform first
-        if (process.platform !== 'darwin') {
-          log.info('settings:setHideAppIcon - Not supported on this platform')
-          return true // Return true to indicate success (no-op on non-macOS)
-        }
-
-        // Validate input type
-        if (typeof hide !== 'boolean') {
-          log.error(
-            'settings:setHideAppIcon - Invalid argument: hide must be a boolean',
-          )
-          return false
-        }
-
-        if (hide) {
-          // Hide from dock - app becomes "accessory" (no dock icon)
-          app.setActivationPolicy('accessory')
-        } else {
-          // Show in dock - app becomes "regular" application
-          app.setActivationPolicy('regular')
-        }
-        log.info(`Dock icon visibility changed: ${hide ? 'hidden' : 'visible'}`)
-        return true
-      } catch (error) {
-        log.error(
-          'settings:setHideAppIcon - Failed to change dock icon visibility:',
-          error,
-        )
-        return false
+  typedHandle('settings:setHideAppIcon', (_event, hide) => {
+    try {
+      // This API is macOS-only - check platform first
+      if (process.platform !== 'darwin') {
+        log.info('settings:setHideAppIcon - Not supported on this platform')
+        return true // Return true to indicate success (no-op on non-macOS)
       }
-    },
-  )
+
+      if (hide) {
+        // Hide from dock - app becomes "accessory" (no dock icon)
+        app.setActivationPolicy('accessory')
+      } else {
+        // Show in dock - app becomes "regular" application
+        app.setActivationPolicy('regular')
+      }
+      log.info(`Dock icon visibility changed: ${hide ? 'hidden' : 'visible'}`)
+      return true
+    } catch (error) {
+      log.error(
+        'settings:setHideAppIcon - Failed to change dock icon visibility:',
+        error,
+      )
+      return false
+    }
+  })
 
   // Show in Menu Bar IPC handler (placeholder for future implementation)
-  ipcMain.handle(
-    'settings:setShowInMenuBar',
-    (_event: IpcMainInvokeEvent, show: boolean) => {
-      try {
-        // Validate input type
-        if (typeof show !== 'boolean') {
-          log.error(
-            'settings:setShowInMenuBar - Invalid argument: show must be a boolean',
-          )
-          return false
-        }
-
-        // SystemTrayManager handles menu bar visibility
-        // Currently not implemented - return false to indicate feature is not available
-        log.warn(
-          `settings:setShowInMenuBar - Menu bar visibility (${show ? 'show' : 'hide'}) not yet implemented`,
-        )
-        // TODO: Implement actual menu bar show/hide logic via SystemTrayManager
-        return false
-      } catch (error) {
-        log.error(
-          'settings:setShowInMenuBar - Failed to change menu bar visibility:',
-          error,
-        )
-        return false
-      }
-    },
-  )
+  typedHandle('settings:setShowInMenuBar', (_event, show) => {
+    try {
+      // SystemTrayManager handles menu bar visibility
+      // Currently not implemented - return false to indicate feature is not available
+      log.warn(
+        `settings:setShowInMenuBar - Menu bar visibility (${show ? 'show' : 'hide'}) not yet implemented`,
+      )
+      return false
+    } catch (error) {
+      log.error(
+        'settings:setShowInMenuBar - Failed to change menu bar visibility:',
+        error,
+      )
+      return false
+    }
+  })
 
   // Start at Login IPC handler
-  ipcMain.handle(
-    'settings:setStartAtLogin',
-    (_event: IpcMainInvokeEvent, startAtLogin: boolean) => {
-      try {
-        // Validate input type
-        if (typeof startAtLogin !== 'boolean') {
-          log.error(
-            'settings:setStartAtLogin - Invalid argument: startAtLogin must be a boolean',
-          )
-          return false
-        }
-
-        app.setLoginItemSettings({
-          openAtLogin: startAtLogin,
-          openAsHidden: false,
-        })
-        log.info(`Start at login setting changed: ${startAtLogin}`)
-        return true
-      } catch (error) {
-        log.error(
-          'settings:setStartAtLogin - Failed to change start at login setting:',
-          error,
-        )
-        return false
-      }
-    },
-  )
+  typedHandle('settings:setStartAtLogin', (_event, startAtLogin) => {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: startAtLogin,
+        openAsHidden: false,
+      })
+      log.info(`Start at login setting changed: ${startAtLogin}`)
+      return true
+    } catch (error) {
+      log.error(
+        'settings:setStartAtLogin - Failed to change start at login setting:',
+        error,
+      )
+      return false
+    }
+  })
 
   // Get current login item settings
-  ipcMain.handle('settings:getLoginItemSettings', () => {
+  typedHandle('settings:getLoginItemSettings', () => {
     try {
       return app.getLoginItemSettings()
     } catch (error) {
@@ -1610,55 +1403,47 @@ function setupIPCHandlers(): void {
   })
 
   // OAuth IPC handlers for browser-based OAuth flows
+  // OAuth IPC handlers (Zod-validated)
   // Used when WebView OAuth is blocked (e.g., Google OAuth)
-  ipcMain.handle(
-    'oauth-start',
-    async (_event: IpcMainInvokeEvent, provider: string) => {
-      try {
-        const oauth = ensureOAuthManager()
-        if (!oauth) {
-          throw new Error('OAuth manager not initialized')
-        }
-
-        if (!oauth.isProviderSupported(provider)) {
-          throw new Error(`Unsupported OAuth provider: ${provider}`)
-        }
-
-        return await oauth.startOAuthFlow(provider)
-      } catch (error) {
-        log.error('Failed to start OAuth flow:', error)
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        }
+  typedHandle('oauth-start', async (_event, provider) => {
+    try {
+      const oauth = ensureOAuthManager()
+      if (!oauth) {
+        throw new Error('OAuth manager not initialized')
       }
-    },
-  )
+      if (!oauth.isProviderSupported(provider)) {
+        throw new Error(`Unsupported OAuth provider: ${provider}`)
+      }
+      return await oauth.startOAuthFlow(provider)
+    } catch (error) {
+      log.error('Failed to start OAuth flow:', error)
+      return {
+        state: null,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  })
 
-  ipcMain.handle('oauth-get-supported-providers', () => {
+  typedHandle('oauth-get-supported-providers', () => {
     const oauth = ensureOAuthManager()
     return oauth ? oauth.getSupportedProviders() : []
   })
 
-  ipcMain.handle(
-    'oauth-cancel',
-    (_event: IpcMainInvokeEvent, state?: string | null) => {
-      const oauth = ensureOAuthManager()
-      if (oauth) {
-        oauth.cancelPendingFlow(state ?? null)
-      }
-      return true
-    },
-  )
+  typedHandle('oauth-cancel', (_event, state) => {
+    const oauth = ensureOAuthManager()
+    if (oauth) {
+      oauth.cancelPendingFlow(state ?? null)
+    }
+    return true
+  })
 
-  // Get pending sign-in token (for race condition handling)
-  ipcMain.handle('oauth-get-pending-token', () => {
+  typedHandle('oauth-get-pending-token', () => {
     const oauth = ensureOAuthManager()
     return oauth ? oauth.getPendingSignInToken() : null
   })
 
-  // Clear pending sign-in token (after successful sign-in)
-  ipcMain.handle('oauth-clear-pending-token', () => {
+  typedHandle('oauth-clear-pending-token', () => {
     const oauth = ensureOAuthManager()
     if (oauth) {
       oauth.clearPendingSignInToken()
@@ -1666,8 +1451,8 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  // Performance monitoring IPC handlers
-  ipcMain.handle('performance-get-metrics', () => {
+  // Performance monitoring IPC handlers (typed)
+  typedHandle('performance-get-metrics', () => {
     return {
       optimizer: performanceOptimizer.getMetrics(),
       memory: memoryProfiler.getStatistics(),
@@ -1675,27 +1460,24 @@ function setupIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('performance-trigger-cleanup', () => {
+  typedHandle('performance-trigger-cleanup', () => {
     memoryProfiler.performCleanup('manual')
     return true
   })
 
-  ipcMain.handle('performance-get-startup-time', () => {
+  typedHandle('performance-get-startup-time', () => {
     return Date.now() - performanceOptimizer.startupMetrics.startTime
   })
 
   // Menu action IPC handlers
-  ipcMain.handle(
-    'menu-action',
-    (_event: IpcMainInvokeEvent, action: string) => {
-      if (menuManager) {
-        menuManager.handleMenuAction({ action })
-      }
-    },
-  )
+  typedHandle('menu-action', (_event, action) => {
+    if (menuManager) {
+      menuManager.handleMenuAction({ action })
+    }
+  })
 
   // Shortcuts IPC handlers
-  ipcMain.handle('shortcuts-get-registered', () => {
+  typedHandle('shortcuts-get-registered', () => {
     if (!shortcutManager) {
       return []
     }
@@ -1709,7 +1491,7 @@ function setupIPCHandlers(): void {
     }))
   })
 
-  ipcMain.handle('shortcuts-get-defaults', () => {
+  typedHandle('shortcuts-get-defaults', () => {
     if (!shortcutManager) {
       return []
     }
@@ -1725,69 +1507,43 @@ function setupIPCHandlers(): void {
       }))
   })
 
-  ipcMain.handle(
-    'shortcuts-update',
-    (
-      _event: IpcMainInvokeEvent,
-      update: { id: string; accelerator: string },
-    ) => {
-      if (!shortcutManager) {
-        return false
-      }
-      return shortcutManager.updateShortcuts({
-        [update.id]: update.accelerator,
-      })
-    },
-  )
+  typedHandle('shortcuts-update', (_event, shortcuts) => {
+    if (!shortcutManager) {
+      return false
+    }
+    return shortcutManager.updateShortcuts(shortcuts)
+  })
 
-  ipcMain.handle(
-    'shortcuts-register',
-    (
-      _event: IpcMainInvokeEvent,
-      definition: {
-        id: string
-        accelerator: string
-        description?: string
-        enabled?: boolean
-        isGlobal?: boolean
-      },
-    ) => {
-      if (!shortcutManager) {
-        return false
-      }
-      const handler = shortcutManager.getHandlerForShortcut(definition.id)
-      if (!handler) {
-        return false
-      }
-      return shortcutManager.registerShortcut(
-        definition.accelerator,
-        definition.id,
-        handler,
-      )
-    },
-  )
+  typedHandle('shortcuts-register', (_event, definition) => {
+    if (!shortcutManager) {
+      return false
+    }
+    const handler = shortcutManager.getHandlerForShortcut(definition.id)
+    if (!handler) {
+      return false
+    }
+    return shortcutManager.registerShortcut(
+      definition.accelerator,
+      definition.id,
+      handler,
+    )
+  })
 
-  ipcMain.handle(
-    'shortcuts-unregister',
-    (_event: IpcMainInvokeEvent, id: string) => {
-      if (!shortcutManager) {
-        return false
-      }
-      return shortcutManager.unregisterShortcut(id)
-    },
-  )
+  typedHandle('shortcuts-unregister', (_event, id) => {
+    if (!shortcutManager) {
+      return false
+    }
+    return shortcutManager.unregisterShortcut(id)
+  })
 
-  ipcMain.handle(
-    'shortcuts-is-registered',
-    (_event: IpcMainInvokeEvent, accelerator: string) => {
-      if (!shortcutManager) {
-        return false
-      }
-      return shortcutManager.isShortcutRegistered(accelerator)
-    },
-  )
+  typedHandle('shortcuts-is-registered', (_event, accelerator) => {
+    if (!shortcutManager) {
+      return false
+    }
+    return shortcutManager.isShortcutRegistered(accelerator)
+  })
 
-  ipcMain.handle('shortcuts-enable', () => {
+  typedHandle('shortcuts-enable', () => {
     if (!shortcutManager) {
       return false
     }
@@ -1795,7 +1551,7 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  ipcMain.handle('shortcuts-disable', () => {
+  typedHandle('shortcuts-disable', () => {
     if (!shortcutManager) {
       return false
     }
@@ -1803,7 +1559,7 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  ipcMain.handle('shortcuts-get-stats', () => {
+  typedHandle('shortcuts-get-stats', () => {
     if (!shortcutManager) {
       return {
         totalRegistered: 0,
@@ -1816,49 +1572,38 @@ function setupIPCHandlers(): void {
   })
 
   // Deep linking IPC handlers
-  ipcMain.handle(
-    'deep-link-generate',
-    (
-      _event: IpcMainInvokeEvent,
-      action: string,
-      params?: Record<string, unknown>,
-    ) => {
-      const manager = ensureDeepLinkManager()
-      if (manager) {
-        return manager.generateDeepLink(action, params)
-      }
-      return null
-    },
-  )
+  typedHandle('deep-link-generate', (_event, action, params) => {
+    const manager = ensureDeepLinkManager()
+    if (manager) {
+      return manager.generateDeepLink(action, params)
+    }
+    return null
+  })
 
-  ipcMain.handle('deep-link-get-examples', () => {
+  typedHandle('deep-link-get-examples', () => {
     const manager = ensureDeepLinkManager()
     if (manager) {
       return manager.getExampleUrls()
     }
-    return {}
+    return null
   })
 
-  ipcMain.handle(
-    'deep-link-handle-url',
-    async (_event: IpcMainInvokeEvent, url: string) => {
-      const manager = ensureDeepLinkManager()
-      if (manager) {
-        return manager.handleDeepLink(url)
-      }
-      return false
-    },
-  )
+  typedHandle('deep-link-handle-url', async (_event, url) => {
+    const manager = ensureDeepLinkManager()
+    if (manager) {
+      return manager.handleDeepLink(url)
+    }
+    return false
+  })
 
-  // Add other IPC handlers without error wrapping for simplicity
-  ipcMain.handle('window-show-main', () => {
+  typedHandle('window-show-main', () => {
     if (windowManager) {
       windowManager.restoreFromTray()
     }
   })
 
-  // Auto-updater IPC handlers
-  ipcMain.handle('updater-check-for-updates', () => {
+  // Auto-updater IPC handlers (Zod-validated)
+  typedHandle('updater-check-for-updates', () => {
     if (autoUpdater) {
       autoUpdater.manualCheckForUpdates()
       return true
@@ -1866,7 +1611,7 @@ function setupIPCHandlers(): void {
     return false
   })
 
-  ipcMain.handle('updater-quit-and-install', () => {
+  typedHandle('updater-quit-and-install', () => {
     if (autoUpdater) {
       autoUpdater.quitAndInstall()
       return true
@@ -1874,7 +1619,7 @@ function setupIPCHandlers(): void {
     return false
   })
 
-  ipcMain.handle('updater-get-status', () => {
+  typedHandle('updater-get-status', () => {
     if (autoUpdater) {
       return autoUpdater.getUpdateStatus()
     }

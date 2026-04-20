@@ -9,6 +9,14 @@
 
 import type { IpcMainInvokeEvent } from 'electron'
 
+import type { LoadingStatus } from '../LazyLoadManager'
+import type { MemoryStatistics } from '../MemoryProfiler'
+import type { PerformanceMetrics } from '../performance-config'
+import type {
+  DisplayInfo as WindowManagerDisplayInfo,
+  WindowStats,
+} from '../WindowStateManager'
+
 // ============================================================================
 // Shared Types
 // ============================================================================
@@ -21,6 +29,25 @@ export interface ElectronUser {
   firstName?: string | null
   lastName?: string | null
   imageUrl?: string | null
+}
+
+/**
+ * Auth user payload exchanged on auth IPC channels.
+ *
+ * Required fields reflect what `setActiveUser` in main.ts actually reads:
+ *  - `clerkId` is required (user identity)
+ *  - `emailAddresses` is optional array (Clerk can expose multiple)
+ *  - `firstName` may be null when Clerk user has no name
+ *
+ * The index signature mirrors the Zod schema's `.passthrough()`: renderer may
+ * include richer Clerk fields (`id`, `email`, `lastName`, `imageUrl`, ...) and
+ * they will be accepted at runtime. Unknown fields are ignored by main.
+ */
+export interface AuthUserPayload {
+  clerkId: string
+  emailAddresses?: string[]
+  firstName?: string | null
+  [extra: string]: unknown
 }
 
 /** Window bounds and state */
@@ -41,40 +68,37 @@ export interface WindowState extends WindowBounds {
   lastSaved?: number
 }
 
-/** Display information */
-export interface DisplayInfo {
-  id: number
-  bounds: WindowBounds
-  workArea: WindowBounds
-  isPrimary: boolean
-  scaleFactor: number
-}
+/** Display information (richer version from WindowStateManager) */
+export type DisplayInfo = WindowManagerDisplayInfo
 
-/** Notification options */
+export type { WindowStats }
+
+/** Notification options (matches NotificationManager) */
 export interface NotificationOptions {
   type?: 'info' | 'warning' | 'error' | 'success'
   silent?: boolean
+  tag?: string
   urgency?: 'low' | 'normal' | 'critical'
   timeoutMs?: number
   icon?: string
-  actions?: Array<{ text: string; type: string }>
+  actions?: Array<{ type: 'button'; text: string }>
+  /** Renderer-only callbacks (not serialized across IPC) */
+  onClick?: () => Promise<void> | void
+  onAction?: (actionIndex: number) => Promise<void> | void
 }
 
-/** Notification preferences */
+/** Notification preferences (matches NotificationManager) */
 export interface NotificationPreferences {
   enabled: boolean
+  taskCreated: boolean
+  taskCompleted: boolean
+  taskUpdated: boolean
+  taskDeleted: boolean
   sound: boolean
-  taskReminders: boolean
-  dueDateAlerts: boolean
-  achievementNotifications: boolean
-  quietHoursEnabled: boolean
-  quietHoursStart?: string
-  quietHoursEnd?: string
-  /** Task-specific notification preferences */
-  taskCreated?: boolean
-  taskCompleted?: boolean
-  taskUpdated?: boolean
-  taskDeleted?: boolean
+  showInTray: boolean
+  autoHide: boolean
+  autoHideDelay: number
+  position: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft'
 }
 
 /** Tray icon states */
@@ -83,19 +107,17 @@ export type TrayIconState = 'default' | 'active' | 'notification' | 'disabled'
 /** OAuth provider types */
 export type OAuthProvider = 'google' | 'github' | 'apple'
 
-/** OAuth result from browser flow */
+/** OAuth flow result from main-process initiated flow */
 export interface OAuthResult {
+  state: string | null
   success: boolean
-  provider: OAuthProvider
-  token?: string
   error?: string
 }
 
 /** OAuth pending token */
 export interface PendingSignInToken {
   token: string
-  provider: OAuthProvider
-  createdAt: number
+  provider: string
 }
 
 /** Shortcut definition */
@@ -126,51 +148,10 @@ export interface DeepLinkExamples {
   openView: string
 }
 
-/** Updater status */
+/** Updater status (matches AutoUpdater.getUpdateStatus()) */
 export interface UpdaterStatus {
-  checking: boolean
-  available: boolean
-  downloading: boolean
-  downloaded: boolean
-  version?: string
-  releaseNotes?: string
-  error?: string
-}
-
-/** Last error information (matches IPCErrorHandler) */
-interface LastError {
-  message: string
-  timestamp: string
-  context: {
-    channel?: string
-    operationType?: string
-    attempt?: number
-  }
-}
-
-/**
- * IPC error statistics.
- * Matches the IPCErrorStats interface in IPCErrorHandler.ts.
- */
-export interface IPCErrorStats {
-  /** Total number of operations attempted */
-  totalOperations: number
-  /** Total number of errors encountered (may include retries) */
-  totalErrors: number
-  /** Number of operations that were retried */
-  retriedOperations: number
-  /** Number of operations that succeeded (on first try or after retry) */
-  successfulOperations: number
-  /** Number of operations that failed after exhausting all retries */
-  failedOperations: number
-  /** Number of operations that used graceful degradation */
-  degradedOperations: number
-  /** Last error encountered */
-  lastError: LastError | null
-  /** Error counts grouped by error type */
-  errorsByType: Record<string, number>
-  /** Error counts grouped by IPC channel */
-  errorsByChannel: Record<string, number>
+  updateAvailable: boolean
+  updateDownloaded: boolean
 }
 
 // ============================================================================
@@ -201,22 +182,22 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   'auth-get-user': {
     request: void
-    response: ElectronUser | null
+    response: AuthUserPayload | null
   }
   'auth-set-user': {
-    request: ElectronUser
-    response: boolean
+    request: AuthUserPayload
+    response: AuthUserPayload
   }
   'auth-logout': {
     request: void
-    response: void
+    response: boolean
   }
   'auth-is-authenticated': {
     request: void
     response: boolean
   }
   'auth-sync-from-web': {
-    request: { token: string; user: ElectronUser }
+    request: AuthUserPayload
     response: boolean
   }
 
@@ -224,16 +205,16 @@ export interface IPCChannels {
   // OAuth
   // ──────────────────────────────────────────────────────────────────────────
   'oauth-start': {
-    request: OAuthProvider
+    request: string
     response: OAuthResult
   }
   'oauth-get-supported-providers': {
     request: void
-    response: OAuthProvider[]
+    response: string[]
   }
   'oauth-cancel': {
-    request: void
-    response: void
+    request: [state?: string | null]
+    response: boolean
   }
   'oauth-get-pending-token': {
     request: void
@@ -241,7 +222,7 @@ export interface IPCChannels {
   }
   'oauth-clear-pending-token': {
     request: void
-    response: void
+    response: boolean
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -249,11 +230,11 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   'window-minimize': {
     request: void
-    response: void
+    response: boolean
   }
   'window-close': {
     request: void
-    response: void
+    response: boolean
   }
   'window-toggle-floating-navigator': {
     request: void
@@ -281,15 +262,15 @@ export interface IPCChannels {
   }
   'window-state-set': {
     request: ['main' | 'floating', Partial<WindowState>]
-    response: boolean
+    response: WindowState | null
   }
   'window-state-reset': {
     request: 'main' | 'floating'
-    response: void
+    response: WindowState | null
   }
   'window-state-get-stats': {
     request: void
-    response: { saves: number; loads: number; resets: number }
+    response: WindowStats
   }
   'window-state-move-to-display': {
     request: ['main' | 'floating', number]
@@ -326,11 +307,11 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   'floating-window-close': {
     request: void
-    response: void
+    response: boolean
   }
   'floating-window-minimize': {
     request: void
-    response: void
+    response: boolean
   }
   'floating-window-toggle-always-on-top': {
     request: void
@@ -342,7 +323,7 @@ export interface IPCChannels {
   }
   'floating-window-set-bounds': {
     request: WindowBounds
-    response: void
+    response: boolean
   }
   'floating-window-is-always-on-top': {
     request: void
@@ -357,7 +338,7 @@ export interface IPCChannels {
     response: { id: string } | null
   }
   'tray-update-menu': {
-    request: Array<{ id: string; title: string; completed?: boolean }>
+    request: [tasks: Array<{ id: string; title: string; completed?: boolean }>]
     response: void
   }
   'tray-set-tooltip': {
@@ -390,7 +371,7 @@ export interface IPCChannels {
   }
   'notification-update-preferences': {
     request: Partial<NotificationPreferences>
-    response: boolean
+    response: NotificationPreferences | null
   }
   'notification-clear-all': {
     request: void
@@ -421,7 +402,7 @@ export interface IPCChannels {
     response: ShortcutDefinition[]
   }
   'shortcuts-update': {
-    request: { id: string; accelerator: string }
+    request: Record<string, string>
     response: boolean
   }
   'shortcuts-register': {
@@ -458,11 +439,11 @@ export interface IPCChannels {
   // Configuration
   // ──────────────────────────────────────────────────────────────────────────
   'config-get': {
-    request: string
+    request: [path: string, defaultValue?: unknown]
     response: unknown
   }
   'config-set': {
-    request: [string, unknown]
+    request: [path: string, value: unknown]
     response: boolean
   }
   'config-get-all': {
@@ -479,19 +460,19 @@ export interface IPCChannels {
   }
   'config-reset': {
     request: void
-    response: void
+    response: boolean
   }
   'config-reset-section': {
     request: ConfigSection
-    response: void
+    response: boolean
   }
   'config-validate': {
-    request: Record<string, unknown>
-    response: { valid: boolean; errors?: string[] }
+    request: void
+    response: { isValid: boolean; errors: string[] }
   }
   'config-export': {
-    request: void
-    response: string
+    request: string
+    response: boolean
   }
   'config-import': {
     request: string
@@ -499,23 +480,23 @@ export interface IPCChannels {
   }
   'config-backup': {
     request: void
-    response: string
+    response: string | null
   }
   'config-get-paths': {
     request: void
-    response: { config: string; backup: string; logs: string }
+    response: { config: string; windowState: string; directory: string }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Deep Linking
   // ──────────────────────────────────────────────────────────────────────────
   'deep-link-generate': {
-    request: { action: string; params?: Record<string, string> }
-    response: string
+    request: [action: string, params?: Record<string, unknown>]
+    response: string | null
   }
   'deep-link-get-examples': {
     request: void
-    response: DeepLinkExamples
+    response: DeepLinkExamples | null
   }
   'deep-link-handle-url': {
     request: string
@@ -539,31 +520,15 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   'updater-check-for-updates': {
     request: void
-    response: UpdaterStatus
+    response: boolean
   }
   'updater-quit-and-install': {
     request: void
-    response: void
+    response: boolean
   }
   'updater-get-status': {
     request: void
     response: UpdaterStatus
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // IPC Error Handling
-  // ──────────────────────────────────────────────────────────────────────────
-  'ipc-error-stats': {
-    request: void
-    response: IPCErrorStats
-  }
-  'ipc-error-health-check': {
-    request: void
-    response: { healthy: boolean; issues?: string[] }
-  }
-  'ipc-error-reset-stats': {
-    request: void
-    response: void
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -572,18 +537,51 @@ export interface IPCChannels {
   'performance-get-metrics': {
     request: void
     response: {
-      memoryUsage: NodeJS.MemoryUsage
-      uptime: number
-      cpuUsage: NodeJS.CpuUsage
+      optimizer: PerformanceMetrics
+      memory: MemoryStatistics | null
+      lazyLoad: LoadingStatus
     }
   }
   'performance-trigger-cleanup': {
     request: void
-    response: { freedMemory: number }
+    // Returns `true` once cleanup completes. Historical spec advertised
+    // `{ freedMemory: number }` but the implementation has always returned a boolean
+    // — aligned here so `typedHandle` can enforce the contract.
+    response: boolean
   }
   'performance-get-startup-time': {
     request: void
     response: number
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Settings window + per-user preferences
+  // ──────────────────────────────────────────────────────────────────────────
+  'settings:open': {
+    request: void
+    response: boolean
+  }
+  'settings:close': {
+    request: void
+    response: boolean
+  }
+  /** macOS only: toggle dock visibility via `app.setActivationPolicy`. */
+  'settings:setHideAppIcon': {
+    request: boolean
+    response: boolean
+  }
+  /** Placeholder for future SystemTrayManager integration. */
+  'settings:setShowInMenuBar': {
+    request: boolean
+    response: boolean
+  }
+  'settings:setStartAtLogin': {
+    request: boolean
+    response: boolean
+  }
+  'settings:getLoginItemSettings': {
+    request: void
+    response: { openAtLogin: boolean; openAsHidden?: boolean }
   }
 }
 
@@ -593,10 +591,14 @@ export interface IPCChannels {
 
 export interface IPCEventChannels {
   // OAuth events
-  'oauth-success': OAuthResult
-  'oauth-error': { provider: OAuthProvider; error: string }
-  'oauth-complete-exchange': { provider: OAuthProvider; code: string }
-  'clerk-sign-in-token': { token: string; provider: OAuthProvider }
+  'oauth-success': { user: unknown }
+  'oauth-error': { error: string }
+  'oauth-complete-exchange': {
+    code: string
+    verifier: string
+    provider: string
+  }
+  'clerk-sign-in-token': { token: string; provider: string }
 
   // Auth events
   'auth-state-changed': { isAuthenticated: boolean; user: ElectronUser | null }
@@ -608,10 +610,7 @@ export interface IPCEventChannels {
   // App events
   'app-update-available': { version: string; releaseNotes?: string }
   'app-update-downloaded': { version: string }
-  'updater-message': {
-    type: 'checking' | 'available' | 'downloaded' | 'error'
-    message?: string
-  }
+  'updater-message': string
 
   // Task events (from shortcuts/deep links)
   'focus-task': { taskId: string }
@@ -622,17 +621,54 @@ export interface IPCEventChannels {
   // Menu events
   'menu-action': { action: string; filePath?: string }
 
-  // Deep link events
+  // Floating navigator events (main → floating renderer)
+  'floating-navigator-menu-action': string
+
+  // Notification fallback events (renderer hook-up pending)
+  'notification-permission-denied': { reason?: string; guidance?: string }
+  'show-fallback-notification': {
+    title: string
+    body: string
+    options?: NotificationOptions
+  }
+
+  // System integration status broadcast (from SystemIntegrationErrorHandler)
+  'system-integration-status': {
+    status: 'full' | 'partial' | 'minimal' | 'failed' | undefined
+    title: string
+    message: string
+    issues: string[]
+    integrationStatus: {
+      tray: { available: boolean; fallbackMode: boolean; error: string | null }
+      notifications: {
+        available: boolean
+        fallbackMode: boolean
+        error: string | null
+      }
+      shortcuts: {
+        available: boolean
+        partiallyAvailable: boolean
+        failedCount: number
+        error: string | null
+      }
+    }
+  }
+
+  // Deep link events — `task` passes through raw Todo shape; `id`/`title` are
+  // guaranteed, additional Clerk-style fields are accepted via index signature.
   'deep-link-focus-task': {
-    task: { id: string; title: string }
+    task: { id: string; title: string; [extra: string]: unknown }
     params: Record<string, string>
   }
   'deep-link-create-task': {
     title?: string
     description?: string
     priority?: string
+    dueDate?: string
   }
-  'deep-link-task-created': { task: { id: string; title: string } }
+  'deep-link-task-created': {
+    task: { id: string; title: string; [extra: string]: unknown }
+  }
   'deep-link-navigate': { view: string; params: Record<string, string> }
   'deep-link-search': { query: string; filter?: string }
 }
