@@ -14,9 +14,11 @@ import { URL } from 'url'
 import type { App } from 'electron'
 import { app as electronApp } from 'electron'
 
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { OAuthManager } from './OAuthManager'
+import type { IPCEventChannel, IPCEventChannels } from './types/ipc'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -411,7 +413,10 @@ export class DeepLinkManager {
         return
       }
 
-      this.sendToRenderer('deep-link-focus-task', { task, params })
+      this.sendToRenderer('deep-link-focus-task', {
+        task: task as { id: string; title: string; [extra: string]: unknown },
+        params,
+      })
 
       if (this.notificationManager) {
         this.notificationManager.showNotification(
@@ -456,7 +461,13 @@ export class DeepLinkManager {
 
       const newTask = await this.apiBridge?.createTodo(taskData)
 
-      this.sendToRenderer('deep-link-task-created', { task: newTask })
+      this.sendToRenderer('deep-link-task-created', {
+        task: newTask as {
+          id: string
+          title: string
+          [extra: string]: unknown
+        },
+      })
 
       if (this.notificationManager && newTask) {
         this.notificationManager.showNotification(
@@ -561,10 +572,24 @@ export class DeepLinkManager {
    * @param event - Event name
    * @param data - Event data
    */
-  sendToRenderer(event: string, data: unknown): void {
+  /**
+   * Dispatch a typed event to the main renderer window.
+   *
+   * Triggered when: deep-link handlers resolve (e.g., `corelive://open/task/1`).
+   * Called by: the `handleDeepLink*` methods above.
+   *
+   * @example
+   *   this.sendToRenderer('deep-link-focus-task', { task, params })
+   */
+  sendToRenderer<C extends IPCEventChannel>(
+    channel: C,
+    ...payload: IPCEventChannels[C] extends void ? [] : [IPCEventChannels[C]]
+  ): void {
     if (this.windowManager && this.windowManager.hasMainWindow()) {
       const mainWindow = this.windowManager.getMainWindow()
-      mainWindow?.webContents.send(event, data)
+      if (mainWindow) {
+        typedSend(mainWindow.webContents, channel, ...payload)
+      }
     }
   }
 

@@ -7,6 +7,7 @@
  */
 
 import type { ConfigManager } from './ConfigManager'
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { ShortcutManager } from './ShortcutManager'
@@ -480,13 +481,15 @@ export class SystemIntegrationErrorHandler {
 
     if (this.windowManager && this.windowManager.hasMainWindow()) {
       const mainWindow = this.windowManager.getMainWindow()
-      mainWindow?.webContents.send('system-integration-status', {
-        status: this.overallStatus,
-        title,
-        message,
-        issues: this.issues,
-        integrationStatus: this.integrationStatus,
-      })
+      if (mainWindow) {
+        typedSend(mainWindow.webContents, 'system-integration-status', {
+          status: this.overallStatus,
+          title,
+          message,
+          issues: this.issues,
+          integrationStatus: this.integrationStatus,
+        })
+      }
     }
   }
 

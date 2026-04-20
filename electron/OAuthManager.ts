@@ -11,8 +11,10 @@ import crypto from 'crypto'
 
 import { shell } from 'electron'
 
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
+import type { IPCEventChannel, IPCEventChannels } from './types/ipc'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -438,15 +440,20 @@ export class OAuthManager {
   }
 
   /**
-   * Sends event to renderer process.
+   * Sends event to renderer process using typed IPC channels.
    *
-   * @param channel - IPC channel name
-   * @param data - Data to send
+   * @param channel - Typed IPC event channel name
+   * @param data - Event payload (validated at compile time against IPCEventChannels[C])
    */
-  sendToRenderer(channel: string, data: unknown): void {
+  sendToRenderer<C extends IPCEventChannel>(
+    channel: C,
+    ...payload: IPCEventChannels[C] extends void ? [] : [IPCEventChannels[C]]
+  ): void {
     if (this.windowManager && this.windowManager.hasMainWindow()) {
       const mainWindow = this.windowManager.getMainWindow()
-      mainWindow?.webContents.send(channel, data)
+      if (mainWindow) {
+        typedSend(mainWindow.webContents, channel, ...payload)
+      }
     }
   }
 

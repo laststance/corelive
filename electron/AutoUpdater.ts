@@ -11,6 +11,7 @@ import { dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
 
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 
 // ============================================================================
@@ -230,7 +231,7 @@ export class AutoUpdater {
   sendStatusToWindow(text: string): void {
     log.info(text)
     if (this.mainWindow && this.mainWindow.webContents) {
-      this.mainWindow.webContents.send('updater-message', text)
+      typedSend(this.mainWindow.webContents, 'updater-message', text)
     }
   }
 

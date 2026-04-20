@@ -27,19 +27,35 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 
+import { typedInvoke } from './ipc/typedInvoke'
 import { log } from './logger'
 import type {
+  ConfigSection,
+  DeepLinkExamples,
+  IPCEventChannel,
   NotificationOptions,
+  NotificationPreferences,
+  ShortcutDefinition,
   TrayIconState,
   WindowBounds,
+  WindowState,
 } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
-/** Allowed IPC channels map */
-type AllowedChannelsMap = Record<string, boolean>
+/**
+ * Allowed event-channel map for the generic `on/removeListener/removeAllListeners`
+ * entry points.
+ *
+ * Request/response channels are already guarded by `typedInvoke` — the typed
+ * wrapper constrains channel names to `IPCChannel` at compile-time. The
+ * whitelist below only protects the untyped listener surface, which is solely
+ * for one-way events (main → renderer). Including request/response channels
+ * here would needlessly widen the listener-management attack surface.
+ */
+type AllowedChannelsMap = Record<IPCEventChannel, true>
 
 /** Sanitized data type */
 type SanitizedValue =
@@ -87,129 +103,46 @@ interface OAuthCallbackData {
  * 2. Ensure the main process handler validates all input
  * 3. Document what the channel does and why it's safe
  */
-const ALLOWED_CHANNELS: AllowedChannelsMap = {
-  // IPC Error handling
-  'ipc-error-stats': true,
-  'ipc-error-health-check': true,
-  'ipc-error-reset-stats': true,
-
-  // Note: Todo operations removed - WebView architecture uses oRPC via HTTP
-
-  // Authentication operations
-  'auth-get-user': true,
-  'auth-set-user': true,
-  'auth-logout': true,
-  'auth-is-authenticated': true,
-  'auth-sync-from-web': true,
-
-  // OAuth operations (browser-based OAuth for providers that block WebView)
-  'oauth-start': true,
-  'oauth-get-supported-providers': true,
-  'oauth-cancel': true,
+/**
+ * Whitelist of channels allowed for renderer-facing `on/off/removeAllListeners`.
+ *
+ * Since `typedInvoke`/`createTypedListener` already constrain callers to valid
+ * channel names at compile-time, this map only guards the untyped generic
+ * `on()` / `removeListener()` / `removeAllListeners()` entry points below.
+ *
+ * The `satisfies AllowedChannelsMap` assertion forces exhaustive enumeration
+ * of every `IPCEventChannel`. Adding an event channel in `types/ipc.ts`
+ * without listing it here is a compile error. This is the single source of
+ * truth — no hand-maintained subset is allowed to drift.
+ */
+const ALLOWED_CHANNELS = {
+  // Event channels (main → renderer) — the only surface guarded here,
+  // since request/response channels go through typedInvoke (compile-time safe).
   'oauth-success': true,
   'oauth-error': true,
   'oauth-complete-exchange': true,
-  'oauth-get-pending-token': true,
-  'oauth-clear-pending-token': true,
-  'clerk-sign-in-token': true, // Sign-in token from browser OAuth for WebView session
-
-  // Window operations
-  'window-minimize': true,
-  'window-close': true,
-  'window-toggle-floating-navigator': true,
-  'window-show-floating-navigator': true,
-  'window-hide-floating-navigator': true,
-
-  // System operations
-  'tray-show-notification': true,
-  'tray-update-menu': true,
-  'tray-set-tooltip': true,
-  'tray-set-icon-state': true,
-
-  // Menu actions
-  'menu-action': true,
-
-  // Deep linking
-  'deep-link-generate': true,
-  'deep-link-get-examples': true,
-  'deep-link-handle-url': true,
-
-  // Settings operations
-  'settings:setHideAppIcon': true,
-  'settings:setShowInMenuBar': true,
-  'settings:setStartAtLogin': true,
-
-  // Notification management
-  'notification-show': true,
-  'notification-get-preferences': true,
-  'notification-update-preferences': true,
-  'notification-clear-all': true,
-  'notification-clear': true,
-  'notification-is-enabled': true,
-  'notification-get-active-count': true,
-
-  // Keyboard shortcut management
-  'shortcuts-get-registered': true,
-  'shortcuts-get-defaults': true,
-  'shortcuts-update': true,
-  'shortcuts-register': true,
-  'shortcuts-unregister': true,
-  'shortcuts-is-registered': true,
-  'shortcuts-enable': true,
-  'shortcuts-disable': true,
-  'shortcuts-get-stats': true,
-
-  // Configuration management
-  'config-get': true,
-  'config-set': true,
-  'config-get-all': true,
-  'config-get-section': true,
-  'config-update': true,
-  'config-reset': true,
-  'config-reset-section': true,
-  'config-validate': true,
-  'config-export': true,
-  'config-import': true,
-  'config-backup': true,
-  'config-get-paths': true,
-
-  // Window state management
-  'window-state-get': true,
-  'window-state-set': true,
-  'window-state-reset': true,
-  'window-state-get-stats': true,
-  'window-state-move-to-display': true,
-  'window-state-snap-to-edge': true,
-  'window-state-get-display': true,
-  'window-state-get-all-displays': true,
-
-  // App operations
-  'app-version': true,
-  'app-quit': true,
-
-  // Auto-updater operations
-  'updater-check-for-updates': true,
-  'updater-quit-and-install': true,
-  'updater-get-status': true,
-
-  // Event channels
+  'clerk-sign-in-token': true,
+  'auth-state-changed': true,
   'window-focus': true,
   'window-blur': true,
   'app-update-available': true,
   'app-update-downloaded': true,
   'updater-message': true,
-  // Note: todo event channels removed - WebView architecture uses oRPC
-  'auth-state-changed': true,
   'focus-task': true,
   'mark-task-complete': true,
   'shortcut-new-task': true,
   'shortcut-search': true,
+  'menu-action': true,
   'deep-link-focus-task': true,
   'deep-link-create-task': true,
   'deep-link-task-created': true,
   'deep-link-navigate': true,
   'deep-link-search': true,
-}
+  'floating-navigator-menu-action': true,
+  'notification-permission-denied': true,
+  'show-fallback-notification': true,
+  'system-integration-status': true,
+} satisfies AllowedChannelsMap
 
 // ============================================================================
 // Security Utilities
@@ -222,7 +155,7 @@ const ALLOWED_CHANNELS: AllowedChannelsMap = {
  * @returns True if channel is in whitelist
  */
 function validateChannel(channel: string): boolean {
-  return ALLOWED_CHANNELS[channel] === true
+  return (ALLOWED_CHANNELS as Record<string, boolean>)[channel] === true
 }
 
 /**
@@ -303,9 +236,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Minimize window to tray.
      */
-    minimize: async (): Promise<void> => {
+    minimize: async () => {
       try {
-        return await ipcRenderer.invoke('window-minimize')
+        return await typedInvoke('window-minimize')
       } catch (error) {
         log.error('Failed to minimize window:', error)
       }
@@ -314,9 +247,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Close window (minimize to tray).
      */
-    close: async (): Promise<void> => {
+    close: async () => {
       try {
-        return await ipcRenderer.invoke('window-close')
+        return await typedInvoke('window-close')
       } catch (error) {
         log.error('Failed to close window:', error)
       }
@@ -325,9 +258,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Toggle floating navigator visibility.
      */
-    toggleFloatingNavigator: async (): Promise<boolean | undefined> => {
+    toggleFloatingNavigator: async () => {
       try {
-        return await ipcRenderer.invoke('window-toggle-floating-navigator')
+        return await typedInvoke('window-toggle-floating-navigator')
       } catch (error) {
         log.error('Failed to toggle floating navigator:', error)
       }
@@ -336,9 +269,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Show floating navigator.
      */
-    showFloatingNavigator: async (): Promise<void> => {
+    showFloatingNavigator: async () => {
       try {
-        return await ipcRenderer.invoke('window-show-floating-navigator')
+        return await typedInvoke('window-show-floating-navigator')
       } catch (error) {
         log.error('Failed to show floating navigator:', error)
       }
@@ -347,9 +280,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Hide floating navigator.
      */
-    hideFloatingNavigator: async (): Promise<void> => {
+    hideFloatingNavigator: async () => {
       try {
-        return await ipcRenderer.invoke('window-hide-floating-navigator')
+        return await typedInvoke('window-hide-floating-navigator')
       } catch (error) {
         log.error('Failed to hide floating navigator:', error)
       }
@@ -361,9 +294,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     getBounds: async (): Promise<WindowBounds> => {
       try {
-        // 'window-state-get' returns full WindowState; extract only bounds
-        const state = await ipcRenderer.invoke('window-state-get', 'main')
-        if (state && typeof state === 'object') {
+        const state = await typedInvoke('window-state-get', 'main')
+        if (state) {
           return {
             x: typeof state.x === 'number' ? state.x : 0,
             y: typeof state.y === 'number' ? state.y : 0,
@@ -383,7 +315,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     setBounds: async (bounds: WindowBounds): Promise<void> => {
       try {
-        return await ipcRenderer.invoke('window-state-set', 'main', bounds)
+        await typedInvoke('window-state-set', 'main', bounds)
       } catch (error) {
         log.error('Failed to set window bounds:', error)
       }
@@ -394,7 +326,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     isMinimized: async (): Promise<boolean> => {
       try {
-        const state = await ipcRenderer.invoke('window-state-get', 'main')
+        const state = await typedInvoke('window-state-get', 'main')
         return state?.isMinimized || false
       } catch (error) {
         log.error('Failed to check if window is minimized:', error)
@@ -407,7 +339,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     isAlwaysOnTop: async (): Promise<boolean> => {
       try {
-        const state = await ipcRenderer.invoke('window-state-get', 'main')
+        const state = await typedInvoke('window-state-get', 'main')
         return state?.alwaysOnTop || false
       } catch (error) {
         log.error('Failed to check if window is always on top:', error)
@@ -420,11 +352,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     moveToDisplay: async (displayIndex: number): Promise<void> => {
       try {
-        return await ipcRenderer.invoke(
-          'window-state-move-to-display',
-          'main',
-          displayIndex,
-        )
+        await typedInvoke('window-state-move-to-display', 'main', displayIndex)
       } catch (error) {
         log.error('Failed to move window to display:', error)
       }
@@ -453,11 +381,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedOptions = sanitizeData(options)
 
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'tray-show-notification',
-          sanitizedTitle,
-          sanitizedBody,
-          sanitizedOptions,
+          sanitizedTitle as string,
+          sanitizedBody as string,
+          sanitizedOptions as NotificationOptions | undefined,
         )
       } catch (error) {
         log.error('Failed to show notification:', error)
@@ -476,7 +404,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedTasks = sanitizeData(tasks)
 
       try {
-        return await ipcRenderer.invoke('tray-update-menu', sanitizedTasks)
+        return await typedInvoke(
+          'tray-update-menu',
+          sanitizedTasks as TrayTaskItem[],
+        )
       } catch (error) {
         log.error('Failed to update tray menu:', error)
       }
@@ -493,7 +424,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedText = sanitizeData(text)
 
       try {
-        return await ipcRenderer.invoke('tray-set-tooltip', sanitizedText)
+        return await typedInvoke('tray-set-tooltip', sanitizedText as string)
       } catch (error) {
         log.error('Failed to set tray tooltip:', error)
       }
@@ -520,7 +451,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
 
       try {
-        return await ipcRenderer.invoke('tray-set-icon-state', state)
+        return await typedInvoke('tray-set-icon-state', state)
       } catch (error) {
         log.error('Failed to set tray icon state:', error)
         return false
@@ -550,11 +481,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedOptions = sanitizeData(options)
 
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'notification-show',
-          sanitizedTitle,
-          sanitizedBody,
-          sanitizedOptions,
+          sanitizedTitle as string,
+          sanitizedBody as string,
+          sanitizedOptions as NotificationOptions | undefined,
         )
       } catch (error) {
         log.error('Failed to show notification:', error)
@@ -565,9 +496,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get notification preferences.
      */
-    getPreferences: async (): Promise<unknown> => {
+    getPreferences: async (): Promise<NotificationPreferences | null> => {
       try {
-        return await ipcRenderer.invoke('notification-get-preferences')
+        return await typedInvoke('notification-get-preferences')
       } catch (error) {
         log.error('Failed to get notification preferences:', error)
         return null
@@ -579,7 +510,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     updatePreferences: async (
       preferences: Record<string, unknown>,
-    ): Promise<boolean> => {
+    ): Promise<NotificationPreferences | null> => {
       if (!preferences || typeof preferences !== 'object') {
         throw new Error('Invalid preferences data')
       }
@@ -587,9 +518,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedPreferences = sanitizeData(preferences)
 
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'notification-update-preferences',
-          sanitizedPreferences,
+          sanitizedPreferences as Partial<NotificationPreferences>,
         )
       } catch (error) {
         log.error('Failed to update notification preferences:', error)
@@ -602,7 +533,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     clearAll: async (): Promise<void> => {
       try {
-        return await ipcRenderer.invoke('notification-clear-all')
+        return await typedInvoke('notification-clear-all')
       } catch (error) {
         log.error('Failed to clear all notifications:', error)
       }
@@ -619,7 +550,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedTag = sanitizeData(tag)
 
       try {
-        return await ipcRenderer.invoke('notification-clear', sanitizedTag)
+        return await typedInvoke('notification-clear', sanitizedTag as string)
       } catch (error) {
         log.error('Failed to clear notification:', error)
       }
@@ -630,7 +561,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     isEnabled: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('notification-is-enabled')
+        return await typedInvoke('notification-is-enabled')
       } catch (error) {
         log.error('Failed to check notification status:', error)
         return false
@@ -642,7 +573,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     getActiveCount: async (): Promise<number> => {
       try {
-        return await ipcRenderer.invoke('notification-get-active-count')
+        return await typedInvoke('notification-get-active-count')
       } catch (error) {
         log.error('Failed to get active notification count:', error)
         return 0
@@ -655,39 +586,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get currently registered shortcuts.
      */
-    getRegistered: async (): Promise<Record<string, unknown>> => {
+    getRegistered: async (): Promise<ShortcutDefinition[]> => {
       try {
-        return await ipcRenderer.invoke('shortcuts-get-registered')
+        return await typedInvoke('shortcuts-get-registered')
       } catch (error) {
         log.error('Failed to get registered shortcuts:', error)
-        return {}
+        return []
       }
     },
 
     /**
      * Get default shortcuts configuration.
      */
-    getDefaults: async (): Promise<Record<string, unknown>> => {
+    getDefaults: async (): Promise<ShortcutDefinition[]> => {
       try {
-        return await ipcRenderer.invoke('shortcuts-get-defaults')
+        return await typedInvoke('shortcuts-get-defaults')
       } catch (error) {
         log.error('Failed to get default shortcuts:', error)
-        return {}
+        return []
       }
     },
 
     /**
      * Update shortcuts configuration.
      */
-    update: async (shortcuts: Record<string, unknown>): Promise<boolean> => {
+    update: async (shortcuts: Record<string, string>): Promise<boolean> => {
       if (!shortcuts || typeof shortcuts !== 'object') {
         throw new Error('Invalid shortcuts configuration')
       }
 
-      const sanitizedShortcuts = sanitizeData(shortcuts)
+      const sanitizedShortcuts = sanitizeData(shortcuts) as Record<
+        string,
+        string
+      >
 
       try {
-        return await ipcRenderer.invoke('shortcuts-update', sanitizedShortcuts)
+        return await typedInvoke('shortcuts-update', sanitizedShortcuts)
       } catch (error) {
         log.error('Failed to update shortcuts:', error)
         throw new Error('Failed to update shortcuts')
@@ -721,13 +655,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         description: description || id,
         enabled: options.enabled ?? true,
         isGlobal: options.isGlobal ?? false,
-      })
+      }) as ShortcutDefinition
 
       try {
-        return await ipcRenderer.invoke(
-          'shortcuts-register',
-          shortcutDefinition,
-        )
+        return await typedInvoke('shortcuts-register', shortcutDefinition)
       } catch (error) {
         log.error('Failed to register shortcut:', error)
         throw new Error('Failed to register shortcut')
@@ -745,7 +676,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedId = sanitizeData(id)
 
       try {
-        return await ipcRenderer.invoke('shortcuts-unregister', sanitizedId)
+        return await typedInvoke('shortcuts-unregister', sanitizedId as string)
       } catch (error) {
         log.error('Failed to unregister shortcut:', error)
         throw new Error('Failed to unregister shortcut')
@@ -763,9 +694,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedAccelerator = sanitizeData(accelerator)
 
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'shortcuts-is-registered',
-          sanitizedAccelerator,
+          sanitizedAccelerator as string,
         )
       } catch (error) {
         log.error('Failed to check shortcut registration:', error)
@@ -778,7 +709,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     enable: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('shortcuts-enable')
+        return await typedInvoke('shortcuts-enable')
       } catch (error) {
         log.error('Failed to enable shortcuts:', error)
         return false
@@ -790,7 +721,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     disable: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('shortcuts-disable')
+        return await typedInvoke('shortcuts-disable')
       } catch (error) {
         log.error('Failed to disable shortcuts:', error)
         return false
@@ -800,9 +731,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get shortcut statistics.
      */
-    getStats: async (): Promise<unknown> => {
+    getStats: async (): Promise<{
+      totalRegistered: number
+      isEnabled: boolean
+      platform: string
+      shortcuts: Record<string, string>
+    } | null> => {
       try {
-        return await ipcRenderer.invoke('shortcuts-get-stats')
+        return await typedInvoke('shortcuts-get-stats')
       } catch (error) {
         log.error('Failed to get shortcut stats:', error)
         return null
@@ -815,9 +751,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get current user.
      */
-    getUser: async (): Promise<unknown> => {
+    getUser: async () => {
       try {
-        return await ipcRenderer.invoke('auth-get-user')
+        return await typedInvoke('auth-get-user')
       } catch (error) {
         log.error('Failed to get user:', error)
         return null
@@ -827,7 +763,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Set current user.
      */
-    setUser: async (user: ElectronUserData): Promise<boolean> => {
+    setUser: async (user: ElectronUserData) => {
       try {
         if (!user || typeof user !== 'object') {
           throw new Error('Invalid auth payload: user object is required')
@@ -844,7 +780,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
           throw new Error('Invalid auth payload: id must be a string')
         }
 
-        return await ipcRenderer.invoke('auth-set-user', sanitizeData(user))
+        const sanitized = sanitizeData(user) as {
+          clerkId: string
+          emailAddresses?: string[]
+          firstName?: string | null
+        }
+        return await typedInvoke('auth-set-user', sanitized)
       } catch (error) {
         log.error('Failed to set user:', error)
         throw new Error('Failed to set user')
@@ -854,9 +795,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Logout current user.
      */
-    logout: async (): Promise<void> => {
+    logout: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('auth-logout')
+        return await typedInvoke('auth-logout')
       } catch (error) {
         log.error('Failed to logout:', error)
         throw new Error('Failed to logout')
@@ -868,7 +809,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     isAuthenticated: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('auth-is-authenticated')
+        return await typedInvoke('auth-is-authenticated')
       } catch (error) {
         log.error('Failed to check authentication:', error)
         return false
@@ -895,10 +836,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
           throw new Error('Invalid auth payload: id must be a string')
         }
 
-        return await ipcRenderer.invoke(
-          'auth-sync-from-web',
-          sanitizeData(authData),
-        )
+        const sanitized = sanitizeData(authData) as {
+          clerkId: string
+          emailAddresses?: string[]
+          firstName?: string | null
+        }
+        return await typedInvoke('auth-sync-from-web', sanitized)
       } catch (error) {
         log.error('Failed to sync auth from web:', error)
         throw new Error('Failed to sync authentication')
@@ -915,20 +858,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * @param provider - OAuth provider (e.g., 'google', 'github')
      * @returns Promise with success status and state or error
      */
-    start: async (
-      provider: string,
-    ): Promise<{ success: boolean; state?: string; error?: string }> => {
-      if (!provider || typeof provider !== 'string') {
-        throw new Error('OAuth provider is required')
-      }
-
-      const sanitizedProvider = sanitizeData(provider)
-
+    start: async (provider: string) => {
       try {
-        return await ipcRenderer.invoke('oauth-start', sanitizedProvider)
+        return await typedInvoke('oauth-start', provider)
       } catch (error) {
         log.error('Failed to start OAuth flow:', error)
         return {
+          state: null,
           success: false,
           error: error instanceof Error ? error.message : String(error),
         }
@@ -938,9 +874,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get list of supported OAuth providers.
      */
-    getSupportedProviders: async (): Promise<string[]> => {
+    getSupportedProviders: async () => {
       try {
-        return await ipcRenderer.invoke('oauth-get-supported-providers')
+        return await typedInvoke('oauth-get-supported-providers')
       } catch (error) {
         log.error('Failed to get supported OAuth providers:', error)
         return []
@@ -950,9 +886,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Cancel pending OAuth flow.
      */
-    cancel: async (state?: string | null): Promise<boolean> => {
+    cancel: async (state?: string | null) => {
       try {
-        return await ipcRenderer.invoke('oauth-cancel', state || null)
+        return await typedInvoke('oauth-cancel', state ?? null)
       } catch (error) {
         log.error('Failed to cancel OAuth flow:', error)
         return false
@@ -1070,12 +1006,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
      *
      * @returns Promise with pending token or null
      */
-    getPendingToken: async (): Promise<{
-      token: string
-      provider: string
-    } | null> => {
+    getPendingToken: async () => {
       try {
-        return await ipcRenderer.invoke('oauth-get-pending-token')
+        return await typedInvoke('oauth-get-pending-token')
       } catch (error) {
         log.error('Failed to get pending OAuth token:', error)
         return null
@@ -1085,9 +1018,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Clear pending sign-in token (after successful sign-in).
      */
-    clearPendingToken: async (): Promise<boolean> => {
+    clearPendingToken: async () => {
       try {
-        return await ipcRenderer.invoke('oauth-clear-pending-token')
+        return await typedInvoke('oauth-clear-pending-token')
       } catch (error) {
         log.error('Failed to clear pending OAuth token:', error)
         return false
@@ -1108,7 +1041,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedAction = sanitizeData(action)
 
       try {
-        return await ipcRenderer.invoke('menu-action', sanitizedAction)
+        return await typedInvoke('menu-action', sanitizedAction as string)
       } catch (error) {
         log.error('Failed to trigger menu action:', error)
         throw new Error('Failed to trigger menu action')
@@ -1130,11 +1063,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedDefault = sanitizeData(defaultValue)
 
       try {
-        return await ipcRenderer.invoke(
+        return (await typedInvoke(
           'config-get',
-          sanitizedPath,
+          sanitizedPath as string,
           sanitizedDefault,
-        )
+        )) as T
       } catch (error) {
         log.error('Failed to get config value:', error)
         return defaultValue as T
@@ -1160,7 +1093,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     load: async (): Promise<Record<string, unknown>> => {
       try {
-        return await ipcRenderer.invoke('config-get-all')
+        return await typedInvoke('config-get-all')
       } catch (error) {
         log.error('Failed to load config:', error)
         return {}
@@ -1179,9 +1112,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedValue = sanitizeData(value)
 
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'config-set',
-          sanitizedPath,
+          sanitizedPath as string,
           sanitizedValue,
         )
       } catch (error) {
@@ -1195,7 +1128,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     getAll: async (): Promise<Record<string, unknown>> => {
       try {
-        return await ipcRenderer.invoke('config-get-all')
+        return await typedInvoke('config-get-all')
       } catch (error) {
         log.error('Failed to get all config:', error)
         return {}
@@ -1205,15 +1138,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get configuration section.
      */
-    getSection: async (section: string): Promise<Record<string, unknown>> => {
+    getSection: async (
+      section: ConfigSection,
+    ): Promise<Record<string, unknown>> => {
       if (!section || typeof section !== 'string') {
         throw new Error('Configuration section is required')
       }
 
-      const sanitizedSection = sanitizeData(section)
+      const sanitizedSection = sanitizeData(section) as ConfigSection
 
       try {
-        return await ipcRenderer.invoke('config-get-section', sanitizedSection)
+        const result = await typedInvoke('config-get-section', sanitizedSection)
+        return result ?? {}
       } catch (error) {
         log.error('Failed to get config section:', error)
         return {}
@@ -1228,10 +1164,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw new Error('Configuration updates must be an object')
       }
 
-      const sanitizedUpdates = sanitizeData(updates)
+      const sanitizedUpdates = sanitizeData(updates) as Record<string, unknown>
 
       try {
-        return await ipcRenderer.invoke('config-update', sanitizedUpdates)
+        return await typedInvoke('config-update', sanitizedUpdates)
       } catch (error) {
         log.error('Failed to update config:', error)
         throw new Error('Failed to update configuration')
@@ -1243,7 +1179,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     reset: async (): Promise<void> => {
       try {
-        return await ipcRenderer.invoke('config-reset')
+        await typedInvoke('config-reset')
       } catch (error) {
         log.error('Failed to reset config:', error)
         throw new Error('Failed to reset configuration')
@@ -1253,18 +1189,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Reset specific section to defaults.
      */
-    resetSection: async (section: string): Promise<void> => {
+    resetSection: async (section: ConfigSection): Promise<void> => {
       if (!section || typeof section !== 'string') {
         throw new Error('Configuration section is required')
       }
 
-      const sanitizedSection = sanitizeData(section)
+      const sanitizedSection = sanitizeData(section) as ConfigSection
 
       try {
-        return await ipcRenderer.invoke(
-          'config-reset-section',
-          sanitizedSection,
-        )
+        await typedInvoke('config-reset-section', sanitizedSection)
       } catch (error) {
         log.error('Failed to reset config section:', error)
         throw new Error('Failed to reset configuration section')
@@ -1274,27 +1207,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Validate configuration.
      */
-    validate: async (): Promise<{ valid: boolean; errors?: string[] }> => {
+    validate: async (): Promise<{ isValid: boolean; errors: string[] }> => {
       try {
-        return await ipcRenderer.invoke('config-validate')
+        return await typedInvoke('config-validate')
       } catch (error) {
         log.error('Failed to validate config:', error)
-        return { valid: false, errors: ['Validation failed'] }
+        return { isValid: false, errors: ['Validation failed'] }
       }
     },
 
     /**
      * Export configuration to file.
+     *
+     * The file path is chosen via a main-process save dialog — the renderer
+     * cannot supply a path, so a compromised renderer cannot write to
+     * arbitrary filesystem locations.
      */
-    export: async (filePath: string): Promise<boolean> => {
-      if (!filePath || typeof filePath !== 'string') {
-        throw new Error('File path is required')
-      }
-
-      const sanitizedPath = sanitizeData(filePath)
-
+    export: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('config-export', sanitizedPath)
+        return await typedInvoke('config-export')
       } catch (error) {
         log.error('Failed to export config:', error)
         throw new Error('Failed to export configuration')
@@ -1303,16 +1234,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Import configuration from file.
+     *
+     * The file path is chosen via a main-process open dialog — the renderer
+     * cannot supply a path, so a compromised renderer cannot read from
+     * arbitrary filesystem locations.
      */
-    import: async (filePath: string): Promise<boolean> => {
-      if (!filePath || typeof filePath !== 'string') {
-        throw new Error('File path is required')
-      }
-
-      const sanitizedPath = sanitizeData(filePath)
-
+    import: async (): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke('config-import', sanitizedPath)
+        return await typedInvoke('config-import')
       } catch (error) {
         log.error('Failed to import config:', error)
         throw new Error('Failed to import configuration')
@@ -1324,7 +1253,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     backup: async (): Promise<string | null> => {
       try {
-        return await ipcRenderer.invoke('config-backup')
+        return await typedInvoke('config-backup')
       } catch (error) {
         log.error('Failed to backup config:', error)
         return null
@@ -1334,12 +1263,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get configuration file paths.
      */
-    getPaths: async (): Promise<Record<string, string>> => {
+    getPaths: async (): Promise<{
+      config: string
+      windowState: string
+      directory: string
+    }> => {
       try {
-        return await ipcRenderer.invoke('config-get-paths')
+        return await typedInvoke('config-get-paths')
       } catch (error) {
         log.error('Failed to get config paths:', error)
-        return {}
+        return { config: '', windowState: '', directory: '' }
       }
     },
   },
@@ -1349,15 +1282,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get window state.
      */
-    get: async (windowType: string): Promise<unknown> => {
-      if (!windowType || typeof windowType !== 'string') {
-        throw new Error('Window type is required')
-      }
-
-      const sanitizedType = sanitizeData(windowType)
-
+    get: async (windowType: 'main' | 'floating') => {
       try {
-        return await ipcRenderer.invoke('window-state-get', sanitizedType)
+        return await typedInvoke('window-state-get', windowType)
       } catch (error) {
         log.error('Failed to get window state:', error)
         return null
@@ -1368,25 +1295,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * Set window state properties.
      */
     set: async (
-      windowType: string,
-      properties: Record<string, unknown>,
-    ): Promise<boolean> => {
-      if (!windowType || typeof windowType !== 'string') {
-        throw new Error('Window type is required')
-      }
-      if (!properties || typeof properties !== 'object') {
-        throw new Error('Window properties must be an object')
-      }
-
-      const sanitizedType = sanitizeData(windowType)
-      const sanitizedProperties = sanitizeData(properties)
-
+      windowType: 'main' | 'floating',
+      properties: Partial<WindowState>,
+    ) => {
       try {
-        return await ipcRenderer.invoke(
-          'window-state-set',
-          sanitizedType,
-          sanitizedProperties,
-        )
+        return await typedInvoke('window-state-set', windowType, properties)
       } catch (error) {
         log.error('Failed to set window state:', error)
         throw new Error('Failed to update window state')
@@ -1396,15 +1309,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Reset window state to defaults.
      */
-    reset: async (windowType: string): Promise<void> => {
-      if (!windowType || typeof windowType !== 'string') {
-        throw new Error('Window type is required')
-      }
-
-      const sanitizedType = sanitizeData(windowType)
-
+    reset: async (windowType: 'main' | 'floating') => {
       try {
-        return await ipcRenderer.invoke('window-state-reset', sanitizedType)
+        return await typedInvoke('window-state-reset', windowType)
       } catch (error) {
         log.error('Failed to reset window state:', error)
         throw new Error('Failed to reset window state')
@@ -1414,12 +1321,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get window state statistics.
      */
-    getStats: async (): Promise<Record<string, unknown>> => {
+    getStats: async () => {
       try {
-        return await ipcRenderer.invoke('window-state-get-stats')
+        return await typedInvoke('window-state-get-stats')
       } catch (error) {
         log.error('Failed to get window state stats:', error)
-        return {}
+        return null
       }
     },
 
@@ -1427,24 +1334,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * Move window to specific display.
      */
     moveToDisplay: async (
-      windowType: string,
+      windowType: 'main' | 'floating',
       displayId: number,
     ): Promise<boolean> => {
-      if (!windowType || typeof windowType !== 'string') {
-        throw new Error('Window type is required')
-      }
-      if (typeof displayId !== 'number') {
-        throw new Error('Display ID is required')
-      }
-
-      const sanitizedType = sanitizeData(windowType)
-      const sanitizedDisplayId = sanitizeData(displayId)
-
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'window-state-move-to-display',
-          sanitizedType,
-          sanitizedDisplayId,
+          windowType,
+          displayId,
         )
       } catch (error) {
         log.error('Failed to move window to display:', error)
@@ -1455,23 +1352,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Snap window to edge of current display.
      */
-    snapToEdge: async (windowType: string, edge: string): Promise<boolean> => {
-      if (!windowType || typeof windowType !== 'string') {
-        throw new Error('Window type is required')
-      }
-      if (!edge || typeof edge !== 'string') {
-        throw new Error('Edge is required')
-      }
-
-      const sanitizedType = sanitizeData(windowType)
-      const sanitizedEdge = sanitizeData(edge)
-
+    snapToEdge: async (
+      windowType: 'main' | 'floating',
+      edge:
+        | 'left'
+        | 'right'
+        | 'top'
+        | 'bottom'
+        | 'top-left'
+        | 'top-right'
+        | 'bottom-left'
+        | 'bottom-right'
+        | 'maximize',
+    ): Promise<boolean> => {
       try {
-        return await ipcRenderer.invoke(
-          'window-state-snap-to-edge',
-          sanitizedType,
-          sanitizedEdge,
-        )
+        return await typedInvoke('window-state-snap-to-edge', windowType, edge)
       } catch (error) {
         log.error('Failed to snap window to edge:', error)
         throw new Error('Failed to snap window to edge')
@@ -1481,18 +1376,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get display information for a window.
      */
-    getDisplay: async (windowType: string): Promise<unknown> => {
-      if (!windowType || typeof windowType !== 'string') {
-        throw new Error('Window type is required')
-      }
-
-      const sanitizedType = sanitizeData(windowType)
-
+    getDisplay: async (windowType: 'main' | 'floating') => {
       try {
-        return await ipcRenderer.invoke(
-          'window-state-get-display',
-          sanitizedType,
-        )
+        return await typedInvoke('window-state-get-display', windowType)
       } catch (error) {
         log.error('Failed to get window display:', error)
         return null
@@ -1502,9 +1388,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get all available displays.
      */
-    getAllDisplays: async (): Promise<unknown[]> => {
+    getAllDisplays: async () => {
       try {
-        return await ipcRenderer.invoke('window-state-get-all-displays')
+        return await typedInvoke('window-state-get-all-displays')
       } catch (error) {
         log.error('Failed to get all displays:', error)
         return []
@@ -1519,7 +1405,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     getVersion: async (): Promise<string> => {
       try {
-        return await ipcRenderer.invoke('app-version')
+        return await typedInvoke('app-version')
       } catch (error) {
         log.error('Failed to get app version:', error)
         return 'unknown'
@@ -1531,7 +1417,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     quit: async (): Promise<void> => {
       try {
-        return await ipcRenderer.invoke('app-quit')
+        return await typedInvoke('app-quit')
       } catch (error) {
         log.error('Failed to quit app:', error)
       }
@@ -1555,10 +1441,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedParams = sanitizeData(params)
 
       try {
-        return await ipcRenderer.invoke(
+        return await typedInvoke(
           'deep-link-generate',
-          sanitizedAction,
-          sanitizedParams,
+          sanitizedAction as string,
+          sanitizedParams as Record<string, unknown>,
         )
       } catch (error) {
         log.error('Failed to generate deep link:', error)
@@ -1569,12 +1455,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get example deep link URLs.
      */
-    getExamples: async (): Promise<Record<string, string>> => {
+    getExamples: async (): Promise<DeepLinkExamples | null> => {
       try {
-        return await ipcRenderer.invoke('deep-link-get-examples')
+        return await typedInvoke('deep-link-get-examples')
       } catch (error) {
         log.error('Failed to get deep link examples:', error)
-        return {}
+        return null
       }
     },
 
@@ -1589,7 +1475,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sanitizedUrl = sanitizeData(url)
 
       try {
-        return await ipcRenderer.invoke('deep-link-handle-url', sanitizedUrl)
+        return await typedInvoke('deep-link-handle-url', sanitizedUrl as string)
       } catch (error) {
         log.error('Failed to handle deep link:', error)
         return false
@@ -1608,7 +1494,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
 
       try {
-        return await ipcRenderer.invoke('settings:setHideAppIcon', hide)
+        return await typedInvoke('settings:setHideAppIcon', hide)
       } catch (error) {
         log.error('Failed to set hide app icon:', error)
         return false
@@ -1624,7 +1510,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
 
       try {
-        return await ipcRenderer.invoke('settings:setShowInMenuBar', show)
+        return await typedInvoke('settings:setShowInMenuBar', show)
       } catch (error) {
         log.error('Failed to set show in menu bar:', error)
         return false
@@ -1640,10 +1526,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
 
       try {
-        return await ipcRenderer.invoke(
-          'settings:setStartAtLogin',
-          startAtLogin,
-        )
+        return await typedInvoke('settings:setStartAtLogin', startAtLogin)
       } catch (error) {
         log.error('Failed to set start at login:', error)
         return false
@@ -1729,56 +1612,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners(channel)
   },
 
-  // IPC Error handling and monitoring
-  errorHandling: {
-    /**
-     * Get IPC error statistics.
-     */
-    getStats: async (): Promise<unknown> => {
-      try {
-        return await ipcRenderer.invoke('ipc-error-stats')
-      } catch (error) {
-        log.error('Failed to get IPC error stats:', error)
-        return null
-      }
-    },
-
-    /**
-     * Perform IPC health check.
-     */
-    healthCheck: async (): Promise<{
-      isHealthy: boolean
-      error?: string
-    }> => {
-      try {
-        return await ipcRenderer.invoke('ipc-error-health-check')
-      } catch (error) {
-        log.error('Failed to perform IPC health check:', error)
-        return { isHealthy: false, error: 'Health check failed' }
-      }
-    },
-
-    /**
-     * Reset IPC error statistics.
-     */
-    resetStats: async (): Promise<boolean> => {
-      try {
-        return await ipcRenderer.invoke('ipc-error-reset-stats')
-      } catch (error) {
-        log.error('Failed to reset IPC error stats:', error)
-        return false
-      }
-    },
-  },
-
   // Auto-updater operations
   updater: {
     /**
      * Check for application updates.
      */
-    checkForUpdates: async (): Promise<boolean> => {
+    checkForUpdates: async () => {
       try {
-        return await ipcRenderer.invoke('updater-check-for-updates')
+        return await typedInvoke('updater-check-for-updates')
       } catch (error) {
         log.error('Failed to check for updates:', error)
         return false
@@ -1788,9 +1629,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Quit and install update.
      */
-    quitAndInstall: async (): Promise<boolean> => {
+    quitAndInstall: async () => {
       try {
-        return await ipcRenderer.invoke('updater-quit-and-install')
+        return await typedInvoke('updater-quit-and-install')
       } catch (error) {
         log.error('Failed to quit and install update:', error)
         return false
@@ -1800,12 +1641,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get update status.
      */
-    getStatus: async (): Promise<{
-      updateAvailable: boolean
-      updateDownloaded: boolean
-    }> => {
+    getStatus: async () => {
       try {
-        return await ipcRenderer.invoke('updater-get-status')
+        return await typedInvoke('updater-get-status')
       } catch (error) {
         log.error('Failed to get update status:', error)
         return { updateAvailable: false, updateDownloaded: false }
@@ -1820,11 +1658,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     click: async (): Promise<void> => {
       try {
-        return await ipcRenderer.invoke(
-          'tray-show-notification',
-          'Test',
-          'Tray clicked',
-        )
+        await typedInvoke('tray-show-notification', 'Test', 'Tray clicked')
       } catch (error) {
         log.error('Failed to click tray:', error)
       }
@@ -1836,9 +1670,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Get all displays.
      */
-    getAllDisplays: async (): Promise<unknown[]> => {
+    getAllDisplays: async () => {
       try {
-        return await ipcRenderer.invoke('window-state-get-all-displays')
+        return await typedInvoke('window-state-get-all-displays')
       } catch (error) {
         log.error('Failed to get all displays:', error)
         return []

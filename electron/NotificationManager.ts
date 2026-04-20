@@ -11,7 +11,12 @@ import path from 'path'
 import { Notification, nativeImage, type NativeImage } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
+// NotificationPreferences and NotificationOptions are the canonical contract
+// types from ./types/ipc.ts — imported here so the manager stays aligned with
+// the IPC boundary contract (single source of truth).
+import type { NotificationOptions, NotificationPreferences } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -47,32 +52,7 @@ interface TaskChanges {
   dueDate?: boolean
 }
 
-/** Notification preferences */
-export interface NotificationPreferences {
-  enabled: boolean
-  taskCreated: boolean
-  taskCompleted: boolean
-  taskUpdated: boolean
-  taskDeleted: boolean
-  sound: boolean
-  showInTray: boolean
-  autoHide: boolean
-  autoHideDelay: number
-  position: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft'
-}
-
-/** Notification options */
-interface NotificationOptions {
-  type?: 'info' | 'warning' | 'error' | 'success'
-  silent?: boolean
-  tag?: string
-  urgency?: 'low' | 'normal' | 'critical'
-  timeoutMs?: number
-  icon?: string
-  actions?: Array<{ type: 'button'; text: string }>
-  onClick?: () => Promise<void>
-  onAction?: (actionIndex: number) => Promise<void>
-}
+export type { NotificationPreferences, NotificationOptions }
 
 /** Permission result */
 interface PermissionResult {
@@ -344,7 +324,7 @@ export class NotificationManager {
 
     if (this.windowManager.hasMainWindow()) {
       const mainWindow = this.windowManager.getMainWindow()
-      mainWindow.webContents.send('notification-permission-denied', {
+      typedSend(mainWindow.webContents, 'notification-permission-denied', {
         reason: _reason,
         guidance: this.getPermissionGuidanceForPlatform(),
       })
@@ -407,7 +387,7 @@ export class NotificationManager {
         this.windowManager.hasMainWindow()
       ) {
         const mainWindow = this.windowManager.getMainWindow()
-        mainWindow.webContents.send('show-fallback-notification', {
+        typedSend(mainWindow.webContents, 'show-fallback-notification', {
           title,
           body,
           options,
@@ -578,7 +558,7 @@ export class NotificationManager {
 
       if (this.windowManager.hasMainWindow()) {
         const mainWindow = this.windowManager.getMainWindow()
-        mainWindow.webContents.send('focus-task', taskId)
+        typedSend(mainWindow.webContents, 'focus-task', { taskId })
       }
     } catch (error) {
       log.error('Failed to handle task notification click:', error)
@@ -640,7 +620,7 @@ export class NotificationManager {
     try {
       if (this.windowManager.hasMainWindow()) {
         const mainWindow = this.windowManager.getMainWindow()
-        mainWindow.webContents.send('mark-task-complete', taskId)
+        typedSend(mainWindow.webContents, 'mark-task-complete', { taskId })
       }
     } catch (error) {
       log.error('Failed to mark task complete:', error)

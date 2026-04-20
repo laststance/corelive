@@ -12,6 +12,7 @@ import type { BrowserWindow, MenuItemConstructorOptions } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
 import type { ConfigManager } from './ConfigManager'
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { WindowManager } from './WindowManager'
 
@@ -408,13 +409,15 @@ export class MenuManager {
 
   createNewTask(): void {
     if (this.mainWindow && this.mainWindow.webContents) {
-      this.mainWindow.webContents.send('menu-action', { action: 'new-task' })
+      typedSend(this.mainWindow.webContents, 'menu-action', {
+        action: 'new-task',
+      })
     }
   }
 
   focusSearch(): void {
     if (this.mainWindow && this.mainWindow.webContents) {
-      this.mainWindow.webContents.send('menu-action', {
+      typedSend(this.mainWindow.webContents, 'menu-action', {
         action: 'focus-search',
       })
     }
@@ -446,7 +449,8 @@ export class MenuManager {
     try {
       const floatingWindow = this.windowManager.getFloatingNavigator()
       if (floatingWindow && !floatingWindow.isDestroyed()) {
-        floatingWindow.webContents.send(
+        typedSend(
+          floatingWindow.webContents,
           'floating-navigator-menu-action',
           action,
         )
@@ -473,7 +477,7 @@ export class MenuManager {
       )
       // Fallback: send IPC message if windowManager is not available
       if (this.mainWindow && this.mainWindow.webContents) {
-        this.mainWindow.webContents.send('menu-action', {
+        typedSend(this.mainWindow.webContents, 'menu-action', {
           action: 'open-preferences',
         })
       }
@@ -483,7 +487,8 @@ export class MenuManager {
   async checkForUpdates(): Promise<void> {
     try {
       if (this.mainWindow && this.mainWindow.webContents) {
-        this.mainWindow.webContents.send(
+        typedSend(
+          this.mainWindow.webContents,
           'updater-message',
           'Checking for updates...',
         )
@@ -521,7 +526,7 @@ export class MenuManager {
       })
 
       if (!result.canceled && result.filePaths.length > 0) {
-        this.mainWindow.webContents.send('menu-action', {
+        typedSend(this.mainWindow.webContents, 'menu-action', {
           action: 'import-tasks',
           filePath: result.filePaths[0],
         })
@@ -545,7 +550,7 @@ export class MenuManager {
       })
 
       if (!result.canceled && result.filePath) {
-        this.mainWindow.webContents.send('menu-action', {
+        typedSend(this.mainWindow.webContents, 'menu-action', {
           action: 'export-tasks',
           filePath: result.filePath,
         })
