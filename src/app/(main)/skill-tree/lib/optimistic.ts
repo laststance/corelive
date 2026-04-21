@@ -1,16 +1,32 @@
+import type { SkillNode } from '@/server/schemas/skillTree'
+
+import type { SkillNodeId, TodoId } from './domain-types'
+
+/**
+ * A minimal assignment row in the optimistic reducer state.
+ */
+export interface OptimisticAssignment {
+  todoId: TodoId
+}
+
+/**
+ * Server skill-node slice required to construct optimistic assignment state.
+ */
+type SkillNodeWithAssignments = Pick<SkillNode, 'id' | 'assignments'>
+
 /**
  * A lightweight snapshot of assignment state used by the optimistic reducer.
  * Holds only the derived data the UI needs: per-node assignments and the
  * unassigned pool. Not persisted — rebuilt from server state on each query.
  */
 export interface OptimisticState {
-  assignmentsByNode: Record<number, { todoId: number }[]>
-  unassignedTodoIds: number[]
+  assignmentsByNode: Record<SkillNodeId, OptimisticAssignment[]>
+  unassignedTodoIds: TodoId[]
 }
 
 export type OptimisticAction =
-  | { type: 'assign'; nodeId: number; todoId: number }
-  | { type: 'unassign'; nodeId: number; todoId: number }
+  | { type: 'assign'; nodeId: SkillNodeId; todoId: TodoId }
+  | { type: 'unassign'; nodeId: SkillNodeId; todoId: TodoId }
 
 /**
  * Pure reducer for optimistic drag-and-drop assignments.
@@ -82,16 +98,16 @@ export function applyAssignment(
  * const state = buildInitialState(skillTree.nodes, poolTodoIds)
  */
 export function buildInitialState(
-  nodes: Array<{
-    id: number
-    assignments: Array<{ todoId: number | null }>
-  }>,
-  poolTodoIds: number[],
+  nodes: SkillNodeWithAssignments[],
+  poolTodoIds: TodoId[],
 ): OptimisticState {
-  const assignmentsByNode: Record<number, { todoId: number }[]> = {}
+  const assignmentsByNode: Record<SkillNodeId, OptimisticAssignment[]> = {}
   for (const node of nodes) {
     assignmentsByNode[node.id] = node.assignments
-      .filter((a): a is { todoId: number } => a.todoId !== null)
+      .filter(
+        (a): a is SkillNode['assignments'][number] & { todoId: TodoId } =>
+          a.todoId !== null,
+      )
       .map((a) => ({ todoId: a.todoId }))
   }
   return { assignmentsByNode, unassignedTodoIds: poolTodoIds }

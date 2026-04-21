@@ -11,14 +11,16 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 
+import type { TodoId, TodoText } from '../lib/domain-types'
+
 import { TaskPoolCard } from './TaskPoolCard'
 
 /**
  * Minimal Todo shape used by the drawer. Kept loose so stories can use mocks.
  */
 export interface PoolTodo {
-  id: number
-  text: string
+  id: TodoId
+  text: TodoText
 }
 
 export interface TaskPoolDrawerProps {

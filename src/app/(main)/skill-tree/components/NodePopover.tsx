@@ -10,14 +10,22 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
+import type {
+  NodeXp,
+  SkillNodeId,
+  SkillNodeName,
+  TodoId,
+  TodoText,
+} from '../lib/domain-types'
+
 import { XpBadge } from './XpBadge'
 
 /** A single todo that has been assigned to a skill node. */
 export interface AssignedTodo {
   /** The unique identifier of the todo. */
-  id: number
+  id: TodoId
   /** The display text of the todo. */
-  text: string
+  text: TodoText
 }
 
 /** Props for the NodePopover component. */
@@ -30,14 +38,14 @@ export interface NodePopoverProps {
    */
   onOpenChange: (open: boolean) => void
   /** The skill node to display: id, name, and current accumulated XP. */
-  node: { id: number; name: string; xp: number }
+  node: { id: SkillNodeId; name: SkillNodeName; xp: NodeXp }
   /** Todos currently assigned to this node. */
   assignedTodos: AssignedTodo[]
   /**
    * Called with the todo's id when the user clicks the × button next to a row.
    * The parent is responsible for removing the assignment optimistically.
    */
-  onUnassign: (todoId: number) => void
+  onUnassign: (todoId: TodoId) => void
   /** The trigger element the popover is anchored to (rendered via PopoverTrigger asChild). */
   children: ReactNode
 }
