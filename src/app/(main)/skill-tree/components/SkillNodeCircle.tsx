@@ -4,6 +4,12 @@ import { useDroppable } from '@dnd-kit/core'
 import React from 'react'
 import { match } from 'ts-pattern'
 
+import type {
+  NodeXp,
+  SkillNodeId,
+  SkillNodeName,
+  ViewboxCoordinate,
+} from '../lib/domain-types'
 import { LEVEL_LABEL, xpToLevel } from '../lib/xp'
 
 /**
@@ -23,12 +29,12 @@ import { LEVEL_LABEL, xpToLevel } from '../lib/xp'
  * <SkillNodeCircle id={1} name="APIs" cx={50} cy={50} xp={30} onClick={(id) => console.log(id)} />
  */
 export interface SkillNodeCircleProps {
-  id: number
-  name: string
-  cx: number
-  cy: number
-  xp: number
-  onClick?: (nodeId: number) => void
+  id: SkillNodeId
+  name: SkillNodeName
+  cx: ViewboxCoordinate
+  cy: ViewboxCoordinate
+  xp: NodeXp
+  onClick?: (nodeId: SkillNodeId) => void
 }
 
 export function SkillNodeCircle({

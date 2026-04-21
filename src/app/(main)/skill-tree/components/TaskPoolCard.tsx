@@ -3,6 +3,8 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 
+import type { TodoId, TodoText } from '../lib/domain-types'
+
 /**
  * A draggable card representing a completed Todo in the pool drawer.
  * Uses `useDraggable` for DnD and renders as a button for a11y.
@@ -18,8 +20,8 @@ import { CSS } from '@dnd-kit/utilities'
  * </DndContext>
  */
 export interface TaskPoolCardProps {
-  id: number
-  text: string
+  id: TodoId
+  text: TodoText
 }
 
 export function TaskPoolCard({ id, text }: TaskPoolCardProps) {

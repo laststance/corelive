@@ -23,6 +23,7 @@ import { ConstellationCanvas } from './components/ConstellationCanvas'
 import { DragOverlayCard } from './components/DragOverlayCard'
 import { NodePopover } from './components/NodePopover'
 import { TaskPoolDrawer } from './components/TaskPoolDrawer'
+import type { SkillNodeId, TodoId, TodoText } from './lib/domain-types'
 import {
   applyAssignment,
   buildInitialState,
@@ -54,10 +55,9 @@ import './styles.css'
 export function SkillTreeView() {
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [activeDragId, setActiveDragId] = useState<number | null>(null)
-  const [activePopoverNodeId, setActivePopoverNodeId] = useState<number | null>(
-    null,
-  )
+  const [activeDragId, setActiveDragId] = useState<TodoId | null>(null)
+  const [activePopoverNodeId, setActivePopoverNodeId] =
+    useState<SkillNodeId | null>(null)
   const [, startTransition] = useTransition()
 
   const {
@@ -94,7 +94,7 @@ export function SkillTreeView() {
   // The tree side uses the `todoText` snapshot column which is populated at
   // assign time and survives the source todo being deleted.
   const todoTextById = useMemo(() => {
-    const map = new Map<number, string>()
+    const map = new Map<TodoId, TodoText>()
     pool?.forEach((t) => map.set(t.id, t.text))
     tree?.nodes.forEach((node) => {
       node.assignments.forEach((a) => {
@@ -185,7 +185,7 @@ export function SkillTreeView() {
     })
   }
 
-  function handleUnassign(nodeId: number, todoId: number) {
+  function handleUnassign(nodeId: SkillNodeId, todoId: TodoId) {
     startTransition(async () => {
       applyOptimistic({ type: 'unassign', nodeId, todoId })
       await unassignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
@@ -415,7 +415,7 @@ export function SkillTreeView() {
  * parseTodoDragId('todo-0')    // => null
  * parseTodoDragId('node-3')    // => null
  */
-function parseTodoDragId(id: UniqueIdentifier): number | null {
+function parseTodoDragId(id: UniqueIdentifier): TodoId | null {
   const s = String(id)
   if (!s.startsWith('todo-')) return null
   const n = Number(s.slice('todo-'.length))
@@ -438,7 +438,7 @@ function parseTodoDragId(id: UniqueIdentifier): number | null {
  * parseNodeDropId('node-0')    // => null
  * parseNodeDropId('todo-42')   // => null
  */
-function parseNodeDropId(id: UniqueIdentifier): number | null {
+function parseNodeDropId(id: UniqueIdentifier): SkillNodeId | null {
   const s = String(id)
   if (!s.startsWith('node-')) return null
   const n = Number(s.slice('node-'.length))

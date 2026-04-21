@@ -1,5 +1,16 @@
 'use client'
 
+import type {
+  EdgeFromNodeId,
+  EdgeToNodeId,
+  NodeCoordinate,
+  NodeEdgeId,
+  NodeXp,
+  SkillNodeId,
+  SkillNodeName,
+  ViewboxCoordinate,
+} from '../lib/domain-types'
+
 import { SkillNodeCircle } from './SkillNodeCircle'
 
 /**
@@ -7,23 +18,23 @@ import { SkillNodeCircle } from './SkillNodeCircle'
  * Kept separate from the Prisma type to avoid pulling server types into client code.
  */
 export interface CanvasNode {
-  id: number
-  name: string
-  x: number // 0-1 normalized
-  y: number // 0-1 normalized
-  xp: number
+  id: SkillNodeId
+  name: SkillNodeName
+  x: NodeCoordinate // 0-1 normalized
+  y: NodeCoordinate // 0-1 normalized
+  xp: NodeXp
 }
 
 export interface CanvasEdge {
-  id: number
-  fromNodeId: number
-  toNodeId: number
+  id: NodeEdgeId
+  fromNodeId: EdgeFromNodeId
+  toNodeId: EdgeToNodeId
 }
 
 export interface ConstellationCanvasProps {
   nodes: CanvasNode[]
   edges: CanvasEdge[]
-  onNodeClick?: (nodeId: number) => void
+  onNodeClick?: (nodeId: SkillNodeId) => void
 }
 
 const VIEWBOX = 1000 // logical units — actual size is controlled by CSS
@@ -37,7 +48,7 @@ const VIEWBOX = 1000 // logical units — actual size is controlled by CSS
  * toViewboxUnits(0.5) // => 500
  * toViewboxUnits(0)   // => 0
  */
-function toViewboxUnits(n: number) {
+function toViewboxUnits(n: NodeCoordinate): ViewboxCoordinate {
   return n * VIEWBOX
 }
 
