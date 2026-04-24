@@ -1,17 +1,42 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    <linearGradient id="glassShell" x1="108" y1="64" x2="418" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBFEFF" stop-opacity="0.98" />
+      <stop offset="0.48" stop-color="#BFE9F6" stop-opacity="0.78" />
+      <stop offset="1" stop-color="#5D8AE8" stop-opacity="0.86" />
     </linearGradient>
+    <radialGradient id="topGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(170 130) rotate(54) scale(320)">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.96" />
+      <stop offset="0.46" stop-color="#DFF8FF" stop-opacity="0.42" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="orbitBlue" x1="154" y1="322" x2="374" y2="206" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6ECFF6" />
+      <stop offset="1" stop-color="#4776E6" />
+    </linearGradient>
+    <linearGradient id="orbitWhite" x1="156" y1="278" x2="336" y2="184" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18" />
+      <stop offset="0.44" stop-color="#FFFFFF" stop-opacity="0.68" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.38" />
+    </linearGradient>
+    <filter id="appShadow" x="42" y="42" width="428" height="428" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#164E63" flood-opacity="0.2" />
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.08" />
+    </filter>
+    <filter id="softBlur" x="90" y="86" width="268" height="250" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="18" />
+    </filter>
   </defs>
-  
-  <!-- Background circle -->
-  <circle cx="256" cy="256" r="240" fill="url(#gradient)" stroke="#1F2937" stroke-width="8"/>
-  
-  <!-- Checkmark icon -->
-  <path d="M160 256l64 64 128-128" stroke="white" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  
-  <!-- TODO text -->
-  <text x="256" y="380" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="white">TODO</text>
+
+  <rect x="72" y="72" width="368" height="368" rx="92" fill="url(#glassShell)" filter="url(#appShadow)" />
+  <rect x="84" y="84" width="344" height="344" rx="82" fill="url(#topGlow)" />
+  <rect x="84" y="84" width="344" height="344" rx="82" stroke="#FFFFFF" stroke-opacity="0.52" stroke-width="2" />
+
+  <path d="M136 272C176 208 235 168 312 154" stroke="#FFFFFF" stroke-opacity="0.34" stroke-width="36" stroke-linecap="round" filter="url(#softBlur)" />
+  <path d="M144 282C184 218 242 178 320 164" stroke="url(#orbitWhite)" stroke-width="28" stroke-linecap="round" />
+  <path d="M156 316C214 254 280 220 356 213" stroke="url(#orbitBlue)" stroke-opacity="0.74" stroke-width="22" stroke-linecap="round" />
+
+  <circle cx="344" cy="182" r="18" fill="#FFFFFF" fill-opacity="0.82" />
+  <circle cx="344" cy="182" r="8" fill="#BCEEFF" fill-opacity="0.7" />
+  <path d="M126 138C146 116 181 105 213 108" stroke="#FFFFFF" stroke-opacity="0.72" stroke-width="16" stroke-linecap="round" />
 </svg>
