@@ -1,42 +1,46 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="glassShell" x1="108" y1="64" x2="418" y2="448" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FBFEFF" stop-opacity="0.98" />
-      <stop offset="0.48" stop-color="#BFE9F6" stop-opacity="0.78" />
-      <stop offset="1" stop-color="#5D8AE8" stop-opacity="0.86" />
+    <linearGradient id="outerShell" x1="104" y1="72" x2="408" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#596068" />
+      <stop offset="0.34" stop-color="#3E454D" />
+      <stop offset="1" stop-color="#23282F" />
     </linearGradient>
-    <radialGradient id="topGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(170 130) rotate(54) scale(320)">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.96" />
-      <stop offset="0.46" stop-color="#DFF8FF" stop-opacity="0.42" />
+    <radialGradient id="innerPanel" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(260 258) rotate(90) scale(180)">
+      <stop offset="0" stop-color="#CDD4DD" />
+      <stop offset="0.6" stop-color="#A7B0BB" />
+      <stop offset="1" stop-color="#7F8995" />
+    </radialGradient>
+    <radialGradient id="innerGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(258 220) rotate(90) scale(130)">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.34" />
       <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="orbitBlue" x1="154" y1="322" x2="374" y2="206" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#6ECFF6" />
-      <stop offset="1" stop-color="#4776E6" />
+    <linearGradient id="blueArc" x1="156" y1="334" x2="372" y2="214" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#66C8F7" />
+      <stop offset="1" stop-color="#4F79E6" />
     </linearGradient>
-    <linearGradient id="orbitWhite" x1="156" y1="278" x2="336" y2="184" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18" />
-      <stop offset="0.44" stop-color="#FFFFFF" stop-opacity="0.68" />
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.38" />
+    <linearGradient id="whiteArc" x1="172" y1="286" x2="350" y2="182" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22" />
+      <stop offset="0.48" stop-color="#FFFFFF" stop-opacity="0.8" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.34" />
     </linearGradient>
-    <filter id="appShadow" x="42" y="42" width="428" height="428" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#164E63" flood-opacity="0.2" />
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.08" />
-    </filter>
-    <filter id="softBlur" x="90" y="86" width="268" height="250" color-interpolation-filters="sRGB">
-      <feGaussianBlur stdDeviation="18" />
+    <filter id="shadow" x="42" y="42" width="428" height="428" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.24" />
     </filter>
   </defs>
 
-  <rect x="72" y="72" width="368" height="368" rx="92" fill="url(#glassShell)" filter="url(#appShadow)" />
-  <rect x="84" y="84" width="344" height="344" rx="82" fill="url(#topGlow)" />
-  <rect x="84" y="84" width="344" height="344" rx="82" stroke="#FFFFFF" stroke-opacity="0.52" stroke-width="2" />
+  <rect x="72" y="72" width="368" height="368" rx="92" fill="url(#outerShell)" filter="url(#shadow)" />
+  <rect x="72" y="72" width="368" height="368" rx="92" fill="#2A2F36" fill-opacity="0.78" />
+  <rect x="72" y="72" width="368" height="368" rx="92" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="2" />
 
-  <path d="M136 272C176 208 235 168 312 154" stroke="#FFFFFF" stroke-opacity="0.34" stroke-width="36" stroke-linecap="round" filter="url(#softBlur)" />
-  <path d="M144 282C184 218 242 178 320 164" stroke="url(#orbitWhite)" stroke-width="28" stroke-linecap="round" />
-  <path d="M156 316C214 254 280 220 356 213" stroke="url(#orbitBlue)" stroke-opacity="0.74" stroke-width="22" stroke-linecap="round" />
+  <rect x="160" y="156" width="192" height="192" rx="44" fill="url(#innerPanel)" fill-opacity="0.92" />
+  <rect x="160" y="156" width="192" height="192" rx="44" fill="url(#innerGlow)" />
+  <rect x="160" y="156" width="192" height="192" rx="44" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2" />
 
-  <circle cx="344" cy="182" r="18" fill="#FFFFFF" fill-opacity="0.82" />
-  <circle cx="344" cy="182" r="8" fill="#BCEEFF" fill-opacity="0.7" />
-  <path d="M126 138C146 116 181 105 213 108" stroke="#FFFFFF" stroke-opacity="0.72" stroke-width="16" stroke-linecap="round" />
+  <path d="M136 272C176 206 240 165 322 152" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="32" stroke-linecap="round" />
+  <path d="M152 286C192 224 252 187 332 176" stroke="url(#whiteArc)" stroke-width="26" stroke-linecap="round" />
+  <path d="M152 330C214 262 280 224 366 216" stroke="url(#blueArc)" stroke-width="22" stroke-linecap="round" />
+
+  <path d="M118 136C140 114 175 103 211 108" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="16" stroke-linecap="round" />
+  <circle cx="344" cy="182" r="18" fill="#F8FBFF" fill-opacity="0.86" />
+  <circle cx="344" cy="182" r="8" fill="#B7EBFF" fill-opacity="0.84" />
 </svg>
