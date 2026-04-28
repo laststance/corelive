@@ -8,6 +8,15 @@ test.describe('Theme Visual Test', () => {
     // This is required for Clerk to work properly in test mode
     await setupClerkTestingToken({ page })
 
+    // Freeze the browser clock so client-side `new Date()` calls render
+    // deterministically across runs. Without this, `ContributionGraph`'s
+    // `endDate` (computed via `useMemo(() => normalizeDate(new Date()))`)
+    // shifts day-by-day and produces false-positive Argos diffs.
+    // The fixed reference is in the past relative to any realistic CI run
+    // so Clerk session token validation (which compares `iat`/`exp` against
+    // the browser clock) still treats real tokens as freshly issued.
+    await page.clock.install({ time: new Date('2026-01-15T12:00:00Z') })
+
     // Navigate to the TODO app home page
     // Authentication state is automatically loaded from playwright/.auth/user.json
     await page.goto('/home')
@@ -35,8 +44,14 @@ test.describe('Theme Visual Test', () => {
       await expect(page.getByText('Todo List')).toBeVisible({ timeout: 10000 })
     }
 
-    // Add a new TODO item
-    const todoText = `ThemeTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    // Add a new TODO item.
+    //
+    // The text is intentionally a fixed constant — embedding `Date.now()` /
+    // `Math.random()` here would render a different label every run and
+    // surface as an Argos visual diff even when the UI itself has not
+    // changed. `globalSetup` resets the database before each `pnpm e2e:web`
+    // invocation, so a stable string never collides with prior fixtures.
+    const todoText = 'Theme test todo'
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
@@ -47,8 +62,14 @@ test.describe('Theme Visual Test', () => {
     // Wait for UI to stabilize before taking screenshot
     await page.waitForTimeout(1000)
 
+    // Mask any TODO `createdAt` date displays — those are stamped by the
+    // server when the TODO is added during this test, so the value is
+    // inherently the test execution date and cannot be fixed via
+    // `page.clock.install`.
+    const createdAtMask = [page.locator('[data-testid="todo-created-at"]')]
+
     // Capture screenshot of light theme (default)
-    await argosScreenshot(page, 'home-light-theme')
+    await argosScreenshot(page, 'home-light-theme', { mask: createdAtMask })
 
     // Open user menu dropdown (click on avatar button in sidebar header)
     // The avatar button is in the sidebar header, which contains the user's avatar and name
@@ -91,7 +112,7 @@ test.describe('Theme Visual Test', () => {
       timeout: 5000,
     })
 
-    // Capture screenshot of dark theme
-    await argosScreenshot(page, 'home-dark-theme')
+    // Capture screenshot of dark theme (same mask as light theme)
+    await argosScreenshot(page, 'home-dark-theme', { mask: createdAtMask })
   })
 })

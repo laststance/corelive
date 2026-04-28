@@ -99,7 +99,9 @@ export function TodoItem({
             {todo.text}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{todo.createdAt.toLocaleDateString('en-US')}</span>
+            <span data-testid="todo-created-at">
+              {todo.createdAt.toLocaleDateString('en-US')}
+            </span>
             {todo.categoryName && (
               <span className="flex items-center gap-1">
                 <span
