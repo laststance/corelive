@@ -98,8 +98,9 @@ const createWindowManagerMock = () => {
         this.windowStateManager.applyWindowState('main', this.mainWindow)
       }
 
-      // Production web app URL
-      const startUrl = this.serverUrl || 'https://corelive.app'
+      // Production web app URL — load /home so authenticated users land
+      // directly in the app and proxy.ts redirects unauthenticated users to /login.
+      const startUrl = `${this.serverUrl || 'https://corelive.app'}/home`
       this.mainWindow.loadURL(startUrl)
 
       // Set up event listeners
@@ -413,11 +414,20 @@ describe('WindowManager', () => {
         }),
       )
 
-      expect(window.loadURL).toHaveBeenCalledWith('http://localhost:3000')
+      expect(window.loadURL).toHaveBeenCalledWith('http://localhost:3000/home')
       expect(mockWindowStateManager.applyWindowState).toHaveBeenCalledWith(
         'main',
         window,
       )
+    })
+
+    it('should load /home so authenticated users skip the landing page', () => {
+      // Regression test for: already-signed-in users seeing the public
+      // landing (/) on Electron startup. Loading /home lets proxy.ts route
+      // unauthenticated users to /login while authenticated users land in the app.
+      const window = windowManager.createMainWindow()
+      const loadedUrl = window.loadURL.mock.calls[0][0]
+      expect(loadedUrl).toMatch(/\/home$/)
     })
 
     it('should set up window event listeners', () => {

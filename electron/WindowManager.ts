@@ -233,7 +233,11 @@ export class WindowManager {
       this.windowStateManager.applyWindowState('main', this.mainWindow)
     }
 
-    const startUrl = this.serverUrl || 'https://corelive.app'
+    // Load /home directly so already-authenticated users skip the public
+    // landing page (`/`) and Clerk's proxy.ts redirects unauthenticated users
+    // to /login. Without this path, Electron always opened `/`, which has no
+    // auth check and made signed-in users see the Login button.
+    const startUrl = `${this.serverUrl || 'https://corelive.app'}/home`
     this.mainWindow.loadURL(startUrl)
 
     this.mainWindow.once('ready-to-show', () => {
