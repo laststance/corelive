@@ -49,8 +49,22 @@ export function ElectronStartupSync(): null {
     if (!isElectronEnvironment()) return
     // Surface IPC failures to the console; swallowing them silently would
     // mask main-process regressions during startup sync.
-    window.electronAPI?.settings
-      ?.setHideAppIcon(hideAppIcon)
+    //
+    // The preload bridge (electron/preload.ts) wraps `typedInvoke` in a
+    // try/catch and returns `false` instead of rejecting, so the meaningful
+    // failure signal here is the boolean `false`, not a thrown error. The
+    // `.catch` is still kept as defense-in-depth in case preload behavior
+    // changes or someone exposes the raw IPC channel later.
+    const syncPromise =
+      window.electronAPI?.settings?.setHideAppIcon(hideAppIcon)
+    syncPromise
+      ?.then((ok) => {
+        if (ok === false) {
+          console.error(
+            '[ElectronStartupSync] Failed to sync hideAppIcon: IPC returned false',
+          )
+        }
+      })
       ?.catch((error: unknown) => {
         console.error(
           '[ElectronStartupSync] Failed to sync hideAppIcon:',

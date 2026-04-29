@@ -114,6 +114,46 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
+  it('logs an error when setHideAppIcon resolves to false', async () => {
+    // The preload bridge swallows thrown errors and returns `false` instead
+    // of rejecting (electron/preload.ts:1491-1502). Without this test, the
+    // .then/false-check could be removed and the rejection-only test above
+    // would still pass — but real failures from main would silently disappear.
+    setHideAppIconMock.mockResolvedValueOnce(false)
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+
+    render(wrapWithStore(<ElectronStartupSync />, true))
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[ElectronStartupSync] Failed to sync hideAppIcon: IPC returned false',
+      )
+    })
+
+    consoleErrorSpy.mockRestore()
+  })
+
+  it('does not log an error when setHideAppIcon resolves to true', async () => {
+    // Guard against false-positive logging: the success path must stay quiet.
+    // If someone flipped the boolean check (`ok === true` instead of `ok === false`),
+    // this test catches it.
+    setHideAppIconMock.mockResolvedValueOnce(true)
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+
+    render(wrapWithStore(<ElectronStartupSync />, true))
+
+    await waitFor(() => {
+      expect(setHideAppIconMock).toHaveBeenCalledWith(true)
+    })
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+
+    consoleErrorSpy.mockRestore()
+  })
+
   it('re-syncs when hideAppIcon changes after mount', async () => {
     // Locks down the [hideAppIcon] dependency in the effect — if someone
     // changes it to [] (mount-only), this test fails. Important because
