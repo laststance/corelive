@@ -17,15 +17,21 @@
 
 import { useEffect } from 'react'
 
-import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { useAppSelector } from '@/lib/redux/hooks'
 import { selectHideAppIcon } from '@/lib/redux/slices/electronSettingsSlice'
+
+import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 
 /**
  * Pushes the persisted `hideAppIcon` value to the main process via IPC
  * after Redux hydrates from localStorage. The IPC handler in main.ts is
  * idempotent (re-applying the same activation policy is a no-op), so
  * firing on every selector change is safe.
+ *
+ * Uses `isElectronEnvironment()` directly inside the effect rather than
+ * the `useIsElectron` hook: avoids importing the heavy auth-form module
+ * (and its Clerk hooks) into the root layout chunk for web users, while
+ * staying SSR-safe because effects only run in the browser.
  *
  * @returns Always null; this component renders nothing.
  *
@@ -37,14 +43,21 @@ import { selectHideAppIcon } from '@/lib/redux/slices/electronSettingsSlice'
  * </ReduxProvider>
  */
 export function ElectronStartupSync(): null {
-  const isElectron = useIsElectron()
   const hideAppIcon = useAppSelector(selectHideAppIcon)
 
   useEffect(() => {
-    if (!isElectron) return
-    if (typeof window === 'undefined') return
-    void window.electronAPI?.settings?.setHideAppIcon(hideAppIcon)
-  }, [isElectron, hideAppIcon])
+    if (!isElectronEnvironment()) return
+    // Surface IPC failures to the console; swallowing them silently would
+    // mask main-process regressions during startup sync.
+    window.electronAPI?.settings
+      ?.setHideAppIcon(hideAppIcon)
+      ?.catch((error: unknown) => {
+        console.error(
+          '[ElectronStartupSync] Failed to sync hideAppIcon:',
+          error,
+        )
+      })
+  }, [hideAppIcon])
 
   return null
 }

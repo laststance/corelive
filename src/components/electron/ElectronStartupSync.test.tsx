@@ -10,8 +10,12 @@ import { ElectronStartupSync } from './ElectronStartupSync'
 
 const setHideAppIconMock = vi.fn().mockResolvedValue(true)
 
-vi.mock('@/components/auth/ElectronLoginForm', () => ({
-  useIsElectron: () => true,
+// Toggle for the mocked Electron environment detector. Tests flip this
+// before rendering to exercise both Electron and web code paths.
+const isElectronMock = { value: true }
+
+vi.mock('../../../electron/utils/electron-client', () => ({
+  isElectronEnvironment: () => isElectronMock.value,
 }))
 
 const buildStore = (hideAppIcon: boolean) =>
@@ -32,33 +36,57 @@ const wrapWithStore = (children: ReactNode, hideAppIcon: boolean) => (
   <Provider store={buildStore(hideAppIcon)}>{children}</Provider>
 )
 
+const installElectronAPI = (
+  api:
+    | { settings?: { setHideAppIcon?: typeof setHideAppIconMock } }
+    | undefined,
+): void => {
+  Object.defineProperty(window, 'electronAPI', {
+    configurable: true,
+    writable: true,
+    value: api,
+  })
+}
+
 describe('ElectronStartupSync', () => {
   beforeEach(() => {
     setHideAppIconMock.mockClear()
-    Object.defineProperty(window, 'electronAPI', {
-      configurable: true,
-      writable: true,
-      value: {
-        settings: {
-          setHideAppIcon: setHideAppIconMock,
-        },
+    isElectronMock.value = true
+    installElectronAPI({
+      settings: {
+        setHideAppIcon: setHideAppIconMock,
       },
     })
   })
 
-  it('forwards persisted hideAppIcon=true to the main process on mount', async () => {
+  it.each([true, false])(
+    'forwards persisted hideAppIcon=%s to the main process on mount',
+    async (hideAppIcon) => {
+      render(wrapWithStore(<ElectronStartupSync />, hideAppIcon))
+
+      await waitFor(() => {
+        expect(setHideAppIconMock).toHaveBeenCalledWith(hideAppIcon)
+      })
+    },
+  )
+
+  it('does not call IPC when not running in Electron', async () => {
+    isElectronMock.value = false
+
     render(wrapWithStore(<ElectronStartupSync />, true))
 
-    await waitFor(() => {
-      expect(setHideAppIconMock).toHaveBeenCalledWith(true)
-    })
+    // Yield once so any pending effect would have flushed.
+    await Promise.resolve()
+    expect(setHideAppIconMock).not.toHaveBeenCalled()
   })
 
-  it('forwards persisted hideAppIcon=false to the main process on mount', async () => {
-    render(wrapWithStore(<ElectronStartupSync />, false))
+  it('does not throw when window.electronAPI is undefined', async () => {
+    installElectronAPI(undefined)
 
-    await waitFor(() => {
-      expect(setHideAppIconMock).toHaveBeenCalledWith(false)
-    })
+    expect(() =>
+      render(wrapWithStore(<ElectronStartupSync />, true)),
+    ).not.toThrow()
+    await Promise.resolve()
+    expect(setHideAppIconMock).not.toHaveBeenCalled()
   })
 })
