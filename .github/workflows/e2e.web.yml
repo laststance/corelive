@@ -133,6 +133,18 @@ jobs:
           # `"${SPEC}"` keeps the value as a single literal argument.
           # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
           SPEC: ${{ matrix.spec }}
+          # Argos parallel mode — roll up every matrix shard's screenshots
+          # into ONE Argos build. Without this, each shard creates a
+          # separate build; the 4 specs that take no screenshots surface as
+          # "2 removed — waiting for your decision" because Argos compares
+          # those empty builds against the baseline. NONCE must be unique
+          # per workflow run (re-runs need a fresh build, hence
+          # `run_attempt`); TOTAL is the number of parallel shards, sourced
+          # from `detect-specs` so adding a spec file auto-updates the
+          # count. See https://argos-ci.com/docs/parallel-testing.
+          ARGOS_PARALLEL: 'true'
+          ARGOS_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+          ARGOS_PARALLEL_TOTAL: ${{ needs.detect-specs.outputs.total }}
         # The `setup` project (auth.setup.ts) auto-runs because the `web`
         # project declares `dependencies: ['setup']` — file-path filters do
         # NOT skip dependency projects. Verified via `playwright test --list`.

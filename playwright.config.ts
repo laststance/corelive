@@ -45,10 +45,12 @@ export default defineConfig({
     process.env.CI ? ['blob'] : ['list'],
     // Add Argos reporter.
     //
-    // NOTE: when `ARGOS_TOKEN` is wired into `.github/workflows/e2e.web.yml`,
-    // the matrix-shard workflow will produce one Argos build per spec file
-    // unless `ARGOS_PARALLEL_NONCE` and `ARGOS_PARALLEL_TOTAL` are also set
-    // so Argos can collate the screenshots into a single review. See
+    // The matrix-shard workflow at `.github/workflows/e2e.web.yml` sets
+    // `ARGOS_PARALLEL` / `ARGOS_PARALLEL_NONCE` / `ARGOS_PARALLEL_TOTAL` so
+    // every shard's `argosScreenshot` calls collate into a single Argos
+    // build. Without parallel mode, the 4 spec files that take no
+    // screenshots would each create an empty Argos build that diffs as
+    // "2 removed" against the baseline. See
     // https://argos-ci.com/docs/parallel-testing.
     [
       '@argos-ci/playwright/reporter',
