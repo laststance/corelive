@@ -2,7 +2,16 @@ import { argosScreenshot } from '@argos-ci/playwright'
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { expect, test } from '@playwright/test'
 
+import { resetDatabase } from './_helpers/db'
+
 test.describe('Theme Visual Test', () => {
+  // Reset the database once before this spec runs so the screenshots capture
+  // exactly the seeded fixture TODOs (see `prisma/seed.ts`) plus the one
+  // todo this test adds. Without this, leftover rows from prior spec files
+  // (random IDs from todo-app/category/qa-fixes/skill-tree) bleed into the
+  // Argos snapshot and produce false-positive visual diffs.
+  test.beforeAll(resetDatabase)
+
   test.beforeEach(async ({ page }) => {
     // Setup Clerk testing token for each test
     // This is required for Clerk to work properly in test mode

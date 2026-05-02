@@ -3,6 +3,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { xpToLevel } from '../../src/app/(main)/skill-tree/lib/xp'
 
+import { resetDatabase } from './_helpers/db'
+
 /**
  * oRPC procedure URL paths. Keeping these in one place so a procedure rename
  * breaks loudly at one site, not four, and the full `/api/orpc/...` shape is
@@ -75,6 +77,14 @@ test.describe('Skill Tree E2E', () => {
   // survives any future config flip or targeted `--grep unassign` runs.
   test.describe.configure({ mode: 'serial' })
 
+  // Reset the database once before this spec runs so the three serial tests
+  // start from a deterministic baseline: the seeded fixture TODOs from
+  // `prisma/seed.ts` exist in the pending list, but the skill tree's
+  // "unassigned pool" (which shows only `completed: true` todos) is empty.
+  // Without this reset, leftover completed todos from earlier specs would
+  // appear in the pool and confuse the drag-target selectors below.
+  test.beforeAll(resetDatabase)
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
   })
@@ -82,7 +92,10 @@ test.describe('Skill Tree E2E', () => {
   test('happy path: drag a task to a node and verify persistence', async ({
     page,
   }) => {
-    const todoText = uniqueTodoText('Happy')
+    // Fixed string — `test.beforeAll(resetDatabase)` guarantees a fresh DB
+    // each spec run, so we no longer need Date.now/Math.random for isolation.
+    // Stable text also keeps Argos screenshots deterministic (see Issue #31).
+    const todoText = 'Skill tree happy path todo'
 
     // 1. Seed a completed todo via the home page.
     await seedCompletedTodo(page, todoText)
@@ -276,26 +289,18 @@ test.describe('Skill Tree E2E', () => {
 })
 
 /**
- * Generates a unique todo text for isolation across test runs.
- * @param tag - A short tag identifying the calling test (e.g. `'Happy'`).
- * @returns A todo text like `E2E-ST-Happy-1712664000000-a3f9k2`.
- * @example
- * uniqueTodoText('Happy') // => 'E2E-ST-Happy-1712664000000-a3f9k2'
- */
-function uniqueTodoText(tag: string): string {
-  return `E2E-ST-${tag}-${Date.now()}-${Math.random().toString(36).substring(7)}`
-}
-
-/**
  * Seeds a completed todo via the home page UI. Navigates to /home, types the
  * todo text into the input, clicks Add, waits for the optimistic ID to settle
  * to a positive server ID (so subsequent dnd-kit drag IDs like `todo-<id>`
  * resolve to a real row), then marks the todo complete.
  *
  * @param page - The Playwright Page instance.
- * @param todoText - The text to enter into the new-todo input.
+ * @param todoText - The text to enter into the new-todo input. Pass a fixed
+ *   string (not a Date.now/Math.random suffix) — `test.beforeAll(resetDatabase)`
+ *   guarantees per-spec DB isolation, and stable text keeps Argos screenshots
+ *   deterministic (see Issue #31).
  * @example
- * await seedCompletedTodo(page, uniqueTodoText('Happy'))
+ * await seedCompletedTodo(page, 'Skill tree happy path todo')
  */
 async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   await page.goto('/home')

@@ -1,13 +1,7 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { test, expect, type Page } from '@playwright/test'
 
-/**
- * Generates a unique name for test data isolation.
- * @param prefix - Test identifier prefix (keep short)
- * @returns Unique string like "QAFix-1706000000000-a1b2c"
- */
-const uniqueName = (prefix: string) =>
-  `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+import { resetDatabase } from './_helpers/db'
 
 /**
  * Waits for the Todo List heading to appear, handling the Loading... state.
@@ -25,6 +19,8 @@ async function waitForAppReady(page: Page) {
 }
 
 test.describe('QA Fixes Verification', () => {
+  test.beforeAll(resetDatabase)
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
     await page.goto('/home')
@@ -102,7 +98,7 @@ test.describe('QA Fixes Verification', () => {
     test('should show confirmation dialog before clearing completed todos', async ({
       page,
     }) => {
-      const todoText = uniqueName('Clear')
+      const todoText = 'Clear dialog test todo'
 
       // Create and complete a todo
       const input = page.getByPlaceholder('Enter a new todo...')
@@ -143,7 +139,7 @@ test.describe('QA Fixes Verification', () => {
     })
 
     test('should delete completed todos when confirmed', async ({ page }) => {
-      const todoText = uniqueName('Confirm')
+      const todoText = 'Confirm clear test todo'
 
       // Create and complete a todo
       const input = page.getByPlaceholder('Enter a new todo...')

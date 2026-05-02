@@ -4,20 +4,15 @@ import { clerkSetup } from '@clerk/testing/playwright'
 
 /**
  * Global setup function for Playwright tests
- * This runs before all tests and sets up the test environment
+ * This runs before all tests and sets up the test environment.
+ *
+ * `pnpm db:reset` chains `prisma migrate reset --force` with `pnpm prisma:seed`
+ * (see package.json), so a single invocation drops the schema, re-runs all
+ * migrations, and re-seeds fixtures in one shot. Prisma 7's `migrate reset`
+ * skips seeding by default — the chained script is the corelive-side fix.
  */
 export default async function globalSetup() {
-  // Reset database for clean test state
-  // Note: Prisma 7's `migrate reset --force` does not auto-run the seed,
-  // so we run it explicitly after reset to ensure test fixtures exist.
   execSync('pnpm db:reset', {
-    stdio: 'pipe', // Suppress stdout/stderr for cleaner output
-    env: {
-      ...process.env,
-      DEBUG: '', // Disable debug logging
-    },
-  })
-  execSync('pnpm prisma:seed', {
     stdio: 'pipe',
     env: {
       ...process.env,

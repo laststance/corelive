@@ -1,7 +1,11 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { test, expect } from '@playwright/test'
 
+import { resetDatabase } from './_helpers/db'
+
 test.describe('TODO App E2E Tests', () => {
+  test.beforeAll(resetDatabase)
+
   test.beforeEach(async ({ page }) => {
     // Setup Clerk testing token for each test
     // This is required for Clerk to work properly in test mode
@@ -51,7 +55,7 @@ test.describe('TODO App E2E Tests', () => {
   })
 
   test('should add a new TODO item', async ({ page }) => {
-    const todoText = `AddTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const todoText = 'Add new TODO test'
 
     // Add a new TODO
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)
@@ -69,7 +73,7 @@ test.describe('TODO App E2E Tests', () => {
   })
 
   test('should toggle TODO completion status', async ({ page }) => {
-    const todoText = `ToggleTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const todoText = 'Toggle completion test todo'
 
     // Add a new TODO first
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)
@@ -100,7 +104,7 @@ test.describe('TODO App E2E Tests', () => {
   })
 
   test('should delete a TODO item', async ({ page }) => {
-    const todoText = `DeleteTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const todoText = 'Delete TODO test'
 
     // Add a new TODO first
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)
@@ -129,7 +133,7 @@ test.describe('TODO App E2E Tests', () => {
   })
 
   test('should add TODO with notes', async ({ page }) => {
-    const todoText = `NotesTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const todoText = 'Notes feature test todo'
     const todoNotes = 'These are some important notes for this task'
 
     // Fill in the TODO text
@@ -198,7 +202,7 @@ test.describe('TODO App E2E Tests', () => {
   test('should move completed TODO back to pending when clicking checkbox', async ({
     page,
   }) => {
-    const todoText = `UncheckTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const todoText = 'Uncheck completion test todo'
 
     // Step 1: Add a new TODO
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)
@@ -245,7 +249,7 @@ test.describe('TODO App E2E Tests', () => {
   test('should only toggle completion when clicking checkbox, not text', async ({
     page,
   }) => {
-    const todoText = `CheckboxOnlyTest-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const todoText = 'Checkbox-only toggle test todo'
 
     // Add a new TODO
     await page.getByPlaceholder('Enter a new todo...').fill(todoText)

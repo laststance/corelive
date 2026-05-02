@@ -1,17 +1,7 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { test, expect, type Page, type Locator } from '@playwright/test'
 
-/**
- * Generates a unique name for test data isolation.
- * Category names have maxLength=30 in the UI input, so keep prefixes short (<=7 chars).
- * @param prefix - Test identifier prefix (keep short for category names)
- * @returns Unique string like "CatNew-1706000000000-a1b2c"
- * @example
- * uniqueName('CatNew')  // => "CatNew-1706000000000-a1b2c" (26 chars)
- * uniqueName('TodoLong') // => "TodoLong-1706000000000-a1b2c" (28 chars)
- */
-const uniqueName = (prefix: string) =>
-  `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+import { resetDatabase } from './_helpers/db'
 
 /**
  * Waits for the Todo List heading to appear, handling the Loading... state.
@@ -38,34 +28,63 @@ function getSidebar(page: Page) {
 }
 
 /**
- * Selects a category in the sidebar, ensuring the real server ID is used.
- * After optimistic category creation, the ID may still be negative (-Date.now()).
- * This helper clicks the category, checks if the stored ID is negative (optimistic),
- * and if so, waits for the category list to refresh and clicks again.
+ * Selects a category in the sidebar by clicking it and waiting until the
+ * sidebar UI confirms it became the active category.
+ *
+ * The previous implementation only verified that
+ * `localStorage.corelive-selected-category` held a positive integer — but
+ * General's real ID (1) is already positive, so a silently-failed click on a
+ * just-created optimistic category would leave General active and the helper
+ * would still resolve. This hid a race condition: with the seeded fixture
+ * todos in `prisma/seed.ts`, the heavier initial render delays click-handler
+ * attachment on freshly-rendered category buttons, and the click landed
+ * before the handler was bound.
+ *
+ * Asserting on `data-active="true"` of the clicked button is the
+ * source-of-truth UI signal and surfaces the failure immediately instead of
+ * letting downstream assertions chase a phantom selection.
+ *
  * @param page - Playwright page object
  * @param sidebar - Sidebar locator
  * @param categoryName - Name of the category to click
+ * @example
+ * await selectCategory(page, getSidebar(page), 'General')
  */
 async function selectCategory(
   page: Page,
   sidebar: Locator,
   categoryName: string,
 ) {
-  // Click the category
-  await sidebar.getByText(categoryName).click()
+  const categoryButton = sidebar
+    .locator('[data-slot="sidebar-menu-button"]')
+    .filter({ hasText: categoryName })
 
-  // After optimistic category creation, the first click may store a negative (temp) ID.
-  // Wait for the category list refetch to bring real IDs, then re-click if needed.
-  const storedId = await page.evaluate(() =>
-    localStorage.getItem('corelive-selected-category'),
-  )
-  if (storedId && Number(storedId) < 0) {
+  // First click — may land before the handler is attached on a freshly
+  // rendered button (race exposed by heavier seed fixtures).
+  await categoryButton.click()
+
+  // Verify the click actually flipped the active state. If not, retry once
+  // after letting React Query settle and the optimistic category swap to a
+  // real server ID; this covers the post-createCategory window where the
+  // button briefly carries a negative temp ID.
+  try {
+    await expect(categoryButton).toHaveAttribute('data-active', 'true', {
+      timeout: 3000,
+    })
+  } catch {
     await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(1000)
-    await sidebar.getByText(categoryName).click()
+    await page.waitForTimeout(500)
+    await categoryButton.click()
+    await expect(categoryButton).toHaveAttribute('data-active', 'true', {
+      timeout: 5000,
+    })
   }
 
-  // Verify we now have a positive (real) server ID
+  // Belt-and-suspenders: also confirm localStorage holds a positive (real)
+  // server ID so subsequent todo-create mutations attach the right
+  // categoryId. A negative value here means the optimistic-→-real swap
+  // hasn't completed and a created todo would persist with the temp
+  // category linkage.
   await page.waitForFunction(
     () => {
       const val = localStorage.getItem('corelive-selected-category')
@@ -145,6 +164,8 @@ async function openManageDialog(page: Page, sidebar: Locator) {
 }
 
 test.describe('Category Feature E2E Tests', () => {
+  test.beforeAll(resetDatabase)
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
     await page.goto('/home')
@@ -177,15 +198,15 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should create a new category from sidebar', async ({ page }) => {
-      const categoryName = uniqueName('CatCreate')
+      const categoryName = 'CatCreate'
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
     })
 
     test('should filter todos by category selection', async ({ page }) => {
-      const categoryName = uniqueName('CatFilter')
-      const todoInGeneral = uniqueName('TodoGen')
-      const todoInCategory = uniqueName('TodoCat')
+      const categoryName = 'CatFilter'
+      const todoInGeneral = 'TodoGen'
+      const todoInCategory = 'TodoCat'
 
       const sidebar = getSidebar(page)
 
@@ -228,8 +249,8 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should show category name on todo items', async ({ page }) => {
-      const categoryName = uniqueName('CatBadge')
-      const todoText = uniqueName('TodoBadge')
+      const categoryName = 'CatBadge'
+      const todoText = 'TodoBadge'
 
       // Create a category
       const sidebar = getSidebar(page)
@@ -261,7 +282,7 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should select a color when creating a category', async ({ page }) => {
-      const categoryName = uniqueName('CatColor')
+      const categoryName = 'CatColor'
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName, 'green')
 
@@ -276,7 +297,7 @@ test.describe('Category Feature E2E Tests', () => {
     test('should hide empty state CTA when categories exist', async ({
       page,
     }) => {
-      const categoryName = uniqueName('CatCTA')
+      const categoryName = 'CatCTA'
       const sidebar = getSidebar(page)
 
       // Create a category to ensure at least one exists
@@ -296,7 +317,7 @@ test.describe('Category Feature E2E Tests', () => {
     test('should hide badge count when category has zero todos', async ({
       page,
     }) => {
-      const categoryName = uniqueName('CatZero')
+      const categoryName = 'CatZero'
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
@@ -311,7 +332,7 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should highlight active category selection', async ({ page }) => {
-      const categoryName = uniqueName('CatActive')
+      const categoryName = 'CatActive'
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
 
@@ -338,7 +359,7 @@ test.describe('Category Feature E2E Tests', () => {
     test('should show Manage button when categories exist', async ({
       page,
     }) => {
-      const categoryName = uniqueName('CatMgBtn')
+      const categoryName = 'CatMgBtn'
       const sidebar = getSidebar(page)
 
       // Create a category
@@ -356,7 +377,7 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
 
       // "Manage" button only appears when categories exist, so create one first
-      const categoryName = uniqueName('CatMgr')
+      const categoryName = 'CatMgr'
       await createCategory(page, sidebar, categoryName)
 
       // Click the "Manage" button in sidebar
@@ -372,8 +393,8 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should rename a category in manage dialog', async ({ page }) => {
-      const originalName = uniqueName('CatRen')
-      const newName = uniqueName('CatRen2')
+      const originalName = 'CatRen'
+      const newName = 'CatRen2'
 
       // First create a category
       const sidebar = getSidebar(page)
@@ -417,7 +438,7 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should delete a category with confirmation', async ({ page }) => {
-      const categoryName = uniqueName('CatDelete')
+      const categoryName = 'CatDelete'
 
       // Create a category
       const sidebar = getSidebar(page)
@@ -520,7 +541,7 @@ test.describe('Category Feature E2E Tests', () => {
       page,
     }) => {
       const sidebar = getSidebar(page)
-      const newName = uniqueName('GenRen')
+      const newName = 'GenRen'
 
       // Open manage dialog
       await openManageDialog(page, sidebar)
@@ -579,7 +600,9 @@ test.describe('Category Feature E2E Tests', () => {
     test('should auto-assign new todo to General by default', async ({
       page,
     }) => {
-      const todoText = uniqueName('TodoGen')
+      // Different label from the "filter todos" test's 'TodoGen' fixture so the
+      // two coexist without colliding under shared spec-level state.
+      const todoText = 'TodoGenAuto'
       const sidebar = getSidebar(page)
 
       // General is auto-selected on page load — add a todo directly
@@ -613,8 +636,8 @@ test.describe('Category Feature E2E Tests', () => {
     test('should reassign todos to General when their category is deleted', async ({
       page,
     }) => {
-      const categoryName = uniqueName('CatDel')
-      const todoText = uniqueName('TodoDel')
+      const categoryName = 'CatDel'
+      const todoText = 'TodoDel'
       const sidebar = getSidebar(page)
 
       // Create a new category and add a todo to it
@@ -679,8 +702,8 @@ test.describe('Category Feature E2E Tests', () => {
     test('should auto-assign category when adding todo with category selected', async ({
       page,
     }) => {
-      const categoryName = uniqueName('CatAuto')
-      const todoText = uniqueName('TodoAuto')
+      const categoryName = 'CatAuto'
+      const todoText = 'TodoAuto'
 
       // Create a category
       const sidebar = getSidebar(page)
@@ -708,7 +731,7 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should show pending count next to categories', async ({ page }) => {
-      const todoText = uniqueName('TodoCnt')
+      const todoText = 'TodoCnt'
       const sidebar = getSidebar(page)
 
       // Wait for page to fully load before interacting with todo input
@@ -736,8 +759,8 @@ test.describe('Category Feature E2E Tests', () => {
     })
 
     test('should keep tasks when deleting their category', async ({ page }) => {
-      const categoryName = uniqueName('CatKeep')
-      const todoText = uniqueName('TodoKeep')
+      const categoryName = 'CatKeep'
+      const todoText = 'TodoKeep'
 
       // Create a category and add a todo to it
       const sidebar = getSidebar(page)
