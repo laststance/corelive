@@ -58,14 +58,30 @@ async function main(): Promise<void> {
     'Workout - leg day',
   ]
 
-  await prisma.todo.createMany({
-    data: fixtureTodos.map((text, index) => ({
-      text,
-      order: index,
-      userId: user.id,
-      categoryId: defaultCategory.id,
-    })),
-  })
+  // `migrate reset --force` (chained via `pnpm db:reset`) leaves these
+  // tables empty, so a plain `createMany` would suffice in the E2E flow.
+  // But `pnpm prisma:seed` is also exposed as a standalone script — without
+  // a delete-first guard a second invocation would duplicate every fixture
+  // row and break the deterministic state E2E specs depend on. Wrapping the
+  // delete + insert in a single transaction makes the script idempotent for
+  // both call sites.
+  await prisma.$transaction([
+    prisma.todo.deleteMany({
+      where: {
+        userId: user.id,
+        categoryId: defaultCategory.id,
+        text: { in: fixtureTodos },
+      },
+    }),
+    prisma.todo.createMany({
+      data: fixtureTodos.map((text, index) => ({
+        text,
+        order: index,
+        userId: user.id,
+        categoryId: defaultCategory.id,
+      })),
+    }),
+  ])
 }
 
 main()

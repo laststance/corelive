@@ -119,6 +119,12 @@ jobs:
       - name: Run Web Playwright tests 🧪
         env:
           E2E_TEST_MODE: 'true'
+          # Each matrix runner executes exactly ONE spec file, so
+          # `e2e/global-setup.ts`'s up-front `pnpm db:reset` is already enough
+          # — the per-spec `test.beforeAll(resetDatabase)` would just repeat
+          # the same migrate+seed (~5-10s wasted). `resetDatabase` early-
+          # returns when this var is set; see `e2e/web/_helpers/db.ts`.
+          E2E_SKIP_PER_SPEC_RESET: 'true'
           # Pipe `matrix.spec` through an env var (rather than interpolating
           # `${{ matrix.spec }}` directly into `run:`) so a hypothetical
           # filename containing shell metacharacters (`$()`, backticks, `;`)
