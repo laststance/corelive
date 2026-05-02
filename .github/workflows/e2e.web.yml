@@ -7,9 +7,63 @@ on:
       - main
 
 jobs:
-  e2e-web-tests:
-    timeout-minutes: 60
+  # ----------------------------------------------------------------------------
+  # detect-specs
+  # ----------------------------------------------------------------------------
+  # Auto-discovers every `e2e/web/*.spec.ts` file and emits the basenames as a
+  # JSON array (e.g. `["category","qa-fixes",...]`). The downstream `e2e-web`
+  # job consumes this array via `fromJson(...)` to fan out one runner per spec
+  # file. Adding or removing a spec file requires no workflow edits — the
+  # matrix size auto-adjusts on the next CI run.
+  #
+  # Why per-file (not Playwright `--shard=N/M`):
+  #   - `playwright.config.ts` forces `workers: 1` due to shared Clerk user +
+  #     PostgreSQL state, so `--shard` would only split tests across shards
+  #     while still serializing within each shard. Per-file runners give true
+  #     parallelism because each runner gets its own Postgres + Next.js.
+  #   - Each spec already calls `test.beforeAll(resetDatabase)`, so isolated
+  #     databases per runner are the natural unit of work.
+  detect-specs:
+    name: Detect spec files 🔍
     runs-on: ubuntu-latest
+    outputs:
+      specs: ${{ steps.list.outputs.specs }}
+      total: ${{ steps.list.outputs.total }}
+    steps:
+      - name: Checkout repository 🔄
+        uses: actions/checkout@v5
+
+      - name: Enumerate e2e/web/*.spec.ts
+        id: list
+        run: |
+          # `find` produces newline-separated paths; `basename ... .spec.ts`
+          # strips both the directory and the `.spec.ts` suffix so the matrix
+          # value is a clean spec name (e.g. `category`). `jq -R . | jq -sc .`
+          # turns the newline list into a compact JSON array.
+          specs=$(find e2e/web -maxdepth 1 -name '*.spec.ts' -type f \
+            -exec basename {} .spec.ts \; | sort | jq -R . | jq -sc .)
+          total=$(echo "$specs" | jq 'length')
+          echo "specs=$specs" >> "$GITHUB_OUTPUT"
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "Discovered $total spec file(s): $specs"
+
+  # ----------------------------------------------------------------------------
+  # e2e-web
+  # ----------------------------------------------------------------------------
+  # Runs ONE Playwright invocation per spec file in parallel. Each matrix job
+  # is a fresh ubuntu-latest runner with its own Postgres + Next.js process,
+  # so there is no shared-state contention between specs. `fail-fast: false`
+  # keeps every shard running even if one fails — we want the full picture
+  # for triage, not an early abort.
+  e2e-web:
+    name: E2E Web (${{ matrix.spec }}) 🧪
+    needs: detect-specs
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        spec: ${{ fromJson(needs.detect-specs.outputs.specs) }}
 
     steps:
       - name: Checkout repository 🔄
@@ -17,6 +71,7 @@ jobs:
 
       - name: Use shared prepare action 🔧
         uses: ./.github/actions/prepare
+
       - name: Set environment variables
         run: |
           touch .env
@@ -64,19 +119,95 @@ jobs:
       - name: Run Web Playwright tests 🧪
         env:
           E2E_TEST_MODE: 'true'
-        run: pnpm exec playwright test --project=web
+          # Each matrix runner executes exactly ONE spec file, so
+          # `e2e/global-setup.ts`'s up-front `pnpm db:reset` is already enough
+          # — the per-spec `test.beforeAll(resetDatabase)` would just repeat
+          # the same migrate+seed (~5-10s wasted). `resetDatabase` early-
+          # returns when this var is set; see `e2e/web/_helpers/db.ts`.
+          E2E_SKIP_PER_SPEC_RESET: 'true'
+          # Pipe `matrix.spec` through an env var (rather than interpolating
+          # `${{ matrix.spec }}` directly into `run:`) so a hypothetical
+          # filename containing shell metacharacters (`$()`, backticks, `;`)
+          # cannot inject into the rendered bash. GHA expands `${{ ... }}`
+          # at template time, BEFORE bash escaping; env-var consumption via
+          # `"${SPEC}"` keeps the value as a single literal argument.
+          # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+          SPEC: ${{ matrix.spec }}
+          # Argos parallel mode — roll up every matrix shard's screenshots
+          # into ONE Argos build. Without this, each shard creates a
+          # separate build; the 4 specs that take no screenshots surface as
+          # "2 removed — waiting for your decision" because Argos compares
+          # those empty builds against the baseline. NONCE must be unique
+          # per workflow run (re-runs need a fresh build, hence
+          # `run_attempt`); TOTAL is the number of parallel shards, sourced
+          # from `detect-specs` so adding a spec file auto-updates the
+          # count. See https://argos-ci.com/docs/parallel-testing.
+          ARGOS_PARALLEL: 'true'
+          ARGOS_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+          ARGOS_PARALLEL_TOTAL: ${{ needs.detect-specs.outputs.total }}
+        # The `setup` project (auth.setup.ts) auto-runs because the `web`
+        # project declares `dependencies: ['setup']` — file-path filters do
+        # NOT skip dependency projects. Verified via `playwright test --list`.
+        run: pnpm exec playwright test --project=web "e2e/web/${SPEC}.spec.ts"
 
-      - name: Upload Playwright Report 📊
+      - name: Upload Blob Report 🧊
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
-        if: always()
         with:
-          name: playwright-report-web
-          path: playwright-report/
-          retention-days: 30
+          # Each spec gets its own blob artifact so `merge-reports` can fan
+          # them back into a single HTML report. The pattern `blob-report-*`
+          # is what the merge job globs for.
+          name: blob-report-${{ matrix.spec }}
+          path: blob-report/
+          retention-days: 1
+
       - name: Upload Test Results 📋
+        if: failure()
         uses: actions/upload-artifact@v6
-        if: always()
         with:
-          name: test-results-web
+          # Only upload on failure — test-results/ holds traces, screenshots,
+          # and videos that bloat artifact storage when every shard ships
+          # them on success. Keep them 30 days for triage.
+          name: test-results-${{ matrix.spec }}
           path: test-results/
+          retention-days: 30
+
+  # ----------------------------------------------------------------------------
+  # merge-reports
+  # ----------------------------------------------------------------------------
+  # Combines every shard's blob report into a single browsable HTML report.
+  # Runs even if some shards failed (`if: !cancelled()`), so the merged
+  # report still shows passing + failing tests across the whole suite.
+  merge-reports:
+    name: Merge reports 📊
+    if: ${{ !cancelled() }}
+    needs: e2e-web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository 🔄
+        uses: actions/checkout@v5
+
+      - name: Use shared prepare action 🔧
+        uses: ./.github/actions/prepare
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v6
+        with:
+          # `merge-multiple: true` flattens every `blob-report-*` artifact
+          # into the same `all-blob-reports/` directory. Blob filenames
+          # already encode the shard identity, so no name collisions.
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into HTML Report
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v6
+        with:
+          # Suffix with `attempt-N` so re-runs don't overwrite prior reports
+          # in the same workflow run.
+          name: playwright-report-web--attempt-${{ github.run_attempt }}
+          path: playwright-report/
           retention-days: 30

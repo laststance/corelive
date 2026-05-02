@@ -3,6 +3,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { xpToLevel } from '../../src/app/(main)/skill-tree/lib/xp'
 
+import { resetDatabase } from './_helpers/db'
+
 /**
  * oRPC procedure URL paths. Keeping these in one place so a procedure rename
  * breaks loudly at one site, not four, and the full `/api/orpc/...` shape is
@@ -75,6 +77,14 @@ test.describe('Skill Tree E2E', () => {
   // survives any future config flip or targeted `--grep unassign` runs.
   test.describe.configure({ mode: 'serial' })
 
+  // Reset the database once before this spec runs so the three serial tests
+  // start from a deterministic baseline: the seeded fixture TODOs from
+  // `prisma/seed.ts` exist in the pending list, but the skill tree's
+  // "unassigned pool" (which shows only `completed: true` todos) is empty.
+  // Without this reset, leftover completed todos from earlier specs would
+  // appear in the pool and confuse the drag-target selectors below.
+  test.beforeAll(resetDatabase)
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
   })
@@ -82,33 +92,32 @@ test.describe('Skill Tree E2E', () => {
   test('happy path: drag a task to a node and verify persistence', async ({
     page,
   }) => {
-    const todoText = uniqueTodoText('Happy')
-
-    // 1. Seed a completed todo via the home page.
+    // Arrange — seed a completed todo, navigate to the skill tree, and open
+    // the task pool drawer so the pool card is visible and draggable.
+    //
+    // Fixed string — `test.beforeAll(resetDatabase)` guarantees a fresh DB
+    // each spec run, so we no longer need Date.now/Math.random for isolation.
+    // Stable text also keeps Argos screenshots deterministic (see Issue #31).
+    const todoText = 'Skill tree happy path todo'
     await seedCompletedTodo(page, todoText)
-
-    // 2. Navigate to the skill tree via the sidebar.
     await page.getByRole('link', { name: /skill tree/i }).click()
     await expect(page).toHaveURL(/\/skill-tree/)
 
-    // 3. Open the task pool drawer. `pill.toBeVisible` polls the DOM and is
-    //    a stronger gate than `networkidle`, which can return "quiet" while
-    //    React Query's persister is still settling.
+    // `pill.toBeVisible` polls the DOM and is a stronger gate than
+    // `networkidle`, which can return "quiet" while React Query's persister
+    // is still settling.
     const pill = page.getByRole('button', { name: /unassigned task/i })
     await expect(pill).toBeVisible({ timeout: 10000 })
     await pill.click()
-
-    // 4. Verify our task is in the pool. TaskPoolCard's aria-label contains
-    //    the todo text, so a regex match against the text is sufficient.
     const poolCard = page.getByRole('button', {
       name: new RegExp(todoText, 'i'),
     })
     await expect(poolCard).toBeVisible()
 
-    // 5. Drag it to the first dormant skill node. We arm a waitForResponse
-    //    BEFORE the drag so we capture the assign mutation's round-trip even
-    //    if it fires late (the mutation is dispatched from inside
-    //    startTransition(async), which React can defer to a later microtask).
+    // Arm a waitForResponse BEFORE the drag so we capture the assign
+    // mutation's round-trip even if it fires late (the mutation is dispatched
+    // from inside startTransition(async), which React can defer to a later
+    // microtask).
     const assignResponsePromise = page.waitForResponse(
       (resp) =>
         resp.url().includes(ORPC_PATHS.assignTask) &&
@@ -123,12 +132,14 @@ test.describe('Skill Tree E2E', () => {
       .locator('[data-testid="skill-node"][data-level="0"]')
       .first()
     await expect(firstDormantNode).toBeVisible()
+
+    // Act 1 — drag the pool card onto the first dormant skill node
     await mouseDrag(page, poolCard, firstDormantNode)
 
-    // 6. Verify the drop succeeded. A single task = 1 XP (XP is the count of
-    //    assignments), so the node stays at level 0 BUT its aria-label now
-    //    reports the 1-XP progress fragment. Same aria-hidden concern as
-    //    the selector above — use data-testid + aria-label CSS filter.
+    // Assert 1 — drop succeeded: a single task = 1 XP, so the node stays at
+    // level 0 BUT its aria-label now reports the 1-XP progress fragment. Same
+    // aria-hidden concern as the selector above — use data-testid + aria-label
+    // CSS filter.
     await expect(
       page
         .locator(
@@ -143,22 +154,22 @@ test.describe('Skill Tree E2E', () => {
       page.getByRole('button', { name: /unassigned task/i }),
     ).toBeHidden({ timeout: 5000 })
 
-    // 7. Block until the actual assign mutation HTTP round-trip completes and
-    //    returns 200. Without this wait, `page.reload()` can fire while the
-    //    POST is still queued — the mutation then races the reload's data
-    //    fetch, and the reloaded tree renders BEFORE the assignment lands.
+    // Block until the actual assign mutation HTTP round-trip completes and
+    // returns 200. Without this wait, `page.reload()` can fire while the
+    // POST is still queued — the mutation then races the reload's data
+    // fetch, and the reloaded tree renders BEFORE the assignment lands.
     const assignResponse = await assignResponsePromise
     expect(assignResponse.status()).toBe(200)
 
-    // 8. Reload and verify the assignment persisted to the DATABASE.
+    // Act 2 — reload to verify the assignment persisted to the DATABASE.
     //
-    //    Subtlety: the app uses `PersistQueryClientProvider` with
-    //    `createSyncStoragePersister` + `staleTime: 60s` (see
-    //    `src/providers/QueryClientProvider.tsx`). On reload, React Query
-    //    rehydrates from localStorage and considers the cached tree fresh,
-    //    so it won't re-fetch from the server. Drop only the persister's
-    //    own key — not all of localStorage — so Clerk session + misc app
-    //    state survive the reset.
+    // Subtlety: the app uses `PersistQueryClientProvider` with
+    // `createSyncStoragePersister` + `staleTime: 60s` (see
+    // `src/providers/QueryClientProvider.tsx`). On reload, React Query
+    // rehydrates from localStorage and considers the cached tree fresh,
+    // so it won't re-fetch from the server. Drop only the persister's
+    // own key — not all of localStorage — so Clerk session + misc app
+    // state survive the reset.
     await page.evaluate(() =>
       window.localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE'),
     )
@@ -177,9 +188,10 @@ test.describe('Skill Tree E2E', () => {
     )
     await page.reload()
     await reloadTreeFetchPromise
-    // After reload, the drawer is closed, so the canvas isn't aria-hidden
-    // and we can use getByRole against the real a11y tree (which is what
-    // users' screen readers see).
+
+    // Assert 2 — assignment persisted across reload. After reload, the drawer
+    // is closed, so the canvas isn't aria-hidden and we can use getByRole
+    // against the real a11y tree (which is what users' screen readers see).
     await expect(
       page.getByRole('button', { name: ONE_XP_LABEL_RE }).first(),
     ).toBeVisible({ timeout: 10000 })
@@ -188,19 +200,17 @@ test.describe('Skill Tree E2E', () => {
   test('unassign: click a node with assignments and unassign a task', async ({
     page,
   }) => {
-    // Preconditions: the previous test left a task assigned to a node.
+    // Arrange — preconditions: previous test left a task assigned to a node.
+    // Navigate to the tree and open the popover for the assigned node.
     await page.goto('/skill-tree')
-
-    // Click the node that got the assignment (its aria-label now reports
-    // the 1-XP progress fragment).
     const assignedNode = page
       .getByRole('button', { name: ONE_XP_LABEL_RE })
       .first()
     await expect(assignedNode).toBeVisible({ timeout: 10000 })
     await assignedNode.click()
 
-    // Popover unassign button: NodePopover uses aria-label=`Unassign <text>`
-    // for the unassign trigger. A generic /unassign/i match finds it.
+    // NodePopover uses aria-label=`Unassign <text>` for the unassign trigger.
+    // A generic /unassign/i match finds it.
     const unassignBtn = page.getByRole('button', { name: /unassign/i }).first()
     await expect(unassignBtn).toBeVisible()
 
@@ -217,21 +227,17 @@ test.describe('Skill Tree E2E', () => {
       { timeout: 10000 },
     )
 
+    // Act — click the unassign button
     await unassignBtn.click()
 
-    // After unassignment:
-    // - the node reverts to Dormant (0 XP)
-    // - the pool drawer pill reappears (1 unassigned task)
+    // Assert — node reverts to Dormant (0 XP), pool drawer pill reappears
+    // (1 unassigned task), and the unassign POST round-tripped with 200.
     await expect(
       page.getByRole('button', { name: /unassigned task/i }),
     ).toBeVisible({ timeout: 5000 })
     await expect(
       page.getByRole('button', { name: ONE_XP_LABEL_RE }),
     ).toHaveCount(0, { timeout: 5000 })
-
-    // Block until the unassign POST round-trips. This guarantees the DB is
-    // in the expected state (assignment removed) before the test ends, so
-    // the subsequent keyboard flow test sees a deterministic starting point.
     const unassignResponse = await unassignResponsePromise
     expect(unassignResponse.status()).toBe(200)
   })
@@ -239,52 +245,43 @@ test.describe('Skill Tree E2E', () => {
   test('keyboard flow: open drawer and verify keyboard entry point', async ({
     page,
   }) => {
-    // This test verifies that the drawer pill is reachable and activatable via
-    // keyboard (focus + Enter). Full keyboard DnD from drawer to canvas isn't
-    // tested here because dnd-kit's KeyboardSensor clamps the virtual pointer
-    // to the draggable's nearest scrollable ancestor — our pool card lives
-    // inside a Radix Dialog whose overflow context prevents the drag from
-    // reaching the canvas. End-to-end keyboard DnD is covered by manual a11y
-    // QA in Task 24.
+    // Arrange — verify the drawer pill is reachable via keyboard.
     //
-    // Reuses the task that test 2 returned to the pool (serial describe
-    // mode guarantees ordering). No seeding needed — saves one full /home
+    // Full keyboard DnD from drawer to canvas isn't tested here because
+    // dnd-kit's KeyboardSensor clamps the virtual pointer to the draggable's
+    // nearest scrollable ancestor — our pool card lives inside a Radix Dialog
+    // whose overflow context prevents the drag from reaching the canvas.
+    // End-to-end keyboard DnD is covered by manual a11y QA in Task 24.
+    //
+    // Reuses the task that test 2 returned to the pool (serial describe mode
+    // guarantees ordering). No seeding needed — saves one full /home
     // navigation + create + toggle round-trip.
     await page.goto('/skill-tree')
-
-    // Open drawer via keyboard (Enter on focused pill).
     const pill = page.getByRole('button', { name: /unassigned task/i })
     await expect(pill).toBeVisible({ timeout: 10000 })
+
+    // Act 1 — focus pill and press Enter to open the drawer
     await pill.focus()
     await page.keyboard.press('Enter')
 
-    // Drawer opened → any pool card (TaskPoolCard's aria-label always starts
-    // with "Completed task:", so this matches without coupling to a specific
-    // todo text from the previous test).
+    // Assert 1 — drawer opened: any pool card is visible. TaskPoolCard's
+    // aria-label always starts with "Completed task:", so this matches without
+    // coupling to a specific todo text from the previous test.
     const poolCard = page
       .getByRole('button', { name: /^completed task:/i })
       .first()
     await expect(poolCard).toBeVisible()
 
-    // Pool card is focusable and has the dnd-kit screen reader instruction.
+    // Act 2 — focus the pool card to verify it's keyboard-reachable
     await poolCard.focus()
+
+    // Assert 2 — pool card receives focus
     await expect(poolCard).toBeFocused()
 
-    // Close the drawer so subsequent tests start from a clean state.
+    // Cleanup — close the drawer so subsequent tests start from a clean state
     await page.keyboard.press('Escape')
   })
 })
-
-/**
- * Generates a unique todo text for isolation across test runs.
- * @param tag - A short tag identifying the calling test (e.g. `'Happy'`).
- * @returns A todo text like `E2E-ST-Happy-1712664000000-a3f9k2`.
- * @example
- * uniqueTodoText('Happy') // => 'E2E-ST-Happy-1712664000000-a3f9k2'
- */
-function uniqueTodoText(tag: string): string {
-  return `E2E-ST-${tag}-${Date.now()}-${Math.random().toString(36).substring(7)}`
-}
 
 /**
  * Seeds a completed todo via the home page UI. Navigates to /home, types the
@@ -293,9 +290,12 @@ function uniqueTodoText(tag: string): string {
  * resolve to a real row), then marks the todo complete.
  *
  * @param page - The Playwright Page instance.
- * @param todoText - The text to enter into the new-todo input.
+ * @param todoText - The text to enter into the new-todo input. Pass a fixed
+ *   string (not a Date.now/Math.random suffix) — `test.beforeAll(resetDatabase)`
+ *   guarantees per-spec DB isolation, and stable text keeps Argos screenshots
+ *   deterministic (see Issue #31).
  * @example
- * await seedCompletedTodo(page, uniqueTodoText('Happy'))
+ * await seedCompletedTodo(page, 'Skill tree happy path todo')
  */
 async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   await page.goto('/home')

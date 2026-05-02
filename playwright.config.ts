@@ -36,9 +36,22 @@ export default defineConfig({
   workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
-    // Use "dot" reporter on CI, "list" otherwise (Playwright default).
-    process.env.CI ? ['html'] : ['list'],
+    // CI uses the "blob" reporter so each matrix shard (one per spec file in
+    // `.github/workflows/e2e.web.yml`) writes a `blob-report/` directory that
+    // a downstream `merge-reports` job combines into a single HTML report
+    // via `playwright merge-reports`. Locally, "list" gives terminal feedback
+    // (Playwright default) without producing artifacts. See
+    // https://playwright.dev/docs/test-sharding#merging-reports-from-multiple-shards.
+    process.env.CI ? ['blob'] : ['list'],
     // Add Argos reporter.
+    //
+    // The matrix-shard workflow at `.github/workflows/e2e.web.yml` sets
+    // `ARGOS_PARALLEL` / `ARGOS_PARALLEL_NONCE` / `ARGOS_PARALLEL_TOTAL` so
+    // every shard's `argosScreenshot` calls collate into a single Argos
+    // build. Without parallel mode, the 4 spec files that take no
+    // screenshots would each create an empty Argos build that diffs as
+    // "2 removed" against the baseline. See
+    // https://argos-ci.com/docs/parallel-testing.
     [
       '@argos-ci/playwright/reporter',
       {
