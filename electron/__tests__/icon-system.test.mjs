@@ -272,10 +272,12 @@ describe('Icon System', () => {
 
     it('should have valid structure', () => {
       expect(manifest).toHaveProperty('generated')
-      expect(manifest).toHaveProperty('source')
+      expect(manifest).toHaveProperty('sources')
       expect(manifest).toHaveProperty('icons')
       expect(typeof manifest.generated).toBe('string')
-      expect(typeof manifest.source).toBe('string')
+      expect(manifest.sources).toHaveProperty('appRaw')
+      expect(manifest.sources).toHaveProperty('appNormalized')
+      expect(manifest.sources).toHaveProperty('tray')
     })
 
     it('should list all PNG icons', () => {
