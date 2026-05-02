@@ -32,35 +32,32 @@ test.describe('QA Fixes Verification', () => {
     test('should wrap long unbreakable text without overflow', async ({
       page,
     }) => {
-      // Create a todo with a very long unbreakable string (no spaces)
+      // Arrange — a 200-character unbreakable string (no spaces) stresses CSS wrap
       const longText = 'A'.repeat(200)
+
+      // Act — create the todo via Enter key
       const input = page.getByPlaceholder('Enter a new todo...')
       await input.fill(longText)
       await input.press('Enter')
-
-      // Wait for the todo to appear
       const todoCheckbox = page.getByRole('checkbox', { name: longText })
       await expect(todoCheckbox).toBeVisible({ timeout: 5000 })
 
-      // Find the todo text container and verify it has break-words class
+      // Assert — text container has break-words, item stays inside parent bounds
       const todoItem = page.locator('.rounded-lg.border').filter({
         has: page.getByRole('checkbox', { name: longText }),
       })
       const textContainer = todoItem.locator('.break-words').first()
       await expect(textContainer).toBeVisible()
-
-      // Verify the todo item doesn't overflow its parent
       const todoItemBox = await todoItem.boundingBox()
       const parentBox = await todoItem.locator('..').boundingBox()
-
       if (todoItemBox && parentBox) {
-        // The todo item's right edge should not exceed the parent container
+        // Right edge must not exceed the parent (1px tolerance for rounding).
         expect(todoItemBox.x + todoItemBox.width).toBeLessThanOrEqual(
-          parentBox.x + parentBox.width + 1, // 1px tolerance for rounding
+          parentBox.x + parentBox.width + 1,
         )
       }
 
-      // Cleanup: delete the todo
+      // Cleanup — delete the todo so subsequent tests start clean
       const deleteButton = todoItem.getByRole('button', { name: 'Delete' })
       await deleteButton.click()
       await expect(todoCheckbox).not.toBeVisible({ timeout: 5000 })
@@ -69,10 +66,10 @@ test.describe('QA Fixes Verification', () => {
 
   test.describe('P1: Footer icon buttons accessibility', () => {
     test('should have aria-labels on footer icon buttons', async ({ page }) => {
-      // Open sidebar if needed (on mobile viewports)
+      // Arrange — locate the sidebar (no Act phase: this test only inspects DOM)
       const sidebar = page.locator('[data-slot="sidebar"]')
 
-      // Verify footer buttons have aria-labels
+      // Assert — footer buttons expose aria-labels and meet 36x36 minimum tap area
       const documentsButton = sidebar.getByRole('button', {
         name: 'Documents',
       })
@@ -80,14 +77,12 @@ test.describe('QA Fixes Verification', () => {
       const moreButton = sidebar.getByRole('button', {
         name: 'More options',
       })
-
       await expect(documentsButton).toBeVisible()
       await expect(editButton).toBeVisible()
       await expect(moreButton).toBeVisible()
-
-      // Verify buttons have minimum size (size-9 = 36px)
       const documentsBox = await documentsButton.boundingBox()
       if (documentsBox) {
+        // size-9 = 36px in Tailwind
         expect(documentsBox.width).toBeGreaterThanOrEqual(36)
         expect(documentsBox.height).toBeGreaterThanOrEqual(36)
       }
@@ -98,33 +93,27 @@ test.describe('QA Fixes Verification', () => {
     test('should show confirmation dialog before clearing completed todos', async ({
       page,
     }) => {
+      // Arrange — seed and complete a todo so "Clear all" has something to act on
       const todoText = 'Clear dialog test todo'
-
-      // Create and complete a todo
       const input = page.getByPlaceholder('Enter a new todo...')
       await input.fill(todoText)
       await input.press('Enter')
-
       const todoCheckbox = page.getByRole('checkbox', { name: todoText })
       await expect(todoCheckbox).toBeVisible()
-
-      // Wait for server confirmation (positive ID)
       await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
         timeout: 5000,
       })
-
-      // Toggle to completed
       await todoCheckbox.click()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeChecked({
         timeout: 5000,
       })
 
-      // Click "Clear all" button
+      // Act — click "Clear all"
       const clearButton = page.getByRole('button', { name: 'Clear all' })
       await expect(clearButton).toBeVisible()
       await clearButton.click()
 
-      // Verify confirmation dialog appears
+      // Assert — confirmation dialog appears with the right copy
       const dialog = page.getByRole('alertdialog')
       await expect(dialog).toBeVisible()
       await expect(dialog.getByText('Clear all completed tasks?')).toBeVisible()
@@ -132,43 +121,38 @@ test.describe('QA Fixes Verification', () => {
         dialog.getByText('This action cannot be undone'),
       ).toBeVisible()
 
-      // Cancel and verify todos are still there
+      // Act 2 — cancel the dialog
       await dialog.getByRole('button', { name: 'Cancel' }).click()
+
+      // Assert 2 — dialog closes and the completed todo is preserved
       await expect(dialog).not.toBeVisible()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible()
     })
 
     test('should delete completed todos when confirmed', async ({ page }) => {
+      // Arrange — seed and complete a todo
       const todoText = 'Confirm clear test todo'
-
-      // Create and complete a todo
       const input = page.getByPlaceholder('Enter a new todo...')
       await input.fill(todoText)
       await input.press('Enter')
-
       const todoCheckbox = page.getByRole('checkbox', { name: todoText })
       await expect(todoCheckbox).toBeVisible()
       await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
         timeout: 5000,
       })
-
       await todoCheckbox.click()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeChecked({
         timeout: 5000,
       })
 
-      // Click "Clear all" and confirm
-      const clearButton = page.getByRole('button', { name: 'Clear all' })
-      await clearButton.click()
-
+      // Act — open Clear All dialog and confirm
+      await page.getByRole('button', { name: 'Clear all' }).click()
       const dialog = page.getByRole('alertdialog')
       await expect(dialog).toBeVisible()
-
-      // Click "Clear all" in the dialog to confirm
       await dialog.getByRole('button', { name: 'Clear all' }).click()
-      await expect(dialog).not.toBeVisible()
 
-      // Verify the completed todo is removed
+      // Assert — dialog closes and the completed todo is gone
+      await expect(dialog).not.toBeVisible()
       await expect(
         page.getByRole('checkbox', { name: todoText }),
       ).not.toBeVisible({ timeout: 5000 })
@@ -177,7 +161,9 @@ test.describe('QA Fixes Verification', () => {
 
   test.describe('P2: Toaster is mounted', () => {
     test('should have toaster container in the DOM', async ({ page }) => {
-      // Sonner v2 renders as an aria region with "Notifications" label
+      // Arrange — page mount handled by beforeEach (no Act phase)
+
+      // Assert — Sonner v2 renders as an aria region with "Notifications" label
       const toaster = page.getByRole('region', { name: /Notifications/ })
       await expect(toaster).toBeAttached({ timeout: 10000 })
     })
