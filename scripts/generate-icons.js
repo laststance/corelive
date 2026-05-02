@@ -303,6 +303,16 @@ class IconGenerator {
   async generateICNS() {
     log.warn('\n🍎 Generating macOS .icns bundle...')
 
+    // iconutil is bundled with macOS only — Linux CI runners (ubuntu-latest)
+    // don't have it. Skip cleanly so the test job can still validate the rest
+    // of the icon pipeline; the committed icon.icns covers the macOS build job.
+    if (process.platform !== 'darwin') {
+      log.warn(
+        `  ⏭️  Skipped (platform=${process.platform}); using committed icon.icns`,
+      )
+      return
+    }
+
     // Apple iconset naming convention: pairs of @1x / @2x for each retina tier.
     // iconutil expects exactly these filenames inside a *.iconset directory.
     const iconsetEntries = [
