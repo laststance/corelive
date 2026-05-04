@@ -3,8 +3,14 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 const isProtectedRoute = createRouteMatcher(['/home(.*)', '/skill-tree(.*)'])
 
 const middleware = clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect()
+  if (!isProtectedRoute(req)) {
+    return
+  }
+
+  const { isAuthenticated, redirectToSignIn } = await auth()
+
+  if (!isAuthenticated) {
+    return redirectToSignIn()
   }
 })
 
