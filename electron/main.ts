@@ -534,15 +534,28 @@ async function setActiveUser(
  * - 'self': Only allow resources from our own origin by default
  * - Clerk domains: Required for authentication UI components
  * - 'unsafe-inline': Unfortunately needed for some React/Next.js inline styles
+ * - 'unsafe-eval' (dev only): React 19 / Next.js dev mode reconstructs error
+ *   stacks from server components via eval(); never used in production
  * - localhost: Development server connections
  * - data: URIs: For inline images and fonts
  *
  * Note: In production, consider stricter policies and nonces for inline scripts
  */
+// React/Next.js dev mode needs eval() for callstack reconstruction (devtools).
+// Production builds never call eval(), so we keep the strict policy there.
+const scriptSrcDirective = [
+  "script-src 'self' 'unsafe-inline'",
+  ...(isDev ? ["'unsafe-eval'"] : []),
+  'https://clerk.corelive.app',
+  'https://*.clerk.accounts.dev',
+  'https://*.clerk.dev',
+  'https://*.clerk.com',
+].join(' ')
+
 const CSP_POLICY = [
   "default-src 'self'",
   // Allow Clerk assets from custom domain (clerk.corelive.app), .dev and .com domains
-  "script-src 'self' 'unsafe-inline' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
+  scriptSrcDirective,
   "style-src 'self' 'unsafe-inline' https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
   "img-src 'self' data: https: https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
   "font-src 'self' data: https://clerk.corelive.app https://*.clerk.accounts.dev https://*.clerk.dev https://*.clerk.com",
