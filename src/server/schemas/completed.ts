@@ -12,7 +12,7 @@ export const HeatmapInputSchema = z.object({
 /**
  * Category breakdown within a single day's heatmap entry.
  * @example
- * { id: 1, name: "Corelive", color: "blue", count: 3 }
+ * { id: 1, name: "CoreLive", color: "blue", count: 3 }
  */
 export const HeatmapCategorySchema = z.object({
   id: z.number().int(),

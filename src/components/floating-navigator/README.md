@@ -123,7 +123,7 @@ The Floating Navigator is built with comprehensive accessibility support to ensu
 ### ARIA Labels and Roles
 
 - **Application Role**: Main container uses `role="application"` with descriptive label "Floating Task Navigator"
-- **Semantic Structure**: Proper heading hierarchy (h1 for "Quick Tasks", h2 for "Completed") and landmark roles (banner, main, sections)
+- **Semantic Structure**: Proper heading hierarchy (h1 for "CoreLive", h2 for "Completed") and landmark roles (banner, main, sections)
 - **List Structure**: Tasks organized in semantic lists with proper labels indicating count and status
 - **Form Controls**: All inputs and buttons have descriptive labels and help text
 - **Live Regions**: Screen reader announcements for dynamic content changes via `aria-live="polite"`

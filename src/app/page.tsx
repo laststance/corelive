@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Corelive',
-    default: 'Corelive',
+    template: '%s | CoreLive',
+    default: 'CoreLive',
   },
   description: 'Personal Todo navigator for you.',
 }

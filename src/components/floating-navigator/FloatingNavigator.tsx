@@ -284,7 +284,7 @@ export function FloatingNavigator({
         role="banner"
       >
         <div className="pointer-events-none flex-1">
-          <h1 className="text-sm font-medium text-foreground">Corelive</h1>
+          <h1 className="text-sm font-medium text-foreground">CoreLive</h1>
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {pendingTodos.length} pending task
             {pendingTodos.length !== 1 ? 's' : ''}

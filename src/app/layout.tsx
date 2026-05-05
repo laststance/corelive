@@ -12,10 +12,10 @@ import { ThemeProvider } from '@/providers/ThemeProvider'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Corelive',
-    default: 'Corelive',
+    template: '%s | CoreLive',
+    default: 'CoreLive',
   },
-  description: 'Corelive convert your leafy tasks to solid engagement.',
+  description: 'CoreLive convert your leafy tasks to solid engagement.',
 }
 
 interface RootLayoutProps {
