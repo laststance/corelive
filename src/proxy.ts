@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 
 const isProtectedRoute = createRouteMatcher(['/home(.*)', '/skill-tree(.*)'])
 
@@ -7,10 +8,12 @@ const middleware = clerkMiddleware(async (auth, req) => {
     return
   }
 
-  const { isAuthenticated, redirectToSignIn } = await auth()
+  const { isAuthenticated } = await auth()
 
   if (!isAuthenticated) {
-    return redirectToSignIn()
+    const loginUrl = new URL('/login', req.url)
+    loginUrl.searchParams.set('redirect_url', req.url)
+    return NextResponse.redirect(loginUrl)
   }
 })
 
