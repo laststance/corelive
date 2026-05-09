@@ -442,9 +442,9 @@ export class SystemTrayManager {
           label: 'Open BrainDump',
           click: () => {
             try {
-              this.windowManager.toggleBrainDump()
+              this.windowManager.showBrainDump()
             } catch (error) {
-              log.error('Failed to toggle BrainDump:', error)
+              log.error('Failed to open BrainDump:', error)
             }
           },
         },

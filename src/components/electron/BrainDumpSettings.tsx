@@ -17,7 +17,7 @@
 'use client'
 
 import { Brain, Eye, Keyboard } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -71,6 +71,11 @@ export function BrainDumpSettings({
   const [opacity, setOpacity] = useState<BrainDumpOpacity>(1.0)
   const [shortcut, setShortcut] = useState<BrainDumpShortcut>('')
   const [error, setError] = useState<string | null>(null)
+  // Last successfully persisted values — used as rollback targets so we
+  // don't restore the in-flight optimistic value (which is what local
+  // `opacity`/`shortcut` state holds while the IPC call is pending).
+  const lastGoodOpacityRef = useRef<BrainDumpOpacity>(1.0)
+  const lastGoodShortcutRef = useRef<BrainDumpShortcut>('')
 
   // Compute inside the effect so the dependency array stays stable across
   // renders and the env check runs only once on mount.
@@ -89,6 +94,8 @@ export function BrainDumpSettings({
         setSyncMode(sync)
         setOpacity(op)
         setShortcut(sc)
+        lastGoodOpacityRef.current = op
+        lastGoodShortcutRef.current = sc
       })
       .catch((loadError: unknown) => {
         log.error('Failed to load BrainDump settings:', loadError)
@@ -127,14 +134,17 @@ export function BrainDumpSettings({
   const handleOpacityCommit = async (values: number[]): Promise<void> => {
     const next = values[0]
     if (next === undefined) return
-    const previous = opacity
     setError(null)
     try {
       const applied = await window.electronAPI?.brainDump?.setOpacity(next)
-      if (typeof applied === 'number') setOpacity(applied)
+      const persisted = typeof applied === 'number' ? applied : next
+      setOpacity(persisted)
+      lastGoodOpacityRef.current = persisted
     } catch (err) {
       log.error('Failed to update BrainDump opacity:', err)
-      setOpacity(previous)
+      // Roll back to the last value the main process confirmed, not the
+      // in-flight optimistic value held in `opacity` state.
+      setOpacity(lastGoodOpacityRef.current)
       setError('Failed to update opacity')
     }
   }
@@ -145,9 +155,13 @@ export function BrainDumpSettings({
       const ok = await window.electronAPI?.brainDump?.setShortcut(shortcut)
       if (ok === false) {
         setError('Shortcut could not be registered (it may already be in use).')
+        setShortcut(lastGoodShortcutRef.current)
+        return
       }
+      lastGoodShortcutRef.current = shortcut
     } catch (err) {
       log.error('Failed to update BrainDump shortcut:', err)
+      setShortcut(lastGoodShortcutRef.current)
       setError('Failed to update shortcut')
     }
   }

@@ -24,6 +24,7 @@ import {
   BRAINDUMP_OPACITY_MIN,
   BRAINDUMP_OPACITY_STEP,
 } from '@/lib/constants/braindump'
+import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
@@ -153,12 +154,20 @@ export function BrainDumpEditor({
       api.window.getOpacity(),
       api.sync.getEnabled(),
       api.category.getLast(),
-    ]).then(([opacityValue, enabled, lastCategoryId]) => {
-      if (cancelled) return
-      setOpacity(opacityValue)
-      setSyncEnabled(enabled)
-      setLocalCategoryId(lastCategoryId)
-    })
+    ])
+      .then(([opacityValue, enabled, lastCategoryId]) => {
+        if (cancelled) return
+        setOpacity(opacityValue)
+        setSyncEnabled(enabled)
+        setLocalCategoryId(lastCategoryId)
+      })
+      .catch((error) => {
+        // Failures here keep the safe defaults seeded by useState; surface
+        // a toast so the user knows their persisted prefs didn't load.
+        if (cancelled) return
+        toast.error('Failed to load BrainDump preferences')
+        log.error('BrainDump preferences load failed', error)
+      })
     return () => {
       cancelled = true
     }
@@ -170,8 +179,9 @@ export function BrainDumpEditor({
     if (!isMounted || !isBrainDumpEnvironment()) return
     const api = window.brainDumpAPI
     if (!api) return
-    return api.on('braindump-category-changed', (_event, payload) => {
-      // Preload contract is `(event, ...args)` so payload is the second arg.
+    return api.on('braindump-category-changed', (payload) => {
+      // Preload sanitizes args and strips the IpcRendererEvent — payload is
+      // the first user arg.
       const parsed = categoryChangedPayloadSchema.safeParse(payload)
       if (parsed.success) setLocalCategoryId(parsed.data.categoryId)
     })
@@ -184,28 +194,41 @@ export function BrainDumpEditor({
       lastPersistedRef.current = { categoryId: null, text: '' }
       return
     }
+    const api = window.brainDumpAPI
+    // Guard before flipping the spinner so the editor doesn't get stuck
+    // loading when the preload hasn't injected `brainDumpAPI` yet.
+    if (!api) return
     let cancelled = false
     setIsLoadingNote(true)
-    const api = window.brainDumpAPI
-    if (!api) return
-    void api.note.get(activeCategoryId).then((text) => {
-      if (cancelled) return
-      setNoteText(text)
-      // Mark as already-persisted to prevent the debounce effect from immediately
-      // echoing this same text back to disk.
-      lastPersistedRef.current = { categoryId: activeCategoryId, text }
-      setIsLoadingNote(false)
-      checkedRowsRef.current.clear()
-      pendingCreatesRef.current.clear()
-    })
+    api.note
+      .get(activeCategoryId)
+      .then((text) => {
+        if (cancelled) return
+        setNoteText(text)
+        // Mark as already-persisted so the debounce effect doesn't immediately
+        // echo this text back to disk.
+        lastPersistedRef.current = { categoryId: activeCategoryId, text }
+        checkedRowsRef.current.clear()
+        pendingCreatesRef.current.clear()
+      })
+      .catch((error) => {
+        if (cancelled) return
+        toast.error('Failed to load note for this category')
+        log.error('BrainDump note load failed', error)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setIsLoadingNote(false)
+      })
     return () => {
       cancelled = true
     }
   }, [activeCategoryId, isMounted])
 
   // Debounce note writes to avoid hammering the config file on every keystroke.
-  // Cleanup also flushes any pending write so we never silently drop the
-  // user's last keystrokes on category change or unmount.
+  // The cleanup *only* clears the pending timer — flushing here would defeat
+  // the debounce because cleanup runs on every keystroke (noteText is a dep).
+  // The companion effect below handles category-swap/unmount flushes.
   useEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
       return
@@ -219,21 +242,36 @@ export function BrainDumpEditor({
     ) {
       return
     }
-    const flush = (): void => {
+    const timeoutId = window.setTimeout(() => {
       lastPersistedRef.current = {
         categoryId: activeCategoryId,
         text: noteText,
       }
       void api.note.set(activeCategoryId, noteText)
-    }
-    const timeoutId = window.setTimeout(flush, NOTE_DEBOUNCE_MS)
+    }, NOTE_DEBOUNCE_MS)
     return () => {
       window.clearTimeout(timeoutId)
-      // Cleanup runs on category swap or unmount — flush so unsaved keystrokes
-      // are not lost.
-      flush()
     }
   }, [activeCategoryId, isLoadingNote, isMounted, noteText])
+
+  // Final flush: runs on category swap and unmount only (not on every keystroke).
+  // Reads the latest text via ref so we never persist a stale snapshot.
+  useEffect(() => {
+    if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
+      return
+    const api = window.brainDumpAPI
+    if (!api) return
+    const flushCategoryId = activeCategoryId
+    return () => {
+      const text = noteTextRef.current
+      const persisted = lastPersistedRef.current
+      if (persisted.categoryId === flushCategoryId && persisted.text === text) {
+        return
+      }
+      lastPersistedRef.current = { categoryId: flushCategoryId, text }
+      void api.note.set(flushCategoryId, text)
+    }
+  }, [activeCategoryId, isMounted])
 
   const handleToggleSync = useCallback((enabled: boolean) => {
     setSyncEnabled(enabled)

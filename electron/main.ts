@@ -380,6 +380,14 @@ function getBrowserWindowForType(
     return null
   }
 
+  // Handle BrainDump panel — never auto-create from a state operation; the
+  // panel is created on demand by user gesture (menu/tray/shortcut).
+  if (windowType === 'braindump') {
+    return windowManager.hasBrainDumpWindow?.()
+      ? (windowManager.getBrainDumpWindow?.() ?? null)
+      : null
+  }
+
   // Handle floating navigator window
   if (windowType === 'floating') {
     // Create floating window on-demand if it doesn't exist
@@ -400,8 +408,14 @@ function getBrowserWindowForType(
       : null
   }
 
-  // Default to main window
-  return windowManager.getMainWindow ? windowManager.getMainWindow() : null
+  // Only return the main window for an explicit 'main' request — falling back
+  // here for unknown types lets a stray 'braindump' (or future addition)
+  // silently mutate main-window state.
+  if (windowType === 'main') {
+    return windowManager.getMainWindow ? windowManager.getMainWindow() : null
+  }
+
+  return null
 }
 
 /**

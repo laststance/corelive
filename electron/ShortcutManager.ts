@@ -331,6 +331,23 @@ export class ShortcutManager {
       ),
     })
 
+    // Honor the persisted BrainDump accelerator on startup. Empty string is
+    // the "disabled" sentinel used by Settings, so skip registration in that
+    // case to avoid binding "" as an accelerator.
+    const brainDumpAccel = shortcuts.toggleBrainDump
+    if (typeof brainDumpAccel === 'string' && brainDumpAccel.trim() !== '') {
+      results.push({
+        id: 'toggleBrainDump',
+        success: this.registerShortcut(
+          brainDumpAccel,
+          'toggleBrainDump',
+          () => {
+            this.handleToggleBrainDump()
+          },
+        ),
+      })
+    }
+
     return results
   }
 
@@ -869,6 +886,7 @@ export class ShortcutManager {
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
+      const wasEnabled = this.isEnabled
       // Sync isEnabled if provided in newShortcuts
       if (typeof newShortcuts.enabled === 'boolean') {
         this.isEnabled = newShortcuts.enabled
@@ -901,6 +919,13 @@ export class ShortcutManager {
         if (handler) {
           this.registerShortcut(accelerator, id, handler)
         }
+      }
+
+      // If toggling enabled false → true with no other accelerator changes,
+      // restore the configured global bindings; otherwise the app stays
+      // "enabled" with no live accelerators until the user edits settings.
+      if (!wasEnabled && this.isEnabled) {
+        this.registerGlobalShortcuts()
       }
 
       return true

@@ -270,7 +270,7 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
    */
   on: (
     channel: string,
-    callback: (event: IpcRendererEvent, ...args: unknown[]) => void,
+    callback: (...args: unknown[]) => void,
   ): (() => void) | undefined => {
     if (!validateChannel(channel)) {
       log.error(
@@ -284,13 +284,16 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
       return
     }
 
+    // Keep IpcRendererEvent private to preload; renderers receive only
+    // sanitized payload args. Forwarding `event` would leak `sender` and
+    // other capabilities across the contextBridge boundary.
     const wrappedCallback = (
-      event: IpcRendererEvent,
+      _event: IpcRendererEvent,
       ...args: unknown[]
     ): void => {
       try {
         const sanitizedArgs = args.map((arg) => sanitizeData(arg))
-        callback(event, ...sanitizedArgs)
+        callback(...sanitizedArgs)
       } catch (error) {
         log.error('BrainDump: Error in event callback:', error)
       }

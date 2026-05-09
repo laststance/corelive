@@ -519,10 +519,15 @@ export class WindowManager {
       }
     })
 
+    // 'close' fires before destruction — capture bounds while the window
+    // is still alive (matches the main window pattern).
+    this.brainDumpWindow.on('close', () => {
+      this.saveWindowState()
+    })
+
     this.brainDumpWindow.on('closed', () => {
       log.debug('BrainDump window closed')
       this.brainDumpWindow = null
-      this.saveWindowState()
     })
 
     this.brainDumpWindow.webContents.on(

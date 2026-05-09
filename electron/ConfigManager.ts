@@ -385,8 +385,9 @@ export class ConfigManager {
       log.error('Failed to load config:', error)
     }
 
-    // Return default config if loading fails
-    return { ...this.defaultConfig }
+    // Return default config if loading fails — deep clone so the runtime copy
+    // never aliases nested defaults like `braindump.notes`.
+    return structuredClone(this.defaultConfig)
   }
 
   /**
@@ -457,8 +458,11 @@ export class ConfigManager {
       return result
     }
 
+    // Deep-clone the defaults before merging so the merged result never
+    // aliases nested objects (e.g., `braindump.notes` shared with the
+    // factory defaults — mutating it would silently pollute reset()).
     return merge(
-      this.defaultConfig as unknown as Record<string, unknown>,
+      structuredClone(this.defaultConfig) as unknown as Record<string, unknown>,
       loadedConfig as unknown as Record<string, unknown>,
     ) as AppConfig
   }
@@ -648,7 +652,10 @@ export class ConfigManager {
    * @returns True if save successful
    */
   reset(): boolean {
-    this.config = { ...this.defaultConfig }
+    // Deep clone — a shallow spread keeps nested objects (e.g.,
+    // `braindump.notes`) aliased to the factory defaults, so subsequent
+    // writes would silently mutate the source-of-truth defaults.
+    this.config = structuredClone(this.defaultConfig)
     return this.saveConfig()
   }
 
@@ -658,7 +665,9 @@ export class ConfigManager {
   resetSection(section: keyof AppConfig): boolean {
     const defaultSection = this.defaultConfig[section]
     if (defaultSection && typeof defaultSection === 'object') {
-      this.config[section] = { ...defaultSection } as AppConfig[typeof section]
+      this.config[section] = structuredClone(
+        defaultSection,
+      ) as AppConfig[typeof section]
       return this.saveConfig()
     }
     return false

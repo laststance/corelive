@@ -253,23 +253,35 @@ export const deleteCompleted = authMiddleware
     const { user } = context
     const { id } = input
 
-    const existing = await prisma.completed.findFirst({
-      where: { id, userId: user.id },
+    // Atomic conditional delete: ownership + freshness checks happen inside a
+    // single statement so two concurrent undo calls (or an undo racing the
+    // window expiry) cannot both observe the row as deletable. The
+    // deleteMany count is the authoritative result; we only do an extra
+    // existence read on failure to distinguish NOT_FOUND vs FORBIDDEN.
+    const result = await prisma.completed.deleteMany({
+      where: {
+        id,
+        userId: user.id,
+        createdAt: {
+          gte: new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
+        },
+      },
     })
-    if (!existing) {
-      throw new ORPCError('NOT_FOUND', {
-        message: 'Completed row not found',
-      })
+
+    if (result.count === 1) {
+      return { id }
     }
 
-    const ageMs = Date.now() - existing.createdAt.getTime()
-    if (ageMs > COMPLETED_UNDO_WINDOW_MS) {
+    const stillExists = await prisma.completed.findFirst({
+      where: { id, userId: user.id },
+      select: { id: true },
+    })
+    if (stillExists) {
       throw new ORPCError('FORBIDDEN', {
         message: 'Undo window has expired for this completion',
       })
     }
-
-    await prisma.completed.delete({ where: { id } })
-
-    return { id }
+    throw new ORPCError('NOT_FOUND', {
+      message: 'Completed row not found',
+    })
   })
