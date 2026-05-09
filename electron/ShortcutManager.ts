@@ -900,6 +900,11 @@ export class ShortcutManager {
         }
       }
 
+      // Track whether every requested global accelerator actually bound;
+      // a conflicting accelerator silently dropping would otherwise look
+      // like success to callers who use this return value to roll back.
+      let allRegistered = true
+
       for (const [id, accelerator] of Object.entries(newShortcuts)) {
         if (id === 'enabled' || typeof accelerator !== 'string') continue
 
@@ -917,7 +922,8 @@ export class ShortcutManager {
 
         const handler = this.getHandlerForShortcut(id)
         if (handler) {
-          this.registerShortcut(accelerator, id, handler)
+          const ok = this.registerShortcut(accelerator, id, handler)
+          allRegistered = allRegistered && ok
         }
       }
 
@@ -925,10 +931,12 @@ export class ShortcutManager {
       // restore the configured global bindings; otherwise the app stays
       // "enabled" with no live accelerators until the user edits settings.
       if (!wasEnabled && this.isEnabled) {
-        this.registerGlobalShortcuts()
+        const results = this.registerGlobalShortcuts()
+        const anyFailed = results.some((r) => !r.success)
+        allRegistered = allRegistered && !anyFailed
       }
 
-      return true
+      return allRegistered
     } catch (error) {
       log.error('Error updating shortcuts:', error)
       return false

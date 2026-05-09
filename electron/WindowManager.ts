@@ -612,7 +612,13 @@ export class WindowManager {
     if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
       return this.brainDumpWindow.getOpacity()
     }
-    return this.configManager?.get('braindump.opacity', 1) ?? 1
+    // Coerce + clamp the persisted value: a hand-edited config or a stale
+    // value from before the clamp was introduced could otherwise hand the
+    // renderer something out of [0.30, 1.00].
+    const raw = this.configManager?.get('braindump.opacity', 1) ?? 1
+    const numeric = typeof raw === 'number' ? raw : Number(raw)
+    if (!Number.isFinite(numeric)) return 1
+    return Math.max(0.3, Math.min(1, numeric))
   }
 
   /** Get the BrainDump BrowserWindow (or null if not yet created). */

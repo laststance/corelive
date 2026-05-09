@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { useMounted } from '@/hooks/use-mounted'
 import {
   type BrainDumpOpacity,
   type BrainDumpShortcut,
@@ -67,6 +68,12 @@ export function BrainDumpSettings({
   const shortcutId = useId()
 
   const [isReady, setIsReady] = useState(false)
+  // True after the first client-side render. Until then we render the same
+  // "Loading" markup the server emitted so React doesn't see a mismatch
+  // between SSR (no `window`) and the first client paint (where `window` may
+  // exist without `electronAPI` in non-Electron browsers). Uses
+  // useSyncExternalStore under the hood for tear-free SSR semantics.
+  const hasMounted = useMounted()
   const [syncMode, setSyncMode] = useState<BrainDumpSyncMode>(true)
   const [opacity, setOpacity] = useState<BrainDumpOpacity>(1.0)
   const [shortcut, setShortcut] = useState<BrainDumpShortcut>('')
@@ -175,7 +182,10 @@ export function BrainDumpSettings({
     }
   }
 
-  if (typeof window !== 'undefined' && !window.electronAPI?.brainDump) {
+  // Defer the non-Electron fallback until after hydration so server and
+  // first client render produce the same markup. Until `hasMounted` is
+  // true we keep rendering the "Loading" branch below.
+  if (hasMounted && !window.electronAPI?.brainDump) {
     return (
       <Card className={className}>
         <CardHeader>

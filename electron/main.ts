@@ -1272,15 +1272,26 @@ function setupIPCHandlers(): void {
 
   typedHandle('braindump-config-set-shortcut', (_event, accelerator) => {
     if (!configManager) return false
-    configManager.set('braindump.shortcut', accelerator)
-    // Re-register global shortcuts so the new accelerator takes effect.
+    // Try to register first; only persist on success so the renderer's
+    // returned boolean accurately reflects whether the new accelerator is
+    // live.
+    const previous = configManager.get<string>('braindump.shortcut', '') ?? ''
     if (shortcutManager) {
       try {
-        shortcutManager.updateShortcuts({ toggleBrainDump: accelerator })
+        const ok = shortcutManager.updateShortcuts({
+          toggleBrainDump: accelerator,
+        })
+        if (!ok) {
+          // Rollback so config and registered shortcut stay in sync.
+          shortcutManager.updateShortcuts({ toggleBrainDump: previous })
+          return false
+        }
       } catch (error) {
         log.error('Failed to update BrainDump shortcut:', error)
+        return false
       }
     }
+    configManager.set('braindump.shortcut', accelerator)
     return true
   })
 

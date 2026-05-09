@@ -37,6 +37,7 @@ import {
   type BrainDumpLineIndex,
   COMPLETED_TITLE_MAX_LENGTH,
   normalizeCompletedTitle,
+  parseAllCheckboxes,
   parseCheckboxLine,
   setCheckboxStateAtLine,
 } from './braindumpUtils'
@@ -69,10 +70,40 @@ type CheckedRowMemory = Readonly<{
 
 /**
  * In-flight create-Completed promise for a line that's been ticked but not
- * yet round-tripped to the server. We await it before any delete so an
- * Undo issued before the create resolves cannot leave a ghost row in the DB.
+ * yet round-tripped to the server. The title is captured at promise creation
+ * so an Undo issued before the create resolves can match the right entry
+ * even after lines drift. We await it before any delete so the row is never
+ * orphaned in the DB.
  */
-type PendingCreate = Promise<Completed['id'] | null>
+type PendingCreate = Readonly<{
+  promise: Promise<Completed['id'] | null>
+  title: BrainDumpCompletedTitle
+}>
+
+/**
+ * Find the first `[x]` line in the given text whose title matches.
+ *
+ * Why title-based lookup: line indices drift the moment the user inserts or
+ * deletes a line above a checked item, so storing a stale lineIndex in the
+ * undo memory is unsafe. Titles are the only stable handle we have between
+ * the toggle and the Undo click.
+ *
+ * @param text - Current textarea contents.
+ * @param title - Title to look for (already normalised).
+ * @returns Zero-based line index, or null when no `[x]` line matches.
+ * @example
+ * findCheckedLineIndexByTitle('- [x] buy milk\n- [ ] dishes', 'buy milk') // → 0
+ */
+function findCheckedLineIndexByTitle(
+  text: string,
+  title: BrainDumpCompletedTitle,
+): BrainDumpLineIndex | null {
+  const checkboxes = parseAllCheckboxes(text)
+  for (const box of checkboxes) {
+    if (box.checked && box.title === title) return box.lineIndex
+  }
+  return null
+}
 
 /**
  * BrainDumpEditor — frameless transparent panel that pairs a category picker
@@ -215,6 +246,13 @@ export function BrainDumpEditor({
         if (cancelled) return
         toast.error('Failed to load note for this category')
         log.error('BrainDump note load failed', error)
+        // Reset editor state BEFORE clearing the loading flag so the
+        // category swap doesn't briefly show stale text from category A
+        // while we render category B's failure.
+        setNoteText('')
+        lastPersistedRef.current = { categoryId: null, text: '' }
+        checkedRowsRef.current.clear()
+        pendingCreatesRef.current.clear()
       })
       .finally(() => {
         if (cancelled) return
@@ -307,7 +345,7 @@ export function BrainDumpEditor({
         return
       }
       const safeTitle = normalizeCompletedTitle(title)
-      const createPromise: PendingCreate = createCompletedMutation
+      const promise = createCompletedMutation
         .mutateAsync({
           categoryId: activeCategoryId,
           title: safeTitle,
@@ -320,18 +358,25 @@ export function BrainDumpEditor({
                 ? error.message
                 : 'Failed to record completion'
             toast.error(message)
+            // Re-resolve which line still holds the `[x]` for this title —
+            // the original lineIndex may have drifted if the user inserted
+            // text above before the create rejected.
+            const currentLine =
+              findCheckedLineIndexByTitle(noteTextRef.current, safeTitle) ??
+              lineIndex
             setNoteText(
-              setCheckboxStateAtLine(noteTextRef.current, lineIndex, false),
+              setCheckboxStateAtLine(noteTextRef.current, currentLine, false),
             )
             return null
           },
         )
-      pendingCreatesRef.current.set(lineIndex, createPromise)
+      const pendingEntry: PendingCreate = { promise, title: safeTitle }
+      pendingCreatesRef.current.set(lineIndex, pendingEntry)
 
-      const completedId = await createPromise
-      // Drop the pending entry only if it's still the same promise — a fresh
+      const completedId = await promise
+      // Drop the pending entry only if it's still the same one — a fresh
       // tick on the same line would have replaced it.
-      if (pendingCreatesRef.current.get(lineIndex) === createPromise) {
+      if (pendingCreatesRef.current.get(lineIndex) === pendingEntry) {
         pendingCreatesRef.current.delete(lineIndex)
       }
       if (completedId === null) return
@@ -352,8 +397,15 @@ export function BrainDumpEditor({
           label: 'Undo',
           onClick: () => {
             // Read latest text via ref so the user's keystrokes between
-            // creation and undo are preserved.
-            void undoCompleted(lineIndex, completedId, noteTextRef.current)
+            // creation and undo are preserved. Pass the captured title so
+            // undoCompleted can re-resolve the current line index even if
+            // lines have drifted.
+            void undoCompleted(
+              safeTitle,
+              completedId,
+              noteTextRef.current,
+              lineIndex,
+            )
             toast.dismiss(undoToastId)
           },
         },
@@ -364,18 +416,42 @@ export function BrainDumpEditor({
 
   /**
    * Reverse a completion: delete the Completed row and flip the line back
-   * to `[ ]`. Called from the toast Undo action.
+   * to `[ ]`. Called from the toast Undo action and from the manual-uncheck
+   * keyboard path.
+   *
+   * Drift handling: the `fallbackLineIndex` captured at toggle time may be
+   * stale by undo time (the user can edit text between the two events). We
+   * re-resolve the line by `title` against the latest text and walk the
+   * `checkedRowsRef` map by `completedId` so the cleanup targets the right
+   * entry no matter how the keys have shifted.
    */
   const undoCompleted = useCallback(
     async (
-      lineIndex: BrainDumpLineIndex,
+      title: BrainDumpCompletedTitle,
       completedId: Completed['id'],
       originalText: string,
+      fallbackLineIndex: BrainDumpLineIndex,
     ) => {
+      const resolvedLineIndex =
+        findCheckedLineIndexByTitle(originalText, title) ?? fallbackLineIndex
+
+      // Find the ref entry by completedId (key may have drifted).
+      let memoryKey: BrainDumpLineIndex | null = null
+      let memoryBeforeUndo: CheckedRowMemory | undefined
+      for (const [key, value] of checkedRowsRef.current.entries()) {
+        if (value.completedId === completedId) {
+          memoryKey = key
+          memoryBeforeUndo = value
+          break
+        }
+      }
+      if (memoryKey !== null) checkedRowsRef.current.delete(memoryKey)
+      setNoteText(
+        setCheckboxStateAtLine(originalText, resolvedLineIndex, false),
+      )
+
       try {
         await deleteCompletedMutation.mutateAsync({ id: completedId })
-        checkedRowsRef.current.delete(lineIndex)
-        setNoteText(setCheckboxStateAtLine(originalText, lineIndex, false))
         await queryClient.invalidateQueries({
           queryKey: orpc.completed.heatmap.key(),
         })
@@ -384,6 +460,18 @@ export function BrainDumpEditor({
         const message =
           error instanceof Error ? error.message : 'Failed to undo completion'
         toast.error(message)
+        // Roll back the optimistic uncheck so the checkbox state matches
+        // the still-existing Completed row. Re-resolve again from the
+        // latest text — drift may have continued during the await.
+        const rollbackLineIndex =
+          findCheckedLineIndexByTitle(noteTextRef.current, title) ??
+          resolvedLineIndex
+        setNoteText(
+          setCheckboxStateAtLine(noteTextRef.current, rollbackLineIndex, true),
+        )
+        if (memoryBeforeUndo) {
+          checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
+        }
       }
     },
     [deleteCompletedMutation, queryClient],
@@ -419,9 +507,25 @@ export function BrainDumpEditor({
       if (nextChecked) {
         void promoteLineToCompleted(lineIndex, parsed.title)
       } else {
-        const memory = checkedRowsRef.current.get(lineIndex)
+        // Look up the ref entry — first by current lineIndex, then by
+        // matching title (the lineIndex key may have drifted since the
+        // toggle if the user inserted/removed lines above it).
+        let memory = checkedRowsRef.current.get(lineIndex)
+        if (!memory) {
+          for (const value of checkedRowsRef.current.values()) {
+            if (value.title === parsed.title) {
+              memory = value
+              break
+            }
+          }
+        }
         if (memory) {
-          void undoCompleted(lineIndex, memory.completedId, nextText)
+          void undoCompleted(
+            memory.title,
+            memory.completedId,
+            nextText,
+            lineIndex,
+          )
           return
         }
         // No memory yet → the create is probably still in flight. Await it
@@ -429,11 +533,25 @@ export function BrainDumpEditor({
         // Cosmetic wart: the success toast from `promoteLineToCompleted`
         // will still flash for an item the user already unchecked. The DB
         // stays consistent because the awaited delete runs right after.
-        const pending = pendingCreatesRef.current.get(lineIndex)
+        let pending = pendingCreatesRef.current.get(lineIndex)
+        if (!pending) {
+          for (const value of pendingCreatesRef.current.values()) {
+            if (value.title === parsed.title) {
+              pending = value
+              break
+            }
+          }
+        }
         if (pending) {
-          void pending.then((completedId) => {
+          const pendingTitle = pending.title
+          void pending.promise.then((completedId) => {
             if (completedId === null) return
-            void undoCompleted(lineIndex, completedId, noteTextRef.current)
+            void undoCompleted(
+              pendingTitle,
+              completedId,
+              noteTextRef.current,
+              lineIndex,
+            )
           })
         }
       }

@@ -1548,7 +1548,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         await typedInvoke('braindump-window-toggle')
       } catch (error) {
+        // Re-throw so the renderer can react (toast, retry); a swallowed
+        // failure leaves the user thinking the toggle worked.
         log.error('Failed to toggle BrainDump:', error)
+        throw error
       }
     },
     /** Read window opacity (clamped 0.30–1.00 in main). */
@@ -1568,8 +1571,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await typedInvoke('braindump-window-set-opacity', value)
       } catch (error) {
+        // Re-throw — returning the requested value masks failure and the
+        // Settings UI cannot roll back to the last good opacity.
         log.error('Failed to set BrainDump opacity:', error)
-        return value
+        throw error
       }
     },
     /** Read "follow FloatingNav category" toggle. */
@@ -1590,7 +1595,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('braindump-config-set-sync', enabled)
       } catch (error) {
         log.error('Failed to set BrainDump sync mode:', error)
-        return false
+        throw error
       }
     },
     /** Read global accelerator (empty string disables the shortcut). */
@@ -1611,7 +1616,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('braindump-config-set-shortcut', accelerator)
       } catch (error) {
         log.error('Failed to set BrainDump shortcut:', error)
-        return false
+        throw error
       }
     },
   },

@@ -207,7 +207,10 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
       try {
         await typedInvoke('braindump-note-set', categoryId, text)
       } catch (error) {
+        // Re-throw so the renderer can detect persistence failure and
+        // surface it (toast/retry); silent resolution would mask data loss.
         log.error('BrainDump: Failed to write note:', error)
+        throw error
       }
     },
   },

@@ -243,9 +243,17 @@ export class WindowStateManager {
       braindump: {
         width: brainDumpConfig.width,
         height: brainDumpConfig.height,
-        // Default near top-right of screen, away from FloatingNavigator's slot.
-        x: screenWidth - brainDumpConfig.width - 80,
-        y: Math.round((screenHeight - brainDumpConfig.height) / 2),
+        // Anchor against the primary display's workArea origin so multi-
+        // monitor users get the panel on the right monitor instead of at
+        // (-1280, …) or off-screen entirely.
+        x:
+          primaryDisplay.workArea.x +
+          (primaryDisplay.workArea.width - brainDumpConfig.width - 80),
+        y:
+          primaryDisplay.workArea.y +
+          Math.round(
+            (primaryDisplay.workArea.height - brainDumpConfig.height) / 2,
+          ),
         isMaximized: false,
         isMinimized: false,
         isFullScreen: false,
