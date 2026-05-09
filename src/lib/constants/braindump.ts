@@ -28,3 +28,32 @@ export const BRAINDUMP_OPACITY_STEP = 0.05
  * a runaway paste cannot grow the per-category note beyond reasonable size.
  */
 export const BRAINDUMP_NOTE_LINES_PER_CAP = 200
+
+/**
+ * Frameless-window opacity in [{@link BRAINDUMP_OPACITY_MIN}, {@link BRAINDUMP_OPACITY_MAX}].
+ * Type alias documents intent without changing the runtime shape.
+ *
+ * @example
+ * const opacity: BrainDumpOpacity = 0.85
+ */
+export type BrainDumpOpacity = number
+
+/**
+ * Electron `globalShortcut` accelerator string. Empty string disables the
+ * global shortcut. Validated only at registration time — invalid accelerators
+ * fail silently when Electron rejects them.
+ *
+ * @example
+ * const accelerator: BrainDumpShortcut = 'CommandOrControl+Shift+B'
+ * const disabled: BrainDumpShortcut = ''
+ */
+export type BrainDumpShortcut = string
+
+/**
+ * Whether BrainDump should follow the FloatingNavigator's selected category.
+ * `true` mirrors the FloatingNav choice; `false` keeps a local selection.
+ *
+ * @example
+ * const sync: BrainDumpSyncMode = true
+ */
+export type BrainDumpSyncMode = boolean

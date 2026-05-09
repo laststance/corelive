@@ -32,6 +32,9 @@ import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import {
+  type BrainDumpOpacity,
+  type BrainDumpShortcut,
+  type BrainDumpSyncMode,
   BRAINDUMP_OPACITY_MAX,
   BRAINDUMP_OPACITY_MIN,
   BRAINDUMP_OPACITY_STEP,
@@ -64,9 +67,9 @@ export function BrainDumpSettings({
   const shortcutId = useId()
 
   const [isReady, setIsReady] = useState(false)
-  const [syncMode, setSyncMode] = useState(true)
-  const [opacity, setOpacity] = useState(1.0)
-  const [shortcut, setShortcut] = useState('')
+  const [syncMode, setSyncMode] = useState<BrainDumpSyncMode>(true)
+  const [opacity, setOpacity] = useState<BrainDumpOpacity>(1.0)
+  const [shortcut, setShortcut] = useState<BrainDumpShortcut>('')
   const [error, setError] = useState<string | null>(null)
 
   // Compute inside the effect so the dependency array stays stable across
@@ -102,7 +105,7 @@ export function BrainDumpSettings({
     }
   }, [])
 
-  const handleSyncChange = async (next: boolean): Promise<void> => {
+  const handleSyncChange = async (next: BrainDumpSyncMode): Promise<void> => {
     const previous = syncMode
     setSyncMode(next)
     setError(null)

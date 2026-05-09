@@ -16,20 +16,41 @@
  * @module components/braindump/braindumpUtils
  */
 
+import type { Completed } from '@/server/schemas/completed'
+
 /** Regex for a markdown checkbox line. Captures the [ ] state and the title. */
 const CHECKBOX_LINE_REGEX = /^- \[([ x])\] (.+)$/
 
 /** Maximum allowed Completed.title length, mirroring `CreateCompletedSchema`. */
 export const COMPLETED_TITLE_MAX_LENGTH = 255
 
+/**
+ * Zero-based line index inside the BrainDump textarea. Reused as the key for
+ * `checkedRowsRef` so a line and its persisted Completed row stay associated.
+ *
+ * @example
+ * const lineIndex: BrainDumpLineIndex = 3 // 4th line of the textarea
+ */
+export type BrainDumpLineIndex = number
+
+/**
+ * Title of a Completed row created from a BrainDump checkbox line. Aliased to
+ * `Completed['title']` so any future schema-level constraint (e.g. branding)
+ * propagates here without hand-editing.
+ *
+ * @example
+ * const title: BrainDumpCompletedTitle = "buy milk"
+ */
+export type BrainDumpCompletedTitle = Completed['title']
+
 /** A single parsed checkbox line. */
 export type ParsedCheckbox = Readonly<{
   /** Zero-based line index in the original text. */
-  lineIndex: number
+  lineIndex: BrainDumpLineIndex
   /** True when the box is `[x]`, false when `[ ]`. */
   checked: boolean
   /** The text after `- [x] ` / `- [ ] ` (already trimmed). */
-  title: string
+  title: BrainDumpCompletedTitle
 }>
 
 /**
@@ -46,7 +67,7 @@ export type ParsedCheckbox = Readonly<{
  */
 export function parseCheckboxLine(
   line: string,
-  lineIndex: number,
+  lineIndex: BrainDumpLineIndex,
 ): ParsedCheckbox | null {
   const match = CHECKBOX_LINE_REGEX.exec(line)
   if (!match) return null
@@ -98,7 +119,7 @@ export function parseAllCheckboxes(text: string): ParsedCheckbox[] {
  */
 export function setCheckboxStateAtLine(
   text: string,
-  lineIndex: number,
+  lineIndex: BrainDumpLineIndex,
   checked: boolean,
 ): string {
   const lines = text.split('\n')
@@ -125,7 +146,7 @@ export function setCheckboxStateAtLine(
  * @example
  * normalizeCompletedTitle('  hello world  ') // → 'hello world'
  */
-export function normalizeCompletedTitle(raw: string): string {
+export function normalizeCompletedTitle(raw: string): BrainDumpCompletedTitle {
   const trimmed = raw.trim()
   if (trimmed.length <= COMPLETED_TITLE_MAX_LENGTH) return trimmed
   return trimmed.slice(0, COMPLETED_TITLE_MAX_LENGTH)

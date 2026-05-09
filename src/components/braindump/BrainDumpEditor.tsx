@@ -26,11 +26,14 @@ import {
 } from '@/lib/constants/braindump'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
-import type { CategoryWithCount } from '@/server/schemas/category'
+import type { Category, CategoryWithCount } from '@/server/schemas/category'
+import type { Completed } from '@/server/schemas/completed'
 
 import { isBrainDumpEnvironment } from '../../../electron/utils/electron-client'
 
 import {
+  type BrainDumpCompletedTitle,
+  type BrainDumpLineIndex,
   COMPLETED_TITLE_MAX_LENGTH,
   normalizeCompletedTitle,
   parseCheckboxLine,
@@ -58,9 +61,9 @@ const categoryChangedPayloadSchema = z.object({
 
 type CheckedRowMemory = Readonly<{
   /** Server-side Completed.id used by undo to call `completed.delete`. */
-  completedId: number
+  completedId: Completed['id']
   /** Verbatim title used to detect double-toggles on the same line. */
-  title: string
+  title: BrainDumpCompletedTitle
 }>
 
 /**
@@ -94,7 +97,9 @@ export function BrainDumpEditor({
   const [opacity, setOpacity] = useState<number>(BRAINDUMP_OPACITY_MAX)
   const [syncEnabled, setSyncEnabled] = useState<boolean>(true)
   const [floatingCategoryId] = useSelectedCategory()
-  const [localCategoryId, setLocalCategoryId] = useState<number | null>(null)
+  const [localCategoryId, setLocalCategoryId] = useState<Category['id'] | null>(
+    null,
+  )
   const [noteText, setNoteText] = useState<string>('')
   const [isLoadingNote, setIsLoadingNote] = useState<boolean>(false)
   const noteInputId = useId()
@@ -103,13 +108,15 @@ export function BrainDumpEditor({
   const categoryInputId = useId()
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
-  const checkedRowsRef = useRef<Map<number, CheckedRowMemory>>(new Map())
+  const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
+    new Map(),
+  )
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
   const noteTextRef = useRef<string>('')
   // Last value persisted via `note.set` — guards against the load effect
   // re-emitting a write for content the renderer just received from main.
   const lastPersistedRef = useRef<{
-    categoryId: number | null
+    categoryId: Category['id'] | null
     text: string
   }>({ categoryId: null, text: '' })
 
@@ -219,7 +226,7 @@ export function BrainDumpEditor({
     void window.brainDumpAPI?.sync.setEnabled(enabled)
   }, [])
 
-  const handleManualCategoryChange = useCallback((id: number) => {
+  const handleManualCategoryChange = useCallback((id: Category['id']) => {
     setLocalCategoryId(id)
     void window.brainDumpAPI?.category.setLast(id)
   }, [])
@@ -242,7 +249,7 @@ export function BrainDumpEditor({
    * leaves the local memory map.
    */
   const promoteLineToCompleted = useCallback(
-    async (lineIndex: number, title: string) => {
+    async (lineIndex: BrainDumpLineIndex, title: BrainDumpCompletedTitle) => {
       if (activeCategoryId === null) {
         toast.error('Pick a category before checking items')
         return
@@ -292,7 +299,11 @@ export function BrainDumpEditor({
    * to `[ ]`. Called from the toast Undo action.
    */
   const undoCompleted = useCallback(
-    async (lineIndex: number, completedId: number, originalText: string) => {
+    async (
+      lineIndex: BrainDumpLineIndex,
+      completedId: Completed['id'],
+      originalText: string,
+    ) => {
       try {
         await deleteCompletedMutation.mutateAsync({ id: completedId })
         checkedRowsRef.current.delete(lineIndex)

@@ -46,6 +46,13 @@ export const CompletedSchema = z.object({
 })
 
 /**
+ * Inferred type of a Completed row exchanged via oRPC. Re-export to give
+ * renderer/desktop code a single source of truth for `Completed.id` /
+ * `Completed.title` / `Completed.categoryId` types.
+ */
+export type Completed = z.infer<typeof CompletedSchema>
+
+/**
  * Category breakdown within a single day's heatmap entry.
  * @example
  * { id: 1, name: "CoreLive", color: "blue", count: 3 }
