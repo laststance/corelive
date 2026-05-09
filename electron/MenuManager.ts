@@ -329,6 +329,9 @@ export class MenuManager {
 
   /**
    * Creates the Window menu for window management.
+   *
+   * Adds a "BrainDump Note" entry that toggles the frameless panel via
+   * WindowManager (no accelerator by default — users opt-in via Settings).
    */
   createWindowMenu(): MenuItemConstructorOptions {
     const submenu: MenuItemConstructorOptions[] = [
@@ -349,6 +352,11 @@ export class MenuManager {
             this.mainWindow.close()
           }
         },
+      },
+      { type: 'separator' },
+      {
+        label: 'BrainDump Note',
+        click: () => this.toggleBrainDump(),
       },
     ]
 
@@ -430,6 +438,17 @@ export class MenuManager {
     if (this.windowManager) {
       log.debug('[MenuManager] Calling windowManager.toggleFloatingNavigator()')
       this.windowManager.toggleFloatingNavigator()
+    } else {
+      console.error('[MenuManager] windowManager is not available!')
+    }
+  }
+
+  /** Toggle the BrainDump Note window via WindowManager. */
+  toggleBrainDump(): void {
+    log.debug('[MenuManager] toggleBrainDump() called')
+
+    if (this.windowManager) {
+      this.windowManager.toggleBrainDump()
     } else {
       console.error('[MenuManager] windowManager is not available!')
     }

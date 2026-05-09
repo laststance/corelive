@@ -209,6 +209,23 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     },
   },
 
+  /**
+   * BrainDump Note window controls — minimal surface so the floating navigator
+   * can offer a "show BrainDump" button without owning the rest of the
+   * BrainDump API. Window-internal config (opacity, sync, shortcut) lives on
+   * `window.brainDumpAPI` inside the BrainDump window itself.
+   */
+  brainDump: {
+    /** Toggle BrainDump window visibility from the floating navigator. */
+    toggle: async (): Promise<void> => {
+      try {
+        await typedInvoke('braindump-window-toggle')
+      } catch (error) {
+        log.error('Floating Navigator: Failed to toggle BrainDump:', error)
+      }
+    },
+  },
+
   // Secure event listener management (restricted set for floating navigator)
   on: (
     channel: string,

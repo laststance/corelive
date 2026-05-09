@@ -151,6 +151,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'tray',
       'behavior',
       'advanced',
+      'braindump',
     ]),
   ]),
   'config-update': z.tuple([z.record(z.string(), z.unknown())]),
@@ -165,6 +166,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'tray',
       'behavior',
       'advanced',
+      'braindump',
     ]),
   ]),
   'config-validate': z.tuple([]),
@@ -261,9 +263,9 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // Window State Management
   // ──────────────────────────────────────────────────────────────────────────
-  'window-state-get': z.tuple([z.enum(['main', 'floating'])]),
+  'window-state-get': z.tuple([z.enum(['main', 'floating', 'braindump'])]),
   'window-state-set': z.tuple([
-    z.enum(['main', 'floating']),
+    z.enum(['main', 'floating', 'braindump']),
     z
       .object({
         x: z.number().optional(),
@@ -279,14 +281,14 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       })
       .passthrough(),
   ]),
-  'window-state-reset': z.tuple([z.enum(['main', 'floating'])]),
+  'window-state-reset': z.tuple([z.enum(['main', 'floating', 'braindump'])]),
   'window-state-get-stats': z.tuple([]),
   'window-state-move-to-display': z.tuple([
-    z.enum(['main', 'floating']),
+    z.enum(['main', 'floating', 'braindump']),
     z.number(),
   ]),
   'window-state-snap-to-edge': z.tuple([
-    z.enum(['main', 'floating']),
+    z.enum(['main', 'floating', 'braindump']),
     z.enum([
       'left',
       'right',
@@ -299,6 +301,38 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'maximize',
     ]),
   ]),
-  'window-state-get-display': z.tuple([z.enum(['main', 'floating'])]),
+  'window-state-get-display': z.tuple([
+    z.enum(['main', 'floating', 'braindump']),
+  ]),
   'window-state-get-all-displays': z.tuple([]),
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // BrainDump
+  // ──────────────────────────────────────────────────────────────────────────
+  'window-toggle-braindump': z.tuple([]),
+  'braindump-window-toggle': z.tuple([]),
+  'braindump-window-show': z.tuple([]),
+  'braindump-window-hide': z.tuple([]),
+  // Opacity is clamped in main; we only validate the bounded range here.
+  'braindump-window-set-opacity': z.tuple([z.number().min(0).max(1)]),
+  'braindump-window-get-opacity': z.tuple([]),
+  'braindump-window-get-bounds': z.tuple([]),
+  'braindump-window-set-bounds': z.tuple([
+    z.object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number(),
+      height: z.number(),
+    }),
+  ]),
+
+  'braindump-note-get': z.tuple([z.number().int()]),
+  'braindump-note-set': z.tuple([z.number().int(), z.string()]),
+
+  'braindump-config-get-sync': z.tuple([]),
+  'braindump-config-set-sync': z.tuple([z.boolean()]),
+  'braindump-config-get-shortcut': z.tuple([]),
+  'braindump-config-set-shortcut': z.tuple([z.string()]),
+  'braindump-config-get-last-category': z.tuple([]),
+  'braindump-config-set-last-category': z.tuple([z.number().int()]),
 }

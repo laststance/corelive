@@ -59,6 +59,31 @@ interface WindowConfig {
   floating: FloatingWindowConfig
 }
 
+/**
+ * BrainDump window/feature configuration.
+ *
+ * Persisted locally per-device (D1 decision in BrainDump plan). `notes` is a
+ * `Record<categoryId-as-string, text>` because JSON object keys must be
+ * strings — the renderer stringifies the numeric categoryId before reading.
+ */
+export interface BrainDumpConfig {
+  width: number
+  height: number
+  /** Window opacity, clamped 0.30–1.00 to keep the window discoverable. */
+  opacity: number
+  /** When true, BrainDump mirrors FloatingNavigator's selected category. */
+  syncMode: boolean
+  /** Global accelerator string; empty disables the shortcut. */
+  shortcut: string
+  /**
+   * Last category id BrainDump showed (used as the source of truth across
+   * sync flips so the user never loses their selection).
+   */
+  lastCategoryId: number | null
+  /** Per-category note text, keyed by categoryId stringified. */
+  notes: Record<string, string>
+}
+
 /** System tray configuration */
 interface TrayConfig {
   enabled: boolean
@@ -132,6 +157,7 @@ export interface AppConfig {
   appearance: AppearanceConfig
   behavior: BehaviorConfig
   advanced: AdvancedConfig
+  braindump: BrainDumpConfig
   [key: string]: unknown
 }
 
@@ -313,6 +339,16 @@ export class ConfigManager {
         maxLogFiles: 5,
         hardwareAcceleration: true,
         experimentalFeatures: false,
+      },
+
+      braindump: {
+        width: 480,
+        height: 640,
+        opacity: 0.95,
+        syncMode: true,
+        shortcut: '',
+        lastCategoryId: null,
+        notes: {},
       },
     }
   }

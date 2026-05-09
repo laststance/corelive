@@ -68,6 +68,10 @@ export default defineConfig({
             __dirname,
             'electron/preload-floating.ts',
           ),
+          'preload-braindump': resolve(
+            __dirname,
+            'electron/preload-braindump.ts',
+          ),
         },
         output: {
           format: 'cjs',

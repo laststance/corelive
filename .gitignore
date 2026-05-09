@@ -82,3 +82,5 @@ _trials/
 # Cursor
 .cursor
 .gstack/
+.claude/goal.json
+.claude/goal-notes.md

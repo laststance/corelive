@@ -18,6 +18,7 @@
 'use client'
 
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
+import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -175,7 +176,7 @@ export function ElectronSettingsPage(): React.ReactElement {
   }
 
   return (
-    <div className="h-full p-4">
+    <div className="h-full space-y-4 p-4">
       <Card className="border-0 bg-transparent shadow-none">
         <CardHeader className="px-2 pb-2 pt-0">
           <CardTitle className="text-lg">Settings</CardTitle>
@@ -237,6 +238,8 @@ export function ElectronSettingsPage(): React.ReactElement {
           </div>
         </CardContent>
       </Card>
+
+      <BrainDumpSettings />
     </div>
   )
 }

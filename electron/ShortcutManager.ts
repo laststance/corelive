@@ -28,6 +28,11 @@ interface ShortcutConfig {
   toggleAlwaysOnTop?: string
   focusFloatingNavigator?: string
   toggleFloatingNavigator?: string
+  /**
+   * Empty string disables the shortcut — BrainDump ships with no default
+   * accelerator (per BrainDump plan D2 — opt-in to avoid global-key conflicts).
+   */
+  toggleBrainDump?: string
   [key: string]: string | boolean | undefined
 }
 
@@ -163,12 +168,16 @@ export class ShortcutManager {
     // Electron will translate this to Cmd on macOS and Ctrl on Windows/Linux
     // Note: 'quit' is not included as macOS already handles Cmd+Q natively
     // and we don't have a custom quit handler
+    //
+    // toggleBrainDump defaults to '' so the user opts in via Settings —
+    // BrainDump is meant to be a personal hotkey, not a global default.
     return {
       newTask: 'CommandOrControl+N',
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       focusFloatingNavigator: 'CommandOrControl+Shift+N',
       toggleFloatingNavigator: 'Alt+Space',
+      toggleBrainDump: '',
     }
   }
 
@@ -833,6 +842,21 @@ export class ShortcutManager {
   }
 
   /**
+   * Handler for the optional BrainDump toggle accelerator.
+   *
+   * Why a try/catch: the user's bound key may collide with another app at
+   * runtime, but we don't want a global-shortcut surprise to crash the main
+   * loop — log and let the next attempt go through.
+   */
+  handleToggleBrainDump(): void {
+    try {
+      this.windowManager.toggleBrainDump()
+    } catch (error) {
+      log.error('Error handling toggle BrainDump shortcut:', error)
+    }
+  }
+
+  /**
    * Update shortcuts with new configuration.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
@@ -878,6 +902,7 @@ export class ShortcutManager {
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
       focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),
       toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
+      toggleBrainDump: () => this.handleToggleBrainDump(),
     }
 
     return handlers[id]
