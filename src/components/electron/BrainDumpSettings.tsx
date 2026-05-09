@@ -31,14 +31,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import {
+  BRAINDUMP_OPACITY_MAX,
+  BRAINDUMP_OPACITY_MIN,
+  BRAINDUMP_OPACITY_STEP,
+} from '@/lib/constants/braindump'
 import { log } from '@/lib/logger'
-
-/** Min opacity allowed by the main process. Mirrors `BRAINDUMP_OPACITY_MIN`. */
-const OPACITY_MIN = 0.3
-/** Max opacity allowed by the main process. */
-const OPACITY_MAX = 1.0
-/** Slider step (5%) — matches the granularity that's visually distinguishable. */
-const OPACITY_STEP = 0.05
 
 interface BrainDumpSettingsProps {
   className?: string
@@ -71,20 +69,14 @@ export function BrainDumpSettings({
   const [shortcut, setShortcut] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const isElectron =
-    typeof window !== 'undefined' && Boolean(window.electronAPI?.brainDump)
-
+  // Compute inside the effect so the dependency array stays stable across
+  // renders and the env check runs only once on mount.
+  // The non-Electron branch is rendered via the early-return below, so it
+  // never observes `isReady`; we only flip it after the IPC fetch resolves.
   useEffect(() => {
-    if (!isElectron) {
-      setIsReady(true)
-      return
-    }
-
-    const api = window.electronAPI?.brainDump
-    if (!api) {
-      setIsReady(true)
-      return
-    }
+    const api =
+      typeof window === 'undefined' ? undefined : window.electronAPI?.brainDump
+    if (!api) return
 
     let cancelled = false
 
@@ -108,15 +100,17 @@ export function BrainDumpSettings({
     return () => {
       cancelled = true
     }
-  }, [isElectron])
+  }, [])
 
   const handleSyncChange = async (next: boolean): Promise<void> => {
+    const previous = syncMode
     setSyncMode(next)
     setError(null)
     try {
       await window.electronAPI?.brainDump?.setSyncMode(next)
     } catch (err) {
       log.error('Failed to update BrainDump sync mode:', err)
+      setSyncMode(previous)
       setError('Failed to update sync setting')
     }
   }
@@ -130,12 +124,14 @@ export function BrainDumpSettings({
   const handleOpacityCommit = async (values: number[]): Promise<void> => {
     const next = values[0]
     if (next === undefined) return
+    const previous = opacity
     setError(null)
     try {
       const applied = await window.electronAPI?.brainDump?.setOpacity(next)
       if (typeof applied === 'number') setOpacity(applied)
     } catch (err) {
       log.error('Failed to update BrainDump opacity:', err)
+      setOpacity(previous)
       setError('Failed to update opacity')
     }
   }
@@ -162,7 +158,7 @@ export function BrainDumpSettings({
     }
   }
 
-  if (!isElectron) {
+  if (typeof window !== 'undefined' && !window.electronAPI?.brainDump) {
     return (
       <Card className={className}>
         <CardHeader>
@@ -192,7 +188,6 @@ export function BrainDumpSettings({
     )
   }
 
-  // Display value as percentage (e.g., 0.85 → "85%")
   const opacityPercent = Math.round(opacity * 100)
 
   return (
@@ -214,7 +209,6 @@ export function BrainDumpSettings({
           </div>
         )}
 
-        {/* Sync mode toggle */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label htmlFor={syncId} className="text-sm font-medium">
@@ -232,7 +226,6 @@ export function BrainDumpSettings({
           />
         </div>
 
-        {/* Opacity slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label
@@ -249,21 +242,20 @@ export function BrainDumpSettings({
           </div>
           <Slider
             id={opacityId}
-            min={OPACITY_MIN}
-            max={OPACITY_MAX}
-            step={OPACITY_STEP}
+            min={BRAINDUMP_OPACITY_MIN}
+            max={BRAINDUMP_OPACITY_MAX}
+            step={BRAINDUMP_OPACITY_STEP}
             value={[opacity]}
             onValueChange={handleOpacityChange}
             onValueCommit={handleOpacityCommit}
             aria-label="BrainDump window opacity"
           />
           <p className="text-xs text-muted-foreground">
-            {Math.round(OPACITY_MIN * 100)}% is the minimum so the window stays
-            discoverable.
+            {Math.round(BRAINDUMP_OPACITY_MIN * 100)}% is the minimum so the
+            window stays discoverable.
           </p>
         </div>
 
-        {/* Shortcut */}
         <div className="space-y-2">
           <Label
             htmlFor={shortcutId}
@@ -285,7 +277,6 @@ export function BrainDumpSettings({
           </p>
         </div>
 
-        {/* Open / toggle button */}
         <div className="flex justify-end">
           <Button variant="outline" onClick={handleOpenBrainDump}>
             Toggle BrainDump window

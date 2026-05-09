@@ -1,15 +1,34 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import {
+  BRAINDUMP_NOTE_LINES_PER_CAP,
+  BRAINDUMP_OPACITY_MAX,
+  BRAINDUMP_OPACITY_MIN,
+  BRAINDUMP_OPACITY_STEP,
+} from '@/lib/constants/braindump'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
+
+import { isBrainDumpEnvironment } from '../../../electron/utils/electron-client'
 
 import {
   COMPLETED_TITLE_MAX_LENGTH,
@@ -20,9 +39,22 @@ import {
 
 const NOTE_DEBOUNCE_MS = 400
 const TOAST_UNDO_MS = 5000
-const OPACITY_MIN = 0.3
-const OPACITY_MAX = 1
-const OPACITY_STEP = 0.05
+
+const NOTE_MAX_LENGTH =
+  COMPLETED_TITLE_MAX_LENGTH * BRAINDUMP_NOTE_LINES_PER_CAP
+
+// `WebkitAppRegion` is an Electron-only CSS property not declared on the
+// React/TS DOM types — cast through Record so the cast lives in one place.
+const DRAG_REGION_STYLE = {
+  WebkitAppRegion: 'drag',
+} as React.CSSProperties
+const NO_DRAG_REGION_STYLE = {
+  WebkitAppRegion: 'no-drag',
+} as React.CSSProperties
+
+const categoryChangedPayloadSchema = z.object({
+  categoryId: z.number().int(),
+})
 
 type CheckedRowMemory = Readonly<{
   /** Server-side Completed.id used by undo to call `completed.delete`. */
@@ -59,7 +91,7 @@ export function BrainDumpEditor({
   const isClerkReady = useClerkQueryReady()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const [opacity, setOpacity] = useState<number>(OPACITY_MAX)
+  const [opacity, setOpacity] = useState<number>(BRAINDUMP_OPACITY_MAX)
   const [syncEnabled, setSyncEnabled] = useState<boolean>(true)
   const [floatingCategoryId] = useSelectedCategory()
   const [localCategoryId, setLocalCategoryId] = useState<number | null>(null)
@@ -67,9 +99,23 @@ export function BrainDumpEditor({
   const [isLoadingNote, setIsLoadingNote] = useState<boolean>(false)
   const noteInputId = useId()
   const opacityInputId = useId()
+  const syncInputId = useId()
+  const categoryInputId = useId()
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<number, CheckedRowMemory>>(new Map())
+  // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
+  const noteTextRef = useRef<string>('')
+  // Last value persisted via `note.set` — guards against the load effect
+  // re-emitting a write for content the renderer just received from main.
+  const lastPersistedRef = useRef<{
+    categoryId: number | null
+    text: string
+  }>({ categoryId: null, text: '' })
+
+  useEffect(() => {
+    noteTextRef.current = noteText
+  }, [noteText])
 
   const createCompletedMutation = useMutation(
     orpc.completed.create.mutationOptions({}),
@@ -78,31 +124,22 @@ export function BrainDumpEditor({
     orpc.completed.delete.mutationOptions({}),
   )
 
-  const { data: opacityFromMain } = useQuery({
-    queryKey: ['braindump', 'opacity'],
-    queryFn: async () =>
-      window.brainDumpAPI?.window.getOpacity() ?? OPACITY_MAX,
-    enabled: isMounted && Boolean(window.brainDumpAPI),
-  })
-
+  // Initial pull of opacity + sync mode + last category from the main process.
   useEffect(() => {
-    if (typeof opacityFromMain === 'number') {
-      setOpacity(opacityFromMain)
-    }
-  }, [opacityFromMain])
-
-  // Read sync mode + last category from main once on mount.
-  useEffect(() => {
-    if (!isMounted || !window.brainDumpAPI) return
+    if (!isMounted || !isBrainDumpEnvironment()) return
     let cancelled = false
     const api = window.brainDumpAPI
-    void Promise.all([api.sync.getEnabled(), api.category.getLast()]).then(
-      ([enabled, lastCategoryId]) => {
-        if (cancelled) return
-        setSyncEnabled(enabled)
-        setLocalCategoryId(lastCategoryId)
-      },
-    )
+    if (!api) return
+    void Promise.all([
+      api.window.getOpacity(),
+      api.sync.getEnabled(),
+      api.category.getLast(),
+    ]).then(([opacityValue, enabled, lastCategoryId]) => {
+      if (cancelled) return
+      setOpacity(opacityValue)
+      setSyncEnabled(enabled)
+      setLocalCategoryId(lastCategoryId)
+    })
     return () => {
       cancelled = true
     }
@@ -111,38 +148,32 @@ export function BrainDumpEditor({
   // Subscribe to main-process category broadcasts (e.g., when another window
   // changes the active category and main updates the BrainDump config).
   useEffect(() => {
-    if (!isMounted || !window.brainDumpAPI) return
+    if (!isMounted || !isBrainDumpEnvironment()) return
     const api = window.brainDumpAPI
-    const cleanup = api.on(
-      'braindump-category-changed',
-      (...args: unknown[]) => {
-        const [, payload] = args
-        if (
-          payload &&
-          typeof payload === 'object' &&
-          'categoryId' in payload &&
-          typeof (payload as { categoryId: unknown }).categoryId === 'number'
-        ) {
-          const id = (payload as { categoryId: number }).categoryId
-          setLocalCategoryId(id)
-        }
-      },
-    )
-    return cleanup
+    if (!api) return
+    return api.on('braindump-category-changed', (...args: unknown[]) => {
+      const parsed = categoryChangedPayloadSchema.safeParse(args[1])
+      if (parsed.success) setLocalCategoryId(parsed.data.categoryId)
+    })
   }, [isMounted])
 
   // Whenever the active category flips, load that category's note text.
   useEffect(() => {
-    if (!isMounted || !window.brainDumpAPI || activeCategoryId === null) {
+    if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null) {
       setNoteText('')
+      lastPersistedRef.current = { categoryId: null, text: '' }
       return
     }
     let cancelled = false
     setIsLoadingNote(true)
     const api = window.brainDumpAPI
+    if (!api) return
     void api.note.get(activeCategoryId).then((text) => {
       if (cancelled) return
       setNoteText(text)
+      // Mark as already-persisted to prevent the debounce effect from immediately
+      // echoing this same text back to disk.
+      lastPersistedRef.current = { categoryId: activeCategoryId, text }
       setIsLoadingNote(false)
       checkedRowsRef.current.clear()
     })
@@ -152,39 +183,54 @@ export function BrainDumpEditor({
   }, [activeCategoryId, isMounted])
 
   // Debounce note writes to avoid hammering the config file on every keystroke.
+  // Cleanup also flushes any pending write so we never silently drop the
+  // user's last keystrokes on category change or unmount.
   useEffect(() => {
-    if (!isMounted || !window.brainDumpAPI || activeCategoryId === null) return
+    if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
+      return
     if (isLoadingNote) return
     const api = window.brainDumpAPI
-    const timeoutId = window.setTimeout(() => {
+    if (!api) return
+    const persisted = lastPersistedRef.current
+    if (
+      persisted.categoryId === activeCategoryId &&
+      persisted.text === noteText
+    ) {
+      return
+    }
+    const flush = (): void => {
+      lastPersistedRef.current = {
+        categoryId: activeCategoryId,
+        text: noteText,
+      }
       void api.note.set(activeCategoryId, noteText)
-    }, NOTE_DEBOUNCE_MS)
+    }
+    const timeoutId = window.setTimeout(flush, NOTE_DEBOUNCE_MS)
     return () => {
       window.clearTimeout(timeoutId)
+      // Cleanup runs on category swap or unmount — flush so unsaved keystrokes
+      // are not lost.
+      flush()
     }
   }, [activeCategoryId, isLoadingNote, isMounted, noteText])
 
-  // Persist sync changes locally so the UI is the source of truth.
   const handleToggleSync = useCallback((enabled: boolean) => {
     setSyncEnabled(enabled)
-    if (window.brainDumpAPI) {
-      void window.brainDumpAPI.sync.setEnabled(enabled)
-    }
+    void window.brainDumpAPI?.sync.setEnabled(enabled)
   }, [])
 
   const handleManualCategoryChange = useCallback((id: number) => {
     setLocalCategoryId(id)
-    if (window.brainDumpAPI) {
-      void window.brainDumpAPI.category.setLast(id)
-    }
+    void window.brainDumpAPI?.category.setLast(id)
   }, [])
 
   const handleOpacityChange = useCallback((next: number) => {
-    const clamped = Math.max(OPACITY_MIN, Math.min(OPACITY_MAX, next))
+    const clamped = Math.max(
+      BRAINDUMP_OPACITY_MIN,
+      Math.min(BRAINDUMP_OPACITY_MAX, next),
+    )
     setOpacity(clamped)
-    if (window.brainDumpAPI) {
-      void window.brainDumpAPI.window.setOpacity(clamped)
-    }
+    void window.brainDumpAPI?.window.setOpacity(clamped)
   }, [])
 
   /**
@@ -196,7 +242,7 @@ export function BrainDumpEditor({
    * leaves the local memory map.
    */
   const promoteLineToCompleted = useCallback(
-    async (lineIndex: number, title: string, currentText: string) => {
+    async (lineIndex: number, title: string) => {
       if (activeCategoryId === null) {
         toast.error('Pick a category before checking items')
         return
@@ -222,7 +268,9 @@ export function BrainDumpEditor({
           action: {
             label: 'Undo',
             onClick: () => {
-              void undoCompleted(lineIndex, created.id, currentText)
+              // Read latest text via ref so the user's keystrokes between
+              // creation and undo are preserved.
+              void undoCompleted(lineIndex, created.id, noteTextRef.current)
               toast.dismiss(undoToastId)
             },
           },
@@ -231,7 +279,9 @@ export function BrainDumpEditor({
         const message =
           error instanceof Error ? error.message : 'Failed to record completion'
         toast.error(message)
-        setNoteText(setCheckboxStateAtLine(currentText, lineIndex, false))
+        setNoteText(
+          setCheckboxStateAtLine(noteTextRef.current, lineIndex, false),
+        )
       }
     },
     [activeCategoryId, createCompletedMutation, queryClient],
@@ -268,15 +318,17 @@ export function BrainDumpEditor({
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
+      // Skip while IME is composing — never hijack a CJK confirmation Enter.
+      if (event.nativeEvent.isComposing) return
       const textarea = textareaRef.current
       if (!textarea) return
       event.preventDefault()
 
       const text = textarea.value
       const caret = textarea.selectionStart
-      const upToCaret = text.slice(0, caret)
-      const lineIndex = upToCaret.split('\n').length - 1
-      const line = text.split('\n')[lineIndex]
+      const lines = text.split('\n')
+      const lineIndex = text.slice(0, caret).split('\n').length - 1
+      const line = lines[lineIndex]
       if (line === undefined) return
       const parsed = parseCheckboxLine(line, lineIndex)
       if (!parsed) return
@@ -286,7 +338,7 @@ export function BrainDumpEditor({
       setNoteText(nextText)
 
       if (nextChecked) {
-        void promoteLineToCompleted(lineIndex, parsed.title, nextText)
+        void promoteLineToCompleted(lineIndex, parsed.title)
       } else {
         const memory = checkedRowsRef.current.get(lineIndex)
         if (memory) {
@@ -298,14 +350,12 @@ export function BrainDumpEditor({
   )
 
   const closeWindow = useCallback(() => {
-    if (window.brainDumpAPI) {
-      void window.brainDumpAPI.window.close()
-    }
+    void window.brainDumpAPI?.window.close()
   }, [])
 
   // Block oRPC calls until Clerk has loaded — otherwise the request 401s
   // before useUser hydrates.
-  const isReady = isMounted && isClerkReady && Boolean(window.brainDumpAPI)
+  const isReady = isMounted && isClerkReady && isBrainDumpEnvironment()
   if (!isReady) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
@@ -323,8 +373,7 @@ export function BrainDumpEditor({
     >
       <header
         className="flex items-center justify-between gap-2"
-        // The drag region lets the user move the frameless panel by its header.
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        style={DRAG_REGION_STYLE}
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -335,7 +384,7 @@ export function BrainDumpEditor({
           type="button"
           onClick={closeWindow}
           className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          style={NO_DRAG_REGION_STYLE}
           aria-label="Close BrainDump"
         >
           ✕
@@ -343,53 +392,58 @@ export function BrainDumpEditor({
       </header>
 
       <div
-        className="flex items-center gap-2 text-xs"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        className="flex items-center gap-3 text-xs"
+        style={NO_DRAG_REGION_STYLE}
       >
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
+        <div className="flex items-center gap-2">
+          <Switch
+            id={syncInputId}
             checked={syncEnabled}
-            onChange={(event) => handleToggleSync(event.target.checked)}
+            onCheckedChange={handleToggleSync}
           />
-          <span>Follow FloatingNav</span>
-        </label>
+          <Label htmlFor={syncInputId} className="cursor-pointer text-xs">
+            Follow FloatingNav
+          </Label>
+        </div>
 
-        <select
-          value={activeCategoryId ?? ''}
-          onChange={(event) =>
-            handleManualCategoryChange(Number(event.target.value))
-          }
+        <Select
+          value={activeCategoryId === null ? '' : String(activeCategoryId)}
+          onValueChange={(value) => handleManualCategoryChange(Number(value))}
           disabled={syncEnabled || !hasCategories}
-          className="rounded-md border bg-background px-2 py-1 text-xs disabled:opacity-50"
-          aria-label="Active category"
         >
-          {hasCategories ? (
-            categories.map((category) => (
-              <option key={category.id} value={category.id}>
+          <SelectTrigger
+            id={categoryInputId}
+            aria-label="Active category"
+            className="h-7 w-32 text-xs"
+          >
+            <SelectValue placeholder="No categories" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={String(category.id)}>
                 {category.name}
-              </option>
-            ))
-          ) : (
-            <option value="">No categories</option>
-          )}
-        </select>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <label
-          className="flex flex-1 items-center gap-1"
-          htmlFor={opacityInputId}
-        >
-          <span className="text-muted-foreground">Opacity</span>
-          <input
+        <div className="flex flex-1 items-center gap-2">
+          <Label
+            htmlFor={opacityInputId}
+            className="text-xs text-muted-foreground"
+          >
+            Opacity
+          </Label>
+          <Slider
             id={opacityInputId}
-            type="range"
-            min={OPACITY_MIN}
-            max={OPACITY_MAX}
-            step={OPACITY_STEP}
-            value={opacity}
-            onChange={(event) =>
-              handleOpacityChange(Number(event.target.value))
-            }
+            min={BRAINDUMP_OPACITY_MIN}
+            max={BRAINDUMP_OPACITY_MAX}
+            step={BRAINDUMP_OPACITY_STEP}
+            value={[opacity]}
+            onValueChange={(values) => {
+              const next = values[0]
+              if (next !== undefined) handleOpacityChange(next)
+            }}
             className="flex-1"
             aria-label="Window opacity"
           />
@@ -397,7 +451,7 @@ export function BrainDumpEditor({
           <span className="w-10 text-right tabular-nums">
             {Math.round(opacity * 100)}%
           </span>
-        </label>
+        </div>
       </div>
 
       <textarea
@@ -412,10 +466,10 @@ export function BrainDumpEditor({
             : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter on a checkbox line to toggle.'
         }
         disabled={activeCategoryId === null}
-        maxLength={COMPLETED_TITLE_MAX_LENGTH * 200}
+        maxLength={NOTE_MAX_LENGTH}
         spellCheck
         className="bg-background/60 flex-1 resize-none rounded-lg border p-3 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        style={NO_DRAG_REGION_STYLE}
       />
     </div>
   )
