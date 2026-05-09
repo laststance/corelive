@@ -438,6 +438,16 @@ export class SystemTrayManager {
             }
           },
         },
+        {
+          label: 'Open BrainDump',
+          click: () => {
+            try {
+              this.windowManager.showBrainDump()
+            } catch (error) {
+              log.error('Failed to open BrainDump:', error)
+            }
+          },
+        },
         { type: 'separator' },
         {
           label: 'Settings',

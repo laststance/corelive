@@ -59,6 +59,31 @@ interface WindowConfig {
   floating: FloatingWindowConfig
 }
 
+/**
+ * BrainDump window/feature configuration.
+ *
+ * Persisted locally per-device (D1 decision in BrainDump plan). `notes` is a
+ * `Record<categoryId-as-string, text>` because JSON object keys must be
+ * strings — the renderer stringifies the numeric categoryId before reading.
+ */
+export interface BrainDumpConfig {
+  width: number
+  height: number
+  /** Window opacity, clamped 0.30–1.00 to keep the window discoverable. */
+  opacity: number
+  /** When true, BrainDump mirrors FloatingNavigator's selected category. */
+  syncMode: boolean
+  /** Global accelerator string; empty disables the shortcut. */
+  shortcut: string
+  /**
+   * Last category id BrainDump showed (used as the source of truth across
+   * sync flips so the user never loses their selection).
+   */
+  lastCategoryId: number | null
+  /** Per-category note text, keyed by categoryId stringified. */
+  notes: Record<string, string>
+}
+
 /** System tray configuration */
 interface TrayConfig {
   enabled: boolean
@@ -132,6 +157,7 @@ export interface AppConfig {
   appearance: AppearanceConfig
   behavior: BehaviorConfig
   advanced: AdvancedConfig
+  braindump: BrainDumpConfig
   [key: string]: unknown
 }
 
@@ -314,6 +340,16 @@ export class ConfigManager {
         hardwareAcceleration: true,
         experimentalFeatures: false,
       },
+
+      braindump: {
+        width: 480,
+        height: 640,
+        opacity: 0.95,
+        syncMode: true,
+        shortcut: '',
+        lastCategoryId: null,
+        notes: {},
+      },
     }
   }
 
@@ -349,8 +385,9 @@ export class ConfigManager {
       log.error('Failed to load config:', error)
     }
 
-    // Return default config if loading fails
-    return { ...this.defaultConfig }
+    // Return default config if loading fails — deep clone so the runtime copy
+    // never aliases nested defaults like `braindump.notes`.
+    return structuredClone(this.defaultConfig)
   }
 
   /**
@@ -421,8 +458,11 @@ export class ConfigManager {
       return result
     }
 
+    // Deep-clone the defaults before merging so the merged result never
+    // aliases nested objects (e.g., `braindump.notes` shared with the
+    // factory defaults — mutating it would silently pollute reset()).
     return merge(
-      this.defaultConfig as unknown as Record<string, unknown>,
+      structuredClone(this.defaultConfig) as unknown as Record<string, unknown>,
       loadedConfig as unknown as Record<string, unknown>,
     ) as AppConfig
   }
@@ -612,7 +652,10 @@ export class ConfigManager {
    * @returns True if save successful
    */
   reset(): boolean {
-    this.config = { ...this.defaultConfig }
+    // Deep clone — a shallow spread keeps nested objects (e.g.,
+    // `braindump.notes`) aliased to the factory defaults, so subsequent
+    // writes would silently mutate the source-of-truth defaults.
+    this.config = structuredClone(this.defaultConfig)
     return this.saveConfig()
   }
 
@@ -622,7 +665,9 @@ export class ConfigManager {
   resetSection(section: keyof AppConfig): boolean {
     const defaultSection = this.defaultConfig[section]
     if (defaultSection && typeof defaultSection === 'object') {
-      this.config[section] = { ...defaultSection } as AppConfig[typeof section]
+      this.config[section] = structuredClone(
+        defaultSection,
+      ) as AppConfig[typeof section]
       return this.saveConfig()
     }
     return false

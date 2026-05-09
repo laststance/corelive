@@ -1,7 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
-const isProtectedRoute = createRouteMatcher(['/home(.*)', '/skill-tree(.*)'])
+const isProtectedRoute = createRouteMatcher([
+  '/home(.*)',
+  '/skill-tree(.*)',
+  '/braindump(.*)',
+])
 
 const middleware = clerkMiddleware(async (auth, req) => {
   if (!isProtectedRoute(req)) {

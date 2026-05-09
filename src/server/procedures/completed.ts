@@ -1,10 +1,17 @@
 import { ORPCError } from '@orpc/server'
+import { z } from 'zod'
 
 import { prisma } from '@/lib/prisma'
 
 import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
-import { HeatmapInputSchema, HeatmapResponseSchema } from '../schemas/completed'
+import {
+  CompletedSchema,
+  CreateCompletedSchema,
+  DeleteCompletedSchema,
+  HeatmapInputSchema,
+  HeatmapResponseSchema,
+} from '../schemas/completed'
 
 /**
  * Fetches heatmap data for completed tasks, aggregated by date with category breakdown.
@@ -166,3 +173,115 @@ function calculateStreaks(dates: string[]): {
 
   return { current: currentStreak, longest: Math.max(longest, currentStreak) }
 }
+
+/**
+ * Inserts a row directly into the Completed table for the authenticated user.
+ * Used by BrainDump's checkbox-tick flow which bypasses the Todo lifecycle —
+ * the user has already decided the item is done at the moment of capture.
+ *
+ * @param input.categoryId - Target category (must belong to the caller)
+ * @param input.title - Free-text title (1-255 chars; longer text is rejected
+ *   by Zod, callers should truncate before calling)
+ * @returns The newly created Completed row
+ * @example
+ * createCompleted({ categoryId: 1, title: "buy milk" })
+ * // => { id: 42, categoryId: 1, title: "buy milk", archived: false, ... }
+ */
+export const createCompleted = authMiddleware
+  .input(CreateCompletedSchema)
+  .output(CompletedSchema)
+  .handler(async ({ input, context }) => {
+    try {
+      const { user } = context
+      const { categoryId, title } = input
+
+      const category = await prisma.category.findFirst({
+        where: { id: categoryId, userId: user.id },
+      })
+      if (!category) {
+        throw new ORPCError('NOT_FOUND', {
+          message: 'Category not found',
+        })
+      }
+
+      const completed = await prisma.completed.create({
+        data: {
+          title,
+          categoryId,
+          userId: user.id,
+        },
+      })
+
+      return completed
+    } catch (error) {
+      if (error instanceof ORPCError) throw error
+      log.error('Error in createCompleted:', error)
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to create completed row',
+        cause: error,
+      })
+    }
+  })
+
+/**
+ * Window during which a Completed row may be hard-deleted via this endpoint.
+ * Picked to cover the 5 s toast plus generous slack for slow networks; older
+ * rows must go through archival flows so the destructive endpoint cannot be
+ * weaponised against historical data.
+ */
+const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
+
+/**
+ * Hard-deletes a Completed row owned by the authenticated user, but only
+ * within {@link COMPLETED_UNDO_WINDOW_MS} of creation. Used by BrainDump's
+ * 5-second toast-undo flow when the user retracts a checkbox tick — the
+ * row is ephemeral and reversed before any archival semantics matter.
+ *
+ * The time window scopes the destructive surface area: even if a Bearer
+ * token leaks, an attacker cannot use this endpoint to wipe historical
+ * Completed history.
+ *
+ * @param input.id - Completed row id
+ * @returns The deleted row id (echoed back so optimistic clients can confirm)
+ * @example
+ * deleteCompleted({ id: 42 }) // => { id: 42 }
+ */
+export const deleteCompleted = authMiddleware
+  .input(DeleteCompletedSchema)
+  .output(z.object({ id: z.number().int() }))
+  .handler(async ({ input, context }) => {
+    const { user } = context
+    const { id } = input
+
+    // Atomic conditional delete: ownership + freshness checks happen inside a
+    // single statement so two concurrent undo calls (or an undo racing the
+    // window expiry) cannot both observe the row as deletable. The
+    // deleteMany count is the authoritative result; we only do an extra
+    // existence read on failure to distinguish NOT_FOUND vs FORBIDDEN.
+    const result = await prisma.completed.deleteMany({
+      where: {
+        id,
+        userId: user.id,
+        createdAt: {
+          gte: new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
+        },
+      },
+    })
+
+    if (result.count === 1) {
+      return { id }
+    }
+
+    const stillExists = await prisma.completed.findFirst({
+      where: { id, userId: user.id },
+      select: { id: true },
+    })
+    if (stillExists) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'Undo window has expired for this completion',
+      })
+    }
+    throw new ORPCError('NOT_FOUND', {
+      message: 'Completed row not found',
+    })
+  })

@@ -442,6 +442,31 @@ export interface ElectronAPI {
      */
     setStartAtLogin: (enable: boolean) => Promise<boolean>
   }
+
+  /**
+   * BrainDump Note window configuration from the main window's Settings UI.
+   *
+   * Mirrors the `BrainDumpAPI` exposed inside the BrainDump window itself
+   * (`preload-braindump.ts`), but only includes the surface a settings page
+   * needs (no per-category note CRUD). All methods log + return safe defaults
+   * on failure rather than throwing.
+   */
+  brainDump?: {
+    /** Toggle BrainDump window visibility. */
+    toggle: () => Promise<void>
+    /** Read current opacity (already clamped to [0.30, 1.00]). */
+    getOpacity: () => Promise<number>
+    /** Persist + apply opacity; returns the clamped value the main applied. */
+    setOpacity: (value: number) => Promise<number>
+    /** Read the "follow FloatingNav category" toggle. */
+    getSyncMode: () => Promise<boolean>
+    /** Update the "follow FloatingNav category" toggle. */
+    setSyncMode: (enabled: boolean) => Promise<boolean>
+    /** Read the global accelerator (empty string when disabled). */
+    getShortcut: () => Promise<string>
+    /** Persist + register the global accelerator. */
+    setShortcut: (accelerator: string) => Promise<boolean>
+  }
 }
 
 /**
@@ -492,6 +517,15 @@ export interface FloatingNavigatorAPI {
     /** Check if window is always on top */
     isAlwaysOnTop: () => Promise<boolean>
   }
+  /**
+   * BrainDump controls reachable from the floating navigator. Intentionally
+   * minimal — only `toggle`, since other BrainDump operations are owned by
+   * the BrainDump window itself (`window.brainDumpAPI`).
+   */
+  brainDump: {
+    /** Toggle BrainDump window visibility. */
+    toggle: () => Promise<void>
+  }
   /** Subscribe to IPC events */
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void
   /** @deprecated Use the cleanup function returned by `on()` instead */
@@ -509,6 +543,80 @@ export interface FloatingNavigatorEnv {
   isElectron: boolean
   /** Whether this is the floating navigator window */
   isFloatingNavigator: boolean
+  /** Platform identifier */
+  platform: string
+}
+
+/**
+ * BrainDump API exposed via contextBridge in preload-braindump.ts.
+ *
+ * Provides:
+ * - `window.*` — frameless panel controls (close/toggle/opacity/bounds)
+ * - `note.*`   — per-category text persistence
+ * - `sync.*`   — toggle for "follow FloatingNav category"
+ * - `category.*` — last-active category id used to restore state
+ * - `on(channel, cb)` — subscribe to whitelisted main-process events
+ */
+export interface BrainDumpAPI {
+  window: {
+    /** Hide the BrainDump window (kept in memory for fast re-show). */
+    close: () => Promise<void>
+    /** Toggle BrainDump visibility (mirror of the global accelerator). */
+    toggle: () => Promise<void>
+    /**
+     * Set window opacity. Main process clamps to [0.30, 1.00].
+     */
+    setOpacity: (value: number) => Promise<void>
+    /** Get current window opacity (already clamped). */
+    getOpacity: () => Promise<number>
+    /** Get current window bounds, or null if window is gone. */
+    getBounds: () => Promise<{
+      x: number
+      y: number
+      width: number
+      height: number
+    } | null>
+    /** Set window bounds (also persisted via WindowStateManager). */
+    setBounds: (bounds: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }) => Promise<void>
+  }
+  note: {
+    /** Read persisted note text for a category (empty string when none). */
+    get: (categoryId: number) => Promise<string>
+    /** Persist note text for a category. */
+    set: (categoryId: number, text: string) => Promise<void>
+  }
+  sync: {
+    /** Read the "follow FloatingNav category" toggle. */
+    getEnabled: () => Promise<boolean>
+    /** Update the "follow FloatingNav category" toggle. */
+    setEnabled: (enabled: boolean) => Promise<void>
+  }
+  category: {
+    /** Read the last-active category id (null when never set). */
+    getLast: () => Promise<number | null>
+    /** Persist the active category id. */
+    setLast: (categoryId: number) => Promise<void>
+  }
+  /** Subscribe to a whitelisted event; returns a cleanup function. */
+  on: (
+    channel: string,
+    callback: (...args: unknown[]) => void,
+  ) => (() => void) | undefined
+}
+
+/**
+ * BrainDump environment information exposed via preload-braindump.ts.
+ */
+export interface BrainDumpEnv {
+  /** Whether running in Electron */
+  isElectron: boolean
+  /** Whether this is the BrainDump Note window */
+  isBrainDump: boolean
   /** Platform identifier */
   platform: string
 }
@@ -542,6 +650,18 @@ declare global {
      * Only available when running in floating navigator window.
      */
     floatingNavigatorEnv?: FloatingNavigatorEnv
+
+    /**
+     * BrainDump API exposed via contextBridge.
+     * Only available when running in the BrainDump window.
+     */
+    brainDumpAPI?: BrainDumpAPI
+
+    /**
+     * BrainDump environment information.
+     * Only available when running in the BrainDump window.
+     */
+    brainDumpEnv?: BrainDumpEnv
   }
 }
 

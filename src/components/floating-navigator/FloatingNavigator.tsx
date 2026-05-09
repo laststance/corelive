@@ -66,6 +66,9 @@ const GripVertical = lazy(async () =>
 const Settings = lazy(async () =>
   import('lucide-react').then((mod) => ({ default: mod.Settings })),
 )
+const Brain = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Brain })),
+)
 
 // Icon fallback component for loading state
 const IconFallback = () => (
@@ -256,6 +259,16 @@ export function FloatingNavigator({
     }
   }
 
+  // Toggle the BrainDump Note window via the floating navigator preload bridge.
+  const handleToggleBrainDump = async () => {
+    if (!isFloatingNavigatorEnvironment()) return
+    try {
+      await window.floatingNavigatorAPI?.brainDump.toggle()
+    } catch (error) {
+      log.error('Failed to toggle BrainDump:', error)
+    }
+  }
+
   // Handle task toggle
   const handleTaskToggle = (id: string) => {
     const task = todos.find((t) => t.id === id)
@@ -299,6 +312,18 @@ export function FloatingNavigator({
             role="toolbar"
             aria-label="Window controls"
           >
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleToggleBrainDump}
+              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Open BrainDump Note"
+              title="Open BrainDump Note"
+            >
+              <Suspense fallback={<IconFallback />}>
+                <Brain className="h-3 w-3" aria-hidden="true" />
+              </Suspense>
+            </Button>
             <Button
               size="sm"
               variant="ghost"

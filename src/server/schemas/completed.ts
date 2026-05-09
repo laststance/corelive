@@ -10,6 +10,49 @@ export const HeatmapInputSchema = z.object({
 })
 
 /**
+ * Input schema for creating a Completed row directly (used by BrainDump
+ * checkbox flow that bypasses the Todo lifecycle).
+ * @example
+ * { categoryId: 1, title: "buy milk" }
+ */
+export const CreateCompletedSchema = z.object({
+  categoryId: z.number().int(),
+  title: z.string().min(1).max(255),
+})
+
+/**
+ * Input schema for deleting a Completed row (used by BrainDump's 5-second
+ * toast-undo flow when the user retracts a checkbox tick).
+ * @example
+ * { id: 42 }
+ */
+export const DeleteCompletedSchema = z.object({
+  id: z.number().int(),
+})
+
+/**
+ * Schema mirroring the Prisma `Completed` model (selected fields the API
+ * round-trips). Used as the output shape of `completed.create`.
+ * @example
+ * { id: 1, title: "buy milk", categoryId: 2, archived: false, createdAt, updatedAt }
+ */
+export const CompletedSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  categoryId: z.number().int(),
+  archived: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+})
+
+/**
+ * Inferred type of a Completed row exchanged via oRPC. Re-export to give
+ * renderer/desktop code a single source of truth for `Completed.id` /
+ * `Completed.title` / `Completed.categoryId` types.
+ */
+export type Completed = z.infer<typeof CompletedSchema>
+
+/**
  * Category breakdown within a single day's heatmap entry.
  * @example
  * { id: 1, name: "CoreLive", color: "blue", count: 3 }

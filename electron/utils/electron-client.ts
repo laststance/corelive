@@ -47,10 +47,34 @@ export const isFloatingNavigatorEnvironment = (): boolean => {
 }
 
 /**
+ * Check if running in the BrainDump frameless window.
+ *
+ * Detects the BrainDump host by checking for `window.brainDumpAPI`, which is
+ * exposed only by `preload-braindump.ts`. Use this from the BrainDump renderer
+ * (`src/components/braindump/*`) to skip API calls when the same React route is
+ * rendered in a regular browser tab during dev.
+ *
+ * @returns true if running in BrainDump window, false otherwise
+ * @example
+ * if (isBrainDumpEnvironment()) {
+ *   await window.brainDumpAPI.window.setOpacity(0.85)
+ * }
+ */
+export const isBrainDumpEnvironment = (): boolean => {
+  return (
+    typeof window !== 'undefined' && typeof window.brainDumpAPI !== 'undefined'
+  )
+}
+
+/**
  * Check if running in any Electron window (main or floating).
  *
  * @returns true if running in any Electron window, false otherwise
  */
 export const isAnyElectronEnvironment = (): boolean => {
-  return isElectronEnvironment() || isFloatingNavigatorEnvironment()
+  return (
+    isElectronEnvironment() ||
+    isFloatingNavigatorEnvironment() ||
+    isBrainDumpEnvironment()
+  )
 }

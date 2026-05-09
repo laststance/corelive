@@ -155,6 +155,10 @@ export type ConfigSection =
   | 'tray'
   | 'behavior'
   | 'advanced'
+  | 'braindump'
+
+/** Window-state-managed window kinds (must mirror WindowStateManager support). */
+export type ManagedWindowKind = 'main' | 'floating' | 'braindump'
 
 /** Deep link examples */
 export interface DeepLinkExamples {
@@ -268,20 +272,28 @@ export interface IPCChannels {
     request: void
     response: void
   }
+  /**
+   * Toggle the BrainDump window. Available from any renderer (FloatingNav,
+   * Main) — mirrors `window-toggle-floating-navigator`.
+   */
+  'window-toggle-braindump': {
+    request: void
+    response: boolean
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Window State Management
   // ──────────────────────────────────────────────────────────────────────────
   'window-state-get': {
-    request: 'main' | 'floating'
+    request: ManagedWindowKind
     response: WindowState | null
   }
   'window-state-set': {
-    request: ['main' | 'floating', Partial<WindowState>]
+    request: [ManagedWindowKind, Partial<WindowState>]
     response: WindowState | null
   }
   'window-state-reset': {
-    request: 'main' | 'floating'
+    request: ManagedWindowKind
     response: WindowState | null
   }
   'window-state-get-stats': {
@@ -289,12 +301,12 @@ export interface IPCChannels {
     response: WindowStats
   }
   'window-state-move-to-display': {
-    request: ['main' | 'floating', number]
+    request: [ManagedWindowKind, number]
     response: boolean
   }
   'window-state-snap-to-edge': {
     request: [
-      'main' | 'floating',
+      ManagedWindowKind,
       (
         | 'left'
         | 'right'
@@ -310,7 +322,7 @@ export interface IPCChannels {
     response: boolean
   }
   'window-state-get-display': {
-    request: 'main' | 'floating'
+    request: ManagedWindowKind
     response: DisplayInfo | null
   }
   'window-state-get-all-displays': {
@@ -343,6 +355,82 @@ export interface IPCChannels {
   }
   'floating-window-is-always-on-top': {
     request: void
+    response: boolean
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // BrainDump Window
+  // ──────────────────────────────────────────────────────────────────────────
+  /** Toggle BrainDump window visibility (callable from BrainDump itself). */
+  'braindump-window-toggle': {
+    request: void
+    response: boolean
+  }
+  'braindump-window-show': {
+    request: void
+    response: void
+  }
+  'braindump-window-hide': {
+    request: void
+    response: void
+  }
+  /** Set BrainDump window opacity. Value is clamped to [0.30, 1.00] in main. */
+  'braindump-window-set-opacity': {
+    request: number
+    response: number
+  }
+  'braindump-window-get-opacity': {
+    request: void
+    response: number
+  }
+  'braindump-window-get-bounds': {
+    request: void
+    response: WindowBounds | null
+  }
+  'braindump-window-set-bounds': {
+    request: WindowBounds
+    response: boolean
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // BrainDump Notes (per-category text persistence)
+  // ──────────────────────────────────────────────────────────────────────────
+  /** Read the persisted note text for a categoryId (empty string if none). */
+  'braindump-note-get': {
+    request: number
+    response: string
+  }
+  /** Persist the note text for a categoryId. */
+  'braindump-note-set': {
+    request: [categoryId: number, text: string]
+    response: boolean
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // BrainDump Configuration (sync mode, shortcut, last category)
+  // ──────────────────────────────────────────────────────────────────────────
+  'braindump-config-get-sync': {
+    request: void
+    response: boolean
+  }
+  'braindump-config-set-sync': {
+    request: boolean
+    response: boolean
+  }
+  'braindump-config-get-shortcut': {
+    request: void
+    response: string
+  }
+  'braindump-config-set-shortcut': {
+    request: string
+    response: boolean
+  }
+  'braindump-config-get-last-category': {
+    request: void
+    response: number | null
+  }
+  'braindump-config-set-last-category': {
+    request: number
     response: boolean
   }
 
@@ -639,6 +727,10 @@ export interface IPCEventChannels {
 
   // Floating navigator events (main → floating renderer)
   'floating-navigator-menu-action': string
+
+  // BrainDump events (main → braindump renderer)
+  /** Sent when the active category changes (via FloatingNav sync, etc.). */
+  'braindump-category-changed': { categoryId: number }
 
   // Notification fallback events (renderer hook-up pending)
   'notification-permission-denied': { reason?: string; guidance?: string }

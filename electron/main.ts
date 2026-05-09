@@ -30,6 +30,7 @@ import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
 import { ConfigManager } from './ConfigManager'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
 import { typedHandle } from './ipc/typedHandle'
+import { typedSend } from './ipc/typedSend'
 import { IPCErrorHandler } from './IPCErrorHandler'
 import { lazyLoadManager } from './LazyLoadManager'
 import { log } from './logger'
@@ -72,7 +73,7 @@ interface OptimizationConfig {
  * @returns Valid WindowType
  */
 function toWindowType(value: unknown): WindowType {
-  if (value === 'main' || value === 'floating') {
+  if (value === 'main' || value === 'floating' || value === 'braindump') {
     return value
   }
   return 'main'
@@ -379,6 +380,14 @@ function getBrowserWindowForType(
     return null
   }
 
+  // Handle BrainDump panel — never auto-create from a state operation; the
+  // panel is created on demand by user gesture (menu/tray/shortcut).
+  if (windowType === 'braindump') {
+    return windowManager.hasBrainDumpWindow?.()
+      ? (windowManager.getBrainDumpWindow?.() ?? null)
+      : null
+  }
+
   // Handle floating navigator window
   if (windowType === 'floating') {
     // Create floating window on-demand if it doesn't exist
@@ -399,8 +408,14 @@ function getBrowserWindowForType(
       : null
   }
 
-  // Default to main window
-  return windowManager.getMainWindow ? windowManager.getMainWindow() : null
+  // Only return the main window for an explicit 'main' request — falling back
+  // here for unknown types lets a stray 'braindump' (or future addition)
+  // silently mutate main-window state.
+  if (windowType === 'main') {
+    return windowManager.getMainWindow ? windowManager.getMainWindow() : null
+  }
+
+  return null
 }
 
 /**
@@ -900,6 +915,26 @@ async function createWindow(): Promise<BrowserWindow> {
  * 2. Error handling (graceful degradation)
  * 3. Proper cleanup (prevent memory leaks)
  */
+
+/**
+ * Strip user-authored BrainDump note text from a config snapshot before
+ * exposing it via the generic `config-get-all` channel. The note map is
+ * personal scratch content and only the dedicated `braindump-note-get`
+ * channel should surface it. Any other window asking for the full config
+ * sees only the BrainDump metadata (sync mode, opacity, shortcut, etc.).
+ *
+ * @param snapshot - The full config object as returned by `ConfigManager.getAll()`.
+ * @returns A shallow clone with `braindump.notes` removed.
+ */
+function redactBrainDumpNotes(
+  snapshot: Record<string, unknown>,
+): Record<string, unknown> {
+  const braindump = snapshot.braindump
+  if (!braindump || typeof braindump !== 'object') return snapshot
+  const { notes: _notes, ...rest } = braindump as Record<string, unknown>
+  return { ...snapshot, braindump: rest }
+}
+
 function setupIPCHandlers(): void {
   /**
    * Basic app control handlers.
@@ -1126,6 +1161,162 @@ function setupIPCHandlers(): void {
     }
   })
 
+  // ────────────────────────────────────────────────────────────────────────
+  // BrainDump Window IPC handlers
+  //
+  // Why a separate block: BrainDump is a frameless transparent panel with
+  // its own preload; window/note/sync/category channels live together so the
+  // contract between preload-braindump.ts and main.ts is easy to audit.
+  // ────────────────────────────────────────────────────────────────────────
+  typedHandle('window-toggle-braindump', () => {
+    if (!windowManager) {
+      throw new Error('Window manager not initialized')
+    }
+    windowManager.toggleBrainDump()
+    return true
+  })
+
+  typedHandle('braindump-window-toggle', () => {
+    if (!windowManager) return false
+    windowManager.toggleBrainDump()
+    return true
+  })
+
+  typedHandle('braindump-window-show', () => {
+    if (!windowManager) return
+    windowManager.showBrainDump()
+  })
+
+  typedHandle('braindump-window-hide', () => {
+    if (!windowManager) return
+    windowManager.hideBrainDump()
+  })
+
+  typedHandle('braindump-window-set-opacity', (_event, value) => {
+    if (!windowManager) return 1
+    return windowManager.setBrainDumpOpacity(value)
+  })
+
+  typedHandle('braindump-window-get-opacity', () => {
+    if (!windowManager) return 1
+    return windowManager.getBrainDumpOpacity()
+  })
+
+  typedHandle('braindump-window-get-bounds', () => {
+    try {
+      if (windowManager?.hasBrainDumpWindow()) {
+        const win = windowManager.getBrainDumpWindow()
+        if (win && !win.isDestroyed()) {
+          return win.getBounds()
+        }
+      }
+      return null
+    } catch (error) {
+      log.error('Failed to get BrainDump window bounds:', error)
+      return null
+    }
+  })
+
+  typedHandle('braindump-window-set-bounds', (_event, bounds) => {
+    try {
+      if (windowManager?.hasBrainDumpWindow()) {
+        const win = windowManager.getBrainDumpWindow()
+        if (win && !win.isDestroyed()) {
+          win.setBounds(bounds)
+        }
+      }
+      return true
+    } catch (error) {
+      log.error('Failed to set BrainDump window bounds:', error)
+      return false
+    }
+  })
+
+  // Per-category note text (persisted in `braindump.notes[<categoryId>]`).
+  typedHandle('braindump-note-get', (_event, categoryId) => {
+    if (!configManager) return ''
+    const notes = configManager.get<Record<string, string>>(
+      'braindump.notes',
+      {},
+    )
+    return notes?.[String(categoryId)] ?? ''
+  })
+
+  typedHandle('braindump-note-set', (_event, categoryId, text) => {
+    if (!configManager) return false
+    const notes = {
+      ...(configManager.get<Record<string, string>>('braindump.notes', {}) ??
+        {}),
+      [String(categoryId)]: text,
+    }
+    configManager.set('braindump.notes', notes)
+    return true
+  })
+
+  // Sync mode (mirror FloatingNav category selection).
+  typedHandle('braindump-config-get-sync', () => {
+    if (!configManager) return true
+    return configManager.get<boolean>('braindump.syncMode', true) ?? true
+  })
+
+  typedHandle('braindump-config-set-sync', (_event, enabled) => {
+    if (!configManager) return false
+    configManager.set('braindump.syncMode', enabled)
+    return true
+  })
+
+  typedHandle('braindump-config-get-shortcut', () => {
+    if (!configManager) return ''
+    return configManager.get<string>('braindump.shortcut', '') ?? ''
+  })
+
+  typedHandle('braindump-config-set-shortcut', (_event, accelerator) => {
+    if (!configManager) return false
+    // Try to register first; only persist on success so the renderer's
+    // returned boolean accurately reflects whether the new accelerator is
+    // live.
+    const previous = configManager.get<string>('braindump.shortcut', '') ?? ''
+    if (shortcutManager) {
+      try {
+        const ok = shortcutManager.updateShortcuts({
+          toggleBrainDump: accelerator,
+        })
+        if (!ok) {
+          // Rollback so config and registered shortcut stay in sync.
+          shortcutManager.updateShortcuts({ toggleBrainDump: previous })
+          return false
+        }
+      } catch (error) {
+        log.error('Failed to update BrainDump shortcut:', error)
+        return false
+      }
+    }
+    configManager.set('braindump.shortcut', accelerator)
+    return true
+  })
+
+  typedHandle('braindump-config-get-last-category', () => {
+    if (!configManager) return null
+    return (
+      configManager.get<number | null>('braindump.lastCategoryId', null) ?? null
+    )
+  })
+
+  typedHandle('braindump-config-set-last-category', (_event, categoryId) => {
+    if (!configManager) return false
+    configManager.set('braindump.lastCategoryId', categoryId)
+
+    // Broadcast to BrainDump window so its `on('braindump-category-changed')`
+    // listener mirrors the new selection without round-tripping config.
+    const brainDumpWin = windowManager?.getBrainDumpWindow()
+    if (brainDumpWin && !brainDumpWin.isDestroyed()) {
+      typedSend(brainDumpWin.webContents, 'braindump-category-changed', {
+        categoryId,
+      })
+    }
+    return true
+  })
+
   typedHandle('tray-show-notification', (_event, title, body, options) => {
     if (systemTrayManager) {
       const notif = systemTrayManager.showNotification(title, body, options)
@@ -1210,7 +1401,9 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return {}
     }
-    return configManager.getAll() as Record<string, unknown>
+    return redactBrainDumpNotes(
+      configManager.getAll() as Record<string, unknown>,
+    )
   })
 
   typedHandle('config-get-section', (_event, section) => {
@@ -1220,6 +1413,13 @@ function setupIPCHandlers(): void {
     const result = configManager.getSection(
       section as keyof ReturnType<typeof configManager.getAll>,
     )
+    if (section === 'braindump' && result && typeof result === 'object') {
+      // Strip free-text notes from the generic getter; anyone asking for the
+      // BrainDump section gets only metadata. The dedicated `braindump-note-get`
+      // channel is the single read path for note text.
+      const { notes: _notes, ...rest } = result as Record<string, unknown>
+      return rest as Record<string, unknown>
+    }
     return result as Record<string, unknown> | null
   })
 

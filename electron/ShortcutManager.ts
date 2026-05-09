@@ -28,6 +28,11 @@ interface ShortcutConfig {
   toggleAlwaysOnTop?: string
   focusFloatingNavigator?: string
   toggleFloatingNavigator?: string
+  /**
+   * Empty string disables the shortcut — BrainDump ships with no default
+   * accelerator (per BrainDump plan D2 — opt-in to avoid global-key conflicts).
+   */
+  toggleBrainDump?: string
   [key: string]: string | boolean | undefined
 }
 
@@ -163,12 +168,16 @@ export class ShortcutManager {
     // Electron will translate this to Cmd on macOS and Ctrl on Windows/Linux
     // Note: 'quit' is not included as macOS already handles Cmd+Q natively
     // and we don't have a custom quit handler
+    //
+    // toggleBrainDump defaults to '' so the user opts in via Settings —
+    // BrainDump is meant to be a personal hotkey, not a global default.
     return {
       newTask: 'CommandOrControl+N',
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       focusFloatingNavigator: 'CommandOrControl+Shift+N',
       toggleFloatingNavigator: 'Alt+Space',
+      toggleBrainDump: '',
     }
   }
 
@@ -321,6 +330,23 @@ export class ShortcutManager {
         },
       ),
     })
+
+    // Honor the persisted BrainDump accelerator on startup. Empty string is
+    // the "disabled" sentinel used by Settings, so skip registration in that
+    // case to avoid binding "" as an accelerator.
+    const brainDumpAccel = shortcuts.toggleBrainDump
+    if (typeof brainDumpAccel === 'string' && brainDumpAccel.trim() !== '') {
+      results.push({
+        id: 'toggleBrainDump',
+        success: this.registerShortcut(
+          brainDumpAccel,
+          'toggleBrainDump',
+          () => {
+            this.handleToggleBrainDump()
+          },
+        ),
+      })
+    }
 
     return results
   }
@@ -833,12 +859,34 @@ export class ShortcutManager {
   }
 
   /**
+   * Handler for the optional BrainDump toggle accelerator.
+   *
+   * Why a try/catch: the user's bound key may collide with another app at
+   * runtime, but we don't want a global-shortcut surprise to crash the main
+   * loop — log and let the next attempt go through.
+   */
+  handleToggleBrainDump(): void {
+    try {
+      this.windowManager.toggleBrainDump()
+    } catch (error) {
+      log.error('Error handling toggle BrainDump shortcut:', error)
+    }
+  }
+
+  /**
    * Update shortcuts with new configuration.
+   *
+   * Only the shortcuts named in `newShortcuts` are re-registered. Contextual
+   * shortcuts (`newTask`, `minimize`, etc.) stay scoped to their focus
+   * listeners — re-registering them globally would hijack keys like Cmd+N
+   * and Cmd+M system-wide.
+   *
+   * Empty-string accelerators are treated as "disable this shortcut" — the
+   * old binding is removed and nothing is registered in its place.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
-      this.unregisterAllShortcuts()
-
+      const wasEnabled = this.isEnabled
       // Sync isEnabled if provided in newShortcuts
       if (typeof newShortcuts.enabled === 'boolean') {
         this.isEnabled = newShortcuts.enabled
@@ -852,16 +900,43 @@ export class ShortcutManager {
         }
       }
 
-      for (const [id, accelerator] of Object.entries(this.shortcuts)) {
-        if (id !== 'enabled' && typeof accelerator === 'string') {
-          const handler = this.getHandlerForShortcut(id)
-          if (handler) {
-            this.registerShortcut(accelerator, id, handler)
-          }
+      // Track whether every requested global accelerator actually bound;
+      // a conflicting accelerator silently dropping would otherwise look
+      // like success to callers who use this return value to roll back.
+      let allRegistered = true
+
+      for (const [id, accelerator] of Object.entries(newShortcuts)) {
+        if (id === 'enabled' || typeof accelerator !== 'string') continue
+
+        // Always drop the old registration first so the new accelerator
+        // (or empty string = disabled) takes effect.
+        if (this.registeredShortcuts.has(id)) {
+          this.unregisterShortcut(id)
+        }
+
+        if (accelerator === '') continue
+
+        // Contextual shortcuts only ever register on focus; re-registering
+        // them here would promote them to global accelerators.
+        if (this.contextualShortcuts.has(id)) continue
+
+        const handler = this.getHandlerForShortcut(id)
+        if (handler) {
+          const ok = this.registerShortcut(accelerator, id, handler)
+          allRegistered = allRegistered && ok
         }
       }
 
-      return true
+      // If toggling enabled false → true with no other accelerator changes,
+      // restore the configured global bindings; otherwise the app stays
+      // "enabled" with no live accelerators until the user edits settings.
+      if (!wasEnabled && this.isEnabled) {
+        const results = this.registerGlobalShortcuts()
+        const anyFailed = results.some((r) => !r.success)
+        allRegistered = allRegistered && !anyFailed
+      }
+
+      return allRegistered
     } catch (error) {
       log.error('Error updating shortcuts:', error)
       return false
@@ -878,6 +953,7 @@ export class ShortcutManager {
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
       focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),
       toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
+      toggleBrainDump: () => this.handleToggleBrainDump(),
     }
 
     return handlers[id]

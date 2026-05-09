@@ -139,6 +139,7 @@ const ALLOWED_CHANNELS = {
   'deep-link-navigate': true,
   'deep-link-search': true,
   'floating-navigator-menu-action': true,
+  'braindump-category-changed': true,
   'notification-permission-denied': true,
   'show-fallback-notification': true,
   'system-integration-status': true,
@@ -1530,6 +1531,92 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         log.error('Failed to set start at login:', error)
         return false
+      }
+    },
+  },
+
+  /**
+   * BrainDump Note window controls — exposed to the main window's Settings UI.
+   *
+   * The BrainDump renderer has its own preload (`preload-braindump.ts`) for
+   * window-local operations. These methods let the Settings page configure
+   * BrainDump from the *main* window without opening it.
+   */
+  brainDump: {
+    /** Toggle BrainDump window visibility. */
+    toggle: async (): Promise<void> => {
+      try {
+        await typedInvoke('braindump-window-toggle')
+      } catch (error) {
+        // Re-throw so the renderer can react (toast, retry); a swallowed
+        // failure leaves the user thinking the toggle worked.
+        log.error('Failed to toggle BrainDump:', error)
+        throw error
+      }
+    },
+    /** Read window opacity (clamped 0.30–1.00 in main). */
+    getOpacity: async (): Promise<number> => {
+      try {
+        return await typedInvoke('braindump-window-get-opacity')
+      } catch (error) {
+        log.error('Failed to get BrainDump opacity:', error)
+        return 1.0
+      }
+    },
+    /** Persist + apply window opacity. */
+    setOpacity: async (value: number): Promise<number> => {
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        throw new Error('Opacity must be a number')
+      }
+      try {
+        return await typedInvoke('braindump-window-set-opacity', value)
+      } catch (error) {
+        // Re-throw — returning the requested value masks failure and the
+        // Settings UI cannot roll back to the last good opacity.
+        log.error('Failed to set BrainDump opacity:', error)
+        throw error
+      }
+    },
+    /** Read "follow FloatingNav category" toggle. */
+    getSyncMode: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke('braindump-config-get-sync')
+      } catch (error) {
+        log.error('Failed to get BrainDump sync mode:', error)
+        return true
+      }
+    },
+    /** Update "follow FloatingNav category" toggle. */
+    setSyncMode: async (enabled: boolean): Promise<boolean> => {
+      if (typeof enabled !== 'boolean') {
+        throw new Error('SyncMode must be a boolean')
+      }
+      try {
+        return await typedInvoke('braindump-config-set-sync', enabled)
+      } catch (error) {
+        log.error('Failed to set BrainDump sync mode:', error)
+        throw error
+      }
+    },
+    /** Read global accelerator (empty string disables the shortcut). */
+    getShortcut: async (): Promise<string> => {
+      try {
+        return await typedInvoke('braindump-config-get-shortcut')
+      } catch (error) {
+        log.error('Failed to get BrainDump shortcut:', error)
+        return ''
+      }
+    },
+    /** Persist + register global accelerator. */
+    setShortcut: async (accelerator: string): Promise<boolean> => {
+      if (typeof accelerator !== 'string') {
+        throw new Error('Shortcut must be a string')
+      }
+      try {
+        return await typedInvoke('braindump-config-set-shortcut', accelerator)
+      } catch (error) {
+        log.error('Failed to set BrainDump shortcut:', error)
+        throw error
       }
     },
   },

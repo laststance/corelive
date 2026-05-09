@@ -95,5 +95,52 @@ describe('IPC contract', () => {
       // Wrong type for state
       expect(() => oauthCancel.parse([123])).toThrow(ZodError)
     })
+
+    /**
+     * BrainDump Note channels — locks down the contract used by
+     * `preload-braindump.ts` and the main-window Settings bridge.
+     */
+    it('clamps and validates braindump-window-set-opacity', () => {
+      const setOpacity = IPC_ARG_SCHEMAS['braindump-window-set-opacity']
+      expect(() => setOpacity.parse([0.85])).not.toThrow()
+      expect(() => setOpacity.parse([0])).not.toThrow()
+      expect(() => setOpacity.parse([1])).not.toThrow()
+      // Out of range — schema bounds [0, 1]
+      expect(() => setOpacity.parse([1.5])).toThrow(ZodError)
+      expect(() => setOpacity.parse([-0.1])).toThrow(ZodError)
+      expect(() => setOpacity.parse(['0.5'])).toThrow(ZodError)
+    })
+
+    it('requires (categoryId, text) tuple for braindump-note-set', () => {
+      const setNote = IPC_ARG_SCHEMAS['braindump-note-set']
+      expect(() => setNote.parse([42, 'hello'])).not.toThrow()
+      expect(() => setNote.parse([42])).toThrow(ZodError)
+      expect(() => setNote.parse(['42', 'hello'])).toThrow(ZodError)
+      expect(() => setNote.parse([1.5, 'hello'])).toThrow(ZodError) // not int
+    })
+
+    it('rejects non-boolean for braindump-config-set-sync', () => {
+      const setSync = IPC_ARG_SCHEMAS['braindump-config-set-sync']
+      expect(() => setSync.parse([true])).not.toThrow()
+      expect(() => setSync.parse([false])).not.toThrow()
+      expect(() => setSync.parse(['true'])).toThrow(ZodError)
+      expect(() => setSync.parse([])).toThrow(ZodError)
+    })
+
+    it('accepts empty string (disable shortcut) for braindump-config-set-shortcut', () => {
+      const setShortcut = IPC_ARG_SCHEMAS['braindump-config-set-shortcut']
+      expect(() => setShortcut.parse([''])).not.toThrow()
+      expect(() =>
+        setShortcut.parse(['CommandOrControl+Shift+B']),
+      ).not.toThrow()
+      expect(() => setShortcut.parse([null])).toThrow(ZodError)
+    })
+
+    it('requires positive int categoryId for braindump-config-set-last-category', () => {
+      const setLast = IPC_ARG_SCHEMAS['braindump-config-set-last-category']
+      expect(() => setLast.parse([1])).not.toThrow()
+      expect(() => setLast.parse(['1'])).toThrow(ZodError)
+      expect(() => setLast.parse([1.5])).toThrow(ZodError)
+    })
   })
 })

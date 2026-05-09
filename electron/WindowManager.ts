@@ -60,6 +60,9 @@ export class WindowManager {
   /** Always-on-top utility window */
   private floatingNavigator: BrowserWindow | null
 
+  /** Frameless transparent BrainDump Note panel */
+  private brainDumpWindow: BrowserWindow | null
+
   /** Settings window */
   private settingsWindow: BrowserWindow | null
 
@@ -95,6 +98,7 @@ export class WindowManager {
   ) {
     this.mainWindow = null
     this.floatingNavigator = null
+    this.brainDumpWindow = null
     this.settingsWindow = null
     this.isDev = process.env.NODE_ENV === 'development'
     this.serverUrl = serverUrl
@@ -183,6 +187,12 @@ export class WindowManager {
         this.windowStateManager.updateWindowState(
           'floating',
           this.floatingNavigator,
+        )
+      }
+      if (this.brainDumpWindow) {
+        this.windowStateManager.updateWindowState(
+          'braindump',
+          this.brainDumpWindow,
         )
       }
     }
@@ -409,6 +419,216 @@ export class WindowManager {
     }
 
     return this.floatingNavigator
+  }
+
+  /**
+   * Create the BrainDump Note window — a frameless, transparent, always-on-top
+   * panel that loads `${baseUrl}/braindump`.
+   *
+   * Why frameless + transparent: the panel sits over other apps as a calm
+   * scratchpad; the renderer paints its own chrome (titlebar, opacity slider).
+   *
+   * Why we cap opacity 0.30–1.00: lower than 0.30 makes the window
+   * undiscoverable; the cap is enforced both here and at config persist time.
+   *
+   * @returns The (possibly already-existing) BrainDump BrowserWindow.
+   */
+  createBrainDumpWindow(): BrowserWindow {
+    if (this.brainDumpWindow) {
+      return this.brainDumpWindow
+    }
+
+    const windowOptions: WindowOptions = this.windowStateManager
+      ? this.windowStateManager.getWindowOptions('braindump')
+      : {
+          width: 480,
+          height: 640,
+          minWidth: 320,
+          minHeight: 320,
+          maxWidth: 1200,
+          frame: false,
+          alwaysOnTop: true,
+          resizable: true,
+          skipTaskbar: true,
+        }
+
+    const initialOpacity = this.getBrainDumpOpacity()
+
+    log.debug('Creating BrainDump window...', {
+      windowOptions,
+      initialOpacity,
+      isDev: this.isDev,
+    })
+
+    const brainDumpPreloadPath = path.join(
+      __dirname,
+      '..',
+      'preload',
+      'preload-braindump.cjs',
+    )
+
+    this.brainDumpWindow = new BrowserWindow({
+      ...windowOptions,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: brainDumpPreloadPath,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        sandbox: false,
+        devTools:
+          this.isDev ||
+          (this.configManager?.get('advanced.enableDevTools', false) ?? false),
+      },
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: true,
+      show: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      hasShadow: true,
+      vibrancy: 'under-window',
+      titleBarStyle: 'hidden',
+      trafficLightPosition: { x: -100, y: -100 },
+    })
+
+    this.brainDumpWindow.setOpacity(initialOpacity)
+
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    const brainDumpUrl = `${baseUrl}/braindump`
+
+    log.debug('Loading BrainDump URL:', brainDumpUrl)
+    this.brainDumpWindow.loadURL(brainDumpUrl)
+
+    this.brainDumpWindow.on('resize', () => {
+      if (this.windowStateManager && this.brainDumpWindow) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'braindump',
+          this.brainDumpWindow,
+        )
+      }
+    })
+
+    this.brainDumpWindow.on('move', () => {
+      if (this.windowStateManager && this.brainDumpWindow) {
+        this.windowStateManager.updateWindowStateDebounced(
+          'braindump',
+          this.brainDumpWindow,
+        )
+      }
+    })
+
+    // 'close' fires before destruction — capture bounds while the window
+    // is still alive (matches the main window pattern).
+    this.brainDumpWindow.on('close', () => {
+      this.saveWindowState()
+    })
+
+    this.brainDumpWindow.on('closed', () => {
+      log.debug('BrainDump window closed')
+      this.brainDumpWindow = null
+    })
+
+    this.brainDumpWindow.webContents.on(
+      'render-process-gone',
+      (_event, details) => {
+        log.error('BrainDump process gone:', { reason: details.reason })
+      },
+    )
+
+    if (this.windowStateManager) {
+      this.windowStateManager.applyWindowState(
+        'braindump',
+        this.brainDumpWindow,
+      )
+    }
+
+    return this.brainDumpWindow
+  }
+
+  /**
+   * Toggle BrainDump visibility (creates the window on first call).
+   *
+   * @returns True when the window is now visible, false when hidden.
+   */
+  toggleBrainDump(): boolean {
+    if (!this.brainDumpWindow || this.brainDumpWindow.isDestroyed()) {
+      this.createBrainDumpWindow()
+      this.showBrainDump()
+      return true
+    }
+
+    if (this.brainDumpWindow.isVisible()) {
+      this.hideBrainDump()
+      return false
+    }
+
+    this.showBrainDump()
+    return true
+  }
+
+  /** Show the BrainDump window, creating it if needed, then focus it. */
+  showBrainDump(): void {
+    if (!this.brainDumpWindow || this.brainDumpWindow.isDestroyed()) {
+      this.createBrainDumpWindow()
+    }
+    this.brainDumpWindow?.show()
+    this.brainDumpWindow?.focus()
+  }
+
+  /** Hide the BrainDump window without destroying it (instant re-show). */
+  hideBrainDump(): void {
+    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
+      this.brainDumpWindow.hide()
+    }
+  }
+
+  /**
+   * Set BrainDump opacity, clamped to [0.30, 1.00] and persisted to config.
+   *
+   * @param value - Desired opacity (out-of-band values are clamped silently).
+   * @returns The opacity actually applied (post-clamp).
+   * @example
+   * windowManager.setBrainDumpOpacity(0.85) // → 0.85
+   * windowManager.setBrainDumpOpacity(0.10) // → 0.30 (clamped)
+   */
+  setBrainDumpOpacity(value: number): number {
+    const clamped = Math.max(0.3, Math.min(1, value))
+
+    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
+      this.brainDumpWindow.setOpacity(clamped)
+    }
+
+    if (this.configManager) {
+      this.configManager.set('braindump.opacity', clamped)
+    }
+
+    return clamped
+  }
+
+  /** Read current BrainDump opacity (live window value, else config, else 1). */
+  getBrainDumpOpacity(): number {
+    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
+      return this.brainDumpWindow.getOpacity()
+    }
+    // Coerce + clamp the persisted value: a hand-edited config or a stale
+    // value from before the clamp was introduced could otherwise hand the
+    // renderer something out of [0.30, 1.00].
+    const raw = this.configManager?.get('braindump.opacity', 1) ?? 1
+    const numeric = typeof raw === 'number' ? raw : Number(raw)
+    if (!Number.isFinite(numeric)) return 1
+    return Math.max(0.3, Math.min(1, numeric))
+  }
+
+  /** Get the BrainDump BrowserWindow (or null if not yet created). */
+  getBrainDumpWindow(): BrowserWindow | null {
+    return this.brainDumpWindow
+  }
+
+  /** Whether the BrainDump window currently exists (and is not destroyed). */
+  hasBrainDumpWindow(): boolean {
+    return Boolean(this.brainDumpWindow && !this.brainDumpWindow.isDestroyed())
   }
 
   /**
@@ -662,6 +882,10 @@ export class WindowManager {
 
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
       this.settingsWindow.close()
+    }
+
+    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
+      this.brainDumpWindow.close()
     }
 
     if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {

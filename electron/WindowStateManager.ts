@@ -56,11 +56,12 @@ export interface WindowState {
 interface WindowStates {
   main: WindowState
   floating: WindowState
+  braindump: WindowState
   [key: string]: WindowState
 }
 
 /** Window type */
-export type WindowType = 'main' | 'floating'
+export type WindowType = 'main' | 'floating' | 'braindump'
 
 /** Snap edge type */
 export type SnapEdge =
@@ -208,6 +209,9 @@ export class WindowStateManager {
     ) as AppConfig['window']
     const mainConfig = windowConfig.main
     const floatingConfig = windowConfig.floating
+    const brainDumpConfig = this.configManager.getSection(
+      'braindump',
+    ) as AppConfig['braindump']
 
     return {
       main: {
@@ -236,6 +240,28 @@ export class WindowStateManager {
         workArea: primaryDisplay.workArea,
         lastSaved: Date.now(),
       },
+      braindump: {
+        width: brainDumpConfig.width,
+        height: brainDumpConfig.height,
+        // Anchor against the primary display's workArea origin so multi-
+        // monitor users get the panel on the right monitor instead of at
+        // (-1280, …) or off-screen entirely.
+        x:
+          primaryDisplay.workArea.x +
+          (primaryDisplay.workArea.width - brainDumpConfig.width - 80),
+        y:
+          primaryDisplay.workArea.y +
+          Math.round(
+            (primaryDisplay.workArea.height - brainDumpConfig.height) / 2,
+          ),
+        isMaximized: false,
+        isMinimized: false,
+        isFullScreen: false,
+        isVisible: false,
+        displayId: primaryDisplay.id,
+        workArea: primaryDisplay.workArea,
+        lastSaved: Date.now(),
+      },
     }
   }
 
@@ -247,6 +273,7 @@ export class WindowStateManager {
     const validatedStates: WindowStates = {
       main: defaultStates.main,
       floating: defaultStates.floating,
+      braindump: defaultStates.braindump,
     }
 
     if (states.main) {
@@ -265,27 +292,53 @@ export class WindowStateManager {
       )
     }
 
+    if (states.braindump) {
+      validatedStates.braindump = this.validateWindowState(
+        states.braindump,
+        defaultStates.braindump,
+        'braindump',
+      )
+    }
+
     return validatedStates
   }
 
   /**
    * Validate individual window state.
+   *
+   * BrainDump lives outside `windowConfig` because its dimensions are tracked
+   * in the dedicated `braindump` section (per BrainDump plan D1) — the window
+   * always remembers its bounds, so we still apply persisted x/y/w/h.
    */
   private validateWindowState(
     state: Partial<WindowState>,
     defaultState: WindowState,
     windowType: WindowType,
   ): WindowState {
-    const windowConfig = this.configManager.getSection(
-      'window',
-    ) as AppConfig['window']
-    const config = windowConfig[windowType]
     const validatedState: WindowState = { ...defaultState }
 
-    // Validate dimensions
-    const minWidth = 'minWidth' in config ? config.minWidth : 400
-    const minHeight = 'minHeight' in config ? config.minHeight : 300
-    const maxWidth = 'maxWidth' in config ? config.maxWidth : 2000
+    let minWidth: number
+    let minHeight: number
+    let maxWidth: number
+    let shouldRememberPosition: boolean
+
+    if (windowType === 'braindump') {
+      // BrainDump bounds are bounded by sensible UX limits, not config-driven.
+      minWidth = 320
+      minHeight = 320
+      maxWidth = 1200
+      shouldRememberPosition = true
+    } else {
+      const windowConfig = this.configManager.getSection(
+        'window',
+      ) as AppConfig['window']
+      const config = windowConfig[windowType]
+      minWidth = 'minWidth' in config ? config.minWidth : 400
+      minHeight = 'minHeight' in config ? config.minHeight : 300
+      maxWidth = 'maxWidth' in config ? config.maxWidth : 2000
+      shouldRememberPosition = config.rememberPosition
+    }
+
     const maxHeight = 1500
 
     if (typeof state.width === 'number' && state.width >= minWidth) {
@@ -298,7 +351,7 @@ export class WindowStateManager {
 
     // Validate position if remember position is enabled
     if (
-      config.rememberPosition &&
+      shouldRememberPosition &&
       typeof state.x === 'number' &&
       typeof state.y === 'number'
     ) {
@@ -601,15 +654,40 @@ export class WindowStateManager {
 
   /**
    * Get window creation options for BrowserWindow.
+   *
+   * BrainDump options come from `braindump` config (frameless transparent
+   * panel) — main/floating come from `window` config as before.
    */
   getWindowOptions(windowType: WindowType): WindowOptions {
     const state = this.getWindowState(windowType)
+
+    if (!state) {
+      return {}
+    }
+
+    if (windowType === 'braindump') {
+      return {
+        width: state.width,
+        height: state.height,
+        minWidth: 320,
+        minHeight: 320,
+        maxWidth: 1200,
+        x: state.x,
+        y: state.y,
+        show: false,
+        frame: false,
+        alwaysOnTop: true,
+        resizable: true,
+        skipTaskbar: true,
+      } satisfies WindowOptions
+    }
+
     const windowConfig = this.configManager.getSection(
       'window',
     ) as AppConfig['window']
     const config = windowConfig[windowType]
 
-    if (!state || !config) {
+    if (!config) {
       return {}
     }
 

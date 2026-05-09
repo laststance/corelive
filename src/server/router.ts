@@ -4,7 +4,11 @@ import {
   updateCategory,
   deleteCategory,
 } from './procedures/category'
-import { getHeatmap } from './procedures/completed'
+import {
+  createCompleted,
+  deleteCompleted,
+  getHeatmap,
+} from './procedures/completed'
 import {
   getElectronSettings,
   upsertElectronSettings,
@@ -43,6 +47,8 @@ export const router = {
   },
   completed: {
     heatmap: getHeatmap,
+    create: createCompleted,
+    delete: deleteCompleted,
   },
   electronSettings: {
     get: getElectronSettings,
