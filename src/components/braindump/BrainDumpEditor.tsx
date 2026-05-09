@@ -67,6 +67,13 @@ type CheckedRowMemory = Readonly<{
 }>
 
 /**
+ * In-flight create-Completed promise for a line that's been ticked but not
+ * yet round-tripped to the server. We await it before any delete so an
+ * Undo issued before the create resolves cannot leave a ghost row in the DB.
+ */
+type PendingCreate = Promise<Completed['id'] | null>
+
+/**
  * BrainDumpEditor — frameless transparent panel that pairs a category picker
  * with a freeform textarea using markdown checkboxes.
  *
@@ -109,6 +116,11 @@ export function BrainDumpEditor({
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
+    new Map(),
+  )
+  // Pending creates per line — Undo awaits this before issuing delete to
+  // avoid the race where a tick is reverted before the server responds.
+  const pendingCreatesRef = useRef<Map<BrainDumpLineIndex, PendingCreate>>(
     new Map(),
   )
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
@@ -158,8 +170,9 @@ export function BrainDumpEditor({
     if (!isMounted || !isBrainDumpEnvironment()) return
     const api = window.brainDumpAPI
     if (!api) return
-    return api.on('braindump-category-changed', (...args: unknown[]) => {
-      const parsed = categoryChangedPayloadSchema.safeParse(args[1])
+    return api.on('braindump-category-changed', (_event, payload) => {
+      // Preload contract is `(event, ...args)` so payload is the second arg.
+      const parsed = categoryChangedPayloadSchema.safeParse(payload)
       if (parsed.success) setLocalCategoryId(parsed.data.categoryId)
     })
   }, [isMounted])
@@ -183,6 +196,7 @@ export function BrainDumpEditor({
       lastPersistedRef.current = { categoryId: activeCategoryId, text }
       setIsLoadingNote(false)
       checkedRowsRef.current.clear()
+      pendingCreatesRef.current.clear()
     })
     return () => {
       cancelled = true
@@ -255,41 +269,57 @@ export function BrainDumpEditor({
         return
       }
       const safeTitle = normalizeCompletedTitle(title)
-      try {
-        const created = await createCompletedMutation.mutateAsync({
+      const createPromise: PendingCreate = createCompletedMutation
+        .mutateAsync({
           categoryId: activeCategoryId,
           title: safeTitle,
         })
-        checkedRowsRef.current.set(lineIndex, {
-          completedId: created.id,
-          title: safeTitle,
-        })
-        await queryClient.invalidateQueries({
-          queryKey: orpc.completed.heatmap.key(),
-        })
-        broadcastTodoSync()
-
-        const undoToastId = toast.success(`Completed: ${safeTitle}`, {
-          description: 'Tap Undo within 5 s to revert.',
-          duration: TOAST_UNDO_MS,
-          action: {
-            label: 'Undo',
-            onClick: () => {
-              // Read latest text via ref so the user's keystrokes between
-              // creation and undo are preserved.
-              void undoCompleted(lineIndex, created.id, noteTextRef.current)
-              toast.dismiss(undoToastId)
-            },
+        .then(
+          (created) => created.id,
+          (error) => {
+            const message =
+              error instanceof Error
+                ? error.message
+                : 'Failed to record completion'
+            toast.error(message)
+            setNoteText(
+              setCheckboxStateAtLine(noteTextRef.current, lineIndex, false),
+            )
+            return null
           },
-        })
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Failed to record completion'
-        toast.error(message)
-        setNoteText(
-          setCheckboxStateAtLine(noteTextRef.current, lineIndex, false),
         )
+      pendingCreatesRef.current.set(lineIndex, createPromise)
+
+      const completedId = await createPromise
+      // Drop the pending entry only if it's still the same promise — a fresh
+      // tick on the same line would have replaced it.
+      if (pendingCreatesRef.current.get(lineIndex) === createPromise) {
+        pendingCreatesRef.current.delete(lineIndex)
       }
+      if (completedId === null) return
+
+      checkedRowsRef.current.set(lineIndex, {
+        completedId,
+        title: safeTitle,
+      })
+      await queryClient.invalidateQueries({
+        queryKey: orpc.completed.heatmap.key(),
+      })
+      broadcastTodoSync()
+
+      const undoToastId = toast.success(`Completed: ${safeTitle}`, {
+        description: 'Tap Undo within 5 s to revert.',
+        duration: TOAST_UNDO_MS,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            // Read latest text via ref so the user's keystrokes between
+            // creation and undo are preserved.
+            void undoCompleted(lineIndex, completedId, noteTextRef.current)
+            toast.dismiss(undoToastId)
+          },
+        },
+      })
     },
     [activeCategoryId, createCompletedMutation, queryClient],
   )
@@ -354,6 +384,19 @@ export function BrainDumpEditor({
         const memory = checkedRowsRef.current.get(lineIndex)
         if (memory) {
           void undoCompleted(lineIndex, memory.completedId, nextText)
+          return
+        }
+        // No memory yet → the create is probably still in flight. Await it
+        // before issuing delete so the row is never orphaned in the DB.
+        // Cosmetic wart: the success toast from `promoteLineToCompleted`
+        // will still flash for an item the user already unchecked. The DB
+        // stays consistent because the awaited delete runs right after.
+        const pending = pendingCreatesRef.current.get(lineIndex)
+        if (pending) {
+          void pending.then((completedId) => {
+            if (completedId === null) return
+            void undoCompleted(lineIndex, completedId, noteTextRef.current)
+          })
         }
       }
     },

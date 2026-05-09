@@ -901,6 +901,26 @@ async function createWindow(): Promise<BrowserWindow> {
  * 2. Error handling (graceful degradation)
  * 3. Proper cleanup (prevent memory leaks)
  */
+
+/**
+ * Strip user-authored BrainDump note text from a config snapshot before
+ * exposing it via the generic `config-get-all` channel. The note map is
+ * personal scratch content and only the dedicated `braindump-note-get`
+ * channel should surface it. Any other window asking for the full config
+ * sees only the BrainDump metadata (sync mode, opacity, shortcut, etc.).
+ *
+ * @param snapshot - The full config object as returned by `ConfigManager.getAll()`.
+ * @returns A shallow clone with `braindump.notes` removed.
+ */
+function redactBrainDumpNotes(
+  snapshot: Record<string, unknown>,
+): Record<string, unknown> {
+  const braindump = snapshot.braindump
+  if (!braindump || typeof braindump !== 'object') return snapshot
+  const { notes: _notes, ...rest } = braindump as Record<string, unknown>
+  return { ...snapshot, braindump: rest }
+}
+
 function setupIPCHandlers(): void {
   /**
    * Basic app control handlers.
@@ -1356,7 +1376,9 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return {}
     }
-    return configManager.getAll() as Record<string, unknown>
+    return redactBrainDumpNotes(
+      configManager.getAll() as Record<string, unknown>,
+    )
   })
 
   typedHandle('config-get-section', (_event, section) => {
@@ -1366,6 +1388,13 @@ function setupIPCHandlers(): void {
     const result = configManager.getSection(
       section as keyof ReturnType<typeof configManager.getAll>,
     )
+    if (section === 'braindump' && result && typeof result === 'object') {
+      // Strip free-text notes from the generic getter; anyone asking for the
+      // BrainDump section gets only metadata. The dedicated `braindump-note-get`
+      // channel is the single read path for note text.
+      const { notes: _notes, ...rest } = result as Record<string, unknown>
+      return rest as Record<string, unknown>
+    }
     return result as Record<string, unknown> | null
   })
 

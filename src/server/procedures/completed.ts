@@ -224,10 +224,22 @@ export const createCompleted = authMiddleware
   })
 
 /**
- * Hard-deletes a Completed row owned by the authenticated user. Used by
- * BrainDump's 5-second toast-undo flow when the user retracts a checkbox
- * tick. Hard-delete (not archived=true) because the row is ephemeral —
- * created moments ago and reversed before any archival semantics matter.
+ * Window during which a Completed row may be hard-deleted via this endpoint.
+ * Picked to cover the 5 s toast plus generous slack for slow networks; older
+ * rows must go through archival flows so the destructive endpoint cannot be
+ * weaponised against historical data.
+ */
+const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
+
+/**
+ * Hard-deletes a Completed row owned by the authenticated user, but only
+ * within {@link COMPLETED_UNDO_WINDOW_MS} of creation. Used by BrainDump's
+ * 5-second toast-undo flow when the user retracts a checkbox tick — the
+ * row is ephemeral and reversed before any archival semantics matter.
+ *
+ * The time window scopes the destructive surface area: even if a Bearer
+ * token leaks, an attacker cannot use this endpoint to wipe historical
+ * Completed history.
  *
  * @param input.id - Completed row id
  * @returns The deleted row id (echoed back so optimistic clients can confirm)
@@ -247,6 +259,13 @@ export const deleteCompleted = authMiddleware
     if (!existing) {
       throw new ORPCError('NOT_FOUND', {
         message: 'Completed row not found',
+      })
+    }
+
+    const ageMs = Date.now() - existing.createdAt.getTime()
+    if (ageMs > COMPLETED_UNDO_WINDOW_MS) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'Undo window has expired for this completion',
       })
     }
 

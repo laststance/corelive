@@ -858,11 +858,17 @@ export class ShortcutManager {
 
   /**
    * Update shortcuts with new configuration.
+   *
+   * Only the shortcuts named in `newShortcuts` are re-registered. Contextual
+   * shortcuts (`newTask`, `minimize`, etc.) stay scoped to their focus
+   * listeners — re-registering them globally would hijack keys like Cmd+N
+   * and Cmd+M system-wide.
+   *
+   * Empty-string accelerators are treated as "disable this shortcut" — the
+   * old binding is removed and nothing is registered in its place.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
-      this.unregisterAllShortcuts()
-
       // Sync isEnabled if provided in newShortcuts
       if (typeof newShortcuts.enabled === 'boolean') {
         this.isEnabled = newShortcuts.enabled
@@ -876,12 +882,24 @@ export class ShortcutManager {
         }
       }
 
-      for (const [id, accelerator] of Object.entries(this.shortcuts)) {
-        if (id !== 'enabled' && typeof accelerator === 'string') {
-          const handler = this.getHandlerForShortcut(id)
-          if (handler) {
-            this.registerShortcut(accelerator, id, handler)
-          }
+      for (const [id, accelerator] of Object.entries(newShortcuts)) {
+        if (id === 'enabled' || typeof accelerator !== 'string') continue
+
+        // Always drop the old registration first so the new accelerator
+        // (or empty string = disabled) takes effect.
+        if (this.registeredShortcuts.has(id)) {
+          this.unregisterShortcut(id)
+        }
+
+        if (accelerator === '') continue
+
+        // Contextual shortcuts only ever register on focus; re-registering
+        // them here would promote them to global accelerators.
+        if (this.contextualShortcuts.has(id)) continue
+
+        const handler = this.getHandlerForShortcut(id)
+        if (handler) {
+          this.registerShortcut(accelerator, id, handler)
         }
       }
 
