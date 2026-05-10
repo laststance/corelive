@@ -1,8 +1,10 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { match } from 'ts-pattern'
 
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -18,6 +20,14 @@ import { cn } from '@/lib/utils'
 interface DayDetailDialogProps {
   date: string | null
   onOpenChange: (open: boolean) => void
+  /**
+   * Optional day navigation callback. When provided, `< >` icon buttons are
+   * rendered inside DialogHeader. The handler receives a signed day offset
+   * (`-1` for previous, `1` for next) and is expected to swap `date` for the
+   * shifted YYYY-MM-DD on the parent. Co-designed with PR2's keyboard nav so
+   * the same handler can be reused by `useKeyboardNav` without API churn.
+   */
+  onNavigate?: (dayOffset: -1 | 1) => void
 }
 
 type Intensity = 0 | 1 | 2 | 3 | 4
@@ -158,7 +168,11 @@ function getTodayDateString(): string {
  * @example
  * <DayDetailDialog date={selectedDate} onOpenChange={(open) => !open && setSelectedDate(null)} />
  */
-export function DayDetailDialog({ date, onOpenChange }: DayDetailDialogProps) {
+export function DayDetailDialog({
+  date,
+  onOpenChange,
+  onNavigate,
+}: DayDetailDialogProps) {
   const isClerkQueryReady = useClerkQueryReady()
   const { data, isLoading } = useQuery({
     ...orpc.completed.dayDetail.queryOptions({
@@ -194,6 +208,29 @@ export function DayDetailDialog({ date, onOpenChange }: DayDetailDialogProps) {
                     {formatDate(date)}
                   </p>
                 </div>
+                {/* `mr-8` clears the Dialog's absolute-positioned close X (right-4) so the chevrons don't visually collide with it */}
+                {onNavigate && (
+                  <div className="ml-auto mr-8 flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => onNavigate(-1)}
+                      aria-label="Previous day"
+                    >
+                      <ChevronLeft />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => onNavigate(1)}
+                      aria-label="Next day"
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </div>
+                )}
               </div>
               <DialogDescription className="pt-1 font-serif text-sm italic text-muted-foreground">
                 {state.voice}
