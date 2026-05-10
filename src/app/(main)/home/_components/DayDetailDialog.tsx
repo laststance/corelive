@@ -212,7 +212,7 @@ export function DayDetailDialog({ date, onOpenChange }: DayDetailDialogProps) {
               <ul className="space-y-1.5">
                 {data?.tasks.map((task) => (
                   <li
-                    key={task.id}
+                    key={`${task.source}-${task.id}`}
                     className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
                   >
                     <span

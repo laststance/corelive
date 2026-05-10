@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { orpc } from '@/lib/orpc/client-query'
@@ -38,6 +39,7 @@ import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import { SortableTodoItem } from './SortableTodoItem'
 import type { Todo } from './TodoItem'
+import { WeeklySummaryCard } from './WeeklySummaryCard'
 
 const TODO_QUERY_LIMIT = 100
 const TODO_QUERY_OFFSET = 0
@@ -109,6 +111,12 @@ export function TodoList() {
     }),
     enabled: isClerkQueryReady,
   })
+
+  // Heatmap data shared with WeeklySummaryCard (React Query dedupes the
+  // underlying request with ContributionGraph's own useHeatmapData() call, so
+  // mounting the summary card does not add a second network round-trip).
+  const { dataByDate: heatmapByDate, isLoading: heatmapLoading } =
+    useHeatmapData()
 
   /**
    * Adds a new todo item using the create mutation.
@@ -336,6 +344,10 @@ export function TodoList() {
       {/* Completed Tasks Column */}
       <div className="space-y-6">
         <ContributionGraph />
+        <WeeklySummaryCard
+          dataByDate={heatmapByDate}
+          isLoading={heatmapLoading}
+        />
         <CompletedTodos
           onDelete={deleteTodo}
           onClearCompleted={deleteCompleted}

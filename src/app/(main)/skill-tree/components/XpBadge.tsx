@@ -25,7 +25,6 @@ export function XpBadge({ xp }: { xp: number }) {
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium text-[var(--st-gold)]">{label}</span>
         {next !== null && (
-          // eslint-disable-next-line dslint/token-only -- tabular-nums is a valid Tailwind utility class, not a design token
           <span className="tabular-nums">
             {progress} / {next}
           </span>
