@@ -1,5 +1,6 @@
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
+import { Geist_Mono, Inter_Tight, Newsreader } from 'next/font/google'
 import '@/globals.css'
 
 import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'
@@ -10,6 +11,25 @@ import { ReduxProvider } from '@/lib/redux/providers'
 import { cn } from '@/lib/utils'
 import { QueryClientProvider } from '@/providers/QueryClientProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
+
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  style: ['normal', 'italic'],
+  display: 'swap',
+  variable: '--font-newsreader',
+})
+
+const interTight = Inter_Tight({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter-tight',
+})
+
+const geistMono = Geist_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-geist-mono',
+})
 
 export const metadata: Metadata = {
   title: {
@@ -26,8 +46,16 @@ interface RootLayoutProps {
 const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
     <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body className={cn('mx-auto min-h-screen antialiased')}>
+      <html
+        lang="en"
+        suppressHydrationWarning
+        className={cn(
+          newsreader.variable,
+          interTight.variable,
+          geistMono.variable,
+        )}
+      >
+        <body className={cn('mx-auto min-h-screen font-sans antialiased')}>
           <ThemeProvider
             attribute="data-theme"
             defaultTheme="light"

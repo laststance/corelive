@@ -20,6 +20,8 @@ import {
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
+import { DayDetailDialog } from './DayDetailDialog'
+
 /** Milliseconds in a single day. */
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
 
@@ -29,22 +31,30 @@ const DAYS_IN_WEEK = 7
 /** Reserved width for week-day labels inside the SVG. */
 const HEATMAP_LEFT_PAD = 28
 
-/** Minimum cell size used when space is tight and horizontal scrolling is needed. */
-const HEATMAP_MIN_RECT_SIZE = 8
+/** Minimum cell size — DESIGN.md heatmap cell-sizing lock (Heatmap Cathedral D6). */
+const HEATMAP_MIN_RECT_SIZE = 12
 
-/** Maximum cell size used when the card has generous horizontal room. */
-const HEATMAP_MAX_RECT_SIZE = 28
+/** Maximum cell size — DESIGN.md heatmap cell-sizing lock (Heatmap Cathedral D6). */
+const HEATMAP_MAX_RECT_SIZE = 32
 
 /** Gap between heatmap cells. */
 const HEATMAP_SPACE = 2
 
-/** Theme-aware heatmap gradient expressed through global CSS variables. */
+/**
+ * Theme-aware heatmap gradient expressed through global CSS variables.
+ *
+ * Keys are threshold *upper bounds* for `existColor` semantics in
+ * @uiw/react-heat-map: it returns the value of the smallest key strictly
+ * greater than the day's count. So count=1,2,3 falls into bucket `4` (L1),
+ * count=4..9 falls into `10` (L2), and so on — matching DESIGN.md's
+ * intensity bands and DayDetailDialog's `getIntensityFromCount`.
+ */
 const PANEL_COLORS: Record<string, string> = {
   0: 'var(--heatmap-level-0)',
-  2: 'var(--heatmap-level-1)',
-  4: 'var(--heatmap-level-2)',
-  10: 'var(--heatmap-level-3)',
-  20: 'var(--heatmap-level-4)',
+  4: 'var(--heatmap-level-1)',
+  10: 'var(--heatmap-level-2)',
+  20: 'var(--heatmap-level-3)',
+  1000: 'var(--heatmap-level-4)',
 }
 
 /** Legend color squares matching the gradient. */
@@ -147,6 +157,7 @@ export function ContributionGraph() {
   const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const endDate = useMemo(() => normalizeDate(new Date()), [])
   const startDate = useMemo(
     () => getAlignedHeatmapStartDate(endDate),
@@ -201,17 +212,30 @@ export function ContributionGraph() {
                 fontSize: '10px',
               }}
               rectRender={(props, data) => {
-                const dateKey = data.date?.replace(/\//g, '-') ?? ''
+                const dateKey = toIsoDateKey(data.date)
                 const dayData = dataByDate.get(dateKey)
+                const handleSelect = () => {
+                  if (dateKey) setSelectedDate(dateKey)
+                }
 
                 if (!dayData || dayData.count === 0) {
-                  return <rect {...props} />
+                  return (
+                    <rect
+                      {...props}
+                      onClick={handleSelect}
+                      style={{ ...props.style, cursor: 'pointer' }}
+                    />
+                  )
                 }
 
                 return (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <rect {...props} />
+                      <rect
+                        {...props}
+                        onClick={handleSelect}
+                        style={{ ...props.style, cursor: 'pointer' }}
+                      />
                     </TooltipTrigger>
                     <TooltipContent>
                       <CategoryBreakdown day={dayData} />
@@ -234,6 +258,12 @@ export function ContributionGraph() {
           ))}
           <span className="ml-1 text-muted-foreground">More</span>
         </div>
+        <DayDetailDialog
+          date={selectedDate}
+          onOpenChange={(open) => {
+            if (!open) setSelectedDate(null)
+          }}
+        />
       </CardContent>
     </Card>
   )
@@ -397,4 +427,30 @@ function normalizeDate(date: Date): Date {
  */
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
+}
+
+/**
+ * Converts a heatmap rect's raw `data.date` (the library emits `YYYY/M/D` with
+ * no zero-padding) into the canonical `YYYY-MM-DD` form used by the server
+ * aggregation (`updatedAt.toISOString().split('T')[0]`) and by `dataByDate`.
+ *
+ * Without this, the click handler passed `2026-5-10` to `getDayDetail`, which
+ * never matches the server's `2026-05-10` bucket — so the dialog returned
+ * count=0 ("rest day") for cells the heatmap painted as L1+. Also unblocks
+ * `formatDate`, which falls back to "INVALID DATE" when given non-padded ISO.
+ *
+ * @param rawDate - The `data.date` value from @uiw/react-heat-map (`YYYY/M/D`)
+ * @returns A zero-padded `YYYY-MM-DD` string, or empty string when unparseable
+ * @example
+ * toIsoDateKey("2026/5/10")  // => "2026-05-10"
+ * toIsoDateKey("2026/12/3")  // => "2026-12-03"
+ * toIsoDateKey(undefined)    // => ""
+ */
+function toIsoDateKey(rawDate: string | undefined): string {
+  if (!rawDate) return ''
+  const parts = rawDate.split('/')
+  if (parts.length !== 3) return ''
+  const [year, month, day] = parts
+  if (!year || !month || !day) return ''
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
 }

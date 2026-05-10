@@ -88,3 +88,57 @@ export const HeatmapResponseSchema = z.object({
   }),
   total: z.number().int(),
 })
+
+/**
+ * Input schema for the day-detail endpoint used by DayDetailDialog.
+ * Date is the local calendar date the user clicked on the heatmap.
+ * @example
+ * { date: "2026-05-10" }
+ */
+export const DayDetailInputSchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: 'date must be YYYY-MM-DD',
+    })
+    .refine(
+      (value) => {
+        const parsed = new Date(`${value}T00:00:00.000Z`)
+        return (
+          !Number.isNaN(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === value
+        )
+      },
+      { message: 'date must be a valid calendar date' },
+    ),
+})
+
+/**
+ * Single completed task entry surfaced in the day-detail dialog.
+ * @example
+ * { id: 12, title: "draft sunday digest", completedAt: Date, category: { id: 1, name: "writing", color: "blue" } }
+ */
+export const DayDetailTaskSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  completedAt: z.date(),
+  category: z
+    .object({
+      id: z.number().int(),
+      name: z.string(),
+      color: z.string(),
+    })
+    .nullable(),
+})
+
+/**
+ * Response schema for the day-detail endpoint.
+ * @example
+ * { date: "2026-05-10", count: 3, tasks: [...], categories: [...] }
+ */
+export const DayDetailResponseSchema = z.object({
+  date: z.string(),
+  count: z.number().int(),
+  tasks: z.array(DayDetailTaskSchema),
+  categories: z.array(HeatmapCategorySchema),
+})
