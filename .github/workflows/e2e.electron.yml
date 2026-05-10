@@ -99,11 +99,6 @@ jobs:
           docker compose -f compose.yml -p corelive up -d postgres --wait
           docker ps -a
 
-      - name: Show Postgres logs on failure 🪵
-        if: failure()
-        run: |
-          docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true
-
       - name: Verify database connection 🧪
         run: |
           # Wait for database to be created and ready
@@ -161,3 +156,11 @@ jobs:
           name: test-results-electron
           path: test-results/
           retention-days: 30
+
+      # Placed at the very end so `if: failure()` covers DB verification,
+      # migrations, build, Electron compile, and the Playwright run itself —
+      # not just Docker startup. CodeRabbit caught this on PR #36.
+      - name: Show Postgres logs on failure 🪵
+        if: failure()
+        run: |
+          docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true
