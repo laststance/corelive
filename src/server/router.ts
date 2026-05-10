@@ -7,6 +7,7 @@ import {
 import {
   createCompleted,
   deleteCompleted,
+  getDayDetail,
   getHeatmap,
 } from './procedures/completed'
 import {
@@ -47,6 +48,7 @@ export const router = {
   },
   completed: {
     heatmap: getHeatmap,
+    dayDetail: getDayDetail,
     create: createCompleted,
     delete: deleteCompleted,
   },

@@ -249,6 +249,13 @@ export function useTodoMutations(categoryId: number | null) {
       queryClient.invalidateQueries({
         queryKey: orpc.skillTree.getUnassignedPool.key(),
       })
+      // Heatmap aggregates the same Todo rows that toggle flips. Without
+      // these invalidations the heatmap cell color and the DayDetailDialog
+      // task list drift out of sync after a toggle until the user reloads.
+      queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+      queryClient.invalidateQueries({
+        queryKey: orpc.completed.dayDetail.key(),
+      })
       broadcastTodoSync()
       broadcastCategorySync()
     },
@@ -324,6 +331,12 @@ export function useTodoMutations(categoryId: number | null) {
       })
       queryClient.invalidateQueries({
         queryKey: orpc.skillTree.getUnassignedPool.key(),
+      })
+      // Deleting a completed todo shrinks the heatmap cell for that day
+      // and removes the row from any open DayDetailDialog list.
+      queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+      queryClient.invalidateQueries({
+        queryKey: orpc.completed.dayDetail.key(),
       })
       broadcastTodoSync()
       broadcastCategorySync()
@@ -449,6 +462,12 @@ export function useTodoMutations(categoryId: number | null) {
       })
       queryClient.invalidateQueries({
         queryKey: orpc.skillTree.getUnassignedPool.key(),
+      })
+      // Wiping all completed todos resets every heatmap cell and empties
+      // any open DayDetailDialog list.
+      queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+      queryClient.invalidateQueries({
+        queryKey: orpc.completed.dayDetail.key(),
       })
       broadcastTodoSync()
       broadcastCategorySync()

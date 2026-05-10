@@ -8,6 +8,8 @@ import { authMiddleware } from '../middleware/auth'
 import {
   CompletedSchema,
   CreateCompletedSchema,
+  DayDetailInputSchema,
+  DayDetailResponseSchema,
   DeleteCompletedSchema,
   HeatmapInputSchema,
   HeatmapResponseSchema,
@@ -173,6 +175,90 @@ function calculateStreaks(dates: string[]): {
 
   return { current: currentStreak, longest: Math.max(longest, currentStreak) }
 }
+
+/**
+ * Fetches a single day's completed tasks for the DayDetailDialog opened from
+ * a heatmap cell click. Date range covers the local calendar day in UTC; this
+ * matches the heatmap's existing aggregation, so cell counts and dialog
+ * counts stay in lockstep.
+ *
+ * @param input.date - YYYY-MM-DD date string the user clicked on the heatmap
+ * @returns
+ * - date, count, tasks (id/title/completedAt/category), categories (rollup)
+ * @example
+ * getDayDetail({ date: "2026-05-10" })
+ * // => { date: "2026-05-10", count: 3, tasks: [...], categories: [...] }
+ */
+export const getDayDetail = authMiddleware
+  .input(DayDetailInputSchema)
+  .output(DayDetailResponseSchema)
+  .handler(async ({ input, context }) => {
+    try {
+      const { date } = input
+      const { user } = context
+
+      // The heatmap aggregates by `updatedAt.toISOString().split('T')[0]`,
+      // which is UTC. Match that here so cell counts match dialog counts.
+      const dayStart = new Date(`${date}T00:00:00.000Z`)
+      const dayEnd = new Date(`${date}T23:59:59.999Z`)
+
+      const todos = await prisma.todo.findMany({
+        where: {
+          userId: user.id,
+          completed: true,
+          updatedAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: {
+          id: true,
+          text: true,
+          updatedAt: true,
+          category: {
+            select: { id: true, name: true, color: true },
+          },
+        },
+        orderBy: { updatedAt: 'asc' },
+      })
+
+      const tasks = todos.map((todo) => ({
+        id: todo.id,
+        title: todo.text,
+        completedAt: todo.updatedAt,
+        category: todo.category,
+      }))
+
+      const categoryRollup = new Map<
+        number,
+        { id: number; name: string; color: string; count: number }
+      >()
+      for (const todo of todos) {
+        if (!todo.category) continue
+        const existing = categoryRollup.get(todo.category.id)
+        if (existing) {
+          existing.count++
+        } else {
+          categoryRollup.set(todo.category.id, {
+            id: todo.category.id,
+            name: todo.category.name,
+            color: todo.category.color,
+            count: 1,
+          })
+        }
+      }
+
+      return {
+        date,
+        count: tasks.length,
+        tasks,
+        categories: Array.from(categoryRollup.values()),
+      }
+    } catch (error) {
+      log.error('Error in getDayDetail:', error)
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to fetch day detail',
+        cause: error,
+      })
+    }
+  })
 
 /**
  * Inserts a row directly into the Completed table for the authenticated user.

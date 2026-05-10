@@ -115,6 +115,8 @@ export default defineConfig([
             'level-up-*',
             'confetti-*',
             'floating-navigator-*',
+            // Custom utility classes (defined in globals.css @layer utilities)
+            'cathedral-lit',
             // Tailwind default color palette (temporary - will migrate to tokens)
             'text-red-*',
             'text-blue-*',
