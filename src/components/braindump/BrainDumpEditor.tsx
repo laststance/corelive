@@ -678,7 +678,7 @@ export function BrainDumpEditor({
         disabled={activeCategoryId === null}
         maxLength={NOTE_MAX_LENGTH}
         spellCheck
-        className="bg-background/60 flex-1 resize-none rounded-lg border p-3 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+        className="bg-background/60 flex-1 resize-none rounded-lg border p-3 font-mono text-sm shadow-sm focus:outline-none disabled:opacity-50"
         style={NO_DRAG_REGION_STYLE}
       />
     </div>

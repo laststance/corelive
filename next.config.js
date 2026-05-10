@@ -1,4 +1,36 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { codeInspectorPlugin } from 'code-inspector-plugin'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const codeInspectorInjectTargets = [
+  path.join(
+    __dirname,
+    'src',
+    'components',
+    'code-inspector',
+    'CodeInspectorClient.tsx',
+  ),
+]
+const isProductionBuild = process.env.NODE_ENV === 'production'
+
+/**
+ * Builds shared code-inspector options for Next.js dev bundlers.
+ *
+ * @param {'turbopack' | 'webpack'} bundler - Next.js bundler currently wiring the inspector loaders.
+ * @returns {object} Options passed to `codeInspectorPlugin`.
+ * @example
+ * codeInspectorPlugin(createCodeInspectorOptions('turbopack'))
+ */
+function createCodeInspectorOptions(bundler) {
+  return {
+    bundler,
+    hotKeys: ['altKey'],
+    injectTo: codeInspectorInjectTargets,
+    ...(bundler === 'turbopack' ? { dev: !isProductionBuild } : {}),
+  }
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -8,14 +40,10 @@ const nextConfig = {
   },
   // Turbopack configuration (Next.js 16+)
   // code-inspector-plugin enables Alt+click to jump to source code in IDE
-  // dev: true is required because turbopack.rules is evaluated at config load time,
-  // before Next.js sets NODE_ENV=development. Without it, the plugin returns {} (no-op).
+  // Next dev evaluates this config before it sets NODE_ENV=development, so we
+  // treat every non-production config load as dev while keeping builds closed.
   turbopack: {
-    rules: codeInspectorPlugin({
-      bundler: 'turbopack',
-      hotKeys: ['altKey'],
-      dev: true,
-    }),
+    rules: codeInspectorPlugin(createCodeInspectorOptions('turbopack')),
   },
   // Performance optimizations
   experimental: {
@@ -58,10 +86,7 @@ const nextConfig = {
 
     // Code inspector plugin for development
     if (dev && !isServer) {
-      const plugin = codeInspectorPlugin({
-        bundler: 'webpack',
-        hotKeys: ['altKey'],
-      })
+      const plugin = codeInspectorPlugin(createCodeInspectorOptions('webpack'))
       if (plugin) {
         if (Array.isArray(plugin)) {
           config.plugins.push(...plugin)

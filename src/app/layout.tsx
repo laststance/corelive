@@ -2,6 +2,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
 import '@/globals.css'
 
+import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'
 import { ElectronStartupSync } from '@/components/electron/ElectronStartupSync'
 import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
@@ -32,6 +33,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
             defaultTheme="light"
             disableTransitionOnChange
           >
+            <CodeInspectorClient />
             <QueryClientProvider>
               <ReduxProvider>
                 <ElectronStartupSync />

@@ -459,7 +459,7 @@ export function FloatingNavigator({
                 value={newTaskText}
                 onChange={(e) => setNewTaskText(e.target.value)}
                 onKeyDown={handleKeyPress}
-                className="h-8 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="h-8 border-0 text-sm ring-0 focus-visible:border-0 focus-visible:ring-0"
                 aria-label="New task title"
                 aria-describedby="task-input-help"
               />
