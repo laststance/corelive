@@ -23,6 +23,18 @@ let electronApp: ElectronApplication
 
 test.beforeAll(async () => {
   electronApp = await launchElectronForTest('window-controls')
+
+  // Wait for the renderer to load before any `electronApp.evaluate` call.
+  // Without this wait, the main-process inspector context can be torn down
+  // mid-evaluate while Electron is still creating the BrowserWindow and
+  // loading the URL — Playwright surfaces that as
+  // `Execution context was destroyed, most likely because of a navigation`
+  // (the "navigation" wording is misleading; the destruction happens in
+  // the Node-side execution context, not the renderer). Waiting for
+  // `domcontentloaded` lets the main process reach a quiescent state where
+  // CDP main-process evaluates are stable.
+  const mainWindow = await electronApp.firstWindow()
+  await mainWindow.waitForLoadState('domcontentloaded')
 })
 
 test.afterAll(async () => {
