@@ -12,8 +12,8 @@ const exec = util.promisify(execCb)
  * defined in `prisma/seed.ts`.
  *
  * Call this in `test.beforeAll` so each spec file starts from an identical
- * known state — no leftover rows from earlier specs polluting Argos
- * screenshots, no random IDs bleeding across test boundaries.
+ * known state — no leftover rows from earlier specs and no random IDs
+ * bleeding across test boundaries.
  *
  * In CI matrix mode (`.github/workflows/e2e.web.yml`) each runner only
  * executes ONE spec, so `e2e/global-setup.ts`'s up-front reset is already

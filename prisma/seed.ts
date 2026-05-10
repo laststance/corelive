@@ -17,8 +17,7 @@ const prisma = new PrismaClient({ adapter })
  * - Default "General" category
  * - A representative real-world TODO list — a deterministic mix of work +
  *   life tasks. This baseline lets E2E specs assume a realistic starting
- *   state in `beforeAll(resetDatabase)` without seeding individually, and
- *   gives Argos visual snapshots an authentic-looking todo list to capture.
+ *   state in `beforeAll(resetDatabase)` without seeding individually.
  */
 async function main(): Promise<void> {
   const user = await prisma.user.upsert({
