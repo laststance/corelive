@@ -49,6 +49,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "e2e:web": "playwright test --project=web",
+    "e2e:electron": "pnpm electron:build:ts && playwright test --config=playwright.electron.config.ts",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
     "electron:build:ts": "electron-vite build",

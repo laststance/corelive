@@ -95,6 +95,45 @@ if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
   )
 }
 
+/**
+ * E2E renderer URL override.
+ *
+ * The Playwright Electron E2E suite (`e2e/electron/*.spec.ts`) loads the
+ * renderer from a local Next.js server (`http://localhost:3011`) so tests
+ * never hit production. To swap the URL without flipping the rest of the
+ * dev/prod surface (CSP `'unsafe-eval'`, optimization level), we accept a
+ * dedicated `ELECTRON_RENDERER_URL` env var. Production runs leave this
+ * unset and continue to use `https://corelive.app`.
+ *
+ * Validation: hostname must be exactly `localhost` or `127.0.0.1` and the
+ * protocol must be `http:`. We parse with `URL` (instead of `startsWith`)
+ * so that subdomain tricks like `http://localhost.attacker.com` cannot
+ * slip past the guard. This is defense-in-depth before the value reaches
+ * `WindowManager.createMainWindow`.
+ */
+if (process.env.ELECTRON_RENDERER_URL) {
+  let parsedRendererUrl: URL
+  try {
+    parsedRendererUrl = new URL(process.env.ELECTRON_RENDERER_URL)
+  } catch {
+    throw new Error(
+      `ELECTRON_RENDERER_URL must be a valid URL — got ` +
+        `"${process.env.ELECTRON_RENDERER_URL}".`,
+    )
+  }
+  if (
+    parsedRendererUrl.protocol !== 'http:' ||
+    (parsedRendererUrl.hostname !== 'localhost' &&
+      parsedRendererUrl.hostname !== '127.0.0.1')
+  ) {
+    throw new Error(
+      `ELECTRON_RENDERER_URL must use http: with hostname "localhost" or ` +
+        `"127.0.0.1" — got "${parsedRendererUrl.protocol}//${parsedRendererUrl.hostname}". ` +
+        `This guard prevents accidental production renderer load during E2E.`,
+    )
+  }
+}
+
 // ============================================================================
 // Environment Flags
 // ============================================================================
@@ -105,6 +144,34 @@ if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
  */
 const isDev = process.env.NODE_ENV === 'development'
 const isTestEnvironment = process.env.NODE_ENV === 'test'
+
+/**
+ * E2E system-integration kill switch.
+ *
+ * Linux CI runs Electron under `xvfb` (virtual display). Several lazy-loaded
+ * managers are unsuitable in that environment:
+ * - `SystemTrayManager` — no system tray on a headless display
+ * - `NotificationManager` — DBus / libnotify is flaky/absent
+ * - `ShortcutManager` — `globalShortcut` races on Linux WMs
+ * - `DeepLinkManager` — protocol handlers can't register without a desktop
+ *
+ * When this flag is `'true'`, `deferredInit` skips all four. The renderer
+ * still loads, IPC for window controls still works, and tests can exercise
+ * the integrated startup path without flake from the system surface.
+ *
+ * Auto-coupling: setting `ELECTRON_RENDERER_URL` (E2E renderer override)
+ * implies the kill switch. Pointing the renderer at a local URL while
+ * still registering the tray icon and `corelive://` protocol handler
+ * against the host OS would leak real OS state from a test run — so the
+ * two flags are coupled by default. Setting both explicitly is also fine.
+ *
+ * Defaults to `false` (production behavior). Humans can override locally
+ * via `ELECTRON_E2E_DISABLE_SYSTEM_INTEGRATION=true` to repro a tray bug
+ * without the URL flag.
+ */
+const disableSystemIntegration =
+  process.env.ELECTRON_E2E_DISABLE_SYSTEM_INTEGRATION === 'true' ||
+  Boolean(process.env.ELECTRON_RENDERER_URL)
 
 /**
  * Performance optimization level selection.
@@ -677,6 +744,98 @@ function setupSecurity(): void {
  *
  * @returns The main application window
  */
+/**
+ * Load the system-integration manager stack (tray, notifications, shortcuts,
+ * and the error handler that orchestrates them).
+ *
+ * Skipped entirely under `disableSystemIntegration` (E2E kill switch). The
+ * `systemIntegrationErrorHandler` is also constructed inside this helper so
+ * that the kill-switch path leaves NO partially-initialized handler — every
+ * `if (systemIntegrationErrorHandler)` call site downstream becomes a clean
+ * no-op rather than a half-wired surface.
+ */
+async function loadSystemIntegrationStack(): Promise<void> {
+  log.info('🔧 [DEFERRED] Loading SystemIntegrationErrorHandler...')
+  const SystemIntegrationErrorHandlerCls = (await lazyLoadManager.loadComponent(
+    'SystemIntegrationErrorHandler',
+  )) as new (...args: unknown[]) => SystemIntegrationErrorHandlerType
+  systemIntegrationErrorHandler = new SystemIntegrationErrorHandlerCls(
+    windowManager,
+    configManager,
+  )
+  log.info('✅ [DEFERRED] SystemIntegrationErrorHandler loaded')
+
+  log.info('🔧 [DEFERRED] Loading SystemTrayManager...')
+  const SystemTrayManagerCls = (await lazyLoadManager.loadComponent(
+    'SystemTrayManager',
+  )) as new (...args: unknown[]) => SystemTrayManagerType
+  systemTrayManager = new SystemTrayManagerCls(windowManager)
+  windowManager.setTrayBoundsProvider(
+    () => systemTrayManager?.getTrayBounds() ?? null,
+  )
+  log.info('✅ [DEFERRED] SystemTrayManager loaded')
+
+  log.info('🔧 [DEFERRED] Loading NotificationManager...')
+  const NotificationManagerCls = (await lazyLoadManager.loadComponent(
+    'NotificationManager',
+  )) as new (...args: unknown[]) => NotificationManagerType
+  notificationManager = new NotificationManagerCls(
+    windowManager,
+    systemTrayManager,
+    configManager,
+  )
+  log.info('✅ [DEFERRED] NotificationManager loaded')
+
+  log.info('🔧 [DEFERRED] Loading ShortcutManager...')
+  const ShortcutManagerCls = (await lazyLoadManager.loadComponent(
+    'ShortcutManager',
+  )) as new (...args: unknown[]) => ShortcutManagerType
+  shortcutManager = new ShortcutManagerCls(
+    windowManager,
+    notificationManager,
+    configManager,
+  )
+  log.info('✅ [DEFERRED] ShortcutManager loaded')
+
+  log.info('🔧 [DEFERRED] Wiring managers + initializing system integration...')
+  systemIntegrationErrorHandler.setManagers(
+    systemTrayManager,
+    notificationManager,
+    shortcutManager,
+  )
+  await systemIntegrationErrorHandler.initializeSystemIntegration()
+  log.info('✅ [DEFERRED] System integration initialized')
+}
+
+/**
+ * Load the deep-link stack: registers `corelive://` protocol handler with
+ * the OS and drains any URLs that arrived before the handler was ready.
+ *
+ * Skipped under `disableSystemIntegration` since protocol registration
+ * requires a real desktop session.
+ */
+async function loadDeepLinkStack(): Promise<void> {
+  log.info('🔧 [DEFERRED] Initializing DeepLinkManager...')
+  const manager = ensureDeepLinkManager()
+  if (!manager) {
+    return
+  }
+  log.info('✅ [DEFERRED] DeepLinkManager initialized')
+  manager.setNotificationManager(notificationManager)
+
+  // Drain any deep-link URLs received before the manager was ready:
+  // 1. URLs from early `open-url` events (before app ready)
+  // 2. URLs from command line args (Windows/Linux)
+  setTimeout(() => {
+    try {
+      manager.processPendingUrl()
+      processPendingDeepLinkUrl()
+    } catch (error) {
+      log.warn('⚠️ Failed to process pending deep link URL', error)
+    }
+  }, 1000)
+}
+
 async function createWindow(): Promise<BrowserWindow> {
   // Start performance monitoring early to track startup metrics
   if (config.enableMemoryMonitoring) {
@@ -704,8 +863,14 @@ async function createWindow(): Promise<BrowserWindow> {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // Development uses local Next.js server, production uses web app
-    const serverUrl = isDev ? 'http://localhost:3011' : 'https://corelive.app'
+    // Development uses local Next.js server, production uses web app.
+    // The `ELECTRON_RENDERER_URL` env var (validated near the top of this
+    // file) lets the Playwright E2E suite point the renderer at the local
+    // Next.js server WITHOUT also flipping `isDev` — keeping CSP and
+    // optimization level identical to production for high-fidelity tests.
+    const serverUrl =
+      process.env.ELECTRON_RENDERER_URL ??
+      (isDev ? 'http://localhost:3011' : 'https://corelive.app')
 
     // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 
@@ -727,26 +892,13 @@ async function createWindow(): Promise<BrowserWindow> {
   // Deferred initialization - happens after main window is shown
   const deferredInit = async (): Promise<void> => {
     try {
-      // Load system integration components lazily
-      log.info('🔧 [DEFERRED] Loading SystemIntegrationErrorHandler...')
-      const SystemIntegrationErrorHandlerCls =
-        (await lazyLoadManager.loadComponent(
-          'SystemIntegrationErrorHandler',
-        )) as new (...args: unknown[]) => SystemIntegrationErrorHandlerType
-      systemIntegrationErrorHandler = new SystemIntegrationErrorHandlerCls(
-        windowManager,
-        configManager,
-      )
-      log.info('✅ [DEFERRED] SystemIntegrationErrorHandler loaded')
-
+      // MenuManager always loads (works under xvfb)
       log.info('🔧 [DEFERRED] Loading MenuManager...')
-      // Load menu manager
       const MenuManagerCls = (await lazyLoadManager.loadComponent(
         'MenuManager',
       )) as new (...args: unknown[]) => MenuManagerType
       menuManager = new MenuManagerCls()
 
-      // Get mainWindow from windowManager (mainWindow is local to criticalInit)
       const mainWindowRef = windowManager.getMainWindow()
       log.debug(
         '🔧 [DEFERRED] Retrieved mainWindow from windowManager:',
@@ -758,61 +910,22 @@ async function createWindow(): Promise<BrowserWindow> {
       }
       log.info('✅ [DEFERRED] MenuManager loaded')
 
-      log.info('🔧 [DEFERRED] Loading SystemTrayManager...')
-      // Load system tray manager
-      const SystemTrayManagerCls = (await lazyLoadManager.loadComponent(
-        'SystemTrayManager',
-      )) as new (...args: unknown[]) => SystemTrayManagerType
-      systemTrayManager = new SystemTrayManagerCls(windowManager)
-      windowManager.setTrayBoundsProvider(
-        () => systemTrayManager?.getTrayBounds() ?? null,
-      )
-      log.info('✅ [DEFERRED] SystemTrayManager loaded')
-
-      log.info('🔧 [DEFERRED] Loading NotificationManager...')
-      // Load notification manager
-      const NotificationManagerCls = (await lazyLoadManager.loadComponent(
-        'NotificationManager',
-      )) as new (...args: unknown[]) => NotificationManagerType
-      notificationManager = new NotificationManagerCls(
-        windowManager,
-        systemTrayManager,
-        configManager,
-      )
-      log.info('✅ [DEFERRED] NotificationManager loaded')
-
-      log.info('🔧 [DEFERRED] Loading ShortcutManager...')
-      // Load shortcut manager
-      const ShortcutManagerCls = (await lazyLoadManager.loadComponent(
-        'ShortcutManager',
-      )) as new (...args: unknown[]) => ShortcutManagerType
-      shortcutManager = new ShortcutManagerCls(
-        windowManager,
-        notificationManager,
-        configManager,
-      )
-      log.info('✅ [DEFERRED] ShortcutManager loaded')
-
-      log.info('🔧 [DEFERRED] Setting managers in error handler...')
-      // Set managers in error handler
-      if (systemIntegrationErrorHandler) {
-        systemIntegrationErrorHandler.setManagers(
-          systemTrayManager,
-          notificationManager,
-          shortcutManager,
+      // System-integration stack (tray, notifications, shortcuts, error
+      // handler) and deep-link stack are gated by the E2E kill switch.
+      // Both are unreliable on a Linux xvfb display.
+      if (disableSystemIntegration) {
+        log.info(
+          '🧪 [DEFERRED] disableSystemIntegration=true — skipping ' +
+            'SystemIntegrationErrorHandler, tray, notifications, shortcuts, ' +
+            'and deep link.',
         )
+      } else {
+        await loadSystemIntegrationStack()
       }
-      log.info('✅ [DEFERRED] Managers set')
 
-      log.info('🔧 [DEFERRED] Initializing system integration...')
-      // Initialize system integration with comprehensive error handling
-      if (systemIntegrationErrorHandler) {
-        await systemIntegrationErrorHandler.initializeSystemIntegration()
-      }
-      log.info('✅ [DEFERRED] System integration initialized')
-
-      // Load auto-updater in background (skip during automated tests)
-      // Wrapped in own try-catch so failure doesn't block other initializations
+      // AutoUpdater is gated by NODE_ENV=test (NOT the kill switch) so the
+      // production-build smoke run can still exercise the updater path.
+      // Wrapped in its own try/catch so failure doesn't block startup.
       if (!isTestEnvironment) {
         try {
           const AutoUpdaterCls = (await lazyLoadManager.loadComponent(
@@ -825,31 +938,13 @@ async function createWindow(): Promise<BrowserWindow> {
           }
         } catch (autoUpdaterError) {
           log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
-          // Non-critical - continue without auto-updater
         }
       } else {
         log.info('AutoUpdater initialization skipped in test environment')
       }
 
-      // Ensure deep link manager is ready once supporting managers exist
-      log.info('🔧 [DEFERRED] Initializing DeepLinkManager...')
-      const manager = ensureDeepLinkManager()
-      if (manager) {
-        log.info('✅ [DEFERRED] DeepLinkManager initialized')
-        manager.setNotificationManager(notificationManager)
-
-        // Process any pending deep link URLs after initialization
-        // This handles both:
-        // 1. URLs from early 'open-url' events (before app ready)
-        // 2. URLs from command line args (Windows/Linux)
-        setTimeout(() => {
-          try {
-            manager.processPendingUrl() // Command line URLs
-            processPendingDeepLinkUrl() // Early open-url URLs
-          } catch (error) {
-            log.warn('⚠️ Failed to process pending deep link URL', error)
-          }
-        }, 1000)
+      if (!disableSystemIntegration) {
+        await loadDeepLinkStack()
       }
 
       // Set up window close behavior after tray manager is loaded
