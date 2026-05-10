@@ -1,16 +1,8 @@
 /**
- * @fileoverview Window controls E2E spec.
- *
- * Smoke-tests window-level operations from the main process:
- * 1. `BrowserWindow.getBounds()` returns sensible numbers (proves the
- *    window was created and is not zero-sized).
- * 2. `setBounds` round-trips through the IPC layer with a ±1px
- *    tolerance for xvfb DPI rounding (Failure Mode F7 in the plan).
- * 3. `setSize` is idempotent — calling it twice with the same value
- *    doesn't crash the main process.
- *
- * Asserts on `mainWindow.getBounds()` directly via `electronApp.evaluate`
- * (NOT via the `window.electronAPI.window` IPC) so that a preload
+ * Smoke-tests window-level operations from the main process: bounds are
+ * non-zero after creation, `setBounds` round-trips with a ±1px DPI
+ * tolerance, and `setSize` is idempotent. Asserts on `getBounds()` via
+ * `electronApp.evaluate` (not `window.electronAPI.window`) so a preload
  * regression cannot silently mask a window-control failure.
  */
 
