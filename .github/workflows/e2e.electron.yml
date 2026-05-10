@@ -36,7 +36,12 @@
 name: E2E Tests (Electron)
 
 on:
-  pull_request: ~
+  pull_request:
+    # Skip docs-only PRs — Electron build + xvfb run takes ~10 min and
+    # gains nothing from a README typo.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   push:
     branches:
       - main
@@ -46,6 +51,11 @@ jobs:
     name: E2E Electron (Linux + xvfb) 🧪
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    # Lock GITHUB_TOKEN to the minimum needed for checkout + artifact
+    # upload. Forked PRs already run with reduced permissions; explicit
+    # `read` contracts the surface for the trusted-PR case too.
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository 🔄
@@ -54,26 +64,40 @@ jobs:
       - name: Use shared prepare action 🔧
         uses: ./.github/actions/prepare
 
+      # Pipe each secret through an `env:` block (rather than interpolating
+      # `${{ secrets.X }}` directly into `run:`) so values containing
+      # newlines or shell metacharacters cannot inject extra `.env` lines.
+      # `printf '%s\n' "$VAR"` keeps each value as a single literal token.
+      # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
       - name: Set environment variables
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          E2E_CLERK_USER_USERNAME: ${{ secrets.E2E_CLERK_USER_USERNAME }}
+          E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
+          E2E_CLERK_USER_EMAIL: ${{ secrets.E2E_CLERK_USER_EMAIL }}
         run: |
-          touch .env
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home" >> .env
-          echo "CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}" >> .env
-          echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
-          echo "POSTGRES_PRISMA_URL=postgresql://postgres:password@localhost:5432/corelive?schema=public" >> .env
-          echo "E2E_CLERK_USER_USERNAME=${{ secrets.E2E_CLERK_USER_USERNAME }}" >> .env
-          echo "E2E_CLERK_USER_PASSWORD=${{ secrets.E2E_CLERK_USER_PASSWORD }}" >> .env
-          echo "E2E_CLERK_USER_EMAIL=${{ secrets.E2E_CLERK_USER_EMAIL }}" >> .env
+          {
+            printf 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=%s\n' "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login\n'
+            printf 'NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up\n'
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home\n'
+            printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
+            printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5432/corelive?schema=public'
+            printf 'E2E_CLERK_USER_USERNAME=%s\n' "$E2E_CLERK_USER_USERNAME"
+            printf 'E2E_CLERK_USER_PASSWORD=%s\n' "$E2E_CLERK_USER_PASSWORD"
+            printf 'E2E_CLERK_USER_EMAIL=%s\n' "$E2E_CLERK_USER_EMAIL"
+          } > .env
 
       - name: Start Postgres via Docker Compose 🐳
         run: |
+          # `--wait` blocks until the container's healthcheck passes, and
+          # the next "Verify database connection" step re-polls anyway, so
+          # no additional `sleep` is needed here.
           docker compose -f compose.yml -p corelive up -d postgres --wait
           docker ps -a
-          # Wait for PostgreSQL to be fully ready
-          sleep 10
 
       - name: Show Postgres logs on failure 🪵
         if: failure()

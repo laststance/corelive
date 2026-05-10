@@ -8,15 +8,13 @@
 import { expect, test } from '@playwright/test'
 import type { ElectronApplication, Page } from 'playwright'
 
-import { launchElectronForTest } from './_helpers/launch'
+import { setupElectronTest } from './_helpers/launch'
 
 let electronApp: ElectronApplication
 let mainWindow: Page
 
 test.beforeAll(async () => {
-  electronApp = await launchElectronForTest('preload')
-  mainWindow = await electronApp.firstWindow()
-  await mainWindow.waitForLoadState('domcontentloaded')
+  ;({ electronApp, mainWindow } = await setupElectronTest('preload'))
 })
 
 test.afterAll(async () => {
