@@ -1,7 +1,9 @@
 'use client'
 
 import HeatMap from '@uiw/react-heat-map'
+import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -21,6 +23,7 @@ import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
+import { DayDetailInputSchema } from '@/server/schemas/completed'
 
 import { DayDetailDialog } from './DayDetailDialog'
 
@@ -160,6 +163,24 @@ export function ContributionGraph() {
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  // `?date=YYYY-MM-DD` deep-link: validated via the same Zod schema the
+  // server uses for `getDayDetail`, so invalid input is rejected with the
+  // identical contract. The dep `[dateParam]` keeps the effect a one-shot
+  // per URL change — internal day-nav (<,>,j,k) does not write back to the
+  // URL (per plan §1.6), so this never thrashes.
+  const searchParams = useSearchParams()
+  const dateParam = searchParams.get('date')
+
+  useEffect(() => {
+    if (!dateParam) return
+    const parsed = DayDetailInputSchema.safeParse({ date: dateParam })
+    if (parsed.success) {
+      setSelectedDate(parsed.data.date)
+    } else {
+      toast.error('Invalid date in URL — showing your activity instead.')
+    }
+  }, [dateParam])
+
   const endDate = useMemo(() => normalizeDate(new Date()), [])
   const startDate = useMemo(
     () => getAlignedHeatmapStartDate(endDate),

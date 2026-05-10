@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
 import { orpc } from '@/lib/orpc/client-query'
 import { cn } from '@/lib/utils'
@@ -185,6 +186,15 @@ export function DayDetailDialog({
   const dayCount = data?.count ?? 0
   const state = getDayState(dayCount)
   const isToday = date !== null && date === getTodayDateString()
+
+  // j/k keyboard nav reuses the same `onNavigate` contract as the `< >`
+  // buttons, so the dialog has a single source of truth for day-stepping.
+  // Esc dismiss is delegated to Radix Dialog natively (don't double-handle).
+  useKeyboardNav({
+    isOpen,
+    onPrev: () => onNavigate?.(-1),
+    onNext: () => onNavigate?.(1),
+  })
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

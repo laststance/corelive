@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -343,7 +343,21 @@ export function TodoList() {
 
       {/* Completed Tasks Column */}
       <div className="space-y-6">
-        <ContributionGraph />
+        {/* Suspense required because ContributionGraph reads ?date= via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
+        <Suspense
+          fallback={
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  Activity
+                </CardTitle>
+                <CardDescription>Loading activity data...</CardDescription>
+              </CardHeader>
+            </Card>
+          }
+        >
+          <ContributionGraph />
+        </Suspense>
         <WeeklySummaryCard
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
