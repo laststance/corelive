@@ -146,12 +146,13 @@ export const DefaultThemeTest: Story = {
       .getPropertyValue('--foreground')
       .trim()
 
-    // shadcn/ui light theme - browsers may convert oklch to lab or percentage
+    // Warm Cathedral light theme — accept oklch/lab serializations across browsers.
+    // --background: oklch(0.985 0.005 75), --foreground: oklch(0.18 0.015 30)
     expect(backgroundColor).toMatch(
-      /^(oklch\(1 0 0\)|oklch\(100% 0 0\)|lab\(100% 0 0\))$/,
+      /^(oklch\(0\.985 0\.005 75\)|oklch\(98\.5% 0\.005 75\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
     )
     expect(foregroundColor).toMatch(
-      /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/,
+      /^(oklch\(0\.18 0\.015 30\)|oklch\(18% 0\.015 30\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
     )
   },
 }
@@ -204,9 +205,10 @@ export const SwitchToDarkThemeTest: Story = {
       .getPropertyValue('--background')
       .trim()
 
-    // shadcn/ui dark theme - browsers may convert oklch to lab or percentage
+    // Warm Cathedral dark theme — accept oklch/lab serializations across browsers.
+    // --background: oklch(0.16 0.012 35)
     expect(backgroundColor).toMatch(
-      /^(oklch\(0\.145 0 0\)|oklch\(14\.5% 0 0\)|lab\([\d.]+% 0 0\))$/,
+      /^(oklch\(0\.16 0\.012 35\)|oklch\(16% 0\.012 35\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
     )
   },
 }

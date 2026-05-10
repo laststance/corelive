@@ -44,8 +44,7 @@
   --font-serif: var(--font-newsreader);
   --font-mono: var(--font-geist-mono);
 }
-/*---break---
- */
+/* ---break--- */
 :root {
   --radius: 0.625rem;
   /* Warm Cathedral — light theme (paper, dawn, amber, terracotta) */
@@ -93,8 +92,7 @@
   --heatmap-level-3: var(--hm-3);
   --heatmap-level-4: var(--hm-4);
 }
-/*---break---
- */
+/* ---break--- */
 [data-theme='dark'] {
   /* Warm Cathedral — dark theme (warm coal, ember, copper, warm sun) */
   --background: oklch(0.16 0.012 35);
@@ -140,8 +138,7 @@
   --heatmap-level-3: var(--hm-3);
   --heatmap-level-4: var(--hm-4);
 }
-/*---break---
- */
+/* ---break--- */
 @layer base {
   * {
     @apply outline-ring/50 border-border;
