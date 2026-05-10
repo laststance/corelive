@@ -258,8 +258,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // Floating Window
   // ──────────────────────────────────────────────────────────────────────────
-  'floating-panels-get-visible-on-all-workspaces': z.tuple([]),
-  'floating-panels-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
+  'floating-window-get-visible-on-all-workspaces': z.tuple([]),
+  'floating-window-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
   'floating-window-close': z.tuple([]),
   'floating-window-minimize': z.tuple([]),
   'floating-window-toggle-always-on-top': z.tuple([]),

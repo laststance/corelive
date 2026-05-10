@@ -82,7 +82,7 @@ describe('IPC contract', () => {
 
     it('requires boolean for floating panel desktop tracking', () => {
       const setVisibleOnAllWorkspaces =
-        IPC_ARG_SCHEMAS['floating-panels-set-visible-on-all-workspaces']
+        IPC_ARG_SCHEMAS['floating-window-set-visible-on-all-workspaces']
       expect(() => setVisibleOnAllWorkspaces.parse([true])).not.toThrow()
       expect(() => setVisibleOnAllWorkspaces.parse([false])).not.toThrow()
       expect(() => setVisibleOnAllWorkspaces.parse(['true'])).toThrow(ZodError)

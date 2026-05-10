@@ -98,11 +98,15 @@ export function FloatingWindowSettings({
     setError(null)
 
     try {
-      const applied =
-        await window.electronAPI?.floatingPanels?.setVisibleOnAllWorkspaces(
-          next,
-        )
-      setVisibleOnAllWorkspaces(Boolean(applied))
+      const api = window.electronAPI?.floatingPanels
+      // If the preload bridge disappears, rollback instead of showing a saved
+      // value that the main process never applied.
+      if (!api) {
+        throw new Error('Electron floating panels API is not available')
+      }
+
+      const applied = await api.setVisibleOnAllWorkspaces(next)
+      setVisibleOnAllWorkspaces(applied)
     } catch (saveError: unknown) {
       log.error('Failed to update floating window settings:', saveError)
       setVisibleOnAllWorkspaces(previous)

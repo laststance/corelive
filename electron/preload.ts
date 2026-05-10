@@ -371,7 +371,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVisibleOnAllWorkspaces: async (): Promise<boolean> => {
       try {
         return await typedInvoke(
-          'floating-panels-get-visible-on-all-workspaces',
+          'floating-window-get-visible-on-all-workspaces',
         )
       } catch (error) {
         log.error('Failed to get floating panels desktop setting:', error)
@@ -385,7 +385,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
       try {
         return await typedInvoke(
-          'floating-panels-set-visible-on-all-workspaces',
+          'floating-window-set-visible-on-all-workspaces',
           enabled,
         )
       } catch (error) {

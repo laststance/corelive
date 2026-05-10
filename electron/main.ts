@@ -1163,13 +1163,13 @@ function setupIPCHandlers(): void {
     }
   })
 
-  typedHandle('floating-panels-get-visible-on-all-workspaces', () => {
+  typedHandle('floating-window-get-visible-on-all-workspaces', () => {
     if (!windowManager) return false
     return windowManager.getFloatingPanelsVisibleOnAllWorkspaces()
   })
 
   typedHandle(
-    'floating-panels-set-visible-on-all-workspaces',
+    'floating-window-set-visible-on-all-workspaces',
     (_event, enabled) => {
       if (!windowManager) return false
       return windowManager.setFloatingPanelsVisibleOnAllWorkspaces(enabled)
