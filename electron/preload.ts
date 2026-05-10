@@ -360,6 +360,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  /**
+   * Shared controls for floating utility panels.
+   *
+   * Settings uses this narrow surface instead of raw config writes so the main
+   * process can persist the preference and update already-open BrowserWindows.
+   */
+  floatingPanels: {
+    /** Read whether Floating Navigator and BrainDump follow macOS Spaces. */
+    getVisibleOnAllWorkspaces: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke(
+          'floating-panels-get-visible-on-all-workspaces',
+        )
+      } catch (error) {
+        log.error('Failed to get floating panels desktop setting:', error)
+        return false
+      }
+    },
+    /** Persist and apply the macOS Spaces-following behavior. */
+    setVisibleOnAllWorkspaces: async (enabled: boolean): Promise<boolean> => {
+      if (typeof enabled !== 'boolean') {
+        throw new Error('VisibleOnAllWorkspaces must be a boolean')
+      }
+      try {
+        return await typedInvoke(
+          'floating-panels-set-visible-on-all-workspaces',
+          enabled,
+        )
+      } catch (error) {
+        log.error('Failed to set floating panels desktop setting:', error)
+        throw error
+      }
+    },
+  },
+
   // System integration APIs
   system: {
     /**

@@ -37,6 +37,7 @@ interface FloatingConfig {
   frame: boolean
   alwaysOnTop: boolean
   resizable: boolean
+  visibleOnAllWorkspaces?: boolean
 }
 
 // ============================================================================
@@ -117,6 +118,84 @@ export class WindowManager {
    */
   setTrayBoundsProvider(provider: () => Electron.Rectangle | null): void {
     this.getTrayBoundsProvider = provider
+  }
+
+  /**
+   * Applies the macOS Spaces-following behavior to a floating utility window.
+   *
+   * Electron exposes this through `setVisibleOnAllWorkspaces`, but it is only
+   * meaningful on macOS for CoreLive's use case. The guard keeps Linux/Windows
+   * behavior unchanged while still allowing the setting to be stored.
+   *
+   * @param browserWindow - Floating panel to update, if it currently exists
+   * @param enabled - true keeps the window visible across Spaces/desktops
+   * @example
+   * this.applyVisibleOnAllWorkspaces(this.floatingNavigator, true)
+   */
+  private applyVisibleOnAllWorkspaces(
+    browserWindow: BrowserWindow | null,
+    enabled: boolean,
+  ): void {
+    if (process.platform !== 'darwin') return
+    if (!browserWindow || browserWindow.isDestroyed()) return
+
+    // Include fullscreen Spaces so the panel behaves like Raycast Notes during
+    // Mission Control desktop changes, not only normal desktop switches.
+    browserWindow.setVisibleOnAllWorkspaces(enabled, {
+      visibleOnFullScreen: enabled,
+      skipTransformProcessType: true,
+    })
+  }
+
+  /**
+   * Reads whether both floating panels should follow macOS Spaces.
+   *
+   * The Settings UI presents this as a single switch, while the config stores
+   * values beside each window's own settings so future per-window controls can
+   * split cleanly without a migration.
+   *
+   * @returns true only when both Floating Navigator and BrainDump are enabled
+   * @example
+   * const enabled = windowManager.getFloatingPanelsVisibleOnAllWorkspaces()
+   */
+  getFloatingPanelsVisibleOnAllWorkspaces(): boolean {
+    const floatingEnabled =
+      this.configManager?.get<boolean>(
+        'window.floating.visibleOnAllWorkspaces',
+        false,
+      ) ?? false
+    const brainDumpEnabled =
+      this.configManager?.get<boolean>(
+        'braindump.visibleOnAllWorkspaces',
+        floatingEnabled,
+      ) ?? floatingEnabled
+
+    return Boolean(floatingEnabled && brainDumpEnabled)
+  }
+
+  /**
+   * Persists and applies the "show on all Mac desktops" setting.
+   *
+   * Called from Settings via IPC. Existing windows update immediately; windows
+   * created later read the persisted config during creation.
+   *
+   * @param enabled - true keeps both floating panels visible across Spaces
+   * @returns The setting value that was applied
+   * @example
+   * windowManager.setFloatingPanelsVisibleOnAllWorkspaces(true)
+   */
+  setFloatingPanelsVisibleOnAllWorkspaces(enabled: boolean): boolean {
+    if (this.configManager) {
+      this.configManager.update({
+        'window.floating.visibleOnAllWorkspaces': enabled,
+        'braindump.visibleOnAllWorkspaces': enabled,
+      })
+    }
+
+    this.applyVisibleOnAllWorkspaces(this.floatingNavigator, enabled)
+    this.applyVisibleOnAllWorkspaces(this.brainDumpWindow, enabled)
+
+    return enabled
   }
 
   /**
@@ -418,6 +497,11 @@ export class WindowManager {
       )
     }
 
+    this.applyVisibleOnAllWorkspaces(
+      this.floatingNavigator,
+      Boolean(floatingConfig.visibleOnAllWorkspaces),
+    )
+
     return this.floatingNavigator
   }
 
@@ -543,6 +627,14 @@ export class WindowManager {
         this.brainDumpWindow,
       )
     }
+
+    this.applyVisibleOnAllWorkspaces(
+      this.brainDumpWindow,
+      this.configManager?.get<boolean>(
+        'braindump.visibleOnAllWorkspaces',
+        false,
+      ) ?? false,
+    )
 
     return this.brainDumpWindow
   }

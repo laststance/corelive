@@ -291,6 +291,16 @@ export interface ElectronAPI {
   }
 
   /**
+   * Shared settings for floating utility panels.
+   */
+  floatingPanels?: {
+    /** Read whether Floating Navigator and BrainDump follow macOS Spaces. */
+    getVisibleOnAllWorkspaces: () => Promise<boolean>
+    /** Persist and apply whether both panels follow macOS Spaces. */
+    setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
+  }
+
+  /**
    * App operations.
    */
   app: {

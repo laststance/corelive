@@ -182,6 +182,14 @@ interface ElectronAPI {
     getAllDisplays: () => Promise<any[]>
   }
 
+  // Shared floating panel behavior
+  floatingPanels?: {
+    /** Read whether Floating Navigator and BrainDump follow macOS Spaces */
+    getVisibleOnAllWorkspaces: () => Promise<boolean>
+    /** Persist and apply whether both panels follow macOS Spaces */
+    setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
+  }
+
   // App information
   app?: {
     getVersion: () => Promise<string>

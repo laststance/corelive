@@ -45,6 +45,8 @@ interface FloatingWindowConfig {
   minWidth: number
   minHeight: number
   maxWidth: number
+  /** Keep the floating navigator visible while macOS Spaces change. */
+  visibleOnAllWorkspaces: boolean
   alwaysOnTop: boolean
   resizable: boolean
   frame: boolean
@@ -69,6 +71,8 @@ interface WindowConfig {
 export interface BrainDumpConfig {
   width: number
   height: number
+  /** Keep the BrainDump panel visible while macOS Spaces change. */
+  visibleOnAllWorkspaces: boolean
   /** Window opacity, clamped 0.30–1.00 to keep the window discoverable. */
   opacity: number
   /** When true, BrainDump mirrors FloatingNavigator's selected category. */
@@ -275,6 +279,7 @@ export class ConfigManager {
           minWidth: 250,
           minHeight: 300,
           maxWidth: 400,
+          visibleOnAllWorkspaces: false,
           alwaysOnTop: true,
           resizable: true,
           frame: false,
@@ -344,6 +349,7 @@ export class ConfigManager {
       braindump: {
         width: 480,
         height: 640,
+        visibleOnAllWorkspaces: false,
         opacity: 0.95,
         syncMode: true,
         shortcut: '',

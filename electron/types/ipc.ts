@@ -333,6 +333,14 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   // Floating Window
   // ──────────────────────────────────────────────────────────────────────────
+  'floating-panels-get-visible-on-all-workspaces': {
+    request: void
+    response: boolean
+  }
+  'floating-panels-set-visible-on-all-workspaces': {
+    request: boolean
+    response: boolean
+  }
   'floating-window-close': {
     request: void
     response: boolean

@@ -19,6 +19,7 @@
 
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
+import { FloatingWindowSettings } from '@/components/electron/FloatingWindowSettings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -239,6 +240,7 @@ export function ElectronSettingsPage(): React.ReactElement {
         </CardContent>
       </Card>
 
+      <FloatingWindowSettings />
       <BrainDumpSettings />
     </div>
   )

@@ -1163,6 +1163,19 @@ function setupIPCHandlers(): void {
     }
   })
 
+  typedHandle('floating-panels-get-visible-on-all-workspaces', () => {
+    if (!windowManager) return false
+    return windowManager.getFloatingPanelsVisibleOnAllWorkspaces()
+  })
+
+  typedHandle(
+    'floating-panels-set-visible-on-all-workspaces',
+    (_event, enabled) => {
+      if (!windowManager) return false
+      return windowManager.setFloatingPanelsVisibleOnAllWorkspaces(enabled)
+    },
+  )
+
   // Floating window control IPC handlers (Zod-validated)
   typedHandle('floating-window-close', () => {
     try {

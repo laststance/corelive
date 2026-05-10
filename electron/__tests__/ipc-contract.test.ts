@@ -80,6 +80,15 @@ describe('IPC contract', () => {
       expect(() => setHide.parse([])).toThrow(ZodError)
     })
 
+    it('requires boolean for floating panel desktop tracking', () => {
+      const setVisibleOnAllWorkspaces =
+        IPC_ARG_SCHEMAS['floating-panels-set-visible-on-all-workspaces']
+      expect(() => setVisibleOnAllWorkspaces.parse([true])).not.toThrow()
+      expect(() => setVisibleOnAllWorkspaces.parse([false])).not.toThrow()
+      expect(() => setVisibleOnAllWorkspaces.parse(['true'])).toThrow(ZodError)
+      expect(() => setVisibleOnAllWorkspaces.parse([])).toThrow(ZodError)
+    })
+
     it('accepts enum-constrained window state channel names', () => {
       const windowStateGet = IPC_ARG_SCHEMAS['window-state-get']
       expect(() => windowStateGet.parse(['main'])).not.toThrow()
