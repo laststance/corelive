@@ -1,0 +1,139 @@
+# ----------------------------------------------------------------------------
+# E2E Tests (Electron, Linux + xvfb)
+# ----------------------------------------------------------------------------
+# Runs the Playwright Electron suite (`e2e/electron/*.spec.ts`) on a
+# single ubuntu-latest runner under `xvfb-run`, the Linux virtual display.
+#
+# Why a single job (not a per-spec matrix like e2e.web.yml)?
+#   - The web workflow's matrix amortizes Postgres + Next.js bring-up
+#     across many specs (per-spec break-even ≈ 6 specs). The Electron
+#     suite is 3 specs at v0; per-spec runners would spend more time on
+#     setup than on the tests themselves.
+#   - Each runner shells out to `pnpm electron:build:ts` (electron-vite),
+#     adding ~10–20s of build time per matrix shard.
+#   - When the Electron suite grows past ~6 specs, revisit and convert
+#     to a `e2e.web.yml`-style matrix + merge-reports flow. Plan: see
+#     `~/.gstack/projects/laststance-corelive/main-electron-e2e-plan-…md`.
+#
+# Why `xvfb-run`?
+#   - Electron requires a display to create a `BrowserWindow`. CI runners
+#     are headless; `xvfb` provides a virtual one. The repo's "macOS only"
+#     constraint applies to PACKAGED DMG releases (signing/notarization),
+#     not to running Electron under a virtual display for tests.
+#
+# Coverage scope (job suffix `-linux`):
+#   - Linux + xvfb does NOT cover Cocoa-specific paths:
+#     `app.setActivationPolicy`, dock/menu bar/traffic-light buttons,
+#     `open-url` deep links, vibrancy, notarized .app/asar paths.
+#   - Manual macOS smoke before tag pushes covers those paths (see
+#     CLAUDE.md → "Electron Production Build").
+#
+# Required-check status:
+#   - Informational only at landing time. Promote to required after one
+#     stable week on main with flake rate < 2%.
+# ----------------------------------------------------------------------------
+
+name: E2E Tests (Electron)
+
+on:
+  pull_request: ~
+  push:
+    branches:
+      - main
+
+jobs:
+  e2e-electron-linux:
+    name: E2E Electron (Linux + xvfb) 🧪
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository 🔄
+        uses: actions/checkout@v5
+
+      - name: Use shared prepare action 🔧
+        uses: ./.github/actions/prepare
+
+      - name: Set environment variables
+        run: |
+          touch .env
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up" >> .env
+          echo "NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home" >> .env
+          echo "CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}" >> .env
+          echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
+          echo "POSTGRES_PRISMA_URL=postgresql://postgres:password@localhost:5432/corelive?schema=public" >> .env
+          echo "E2E_CLERK_USER_USERNAME=${{ secrets.E2E_CLERK_USER_USERNAME }}" >> .env
+          echo "E2E_CLERK_USER_PASSWORD=${{ secrets.E2E_CLERK_USER_PASSWORD }}" >> .env
+          echo "E2E_CLERK_USER_EMAIL=${{ secrets.E2E_CLERK_USER_EMAIL }}" >> .env
+
+      - name: Start Postgres via Docker Compose 🐳
+        run: |
+          docker compose -f compose.yml -p corelive up -d postgres --wait
+          docker ps -a
+          # Wait for PostgreSQL to be fully ready
+          sleep 10
+
+      - name: Show Postgres logs on failure 🪵
+        if: failure()
+        run: |
+          docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true
+
+      - name: Verify database connection 🧪
+        run: |
+          # Wait for database to be created and ready
+          timeout 60 bash -c 'until docker compose -f compose.yml -p corelive exec postgres env PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive; do sleep 2; done'
+          echo "Database 'corelive' exists and is ready!"
+
+      - name: Run Prisma migrations 📦
+        run: pnpm prisma migrate deploy
+
+      - name: Generate Prisma Client 🗄️
+        run: pnpm prisma generate
+
+      - name: Build Next.js application 🏗️
+        run: pnpm build
+
+      # Always rebuild dist-electron — stale builds are a top flake source.
+      # See plan E5 ("Always rebuild `dist-electron`").
+      - name: Compile Electron main + preload 🛠️
+        run: pnpm electron:build:ts
+
+      - name: Install Playwright Browsers 🎭
+        # Chromium isn't strictly needed for `_electron`, but `--with-deps`
+        # installs the Linux libs (libnss3, libatk-bridge2.0-0, libgtk-3-0,
+        # libxss1, etc.) that Electron itself depends on under xvfb.
+        run: pnpm exec playwright install --with-deps chromium
+
+      # NOTE: Next.js is started by the `webServer` block in
+      # `playwright.config.ts` (inherited by `playwright.electron.config.ts`).
+      # That block fires for ALL projects globally — including `_electron`
+      # — so a manual `pnpm start &` here would cause port-3011 double-start.
+
+      - name: Run Electron Playwright tests 🧪
+        env:
+          # Mirrors `e2e.web.yml`'s flag — keeps the per-spec
+          # `resetDatabase` early-return consistent across both suites.
+          E2E_TEST_MODE: 'true'
+          E2E_SKIP_PER_SPEC_RESET: 'true'
+        run: xvfb-run -a pnpm exec playwright test --config=playwright.electron.config.ts
+
+      - name: Upload Playwright HTML report 📊
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-electron
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload Test Results 📋
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          # `test-results/` contains Playwright traces, screenshots,
+          # videos AND the streaming Electron main-process logs that
+          # `e2e/electron/_helpers/launch.ts` writes.
+          name: test-results-electron
+          path: test-results/
+          retention-days: 30

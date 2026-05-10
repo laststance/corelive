@@ -74,6 +74,25 @@ export default defineConfig({
       testMatch: /^(?!.*electron).*\.spec\.ts$/,
       dependencies: ['setup'], // Run setup project first
     },
+
+    /**
+     * Electron E2E project — runs `e2e/electron/*.spec.ts`. Each spec
+     * launches the compiled Electron main process via Playwright's
+     * `_electron.launch` API; there is no Chromium device profile because
+     * Electron supplies its own renderer.
+     *
+     * Auth: v0 specs hit pre-login screens only (no `dependencies: ['setup']`)
+     * — Clerk storage-state reuse is a TODO when authenticated specs land.
+     *
+     * Reporter / runner: `pnpm e2e:electron` invokes
+     * `playwright.electron.config.ts` (separate config) so CI can emit a
+     * single HTML report without the per-spec blob → merge fan-in that the
+     * web suite uses.
+     */
+    {
+      name: 'electron',
+      testMatch: /e2e\/electron\/.*\.spec\.ts$/,
+    },
   ],
 
   // One-time hooks
