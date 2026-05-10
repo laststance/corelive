@@ -468,11 +468,14 @@ describe('Preload Script Security Tests', () => {
         return data
       }
 
+      // Mirrors preload.ts: the IpcRendererEvent is intentionally dropped so
+      // renderer listeners receive only the sanitized payload (matching the
+      // typed `on<C>()` contract in electron-api.d.ts).
       const createSecureCallback = (userCallback) => {
-        return (event, ...args) => {
+        return (_event, ...args) => {
           try {
             const sanitizedArgs = args.map((arg) => sanitizeData(arg))
-            userCallback(event, ...sanitizedArgs)
+            userCallback(...sanitizedArgs)
           } catch (error) {
             log.error('Error in event callback:', error)
           }
@@ -485,7 +488,7 @@ describe('Preload Script Security Tests', () => {
       // Test callback with sanitized data
       secureCallback({}, '  test data  ', 123, true)
 
-      expect(mockUserCallback).toHaveBeenCalledWith({}, 'test data', 123, true)
+      expect(mockUserCallback).toHaveBeenCalledWith('test data', 123, true)
     })
 
     it('should provide cleanup functions for event listeners', () => {
@@ -498,8 +501,8 @@ describe('Preload Script Security Tests', () => {
           return null
         }
 
-        const wrappedCallback = (event, ...args) => {
-          callback(event, ...args)
+        const wrappedCallback = (_event, ...args) => {
+          callback(...args)
         }
 
         // Store the listener

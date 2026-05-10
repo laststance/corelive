@@ -1621,10 +1621,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
-  // Secure event listener management
+  // Secure event listener management.
+  //
+  // Callbacks receive only the sanitized main-process payload — the
+  // IpcRendererEvent argument is intentionally dropped so listeners can be
+  // written as `(data) => …` to match the typed `on<C>()` contract in
+  // `electron-api.d.ts` (`callback: (data: IPCEventData<C>) => void`). This
+  // also aligns with the BrainDump preload's behavior.
   on: (
     channel: string,
-    callback: (event: IpcRendererEvent, ...args: unknown[]) => void,
+    callback: (...args: unknown[]) => void,
   ): (() => void) | undefined => {
     if (!validateChannel(channel)) {
       log.error(`Attempted to listen to unauthorized channel: ${channel}`)
@@ -1636,14 +1642,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return
     }
 
-    // Wrap callback to sanitize incoming data
     const wrappedCallback = (
-      event: IpcRendererEvent,
+      _event: IpcRendererEvent,
       ...args: unknown[]
     ): void => {
       try {
         const sanitizedArgs = args.map((arg) => sanitizeData(arg))
-        callback(event, ...sanitizedArgs)
+        callback(...sanitizedArgs)
       } catch (error) {
         log.error('Error in event callback:', error)
       }
