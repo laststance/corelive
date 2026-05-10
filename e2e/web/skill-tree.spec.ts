@@ -97,7 +97,6 @@ test.describe('Skill Tree E2E', () => {
     //
     // Fixed string — `test.beforeAll(resetDatabase)` guarantees a fresh DB
     // each spec run, so we no longer need Date.now/Math.random for isolation.
-    // Stable text also keeps Argos screenshots deterministic (see Issue #31).
     const todoText = 'Skill tree happy path todo'
     await seedCompletedTodo(page, todoText)
     await page.getByRole('link', { name: /skill tree/i }).click()
@@ -292,8 +291,7 @@ test.describe('Skill Tree E2E', () => {
  * @param page - The Playwright Page instance.
  * @param todoText - The text to enter into the new-todo input. Pass a fixed
  *   string (not a Date.now/Math.random suffix) — `test.beforeAll(resetDatabase)`
- *   guarantees per-spec DB isolation, and stable text keeps Argos screenshots
- *   deterministic (see Issue #31).
+ *   guarantees per-spec DB isolation.
  * @example
  * await seedCompletedTodo(page, 'Skill tree happy path todo')
  */

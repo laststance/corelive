@@ -43,23 +43,6 @@ export default defineConfig({
     // (Playwright default) without producing artifacts. See
     // https://playwright.dev/docs/test-sharding#merging-reports-from-multiple-shards.
     process.env.CI ? ['blob'] : ['list'],
-    // Add Argos reporter.
-    //
-    // The matrix-shard workflow at `.github/workflows/e2e.web.yml` sets
-    // `ARGOS_PARALLEL` / `ARGOS_PARALLEL_NONCE` / `ARGOS_PARALLEL_TOTAL` so
-    // every shard's `argosScreenshot` calls collate into a single Argos
-    // build. Without parallel mode, the 4 spec files that take no
-    // screenshots would each create an empty Argos build that diffs as
-    // "2 removed" against the baseline. See
-    // https://argos-ci.com/docs/parallel-testing.
-    [
-      '@argos-ci/playwright/reporter',
-      {
-        // Upload to Argos on CI only.
-        uploadToArgos: !!process.env.CI,
-        token: process.env.ARGOS_TOKEN,
-      },
-    ],
   ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
