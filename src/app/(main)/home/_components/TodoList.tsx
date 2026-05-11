@@ -43,6 +43,7 @@ import { SortableTodoItem } from './SortableTodoItem'
 import { SundayDigestCard } from './SundayDigestCard'
 import type { Todo } from './TodoItem'
 import { WeeklySummaryCard } from './WeeklySummaryCard'
+import { YearInReviewModal } from './YearInReviewModal'
 
 const TODO_QUERY_LIMIT = 100
 const TODO_QUERY_OFFSET = 0
@@ -368,7 +369,7 @@ export function TodoList() {
 
       {/* Completed Tasks Column */}
       <div className="space-y-6">
-        {/* Suspense required because ContributionGraph reads ?date= via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
+        {/* Suspense required because ContributionGraph + YearInReviewModal read URL params via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
         <Suspense
           fallback={
             <Card>
@@ -382,6 +383,11 @@ export function TodoList() {
           }
         >
           <ContributionGraph />
+          <YearInReviewModal
+            dataByDate={heatmapByDate}
+            isLoading={heatmapLoading}
+            isRestoring={isRestoring}
+          />
         </Suspense>
         <WeeklySummaryCard
           dataByDate={heatmapByDate}
