@@ -186,7 +186,13 @@ export function ContributionGraph() {
       setSelectedDate(parsed.data.date)
     } else {
       setSelectedDate(null)
-      toast.error('Invalid date in URL — showing your activity instead.')
+      // Sonner `id` dedupes the toast across React reconciliation passes so
+      // SSR→hydrate or Suspense fallback→resolution cycles can't stack two
+      // identical "invalid date" toasts on the same URL value (E2E flake on
+      // CI Linux had `..×× F` strict-mode locator violations otherwise).
+      toast.error('Invalid date in URL — showing your activity instead.', {
+        id: `invalid-date-${dateParam}`,
+      })
     }
   }, [dateParam])
 
