@@ -1,7 +1,9 @@
 'use client'
 
 import HeatMap from '@uiw/react-heat-map'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -19,6 +21,9 @@ import {
 } from '@/components/ui/tooltip'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
+import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
+import { shiftIsoDate } from '@/lib/shiftIsoDate'
+import { DayDetailInputSchema } from '@/server/schemas/completed'
 
 import { DayDetailDialog } from './DayDetailDialog'
 
@@ -158,6 +163,39 @@ export function ContributionGraph() {
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  // `?date=YYYY-MM-DD` deep-link: validated via the same Zod schema the
+  // server uses for `getDayDetail`, so invalid input is rejected with the
+  // identical contract. The dep `[dateParam]` keeps the effect a one-shot
+  // per URL change — internal day-nav (<,>,j,k) does not write back to the
+  // URL (per plan §1.6), so this never thrashes.
+  const searchParams = useSearchParams()
+  const dateParam = searchParams.get('date')
+
+  useEffect(() => {
+    // Closing the dialog when `?date=` is removed or invalidated keeps URL
+    // and dialog state coupled. Without this, navigating from `?date=valid`
+    // → `?date=` (or `?date=garbage`) would leave a stale dialog open even
+    // though the deep-link contract says invalid input keeps the dialog
+    // closed (CodeRabbit review on PR #38).
+    if (!dateParam) {
+      setSelectedDate(null)
+      return
+    }
+    const parsed = DayDetailInputSchema.safeParse({ date: dateParam })
+    if (parsed.success) {
+      setSelectedDate(parsed.data.date)
+    } else {
+      setSelectedDate(null)
+      // Sonner `id` dedupes the toast across React reconciliation passes so
+      // SSR→hydrate or Suspense fallback→resolution cycles can't stack two
+      // identical "invalid date" toasts on the same URL value (E2E flake on
+      // CI Linux had `..×× F` strict-mode locator violations otherwise).
+      toast.error('Invalid date in URL — showing your activity instead.', {
+        id: `invalid-date-${dateParam}`,
+      })
+    }
+  }, [dateParam])
+
   const endDate = useMemo(() => normalizeDate(new Date()), [])
   const startDate = useMemo(
     () => getAlignedHeatmapStartDate(endDate),
@@ -171,6 +209,23 @@ export function ContributionGraph() {
     () => calculateHeatmapLayout(containerWidth, weekCount),
     [containerWidth, weekCount],
   )
+  // Set of YYYY-MM-DD strings for each month's peak day. The ◎ overlay below
+  // reads `monthlyMaxDates.has(dateKey)` on every rect render, so memoizing
+  // the Set keeps that O(1) lookup stable across re-renders triggered by
+  // hover/tooltip state.
+  const monthlyMaxDates = useMemo(
+    () => calcMonthlyMaxDates(dataByDate),
+    [dataByDate],
+  )
+  // Functional setState lets us avoid depending on `selectedDate`, so the
+  // callback identity stays stable across renders. PR2 will reuse this exact
+  // handler for j/k keyboard navigation — keeping it stable matters because
+  // `useKeyboardNav` will attach it to a window event listener.
+  const handleNavigate = useCallback((dayOffset: -1 | 1) => {
+    setSelectedDate((currentDate) =>
+      currentDate ? shiftIsoDate(currentDate, dayOffset) : currentDate,
+    )
+  }, [])
 
   if (isLoading) {
     return (
@@ -217,6 +272,7 @@ export function ContributionGraph() {
                 const handleSelect = () => {
                   if (dateKey) setSelectedDate(dateKey)
                 }
+                const isMonthlyPeak = monthlyMaxDates.has(dateKey)
 
                 if (!dayData || dayData.count === 0) {
                   return (
@@ -228,14 +284,38 @@ export function ContributionGraph() {
                   )
                 }
 
+                // ◎ overlay marks each month's peak day. Painted in primary-foreground so
+                // it reads against the warmer L3/L4 bands without breaking the palette;
+                // pointer-events: none keeps the rect's click + tooltip intact.
+                // aria-hidden because the glyph is decorative — VoiceOver/NVDA would
+                // otherwise announce "circled bullet" between every neighboring cell's
+                // tooltip, which is noisy and adds no information the rect doesn't carry.
+                const monthlyPeakMark = isMonthlyPeak ? (
+                  <text
+                    x={Number(props.x) + Number(props.width) / 2}
+                    y={Number(props.y) + Number(props.height) / 2}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
+                    fill="var(--primary-foreground)"
+                    aria-hidden
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    ◎
+                  </text>
+                ) : null
+
                 return (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <rect
-                        {...props}
-                        onClick={handleSelect}
-                        style={{ ...props.style, cursor: 'pointer' }}
-                      />
+                      <g>
+                        <rect
+                          {...props}
+                          onClick={handleSelect}
+                          style={{ ...props.style, cursor: 'pointer' }}
+                        />
+                        {monthlyPeakMark}
+                      </g>
                     </TooltipTrigger>
                     <TooltipContent>
                       <CategoryBreakdown day={dayData} />
@@ -263,6 +343,7 @@ export function ContributionGraph() {
           onOpenChange={(open) => {
             if (!open) setSelectedDate(null)
           }}
+          onNavigate={handleNavigate}
         />
       </CardContent>
     </Card>

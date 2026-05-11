@@ -91,6 +91,7 @@ export default defineConfig([
             // Typography
             'antialiased',
             'subpixel-antialiased',
+            'tabular-nums',
             // Basic colors
             'text-white',
             'text-black',

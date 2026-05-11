@@ -262,7 +262,6 @@ export function BrainDumpSettings({
               <Eye className="h-4 w-4" />
               Window opacity
             </Label>
-            {/* eslint-disable-next-line dslint/token-only -- tabular-nums is standard Tailwind utility */}
             <span className="text-xs tabular-nums text-muted-foreground">
               {opacityPercent}%
             </span>

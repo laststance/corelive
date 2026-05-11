@@ -1,8 +1,10 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { match } from 'ts-pattern'
 
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
 import { orpc } from '@/lib/orpc/client-query'
 import { cn } from '@/lib/utils'
@@ -18,6 +21,14 @@ import { cn } from '@/lib/utils'
 interface DayDetailDialogProps {
   date: string | null
   onOpenChange: (open: boolean) => void
+  /**
+   * Optional day navigation callback. When provided, `< >` icon buttons are
+   * rendered inside DialogHeader. The handler receives a signed day offset
+   * (`-1` for previous, `1` for next) and is expected to swap `date` for the
+   * shifted YYYY-MM-DD on the parent. Co-designed with PR2's keyboard nav so
+   * the same handler can be reused by `useKeyboardNav` without API churn.
+   */
+  onNavigate?: (dayOffset: -1 | 1) => void
 }
 
 type Intensity = 0 | 1 | 2 | 3 | 4
@@ -106,17 +117,26 @@ function getDayState(dayCount: number): DayState {
 
 /**
  * Formats a YYYY-MM-DD date string to a long-form readable label.
+ *
+ * Parses + formats in UTC so the displayed date matches the bucket the
+ * server, heatmap cell, URL `?date=` param, and `shiftIsoDate` all operate
+ * on. Without `timeZone: 'UTC'` a user in (say) UTC-8 sees "March 31, 2026"
+ * for `2026-04-01` because `new Date('2026-04-01...')` is UTC midnight and
+ * `toLocaleDateString` defaults to local TZ — the subtitle drifts one day
+ * back relative to every other surface.
+ *
  * @param isoDate - YYYY-MM-DD date string
  * @returns Long-form date like "May 10, 2026"
  * @example
- * formatDate("2026-05-10") // => "May 10, 2026"
+ * formatDate("2026-05-10") // => "May 10, 2026" (in any timezone)
  */
 function formatDate(isoDate: string): string {
-  const parsed = new Date(`${isoDate}T00:00:00`)
+  const parsed = new Date(`${isoDate}T00:00:00.000Z`)
   return parsed.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
+    timeZone: 'UTC',
   })
 }
 
@@ -158,19 +178,38 @@ function getTodayDateString(): string {
  * @example
  * <DayDetailDialog date={selectedDate} onOpenChange={(open) => !open && setSelectedDate(null)} />
  */
-export function DayDetailDialog({ date, onOpenChange }: DayDetailDialogProps) {
+export function DayDetailDialog({
+  date,
+  onOpenChange,
+  onNavigate,
+}: DayDetailDialogProps) {
   const isClerkQueryReady = useClerkQueryReady()
-  const { data, isLoading } = useQuery({
+  // `placeholderData: keepPreviousData` so that pressing j/k or the < >
+  // chevrons doesn't flash the header back to "rest day" while the next
+  // day's query is in flight. The previous day's count + state band hold
+  // until the new data lands — TanStack Query v5 marks the result as
+  // `isPlaceholderData` so we can still gate the task list separately.
+  const { data, isLoading, isPlaceholderData } = useQuery({
     ...orpc.completed.dayDetail.queryOptions({
       input: { date: date ?? '1970-01-01' },
     }),
     enabled: isClerkQueryReady && date !== null,
+    placeholderData: keepPreviousData,
   })
 
   const isOpen = date !== null
   const dayCount = data?.count ?? 0
   const state = getDayState(dayCount)
   const isToday = date !== null && date === getTodayDateString()
+
+  // j/k keyboard nav reuses the same `onNavigate` contract as the `< >`
+  // buttons, so the dialog has a single source of truth for day-stepping.
+  // Esc dismiss is delegated to Radix Dialog natively (don't double-handle).
+  useKeyboardNav({
+    isOpen,
+    onPrev: () => onNavigate?.(-1),
+    onNext: () => onNavigate?.(1),
+  })
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -194,13 +233,36 @@ export function DayDetailDialog({ date, onOpenChange }: DayDetailDialogProps) {
                     {formatDate(date)}
                   </p>
                 </div>
+                {/* `mr-8` clears the Dialog's absolute-positioned close X (right-4) so the chevrons don't visually collide with it */}
+                {onNavigate && (
+                  <div className="ml-auto mr-8 flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => onNavigate(-1)}
+                      aria-label="Previous day"
+                    >
+                      <ChevronLeft />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => onNavigate(1)}
+                      aria-label="Next day"
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </div>
+                )}
               </div>
               <DialogDescription className="pt-1 font-serif text-sm italic text-muted-foreground">
                 {state.voice}
               </DialogDescription>
             </DialogHeader>
 
-            {isLoading ? (
+            {isLoading || isPlaceholderData ? (
               <p className="text-sm text-muted-foreground">…</p>
             ) : dayCount === 0 ? (
               <p className="font-serif text-sm italic text-muted-foreground">
@@ -212,7 +274,7 @@ export function DayDetailDialog({ date, onOpenChange }: DayDetailDialogProps) {
               <ul className="space-y-1.5">
                 {data?.tasks.map((task) => (
                   <li
-                    key={task.id}
+                    key={`${task.source}-${task.id}`}
                     className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
                   >
                     <span

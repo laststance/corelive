@@ -657,7 +657,6 @@ export function BrainDumpEditor({
             className="flex-1"
             aria-label="Window opacity"
           />
-          {/* eslint-disable-next-line dslint/token-only -- tabular-nums is standard Tailwind utility */}
           <span className="w-10 text-right tabular-nums">
             {Math.round(opacity * 100)}%
           </span>

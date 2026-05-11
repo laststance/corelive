@@ -205,7 +205,6 @@ export function CategoryManageDialog({
                         className={`h-3 w-3 rounded-full ${getColorDotClass(category.color)}`}
                       />
                       <span className="flex-1 text-sm">{category.name}</span>
-                      {/* eslint-disable-next-line dslint/token-only -- tabular-nums is standard Tailwind utility */}
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {category._count.todos} tasks
                       </span>

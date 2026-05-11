@@ -115,10 +115,19 @@ export const DayDetailInputSchema = z.object({
 
 /**
  * Single completed task entry surfaced in the day-detail dialog.
+ *
+ * `source` discriminates which Prisma table the entry came from. The pair
+ * `(source, id)` is globally unique; the dialog uses it as the React key
+ * because `Todo.id` and `Completed.id` are independent autoincrement
+ * sequences and can collide on the same day.
+ *
  * @example
- * { id: 12, title: "draft sunday digest", completedAt: Date, category: { id: 1, name: "writing", color: "blue" } }
+ * { source: 'todo', id: 12, title: "draft sunday digest", completedAt: Date, category: { id: 1, name: "writing", color: "blue" } }
+ * @example
+ * { source: 'completed', id: 7, title: "buy milk", completedAt: Date, category: null }
  */
 export const DayDetailTaskSchema = z.object({
+  source: z.enum(['todo', 'completed']),
   id: z.number().int(),
   title: z.string(),
   completedAt: z.date(),

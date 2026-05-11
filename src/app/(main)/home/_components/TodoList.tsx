@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { orpc } from '@/lib/orpc/client-query'
@@ -38,6 +39,7 @@ import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import { SortableTodoItem } from './SortableTodoItem'
 import type { Todo } from './TodoItem'
+import { WeeklySummaryCard } from './WeeklySummaryCard'
 
 const TODO_QUERY_LIMIT = 100
 const TODO_QUERY_OFFSET = 0
@@ -109,6 +111,12 @@ export function TodoList() {
     }),
     enabled: isClerkQueryReady,
   })
+
+  // Heatmap data shared with WeeklySummaryCard (React Query dedupes the
+  // underlying request with ContributionGraph's own useHeatmapData() call, so
+  // mounting the summary card does not add a second network round-trip).
+  const { dataByDate: heatmapByDate, isLoading: heatmapLoading } =
+    useHeatmapData()
 
   /**
    * Adds a new todo item using the create mutation.
@@ -260,8 +268,17 @@ export function TodoList() {
   }
 
   useEffect(() => {
+    // Cross-window sync: BrainDump / Floating Navigator completions broadcast
+    // via the BroadcastChannel and also write to the Completed table, so the
+    // Home heatmap + day-detail caches need invalidation alongside the todo
+    // list. Without these two extra keys, completing a task in BrainDump
+    // leaves the main heatmap stale until reload (Codex review HIGH).
     return subscribeToTodoSync(() => {
       queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+      queryClient.invalidateQueries({
+        queryKey: orpc.completed.dayDetail.key(),
+      })
     })
   }, [queryClient])
 
@@ -335,7 +352,25 @@ export function TodoList() {
 
       {/* Completed Tasks Column */}
       <div className="space-y-6">
-        <ContributionGraph />
+        {/* Suspense required because ContributionGraph reads ?date= via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
+        <Suspense
+          fallback={
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  Activity
+                </CardTitle>
+                <CardDescription>Loading activity data...</CardDescription>
+              </CardHeader>
+            </Card>
+          }
+        >
+          <ContributionGraph />
+        </Suspense>
+        <WeeklySummaryCard
+          dataByDate={heatmapByDate}
+          isLoading={heatmapLoading}
+        />
         <CompletedTodos
           onDelete={deleteTodo}
           onClearCompleted={deleteCompleted}

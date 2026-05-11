@@ -14,14 +14,20 @@ import {
   HeatmapInputSchema,
   HeatmapResponseSchema,
 } from '../schemas/completed'
+import { fetchCompletedEntries } from '../utils/completedAggregation'
 
 /**
- * Fetches heatmap data for completed tasks, aggregated by date with category breakdown.
- * @param input.days - Number of days to look back (default: 365)
+ * Fetches heatmap data for completed tasks, aggregated by UTC date with a
+ * category breakdown. Reads the Todo+Completed UNION via
+ * {@link fetchCompletedEntries} so BrainDump checkbox-tick completions
+ * (which write directly to the `Completed` table) appear on the heatmap
+ * alongside Todos completed through the TodoList lifecycle.
+ *
+ * @param input.days - Number of days to look back (default: 365, max 365)
  * @returns
  * - data: Array of daily entries with count and category breakdown
  * - streaks: Current and longest consecutive-day streaks
- * - total: Total completed tasks in the period
+ * - total: Total completed tasks in the period (Todo + Completed union)
  * @example
  * getHeatmap({ days: 365 })
  * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89 }
@@ -34,32 +40,32 @@ export const getHeatmap = authMiddleware
       const { days } = input
       const { user } = context
 
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - days)
-      startDate.setHours(0, 0, 0, 0)
+      // UTC-anchored bounds — `fetchCompletedEntries` buckets via
+      // `entry.completedAt.toISOString().split('T')[0]` (UTC date string).
+      // If we anchored `startDate` to *local* midnight (the previous
+      // implementation), rows in the first/last UTC hours that straddle
+      // the local-vs-UTC boundary would mis-bucket on any non-UTC host
+      // (e.g., a regional deployment). Vercel happens to run UTC by
+      // default, which masked the bug — but the contract should be
+      // explicit. `getDayDetail` already uses this discipline.
+      const todayIso = new Date().toISOString().split('T')[0]!
+      const startDate = new Date(`${todayIso}T00:00:00.000Z`)
+      // Inclusive bounds: `fetchCompletedEntries` uses `gte`/`lte`, so the
+      // window covers `(days - 1)` past calendar dates + today = exactly
+      // `days` dates. Subtracting the full `days` would include one extra
+      // day at the lower edge (CodeRabbit review on PR #38).
+      startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
+      // Upper bound = "now" so future-dated rows (clock skew, test seeds)
+      // never accidentally surface on the heatmap. fetchCompletedEntries
+      // requires an explicit endDate.
+      const endDate = new Date()
 
-      // Fetch all completed todos in the date range with their categories
-      const completedTodos = await prisma.todo.findMany({
-        where: {
-          userId: user.id,
-          completed: true,
-          updatedAt: { gte: startDate },
-        },
-        select: {
-          updatedAt: true,
-          categoryId: true,
-          category: {
-            select: {
-              id: true,
-              name: true,
-              color: true,
-            },
-          },
-        },
-        orderBy: { updatedAt: 'asc' },
-      })
+      const entries = await fetchCompletedEntries(user.id, startDate, endDate)
 
-      // Aggregate by date and category
+      // Bucket entries by UTC date string. Per-day category rollup mirrors
+      // the previous shape so the API contract (HeatmapResponseSchema) is
+      // unchanged — the only difference vs. pre-UNION is that `Completed`
+      // rows now contribute counts too.
       const dayMap = new Map<
         string,
         {
@@ -71,42 +77,40 @@ export const getHeatmap = authMiddleware
         }
       >()
 
-      for (const todo of completedTodos) {
-        const dateKey = todo.updatedAt.toISOString().split('T')[0]!
+      for (const entry of entries) {
+        const dateKey = entry.completedAt.toISOString().split('T')[0]!
         if (!dayMap.has(dateKey)) {
           dayMap.set(dateKey, { count: 0, categories: new Map() })
         }
         const day = dayMap.get(dateKey)!
         day.count++
 
-        if (todo.category) {
-          const catId = todo.category.id
-          if (!day.categories.has(catId)) {
-            day.categories.set(catId, {
-              id: catId,
-              name: todo.category.name,
-              color: todo.category.color,
+        if (entry.category) {
+          const categoryId = entry.category.id
+          if (!day.categories.has(categoryId)) {
+            day.categories.set(categoryId, {
+              id: categoryId,
+              name: entry.category.name,
+              color: entry.category.color,
               count: 0,
             })
           }
-          day.categories.get(catId)!.count++
+          day.categories.get(categoryId)!.count++
         }
       }
 
-      // Convert to array
       const data = Array.from(dayMap.entries()).map(([date, entry]) => ({
         date,
         count: entry.count,
         categories: Array.from(entry.categories.values()),
       }))
 
-      // Calculate streaks
       const streaks = calculateStreaks(data.map((d) => d.date))
 
       return {
         data,
         streaks,
-        total: completedTodos.length,
+        total: entries.length,
       }
     } catch (error) {
       log.error('Error in getHeatmap:', error)
@@ -178,9 +182,13 @@ function calculateStreaks(dates: string[]): {
 
 /**
  * Fetches a single day's completed tasks for the DayDetailDialog opened from
- * a heatmap cell click. Date range covers the local calendar day in UTC; this
+ * a heatmap cell click. Date range covers the calendar day in UTC; this
  * matches the heatmap's existing aggregation, so cell counts and dialog
  * counts stay in lockstep.
+ *
+ * Reads the Todo+Completed UNION via {@link fetchCompletedEntries} so both
+ * lifecycle paths (TodoList complete() and BrainDump checkbox-tick) surface
+ * inside the dialog's task list.
  *
  * @param input.date - YYYY-MM-DD date string the user clicked on the heatmap
  * @returns
@@ -197,49 +205,35 @@ export const getDayDetail = authMiddleware
       const { date } = input
       const { user } = context
 
-      // The heatmap aggregates by `updatedAt.toISOString().split('T')[0]`,
-      // which is UTC. Match that here so cell counts match dialog counts.
+      // Use UTC day bounds so a dialog opened from a heatmap cell matches the
+      // cell's bucket exactly (`completedAt.toISOString().split('T')[0]`).
       const dayStart = new Date(`${date}T00:00:00.000Z`)
       const dayEnd = new Date(`${date}T23:59:59.999Z`)
 
-      const todos = await prisma.todo.findMany({
-        where: {
-          userId: user.id,
-          completed: true,
-          updatedAt: { gte: dayStart, lte: dayEnd },
-        },
-        select: {
-          id: true,
-          text: true,
-          updatedAt: true,
-          category: {
-            select: { id: true, name: true, color: true },
-          },
-        },
-        orderBy: { updatedAt: 'asc' },
-      })
+      const entries = await fetchCompletedEntries(user.id, dayStart, dayEnd)
 
-      const tasks = todos.map((todo) => ({
-        id: todo.id,
-        title: todo.text,
-        completedAt: todo.updatedAt,
-        category: todo.category,
+      const tasks = entries.map((entry) => ({
+        source: entry.source,
+        id: entry.id,
+        title: entry.title,
+        completedAt: entry.completedAt,
+        category: entry.category,
       }))
 
       const categoryRollup = new Map<
         number,
         { id: number; name: string; color: string; count: number }
       >()
-      for (const todo of todos) {
-        if (!todo.category) continue
-        const existing = categoryRollup.get(todo.category.id)
+      for (const entry of entries) {
+        if (!entry.category) continue
+        const existing = categoryRollup.get(entry.category.id)
         if (existing) {
           existing.count++
         } else {
-          categoryRollup.set(todo.category.id, {
-            id: todo.category.id,
-            name: todo.category.name,
-            color: todo.category.color,
+          categoryRollup.set(entry.category.id, {
+            id: entry.category.id,
+            name: entry.category.name,
+            color: entry.category.color,
             count: 1,
           })
         }
