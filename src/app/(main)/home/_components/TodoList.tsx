@@ -29,6 +29,7 @@ import {
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
@@ -38,6 +39,7 @@ import { AddTodoForm } from './AddTodoForm'
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import { SortableTodoItem } from './SortableTodoItem'
+import { SundayDigestCard } from './SundayDigestCard'
 import type { Todo } from './TodoItem'
 import { WeeklySummaryCard } from './WeeklySummaryCard'
 
@@ -112,11 +114,24 @@ export function TodoList() {
     enabled: isClerkQueryReady,
   })
 
-  // Heatmap data shared with WeeklySummaryCard (React Query dedupes the
-  // underlying request with ContributionGraph's own useHeatmapData() call, so
-  // mounting the summary card does not add a second network round-trip).
+  // Heatmap data shared with WeeklySummaryCard + SundayDigestCard + the
+  // streak-notification hook (React Query dedupes the underlying request
+  // with ContributionGraph's own useHeatmapData() call, so the extra
+  // consumers do not add network round-trips).
   const { dataByDate: heatmapByDate, isLoading: heatmapLoading } =
     useHeatmapData()
+
+  // Streak milestone notifications (Electron-only; no-ops in the web build).
+  // The hook is fire-and-forget — localStorage dedupes per-tier so a single
+  // crossing of 7/30/100/365 days fires the macOS banner exactly once.
+  // `isRestoring` is passed so the effect waits for the TanStack persister
+  // before reading data — a stale cached snapshot must not fire a wrong
+  // tier and latch the localStorage max permanently.
+  useStreakNotifications({
+    dataByDate: heatmapByDate,
+    isLoading: heatmapLoading,
+    isRestoring,
+  })
 
   /**
    * Adds a new todo item using the create mutation.
@@ -368,6 +383,10 @@ export function TodoList() {
           <ContributionGraph />
         </Suspense>
         <WeeklySummaryCard
+          dataByDate={heatmapByDate}
+          isLoading={heatmapLoading}
+        />
+        <SundayDigestCard
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
