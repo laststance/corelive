@@ -45,11 +45,14 @@ describe('buildShareCard', () => {
       isoDate: '2026-05-12',
       totalCompleted: 1,
     })
-    const cssText = wrapper.style.cssText
-    expect(cssText).toMatch(/position\s*:\s*fixed/i)
-    expect(cssText).toMatch(/width\s*:\s*0/i)
-    expect(cssText).toMatch(/height\s*:\s*0/i)
-    expect(cssText).toMatch(/overflow\s*:\s*hidden/i)
+    // Direct property assertions on the parsed style declaration rather
+    // than regexing `cssText` — `/width\s*:\s*0/` would also accept
+    // `0.5px` or `0vw`, which would silently let the wrapper grow to a
+    // visible size.
+    expect(wrapper.style.position).toBe('fixed')
+    expect(wrapper.style.width).toBe('0px')
+    expect(wrapper.style.height).toBe('0px')
+    expect(wrapper.style.overflow).toBe('hidden')
     // `aria-hidden` so screen readers skip the temporary tree.
     expect(wrapper.getAttribute('aria-hidden')).toBe('true')
   })
