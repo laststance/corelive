@@ -64,7 +64,15 @@ async function loadHtmlToImage(): Promise<typeof HtmlToImage> {
   if (!htmlToImagePromise) {
     // Stored as a module-level singleton so two rapid-fire captures
     // don't trigger two separate network round-trips to the chunk.
-    htmlToImagePromise = import('html-to-image')
+    // The `.catch` resets the cache so a transient network failure
+    // (offline blip, cancelled chunk fetch) doesn't permanently break
+    // share-image capture for the rest of the session — a rejected
+    // promise is still truthy, so without this every retry would
+    // re-throw the cached rejection instead of attempting the import.
+    htmlToImagePromise = import('html-to-image').catch((error: unknown) => {
+      htmlToImagePromise = null
+      throw error
+    })
   }
   return htmlToImagePromise
 }

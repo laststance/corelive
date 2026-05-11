@@ -68,7 +68,7 @@ describe('aggregateCategoryTrends', () => {
     expect(aggregateCategoryTrends(new Map(), TODAY)).toEqual([])
   })
 
-  it('reports a single category with `firstWeek` trend when only the current week has data and the map starts empty before it', () => {
+  it('reports `new` trend when category has current-week activity but no prior-week activity', () => {
     // The heatmap *only* contains entries inside the current window, so
     // there is no historical activity outside the inspection range either
     // — chip should fall back to "your first week" copy.
