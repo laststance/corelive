@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -118,9 +118,23 @@ export function YearInReviewModal({
   const userId = user?.id
   const searchParams = useSearchParams()
   const forceParam = searchParams.get('force')
-  const forcedToday = parseForceDate(forceParam)
+  // Memoize by the raw URL string — `parseForceDate` returns a fresh `Date`
+  // on every call, so without `useMemo` the effect's `forcedToday` dep
+  // changes identity each render. That made `?force=YYYY-MM-DD` re-open the
+  // modal immediately after the user clicked Close (a re-render produced a
+  // new Date → effect re-fired → setOpen(true)).
+  const forcedToday = useMemo(() => parseForceDate(forceParam), [forceParam])
 
   const [open, setOpen] = useState(false)
+  // Dedupe force-mode opens by `forceParam` value. Without this, every
+  // `dataByDate` refetch (TanStack Query background revalidation) or
+  // persister rehydration re-runs the effect with the same truthy
+  // `forcedToday` and calls `setOpen(true)` again — so the modal pops
+  // back open immediately after the QA user clicks Close. The dedupe
+  // key is intentionally the raw URL param string, not `forcedToday`'s
+  // Date identity, so changing the URL to a new `?force=` value DOES
+  // re-open (which is the desired QA flow).
+  const lastShownForceParam = useRef<string | null>(null)
 
   // Auto-open evaluation:
   // 1. Wait for the heatmap data + persister rehydration before reading.
@@ -149,7 +163,11 @@ export function YearInReviewModal({
 
     if (forcedToday) {
       // QA override: open unconditionally; do NOT write the dedupe key
-      // so the next normal December auto-open still happens.
+      // so the next normal December auto-open still happens. The ref
+      // gates the open so a `dataByDate` refetch / persister rehydrate
+      // doesn't re-fire `setOpen(true)` after the user closed it.
+      if (lastShownForceParam.current === forceParam) return
+      lastShownForceParam.current = forceParam
       setOpen(true)
       return
     }
@@ -162,7 +180,7 @@ export function YearInReviewModal({
 
     setOpen(true)
     writeStoredYear(storageKey, summary.year)
-  }, [dataByDate, isLoading, isRestoring, userId, forcedToday])
+  }, [dataByDate, isLoading, isRestoring, userId, forcedToday, forceParam])
   /* eslint-enable react-you-might-not-need-an-effect/no-adjust-state-on-prop-change */
 
   if (!open) return null

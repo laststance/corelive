@@ -87,12 +87,19 @@ function buildShareCard(input: ExportDayInput): HTMLDivElement {
   // Pretty-print the ISO date to a readable form. Use the user's locale
   // so the share card reads natural ("May 12, 2026" vs "12 May 2026")
   // — the share card is for the user, not a public feed.
+  //
+  // `timeZone: 'UTC'` mirrors `DayDetailDialog`'s `formatDate` so the
+  // exported card shows the same calendar day as the dialog. Without it,
+  // a user in UTC-8 sees "April 30, 2026" on the share card for an
+  // `isoDate` of `2026-05-01` because `toLocaleDateString` defaults to
+  // local TZ and the constructed Date is UTC midnight.
   const prettyDate = new Date(
     `${input.isoDate}T00:00:00.000Z`,
   ).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    timeZone: 'UTC',
   })
 
   const root = document.createElement('div')

@@ -103,6 +103,30 @@ describe('aggregateYearInReview', () => {
     expect(result.eligible).toBe(false)
   })
 
+  it('year-scopes the longest streak so a Dec→Jan run does NOT bleed into the YIR total', () => {
+    // 20-day cross-boundary streak: 10 in 2025 (Dec 22 → Dec 31) +
+    // 10 in 2026 (Jan 1 → Jan 10). The 2026 YIR should report the
+    // 10-day longest, NOT the full 20-day calendar streak — the modal
+    // recaps "your 2026", not "your longest ever".
+    const map = new Map<string, HeatmapDay>()
+    for (let dayOffset = 0; dayOffset < 10; dayOffset++) {
+      const dec = shiftIsoDate('2025-12-31', -dayOffset)
+      map.set(dec, {
+        date: dec,
+        count: 1,
+        categories: [{ id: 1, name: 'writing', color: 'blue', count: 1 }],
+      })
+      const jan = shiftIsoDate('2026-01-01', dayOffset)
+      map.set(jan, {
+        date: jan,
+        count: 1,
+        categories: [{ id: 1, name: 'writing', color: 'blue', count: 1 }],
+      })
+    }
+    const result = aggregateYearInReview(map, new Date('2026-12-15Z'))
+    expect(result.longestStreak).toBe(10)
+  })
+
   it('caps topCategories at 3 and sorts by count desc, name asc', () => {
     const map = new Map<string, HeatmapDay>([
       [
@@ -210,6 +234,17 @@ describe('parseForceDate', () => {
     expect(parseForceDate('2026/12/31')).toBeNull()
     expect(parseForceDate('not-a-date')).toBeNull()
     expect(parseForceDate('2026-13-01')).toBeNull()
+  })
+
+  it('rejects day-rollover inputs that JS Date silently normalizes', () => {
+    // `new Date('2026-02-30T00:00:00.000Z')` → `2026-03-02`. The regex
+    // passes and `getTime()` is valid, so without a round-trip check the
+    // URL surface said one date and the modal rendered a different one.
+    expect(parseForceDate('2026-02-30')).toBeNull()
+    expect(parseForceDate('2026-04-31')).toBeNull()
+    // Year-crossing rollover — most dangerous because year inference
+    // diverges from URL surface.
+    expect(parseForceDate('2025-12-32')).toBeNull()
   })
 
   it('parses a YYYY-MM-DD string into UTC midnight', () => {

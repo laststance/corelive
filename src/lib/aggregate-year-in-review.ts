@@ -121,7 +121,14 @@ export function aggregateYearInReview(
     })
     .slice(0, TOP_CATEGORIES_COUNT)
 
-  const { longestStreak } = calcStreak(dataByDate, today)
+  // Year-scoped streak: filter dataByDate to the review year before passing
+  // to calcStreak so a streak spanning Dec→Jan doesn't inflate the YIR
+  // longest. The modal recaps "your <year>", not "your longest ever".
+  const yearScopedData = new Map<string, HeatmapDay>()
+  for (const [isoDate, day] of dataByDate) {
+    if (isoDate.startsWith(yearPrefix)) yearScopedData.set(isoDate, day)
+  }
+  const { longestStreak } = calcStreak(yearScopedData, today)
 
   return {
     totalCompleted,
@@ -186,5 +193,9 @@ export function parseForceDate(raw: string | null): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
   const candidate = new Date(`${raw}T00:00:00.000Z`)
   if (Number.isNaN(candidate.getTime())) return null
+  // Round-trip check rejects day-rollover inputs like `2026-02-30` (which
+  // JS Date silently rolls to `2026-03-02`). Without this, the URL surface
+  // says one date but the modal renders a different year.
+  if (candidate.toISOString().slice(0, 10) !== raw) return null
   return candidate
 }
