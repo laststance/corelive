@@ -79,14 +79,23 @@ export function WeeklySummaryCard({
   const stats = aggregateLastSevenDays(dataByDate, new Date())
 
   return (
-    <Card aria-label="This week summary">
+    <Card aria-busy={isLoading} aria-label="This week summary">
       <CardContent className="space-y-3 p-6">
         <div className="flex items-baseline justify-between gap-3">
           <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
             this week
           </p>
           <span
-            aria-label={`${stats.totalCompleted} completed this week`}
+            // While `isLoading`, the numeric placeholder (a stale `0` until
+            // the heatmap query settles) must not be announced as a real
+            // weekly total to AT users — swap to a loading sentence and rely
+            // on `aria-busy` for the polite-region cue (CodeRabbit review on
+            // PR #38).
+            aria-label={
+              isLoading
+                ? 'Loading completed count for this week'
+                : `${stats.totalCompleted} completed this week`
+            }
             className={cn(
               'font-mono text-2xl font-medium tabular-nums text-foreground',
               isLoading && 'opacity-40',

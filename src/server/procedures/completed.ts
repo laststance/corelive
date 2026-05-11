@@ -50,7 +50,11 @@ export const getHeatmap = authMiddleware
       // explicit. `getDayDetail` already uses this discipline.
       const todayIso = new Date().toISOString().split('T')[0]!
       const startDate = new Date(`${todayIso}T00:00:00.000Z`)
-      startDate.setUTCDate(startDate.getUTCDate() - days)
+      // Inclusive bounds: `fetchCompletedEntries` uses `gte`/`lte`, so the
+      // window covers `(days - 1)` past calendar dates + today = exactly
+      // `days` dates. Subtracting the full `days` would include one extra
+      // day at the lower edge (CodeRabbit review on PR #38).
+      startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
       // Upper bound = "now" so future-dated rows (clock skew, test seeds)
       // never accidentally surface on the heatmap. fetchCompletedEntries
       // requires an explicit endDate.

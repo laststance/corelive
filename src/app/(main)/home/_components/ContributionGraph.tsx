@@ -172,11 +172,20 @@ export function ContributionGraph() {
   const dateParam = searchParams.get('date')
 
   useEffect(() => {
-    if (!dateParam) return
+    // Closing the dialog when `?date=` is removed or invalidated keeps URL
+    // and dialog state coupled. Without this, navigating from `?date=valid`
+    // → `?date=` (or `?date=garbage`) would leave a stale dialog open even
+    // though the deep-link contract says invalid input keeps the dialog
+    // closed (CodeRabbit review on PR #38).
+    if (!dateParam) {
+      setSelectedDate(null)
+      return
+    }
     const parsed = DayDetailInputSchema.safeParse({ date: dateParam })
     if (parsed.success) {
       setSelectedDate(parsed.data.date)
     } else {
+      setSelectedDate(null)
       toast.error('Invalid date in URL — showing your activity instead.')
     }
   }, [dateParam])
