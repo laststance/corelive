@@ -36,6 +36,7 @@ import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { AddTodoForm } from './AddTodoForm'
+import { CategoryFilterChips } from './CategoryFilterChips'
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import { SortableTodoItem } from './SortableTodoItem'
@@ -383,6 +384,10 @@ export function TodoList() {
           <ContributionGraph />
         </Suspense>
         <WeeklySummaryCard
+          dataByDate={heatmapByDate}
+          isLoading={heatmapLoading}
+        />
+        <CategoryFilterChips
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
