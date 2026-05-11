@@ -147,9 +147,16 @@ function localSundayIso(now: Date): string {
   const local = new Date(now)
   const daysSinceSunday = local.getDay()
   local.setDate(local.getDate() - daysSinceSunday)
-  // Format in local TZ — `toLocaleDateString` with the en-CA locale yields
-  // a YYYY-MM-DD shape without needing to slice an ISO string.
-  return local.toLocaleDateString('en-CA')
+  // Hand-roll the YYYY-MM-DD string from local-TZ getters — ECMAScript
+  // does not spec a stable format for `toLocaleDateString('en-CA')`, and
+  // engine/CLDR updates have flipped it from `yyyy-MM-dd` to `M/d/yyyy`
+  // in the wild (see CodeRabbit thread on PR #39). If that ever happens
+  // again the dismiss key, `shiftIsoDate` input, and `new Date()` parser
+  // would all silently break.
+  const year = local.getFullYear()
+  const month = String(local.getMonth() + 1).padStart(2, '0')
+  const day = String(local.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
@@ -179,11 +186,12 @@ export function SundayDigestCard({
 }: SundayDigestCardProps) {
   const isMounted = useMounted()
 
-  // Stabilize `today` so a fresh `new Date()` per render does not
-  // invalidate the `summary` memo every paint — when the caller omits
-  // `now`, the value is captured once on first render (sufficient: the
-  // digest is a Sunday-only card, no need to track minutes within a day).
-  const today = useMemo(() => now ?? new Date(), [now])
+  // Recompute `today` per render rather than memoizing — if the home page
+  // stays open across a day boundary (Sat→Sun, Sun→Mon), a memoized
+  // `today` would freeze to the mount-day Date and the card would never
+  // appear on the new day. Re-deriving each render is cheap (small
+  // 7-element scan) and is the correctness win.
+  const today = now ?? new Date()
   const isSunday = today.getDay() === SUNDAY_DAY_INDEX
   const weekKey = `${DISMISS_KEY_PREFIX}${localSundayIso(today)}`
 
@@ -216,7 +224,10 @@ export function SundayDigestCard({
   if (isLoading) return null
   if (!isSunday) return null
   if (dismissed) return null
-  if (dataByDate.size === 0) return null
+  // Note: an empty `dataByDate` does NOT suppress the card — a fully
+  // quiet week is exactly the case the "the room was quiet this week —
+  // that is fine too." copy was added for (DESIGN.md north star:
+  // self-affirmation, never failure framing).
 
   const { weekStats, bestDay } = summary
 

@@ -12,6 +12,10 @@ const electronMocks = vi.hoisted(() => ({
   isEnabled: true,
 }))
 
+const clerkMocks = vi.hoisted(() => ({
+  userId: 'user_test_alpha' as string | null,
+}))
+
 vi.mock('./useElectronNotifications', () => ({
   useElectronNotifications: () => ({
     isSupported: electronMocks.isSupported,
@@ -26,6 +30,14 @@ vi.mock('./useElectronNotifications', () => ({
   }),
 }))
 
+vi.mock('@clerk/nextjs', () => ({
+  useUser: () => ({
+    user: clerkMocks.userId ? { id: clerkMocks.userId } : null,
+    isLoaded: true,
+    isSignedIn: clerkMocks.userId !== null,
+  }),
+}))
+
 vi.mock('@/lib/logger', () => ({
   log: {
     debug: vi.fn(),
@@ -35,7 +47,11 @@ vi.mock('@/lib/logger', () => ({
   },
 }))
 
-const STORAGE_KEY = 'corelive.streak-max-tier-notified'
+// Per-user storage key prefix — tests construct the full key by appending
+// the mocked Clerk user id (matches the production format).
+const STORAGE_KEY_PREFIX = 'corelive.streak-max-tier-notified.'
+const TEST_USER_ID = 'user_test_alpha'
+const STORAGE_KEY = `${STORAGE_KEY_PREFIX}${TEST_USER_ID}`
 const TODAY = new Date('2026-05-12T08:00:00.000Z')
 const TODAY_ISO = '2026-05-12'
 
@@ -54,6 +70,7 @@ describe('useStreakNotifications', () => {
     electronMocks.showNotification.mockClear()
     electronMocks.isSupported = true
     electronMocks.isEnabled = true
+    clerkMocks.userId = TEST_USER_ID
     window.localStorage.clear()
   })
 
@@ -223,5 +240,56 @@ describe('useStreakNotifications', () => {
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  it('does nothing when no Clerk user is signed in', () => {
+    // Without a userId we cannot scope the dedupe key per-account —
+    // the hook defers the milestone rather than fire under a global key.
+    clerkMocks.userId = null
+    renderHook(() =>
+      useStreakNotifications({
+        dataByDate: buildConsecutive(7),
+        isLoading: false,
+        now: TODAY,
+      }),
+    )
+    expect(electronMocks.showNotification).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(`${STORAGE_KEY_PREFIX}null`)).toBeNull()
+  })
+
+  it('namespaces the dedupe key per Clerk user (two accounts on one device)', () => {
+    // User A reaches Day 7 → fires once and writes user A's key.
+    clerkMocks.userId = 'user_test_alpha'
+    const { unmount: unmountA } = renderHook(() =>
+      useStreakNotifications({
+        dataByDate: buildConsecutive(7),
+        isLoading: false,
+        now: TODAY,
+      }),
+    )
+    expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
+    expect(
+      window.localStorage.getItem(`${STORAGE_KEY_PREFIX}user_test_alpha`),
+    ).toBe('7')
+    unmountA()
+
+    // User B (same browser) also reaches Day 7. The pre-existing user-A
+    // key MUST NOT suppress user B's milestone.
+    clerkMocks.userId = 'user_test_beta'
+    renderHook(() =>
+      useStreakNotifications({
+        dataByDate: buildConsecutive(7),
+        isLoading: false,
+        now: TODAY,
+      }),
+    )
+    expect(electronMocks.showNotification).toHaveBeenCalledTimes(2)
+    expect(
+      window.localStorage.getItem(`${STORAGE_KEY_PREFIX}user_test_beta`),
+    ).toBe('7')
+    // User A's key is untouched.
+    expect(
+      window.localStorage.getItem(`${STORAGE_KEY_PREFIX}user_test_alpha`),
+    ).toBe('7')
   })
 })

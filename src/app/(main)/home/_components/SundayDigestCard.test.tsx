@@ -73,15 +73,19 @@ describe('SundayDigestCard', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders nothing when the heatmap is empty', () => {
-    const { container } = render(
+  it('renders the quiet-week fallback when the heatmap is empty', () => {
+    // A new user (or a fully quiet week) should still see the digest —
+    // the "quiet week" copy is exactly what the empty path was designed
+    // for (DESIGN.md: self-affirmation on rest weeks too).
+    render(
       <SundayDigestCard
         dataByDate={new Map()}
         isLoading={false}
         now={LOCAL_SUNDAY}
       />,
     )
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.getByLabelText(/quiet sunday recap/i)).toBeInTheDocument()
+    expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
   })
 
   it('renders the digest on Sunday with non-zero data', () => {

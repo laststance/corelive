@@ -1,5 +1,6 @@
 'use client'
 
+import { useUser } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
 
 import type { StreakTier } from '@/lib/calc-streak'
@@ -10,13 +11,29 @@ import { useElectronNotifications } from './useElectronNotifications'
 import type { HeatmapDay } from './useHeatmapData'
 
 /**
- * localStorage key that stores the highest tier ever notified for this user
- * on this device. Once a tier fires, it stays fired forever — the value
- * never decreases. This guarantees the "additive, generous, never decreases
- * without explanation" rule from DESIGN.md D12: rebuilding a broken streak
- * does not re-trigger an already-celebrated milestone.
+ * localStorage key *prefix* that stores the highest tier ever notified.
+ * The full key is `${STORAGE_KEY_PREFIX}${clerkUserId}` so two accounts
+ * sharing one browser/Electron profile do not suppress each other's
+ * milestones. Once a tier fires (per account), it stays fired — the
+ * value never decreases. This guarantees the "additive, generous, never
+ * decreases without explanation" rule from DESIGN.md D12: rebuilding a
+ * broken streak does not re-trigger an already-celebrated milestone.
  */
-const STORAGE_KEY = 'corelive.streak-max-tier-notified'
+const STORAGE_KEY_PREFIX = 'corelive.streak-max-tier-notified.'
+
+/**
+ * Builds the per-user localStorage key. The Clerk `userId` is a stable
+ * `user_…` identifier that survives reloads but resets on sign-out.
+ *
+ * @param userId - Clerk user id from `useUser().user.id`
+ * @returns The fully namespaced localStorage key for this account
+ * @example
+ * storageKeyFor('user_2fT2GATLWCa…')
+ * // => 'corelive.streak-max-tier-notified.user_2fT2GATLWCa…'
+ */
+function storageKeyFor(userId: string): string {
+  return `${STORAGE_KEY_PREFIX}${userId}`
+}
 
 /**
  * Copy bundle for one milestone tier. Voice is "quiet companion, not coach"
@@ -72,10 +89,10 @@ const TIER_COPY: Record<NonNullable<StreakTier>, TierCopy & { tag: string }> = {
  * readStoredTier() // => 0 on first run
  * readStoredTier() // => 7 after Day-7 fires
  */
-function readStoredTier(): number {
+function readStoredTier(storageKey: string): number {
   if (typeof window === 'undefined') return 0
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(storageKey)
     if (!raw) return 0
     const parsed = Number.parseInt(raw, 10)
     if (!Number.isFinite(parsed)) return 0
@@ -96,10 +113,10 @@ function readStoredTier(): number {
  * @example
  * writeStoredTier(7)
  */
-function writeStoredTier(tier: number): void {
+function writeStoredTier(storageKey: string, tier: number): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, String(tier))
+    window.localStorage.setItem(storageKey, String(tier))
   } catch (error) {
     log.warn('Failed to persist streak tier', error)
   }
@@ -152,12 +169,26 @@ export function useStreakNotifications(input: {
   const { dataByDate, isLoading, isRestoring, now } = input
   const { isSupported, isEnabled, showNotification } =
     useElectronNotifications()
+  // Scope the dedupe key to the signed-in Clerk user so two accounts
+  // sharing one browser/Electron profile do not suppress each other's
+  // milestones. When the user is signed out, `userId` is `undefined`
+  // and the effect short-circuits (no heatmap data either, so this is
+  // already a no-op path in practice).
+  const { user } = useUser()
+  const userId = user?.id
 
   // Latch on a ref so a Strict-Mode double-invoke or React 19 re-render does
   // not redundantly call `showNotification` for the same tier inside one
   // session before localStorage write settles. The persistent dedupe is
   // localStorage; this is just the in-memory edge-case guard.
-  const latchedTierRef = useRef<number>(0)
+  //
+  // The latch is keyed by `userId` so a sign-out → sign-in-as-different-user
+  // in the same session does not leak the previous account's tier into the
+  // new account's notification gate (CodeRabbit #4 follow-up).
+  const latchedTierRef = useRef<{ userId: string | null; tier: number }>({
+    userId: null,
+    tier: 0,
+  })
 
   useEffect(() => {
     if (!isSupported || !isEnabled) return
@@ -167,21 +198,33 @@ export function useStreakNotifications(input: {
     // after we'd already latched the wrong tier from a cached snapshot.
     if (isRestoring) return
     if (dataByDate.size === 0) return
+    // Cannot scope the dedupe key without a stable user id; defer the
+    // milestone instead of firing under a global namespace.
+    if (!userId) return
+
+    // Reset the in-memory latch when the signed-in user changes.
+    if (latchedTierRef.current.userId !== userId) {
+      latchedTierRef.current = { userId, tier: 0 }
+    }
 
     const { currentTier } = calcStreak(dataByDate, now ?? new Date())
     if (currentTier === null) return
 
-    const storedTier = Math.max(readStoredTier(), latchedTierRef.current)
+    const storageKey = storageKeyFor(userId)
+    const storedTier = Math.max(
+      readStoredTier(storageKey),
+      latchedTierRef.current.tier,
+    )
     if (currentTier <= storedTier) return
 
     const copy = TIER_COPY[currentTier]
-    latchedTierRef.current = currentTier
+    latchedTierRef.current = { userId, tier: currentTier }
 
     // Write-then-notify: persist the new max tier BEFORE showing so a crash
     // mid-notification (or a user-rejected permission) does not double-fire
     // on next mount. Failing-quiet is intentional (writeStoredTier swallows
     // errors) since over-notification is the worst outcome to recover from.
-    writeStoredTier(currentTier)
+    writeStoredTier(storageKey, currentTier)
     showNotification(copy.title, copy.body, {
       tag: copy.tag,
       silent: false,
@@ -196,5 +239,6 @@ export function useStreakNotifications(input: {
     isEnabled,
     showNotification,
     now,
+    userId,
   ])
 }
