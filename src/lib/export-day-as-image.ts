@@ -81,17 +81,37 @@ async function loadHtmlToImage(): Promise<typeof HtmlToImage> {
  * Renders the share card markup with hardcoded sRGB inline styles. Lives
  * as a string-building function (not a React component) so we don't
  * have to render it through React, mount/unmount via portal, and chase
- * layout-timing races inside html-to-image. The DOM node is appended
- * off-screen, captured, then removed in a finally block.
+ * layout-timing races inside html-to-image.
+ *
+ * Returns BOTH the clipping wrapper and the inner card because of how
+ * html-to-image works: it clones the captured node, copies its computed
+ * style via `cssText`, and renders it inside an SVG `<foreignObject>`.
+ * That means ANY hiding style on the captured node (off-screen `top`,
+ * `opacity: 0`, `visibility: hidden`, `transform: translate`, etc.)
+ * propagates to the clone and produces a blank PNG.
+ *
+ * The fix: leave the card itself completely "visible" (no hiding styles
+ * at all) and put it inside a 0×0 `overflow: hidden` wrapper. The
+ * wrapper clips the card visually so the user never sees it flash on
+ * screen, but the card keeps its full 480×600 computed dimensions and
+ * solid colors — exactly what html-to-image needs to capture content.
+ *
+ * Pass the inner `card` (NOT the wrapper) to `toPng`, append the wrapper
+ * to `document.body`, and remove the wrapper in a `finally` block.
  *
  * @param input - Day payload for the share card
  * @returns
- * - Detached HTMLDivElement ready to be appended to document.body
+ * - `wrapper` — 0×0 clipping container to append to document.body
+ * - `card` — the 480×600 share card to pass into `toPng`
  * @example
- * const node = buildShareCard({ isoDate: '2026-05-12', totalCompleted: 8 })
- * document.body.appendChild(node)
+ * const { wrapper, card } = buildShareCard({ isoDate: '2026-05-12', totalCompleted: 8 })
+ * document.body.appendChild(wrapper)
+ * try { dataUrl = await toPng(card, ...) } finally { wrapper.remove() }
  */
-function buildShareCard(input: ExportDayInput): HTMLDivElement {
+export function buildShareCard(input: ExportDayInput): {
+  wrapper: HTMLDivElement
+  card: HTMLDivElement
+} {
   // Pretty-print the ISO date to a readable form. Use the user's locale
   // so the share card reads natural ("May 12, 2026" vs "12 May 2026")
   // — the share card is for the user, not a public feed.
@@ -110,15 +130,39 @@ function buildShareCard(input: ExportDayInput): HTMLDivElement {
     timeZone: 'UTC',
   })
 
-  const root = document.createElement('div')
-  // Off-screen positioning keeps the card invisible to the live UI
-  // while still being measurable + rendered by the browser. `aria-hidden`
-  // tells AT to skip the temporary tree.
-  root.setAttribute('aria-hidden', 'true')
-  root.style.cssText = [
+  // Clipping wrapper: 0×0 fixed at the viewport origin with overflow
+  // hidden so the card inside doesn't paint anything visible to the
+  // user, but the card's own layout (width: 480, height: 600) stays
+  // intact. `position: fixed` removes the wrapper from document flow
+  // so it doesn't push surrounding content — 0×0 + overflow:hidden
+  // keeps the wrapper invisible regardless of containing block, so a
+  // transformed/filtered ancestor re-anchoring `fixed` doesn't matter.
+  //
+  // CRITICAL: hiding styles MUST live on the wrapper, NOT the card.
+  // html-to-image's `cloneCSSStyle` copies the captured node's
+  // `cssText` onto the clone — any hiding style on the card itself
+  // (top: -10000px / opacity: 0 / visibility: hidden) propagates into
+  // the SVG foreignObject and produces a blank PNG.
+  const wrapper = document.createElement('div')
+  wrapper.setAttribute('aria-hidden', 'true')
+  wrapper.style.cssText = [
     'position: fixed',
-    'top: -10000px',
-    'left: -10000px',
+    'top: 0',
+    'left: 0',
+    'width: 0',
+    'height: 0',
+    'overflow: hidden',
+    'pointer-events: none',
+    'z-index: -1',
+  ].join('; ')
+
+  // Card: visible at full 480×600 with the hardcoded sRGB palette.
+  // No `position` / `top` / `opacity` / `visibility` — those would
+  // propagate to the html-to-image clone and break capture. Default
+  // `position: static` keeps the card flowing inside the wrapper's
+  // clipped box.
+  const card = document.createElement('div')
+  card.style.cssText = [
     'width: 480px',
     'height: 600px',
     'padding: 48px',
@@ -133,7 +177,7 @@ function buildShareCard(input: ExportDayInput): HTMLDivElement {
     'border-radius: 16px',
   ].join('; ')
 
-  root.innerHTML = `
+  card.innerHTML = `
     <div>
       <p style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: ${SHARE_COLORS.mutedForeground}; margin: 0 0 24px 0;">
         corelive · ${escapeHtml(prettyDate)}
@@ -159,7 +203,8 @@ function buildShareCard(input: ExportDayInput): HTMLDivElement {
     </div>
   `
 
-  return root
+  wrapper.appendChild(card)
+  return { wrapper, card }
 }
 
 /**
@@ -221,10 +266,15 @@ export async function exportDayAsImage(input: ExportDayInput): Promise<string> {
   }
 
   const { toPng } = await loadHtmlToImage()
-  const node = buildShareCard(input)
-  document.body.appendChild(node)
+  const { wrapper, card } = buildShareCard(input)
+  document.body.appendChild(wrapper)
   try {
-    return await toPng(node, {
+    // Pass the inner `card` (NOT the wrapper). html-to-image clones the
+    // node, copies its computed style via `cssText`, and renders it in a
+    // SVG `<foreignObject>` — the card's solid dimensions/colors are
+    // what produces visible pixels. The wrapper exists only to hide the
+    // card from the user; html-to-image never sees the wrapper.
+    return await toPng(card, {
       // The card already has a hardcoded background; passing it again
       // tells html-to-image to fill the canvas BEFORE drawing the node,
       // which avoids transparent pixels at the rounded-corner edges.
@@ -237,6 +287,6 @@ export async function exportDayAsImage(input: ExportDayInput): Promise<string> {
       cacheBust: true,
     })
   } finally {
-    node.remove()
+    wrapper.remove()
   }
 }
