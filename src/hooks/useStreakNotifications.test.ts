@@ -194,4 +194,34 @@ describe('useStreakNotifications', () => {
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe('7')
   })
+
+  it('treats a spurious-but-finite stored value as unset (defends against tamper / future schema)', () => {
+    // 5000 is finite and positive but not a canonical tier — without
+    // validation it would block every real future milestone forever.
+    window.localStorage.setItem(STORAGE_KEY, '5000')
+    renderHook(() =>
+      useStreakNotifications({
+        dataByDate: buildConsecutive(7),
+        isLoading: false,
+        now: TODAY,
+      }),
+    )
+    expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('7')
+  })
+
+  it('skips the effect while TanStack Query is rehydrating its persister', () => {
+    // A stale persisted snapshot must not be allowed to latch the wrong
+    // tier — the hook should wait until `isRestoring` flips to false.
+    renderHook(() =>
+      useStreakNotifications({
+        dataByDate: buildConsecutive(7),
+        isLoading: false,
+        isRestoring: true,
+        now: TODAY,
+      }),
+    )
+    expect(electronMocks.showNotification).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
 })

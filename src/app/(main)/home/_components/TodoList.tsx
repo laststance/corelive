@@ -124,9 +124,13 @@ export function TodoList() {
   // Streak milestone notifications (Electron-only; no-ops in the web build).
   // The hook is fire-and-forget — localStorage dedupes per-tier so a single
   // crossing of 7/30/100/365 days fires the macOS banner exactly once.
+  // `isRestoring` is passed so the effect waits for the TanStack persister
+  // before reading data — a stale cached snapshot must not fire a wrong
+  // tier and latch the localStorage max permanently.
   useStreakNotifications({
     dataByDate: heatmapByDate,
     isLoading: heatmapLoading,
+    isRestoring,
   })
 
   /**

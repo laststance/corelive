@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 
 import type { StreakTier } from '@/lib/calc-streak'
-import { calcStreak } from '@/lib/calc-streak'
+import { calcStreak, STREAK_TIERS } from '@/lib/calc-streak'
 import { log } from '@/lib/logger'
 
 import { useElectronNotifications } from './useElectronNotifications'
@@ -61,14 +61,16 @@ const TIER_COPY: Record<NonNullable<StreakTier>, TierCopy & { tag: string }> = {
 
 /**
  * Reads the stored "max tier ever notified" from localStorage. Returns 0
- * when the key is absent, malformed, or localStorage itself is unavailable
- * (private browsing / strict CSP) so the first run after install starts
- * from a clean slate without throwing.
+ * when the key is absent, malformed, or holds a value that is not one of
+ * the canonical tiers (someone hand-edited it, or a future version stored
+ * a different schema) — restricting to {@link STREAK_TIERS} keeps a
+ * tampered/spurious "5000" from blocking every real future milestone.
  *
  * @returns
- * - The stored tier (one of 0/7/30/100/365)
+ * - One of 0 / 7 / 30 / 100 / 365 (the canonical tier set, or 0 on miss)
  * @example
  * readStoredTier() // => 0 on first run
+ * readStoredTier() // => 7 after Day-7 fires
  */
 function readStoredTier(): number {
   if (typeof window === 'undefined') return 0
@@ -76,7 +78,10 @@ function readStoredTier(): number {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return 0
     const parsed = Number.parseInt(raw, 10)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+    if (!Number.isFinite(parsed)) return 0
+    // Only accept values that exist in the canonical tier set — guards
+    // against a stale schema or hand-edited value capping real progress.
+    return (STREAK_TIERS as readonly number[]).includes(parsed) ? parsed : 0
   } catch {
     return 0
   }
@@ -125,19 +130,26 @@ function writeStoredTier(tier: number): void {
  *
  * @param input.dataByDate - Per-day heatmap entries from `useHeatmapData()`
  * @param input.isLoading - Whether the heatmap query is still settling
+ * @param input.isRestoring - TanStack Query persister rehydration sentinel
+ *   (`useIsRestoring()`). Skipping the effect while restoring prevents a
+ *   stale persisted snapshot from firing the wrong tier *before* the live
+ *   fetch settles — without this gate a long-offline user could trip the
+ *   max-tier latch with last week's data and never see future milestones.
  * @param input.now - Optional injection for tests; defaults to `new Date()`
  * @returns
  * - Nothing — the hook is fire-and-forget
  * @example
  * const { dataByDate, isLoading } = useHeatmapData()
- * useStreakNotifications({ dataByDate, isLoading })
+ * const isRestoring = useIsRestoring()
+ * useStreakNotifications({ dataByDate, isLoading, isRestoring })
  */
 export function useStreakNotifications(input: {
   dataByDate: Map<string, HeatmapDay>
   isLoading: boolean
+  isRestoring?: boolean
   now?: Date
 }): void {
-  const { dataByDate, isLoading, now } = input
+  const { dataByDate, isLoading, isRestoring, now } = input
   const { isSupported, isEnabled, showNotification } =
     useElectronNotifications()
 
@@ -150,6 +162,10 @@ export function useStreakNotifications(input: {
   useEffect(() => {
     if (!isSupported || !isEnabled) return
     if (isLoading) return
+    // Wait for the TanStack Query persister to finish rehydrating before
+    // reading streak data — otherwise the live fetch may swap in moments
+    // after we'd already latched the wrong tier from a cached snapshot.
+    if (isRestoring) return
     if (dataByDate.size === 0) return
 
     const { currentTier } = calcStreak(dataByDate, now ?? new Date())
@@ -172,5 +188,13 @@ export function useStreakNotifications(input: {
     }).catch((error) => {
       log.warn('Failed to show streak tier notification', error)
     })
-  }, [dataByDate, isLoading, isSupported, isEnabled, showNotification, now])
+  }, [
+    dataByDate,
+    isLoading,
+    isRestoring,
+    isSupported,
+    isEnabled,
+    showNotification,
+    now,
+  ])
 }

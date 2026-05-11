@@ -116,7 +116,7 @@ describe('SundayDigestCard', () => {
     expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
   })
 
-  it('shows the best day inside the week', () => {
+  it('shows the brightest day inside the week', () => {
     const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
     const data = buildWeekFixture(2, [{ date: wednesday, count: 6 }])
     render(
@@ -126,9 +126,23 @@ describe('SundayDigestCard', () => {
         now={LOCAL_SUNDAY}
       />,
     )
-    // Best day surfaces inside the "best day:" line; assert the count is rendered
-    expect(screen.getByText(/best day/i)).toBeInTheDocument()
-    expect(screen.getByText(/\(6\)/)).toBeInTheDocument()
+    // The "brightest day:" line surfaces the best day; assert the spelled-out
+    // count ("6 things") renders — the previous "(6)" framing read as KPI.
+    expect(screen.getByText(/brightest day/i)).toBeInTheDocument()
+    expect(screen.getByText(/6 things/i)).toBeInTheDocument()
+  })
+
+  it('uses the singular "1 thing" for a one-item brightest day', () => {
+    const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
+    const data = buildWeekFixture(0, [{ date: wednesday, count: 1 }])
+    render(
+      <SundayDigestCard
+        dataByDate={data}
+        isLoading={false}
+        now={LOCAL_SUNDAY}
+      />,
+    )
+    expect(screen.getByText(/1 thing(?!s)/i)).toBeInTheDocument()
   })
 
   it('hides the card after the dismiss button is clicked and persists per-week', () => {

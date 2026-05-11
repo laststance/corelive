@@ -179,7 +179,11 @@ export function SundayDigestCard({
 }: SundayDigestCardProps) {
   const isMounted = useMounted()
 
-  const today = now ?? new Date()
+  // Stabilize `today` so a fresh `new Date()` per render does not
+  // invalidate the `summary` memo every paint — when the caller omits
+  // `now`, the value is captured once on first render (sufficient: the
+  // digest is a Sunday-only card, no need to track minutes within a day).
+  const today = useMemo(() => now ?? new Date(), [now])
   const isSunday = today.getDay() === SUNDAY_DAY_INDEX
   const weekKey = `${DISMISS_KEY_PREFIX}${localSundayIso(today)}`
 
@@ -191,10 +195,19 @@ export function SundayDigestCard({
     ? dismissedAt === weekKey || readDismissed(weekKey)
     : false
 
-  // Derive the stats once per `dataByDate` identity.
+  // Derive the stats once per `dataByDate` / `today` identity.
+  //
+  // Why anchor on UTC-midnight-of-local-Sunday: `aggregateLastSevenDays`
+  // builds its window via `formatUTCDateISO`, which would otherwise read
+  // the UTC calendar day of `today` — at e.g. JST Sunday 06:00 that day
+  // is still Saturday in UTC, so the user would see a "Sunday recap" that
+  // misses Sunday's data. Re-deriving the anchor from the local Sunday's
+  // ISO string keeps the visibility window (local Sunday) and the data
+  // window (the same Sunday key) in lockstep.
   const summary = useMemo(() => {
     const sundayIso = localSundayIso(today)
-    const weekStats = aggregateLastSevenDays(dataByDate, today)
+    const sundayAnchor = new Date(`${sundayIso}T00:00:00.000Z`)
+    const weekStats = aggregateLastSevenDays(dataByDate, sundayAnchor)
     const bestDay = pickBestDay(dataByDate, sundayIso)
     return { weekStats, bestDay }
   }, [dataByDate, today])
@@ -239,11 +252,13 @@ export function SundayDigestCard({
 
         {bestDay ? (
           <p className="text-sm text-muted-foreground">
-            best day:{' '}
+            brightest day:{' '}
             <span className="text-foreground">
               {formatShortDay(bestDay.date)}
             </span>{' '}
-            <span className="font-mono tabular-nums">({bestDay.count})</span>
+            <span className="font-mono tabular-nums">
+              {bestDay.count} {bestDay.count === 1 ? 'thing' : 'things'}
+            </span>
           </p>
         ) : null}
 
