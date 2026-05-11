@@ -84,3 +84,5 @@ _trials/
 .gstack/
 .claude/goal.json
 .claude/goal-notes.md
+.claude/auto.json
+.claude/auto-notes.md
