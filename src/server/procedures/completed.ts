@@ -40,9 +40,17 @@ export const getHeatmap = authMiddleware
       const { days } = input
       const { user } = context
 
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - days)
-      startDate.setHours(0, 0, 0, 0)
+      // UTC-anchored bounds — `fetchCompletedEntries` buckets via
+      // `entry.completedAt.toISOString().split('T')[0]` (UTC date string).
+      // If we anchored `startDate` to *local* midnight (the previous
+      // implementation), rows in the first/last UTC hours that straddle
+      // the local-vs-UTC boundary would mis-bucket on any non-UTC host
+      // (e.g., a regional deployment). Vercel happens to run UTC by
+      // default, which masked the bug — but the contract should be
+      // explicit. `getDayDetail` already uses this discipline.
+      const todayIso = new Date().toISOString().split('T')[0]!
+      const startDate = new Date(`${todayIso}T00:00:00.000Z`)
+      startDate.setUTCDate(startDate.getUTCDate() - days)
       // Upper bound = "now" so future-dated rows (clock skew, test seeds)
       // never accidentally surface on the heatmap. fetchCompletedEntries
       // requires an explicit endDate.

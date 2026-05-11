@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { orpc } from '@/lib/orpc/client-query'
@@ -49,14 +50,23 @@ export function useHeatmapData(days: number = 365) {
     enabled: isClerkQueryReady,
   })
 
-  const heatmapValues =
-    data?.data.map((d) => ({
-      date: d.date.replace(/-/g, '/'),
-      count: d.count,
-    })) ?? []
-
-  const dataByDate = new Map<string, HeatmapDay>(
-    data?.data.map((d) => [d.date, d]) ?? [],
+  // Derived values are memoized on `data` identity. Without this, every call
+  // site (ContributionGraph, WeeklySummaryCard) would receive a fresh Map and
+  // Array on each render, busting downstream `useMemo` dep keys
+  // (calcMonthlyMaxDates, aggregateLastSevenDays). TanStack Query already
+  // dedups the network request — this is the in-render dedup.
+  const { heatmapValues, dataByDate } = useMemo(
+    () => ({
+      heatmapValues:
+        data?.data.map((d) => ({
+          date: d.date.replace(/-/g, '/'),
+          count: d.count,
+        })) ?? [],
+      dataByDate: new Map<string, HeatmapDay>(
+        data?.data.map((d) => [d.date, d]) ?? [],
+      ),
+    }),
+    [data],
   )
 
   return {

@@ -49,6 +49,14 @@ export function useKeyboardNav({
     if (!isOpen) return undefined
 
     function handleKey(event: KeyboardEvent): void {
+      // IME composition guard — Japanese/Chinese/Korean input methods fire
+      // a keydown with `isComposing=true` (legacy `keyCode === 229`) before
+      // the composition resolves. Without this, pressing `j` to seed じ (ji)
+      // in romaji input would both feed the composition buffer AND step the
+      // dialog. The repo CLAUDE.md tags this as a JP-user-facing usability
+      // path, so this guard runs before the INPUT/TEXTAREA check.
+      if (event.isComposing || event.keyCode === 229) return
+
       // Skip navigation while the user is typing — otherwise `j` / `k`
       // would both insert a literal character and step the dialog.
       const target = event.target as HTMLElement | null

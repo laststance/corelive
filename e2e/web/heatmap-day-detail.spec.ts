@@ -4,12 +4,19 @@ import { test, expect, type Page } from '@playwright/test'
 import { resetDatabase } from './_helpers/db'
 
 /**
- * Fixed historical date used as the dialog "anchor" for every test that needs
- * a starting day. April 1 2026 is well within the trailing 1-year heatmap
- * range (today = 2026-05-11 per the test-environment clock) and stays the
- * same regardless of when the suite is replayed because both the URL param
- * and the label are hard-coded — there is no `new Date()` involved in the
- * E2E assertions, so the spec is replay-deterministic per plan §3.5.
+ * Fixed historical date used as the dialog "anchor" for every test that
+ * needs a starting day. The URL param and the label are both hard-coded
+ * (no `new Date()` in any assertion), so the spec is replay-deterministic
+ * per plan §3.5 *regardless of how far past* today's date drifts from
+ * when these tests were authored — `getDayDetail` accepts any valid
+ * calendar date, it does not gate on the heatmap's visible range.
+ *
+ * Caveat: cells for `DEEP_LINK_DATE` may fall outside the heatmap when
+ * replayed >365 days later, but that only affects cell *clicking* tests,
+ * and these tests open the dialog via `?date=` rather than via the cell,
+ * so they remain valid. If a future test exercises cell clicks, install
+ * `page.clock` to pin the test-environment date instead of relying on
+ * the trailing year being wide enough.
  */
 const DEEP_LINK_DATE = '2026-04-01'
 const DEEP_LINK_DATE_LABEL = 'April 1, 2026'
@@ -55,7 +62,11 @@ async function waitForAppReady(page: Page) {
  */
 async function openDialogViaDeepLink(page: Page, date: string) {
   await page.goto(`/home?date=${date}`)
-  await page.waitForLoadState('networkidle')
+  // No `waitForLoadState('networkidle')` — Clerk + TanStack Query background
+  // refetches keep the page from ever reaching network-idle on Vercel-like
+  // environments, which made earlier drafts of this spec flaky. The app
+  // readiness gate + dialog role locator are sufficient to know the deep
+  // link has resolved (Codex review MEDIUM).
   await waitForAppReady(page)
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
 }
@@ -87,7 +98,6 @@ test.describe('Heatmap Day Detail E2E', () => {
     }) => {
       // Arrange — non-ISO date triggers the Zod regex-fail branch.
       await page.goto('/home?date=not-a-date')
-      await page.waitForLoadState('networkidle')
       await waitForAppReady(page)
 
       // Assert — toast surfaces the invalid-URL message AND the dialog stays
@@ -108,7 +118,6 @@ test.describe('Heatmap Day Detail E2E', () => {
       // arm of the validator so a regression that drops the refine surfaces
       // here, not in production.
       await page.goto('/home?date=2026-02-31')
-      await page.waitForLoadState('networkidle')
       await waitForAppReady(page)
 
       // Assert — same toast + closed-dialog outcome as the regex-fail branch.

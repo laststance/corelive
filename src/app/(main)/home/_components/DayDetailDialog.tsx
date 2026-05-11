@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { match } from 'ts-pattern'
 
@@ -117,17 +117,26 @@ function getDayState(dayCount: number): DayState {
 
 /**
  * Formats a YYYY-MM-DD date string to a long-form readable label.
+ *
+ * Parses + formats in UTC so the displayed date matches the bucket the
+ * server, heatmap cell, URL `?date=` param, and `shiftIsoDate` all operate
+ * on. Without `timeZone: 'UTC'` a user in (say) UTC-8 sees "March 31, 2026"
+ * for `2026-04-01` because `new Date('2026-04-01...')` is UTC midnight and
+ * `toLocaleDateString` defaults to local TZ — the subtitle drifts one day
+ * back relative to every other surface.
+ *
  * @param isoDate - YYYY-MM-DD date string
  * @returns Long-form date like "May 10, 2026"
  * @example
- * formatDate("2026-05-10") // => "May 10, 2026"
+ * formatDate("2026-05-10") // => "May 10, 2026" (in any timezone)
  */
 function formatDate(isoDate: string): string {
-  const parsed = new Date(`${isoDate}T00:00:00`)
+  const parsed = new Date(`${isoDate}T00:00:00.000Z`)
   return parsed.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
+    timeZone: 'UTC',
   })
 }
 
@@ -175,11 +184,17 @@ export function DayDetailDialog({
   onNavigate,
 }: DayDetailDialogProps) {
   const isClerkQueryReady = useClerkQueryReady()
-  const { data, isLoading } = useQuery({
+  // `placeholderData: keepPreviousData` so that pressing j/k or the < >
+  // chevrons doesn't flash the header back to "rest day" while the next
+  // day's query is in flight. The previous day's count + state band hold
+  // until the new data lands — TanStack Query v5 marks the result as
+  // `isPlaceholderData` so we can still gate the task list separately.
+  const { data, isLoading, isPlaceholderData } = useQuery({
     ...orpc.completed.dayDetail.queryOptions({
       input: { date: date ?? '1970-01-01' },
     }),
     enabled: isClerkQueryReady && date !== null,
+    placeholderData: keepPreviousData,
   })
 
   const isOpen = date !== null
@@ -247,7 +262,7 @@ export function DayDetailDialog({
               </DialogDescription>
             </DialogHeader>
 
-            {isLoading ? (
+            {isLoading || isPlaceholderData ? (
               <p className="text-sm text-muted-foreground">…</p>
             ) : dayCount === 0 ? (
               <p className="font-serif text-sm italic text-muted-foreground">

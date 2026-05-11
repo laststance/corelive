@@ -268,8 +268,17 @@ export function TodoList() {
   }
 
   useEffect(() => {
+    // Cross-window sync: BrainDump / Floating Navigator completions broadcast
+    // via the BroadcastChannel and also write to the Completed table, so the
+    // Home heatmap + day-detail caches need invalidation alongside the todo
+    // list. Without these two extra keys, completing a task in BrainDump
+    // leaves the main heatmap stale until reload (Codex review HIGH).
     return subscribeToTodoSync(() => {
       queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
+      queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+      queryClient.invalidateQueries({
+        queryKey: orpc.completed.dayDetail.key(),
+      })
     })
   }, [queryClient])
 

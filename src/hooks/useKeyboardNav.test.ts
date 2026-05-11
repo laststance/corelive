@@ -127,6 +127,49 @@ describe('useKeyboardNav', () => {
     document.body.removeChild(editable)
   })
 
+  it('suppresses navigation during IME composition (isComposing)', () => {
+    // Pressing `j` while seeding `じ` (ji) in a Japanese IME fires a keydown
+    // with `isComposing=true` before the composition resolves. The hook must
+    // skip dispatch — otherwise the user would both feed the IME buffer AND
+    // step the day-detail dialog.
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    renderHook(() => useKeyboardNav({ isOpen: true, onPrev, onNext }))
+
+    act(() => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'j',
+        bubbles: true,
+        cancelable: true,
+        isComposing: true,
+      })
+      window.dispatchEvent(event)
+    })
+
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('suppresses navigation when keyCode is 229 (legacy IME signal)', () => {
+    // Older IMEs / browsers report composition via `keyCode === 229` without
+    // setting `isComposing`. The hook checks both so the JP path stays
+    // robust across input-method implementations.
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    renderHook(() => useKeyboardNav({ isOpen: true, onPrev, onNext }))
+
+    act(() => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'j',
+        bubbles: true,
+        cancelable: true,
+        keyCode: 229,
+      })
+      window.dispatchEvent(event)
+    })
+
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
   it('removes the listener on unmount', () => {
     const onPrev = vi.fn()
     const onNext = vi.fn()

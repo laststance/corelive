@@ -272,6 +272,9 @@ export function ContributionGraph() {
                 // ◎ overlay marks each month's peak day. Painted in primary-foreground so
                 // it reads against the warmer L3/L4 bands without breaking the palette;
                 // pointer-events: none keeps the rect's click + tooltip intact.
+                // aria-hidden because the glyph is decorative — VoiceOver/NVDA would
+                // otherwise announce "circled bullet" between every neighboring cell's
+                // tooltip, which is noisy and adds no information the rect doesn't carry.
                 const monthlyPeakMark = isMonthlyPeak ? (
                   <text
                     x={Number(props.x) + Number(props.width) / 2}
@@ -280,6 +283,7 @@ export function ContributionGraph() {
                     dominantBaseline="central"
                     fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
                     fill="var(--primary-foreground)"
+                    aria-hidden
                     style={{ pointerEvents: 'none' }}
                   >
                     ◎
