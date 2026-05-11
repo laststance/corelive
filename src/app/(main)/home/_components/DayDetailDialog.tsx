@@ -1,7 +1,8 @@
 'use client'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
+import { useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,8 @@ import {
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
+import { exportDayAsImage } from '@/lib/export-day-as-image'
+import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { cn } from '@/lib/utils'
 
@@ -167,6 +170,40 @@ function getTodayDateString(): string {
 }
 
 /**
+ * Picks the single most-used category name across a day's completed
+ * tasks. Used by the share card to render the "mostly <category>" line.
+ * Ties broken alphabetically (locale-insensitive 'en') so two days with
+ * the same task mix produce identical share cards across machines.
+ *
+ * @param tasks - The day's completed tasks
+ * @returns
+ * - Category name with the highest occurrence
+ * - `null` when no task carries a category
+ * @example
+ * getTopCategoryName([
+ *   { category: { name: 'writing' } },
+ *   { category: { name: 'reading' } },
+ *   { category: { name: 'writing' } },
+ * ]) // => 'writing'
+ */
+function getTopCategoryName<T extends { category?: { name: string } | null }>(
+  tasks: ReadonlyArray<T>,
+): string | null {
+  const counts = new Map<string, number>()
+  for (const task of tasks) {
+    const name = task.category?.name
+    if (!name) continue
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+  if (counts.size === 0) return null
+  return Array.from(counts.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1]
+    // Deterministic tie-break — locale-insensitive so CI/local agree.
+    return a[0].localeCompare(b[0], 'en')
+  })[0]![0]
+}
+
+/**
  * Day-detail dialog opened by clicking a Heatmap cell. Renders the day's
  * level band (paper → terracotta), italic state name, voice line, and a
  * compact list of the day's completed tasks. The cathedral-lit halo (soft
@@ -184,6 +221,7 @@ export function DayDetailDialog({
   onNavigate,
 }: DayDetailDialogProps) {
   const isClerkQueryReady = useClerkQueryReady()
+  const [isSaving, setIsSaving] = useState(false)
   // `placeholderData: keepPreviousData` so that pressing j/k or the < >
   // chevrons doesn't flash the header back to "rest day" while the next
   // day's query is in flight. The previous day's count + state band hold
@@ -201,6 +239,37 @@ export function DayDetailDialog({
   const dayCount = data?.count ?? 0
   const state = getDayState(dayCount)
   const isToday = date !== null && date === getTodayDateString()
+
+  /**
+   * Captures the day's stats as a PNG via html-to-image and triggers a
+   * browser download. The button stays disabled while a previous capture
+   * is in flight so a double-click doesn't spawn parallel toPng calls
+   * (each of which would append its own off-screen card).
+   */
+  async function handleShare() {
+    if (!date || dayCount === 0 || isSaving) return
+    setIsSaving(true)
+    try {
+      const topCategoryName = data?.tasks
+        ? getTopCategoryName(data.tasks)
+        : null
+      const dataUrl = await exportDayAsImage({
+        isoDate: date,
+        totalCompleted: dayCount,
+        topCategoryName,
+      })
+      const anchor = document.createElement('a')
+      anchor.href = dataUrl
+      anchor.download = `corelive-${date}.png`
+      anchor.click()
+    } catch (error) {
+      // log.warn keeps the error visible without bubbling a toast — the
+      // button re-enables in the finally so the user can simply retry.
+      log.warn('Failed to export day as image', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   // j/k keyboard nav reuses the same `onNavigate` contract as the `< >`
   // buttons, so the dialog has a single source of truth for day-stepping.
@@ -233,29 +302,46 @@ export function DayDetailDialog({
                     {formatDate(date)}
                   </p>
                 </div>
-                {/* `mr-8` clears the Dialog's absolute-positioned close X (right-4) so the chevrons don't visually collide with it */}
-                {onNavigate && (
-                  <div className="ml-auto mr-8 flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => onNavigate(-1)}
-                      aria-label="Previous day"
-                    >
-                      <ChevronLeft />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => onNavigate(1)}
-                      aria-label="Next day"
-                    >
-                      <ChevronRight />
-                    </Button>
-                  </div>
-                )}
+                {/* `mr-8` clears the Dialog's absolute-positioned close X (right-4) so action buttons don't visually collide with it */}
+                <div className="ml-auto mr-8 flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={handleShare}
+                    disabled={
+                      isSaving ||
+                      dayCount === 0 ||
+                      isLoading ||
+                      isPlaceholderData
+                    }
+                    aria-label="Save as image"
+                  >
+                    <ImageDown />
+                  </Button>
+                  {onNavigate && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => onNavigate(-1)}
+                        aria-label="Previous day"
+                      >
+                        <ChevronLeft />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => onNavigate(1)}
+                        aria-label="Next day"
+                      >
+                        <ChevronRight />
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
               <DialogDescription className="pt-1 font-serif text-sm italic text-muted-foreground">
                 {state.voice}
