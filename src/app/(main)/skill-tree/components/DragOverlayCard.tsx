@@ -8,7 +8,7 @@
  * @returns A visually distinct, slightly rotated card with no pointer events.
  *
  * @example
- * import { DragOverlay } from '@dnd-kit/core'
+ * import { DragOverlay } from '@dnd-kit/react'
  *
  * <DragOverlay>
  *   {activeTodo ? <DragOverlayCard text={activeTodo.text} /> : null}

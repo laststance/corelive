@@ -1,4 +1,4 @@
-import { DndContext } from '@dnd-kit/core'
+import { DragDropProvider } from '@dnd-kit/react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
@@ -7,7 +7,7 @@ import type { TodoId, TodoText } from '../lib/domain-types'
 import { TaskPoolCard } from './TaskPoolCard'
 
 function wrap(ui: React.ReactNode) {
-  return <DndContext>{ui}</DndContext>
+  return <DragDropProvider>{ui}</DragDropProvider>
 }
 
 /**

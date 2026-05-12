@@ -1,7 +1,6 @@
 'use client'
 
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useSortable } from '@dnd-kit/react/sortable'
 import React from 'react'
 
 import type { Todo } from './TodoItem'
@@ -9,6 +8,7 @@ import { TodoItem } from './TodoItem'
 
 interface SortableTodoItemProps {
   todo: Todo
+  index: number
   onToggleComplete: (id: string) => void
   onDelete: (id: string) => void
   onUpdateNotes?: (id: string, notes: string) => void
@@ -17,37 +17,37 @@ interface SortableTodoItemProps {
 /**
  * Wrapper component that makes TodoItem draggable using dnd-kit.
  * Provides drag handle functionality for reordering todos.
+ * @param todo - Todo item to render and register as sortable.
+ * @param index - Current index within the pending todo list.
+ * @param onToggleComplete - Callback fired when completion changes.
+ * @param onDelete - Callback fired when the item is deleted.
+ * @param onUpdateNotes - Optional callback fired when notes change.
+ * @returns A sortable wrapper around the TodoItem row.
+ * @example
+ * <SortableTodoItem todo={todo} index={0} onToggleComplete={toggle} onDelete={remove} />
  */
 export function SortableTodoItem({
   todo,
+  index,
   onToggleComplete,
   onDelete,
   onUpdateNotes,
 }: SortableTodoItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: todo.id })
+  const { ref, handleRef, isDragging } = useSortable({ id: todo.id, index })
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 1 : 0,
   }
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={ref} style={style}>
       <TodoItem
         todo={todo}
         onToggleComplete={onToggleComplete}
         onDelete={onDelete}
         onUpdateNotes={onUpdateNotes}
-        dragHandleProps={{ ...attributes, ...listeners }}
+        dragHandleRef={handleRef}
         isDragging={isDragging}
       />
     </div>

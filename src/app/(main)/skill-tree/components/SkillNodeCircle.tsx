@@ -1,6 +1,6 @@
 'use client'
 
-import { useDroppable } from '@dnd-kit/core'
+import { useDroppable } from '@dnd-kit/react'
 import React from 'react'
 import { match } from 'ts-pattern'
 
@@ -45,9 +45,9 @@ export function SkillNodeCircle({
   xp,
   onClick,
 }: SkillNodeCircleProps) {
-  // dnd-kit ID namespace: node-* for SkillNode droppables, todo-* for Todo draggables (Task 14).
-  // Prevents collision since both Prisma models use autoincrement integers.
-  const { setNodeRef, isOver } = useDroppable({ id: `node-${id}` })
+  // dnd-kit ID namespace: node-* for SkillNode droppables, todo-* for Todo draggables.
+  // Prevents collisions because both Prisma models use autoincrement integers.
+  const { ref, isDropTarget } = useDroppable({ id: `node-${id}` })
   const { level, progress, next } = xpToLevel(xp)
 
   const ariaLabel =
@@ -59,8 +59,7 @@ export function SkillNodeCircle({
 
   return (
     <g
-      // @dnd-kit/core types setNodeRef as HTMLElement; SVGGElement is safe at runtime.
-      ref={setNodeRef as unknown as React.Ref<SVGGElement>}
+      ref={ref as React.Ref<SVGGElement>}
       // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
       className="st-node-group"
       role="button"
@@ -230,7 +229,7 @@ export function SkillNodeCircle({
         .exhaustive()}
 
       {/* Hover/selection halo */}
-      {isOver && (
+      {isDropTarget && (
         <circle
           cx={cx}
           cy={cy}

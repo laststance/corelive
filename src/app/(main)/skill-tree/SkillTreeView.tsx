@@ -1,22 +1,17 @@
 'use client'
 
 import {
-  DndContext,
+  DragDropProvider,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
-  type UniqueIdentifier,
-} from '@dnd-kit/core'
+} from '@dnd-kit/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useOptimistic, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { skillTreeSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
 
 import { ConstellationCanvas } from './components/ConstellationCanvas'
@@ -140,37 +135,36 @@ export function SkillTreeView() {
     },
   })
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
-    }),
-    useSensor(KeyboardSensor),
-  )
-
+  /**
+   * Starts the drag overlay when a completed todo card begins dragging.
+   * @param event - Latest dnd-kit drag-start event from DragDropProvider.
+   * @returns
+   * - No return value; non-todo drags are ignored.
+   * @example
+   * handleDragStart(event)
+   */
   function handleDragStart(event: DragStartEvent) {
-    const todoId = parseTodoDragId(event.active.id)
+    const todoId = parseTodoDragId(event.operation.source?.id)
     if (todoId !== null) {
       setActiveDragId(todoId)
     }
   }
 
-  // dnd-kit fires onDragCancel (not onDragEnd) when the user presses Escape
-  // mid-drag. Without this handler, activeDragId would stay set and the drag
-  // overlay would remain rendered until the next successful drop.
-  function handleDragCancel() {
-    setActiveDragId(null)
-  }
-
+  /**
+   * Assigns a completed todo to the skill node that received the drop.
+   * @param event - Latest dnd-kit drag-end event from DragDropProvider.
+   * @returns
+   * - No return value; canceled drags and invalid targets exit early.
+   * @example
+   * handleDragEnd(event)
+   */
   function handleDragEnd(event: DragEndEvent) {
     setActiveDragId(null)
-    const { active, over } = event
-    if (!over) return
+    if (event.canceled) return
 
-    const todoId = parseTodoDragId(active.id)
-    const nodeId = parseNodeDropId(over.id)
+    const { source, target } = event.operation
+    const todoId = parseTodoDragId(source?.id)
+    const nodeId = parseNodeDropId(target?.id)
     if (todoId === null || nodeId === null) return
 
     // Async transition is required for useOptimistic to hold its optimistic
@@ -326,10 +320,9 @@ export function SkillTreeView() {
     : 0
 
   return (
-    <DndContext
-      sensors={sensors}
+    <DragDropProvider
+      sensors={skillTreeSensors}
       onDragStart={handleDragStart}
-      onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
       <div data-skill-tree="true" className="flex h-full w-full flex-col">
@@ -394,7 +387,7 @@ export function SkillTreeView() {
           <DragOverlayCard text={activeTodoText} />
         ) : null}
       </DragOverlay>
-    </DndContext>
+    </DragDropProvider>
   )
 }
 
@@ -402,7 +395,7 @@ export function SkillTreeView() {
  * Parses a draggable DnD id of the form `todo-<number>` into its numeric todo id.
  * Rejects zero and negative ids because Prisma autoincrement ids are always
  * positive integers — guards against `Number('')` coercing `"todo-"` to `0`.
- * @param id - The raw `UniqueIdentifier` from `@dnd-kit/core`.
+ * @param id - The raw id from the latest dnd-kit drag source.
  * @returns
  * - The todo id as a positive integer when the id has the `todo-` prefix
  *   and the suffix is a positive integer.
@@ -415,7 +408,9 @@ export function SkillTreeView() {
  * parseTodoDragId('todo-0')    // => null
  * parseTodoDragId('node-3')    // => null
  */
-function parseTodoDragId(id: UniqueIdentifier): TodoId | null {
+function parseTodoDragId(
+  id: string | number | null | undefined,
+): TodoId | null {
   const s = String(id)
   if (!s.startsWith('todo-')) return null
   const n = Number(s.slice('todo-'.length))
@@ -426,7 +421,7 @@ function parseTodoDragId(id: UniqueIdentifier): TodoId | null {
  * Parses a droppable DnD id of the form `node-<number>` into its numeric node id.
  * Rejects zero and negative ids because Prisma autoincrement ids are always
  * positive integers — guards against `Number('')` coercing `"node-"` to `0`.
- * @param id - The raw `UniqueIdentifier` from `@dnd-kit/core`.
+ * @param id - The raw id from the latest dnd-kit drop target.
  * @returns
  * - The node id as a positive integer when the id has the `node-` prefix
  *   and the suffix is a positive integer.
@@ -438,7 +433,9 @@ function parseTodoDragId(id: UniqueIdentifier): TodoId | null {
  * parseNodeDropId('node-0')    // => null
  * parseNodeDropId('todo-42')   // => null
  */
-function parseNodeDropId(id: UniqueIdentifier): SkillNodeId | null {
+function parseNodeDropId(
+  id: string | number | null | undefined,
+): SkillNodeId | null {
   const s = String(id)
   if (!s.startsWith('node-')) return null
   const n = Number(s.slice('node-'.length))

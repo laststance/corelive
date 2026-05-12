@@ -30,19 +30,17 @@ export interface Todo {
 }
 
 /**
- * Props passed from SortableTodoItem for drag handle functionality.
+ * Ref passed from SortableTodoItem for drag handle functionality.
  */
-interface DragHandleProps {
-  [key: string]: unknown
-}
+type DragHandleRef = React.Ref<HTMLButtonElement>
 
 interface TodoItemProps {
   todo: Todo
   onToggleComplete: (id: string) => void
   onDelete: (id: string) => void
   onUpdateNotes?: (id: string, notes: string) => void
-  /** Props from useSortable for drag handle */
-  dragHandleProps?: DragHandleProps
+  /** Ref from useSortable for drag handle */
+  dragHandleRef?: DragHandleRef
   /** Whether item is currently being dragged */
   isDragging?: boolean
 }
@@ -52,7 +50,7 @@ export function TodoItem({
   onToggleComplete,
   onDelete,
   onUpdateNotes,
-  dragHandleProps,
+  dragHandleRef,
   isDragging,
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
@@ -72,12 +70,12 @@ export function TodoItem({
       }`}
     >
       <div className="flex items-center gap-3 p-4">
-        {dragHandleProps && (
+        {dragHandleRef && (
           <button
+            ref={dragHandleRef}
             type="button"
             className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
             aria-label="Drag to reorder"
-            {...dragHandleProps}
           >
             <GripVertical className="h-5 w-5" />
           </button>

@@ -1,4 +1,4 @@
-import { DndContext } from '@dnd-kit/core'
+import { DragDropProvider } from '@dnd-kit/react'
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 
 import { SkillNodeCircle } from './SkillNodeCircle'
@@ -9,7 +9,7 @@ const meta: Meta<typeof SkillNodeCircle> = {
   component: SkillNodeCircle,
   decorators: [
     (Story) => (
-      <DndContext>
+      <DragDropProvider>
         <div data-skill-tree="true" className="st-canvas-bg p-8">
           <svg viewBox="0 0 100 100" width="200" height="200">
             <defs>
@@ -47,7 +47,7 @@ const meta: Meta<typeof SkillNodeCircle> = {
             <Story />
           </svg>
         </div>
-      </DndContext>
+      </DragDropProvider>
     ),
   ],
 }
