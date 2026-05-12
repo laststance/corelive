@@ -21,11 +21,11 @@ interface SortableFloatingTodoItemProps {
 
 /**
  * Wrapper component that makes floating navigator todo items draggable using dnd-kit.
- * Uses render props pattern to pass drag handle props to children.
+ * Uses render props pattern to pass drag handle refs to children.
  * @param todo - The todo item to make sortable.
  * @param index - Current index within the pending floating todo list.
- * @param children - Render function receiving dragHandleProps and isDragging state.
- * @returns A draggable wrapper div with transform/transition styles.
+ * @param children - Render function receiving dragHandleRef and isDragging state.
+ * @returns A draggable wrapper div with drag-state opacity and z-index styles.
  * @example
  * <SortableFloatingTodoItem todo={todo} index={0}>
  *   {({ dragHandleRef, isDragging }) => (
