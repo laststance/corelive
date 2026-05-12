@@ -1,4 +1,4 @@
-import { DndContext } from '@dnd-kit/core'
+import { DragDropProvider } from '@dnd-kit/react'
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { useState } from 'react'
 
@@ -10,7 +10,7 @@ const meta: Meta<typeof TaskPoolDrawer> = {
   component: TaskPoolDrawer,
   decorators: [
     (Story) => (
-      <DndContext>
+      <DragDropProvider>
         <div
           data-skill-tree="true"
           className="st-canvas-bg"
@@ -18,7 +18,7 @@ const meta: Meta<typeof TaskPoolDrawer> = {
         >
           <Story />
         </div>
-      </DndContext>
+      </DragDropProvider>
     ),
   ],
 }

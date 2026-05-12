@@ -1,22 +1,20 @@
 'use client'
 
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useSortable } from '@dnd-kit/react/sortable'
 import React from 'react'
 
 import type { FloatingTodo } from './FloatingNavigator'
 
 /**
- * Props passed to children for drag handle functionality.
+ * Ref passed to children for drag handle functionality.
  */
-interface DragHandleProps {
-  [key: string]: unknown
-}
+type DragHandleRef = React.Ref<HTMLButtonElement>
 
 interface SortableFloatingTodoItemProps {
   todo: FloatingTodo
+  index: number
   children: (props: {
-    dragHandleProps: DragHandleProps
+    dragHandleRef: DragHandleRef
     isDragging: boolean
   }) => React.ReactNode
 }
@@ -25,39 +23,32 @@ interface SortableFloatingTodoItemProps {
  * Wrapper component that makes floating navigator todo items draggable using dnd-kit.
  * Uses render props pattern to pass drag handle props to children.
  * @param todo - The todo item to make sortable.
+ * @param index - Current index within the pending floating todo list.
  * @param children - Render function receiving dragHandleProps and isDragging state.
  * @returns A draggable wrapper div with transform/transition styles.
  * @example
- * <SortableFloatingTodoItem todo={todo}>
- *   {({ dragHandleProps, isDragging }) => (
- *     <TodoRow dragHandleProps={dragHandleProps} isDragging={isDragging} />
+ * <SortableFloatingTodoItem todo={todo} index={0}>
+ *   {({ dragHandleRef, isDragging }) => (
+ *     <TodoRow dragHandleRef={dragHandleRef} isDragging={isDragging} />
  *   )}
  * </SortableFloatingTodoItem>
  */
 export function SortableFloatingTodoItem({
   todo,
+  index,
   children,
 }: SortableFloatingTodoItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: todo.id })
+  const { ref, handleRef, isDragging } = useSortable({ id: todo.id, index })
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 1 : 0,
   }
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={ref} style={style}>
       {children({
-        dragHandleProps: { ...attributes, ...listeners },
+        dragHandleRef: handleRef,
         isDragging,
       })}
     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { arrayMove } from '@dnd-kit/sortable'
+import { arrayMove } from '@dnd-kit/helpers'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useState } from 'react'
 

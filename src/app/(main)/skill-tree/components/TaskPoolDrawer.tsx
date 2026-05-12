@@ -42,13 +42,13 @@ export interface TaskPoolDrawerProps {
  * @example
  * const [open, setOpen] = useState(false)
  *
- * <DndContext>
+ * <DragDropProvider>
  *   <TaskPoolDrawer
  *     todos={[{ id: 1, text: 'Fix login bug' }]}
  *     open={open}
  *     onOpenChange={setOpen}
  *   />
- * </DndContext>
+ * </DragDropProvider>
  */
 export function TaskPoolDrawer({
   todos,

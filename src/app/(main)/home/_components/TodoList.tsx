@@ -1,19 +1,7 @@
 'use client'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
+import { arrayMove } from '@dnd-kit/helpers'
+import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
+import { isSortable } from '@dnd-kit/react/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
@@ -31,6 +19,7 @@ import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -64,18 +53,6 @@ export function TodoList() {
 
   // Category filter state (persisted to localStorage)
   const [selectedCategoryId] = useSelectedCategory()
-
-  // Configure dnd-kit sensors for pointer and keyboard interactions
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Minimum drag distance before activation
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  )
 
   // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
@@ -255,18 +232,32 @@ export function TodoList() {
   /**
    * Handles drag end event to reorder todos.
    * Updates local state optimistically and syncs with server.
+   * @param event - Latest dnd-kit drag-end event from DragDropProvider.
+   * @returns
+   * - No return value; invalid drops exit early and valid drops reorder tasks.
+   * @example
+   * handleDragEnd(event)
    */
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-
-    if (!over || active.id === over.id) {
+    if (event.canceled) {
       return
     }
 
-    const oldIndex = pendingTodos.findIndex((todo) => todo.id === active.id)
-    const newIndex = pendingTodos.findIndex((todo) => todo.id === over.id)
+    const { source } = event.operation
 
-    if (oldIndex === -1 || newIndex === -1) {
+    if (!isSortable(source) || source.initialIndex === source.index) {
+      return
+    }
+
+    const oldIndex = source.initialIndex
+    const newIndex = source.index
+
+    if (
+      oldIndex < 0 ||
+      newIndex < 0 ||
+      oldIndex >= pendingTodos.length ||
+      newIndex >= pendingTodos.length
+    ) {
       return
     }
 
@@ -342,28 +333,23 @@ export function TodoList() {
             </CardContent>
           </Card>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
+          <DragDropProvider
+            sensors={todoSortableSensors}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext
-              items={pendingTodos.map((todo) => todo.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-3">
-                {pendingTodos.map((todo) => (
-                  <SortableTodoItem
-                    key={todo.id}
-                    todo={todo}
-                    onToggleComplete={toggleComplete}
-                    onDelete={deleteTodo}
-                    onUpdateNotes={updateNotes}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+            <div className="space-y-3">
+              {pendingTodos.map((todo, index) => (
+                <SortableTodoItem
+                  key={todo.id}
+                  todo={todo}
+                  index={index}
+                  onToggleComplete={toggleComplete}
+                  onDelete={deleteTodo}
+                  onUpdateNotes={updateNotes}
+                />
+              ))}
+            </div>
+          </DragDropProvider>
         )}
       </div>
 

@@ -1,4 +1,4 @@
-import { DndContext } from '@dnd-kit/core'
+import { DragDropProvider } from '@dnd-kit/react'
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 
 import type {
@@ -19,11 +19,11 @@ const meta: Meta<typeof ConstellationCanvas> = {
   component: ConstellationCanvas,
   decorators: [
     (Story) => (
-      <DndContext>
+      <DragDropProvider>
         <div data-skill-tree="true" style={{ width: '800px', height: '800px' }}>
           <Story />
         </div>
-      </DndContext>
+      </DragDropProvider>
     ),
   ],
 }
