@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * @fileoverview Floating utility window settings for the Electron Settings page.
  *
@@ -7,11 +9,9 @@
  *
  * @module components/electron/FloatingWindowSettings
  */
-'use client'
-
 import { Monitor } from 'lucide-react'
-import type { ReactElement } from 'react'
-import { useEffect, useId, useState } from 'react'
+import { memo, type ReactElement } from 'react'
+import { useId, useState } from 'react'
 
 import {
   Card,
@@ -23,6 +23,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useMounted } from '@/hooks/use-mounted'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { log } from '@/lib/logger'
 
 interface FloatingWindowSettingsProps {
@@ -41,7 +42,7 @@ interface FloatingWindowSettingsProps {
  * @example
  * <FloatingWindowSettings />
  */
-export function FloatingWindowSettings({
+export const FloatingWindowSettings = memo(function FloatingWindowSettings({
   className,
 }: FloatingWindowSettingsProps): ReactElement {
   const desktopTrackingId = useId()
@@ -53,7 +54,7 @@ export function FloatingWindowSettings({
 
   // Fetch once from the preload bridge after mount; the fallback branch below
   // handles non-Electron renderers without needing a separate effect path.
-  useEffect(() => {
+  useComponentEffect(() => {
     const api =
       typeof window === 'undefined'
         ? undefined
@@ -195,6 +196,6 @@ export function FloatingWindowSettings({
       </CardContent>
     </Card>
   )
-}
+})
 
 export default FloatingWindowSettings

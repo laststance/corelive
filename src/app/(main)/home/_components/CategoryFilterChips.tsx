@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { match } from 'ts-pattern'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -108,7 +109,7 @@ function chipAccessibleLabel(
  * @example
  * <CategoryChip entry={entry} isActive={false} onClick={toggle} />
  */
-function CategoryChip({
+const CategoryChip = memo(function CategoryChip({
   entry,
   isActive,
   onClick,
@@ -162,7 +163,7 @@ function CategoryChip({
       )}
     </button>
   )
-}
+})
 
 /**
  * Per-category trend chip row mounted under the WeeklySummaryCard on the
@@ -190,7 +191,7 @@ function CategoryChip({
  * @example
  * <CategoryFilterChips dataByDate={dataByDate} isLoading={false} />
  */
-export function CategoryFilterChips({
+export const CategoryFilterChips = memo(function CategoryFilterChips({
   dataByDate,
   isLoading,
 }: CategoryFilterChipsProps) {
@@ -305,4 +306,4 @@ export function CategoryFilterChips({
       </CardContent>
     </Card>
   )
-}
+})

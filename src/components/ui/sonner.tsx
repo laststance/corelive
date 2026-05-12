@@ -1,10 +1,12 @@
 'use client'
 
 import { useTheme } from 'next-themes'
+import * as React from 'react'
+import { memo } from 'react'
 import type { ToasterProps } from 'sonner'
 import { Toaster as Sonner } from 'sonner'
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = memo(({ ...props }: ToasterProps) => {
   const { theme = 'system' } = useTheme()
 
   return (
@@ -21,6 +23,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       {...props}
     />
   )
-}
+})
 
 export { Toaster }

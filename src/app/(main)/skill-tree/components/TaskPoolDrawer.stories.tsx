@@ -1,5 +1,6 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
+import * as React from 'react'
 import { useState } from 'react'
 
 import { TaskPoolDrawer } from './TaskPoolDrawer'

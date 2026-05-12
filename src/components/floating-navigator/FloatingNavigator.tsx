@@ -60,9 +60,10 @@ const Brain = lazy(async () =>
 )
 
 // Icon fallback component for loading state
-const IconFallback = () => (
+const IconFallback = React.memo(() => (
   <div className="h-3 w-3 animate-pulse rounded bg-muted" />
-)
+))
+IconFallback.displayName = 'IconFallback'
 
 export interface FloatingTodo {
   id: string
@@ -97,7 +98,7 @@ interface FloatingNavigatorProps {
   isCategoryDeletePending?: boolean
 }
 
-export function FloatingNavigator({
+export const FloatingNavigator = React.memo(function FloatingNavigator({
   todos,
   onTaskToggle,
   onTaskCreate,
@@ -356,6 +357,7 @@ export function FloatingNavigator({
       ) : (
         <>
           <button
+            type="button"
             className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onClick={() => startEditing(todo)}
             title={`${todo.text} - Click to edit`}
@@ -715,4 +717,4 @@ export function FloatingNavigator({
       )}
     </div>
   )
-}
+})

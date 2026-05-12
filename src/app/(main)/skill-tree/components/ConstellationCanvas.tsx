@@ -1,5 +1,7 @@
 'use client'
 
+import { memo } from 'react'
+
 import type {
   EdgeFromNodeId,
   EdgeToNodeId,
@@ -69,7 +71,7 @@ function toViewboxUnits(n: NodeCoordinate): ViewboxCoordinate {
  *   onNodeClick={(id) => console.log(id)}
  * />
  */
-export function ConstellationCanvas({
+export const ConstellationCanvas = memo(function ConstellationCanvas({
   nodes,
   edges,
   onNodeClick,
@@ -232,4 +234,4 @@ export function ConstellationCanvas({
       </g>
     </svg>
   )
-}
+})

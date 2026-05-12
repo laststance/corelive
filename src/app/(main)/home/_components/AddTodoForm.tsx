@@ -36,7 +36,10 @@ interface AddTodoFormProps {
   disabled?: boolean
 }
 
-export function AddTodoForm({ onAddTodo, disabled }: AddTodoFormProps) {
+export const AddTodoForm = React.memo(function AddTodoForm({
+  onAddTodo,
+  disabled,
+}: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
 
   const form = useForm<TodoFormValues>({
@@ -76,7 +79,10 @@ export function AddTodoForm({ onAddTodo, disabled }: AddTodoFormProps) {
                   </FormItem>
                 )}
               />
-              <Collapsible open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+              <Collapsible
+                open={isNotesOpen}
+                onOpenChange={(open: boolean) => setIsNotesOpen(open)}
+              >
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
@@ -106,7 +112,10 @@ export function AddTodoForm({ onAddTodo, disabled }: AddTodoFormProps) {
                 {form.formState.isSubmitting ? 'Adding...' : 'Add'}
               </Button>
             </div>
-            <Collapsible open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+            <Collapsible
+              open={isNotesOpen}
+              onOpenChange={(open: boolean) => setIsNotesOpen(open)}
+            >
               <CollapsibleContent>
                 <FormField
                   control={form.control}
@@ -131,4 +140,4 @@ export function AddTodoForm({ onAddTodo, disabled }: AddTodoFormProps) {
       </CardContent>
     </Card>
   )
-}
+})

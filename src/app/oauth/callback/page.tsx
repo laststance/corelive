@@ -1,7 +1,9 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useState } from 'react'
+import { memo, Suspense, useState } from 'react'
+
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 /**
  * OAuth Callback Page - Browser-to-Electron Bridge with Sign-In Token
@@ -29,12 +31,12 @@ type CallbackStatus =
   | 'success'
   | 'error'
 
-function OAuthCallbackContent() {
+const OAuthCallbackContent = memo(function OAuthCallbackContent() {
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<CallbackStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
-  useEffect(() => {
+  useComponentEffect(() => {
     const state = searchParams.get('state')
     const error = searchParams.get('error')
     const errorDescription = searchParams.get('error_description')
@@ -226,14 +228,14 @@ function OAuthCallbackContent() {
       </p>
     </div>
   )
-}
+})
 
 /**
  * OAuth Callback Page with Suspense wrapper.
  *
  * useSearchParams() requires Suspense boundary in Next.js App Router.
  */
-export default function OAuthCallbackPage() {
+const OAuthCallbackPage = memo(function OAuthCallbackPage() {
   return (
     <Suspense
       fallback={
@@ -245,4 +247,6 @@ export default function OAuthCallbackPage() {
       <OAuthCallbackContent />
     </Suspense>
   )
-}
+})
+
+export default OAuthCallbackPage

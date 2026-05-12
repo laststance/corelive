@@ -1,5 +1,7 @@
 'use client'
 
+import { memo } from 'react'
+
 import { LEVEL_LABEL, xpToLevel } from '../lib/xp'
 
 /**
@@ -16,7 +18,7 @@ import { LEVEL_LABEL, xpToLevel } from '../lib/xp'
  * <XpBadge xp={40} />  // => "Level 3", "10 / 20", half-filled bar
  * <XpBadge xp={75} />  // => "Mastered" (no bar, no counter)
  */
-export function XpBadge({ xp }: { xp: number }) {
+export const XpBadge = memo(function XpBadge({ xp }: { xp: number }) {
   const { level, progress, next } = xpToLevel(xp)
   const label = LEVEL_LABEL[level]
 
@@ -55,4 +57,4 @@ export function XpBadge({ xp }: { xp: number }) {
       )}
     </div>
   )
-}
+})

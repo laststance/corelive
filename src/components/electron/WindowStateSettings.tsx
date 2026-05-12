@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 import { log } from '../../lib/logger'
 
@@ -64,7 +65,7 @@ interface WindowStateStats {
   }
 }
 
-export function WindowStateSettings() {
+export const WindowStateSettings = React.memo(function WindowStateSettings() {
   const [stats, setStats] = useState<WindowStateStats | null>(null)
   const [displays, setDisplays] = useState<Display[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,7 +73,7 @@ export function WindowStateSettings() {
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  useEffect(() => {
+  useComponentEffect(() => {
     if (isElectron) {
       loadWindowStateData()
     } else {
@@ -624,4 +625,4 @@ export function WindowStateSettings() {
       </Card>
     </div>
   )
-}
+})

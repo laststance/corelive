@@ -1,6 +1,7 @@
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
 import { Geist_Mono, Inter_Tight, Newsreader } from 'next/font/google'
+import * as React from 'react'
 import '@/globals.css'
 
 import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'

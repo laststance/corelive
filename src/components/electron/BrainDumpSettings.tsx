@@ -1,3 +1,32 @@
+'use client'
+
+import { Brain, Eye, Keyboard } from 'lucide-react'
+import React, { memo, useId, useRef, useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
+import { useMounted } from '@/hooks/use-mounted'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
+import {
+  type BrainDumpOpacity,
+  type BrainDumpShortcut,
+  type BrainDumpSyncMode,
+  BRAINDUMP_OPACITY_MAX,
+  BRAINDUMP_OPACITY_MIN,
+  BRAINDUMP_OPACITY_STEP,
+} from '@/lib/constants/braindump'
+import { log } from '@/lib/logger'
+
 /**
  * @fileoverview BrainDump Note settings panel for the Electron Settings page.
  *
@@ -14,34 +43,6 @@
  *
  * @module components/electron/BrainDumpSettings
  */
-'use client'
-
-import { Brain, Eye, Keyboard } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
-
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Slider } from '@/components/ui/slider'
-import { Switch } from '@/components/ui/switch'
-import { useMounted } from '@/hooks/use-mounted'
-import {
-  type BrainDumpOpacity,
-  type BrainDumpShortcut,
-  type BrainDumpSyncMode,
-  BRAINDUMP_OPACITY_MAX,
-  BRAINDUMP_OPACITY_MIN,
-  BRAINDUMP_OPACITY_STEP,
-} from '@/lib/constants/braindump'
-import { log } from '@/lib/logger'
-
 interface BrainDumpSettingsProps {
   className?: string
 }
@@ -60,7 +61,7 @@ interface BrainDumpSettingsProps {
  * @example
  * <BrainDumpSettings />
  */
-export function BrainDumpSettings({
+export const BrainDumpSettings = memo(function BrainDumpSettings({
   className,
 }: BrainDumpSettingsProps): React.ReactElement {
   const syncId = useId()
@@ -88,7 +89,7 @@ export function BrainDumpSettings({
   // renders and the env check runs only once on mount.
   // The non-Electron branch is rendered via the early-return below, so it
   // never observes `isReady`; we only flip it after the IPC fetch resolves.
-  useEffect(() => {
+  useComponentEffect(() => {
     const api =
       typeof window === 'undefined' ? undefined : window.electronAPI?.brainDump
     if (!api) return
@@ -311,6 +312,6 @@ export function BrainDumpSettings({
       </CardContent>
     </Card>
   )
-}
+})
 
 export default BrainDumpSettings

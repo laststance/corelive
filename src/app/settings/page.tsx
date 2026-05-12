@@ -1,3 +1,6 @@
+import type { Metadata } from 'next'
+import * as React from 'react'
+import { memo } from 'react'
 /**
  * Settings Page (Electron Only)
  *
@@ -7,7 +10,6 @@
  *
  * @module app/settings/page
  */
-import type { Metadata } from 'next'
 
 import { ElectronSettingsPage } from '@/components/electron/ElectronSettingsPage'
 
@@ -24,6 +26,8 @@ export const metadata: Metadata = {
  *
  * @returns Settings page
  */
-export default function SettingsPage(): React.ReactNode {
+const SettingsPage = memo(function SettingsPage(): React.ReactNode {
   return <ElectronSettingsPage />
-}
+})
+
+export default SettingsPage

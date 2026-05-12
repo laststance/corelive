@@ -2,7 +2,8 @@
 
 import HeatMap from '@uiw/react-heat-map'
 import { useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as React from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
@@ -125,7 +127,11 @@ function formatDate(dateStr: string): string {
 /**
  * Tooltip content showing category breakdown for a specific day.
  */
-function CategoryBreakdown({ day }: { day: HeatmapDay }) {
+const CategoryBreakdown = memo(function CategoryBreakdown({
+  day,
+}: {
+  day: HeatmapDay
+}) {
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium">{formatDate(day.date)}</p>
@@ -148,7 +154,7 @@ function CategoryBreakdown({ day }: { day: HeatmapDay }) {
       </p>
     </div>
   )
-}
+})
 
 /**
  * GitHub-style contribution heatmap showing completed task activity.
@@ -158,7 +164,7 @@ function CategoryBreakdown({ day }: { day: HeatmapDay }) {
  * @example
  * <ContributionGraph />
  */
-export function ContributionGraph() {
+export const ContributionGraph = memo(function ContributionGraph() {
   const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef)
@@ -171,7 +177,7 @@ export function ContributionGraph() {
   const searchParams = useSearchParams()
   const dateParam = searchParams.get('date')
 
-  useEffect(() => {
+  useComponentEffect(() => {
     // Closing the dialog when `?date=` is removed or invalidated keeps URL
     // and dialog state coupled. Without this, navigating from `?date=valid`
     // → `?date=` (or `?date=garbage`) would leave a stale dialog open even
@@ -348,7 +354,7 @@ export function ContributionGraph() {
       </CardContent>
     </Card>
   )
-}
+})
 
 /**
  * Observes an element and returns its current content width.
@@ -365,7 +371,7 @@ function useObservedElementWidth<T extends HTMLElement>(
 ): number | null {
   const [elementWidth, setElementWidth] = useState<number | null>(null)
 
-  useEffect(() => {
+  useComponentEffect(() => {
     const element = elementRef.current
 
     if (!element) {

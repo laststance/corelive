@@ -1,8 +1,9 @@
 'use client'
 
 import { Trophy, Star, Gift, Medal, Crown } from 'lucide-react'
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback } from 'react'
 
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { cn } from '@/lib/utils'
 
 export interface Achievement {
@@ -33,7 +34,7 @@ const ACHIEVEMENT_ICONS = {
  * Shows animated achievement card with progress bar
  * Note: Parent component is responsible for showing/hiding the achievement
  */
-export function AchievementAnimation({
+export const AchievementAnimation = React.memo(function AchievementAnimation({
   achievement,
   className,
 }: AchievementAnimationProps) {
@@ -102,80 +103,77 @@ export function AchievementAnimation({
       </div>
     </div>
   )
-}
+})
 
 /**
  * Achievement notification list for multiple achievements
  */
-export function AchievementNotifications({
-  className,
-}: {
-  className?: string
-}) {
-  const [achievements, setAchievements] = useState<Achievement[]>([])
-  const [currentIndex, setCurrentIndex] = useState(0)
+export const AchievementNotifications = React.memo(
+  function AchievementNotifications({ className }: { className?: string }) {
+    const [achievements, setAchievements] = useState<Achievement[]>([])
+    const [currentIndex, setCurrentIndex] = useState(0)
 
-  // Show achievements one by one
-  const achievement = achievements[currentIndex] || null
+    // Show achievements one by one
+    const achievement = achievements[currentIndex] || null
 
-  const handleComplete = useCallback(() => {
-    setCurrentIndex((prevIndex) => {
-      let shouldReset = false
-      setAchievements((prevAchievements) => {
-        if (prevIndex < prevAchievements.length - 1) {
-          return prevAchievements
-        } else {
-          shouldReset = true
-          return []
-        }
+    const handleComplete = useCallback(() => {
+      setCurrentIndex((prevIndex) => {
+        let shouldReset = false
+        setAchievements((prevAchievements) => {
+          if (prevIndex < prevAchievements.length - 1) {
+            return prevAchievements
+          } else {
+            shouldReset = true
+            return []
+          }
+        })
+        return shouldReset ? 0 : prevIndex + 1
       })
-      return shouldReset ? 0 : prevIndex + 1
-    })
-  }, [])
+    }, [])
 
-  const addAchievement = useCallback((achievement: Achievement) => {
-    setAchievements((prev: Achievement[]) => [...prev, achievement])
-  }, [])
+    const addAchievement = useCallback((achievement: Achievement) => {
+      setAchievements((prev: Achievement[]) => [...prev, achievement])
+    }, [])
 
-  // Expose methods via ref or context if needed
-  useEffect(() => {
-    // Example: Listen for achievement events
-    const handleAchievementUnlock = (event: CustomEvent<Achievement>) => {
-      addAchievement(event.detail)
-    }
+    // Expose methods via ref or context if needed
+    useComponentEffect(() => {
+      // Example: Listen for achievement events
+      const handleAchievementUnlock = (event: CustomEvent<Achievement>) => {
+        addAchievement(event.detail)
+      }
 
-    window.addEventListener(
-      'achievement:unlock',
-      handleAchievementUnlock as EventListener,
-    )
-    return () => {
-      window.removeEventListener(
+      window.addEventListener(
         'achievement:unlock',
         handleAchievementUnlock as EventListener,
       )
+      return () => {
+        window.removeEventListener(
+          'achievement:unlock',
+          handleAchievementUnlock as EventListener,
+        )
+      }
+    }, [addAchievement])
+
+    // Auto-advance after animation completes (you can adjust timing)
+
+    useComponentEffect(() => {
+      if (achievement) {
+        const timer = setTimeout(() => {
+          handleComplete()
+        }, 3000) // 3 seconds for animation
+        return () => clearTimeout(timer)
+      }
+    }, [achievement, handleComplete])
+
+    if (!achievement) {
+      return null
     }
-  }, [addAchievement])
 
-  // Auto-advance after animation completes (you can adjust timing)
-  /* eslint-disable react-you-might-not-need-an-effect/no-event-handler */
-  useEffect(() => {
-    if (achievement) {
-      const timer = setTimeout(() => {
-        handleComplete()
-      }, 3000) // 3 seconds for animation
-      return () => clearTimeout(timer)
-    }
-  }, [achievement, handleComplete])
-  /* eslint-enable react-you-might-not-need-an-effect/no-event-handler */
-
-  if (!achievement) {
-    return null
-  }
-
-  return (
-    <AchievementAnimation achievement={achievement} className={className} />
-  )
-}
+    return (
+      <AchievementAnimation achievement={achievement} className={className} />
+    )
+  },
+)
 
 /**
  * Hook to trigger achievement animations

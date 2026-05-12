@@ -246,6 +246,9 @@ importers:
       '@electron/notarize':
         specifier: ^3.1.1
         version: 3.1.1
+      '@laststance/react-next-eslint-plugin':
+        specifier: ^2.2.0
+        version: 2.2.0(eslint@10.2.1(jiti@2.6.1))
       '@mdx-js/react':
         specifier: ^3.1.1
         version: 3.1.1(@types/react@19.2.14)(react@19.2.5)
@@ -1347,6 +1350,12 @@ packages:
 
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
+
+  '@laststance/react-next-eslint-plugin@2.2.0':
+    resolution: {integrity: sha512-x/lMgiwNiS5g4yYfxAQCdih/k/Chs09SWoXXJBuRLHnfQnzb/52uH01iVLq6vZUuMvcy+tq9eDoyq2jQ3n6efw==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      eslint: ^9.0.0 || ^10.0.0
 
   '@laststance/redux-storage-middleware@0.3.2':
     resolution: {integrity: sha512-/2iAO3FEyBMiCw0PHmS1VQpAFwgAJXqNRmOH+mmoh2LJ6OjVcJ05fnYVwIzzrY8SGtiNcnpU8oDaHATxnVWMhQ==}
@@ -7929,6 +7938,10 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@kurkle/color@0.3.4': {}
+
+  '@laststance/react-next-eslint-plugin@2.2.0(eslint@10.2.1(jiti@2.6.1))':
+    dependencies:
+      eslint: 10.2.1(jiti@2.6.1)
 
   '@laststance/redux-storage-middleware@0.3.2(@reduxjs/toolkit@2.11.2(react-redux@9.2.0(@types/react@19.2.14)(react@19.2.5)(redux@5.0.1))(react@19.2.5))(react-redux@9.2.0(@types/react@19.2.14)(react@19.2.5)(redux@5.0.1))':
     dependencies:

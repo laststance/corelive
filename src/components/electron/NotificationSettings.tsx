@@ -1,7 +1,7 @@
 'use client'
 
 import { Bell, BellOff, Volume2, VolumeX } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { memo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 import { log } from '../../lib/logger'
 
@@ -40,7 +41,9 @@ interface NotificationSettingsProps {
   className?: string
 }
 
-export function NotificationSettings({ className }: NotificationSettingsProps) {
+export const NotificationSettings = memo(function NotificationSettings({
+  className,
+}: NotificationSettingsProps) {
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     enabled: true,
     taskCreated: true,
@@ -57,7 +60,7 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isElectron) {
       setIsLoading(false)
       return
@@ -369,4 +372,4 @@ export function NotificationSettings({ className }: NotificationSettingsProps) {
       </CardContent>
     </Card>
   )
-}
+})

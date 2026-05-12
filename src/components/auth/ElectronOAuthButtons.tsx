@@ -1,12 +1,13 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useCallback, useEffect, useReducer, useSyncExternalStore } from 'react'
+import { memo, useCallback, useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useReducerState } from '@/hooks/useReducerState'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
-
 type OAuthState = {
   isLoading: string | null
   error: string | null
@@ -43,8 +44,8 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
  *
  * This component provides buttons that trigger the browser-based OAuth flow.
  */
-export function ElectronOAuthButtons() {
-  const [state, dispatch] = useReducer(oauthReducer, {
+export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
+  const [state, dispatch] = useReducerState(oauthReducer, {
     isLoading: null,
     error: null,
   })
@@ -55,7 +56,7 @@ export function ElectronOAuthButtons() {
   const isLoading = user ? null : state.isLoading
   const error = user ? null : state.error
 
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isElectronEnvironment()) return
 
     // Register OAuth event listeners
@@ -182,7 +183,7 @@ export function ElectronOAuthButtons() {
       </p>
     </div>
   )
-}
+})
 
 /**
  * Store for Electron OAuth availability detection.

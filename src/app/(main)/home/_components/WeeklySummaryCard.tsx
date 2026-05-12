@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { match } from 'ts-pattern'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -72,7 +73,7 @@ function trendLabel(trend: WeeklyTrend): string {
  * @example
  * <WeeklySummaryCard dataByDate={dataByDate} isLoading={isLoading} />
  */
-export function WeeklySummaryCard({
+export const WeeklySummaryCard = memo(function WeeklySummaryCard({
   dataByDate,
   isLoading,
 }: WeeklySummaryCardProps) {
@@ -134,4 +135,4 @@ export function WeeklySummaryCard({
       </CardContent>
     </Card>
   )
-}
+})

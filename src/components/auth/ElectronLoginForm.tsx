@@ -3,20 +3,16 @@
 import { useSignIn, useUser } from '@clerk/nextjs'
 import { Eye, EyeOff, Loader2, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import {
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useSyncExternalStore,
-} from 'react'
+import * as React from 'react'
+import { memo, useCallback, useRef, useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useReducerState } from '@/hooks/useReducerState'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
-
 type FormState = {
   email: string
   password: string
@@ -73,11 +69,11 @@ function formReducer(state: FormState, action: FormAction): FormState {
  *
  * @returns Login form with email/password fields and optional Google OAuth fallback
  */
-export function ElectronLoginForm() {
+export const ElectronLoginForm = memo(function ElectronLoginForm() {
   const { signIn, fetchStatus } = useSignIn()
   const { user } = useUser()
   const router = useRouter()
-  const [state, dispatch] = useReducer(formReducer, {
+  const [state, dispatch] = useReducerState(formReducer, {
     email: '',
     password: '',
     isLoading: false,
@@ -90,7 +86,7 @@ export function ElectronLoginForm() {
   )
 
   // Listen for OAuth errors from ElectronAuthProvider to reset loading state
-  useEffect(() => {
+  useComponentEffect(() => {
     const handleOAuthError = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail
       dispatch({
@@ -106,7 +102,7 @@ export function ElectronLoginForm() {
   }, [])
 
   // Safety timeout: reset Google loading after 60s
-  useEffect(() => {
+  useComponentEffect(() => {
     if (state.isGoogleLoading) {
       googleLoadingTimeoutRef.current = setTimeout(() => {
         dispatch({
@@ -127,7 +123,7 @@ export function ElectronLoginForm() {
   }, [state.isGoogleLoading])
 
   // Reset Google loading if user becomes authenticated
-  useEffect(() => {
+  useComponentEffect(() => {
     if (user && state.isGoogleLoading) {
       dispatch({ type: 'STOP_GOOGLE_LOADING' })
     }
@@ -390,7 +386,7 @@ export function ElectronLoginForm() {
       </p>
     </div>
   )
-}
+})
 
 /**
  * Store for Electron environment detection.

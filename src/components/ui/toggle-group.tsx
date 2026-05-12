@@ -14,7 +14,7 @@ const ToggleGroupContext = React.createContext<
   variant: 'default',
 })
 
-function ToggleGroup({
+const ToggleGroup = React.memo(function ToggleGroup({
   className,
   variant,
   size,
@@ -28,19 +28,19 @@ function ToggleGroup({
       data-variant={variant}
       data-size={size}
       className={cn(
-        'group/toggle-group flex w-fit items-center rounded-md data-[variant=outline]:shadow-xs',
+        'group/toggle-group data-[variant=outline]:shadow-xs flex w-fit items-center rounded-md',
         className,
       )}
       {...props}
     >
-      <ToggleGroupContext.Provider value={{ variant, size }}>
+      <ToggleGroupContext value={{ variant, size }}>
         {children}
-      </ToggleGroupContext.Provider>
+      </ToggleGroupContext>
     </ToggleGroupPrimitive.Root>
   )
-}
+})
 
-function ToggleGroupItem({
+const ToggleGroupItem = React.memo(function ToggleGroupItem({
   className,
   children,
   variant,
@@ -68,6 +68,6 @@ function ToggleGroupItem({
       {children}
     </ToggleGroupPrimitive.Item>
   )
-}
+})
 
 export { ToggleGroup, ToggleGroupItem }

@@ -4,7 +4,7 @@ import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { memo, Suspense, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
@@ -45,7 +46,7 @@ const DECIMAL_RADIX = 10
  * @example
  * <TodoList />
  */
-export function TodoList() {
+export const TodoList = memo(function TodoList() {
   const queryClient = useQueryClient()
   // Track if persister is still restoring cached data - prevents hydration mismatch
   const isRestoring = useIsRestoring()
@@ -222,7 +223,7 @@ export function TodoList() {
   const pendingTodosFromQuery = mapTodos(pendingData?.todos)
 
   // Sync local state with query data when it changes
-  useEffect(() => {
+  useComponentEffect(() => {
     setLocalPendingTodos(pendingTodosFromQuery)
   }, [pendingData])
 
@@ -275,7 +276,7 @@ export function TodoList() {
     reorderMutation.mutate({ items })
   }
 
-  useEffect(() => {
+  useComponentEffect(() => {
     // Cross-window sync: BrainDump / Floating Navigator completions broadcast
     // via the BroadcastChannel and also write to the Completed table, so the
     // Home heatmap + day-detail caches need invalidation alongside the todo
@@ -395,4 +396,4 @@ export function TodoList() {
       </div>
     </div>
   )
-}
+})

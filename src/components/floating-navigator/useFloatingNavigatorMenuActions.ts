@@ -1,3 +1,4 @@
+import type * as React from 'react'
 import { useEffect } from 'react'
 
 import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'

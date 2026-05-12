@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 
 import { Category } from '@/app/(main)/home/_components/Category'
 import { CategoryManageDialog } from '@/app/(main)/home/_components/CategoryManageDialog'
@@ -56,25 +56,29 @@ const GITHUB_REPO = 'laststance/corelive'
  * Renders user profile, navigation links, categories, and bottom actions.
  * Uses `usePathname()` to highlight the active route.
  */
-export function AppSidebar() {
+export const AppSidebar = memo(function AppSidebar() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const router = useRouter()
   const pathname = usePathname()
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
 
-  const macDownloadUrl = useMemo(() => {
-    const version = packageJson.version
-    const isArm = isAppleSilicon()
-    const filename = isArm
-      ? `CoreLive-${version}-arm64.dmg`
-      : `CoreLive-${version}.dmg`
-    return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${filename}`
-  }, [])
+  const version = packageJson.version
+  const isArm = isAppleSilicon()
+  const filename = isArm
+    ? `CoreLive-${version}-arm64.dmg`
+    : `CoreLive-${version}.dmg`
+  const macDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${filename}`
 
   const handleOpenSettings = useCallback(() => {
     router.push('/settings')
   }, [router])
+  const handleOpenCategoryManager = useCallback(() => {
+    setManageDialogOpen(true)
+  }, [])
+  const handleCategoryManagerOpenChange = useCallback((open: boolean) => {
+    setManageDialogOpen(open)
+  }, [])
 
   return (
     <>
@@ -209,7 +213,7 @@ export function AppSidebar() {
 
           <SidebarSeparator />
 
-          <Category onOpenManageAction={() => setManageDialogOpen(true)} />
+          <Category onOpenManageAction={handleOpenCategoryManager} />
 
           <div className="flex-1" />
 
@@ -266,8 +270,8 @@ export function AppSidebar() {
       </Sidebar>
       <CategoryManageDialog
         open={manageDialogOpen}
-        onOpenChange={setManageDialogOpen}
+        onOpenChange={handleCategoryManagerOpenChange}
       />
     </>
   )
-}
+})

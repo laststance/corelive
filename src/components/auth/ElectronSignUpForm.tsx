@@ -3,12 +3,13 @@
 import { useSignUp, useUser } from '@clerk/nextjs'
 import { Eye, EyeOff, Loader2, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useReducer, useState } from 'react'
+import * as React from 'react'
+import { memo, useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
+import { useReducerState } from '@/hooks/useReducerState'
 type FormState = {
   email: string
   password: string
@@ -62,11 +63,11 @@ function formReducer(state: FormState, action: FormAction): FormState {
  *
  * @returns Sign-up form with email/password fields and optional Google OAuth fallback
  */
-export function ElectronSignUpForm() {
+export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
   const { signUp, fetchStatus } = useSignUp()
   const { user } = useUser()
   const router = useRouter()
-  const [state, dispatch] = useReducer(formReducer, {
+  const [state, dispatch] = useReducerState(formReducer, {
     email: '',
     password: '',
     code: '',
@@ -432,4 +433,4 @@ export function ElectronSignUpForm() {
       </p>
     </div>
   )
-}
+})

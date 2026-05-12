@@ -92,7 +92,7 @@ function createTimerStore(duration: number, onComplete?: () => void) {
  * ConfettiAnimation component for celebrating task completion
  * Renders confetti particles with various colors, shapes, and sizes
  */
-export function ConfettiAnimation({
+export const ConfettiAnimation = React.memo(function ConfettiAnimation({
   trigger,
   particleCount = 50,
   duration = 3000,
@@ -153,7 +153,7 @@ export function ConfettiAnimation({
       ))}
     </div>
   )
-}
+})
 
 /**
  * Hook to trigger confetti animation

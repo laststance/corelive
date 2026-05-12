@@ -8,8 +8,10 @@ import {
   QueryClient,
 } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import * as React from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { serializer } from '@/lib/orpc/serializer'
 
 /**
@@ -82,7 +84,7 @@ function PersisterSignOutGuard({
   const { isSignedIn, isLoaded } = useAuth()
   const wasSignedIn = useRef<boolean | null>(null)
 
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isLoaded) return
     if (wasSignedIn.current === true && isSignedIn === false) {
       onSessionReset()
@@ -114,7 +116,7 @@ function PersisterSignOutGuard({
  *
  * @param children - React child components
  */
-export function QueryClientProvider({
+export const QueryClientProvider = memo(function QueryClientProvider({
   children,
 }: {
   children: React.ReactNode
@@ -139,6 +141,10 @@ export function QueryClientProvider({
     setPersister(createPersister())
     setResetKey((k) => k + 1)
   }, [persister, queryClient])
+  const persistOptions = React.useMemo(
+    () => (persister ? { persister } : null),
+    [persister],
+  )
 
   if (!persister) {
     // SSR fallback: render without persistence
@@ -148,15 +154,19 @@ export function QueryClientProvider({
       </TanstackQueryClientProvider>
     )
   }
+  const requiredPersistOptions = persistOptions as Exclude<
+    typeof persistOptions,
+    null
+  >
 
   return (
     <PersistQueryClientProvider
       key={resetKey}
       client={queryClient}
-      persistOptions={{ persister }}
+      persistOptions={requiredPersistOptions}
     >
       <PersisterSignOutGuard onSessionReset={handleSessionReset} />
       {children}
     </PersistQueryClientProvider>
   )
-}
+})

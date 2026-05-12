@@ -25,7 +25,7 @@ const badgeVariants = cva(
   },
 )
 
-function Badge({
+const Badge = React.memo(function Badge({
   className,
   variant,
   asChild = false,
@@ -41,6 +41,6 @@ function Badge({
       {...props}
     />
   )
-}
+})
 
 export { Badge, badgeVariants }

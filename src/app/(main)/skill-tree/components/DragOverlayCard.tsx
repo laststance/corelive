@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 /**
  * A non-interactive floating preview of a task card, rendered inside
  * `<DragOverlay>` while a drag is in progress.
@@ -14,7 +15,11 @@
  *   {activeTodo ? <DragOverlayCard text={activeTodo.text} /> : null}
  * </DragOverlay>
  */
-export function DragOverlayCard({ text }: { text: string }) {
+export const DragOverlayCard = memo(function DragOverlayCard({
+  text,
+}: {
+  text: string
+}) {
   return (
     <div
       // eslint-disable-next-line dslint/token-only -- skill-tree card dimensions not in design tokens
@@ -24,4 +29,4 @@ export function DragOverlayCard({ text }: { text: string }) {
       {text}
     </div>
   )
-}
+})

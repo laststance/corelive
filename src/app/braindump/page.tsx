@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { memo } from 'react'
 
 import { BrainDumpEditor } from '@/components/braindump/BrainDumpEditor'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
@@ -15,7 +16,7 @@ import type { CategoryWithCount } from '@/server/schemas/category'
  * (no `brainDumpAPI`), the editor renders a placeholder message so devs can
  * iterate from a regular Next.js dev server.
  */
-export default function BrainDumpPage() {
+const BrainDumpPage = memo(function BrainDumpPage() {
   const isClerkReady = useClerkQueryReady()
   const { data, isLoading, error } = useQuery({
     ...orpc.category.list.queryOptions({}),
@@ -47,4 +48,6 @@ export default function BrainDumpPage() {
       <BrainDumpEditor categories={categories} />
     </div>
   )
-}
+})
+
+export default BrainDumpPage
