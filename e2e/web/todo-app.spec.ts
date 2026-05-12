@@ -110,9 +110,9 @@ test.describe('TODO App E2E Tests', () => {
     await expect(page.getByText(todoText)).not.toBeVisible()
   })
 
-  test('should add TODO with notes', async ({ page }) => {
+  test('should add TODO with notes', async ({ page }, testInfo) => {
     // Arrange
-    const todoText = 'Notes feature test todo'
+    const todoText = `Notes feature test todo ${testInfo.retry}-${Date.now()}`
     const todoNotes = 'These are some important notes for this task'
 
     // Act — fill text, expand notes section, fill notes, submit
@@ -125,11 +125,16 @@ test.describe('TODO App E2E Tests', () => {
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
     // Assert — todo appears and the notes UI is reachable
-    const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+    const todoCheckbox = page.locator(
+      `[role="checkbox"][aria-label="${todoText}"][id^="todo-"]:not([id^="todo--"])`,
+    )
     await expect(todoCheckbox).toBeVisible()
-    const toggleNotesButton = page
-      .getByRole('button', { name: 'Toggle notes' })
-      .first()
+    const todoItem = page.locator('.rounded-lg.border').filter({
+      has: todoCheckbox,
+    })
+    const toggleNotesButton = todoItem.getByRole('button', {
+      name: 'Toggle notes',
+    })
     await expect(toggleNotesButton).toBeVisible()
     await toggleNotesButton.click()
     await page.waitForTimeout(500)
