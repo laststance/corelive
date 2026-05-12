@@ -1,6 +1,7 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/react'
+import { memo } from 'react'
 
 import type { TodoId, TodoText } from '../lib/domain-types'
 
@@ -23,7 +24,10 @@ export interface TaskPoolCardProps {
   text: TodoText
 }
 
-export function TaskPoolCard({ id, text }: TaskPoolCardProps) {
+export const TaskPoolCard = memo(function TaskPoolCard({
+  id,
+  text,
+}: TaskPoolCardProps) {
   // dnd-kit maintains one ID registry across draggables and droppables.
   // Prefix Todo ids so they cannot collide with SkillNode ids.
   const { ref, isDragging } = useDraggable({ id: `todo-${id}` })
@@ -46,4 +50,4 @@ export function TaskPoolCard({ id, text }: TaskPoolCardProps) {
       {text}
     </button>
   )
-}
+})

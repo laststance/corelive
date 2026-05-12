@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import {
   aggregateYearInReview,
@@ -109,7 +110,7 @@ function writeStoredYear(storageKey: string, year: number): void {
  * @example
  * <YearInReviewModal dataByDate={heatmapByDate} isLoading={heatmapLoading} />
  */
-export function YearInReviewModal({
+export const YearInReviewModal = memo(function YearInReviewModal({
   dataByDate,
   isLoading,
   isRestoring,
@@ -151,8 +152,8 @@ export function YearInReviewModal({
   // and write the localStorage dedupe key — that's an external store
   // side effect, not "adjusting state from a prop change". The lint
   // heuristic mis-fires here.
-  /* eslint-disable react-you-might-not-need-an-effect/no-adjust-state-on-prop-change */
-  useEffect(() => {
+
+  useComponentEffect(() => {
     if (isLoading) return
     if (isRestoring) return
     if (dataByDate.size === 0 && !forcedToday) return
@@ -181,7 +182,6 @@ export function YearInReviewModal({
     setOpen(true)
     writeStoredYear(storageKey, summary.year)
   }, [dataByDate, isLoading, isRestoring, userId, forcedToday, forceParam])
-  /* eslint-enable react-you-might-not-need-an-effect/no-adjust-state-on-prop-change */
 
   if (!open) return null
 
@@ -191,7 +191,7 @@ export function YearInReviewModal({
   const summary = aggregateYearInReview(dataByDate, forcedToday ?? new Date())
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(open: boolean) => setOpen(open)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">
@@ -269,7 +269,7 @@ export function YearInReviewModal({
       </DialogContent>
     </Dialog>
   )
-}
+})
 
 /**
  * Single stat tile inside the modal. Geist Mono tabular numbers + serif
@@ -278,7 +278,7 @@ export function YearInReviewModal({
  * @example
  * <Stat label="completed" value={412} isLoading={false} />
  */
-function Stat({
+const Stat = memo(function Stat({
   label,
   value,
   isLoading,
@@ -301,4 +301,4 @@ function Stat({
       <p className="font-serif text-xs italic text-muted-foreground">{label}</p>
     </div>
   )
-}
+})

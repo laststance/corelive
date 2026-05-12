@@ -2,6 +2,7 @@
 
 import { Palette, Check } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { memo, useMemo } from 'react'
 
 import {
   DropdownMenuItem,
@@ -18,8 +19,15 @@ import { THEMES, THEME_META } from '@/providers/ThemeProvider'
  * Displays available themes with preview colors and active state.
  * @returns Dropdown submenu for theme selection
  */
-export function ThemeSelectorMenuItem() {
+export const ThemeSelectorMenuItem = memo(function ThemeSelectorMenuItem() {
   const { theme, setTheme } = useTheme()
+  const themeClickHandlers = useMemo(
+    () =>
+      Object.fromEntries(
+        THEMES.map((themeId) => [themeId, () => setTheme(themeId)]),
+      ) as Record<(typeof THEMES)[number], () => void>,
+    [setTheme],
+  )
 
   return (
     <DropdownMenuSub>
@@ -36,7 +44,7 @@ export function ThemeSelectorMenuItem() {
             return (
               <DropdownMenuItem
                 key={themeId}
-                onClick={() => setTheme(themeId)}
+                onClick={themeClickHandlers[themeId]}
                 className={cn('cursor-pointer gap-2', isActive && 'bg-accent')}
               >
                 <div
@@ -52,4 +60,4 @@ export function ThemeSelectorMenuItem() {
       </DropdownMenuPortal>
     </DropdownMenuSub>
   )
-}
+})

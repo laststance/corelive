@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * Redux Provider Component
  *
@@ -12,6 +14,7 @@
  *
  * @example
  * // In app/layout.tsx
+ * import { memo } from 'react'
  * import { ReduxProvider } from '@/lib/redux/providers'
  *
  * export default function RootLayout({ children }) {
@@ -26,9 +29,7 @@
  *   )
  * }
  */
-'use client'
-
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import { Provider } from 'react-redux'
 
 import { store } from './store'
@@ -58,6 +59,8 @@ interface ReduxProviderProps {
  *   <HomePage />
  * </ReduxProvider>
  */
-export function ReduxProvider({ children }: ReduxProviderProps): ReactNode {
+export const ReduxProvider = memo(function ReduxProvider({
+  children,
+}: ReduxProviderProps): ReactNode {
   return <Provider store={store}>{children}</Provider>
-}
+})

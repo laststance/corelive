@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -179,7 +179,7 @@ function localSundayIso(now: Date): string {
  * @example
  * <SundayDigestCard dataByDate={dataByDate} isLoading={isLoading} />
  */
-export function SundayDigestCard({
+export const SundayDigestCard = memo(function SundayDigestCard({
   dataByDate,
   isLoading,
   now,
@@ -301,4 +301,4 @@ export function SundayDigestCard({
       </CardContent>
     </Card>
   )
-}
+})

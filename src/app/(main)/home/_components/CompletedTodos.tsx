@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Trash2 } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
 
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { orpc } from '@/lib/orpc/client-query'
 
 import { TodoItem } from './TodoItem'
@@ -39,7 +40,7 @@ interface GroupedTodos {
 
 const ITEMS_PER_PAGE = 10
 
-export function CompletedTodos({
+export const CompletedTodos = React.memo(function CompletedTodos({
   onDelete,
   onClearCompleted,
   onToggleComplete,
@@ -106,7 +107,7 @@ export function CompletedTodos({
   })
 
   // Intersection Observer for infinite scroll
-  useEffect(() => {
+  useComponentEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
@@ -248,7 +249,10 @@ export function CompletedTodos({
         </CardContent>
       </Card>
 
-      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+      <AlertDialog
+        open={clearDialogOpen}
+        onOpenChange={(open: boolean) => setClearDialogOpen(open)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Clear all completed tasks?</AlertDialogTitle>
@@ -275,4 +279,4 @@ export function CompletedTodos({
       </AlertDialog>
     </>
   )
-}
+})

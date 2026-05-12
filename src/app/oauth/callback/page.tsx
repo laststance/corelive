@@ -1,7 +1,9 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useState } from 'react'
+import { memo, Suspense, useState } from 'react'
+
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 /**
  * OAuth Callback Page - Browser-to-Electron Bridge with Sign-In Token
@@ -29,15 +31,18 @@ type CallbackStatus =
   | 'success'
   | 'error'
 
-function OAuthCallbackContent() {
+const OAuthCallbackContent = memo(function OAuthCallbackContent() {
   const searchParams = useSearchParams()
+  const state = searchParams.get('state')
+  const error = searchParams.get('error')
+  const errorDescription = searchParams.get('error_description')
   const [status, setStatus] = useState<CallbackStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
-  useEffect(() => {
-    const state = searchParams.get('state')
-    const error = searchParams.get('error')
-    const errorDescription = searchParams.get('error_description')
+  useComponentEffect(() => {
+    let isMounted = true
+    let redirectTimer: number | undefined
+    let successTimer: number | undefined
 
     // Handle OAuth error from Clerk
     if (error) {
@@ -56,6 +61,8 @@ function OAuthCallbackContent() {
     // Fetch sign-in token and redirect to Electron
     const createTokenAndRedirect = async () => {
       try {
+        if (!isMounted) return
+
         setStatus('creating-token')
 
         // Call server API to create a sign-in token
@@ -78,20 +85,25 @@ function OAuthCallbackContent() {
         // Build deep link with both state (for validation) and token (for sign-in)
         const deepLink = `corelive://oauth/callback?state=${encodeURIComponent(state)}&token=${encodeURIComponent(token)}`
 
+        if (!isMounted) return
+
         setStatus('redirecting')
 
         // Redirect to Electron app via deep link
         // Small delay to show UI update
-        setTimeout(() => {
+        redirectTimer = window.setTimeout(() => {
           window.location.href = deepLink
         }, 100)
 
         // After a short delay, show success message
         // (User may need to manually return to app if deep link doesn't auto-focus)
-        setTimeout(() => {
+        successTimer = window.setTimeout(() => {
+          if (!isMounted) return
           setStatus('success')
         }, 2000)
       } catch (err) {
+        if (!isMounted) return
+
         console.error('OAuth callback error:', err)
         setStatus('error')
         setErrorMessage(
@@ -103,7 +115,13 @@ function OAuthCallbackContent() {
     }
 
     void createTokenAndRedirect()
-  }, [searchParams])
+
+    return () => {
+      isMounted = false
+      if (redirectTimer !== undefined) window.clearTimeout(redirectTimer)
+      if (successTimer !== undefined) window.clearTimeout(successTimer)
+    }
+  }, [state, error, errorDescription])
 
   return (
     <div className="bg-linear-to-b flex min-h-screen flex-col items-center justify-center from-gray-50 to-gray-100 p-4">
@@ -226,14 +244,14 @@ function OAuthCallbackContent() {
       </p>
     </div>
   )
-}
+})
 
 /**
  * OAuth Callback Page with Suspense wrapper.
  *
  * useSearchParams() requires Suspense boundary in Next.js App Router.
  */
-export default function OAuthCallbackPage() {
+const OAuthCallbackPage = memo(function OAuthCallbackPage() {
   return (
     <Suspense
       fallback={
@@ -245,4 +263,6 @@ export default function OAuthCallbackPage() {
       <OAuthCallbackContent />
     </Suspense>
   )
-}
+})
+
+export default OAuthCallbackPage

@@ -2,7 +2,7 @@
 
 import { Check, Palette } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -27,7 +27,7 @@ interface ThemeSelectorProps {
  * @param align - Dropdown alignment
  * @param className - Additional CSS classes
  */
-export function ThemeSelector({
+export const ThemeSelector = memo(function ThemeSelector({
   align = 'end',
   className,
 }: ThemeSelectorProps) {
@@ -37,9 +37,25 @@ export function ThemeSelector({
   const currentMeta = theme
     ? THEME_META[theme as keyof typeof THEME_META]
     : null
+  const handleOpenChange = useCallback((open: boolean) => {
+    setIsOpen(open)
+  }, [])
+  const themeClickHandlers = useMemo(
+    () =>
+      Object.fromEntries(
+        THEMES.map((themeId) => [
+          themeId,
+          () => {
+            setTheme(themeId)
+            setIsOpen(false)
+          },
+        ]),
+      ) as Record<(typeof THEMES)[number], () => void>,
+    [setTheme],
+  )
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+    <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
@@ -67,10 +83,7 @@ export function ThemeSelector({
           return (
             <DropdownMenuItem
               key={themeId}
-              onClick={() => {
-                setTheme(themeId)
-                setIsOpen(false)
-              }}
+              onClick={themeClickHandlers[themeId]}
               className={cn('cursor-pointer gap-2', isActive && 'bg-accent')}
             >
               <div
@@ -85,13 +98,17 @@ export function ThemeSelector({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+})
 
 /**
  * Compact theme selector using native select element.
  * @param className - Additional CSS classes
  */
-export function ThemeSelectorCompact({ className }: { className?: string }) {
+export const ThemeSelectorCompact = memo(function ThemeSelectorCompact({
+  className,
+}: {
+  className?: string
+}) {
   const { theme, setTheme } = useTheme()
 
   return (
@@ -111,4 +128,4 @@ export function ThemeSelectorCompact({ className }: { className?: string }) {
       ))}
     </select>
   )
-}
+})

@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -76,7 +76,7 @@ export interface NodePopoverProps {
  *   <button>Open node</button>
  * </NodePopover>
  */
-export function NodePopover({
+export const NodePopover = memo(function NodePopover({
   open,
   onOpenChange,
   node,
@@ -142,4 +142,4 @@ export function NodePopover({
       </PopoverContent>
     </Popover>
   )
-}
+})

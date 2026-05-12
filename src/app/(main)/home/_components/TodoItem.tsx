@@ -5,7 +5,7 @@ import {
   ChevronRight,
   GripVertical,
 } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,7 +45,7 @@ interface TodoItemProps {
   isDragging?: boolean
 }
 
-export function TodoItem({
+export const TodoItem = React.memo(function TodoItem({
   todo,
   onToggleComplete,
   onDelete,
@@ -55,6 +55,9 @@ export function TodoItem({
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const [notes, setNotes] = useState(todo.notes ?? '')
+  const handleNotesOpenChange = useCallback((open: boolean) => {
+    setIsNotesOpen(open)
+  }, [])
 
   const handleNotesChange = (value: string) => {
     setNotes(value)
@@ -115,7 +118,10 @@ export function TodoItem({
             {todo.completed ? 'Completed' : 'Pending'}
           </Badge>
           {onUpdateNotes && (
-            <Collapsible open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+            <Collapsible
+              open={isNotesOpen}
+              onOpenChange={handleNotesOpenChange}
+            >
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
@@ -145,7 +151,7 @@ export function TodoItem({
         </div>
       </div>
       {onUpdateNotes && (
-        <Collapsible open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+        <Collapsible open={isNotesOpen} onOpenChange={handleNotesOpenChange}>
           <CollapsibleContent className="bg-muted/30 border-t">
             <div className="p-4">
               <Textarea
@@ -160,4 +166,4 @@ export function TodoItem({
       )}
     </div>
   )
-}
+})

@@ -1,7 +1,10 @@
 'use client'
 
 import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
-import { useEffect, useRef } from 'react'
+import * as React from 'react'
+import { memo, useRef } from 'react'
+
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 import { log } from '../logger'
@@ -17,7 +20,7 @@ import { log } from '../logger'
  * OAuth in the system browser, a sign-in token is passed back via deep link
  * and this component uses it to create a Clerk session in the WebView.
  */
-export function ElectronAuthProvider({
+export const ElectronAuthProvider = memo(function ElectronAuthProvider({
   children,
 }: {
   children: React.ReactNode
@@ -29,7 +32,7 @@ export function ElectronAuthProvider({
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
 
   // Handle sign-in token from browser OAuth
-  useEffect(() => {
+  useComponentEffect(() => {
     // Only run in Electron environment
     if (!isElectronEnvironment()) {
       return
@@ -248,7 +251,7 @@ export function ElectronAuthProvider({
   }, [client, setActive, signIn, signInFetchStatus, user])
 
   // Store token if it arrives before signIn is ready
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isElectronEnvironment()) return
     if (signIn) {
       log.debug('[OAuth] Temp effect: signIn ready, skipping temp listener')
@@ -274,7 +277,7 @@ export function ElectronAuthProvider({
   }, [signIn])
 
   // Sync auth state with Electron main process
-  useEffect(() => {
+  useComponentEffect(() => {
     // Only run in Electron environment
     if (!isElectronEnvironment()) {
       return
@@ -310,7 +313,7 @@ export function ElectronAuthProvider({
   }, [user, isLoaded])
 
   return <>{children}</>
-}
+})
 
 /**
  * Hook to check if running in Electron and get Electron-specific auth state

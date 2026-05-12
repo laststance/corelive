@@ -37,7 +37,7 @@ export interface SkillNodeCircleProps {
   onClick?: (nodeId: SkillNodeId) => void
 }
 
-export function SkillNodeCircle({
+export const SkillNodeCircle = React.memo(function SkillNodeCircle({
   id,
   name,
   cx,
@@ -243,4 +243,4 @@ export function SkillNodeCircle({
       )}
     </g>
   )
-}
+})

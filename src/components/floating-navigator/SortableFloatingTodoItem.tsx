@@ -33,24 +33,26 @@ interface SortableFloatingTodoItemProps {
  *   )}
  * </SortableFloatingTodoItem>
  */
-export function SortableFloatingTodoItem({
-  todo,
-  index,
-  children,
-}: SortableFloatingTodoItemProps) {
-  const { ref, handleRef, isDragging } = useSortable({ id: todo.id, index })
+export const SortableFloatingTodoItem = React.memo(
+  function SortableFloatingTodoItem({
+    todo,
+    index,
+    children,
+  }: SortableFloatingTodoItemProps) {
+    const { ref, handleRef, isDragging } = useSortable({ id: todo.id, index })
 
-  const style: React.CSSProperties = {
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 1 : 0,
-  }
+    const style: React.CSSProperties = {
+      opacity: isDragging ? 0.5 : 1,
+      zIndex: isDragging ? 1 : 0,
+    }
 
-  return (
-    <div ref={ref} style={style}>
-      {children({
-        dragHandleRef: handleRef,
-        isDragging,
-      })}
-    </div>
-  )
-}
+    return (
+      <div ref={ref} style={style}>
+        {children({
+          dragHandleRef: handleRef,
+          isDragging,
+        })}
+      </div>
+    )
+  },
+)

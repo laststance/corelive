@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Button } from '@/components/ui/button'
@@ -215,7 +215,7 @@ function getTopCategoryName<T extends { category?: { name: string } | null }>(
  * @example
  * <DayDetailDialog date={selectedDate} onOpenChange={(open) => !open && setSelectedDate(null)} />
  */
-export function DayDetailDialog({
+export const DayDetailDialog = memo(function DayDetailDialog({
   date,
   onOpenChange,
   onNavigate,
@@ -395,4 +395,4 @@ export function DayDetailDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Settings } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { memo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
@@ -48,7 +49,7 @@ import {
  * @example
  * <Category onOpenManageAction={() => setManageOpen(true)} />
  */
-export function Category({
+export const Category = memo(function Category({
   onOpenManageAction,
 }: {
   onOpenManageAction: () => void
@@ -79,7 +80,7 @@ export function Category({
   )
 
   // Cross-tab sync for categories
-  useEffect(() => {
+  useComponentEffect(() => {
     return subscribeToCategorySync(() => {
       queryClient.invalidateQueries({
         queryKey: orpc.category.list.key(),
@@ -120,7 +121,10 @@ export function Category({
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Categories</SidebarGroupLabel>
-      <Popover open={addOpen} onOpenChange={setAddOpen}>
+      <Popover
+        open={addOpen}
+        onOpenChange={(open: boolean) => setAddOpen(open)}
+      >
         <PopoverTrigger asChild>
           <SidebarGroupAction
             className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
@@ -206,4 +210,4 @@ export function Category({
       </SidebarGroupContent>
     </SidebarGroup>
   )
-}
+})

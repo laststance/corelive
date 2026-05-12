@@ -1,5 +1,6 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { render, screen } from '@testing-library/react'
+import * as React from 'react'
 import { describe, expect, it } from 'vitest'
 
 import type { TodoId, TodoText } from '../lib/domain-types'

@@ -7,7 +7,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useOptimistic, useState, useTransition } from 'react'
+import { memo, useMemo, useOptimistic, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -47,7 +47,7 @@ import './styles.css'
  * }
  * ```
  */
-export function SkillTreeView() {
+export const SkillTreeView = memo(function SkillTreeView() {
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [activeDragId, setActiveDragId] = useState<TodoId | null>(null)
@@ -389,7 +389,7 @@ export function SkillTreeView() {
       </DragOverlay>
     </DragDropProvider>
   )
-}
+})
 
 /**
  * Parses a draggable DnD id of the form `todo-<number>` into its numeric todo id.

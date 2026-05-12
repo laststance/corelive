@@ -1,7 +1,8 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import * as React from 'react'
+import { memo, useCallback, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -17,6 +18,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import {
   BRAINDUMP_NOTE_LINES_PER_CAP,
@@ -123,7 +125,7 @@ function findCheckedLineIndexByTitle(
  * textarea state first, then fire the IPC + oRPC writes. Failure rollback
  * is handled by the toast cleanup path.
  */
-export function BrainDumpEditor({
+export const BrainDumpEditor = memo(function BrainDumpEditor({
   categories,
 }: {
   categories: CategoryWithCount[]
@@ -164,7 +166,7 @@ export function BrainDumpEditor({
     text: string
   }>({ categoryId: null, text: '' })
 
-  useEffect(() => {
+  useComponentEffect(() => {
     noteTextRef.current = noteText
   }, [noteText])
 
@@ -176,7 +178,7 @@ export function BrainDumpEditor({
   )
 
   // Initial pull of opacity + sync mode + last category from the main process.
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment()) return
     let cancelled = false
     const api = window.brainDumpAPI
@@ -206,7 +208,7 @@ export function BrainDumpEditor({
 
   // Subscribe to main-process category broadcasts (e.g., when another window
   // changes the active category and main updates the BrainDump config).
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment()) return
     const api = window.brainDumpAPI
     if (!api) return
@@ -219,7 +221,7 @@ export function BrainDumpEditor({
   }, [isMounted])
 
   // Whenever the active category flips, load that category's note text.
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null) {
       setNoteText('')
       lastPersistedRef.current = { categoryId: null, text: '' }
@@ -267,7 +269,7 @@ export function BrainDumpEditor({
   // The cleanup *only* clears the pending timer — flushing here would defeat
   // the debounce because cleanup runs on every keystroke (noteText is a dep).
   // The companion effect below handles category-swap/unmount flushes.
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
       return
     if (isLoadingNote) return
@@ -294,7 +296,7 @@ export function BrainDumpEditor({
 
   // Final flush: runs on category swap and unmount only (not on every keystroke).
   // Reads the latest text via ref so we never persist a stale snapshot.
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
       return
     const api = window.brainDumpAPI
@@ -682,4 +684,4 @@ export function BrainDumpEditor({
       />
     </div>
   )
-}
+})

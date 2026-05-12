@@ -1,7 +1,7 @@
 'use client'
 
 import { Keyboard, RotateCcw, Save, AlertCircle } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { memo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 import { log } from '../../lib/logger'
 
@@ -42,7 +43,9 @@ const SHORTCUT_DESCRIPTIONS: Record<string, string> = {
   focusFloatingNavigator: 'Focus floating navigator',
 }
 
-export function ShortcutSettings({ className }: ShortcutSettingsProps) {
+export const ShortcutSettings = memo(function ShortcutSettings({
+  className,
+}: ShortcutSettingsProps) {
   const [shortcuts, setShortcuts] = useState<ShortcutConfig>({})
   const [defaultShortcuts, setDefaultShortcuts] = useState<ShortcutConfig>({})
   const [stats, setStats] = useState<ShortcutStats | null>(null)
@@ -55,7 +58,7 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
   const isElectron =
     typeof window !== 'undefined' && window.electronAPI?.shortcuts
 
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isElectron) {
       setIsLoading(false)
       return
@@ -374,4 +377,4 @@ export function ShortcutSettings({ className }: ShortcutSettingsProps) {
       </CardContent>
     </Card>
   )
-}
+})

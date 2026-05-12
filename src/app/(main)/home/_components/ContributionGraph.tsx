@@ -2,7 +2,8 @@
 
 import HeatMap from '@uiw/react-heat-map'
 import { useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as React from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
@@ -125,7 +127,11 @@ function formatDate(dateStr: string): string {
 /**
  * Tooltip content showing category breakdown for a specific day.
  */
-function CategoryBreakdown({ day }: { day: HeatmapDay }) {
+const CategoryBreakdown = memo(function CategoryBreakdown({
+  day,
+}: {
+  day: HeatmapDay
+}) {
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium">{formatDate(day.date)}</p>
@@ -148,7 +154,7 @@ function CategoryBreakdown({ day }: { day: HeatmapDay }) {
       </p>
     </div>
   )
-}
+})
 
 /**
  * GitHub-style contribution heatmap showing completed task activity.
@@ -158,10 +164,10 @@ function CategoryBreakdown({ day }: { day: HeatmapDay }) {
  * @example
  * <ContributionGraph />
  */
-export function ContributionGraph() {
+export const ContributionGraph = memo(function ContributionGraph() {
   const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
   const containerRef = useRef<HTMLDivElement>(null)
-  const containerWidth = useObservedElementWidth(containerRef)
+  const containerWidth = useObservedElementWidth(containerRef, !isLoading)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   // `?date=YYYY-MM-DD` deep-link: validated via the same Zod schema the
   // server uses for `getDayDetail`, so invalid input is rejected with the
@@ -171,7 +177,7 @@ export function ContributionGraph() {
   const searchParams = useSearchParams()
   const dateParam = searchParams.get('date')
 
-  useEffect(() => {
+  useComponentEffect(() => {
     // Closing the dialog when `?date=` is removed or invalidated keeps URL
     // and dialog state coupled. Without this, navigating from `?date=valid`
     // → `?date=` (or `?date=garbage`) would leave a stale dialog open even
@@ -348,11 +354,12 @@ export function ContributionGraph() {
       </CardContent>
     </Card>
   )
-}
+})
 
 /**
  * Observes an element and returns its current content width.
  * @param elementRef - Reference to the container element
+ * @param enabled - Starts measurement after the element can be rendered.
  * @returns
  * - The measured width in pixels after mount
  * - `null` before the first measurement completes
@@ -362,10 +369,15 @@ export function ContributionGraph() {
  */
 function useObservedElementWidth<T extends HTMLElement>(
   elementRef: React.RefObject<T | null>,
+  enabled: boolean,
 ): number | null {
   const [elementWidth, setElementWidth] = useState<number | null>(null)
 
-  useEffect(() => {
+  useComponentEffect(() => {
+    if (!enabled) {
+      return
+    }
+
     const element = elementRef.current
 
     if (!element) {
@@ -392,7 +404,7 @@ function useObservedElementWidth<T extends HTMLElement>(
     resizeObserver.observe(element)
 
     return () => resizeObserver.disconnect()
-  }, [elementRef])
+  }, [enabled, elementRef])
 
   return elementWidth
 }

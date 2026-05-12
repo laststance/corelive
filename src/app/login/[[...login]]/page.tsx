@@ -2,12 +2,13 @@
 
 import { SignIn as Login, useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { memo } from 'react'
 
 import {
   ElectronLoginForm,
   useIsElectron,
 } from '@/components/auth/ElectronLoginForm'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 
 /**
  * Login Page with Electron Email/Password Support
@@ -20,13 +21,13 @@ import {
  * - Google OAuth requires system browser (blocks WebView)
  * - GitHub removed: email/password provides simpler desktop experience
  */
-export default function Page() {
+const Page = memo(function Page() {
   const isElectron = useIsElectron()
   const { user, isLoaded } = useUser()
   const router = useRouter()
 
   // Redirect to home if user is already authenticated
-  useEffect(() => {
+  useComponentEffect(() => {
     if (isLoaded && user) {
       router.replace('/home')
     }
@@ -63,4 +64,6 @@ export default function Page() {
       )}
     </div>
   )
-}
+})
+
+export default Page

@@ -2,11 +2,12 @@
 
 import { useClerk } from '@clerk/nextjs'
 import { LogOut } from 'lucide-react'
+import { memo } from 'react'
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { log } from '@/lib/logger'
 
-export function LogoutButton() {
+export const LogoutButton = memo(function LogoutButton() {
   const { signOut } = useClerk()
 
   const handleLogout = async () => {
@@ -26,4 +27,4 @@ export function LogoutButton() {
       <span>Log out</span>
     </DropdownMenuItem>
   )
-}
+})

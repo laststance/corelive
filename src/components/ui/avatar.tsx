@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-function Avatar({
+const Avatar = React.memo(function Avatar({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
@@ -19,9 +19,9 @@ function Avatar({
       {...props}
     />
   )
-}
+})
 
-function AvatarImage({
+const AvatarImage = React.memo(function AvatarImage({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
@@ -32,9 +32,9 @@ function AvatarImage({
       {...props}
     />
   )
-}
+})
 
-function AvatarFallback({
+const AvatarFallback = React.memo(function AvatarFallback({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
@@ -42,12 +42,12 @@ function AvatarFallback({
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
-        'bg-muted flex size-full items-center justify-center rounded-full',
+        'flex size-full items-center justify-center rounded-full bg-muted',
         className,
       )}
       {...props}
     />
   )
-}
+})
 
 export { Avatar, AvatarImage, AvatarFallback }

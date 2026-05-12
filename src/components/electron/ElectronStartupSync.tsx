@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * Electron Startup Sync
  *
@@ -13,10 +15,8 @@
  *
  * @module components/electron/ElectronStartupSync
  */
-'use client'
 
-import { useEffect } from 'react'
-
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { useAppSelector } from '@/lib/redux/hooks'
 import { selectHideAppIcon } from '@/lib/redux/slices/electronSettingsSlice'
 
@@ -45,7 +45,7 @@ import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 export function ElectronStartupSync(): null {
   const hideAppIcon = useAppSelector(selectHideAppIcon)
 
-  useEffect(() => {
+  useComponentEffect(() => {
     if (!isElectronEnvironment()) return
     // Surface IPC failures to the console; swallowing them silently would
     // mask main-process regressions during startup sync.

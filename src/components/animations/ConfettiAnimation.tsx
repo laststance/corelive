@@ -2,6 +2,7 @@
 
 import React, { useRef, useMemo, useState, useSyncExternalStore } from 'react'
 
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { cn } from '@/lib/utils'
 
 interface ConfettiParticle {
@@ -92,7 +93,7 @@ function createTimerStore(duration: number, onComplete?: () => void) {
  * ConfettiAnimation component for celebrating task completion
  * Renders confetti particles with various colors, shapes, and sizes
  */
-export function ConfettiAnimation({
+export const ConfettiAnimation = React.memo(function ConfettiAnimation({
   trigger,
   particleCount = 50,
   duration = 3000,
@@ -102,22 +103,24 @@ export function ConfettiAnimation({
   const prevTriggerRef = useRef(false)
   const particleSeedRef = useRef(Date.now())
 
-  // Create stable timer store
-  const timerStoreRef = useRef<ReturnType<typeof createTimerStore> | null>(null)
-  if (!timerStoreRef.current) {
-    timerStoreRef.current = createTimerStore(duration, onComplete)
-  }
+  // Rebuild the timer store when timing inputs change so callbacks stay fresh.
+  const timerStore = useMemo(
+    () => createTimerStore(duration, onComplete),
+    [duration, onComplete],
+  )
 
   const isActive = useSyncExternalStore(
-    timerStoreRef.current.subscribe,
-    timerStoreRef.current.getSnapshot,
-    timerStoreRef.current.getServerSnapshot,
+    timerStore.subscribe,
+    timerStore.getSnapshot,
+    timerStore.getServerSnapshot,
   )
+
+  useComponentEffect(() => () => timerStore.stop(), [timerStore])
 
   // Detect trigger rising edge during render (not in effect)
   if (trigger && !prevTriggerRef.current && !isActive) {
     particleSeedRef.current = Date.now()
-    timerStoreRef.current.start()
+    timerStore.start()
   }
   prevTriggerRef.current = trigger
 
@@ -153,7 +156,7 @@ export function ConfettiAnimation({
       ))}
     </div>
   )
-}
+})
 
 /**
  * Hook to trigger confetti animation

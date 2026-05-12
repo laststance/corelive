@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
-import { useState } from 'react'
+import { memo, useState } from 'react'
 
 import {
   AlertDialog,
@@ -45,7 +45,7 @@ interface CategoryManageDialogProps {
  * @param open - Whether the dialog is visible
  * @param onOpenChange - Callback to toggle dialog visibility
  */
-export function CategoryManageDialog({
+export const CategoryManageDialog = memo(function CategoryManageDialog({
   open,
   onOpenChange,
 }: CategoryManageDialogProps) {
@@ -275,4 +275,4 @@ export function CategoryManageDialog({
       </AlertDialog>
     </>
   )
-}
+})

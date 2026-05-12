@@ -55,18 +55,22 @@ interface LevelUpAnimationProps {
  * LevelUpAnimation component for celebrating user level progression
  * Displays an animated badge with level number and effects
  */
-export function LevelUpAnimation({
+export const LevelUpAnimation = React.memo(function LevelUpAnimation({
   level,
   show,
   onComplete,
   className,
 }: LevelUpAnimationProps) {
   const prevShowRef = useRef(false)
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
 
   // Create stable visibility store
   const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(null)
   if (!storeRef.current) {
-    storeRef.current = createVisibilityStore(4000, onComplete)
+    storeRef.current = createVisibilityStore(4000, () => {
+      onCompleteRef.current?.()
+    })
   }
 
   const isVisible = useSyncExternalStore(
@@ -115,92 +119,102 @@ export function LevelUpAnimation({
       </div>
     </div>
   )
-}
+})
 
 /**
  * Milestone level up animation with special effects
  */
-export function MilestoneLevelUpAnimation({
-  level,
-  show,
-  milestone,
-  reward,
-  onComplete,
-  className,
-}: LevelUpAnimationProps & {
-  milestone: string
-  reward?: string
-}) {
-  const prevShowRef = useRef(false)
+export const MilestoneLevelUpAnimation = React.memo(
+  function MilestoneLevelUpAnimation({
+    level,
+    show,
+    milestone,
+    reward,
+    onComplete,
+    className,
+  }: LevelUpAnimationProps & {
+    milestone: string
+    reward?: string
+  }) {
+    const prevShowRef = useRef(false)
+    const onCompleteRef = useRef(onComplete)
+    onCompleteRef.current = onComplete
 
-  // Create stable visibility store with longer duration for milestones
-  const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(null)
-  if (!storeRef.current) {
-    storeRef.current = createVisibilityStore(5000, onComplete)
-  }
+    // Create stable visibility store with longer duration for milestones
+    const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(
+      null,
+    )
+    if (!storeRef.current) {
+      storeRef.current = createVisibilityStore(5000, () => {
+        onCompleteRef.current?.()
+      })
+    }
 
-  const isVisible = useSyncExternalStore(
-    storeRef.current.subscribe,
-    storeRef.current.getSnapshot,
-    storeRef.current.getServerSnapshot,
-  )
+    const isVisible = useSyncExternalStore(
+      storeRef.current.subscribe,
+      storeRef.current.getSnapshot,
+      storeRef.current.getServerSnapshot,
+    )
 
-  // Detect show rising edge during render (not in effect)
-  if (show && !prevShowRef.current && !isVisible) {
-    storeRef.current.show()
-  }
-  prevShowRef.current = show
+    // Detect show rising edge during render (not in effect)
+    if (show && !prevShowRef.current && !isVisible) {
+      storeRef.current.show()
+    }
+    prevShowRef.current = show
 
-  if (!isVisible) return null
+    if (!isVisible) return null
 
-  return (
-    <div
-      className={cn('level-up-container', className)}
-      aria-live="polite"
-      aria-label={`Amazing! You've reached ${milestone} at level ${level}`}
-      data-slot="milestone-level-up-animation"
-    >
-      <div className="level-up-badge achievement-legendary">
-        {/* Enhanced background effects */}
-        <div className="level-up-bg-circle" />
-        <div className="level-up-bg-rays" />
-        <div className="level-up-sparkle" />
+    return (
+      <div
+        className={cn('level-up-container', className)}
+        aria-live="polite"
+        aria-label={`Amazing! You've reached ${milestone} at level ${level}`}
+        data-slot="milestone-level-up-animation"
+      >
+        <div className="level-up-badge achievement-legendary">
+          {/* Enhanced background effects */}
+          <div className="level-up-bg-circle" />
+          <div className="level-up-bg-rays" />
+          <div className="level-up-sparkle" />
 
-        {/* Trophy icon for milestones */}
-        <div className="level-up-icon">
-          <Trophy className="h-10 w-10" />
+          {/* Trophy icon for milestones */}
+          <div className="level-up-icon">
+            <Trophy className="h-10 w-10" />
+          </div>
+
+          {/* Extra star particles */}
+          {[...Array(8)].map((_, i) => (
+            <div
+              key={i}
+              className="level-up-particle"
+              style={{
+                top: '50%',
+                left: '50%',
+                animation: `levelUpParticle${(i % 4) + 1} var(--duration-slow) var(--ease-out) forwards`,
+                animationDelay: `${i * 100}ms`,
+              }}
+            />
+          ))}
         </div>
 
-        {/* Extra star particles */}
-        {[...Array(8)].map((_, i) => (
-          <div
-            key={i}
-            className="level-up-particle"
-            style={{
-              top: '50%',
-              left: '50%',
-              animation: `levelUpParticle${(i % 4) + 1} var(--duration-slow) var(--ease-out) forwards`,
-              animationDelay: `${i * 100}ms`,
-            }}
-          />
-        ))}
+        {/* Enhanced text content */}
+        <div className="level-up-text">
+          <h3 className="level-up-title flex items-center gap-2">
+            <Star className="h-5 w-5 text-yellow-500" />
+            {milestone}
+            <Star className="h-5 w-5 text-yellow-500" />
+          </h3>
+          <p className="level-up-subtitle">Level {level} Achieved!</p>
+          {reward && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Reward: {reward}
+            </p>
+          )}
+        </div>
       </div>
-
-      {/* Enhanced text content */}
-      <div className="level-up-text">
-        <h3 className="level-up-title flex items-center gap-2">
-          <Star className="h-5 w-5 text-yellow-500" />
-          {milestone}
-          <Star className="h-5 w-5 text-yellow-500" />
-        </h3>
-        <p className="level-up-subtitle">Level {level} Achieved!</p>
-        {reward && (
-          <p className="mt-2 text-sm text-muted-foreground">Reward: {reward}</p>
-        )}
-      </div>
-    </div>
-  )
-}
+    )
+  },
+)
 
 /**
  * Hook to manage level up animations

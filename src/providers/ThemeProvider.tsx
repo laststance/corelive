@@ -33,7 +33,12 @@ interface ThemeProviderProps extends Omit<NextThemesProviderProps, 'themes'> {
  * @param children - Child components
  * @returns Provider component
  */
-export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+export const ThemeProvider = React.memo(function ThemeProvider({
+  children,
+  ...props
+}: ThemeProviderProps) {
+  const themes = React.useMemo(() => [...THEMES], [])
+
   return (
     <NextThemesProvider
       attribute="data-theme"
@@ -41,11 +46,11 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
       enableSystem
       enableColorScheme={false}
       disableTransitionOnChange={false}
-      themes={[...THEMES]}
+      themes={themes}
       storageKey="corelive-theme"
       {...props}
     >
       {children}
     </NextThemesProvider>
   )
-}
+})
