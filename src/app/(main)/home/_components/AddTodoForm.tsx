@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, StickyNote, ChevronDown, ChevronRight } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
@@ -41,6 +41,9 @@ export const AddTodoForm = React.memo(function AddTodoForm({
   disabled,
 }: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
+  const handleNotesOpenChange = useCallback((open: boolean) => {
+    setIsNotesOpen(open)
+  }, [])
 
   const form = useForm<TodoFormValues>({
     resolver: zodResolver(todoFormSchema),
@@ -81,7 +84,7 @@ export const AddTodoForm = React.memo(function AddTodoForm({
               />
               <Collapsible
                 open={isNotesOpen}
-                onOpenChange={(open: boolean) => setIsNotesOpen(open)}
+                onOpenChange={handleNotesOpenChange}
               >
                 <CollapsibleTrigger asChild>
                   <Button
@@ -114,7 +117,7 @@ export const AddTodoForm = React.memo(function AddTodoForm({
             </div>
             <Collapsible
               open={isNotesOpen}
-              onOpenChange={(open: boolean) => setIsNotesOpen(open)}
+              onOpenChange={handleNotesOpenChange}
             >
               <CollapsibleContent>
                 <FormField

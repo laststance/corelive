@@ -1,5 +1,4 @@
 import type * as React from 'react'
-import type React from 'react'
 import type { SetStateAction } from 'react'
 
 declare module 'react' {

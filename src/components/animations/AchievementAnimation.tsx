@@ -117,19 +117,16 @@ export const AchievementNotifications = React.memo(
     const achievement = achievements[currentIndex] || null
 
     const handleComplete = useCallback(() => {
-      setCurrentIndex((prevIndex) => {
-        let shouldReset = false
-        setAchievements((prevAchievements) => {
-          if (prevIndex < prevAchievements.length - 1) {
-            return prevAchievements
-          } else {
-            shouldReset = true
-            return []
-          }
-        })
-        return shouldReset ? 0 : prevIndex + 1
-      })
-    }, [])
+      const isLastAchievement = currentIndex >= achievements.length - 1
+
+      if (isLastAchievement) {
+        setAchievements([])
+        setCurrentIndex(0)
+        return
+      }
+
+      setCurrentIndex(currentIndex + 1)
+    }, [achievements.length, currentIndex])
 
     const addAchievement = useCallback((achievement: Achievement) => {
       setAchievements((prev: Achievement[]) => [...prev, achievement])

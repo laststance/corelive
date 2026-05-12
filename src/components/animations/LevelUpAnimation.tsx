@@ -62,11 +62,15 @@ export const LevelUpAnimation = React.memo(function LevelUpAnimation({
   className,
 }: LevelUpAnimationProps) {
   const prevShowRef = useRef(false)
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
 
   // Create stable visibility store
   const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(null)
   if (!storeRef.current) {
-    storeRef.current = createVisibilityStore(4000, onComplete)
+    storeRef.current = createVisibilityStore(4000, () => {
+      onCompleteRef.current?.()
+    })
   }
 
   const isVisible = useSyncExternalStore(
@@ -133,13 +137,17 @@ export const MilestoneLevelUpAnimation = React.memo(
     reward?: string
   }) {
     const prevShowRef = useRef(false)
+    const onCompleteRef = useRef(onComplete)
+    onCompleteRef.current = onComplete
 
     // Create stable visibility store with longer duration for milestones
     const storeRef = useRef<ReturnType<typeof createVisibilityStore> | null>(
       null,
     )
     if (!storeRef.current) {
-      storeRef.current = createVisibilityStore(5000, onComplete)
+      storeRef.current = createVisibilityStore(5000, () => {
+        onCompleteRef.current?.()
+      })
     }
 
     const isVisible = useSyncExternalStore(

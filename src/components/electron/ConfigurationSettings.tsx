@@ -159,6 +159,7 @@ export const ConfigurationSettings = React.memo(
 
     const updateConfig = (path: string, value: any) => {
       if (!config) return
+      if (typeof value === 'number' && Number.isNaN(value)) return
 
       const keys = path.split('.')
       const newConfig = { ...config }

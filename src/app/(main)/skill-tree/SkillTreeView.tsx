@@ -378,7 +378,7 @@ export const SkillTreeView = memo(function SkillTreeView() {
           <TaskPoolDrawer
             todos={poolTodos}
             open={drawerOpen}
-            onOpenChange={(open: boolean) => setDrawerOpen(open)}
+            onOpenChange={setDrawerOpen}
           />
         </div>
       </div>

@@ -14,7 +14,8 @@
  *
  * @example
  * // In app/layout.tsx
- * import { memo, ReduxProvider } from '@/lib/redux/providers'
+ * import { memo } from 'react'
+ * import { ReduxProvider } from '@/lib/redux/providers'
  *
  * export default function RootLayout({ children }) {
  *   return (

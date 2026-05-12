@@ -39,6 +39,34 @@ type ChartContextProps = {
 
 const ChartContext = React.createContext<ChartContextProps | null>(null)
 
+const SAFE_CHART_COLOR_PATTERN =
+  /^(?:#[\da-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla)\((?:\s*(?:[-+]?\d*\.?\d+(?:deg|rad|turn|%)?|var\(--[a-zA-Z0-9_-]+\))\s*(?:[,/ ]\s*)?)+\))$/
+
+function escapeCssIdentifier(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value)
+  }
+
+  return value.replace(/[^a-zA-Z0-9_-]/g, '\\$&')
+}
+
+function escapeCssString(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[\n\r\f]/g, '')
+}
+
+function sanitizeChartColor(value: string | undefined): string | null {
+  const color = value?.trim()
+
+  if (!color) {
+    return null
+  }
+
+  return SAFE_CHART_COLOR_PATTERN.test(color) ? color : null
+}
+
 function useChart() {
   const context = React.useContext(ChartContext)
 
@@ -63,9 +91,10 @@ const ChartContainer = React.memo(function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, '')}`
+  const chartContextValue = React.useMemo(() => ({ config }), [config])
 
   return (
-    <ChartContext value={{ config }}>
+    <ChartContext value={chartContextValue}>
       <div
         data-slot="chart"
         data-chart={chartId}
@@ -89,6 +118,7 @@ const ChartStyle = React.memo(
     const colorConfig = Object.entries(config).filter(
       ([, config]) => config.theme || config.color,
     )
+    const chartSelectorId = escapeCssString(id)
 
     if (!colorConfig.length) {
       return null
@@ -100,13 +130,17 @@ const ChartStyle = React.memo(
           __html: Object.entries(THEMES)
             .map(
               ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix ? `${prefix} ` : ''}[data-chart="${chartSelectorId}"] {
 ${colorConfig
   .map(([key, itemConfig]) => {
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+    const sanitizedColor = sanitizeChartColor(color)
+
+    return sanitizedColor
+      ? `  --color-${escapeCssIdentifier(key)}: ${sanitizedColor};`
+      : null
   })
   .join('\n')}
 }

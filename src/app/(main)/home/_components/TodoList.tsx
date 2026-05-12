@@ -220,12 +220,15 @@ export const TodoList = memo(function TodoList() {
     })
   }
 
-  const pendingTodosFromQuery = mapTodos(pendingData?.todos)
+  const pendingTodosFromQuery = useMemo(
+    () => mapTodos(pendingData?.todos),
+    [pendingData?.todos, categoryMap],
+  )
 
   // Sync local state with query data when it changes
   useComponentEffect(() => {
     setLocalPendingTodos(pendingTodosFromQuery)
-  }, [pendingData])
+  }, [pendingTodosFromQuery])
 
   // Use local state for rendering to enable optimistic reordering
   const pendingTodos = localPendingTodos

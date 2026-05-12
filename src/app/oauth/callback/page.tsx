@@ -37,6 +37,9 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
   const [errorMessage, setErrorMessage] = useState<string>('')
 
   useComponentEffect(() => {
+    let isMounted = true
+    let redirectTimer: number | undefined
+    let successTimer: number | undefined
     const state = searchParams.get('state')
     const error = searchParams.get('error')
     const errorDescription = searchParams.get('error_description')
@@ -58,6 +61,8 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
     // Fetch sign-in token and redirect to Electron
     const createTokenAndRedirect = async () => {
       try {
+        if (!isMounted) return
+
         setStatus('creating-token')
 
         // Call server API to create a sign-in token
@@ -80,20 +85,25 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
         // Build deep link with both state (for validation) and token (for sign-in)
         const deepLink = `corelive://oauth/callback?state=${encodeURIComponent(state)}&token=${encodeURIComponent(token)}`
 
+        if (!isMounted) return
+
         setStatus('redirecting')
 
         // Redirect to Electron app via deep link
         // Small delay to show UI update
-        setTimeout(() => {
+        redirectTimer = window.setTimeout(() => {
           window.location.href = deepLink
         }, 100)
 
         // After a short delay, show success message
         // (User may need to manually return to app if deep link doesn't auto-focus)
-        setTimeout(() => {
+        successTimer = window.setTimeout(() => {
+          if (!isMounted) return
           setStatus('success')
         }, 2000)
       } catch (err) {
+        if (!isMounted) return
+
         console.error('OAuth callback error:', err)
         setStatus('error')
         setErrorMessage(
@@ -105,6 +115,12 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
     }
 
     void createTokenAndRedirect()
+
+    return () => {
+      isMounted = false
+      if (redirectTimer !== undefined) window.clearTimeout(redirectTimer)
+      if (successTimer !== undefined) window.clearTimeout(successTimer)
+    }
   }, [searchParams])
 
   return (

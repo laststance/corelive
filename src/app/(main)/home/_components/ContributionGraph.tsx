@@ -167,7 +167,7 @@ const CategoryBreakdown = memo(function CategoryBreakdown({
 export const ContributionGraph = memo(function ContributionGraph() {
   const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
   const containerRef = useRef<HTMLDivElement>(null)
-  const containerWidth = useObservedElementWidth(containerRef)
+  const containerWidth = useObservedElementWidth(containerRef, !isLoading)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   // `?date=YYYY-MM-DD` deep-link: validated via the same Zod schema the
   // server uses for `getDayDetail`, so invalid input is rejected with the
@@ -359,6 +359,7 @@ export const ContributionGraph = memo(function ContributionGraph() {
 /**
  * Observes an element and returns its current content width.
  * @param elementRef - Reference to the container element
+ * @param enabled - Starts measurement after the element can be rendered.
  * @returns
  * - The measured width in pixels after mount
  * - `null` before the first measurement completes
@@ -368,10 +369,15 @@ export const ContributionGraph = memo(function ContributionGraph() {
  */
 function useObservedElementWidth<T extends HTMLElement>(
   elementRef: React.RefObject<T | null>,
+  enabled: boolean,
 ): number | null {
   const [elementWidth, setElementWidth] = useState<number | null>(null)
 
   useComponentEffect(() => {
+    if (!enabled) {
+      return
+    }
+
     const element = elementRef.current
 
     if (!element) {
@@ -398,7 +404,7 @@ function useObservedElementWidth<T extends HTMLElement>(
     resizeObserver.observe(element)
 
     return () => resizeObserver.disconnect()
-  }, [elementRef])
+  }, [enabled, elementRef])
 
   return elementWidth
 }
