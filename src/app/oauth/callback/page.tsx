@@ -33,6 +33,9 @@ type CallbackStatus =
 
 const OAuthCallbackContent = memo(function OAuthCallbackContent() {
   const searchParams = useSearchParams()
+  const state = searchParams.get('state')
+  const error = searchParams.get('error')
+  const errorDescription = searchParams.get('error_description')
   const [status, setStatus] = useState<CallbackStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
@@ -40,9 +43,6 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
     let isMounted = true
     let redirectTimer: number | undefined
     let successTimer: number | undefined
-    const state = searchParams.get('state')
-    const error = searchParams.get('error')
-    const errorDescription = searchParams.get('error_description')
 
     // Handle OAuth error from Clerk
     if (error) {
@@ -121,7 +121,7 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
       if (redirectTimer !== undefined) window.clearTimeout(redirectTimer)
       if (successTimer !== undefined) window.clearTimeout(successTimer)
     }
-  }, [searchParams])
+  }, [state, error, errorDescription])
 
   return (
     <div className="bg-linear-to-b flex min-h-screen flex-col items-center justify-center from-gray-50 to-gray-100 p-4">
