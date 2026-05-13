@@ -59,12 +59,30 @@ export const TodoItem = React.memo(function TodoItem({
     setIsNotesOpen(open)
   }, [])
 
-  const handleNotesChange = (value: string) => {
-    setNotes(value)
-    if (onUpdateNotes) {
-      onUpdateNotes(todo.id, value)
-    }
-  }
+  const handleToggleComplete = useCallback(() => {
+    onToggleComplete(todo.id)
+  }, [onToggleComplete, todo.id])
+
+  const handleDelete = useCallback(() => {
+    onDelete(todo.id)
+  }, [onDelete, todo.id])
+
+  const handleNotesChange = useCallback(
+    (value: string) => {
+      setNotes(value)
+      if (onUpdateNotes) {
+        onUpdateNotes(todo.id, value)
+      }
+    },
+    [onUpdateNotes, todo.id],
+  )
+
+  const handleNotesTextareaChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      handleNotesChange(event.target.value)
+    },
+    [handleNotesChange],
+  )
 
   return (
     <div
@@ -85,7 +103,7 @@ export const TodoItem = React.memo(function TodoItem({
         )}
         <Checkbox
           checked={todo.completed}
-          onCheckedChange={() => onToggleComplete(todo.id)}
+          onCheckedChange={handleToggleComplete}
           id={`todo-${todo.id}`}
           aria-label={todo.text}
         />
@@ -142,7 +160,7 @@ export const TodoItem = React.memo(function TodoItem({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onDelete(todo.id)}
+            onClick={handleDelete}
             className="hover:bg-destructive/10 text-destructive hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
@@ -157,7 +175,7 @@ export const TodoItem = React.memo(function TodoItem({
               <Textarea
                 placeholder="Add notes..."
                 value={notes}
-                onChange={(e) => handleNotesChange(e.target.value)}
+                onChange={handleNotesTextareaChange}
                 className="min-h-20 resize-none"
               />
             </div>

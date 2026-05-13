@@ -111,6 +111,14 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
     [],
   )
 
+  const handleGoogleClick = useCallback(() => {
+    void handleOAuthClick('google')
+  }, [handleOAuthClick])
+
+  const handleGithubClick = useCallback(() => {
+    void handleOAuthClick('github')
+  }, [handleOAuthClick])
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-center text-sm text-gray-500">
@@ -120,7 +128,7 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
       <Button
         variant="outline"
         className="flex w-full items-center justify-center gap-2"
-        onClick={() => void handleOAuthClick('google')}
+        onClick={handleGoogleClick}
         disabled={isLoading !== null}
       >
         {isLoading === 'google' ? (
@@ -155,7 +163,7 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
       <Button
         variant="outline"
         className="flex w-full items-center justify-center gap-2"
-        onClick={() => void handleOAuthClick('github')}
+        onClick={handleGithubClick}
         disabled={isLoading !== null}
       >
         {isLoading === 'github' ? (

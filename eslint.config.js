@@ -47,13 +47,6 @@ export default defineConfig([
       // shadcn/ui wrappers are generated primitives; product components consume them.
       'src/components/ui/**',
       '**/src/components/ui/**',
-      // Legacy interaction-heavy surfaces need dedicated follow-up refactors.
-      'src/app/(main)/home/_components/**',
-      'src/app/(main)/skill-tree/**',
-      'src/components/auth/**',
-      'src/components/braindump/**',
-      'src/components/electron/**',
-      'src/components/floating-navigator/**',
     ],
     plugins: {
       '@laststance/react-next': lastStanceReactNextPlugin,

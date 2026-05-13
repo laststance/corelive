@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { memo, type ReactNode } from 'react'
+import { memo, useCallback, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -84,6 +84,16 @@ export const NodePopover = memo(function NodePopover({
   onUnassign,
   children,
 }: NodePopoverProps) {
+  const handleUnassignClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const todoId = Number(event.currentTarget.dataset.todoId)
+      if (Number.isInteger(todoId)) {
+        onUnassign(todoId)
+      }
+    },
+    [onUnassign],
+  )
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
@@ -131,7 +141,8 @@ export const NodePopover = memo(function NodePopover({
                   // invisible on hover. See styles.css for token values.
                   className="h-11 w-11 shrink-0 text-[var(--st-muted)] hover:bg-[var(--st-bg-mid)] hover:text-[var(--st-cream)]"
                   aria-label={`Unassign ${todo.text}`}
-                  onClick={() => onUnassign(todo.id)}
+                  data-todo-id={todo.id}
+                  onClick={handleUnassignClick}
                 >
                   <X className="h-3 w-3" />
                 </Button>

@@ -1,7 +1,13 @@
 'use client'
 
 import { Keyboard, RotateCcw, Save, AlertCircle } from 'lucide-react'
-import { memo, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useState,
+  type ChangeEvent,
+  type MouseEvent,
+} from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -58,16 +64,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
   const isElectron =
     typeof window !== 'undefined' && window.electronAPI?.shortcuts
 
-  useComponentEffect(() => {
-    if (!isElectron) {
-      setIsLoading(false)
-      return
-    }
-
-    loadShortcuts()
-  }, [isElectron])
-
-  const loadShortcuts = async () => {
+  const loadShortcuts = useCallback(async () => {
     if (!isElectron) return
 
     try {
@@ -111,18 +108,27 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [isElectron])
 
-  const updateShortcut = (id: string, accelerator: string) => {
+  useComponentEffect(() => {
+    if (!isElectron) {
+      setIsLoading(false)
+      return
+    }
+
+    loadShortcuts()
+  }, [isElectron, loadShortcuts])
+
+  const updateShortcut = useCallback((id: string, accelerator: string) => {
     setShortcuts((prev) => ({
       ...prev,
       [id]: accelerator,
     }))
     setHasChanges(true)
     setError(null)
-  }
+  }, [])
 
-  const saveShortcuts = async () => {
+  const saveShortcuts = useCallback(async () => {
     if (!isElectron) return
 
     setIsSaving(true)
@@ -158,15 +164,15 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [isElectron, loadShortcuts, shortcuts])
 
-  const resetToDefaults = () => {
+  const resetToDefaults = useCallback(() => {
     setShortcuts({ ...defaultShortcuts })
     setHasChanges(true)
     setError(null)
-  }
+  }, [defaultShortcuts])
 
-  const toggleShortcuts = async () => {
+  const toggleShortcuts = useCallback(async () => {
     if (!isElectron || !stats) return
 
     try {
@@ -187,38 +193,57 @@ export const ShortcutSettings = memo(function ShortcutSettings({
       log.error('Failed to toggle shortcuts:', error)
       setError('Failed to toggle shortcuts')
     }
-  }
+  }, [isElectron, loadShortcuts, shortcuts, stats])
 
-  const testShortcut = async (id: string) => {
-    if (!isElectron) return
+  const testShortcut = useCallback(
+    async (id: string) => {
+      if (!isElectron) return
 
-    try {
-      const accelerator = shortcuts[id]
-      if (accelerator) {
-        if (
-          !window.electronAPI?.shortcuts ||
-          !window.electronAPI?.notifications
-        ) {
-          throw new Error('Electron API not available')
+      try {
+        const accelerator = shortcuts[id]
+        if (accelerator) {
+          if (
+            !window.electronAPI?.shortcuts ||
+            !window.electronAPI?.notifications
+          ) {
+            throw new Error('Electron API not available')
+          }
+          const isRegistered =
+            await window.electronAPI.shortcuts.isRegistered(accelerator)
+          if (isRegistered) {
+            // Show a notification that the shortcut is working
+            await window.electronAPI.notifications.show(
+              'Shortcut Test',
+              `${SHORTCUT_DESCRIPTIONS[id]} (${accelerator}) is registered and working`,
+              { silent: true },
+            )
+          } else {
+            setError(`Shortcut ${accelerator} is not currently registered`)
+          }
         }
-        const isRegistered =
-          await window.electronAPI.shortcuts.isRegistered(accelerator)
-        if (isRegistered) {
-          // Show a notification that the shortcut is working
-          await window.electronAPI.notifications.show(
-            'Shortcut Test',
-            `${SHORTCUT_DESCRIPTIONS[id]} (${accelerator}) is registered and working`,
-            { silent: true },
-          )
-        } else {
-          setError(`Shortcut ${accelerator} is not currently registered`)
-        }
+      } catch (error) {
+        log.error('Failed to test shortcut:', error)
+        setError('Failed to test shortcut')
       }
-    } catch (error) {
-      log.error('Failed to test shortcut:', error)
-      setError('Failed to test shortcut')
-    }
-  }
+    },
+    [isElectron, shortcuts],
+  )
+
+  const handleShortcutChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const shortcutId = event.currentTarget.dataset.shortcutId
+      if (shortcutId) updateShortcut(shortcutId, event.target.value)
+    },
+    [updateShortcut],
+  )
+
+  const handleTestShortcutClick = useCallback(
+    async (event: MouseEvent<HTMLButtonElement>) => {
+      const shortcutId = event.currentTarget.dataset.shortcutId
+      if (shortcutId) await testShortcut(shortcutId)
+    },
+    [testShortcut],
+  )
 
   if (!isElectron) {
     return (
@@ -315,7 +340,8 @@ export const ShortcutSettings = memo(function ShortcutSettings({
                         <Input
                           id={`shortcut-${id}`}
                           value={shortcuts[id] || ''}
-                          onChange={(e) => updateShortcut(id, e.target.value)}
+                          data-shortcut-id={id}
+                          onChange={handleShortcutChange}
                           placeholder="e.g. Ctrl+N"
                           className="w-32 text-sm"
                           disabled={isSaving}
@@ -323,7 +349,8 @@ export const ShortcutSettings = memo(function ShortcutSettings({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={async () => testShortcut(id)}
+                          data-shortcut-id={id}
+                          onClick={handleTestShortcutClick}
                           disabled={isSaving || !shortcuts[id]}
                         >
                           Test

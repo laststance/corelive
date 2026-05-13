@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 
 /**
  * Electron Settings Page Component
@@ -68,33 +68,36 @@ export const ElectronSettingsPage = memo(
      *
      * @param checked - New toggle state
      */
-    const handleHideAppIconChange = async (checked: boolean): Promise<void> => {
-      // Notify Electron main process via settings API first
-      if (typeof window !== 'undefined' && window.electronAPI?.settings) {
-        try {
-          const success =
-            await window.electronAPI.settings.setHideAppIcon(checked)
-          if (success) {
-            dispatch(setHideAppIcon(checked))
-          } else {
-            // IPC call failed - log error but don't update state
+    const handleHideAppIconChange = useCallback(
+      async (checked: boolean): Promise<void> => {
+        // Notify Electron main process via settings API first
+        if (typeof window !== 'undefined' && window.electronAPI?.settings) {
+          try {
+            const success =
+              await window.electronAPI.settings.setHideAppIcon(checked)
+            if (success) {
+              dispatch(setHideAppIcon(checked))
+            } else {
+              // IPC call failed - log error but don't update state
+              if (process.env.NODE_ENV === 'development') {
+                console.error(
+                  'Failed to update dock icon visibility: IPC returned false',
+                )
+              }
+            }
+          } catch (error) {
+            // IPC call threw - log error but don't update state
             if (process.env.NODE_ENV === 'development') {
-              console.error(
-                'Failed to update dock icon visibility: IPC returned false',
-              )
+              console.error('Failed to update dock icon visibility:', error)
             }
           }
-        } catch (error) {
-          // IPC call threw - log error but don't update state
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Failed to update dock icon visibility:', error)
-          }
+        } else {
+          // Not in Electron - update Redux state anyway for local storage
+          dispatch(setHideAppIcon(checked))
         }
-      } else {
-        // Not in Electron - update Redux state anyway for local storage
-        dispatch(setHideAppIcon(checked))
-      }
-    }
+      },
+      [dispatch],
+    )
 
     /**
      * Handles the Show in Menu Bar toggle change.
@@ -102,33 +105,34 @@ export const ElectronSettingsPage = memo(
      *
      * @param checked - New toggle state
      */
-    const handleShowInMenuBarChange = async (
-      checked: boolean,
-    ): Promise<void> => {
-      // Notify Electron main process via settings API first
-      if (typeof window !== 'undefined' && window.electronAPI?.settings) {
-        try {
-          const success =
-            await window.electronAPI.settings.setShowInMenuBar(checked)
-          if (success) {
-            dispatch(setShowInMenuBar(checked))
-          } else {
-            // IPC call failed (feature not implemented) - log but don't update state
+    const handleShowInMenuBarChange = useCallback(
+      async (checked: boolean): Promise<void> => {
+        // Notify Electron main process via settings API first
+        if (typeof window !== 'undefined' && window.electronAPI?.settings) {
+          try {
+            const success =
+              await window.electronAPI.settings.setShowInMenuBar(checked)
+            if (success) {
+              dispatch(setShowInMenuBar(checked))
+            } else {
+              // IPC call failed (feature not implemented) - log but don't update state
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Menu bar visibility change not yet implemented')
+              }
+            }
+          } catch (error) {
+            // IPC call threw - log error but don't update state
             if (process.env.NODE_ENV === 'development') {
-              console.warn('Menu bar visibility change not yet implemented')
+              console.error('Failed to update menu bar visibility:', error)
             }
           }
-        } catch (error) {
-          // IPC call threw - log error but don't update state
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Failed to update menu bar visibility:', error)
-          }
+        } else {
+          // Not in Electron - update Redux state anyway for local storage
+          dispatch(setShowInMenuBar(checked))
         }
-      } else {
-        // Not in Electron - update Redux state anyway for local storage
-        dispatch(setShowInMenuBar(checked))
-      }
-    }
+      },
+      [dispatch],
+    )
 
     /**
      * Handles the Start at Login toggle change.
@@ -136,35 +140,36 @@ export const ElectronSettingsPage = memo(
      *
      * @param checked - New toggle state
      */
-    const handleStartAtLoginChange = async (
-      checked: boolean,
-    ): Promise<void> => {
-      // Notify Electron main process via settings API first
-      if (typeof window !== 'undefined' && window.electronAPI?.settings) {
-        try {
-          const success =
-            await window.electronAPI.settings.setStartAtLogin(checked)
-          if (success) {
-            dispatch(setStartAtLogin(checked))
-          } else {
-            // IPC call failed - log error but don't update state
+    const handleStartAtLoginChange = useCallback(
+      async (checked: boolean): Promise<void> => {
+        // Notify Electron main process via settings API first
+        if (typeof window !== 'undefined' && window.electronAPI?.settings) {
+          try {
+            const success =
+              await window.electronAPI.settings.setStartAtLogin(checked)
+            if (success) {
+              dispatch(setStartAtLogin(checked))
+            } else {
+              // IPC call failed - log error but don't update state
+              if (process.env.NODE_ENV === 'development') {
+                console.error(
+                  'Failed to update start at login setting: IPC returned false',
+                )
+              }
+            }
+          } catch (error) {
+            // IPC call threw - log error but don't update state
             if (process.env.NODE_ENV === 'development') {
-              console.error(
-                'Failed to update start at login setting: IPC returned false',
-              )
+              console.error('Failed to update start at login setting:', error)
             }
           }
-        } catch (error) {
-          // IPC call threw - log error but don't update state
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Failed to update start at login setting:', error)
-          }
+        } else {
+          // Not in Electron - update Redux state anyway for local storage
+          dispatch(setStartAtLogin(checked))
         }
-      } else {
-        // Not in Electron - update Redux state anyway for local storage
-        dispatch(setStartAtLogin(checked))
-      }
-    }
+      },
+      [dispatch],
+    )
 
     // Environment guard: Show fallback for web users
     if (!isElectron) {

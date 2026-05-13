@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -112,6 +112,245 @@ interface ValidationResult {
   errors: string[]
 }
 
+type ConfigValue = string | number | boolean
+type ConfigUpdater = (path: string, value: ConfigValue) => void
+
+interface ConfigFieldProps {
+  id: string
+  path: string
+  updateConfig: ConfigUpdater
+}
+
+interface ConfigInputProps extends ConfigFieldProps {
+  value: string
+  className?: string
+  placeholder?: string
+}
+
+interface ConfigNumberInputProps extends ConfigFieldProps {
+  value: number
+  min?: number
+  max?: number
+}
+
+interface ConfigSwitchProps extends ConfigFieldProps {
+  checked: boolean
+}
+
+interface ConfigSelectProps extends ConfigFieldProps {
+  value: string
+  children: React.ReactNode
+}
+
+interface ConfigSliderProps extends ConfigFieldProps {
+  value: number
+  min: number
+  max: number
+  step: number
+}
+
+interface ResetSectionButtonProps {
+  section: ConfigSection
+  label: string
+  onReset: (section: ConfigSection) => Promise<void>
+}
+
+/**
+ * Updates a string config value from a shadcn Input without inline JSX handlers.
+ *
+ * @param props - Input metadata, value, and config updater.
+ * @returns A controlled Input for string config values.
+ * @example
+ * <ConfigInput id="shortcut" path="shortcuts.createTask" value="Cmd+N" updateConfig={updateConfig} />
+ */
+const ConfigInput = React.memo(function ConfigInput({
+  id,
+  path,
+  value,
+  updateConfig,
+  className,
+  placeholder,
+}: ConfigInputProps): React.ReactNode {
+  const handleChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      updateConfig(path, event.target.value)
+    },
+    [path, updateConfig],
+  )
+
+  return (
+    <Input
+      id={id}
+      value={value}
+      onChange={handleChange}
+      className={className}
+      placeholder={placeholder}
+    />
+  )
+})
+
+/**
+ * Updates a numeric config value from a shadcn Input.
+ *
+ * @param props - Input metadata, numeric value bounds, and config updater.
+ * @returns A controlled number Input.
+ * @example
+ * <ConfigNumberInput id="width" path="window.main.width" value={1024} min={480} updateConfig={updateConfig} />
+ */
+const ConfigNumberInput = React.memo(function ConfigNumberInput({
+  id,
+  path,
+  value,
+  updateConfig,
+  min,
+  max,
+}: ConfigNumberInputProps): React.ReactNode {
+  const handleChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      updateConfig(path, parseInt(event.target.value, 10))
+    },
+    [path, updateConfig],
+  )
+
+  return (
+    <Input
+      id={id}
+      type="number"
+      value={value}
+      onChange={handleChange}
+      min={min}
+      max={max}
+    />
+  )
+})
+
+/**
+ * Updates a boolean config value from a shadcn Switch.
+ *
+ * @param props - Switch metadata, checked value, and config updater.
+ * @returns A controlled Switch.
+ * @example
+ * <ConfigSwitch id="enabled" path="tray.enabled" checked updateConfig={updateConfig} />
+ */
+const ConfigSwitch = React.memo(function ConfigSwitch({
+  id,
+  path,
+  checked,
+  updateConfig,
+}: ConfigSwitchProps): React.ReactNode {
+  const handleCheckedChange = useCallback(
+    (nextChecked: boolean) => {
+      updateConfig(path, nextChecked)
+    },
+    [path, updateConfig],
+  )
+
+  return (
+    <Switch id={id} checked={checked} onCheckedChange={handleCheckedChange} />
+  )
+})
+
+/**
+ * Updates a string config value from a shadcn Select.
+ *
+ * @param props - Select value, options as children, and config updater.
+ * @returns A controlled Select.
+ * @example
+ * <ConfigSelect path="tray.doubleClickAction" value="restore" updateConfig={updateConfig}>...</ConfigSelect>
+ */
+const ConfigSelect = React.memo(function ConfigSelect({
+  id,
+  path,
+  value,
+  updateConfig,
+  children,
+}: ConfigSelectProps): React.ReactNode {
+  const handleValueChange = useCallback(
+    (nextValue: string) => {
+      updateConfig(path, nextValue)
+    },
+    [path, updateConfig],
+  )
+
+  return (
+    <Select value={value} onValueChange={handleValueChange}>
+      {React.Children.map(children, (child): React.ReactNode => {
+        if (
+          React.isValidElement<{ id?: string }>(child) &&
+          child.type === SelectTrigger
+        ) {
+          return React.cloneElement(child, { id })
+        }
+
+        return child
+      })}
+    </Select>
+  )
+})
+
+/**
+ * Updates a numeric config value from a shadcn Slider.
+ *
+ * @param props - Slider metadata, numeric bounds, and config updater.
+ * @returns A controlled Slider.
+ * @example
+ * <ConfigSlider id="delay" path="notifications.autoHideDelay" value={5000} min={1000} max={30000} step={1000} updateConfig={updateConfig} />
+ */
+const ConfigSlider = React.memo(function ConfigSlider({
+  id,
+  path,
+  value,
+  updateConfig,
+  min,
+  max,
+  step,
+}: ConfigSliderProps): React.ReactNode {
+  const sliderValue = useMemo(() => [value], [value])
+  const handleValueChange = useCallback(
+    ([nextValue]: number[]) => {
+      if (nextValue === undefined) return
+      updateConfig(path, nextValue)
+    },
+    [path, updateConfig],
+  )
+
+  return (
+    <Slider
+      id={id}
+      value={sliderValue}
+      onValueChange={handleValueChange}
+      min={min}
+      max={max}
+      step={step}
+      className="w-full"
+    />
+  )
+})
+
+/**
+ * Resets a single config section without creating inline JSX handlers.
+ *
+ * @param props - Section identifier, label, and reset callback.
+ * @returns A reset Button for one config section.
+ * @example
+ * <ResetSectionButton section="window" label="Reset Window Settings" onReset={resetSection} />
+ */
+const ResetSectionButton = React.memo(function ResetSectionButton({
+  section,
+  label,
+  onReset,
+}: ResetSectionButtonProps): React.ReactNode {
+  const handleClick = useCallback(async () => {
+    await onReset(section)
+  }, [onReset, section])
+
+  return (
+    <Button variant="outline" onClick={handleClick} size="sm">
+      {label}
+    </Button>
+  )
+})
+
 export const ConfigurationSettings = React.memo(
   function ConfigurationSettings() {
     const [config, setConfig] = useState<ElectronConfig | null>(null)
@@ -126,15 +365,7 @@ export const ConfigurationSettings = React.memo(
     // Check if we're in Electron environment
     const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-    useComponentEffect(() => {
-      if (isElectron) {
-        loadConfiguration()
-      } else {
-        setLoading(false)
-      }
-    }, [isElectron])
-
-    const loadConfiguration = async () => {
+    const loadConfiguration = useCallback(async () => {
       try {
         setLoading(true)
         if (!window.electronAPI?.config) {
@@ -155,32 +386,46 @@ export const ConfigurationSettings = React.memo(
       } finally {
         setLoading(false)
       }
-    }
+    }, [])
 
-    const updateConfig = (path: string, value: any) => {
-      if (!config) return
+    const updateConfig = useCallback((path: string, value: ConfigValue) => {
       if (typeof value === 'number' && Number.isNaN(value)) return
 
       const keys = path.split('.')
-      const newConfig = { ...config }
-      let current: any = newConfig
+      setConfig((currentConfig) => {
+        if (!currentConfig) return currentConfig
 
-      for (let i = 0; i < keys.length - 1; i++) {
-        const key = keys[i]
-        if (key && current[key] !== undefined) {
-          current = current[key]
+        const nextConfig = { ...currentConfig } as ElectronConfig
+        let currentRecord = nextConfig as unknown as Record<string, unknown>
+
+        for (let index = 0; index < keys.length - 1; index++) {
+          const key = keys[index]
+          if (!key) continue
+
+          const nestedValue = currentRecord[key]
+          if (
+            typeof nestedValue !== 'object' ||
+            nestedValue === null ||
+            Array.isArray(nestedValue)
+          ) {
+            return currentConfig
+          }
+
+          const nextNestedValue = { ...nestedValue }
+          currentRecord[key] = nextNestedValue
+          currentRecord = nextNestedValue as Record<string, unknown>
         }
-      }
-      const lastKey = keys[keys.length - 1]
-      if (lastKey) {
-        current[lastKey] = value
-      }
 
-      setConfig(newConfig)
+        const lastKey = keys[keys.length - 1]
+        if (!lastKey) return currentConfig
+
+        currentRecord[lastKey] = value
+        return nextConfig
+      })
       setHasChanges(true)
-    }
+    }, [])
 
-    const saveConfiguration = async () => {
+    const saveConfiguration = useCallback(async () => {
       if (!config || !isElectron) return
 
       try {
@@ -231,9 +476,9 @@ export const ConfigurationSettings = React.memo(
       } finally {
         setSaving(false)
       }
-    }
+    }, [config, isElectron])
 
-    const resetConfiguration = async () => {
+    const resetConfiguration = useCallback(async () => {
       if (!isElectron) return
 
       try {
@@ -248,26 +493,29 @@ export const ConfigurationSettings = React.memo(
         log.error('Failed to reset configuration:', error)
         toast.error('Failed to reset configuration')
       }
-    }
+    }, [isElectron, loadConfiguration])
 
-    const resetSection = async (section: ConfigSection) => {
-      if (!isElectron) return
+    const resetSection = useCallback(
+      async (section: ConfigSection) => {
+        if (!isElectron) return
 
-      try {
-        if (!window.electronAPI?.config) {
-          throw new Error('Electron API not available')
+        try {
+          if (!window.electronAPI?.config) {
+            throw new Error('Electron API not available')
+          }
+          await window.electronAPI.config.resetSection(section)
+          await loadConfiguration()
+          setHasChanges(false)
+          toast.success(`${section} settings reset to defaults`)
+        } catch (error) {
+          log.error('Failed to reset section:', error)
+          toast.error(`Failed to reset ${section} settings`)
         }
-        await window.electronAPI.config.resetSection(section)
-        await loadConfiguration()
-        setHasChanges(false)
-        toast.success(`${section} settings reset to defaults`)
-      } catch (error) {
-        log.error('Failed to reset section:', error)
-        toast.error(`Failed to reset ${section} settings`)
-      }
-    }
+      },
+      [isElectron, loadConfiguration],
+    )
 
-    const exportConfiguration = async () => {
+    const exportConfiguration = useCallback(async () => {
       if (!isElectron) return
 
       try {
@@ -288,7 +536,15 @@ export const ConfigurationSettings = React.memo(
         log.error('Failed to export configuration:', error)
         toast.error('Failed to export configuration')
       }
-    }
+    }, [isElectron])
+
+    useComponentEffect(() => {
+      if (isElectron) {
+        loadConfiguration()
+      } else {
+        setLoading(false)
+      }
+    }, [isElectron, loadConfiguration])
 
     if (!isElectron) {
       return (
@@ -384,31 +640,21 @@ export const ConfigurationSettings = React.memo(
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="main-width">Width</Label>
-                    <Input
+                    <ConfigNumberInput
                       id="main-width"
-                      type="number"
                       value={config.window.main.width}
-                      onChange={(e) =>
-                        updateConfig(
-                          'window.main.width',
-                          parseInt(e.target.value, 10),
-                        )
-                      }
+                      path="window.main.width"
+                      updateConfig={updateConfig}
                       min={config.window.main.minWidth}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="main-height">Height</Label>
-                    <Input
+                    <ConfigNumberInput
                       id="main-height"
-                      type="number"
                       value={config.window.main.height}
-                      onChange={(e) =>
-                        updateConfig(
-                          'window.main.height',
-                          parseInt(e.target.value, 10),
-                        )
-                      }
+                      path="window.main.height"
+                      updateConfig={updateConfig}
                       min={config.window.main.minHeight}
                     />
                   </div>
@@ -419,57 +665,51 @@ export const ConfigurationSettings = React.memo(
                     <Label htmlFor="remember-position">
                       Remember window position
                     </Label>
-                    <Switch
+                    <ConfigSwitch
                       id="remember-position"
                       checked={config.window.main.rememberPosition}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.main.rememberPosition', checked)
-                      }
+                      path="window.main.rememberPosition"
+                      updateConfig={updateConfig}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Label htmlFor="remember-size">Remember window size</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="remember-size"
                       checked={config.window.main.rememberSize}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.main.rememberSize', checked)
-                      }
+                      path="window.main.rememberSize"
+                      updateConfig={updateConfig}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Label htmlFor="start-maximized">Start maximized</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="start-maximized"
                       checked={config.window.main.startMaximized}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.main.startMaximized', checked)
-                      }
+                      path="window.main.startMaximized"
+                      updateConfig={updateConfig}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Label htmlFor="center-on-start">Center on start</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="center-on-start"
                       checked={config.window.main.centerOnStart}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.main.centerOnStart', checked)
-                      }
+                      path="window.main.centerOnStart"
+                      updateConfig={updateConfig}
                     />
                   </div>
                 </div>
 
                 <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => resetSection('window')}
-                    size="sm"
-                  >
-                    Reset Window Settings
-                  </Button>
+                  <ResetSectionButton
+                    section="window"
+                    label="Reset Window Settings"
+                    onReset={resetSection}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -485,32 +725,22 @@ export const ConfigurationSettings = React.memo(
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="floating-width">Width</Label>
-                    <Input
+                    <ConfigNumberInput
                       id="floating-width"
-                      type="number"
                       value={config.window.floating.width}
-                      onChange={(e) =>
-                        updateConfig(
-                          'window.floating.width',
-                          parseInt(e.target.value, 10),
-                        )
-                      }
+                      path="window.floating.width"
+                      updateConfig={updateConfig}
                       min={config.window.floating.minWidth}
                       max={config.window.floating.maxWidth}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="floating-height">Height</Label>
-                    <Input
+                    <ConfigNumberInput
                       id="floating-height"
-                      type="number"
                       value={config.window.floating.height}
-                      onChange={(e) =>
-                        updateConfig(
-                          'window.floating.height',
-                          parseInt(e.target.value, 10),
-                        )
-                      }
+                      path="window.floating.height"
+                      updateConfig={updateConfig}
                       min={config.window.floating.minHeight}
                     />
                   </div>
@@ -519,45 +749,41 @@ export const ConfigurationSettings = React.memo(
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="always-on-top">Always on top</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="always-on-top"
                       checked={config.window.floating.alwaysOnTop}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.floating.alwaysOnTop', checked)
-                      }
+                      path="window.floating.alwaysOnTop"
+                      updateConfig={updateConfig}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Label htmlFor="floating-resizable">Resizable</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="floating-resizable"
                       checked={config.window.floating.resizable}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.floating.resizable', checked)
-                      }
+                      path="window.floating.resizable"
+                      updateConfig={updateConfig}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Label htmlFor="floating-frame">Show window frame</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="floating-frame"
                       checked={config.window.floating.frame}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.floating.frame', checked)
-                      }
+                      path="window.floating.frame"
+                      updateConfig={updateConfig}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Label htmlFor="start-visible">Start visible</Label>
-                    <Switch
+                    <ConfigSwitch
                       id="start-visible"
                       checked={config.window.floating.startVisible}
-                      onCheckedChange={(checked) =>
-                        updateConfig('window.floating.startVisible', checked)
-                      }
+                      path="window.floating.startVisible"
+                      updateConfig={updateConfig}
                     />
                   </div>
                 </div>
@@ -577,12 +803,11 @@ export const ConfigurationSettings = React.memo(
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="tray-enabled">Enable system tray</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="tray-enabled"
                     checked={config.tray.enabled}
-                    onCheckedChange={(checked) =>
-                      updateConfig('tray.enabled', checked)
-                    }
+                    path="tray.enabled"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
@@ -595,34 +820,31 @@ export const ConfigurationSettings = React.memo(
                         <Label htmlFor="minimize-to-tray">
                           Minimize to tray
                         </Label>
-                        <Switch
+                        <ConfigSwitch
                           id="minimize-to-tray"
                           checked={config.tray.minimizeToTray}
-                          onCheckedChange={(checked) =>
-                            updateConfig('tray.minimizeToTray', checked)
-                          }
+                          path="tray.minimizeToTray"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor="close-to-tray">Close to tray</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="close-to-tray"
                           checked={config.tray.closeToTray}
-                          onCheckedChange={(checked) =>
-                            updateConfig('tray.closeToTray', checked)
-                          }
+                          path="tray.closeToTray"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor="start-minimized">Start minimized</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="start-minimized"
                           checked={config.tray.startMinimized}
-                          onCheckedChange={(checked) =>
-                            updateConfig('tray.startMinimized', checked)
-                          }
+                          path="tray.startMinimized"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
@@ -630,12 +852,11 @@ export const ConfigurationSettings = React.memo(
                         <Label htmlFor="show-notification-count">
                           Show notification count
                         </Label>
-                        <Switch
+                        <ConfigSwitch
                           id="show-notification-count"
                           checked={config.tray.showNotificationCount}
-                          onCheckedChange={(checked) =>
-                            updateConfig('tray.showNotificationCount', checked)
-                          }
+                          path="tray.showNotificationCount"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
@@ -643,11 +864,11 @@ export const ConfigurationSettings = React.memo(
                         <Label htmlFor="double-click-action">
                           Double-click action
                         </Label>
-                        <Select
+                        <ConfigSelect
+                          id="double-click-action"
                           value={config.tray.doubleClickAction}
-                          onValueChange={(value) =>
-                            updateConfig('tray.doubleClickAction', value)
-                          }
+                          path="tray.doubleClickAction"
+                          updateConfig={updateConfig}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -661,18 +882,18 @@ export const ConfigurationSettings = React.memo(
                             </SelectItem>
                             <SelectItem value="none">No action</SelectItem>
                           </SelectContent>
-                        </Select>
+                        </ConfigSelect>
                       </div>
 
                       <div className="space-y-2">
                         <Label htmlFor="right-click-action">
                           Right-click action
                         </Label>
-                        <Select
+                        <ConfigSelect
+                          id="right-click-action"
                           value={config.tray.rightClickAction}
-                          onValueChange={(value) =>
-                            updateConfig('tray.rightClickAction', value)
-                          }
+                          path="tray.rightClickAction"
+                          updateConfig={updateConfig}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -686,20 +907,18 @@ export const ConfigurationSettings = React.memo(
                             </SelectItem>
                             <SelectItem value="none">No action</SelectItem>
                           </SelectContent>
-                        </Select>
+                        </ConfigSelect>
                       </div>
                     </div>
                   </>
                 )}
 
                 <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => resetSection('tray')}
-                    size="sm"
-                  >
-                    Reset Tray Settings
-                  </Button>
+                  <ResetSectionButton
+                    section="tray"
+                    label="Reset Tray Settings"
+                    onReset={resetSection}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -717,12 +936,11 @@ export const ConfigurationSettings = React.memo(
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="shortcuts-enabled">Enable shortcuts</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="shortcuts-enabled"
                     checked={config.shortcuts.enabled}
-                    onCheckedChange={(checked) =>
-                      updateConfig('shortcuts.enabled', checked)
-                    }
+                    path="shortcuts.enabled"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
@@ -744,12 +962,11 @@ export const ConfigurationSettings = React.memo(
                             >
                               {key.replace(/([A-Z])/g, ' $1').trim()}
                             </Label>
-                            <Input
+                            <ConfigInput
                               id={`shortcut-${key}`}
                               value={value as string}
-                              onChange={(e) =>
-                                updateConfig(`shortcuts.${key}`, e.target.value)
-                              }
+                              path={`shortcuts.${key}`}
+                              updateConfig={updateConfig}
                               className="w-48"
                               placeholder="e.g., Ctrl+N"
                             />
@@ -760,13 +977,11 @@ export const ConfigurationSettings = React.memo(
                 )}
 
                 <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => resetSection('shortcuts')}
-                    size="sm"
-                  >
-                    Reset Shortcuts
-                  </Button>
+                  <ResetSectionButton
+                    section="shortcuts"
+                    label="Reset Shortcuts"
+                    onReset={resetSection}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -786,12 +1001,11 @@ export const ConfigurationSettings = React.memo(
                   <Label htmlFor="notifications-enabled">
                     Enable notifications
                   </Label>
-                  <Switch
+                  <ConfigSwitch
                     id="notifications-enabled"
                     checked={config.notifications.enabled}
-                    onCheckedChange={(checked) =>
-                      updateConfig('notifications.enabled', checked)
-                    }
+                    path="notifications.enabled"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
@@ -802,56 +1016,51 @@ export const ConfigurationSettings = React.memo(
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <Label htmlFor="task-created">Task created</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="task-created"
                           checked={config.notifications.taskCreated}
-                          onCheckedChange={(checked) =>
-                            updateConfig('notifications.taskCreated', checked)
-                          }
+                          path="notifications.taskCreated"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor="task-completed">Task completed</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="task-completed"
                           checked={config.notifications.taskCompleted}
-                          onCheckedChange={(checked) =>
-                            updateConfig('notifications.taskCompleted', checked)
-                          }
+                          path="notifications.taskCompleted"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor="task-updated">Task updated</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="task-updated"
                           checked={config.notifications.taskUpdated}
-                          onCheckedChange={(checked) =>
-                            updateConfig('notifications.taskUpdated', checked)
-                          }
+                          path="notifications.taskUpdated"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor="task-deleted">Task deleted</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="task-deleted"
                           checked={config.notifications.taskDeleted}
-                          onCheckedChange={(checked) =>
-                            updateConfig('notifications.taskDeleted', checked)
-                          }
+                          path="notifications.taskDeleted"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor="notification-sound">Play sound</Label>
-                        <Switch
+                        <ConfigSwitch
                           id="notification-sound"
                           checked={config.notifications.sound}
-                          onCheckedChange={(checked) =>
-                            updateConfig('notifications.sound', checked)
-                          }
+                          path="notifications.sound"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
@@ -859,12 +1068,11 @@ export const ConfigurationSettings = React.memo(
                         <Label htmlFor="auto-hide">
                           Auto-hide notifications
                         </Label>
-                        <Switch
+                        <ConfigSwitch
                           id="auto-hide"
                           checked={config.notifications.autoHide}
-                          onCheckedChange={(checked) =>
-                            updateConfig('notifications.autoHide', checked)
-                          }
+                          path="notifications.autoHide"
+                          updateConfig={updateConfig}
                         />
                       </div>
 
@@ -874,16 +1082,14 @@ export const ConfigurationSettings = React.memo(
                             Auto-hide delay:{' '}
                             {config.notifications.autoHideDelay / 1000}s
                           </Label>
-                          <Slider
+                          <ConfigSlider
                             id="auto-hide-delay"
-                            value={[config.notifications.autoHideDelay]}
-                            onValueChange={([value]) =>
-                              updateConfig('notifications.autoHideDelay', value)
-                            }
+                            value={config.notifications.autoHideDelay}
+                            path="notifications.autoHideDelay"
+                            updateConfig={updateConfig}
                             min={1000}
                             max={30000}
                             step={1000}
-                            className="w-full"
                           />
                         </div>
                       )}
@@ -892,11 +1098,11 @@ export const ConfigurationSettings = React.memo(
                         <Label htmlFor="notification-position">
                           Notification position
                         </Label>
-                        <Select
+                        <ConfigSelect
+                          id="notification-position"
                           value={config.notifications.position}
-                          onValueChange={(value) =>
-                            updateConfig('notifications.position', value)
-                          }
+                          path="notifications.position"
+                          updateConfig={updateConfig}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -911,20 +1117,18 @@ export const ConfigurationSettings = React.memo(
                               Bottom Left
                             </SelectItem>
                           </SelectContent>
-                        </Select>
+                        </ConfigSelect>
                       </div>
                     </div>
                   </>
                 )}
 
                 <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => resetSection('notifications')}
-                    size="sm"
-                  >
-                    Reset Notification Settings
-                  </Button>
+                  <ResetSectionButton
+                    section="notifications"
+                    label="Reset Notification Settings"
+                    onReset={resetSection}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -942,34 +1146,31 @@ export const ConfigurationSettings = React.memo(
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="start-on-login">Start on login</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="start-on-login"
                     checked={config.behavior.startOnLogin}
-                    onCheckedChange={(checked) =>
-                      updateConfig('behavior.startOnLogin', checked)
-                    }
+                    path="behavior.startOnLogin"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="check-for-updates">Check for updates</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="check-for-updates"
                     checked={config.behavior.checkForUpdates}
-                    onCheckedChange={(checked) =>
-                      updateConfig('behavior.checkForUpdates', checked)
-                    }
+                    path="behavior.checkForUpdates"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="auto-save">Auto-save</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="auto-save"
                     checked={config.behavior.autoSave}
-                    onCheckedChange={(checked) =>
-                      updateConfig('behavior.autoSave', checked)
-                    }
+                    path="behavior.autoSave"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
@@ -979,50 +1180,44 @@ export const ConfigurationSettings = React.memo(
                       Auto-save interval:{' '}
                       {config.behavior.autoSaveInterval / 1000}s
                     </Label>
-                    <Slider
+                    <ConfigSlider
                       id="auto-save-interval"
-                      value={[config.behavior.autoSaveInterval]}
-                      onValueChange={([value]) =>
-                        updateConfig('behavior.autoSaveInterval', value)
-                      }
+                      value={config.behavior.autoSaveInterval}
+                      path="behavior.autoSaveInterval"
+                      updateConfig={updateConfig}
                       min={5000}
                       max={300000}
                       step={5000}
-                      className="w-full"
                     />
                   </div>
                 )}
 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="confirm-on-delete">Confirm on delete</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="confirm-on-delete"
                     checked={config.behavior.confirmOnDelete}
-                    onCheckedChange={(checked) =>
-                      updateConfig('behavior.confirmOnDelete', checked)
-                    }
+                    path="behavior.confirmOnDelete"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="confirm-on-quit">Confirm on quit</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="confirm-on-quit"
                     checked={config.behavior.confirmOnQuit}
-                    onCheckedChange={(checked) =>
-                      updateConfig('behavior.confirmOnQuit', checked)
-                    }
+                    path="behavior.confirmOnQuit"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
                 <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => resetSection('behavior')}
-                    size="sm"
-                  >
-                    Reset Behavior Settings
-                  </Button>
+                  <ResetSectionButton
+                    section="behavior"
+                    label="Reset Behavior Settings"
+                    onReset={resetSection}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -1042,23 +1237,21 @@ export const ConfigurationSettings = React.memo(
                   <Label htmlFor="enable-dev-tools">
                     Enable developer tools
                   </Label>
-                  <Switch
+                  <ConfigSwitch
                     id="enable-dev-tools"
                     checked={config.advanced.enableDevTools}
-                    onCheckedChange={(checked) =>
-                      updateConfig('advanced.enableDevTools', checked)
-                    }
+                    path="advanced.enableDevTools"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="enable-logging">Enable logging</Label>
-                  <Switch
+                  <ConfigSwitch
                     id="enable-logging"
                     checked={config.advanced.enableLogging}
-                    onCheckedChange={(checked) =>
-                      updateConfig('advanced.enableLogging', checked)
-                    }
+                    path="advanced.enableLogging"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
@@ -1066,11 +1259,11 @@ export const ConfigurationSettings = React.memo(
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="log-level">Log level</Label>
-                      <Select
+                      <ConfigSelect
+                        id="log-level"
                         value={config.advanced.logLevel}
-                        onValueChange={(value) =>
-                          updateConfig('advanced.logLevel', value)
-                        }
+                        path="advanced.logLevel"
+                        updateConfig={updateConfig}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1081,23 +1274,21 @@ export const ConfigurationSettings = React.memo(
                           <SelectItem value="info">Info</SelectItem>
                           <SelectItem value="debug">Debug</SelectItem>
                         </SelectContent>
-                      </Select>
+                      </ConfigSelect>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="max-log-files">
                         Max log files: {config.advanced.maxLogFiles}
                       </Label>
-                      <Slider
+                      <ConfigSlider
                         id="max-log-files"
-                        value={[config.advanced.maxLogFiles]}
-                        onValueChange={([value]) =>
-                          updateConfig('advanced.maxLogFiles', value)
-                        }
+                        value={config.advanced.maxLogFiles}
+                        path="advanced.maxLogFiles"
+                        updateConfig={updateConfig}
                         min={1}
                         max={20}
                         step={1}
-                        className="w-full"
                       />
                     </div>
                   </>
@@ -1107,12 +1298,11 @@ export const ConfigurationSettings = React.memo(
                   <Label htmlFor="hardware-acceleration">
                     Hardware acceleration
                   </Label>
-                  <Switch
+                  <ConfigSwitch
                     id="hardware-acceleration"
                     checked={config.advanced.hardwareAcceleration}
-                    onCheckedChange={(checked) =>
-                      updateConfig('advanced.hardwareAcceleration', checked)
-                    }
+                    path="advanced.hardwareAcceleration"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
@@ -1120,23 +1310,20 @@ export const ConfigurationSettings = React.memo(
                   <Label htmlFor="experimental-features">
                     Experimental features
                   </Label>
-                  <Switch
+                  <ConfigSwitch
                     id="experimental-features"
                     checked={config.advanced.experimentalFeatures}
-                    onCheckedChange={(checked) =>
-                      updateConfig('advanced.experimentalFeatures', checked)
-                    }
+                    path="advanced.experimentalFeatures"
+                    updateConfig={updateConfig}
                   />
                 </div>
 
                 <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => resetSection('advanced')}
-                    size="sm"
-                  >
-                    Reset Advanced Settings
-                  </Button>
+                  <ResetSectionButton
+                    section="advanced"
+                    label="Reset Advanced Settings"
+                    onReset={resetSection}
+                  />
                 </div>
               </CardContent>
             </Card>

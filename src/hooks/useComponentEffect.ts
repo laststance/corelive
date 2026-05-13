@@ -1,4 +1,6 @@
-import { useEffect, type DependencyList, type EffectCallback } from 'react'
+import type { DependencyList, EffectCallback } from 'react'
+
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 /**
  * Runs a React effect from a named custom hook boundary.
@@ -19,5 +21,5 @@ export function useComponentEffect(
   effect: EffectCallback,
   deps?: DependencyList,
 ): void {
-  useEffect(effect, deps)
+  useCycleEffect(effect, deps)
 }

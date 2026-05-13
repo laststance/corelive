@@ -2,7 +2,7 @@
 
 import { useClerk } from '@clerk/nextjs'
 import { LogOut } from 'lucide-react'
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { log } from '@/lib/logger'
@@ -10,13 +10,13 @@ import { log } from '@/lib/logger'
 export const LogoutButton = memo(function LogoutButton() {
   const { signOut } = useClerk()
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await signOut()
     } catch (error) {
       log.error('Logout failed:', error)
     }
-  }
+  }, [signOut])
 
   return (
     <DropdownMenuItem

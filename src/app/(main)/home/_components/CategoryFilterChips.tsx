@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { match } from 'ts-pattern'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -112,17 +112,21 @@ function chipAccessibleLabel(
 const CategoryChip = memo(function CategoryChip({
   entry,
   isActive,
-  onClick,
+  onSelect,
 }: {
   entry: CategoryTrendEntry
   isActive: boolean
-  onClick: () => void
+  onSelect: (categoryId: number | null) => void
 }) {
   const suffix = trendSuffix(entry.trend)
+  function handleClick() {
+    onSelect(isActive ? null : entry.id)
+  }
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       aria-pressed={isActive}
       aria-label={chipAccessibleLabel(entry, isActive)}
       className={cn(
@@ -201,6 +205,22 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
   // at the day boundary without a useMemo on stale anchor — same trade-
   // off SundayDigestCard made (correctness > re-render micro-opt).
   const entries = aggregateCategoryTrends(dataByDate, new Date())
+  function handleClearSelection() {
+    setSelectedCategoryId(null)
+  }
+
+  const handleSelectValueChange = useCallback(
+    (value: string) => {
+      setSelectedCategoryId(value === 'all' ? null : Number(value))
+    },
+    [setSelectedCategoryId],
+  )
+  const handleChipSelect = useCallback(
+    (categoryId: number | null) => {
+      setSelectedCategoryId(categoryId)
+    },
+    [setSelectedCategoryId],
+  )
 
   // Skeleton during the initial heatmap fetch — keeps card height stable
   // so the layout doesn't shift when data arrives.
@@ -236,7 +256,7 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
           {selectedCategoryId !== null && (
             <button
               type="button"
-              onClick={() => setSelectedCategoryId(null)}
+              onClick={handleClearSelection}
               className="font-serif text-xs italic text-muted-foreground underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
             >
               show all
@@ -249,9 +269,7 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
             value={
               selectedCategoryId !== null ? String(selectedCategoryId) : 'all'
             }
-            onValueChange={(value) =>
-              setSelectedCategoryId(value === 'all' ? null : Number(value))
-            }
+            onValueChange={handleSelectValueChange}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Choose a category" />
@@ -294,9 +312,7 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
                   <CategoryChip
                     entry={entry}
                     isActive={isActive}
-                    onClick={() =>
-                      setSelectedCategoryId(isActive ? null : entry.id)
-                    }
+                    onSelect={handleChipSelect}
                   />
                 </li>
               )

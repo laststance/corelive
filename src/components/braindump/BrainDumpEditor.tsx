@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
-import { memo, useCallback, useId, useRef, useState } from 'react'
+import { memo, useCallback, useId, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -332,6 +332,21 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
     void window.brainDumpAPI?.window.setOpacity(clamped)
   }, [])
 
+  const handleCategoryValueChange = useCallback(
+    (value: string) => {
+      handleManualCategoryChange(Number(value))
+    },
+    [handleManualCategoryChange],
+  )
+
+  const handleOpacityValueChange = useCallback(
+    (values: number[]) => {
+      const next = values[0]
+      if (next !== undefined) handleOpacityChange(next)
+    },
+    [handleOpacityChange],
+  )
+
   /**
    * Promote a `[ ]` line to `[x]`, create a Completed row, and arm the
    * 5-second undo toast.
@@ -484,90 +499,88 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
    * Enter inside the textarea — the keyboard path is the deliberate UX,
    * pointer-clicks would require a second editor mode.
    */
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
-      // Skip while IME is composing — never hijack a CJK confirmation Enter.
-      if (event.nativeEvent.isComposing) return
-      const textarea = textareaRef.current
-      if (!textarea) return
-      event.preventDefault()
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
+    // Skip while IME is composing — never hijack a CJK confirmation Enter.
+    if (event.nativeEvent.isComposing) return
+    const textarea = textareaRef.current
+    if (!textarea) return
+    event.preventDefault()
 
-      const text = textarea.value
-      const caret = textarea.selectionStart
-      const lines = text.split('\n')
-      const lineIndex = text.slice(0, caret).split('\n').length - 1
-      const line = lines[lineIndex]
-      if (line === undefined) return
-      const parsed = parseCheckboxLine(line, lineIndex)
-      if (!parsed) return
+    const text = textarea.value
+    const caret = textarea.selectionStart
+    const lines = text.split('\n')
+    const lineIndex = text.slice(0, caret).split('\n').length - 1
+    const line = lines[lineIndex]
+    if (line === undefined) return
+    const parsed = parseCheckboxLine(line, lineIndex)
+    if (!parsed) return
 
-      const nextChecked = !parsed.checked
-      const nextText = setCheckboxStateAtLine(text, lineIndex, nextChecked)
-      setNoteText(nextText)
+    const nextChecked = !parsed.checked
+    const nextText = setCheckboxStateAtLine(text, lineIndex, nextChecked)
+    setNoteText(nextText)
 
-      if (nextChecked) {
-        void promoteLineToCompleted(lineIndex, parsed.title)
-      } else {
-        // Look up the ref entry — first by current lineIndex, then by
-        // matching title (the lineIndex key may have drifted since the
-        // toggle if the user inserted/removed lines above it).
-        let memory = checkedRowsRef.current.get(lineIndex)
-        if (!memory) {
-          for (const value of checkedRowsRef.current.values()) {
-            if (value.title === parsed.title) {
-              memory = value
-              break
-            }
+    if (nextChecked) {
+      void promoteLineToCompleted(lineIndex, parsed.title)
+    } else {
+      // Look up the ref entry — first by current lineIndex, then by
+      // matching title (the lineIndex key may have drifted since the
+      // toggle if the user inserted/removed lines above it).
+      let memory = checkedRowsRef.current.get(lineIndex)
+      if (!memory) {
+        for (const value of checkedRowsRef.current.values()) {
+          if (value.title === parsed.title) {
+            memory = value
+            break
           }
-        }
-        if (memory) {
-          void undoCompleted(
-            memory.title,
-            memory.completedId,
-            nextText,
-            lineIndex,
-          )
-          return
-        }
-        // No memory yet → the create is probably still in flight. Await it
-        // before issuing delete so the row is never orphaned in the DB.
-        // Cosmetic wart: the success toast from `promoteLineToCompleted`
-        // will still flash for an item the user already unchecked. The DB
-        // stays consistent because the awaited delete runs right after.
-        let pending = pendingCreatesRef.current.get(lineIndex)
-        if (!pending) {
-          for (const value of pendingCreatesRef.current.values()) {
-            if (value.title === parsed.title) {
-              pending = value
-              break
-            }
-          }
-        }
-        if (pending) {
-          const pendingTitle = pending.title
-          void pending.promise.then((completedId) => {
-            if (completedId === null) return
-            void undoCompleted(
-              pendingTitle,
-              completedId,
-              noteTextRef.current,
-              lineIndex,
-            )
-          })
         }
       }
-    },
-    [promoteLineToCompleted, undoCompleted],
-  )
+      if (memory) {
+        void undoCompleted(
+          memory.title,
+          memory.completedId,
+          nextText,
+          lineIndex,
+        )
+        return
+      }
+      // No memory yet → the create is probably still in flight. Await it
+      // before issuing delete so the row is never orphaned in the DB.
+      // Cosmetic wart: the success toast from `promoteLineToCompleted`
+      // will still flash for an item the user already unchecked. The DB
+      // stays consistent because the awaited delete runs right after.
+      let pending = pendingCreatesRef.current.get(lineIndex)
+      if (!pending) {
+        for (const value of pendingCreatesRef.current.values()) {
+          if (value.title === parsed.title) {
+            pending = value
+            break
+          }
+        }
+      }
+      if (pending) {
+        const pendingTitle = pending.title
+        void pending.promise.then((completedId) => {
+          if (completedId === null) return
+          void undoCompleted(
+            pendingTitle,
+            completedId,
+            noteTextRef.current,
+            lineIndex,
+          )
+        })
+      }
+    }
+  }
 
-  const closeWindow = useCallback(() => {
+  const closeWindow = () => {
     void window.brainDumpAPI?.window.close()
-  }, [])
+  }
 
   // Block oRPC calls until Clerk has loaded — otherwise the request 401s
   // before useUser hydrates.
   const isReady = isMounted && isClerkReady && isBrainDumpEnvironment()
+  const opacityValue = useMemo(() => [opacity], [opacity])
   if (!isReady) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
@@ -620,7 +633,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
 
         <Select
           value={activeCategoryId === null ? '' : String(activeCategoryId)}
-          onValueChange={(value) => handleManualCategoryChange(Number(value))}
+          onValueChange={handleCategoryValueChange}
           disabled={syncEnabled || !hasCategories}
         >
           <SelectTrigger
@@ -651,11 +664,8 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             min={BRAINDUMP_OPACITY_MIN}
             max={BRAINDUMP_OPACITY_MAX}
             step={BRAINDUMP_OPACITY_STEP}
-            value={[opacity]}
-            onValueChange={(values) => {
-              const next = values[0]
-              if (next !== undefined) handleOpacityChange(next)
-            }}
+            value={opacityValue}
+            onValueChange={handleOpacityValueChange}
             className="flex-1"
             aria-label="Window opacity"
           />

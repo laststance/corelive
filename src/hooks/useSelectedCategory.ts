@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
+
+import { useCycleEffect } from './use-cycle-effect'
 
 const STORAGE_KEY = 'corelive-selected-category'
 
@@ -121,8 +123,7 @@ export function useAutoSelectDefaultCategory(
   setSelectedCategoryId: (id: number | null) => void,
   categories: { id: number; isDefault: boolean }[],
 ) {
-  /* eslint-disable react-you-might-not-need-an-effect/no-pass-data-to-parent -- writes to localStorage external store, not React parent state */
-  useEffect(() => {
+  useCycleEffect(() => {
     if (categories.length === 0) return
 
     const hasValidSelection =
@@ -136,5 +137,4 @@ export function useAutoSelectDefaultCategory(
       }
     }
   }, [selectedCategoryId, categories, setSelectedCategoryId])
-  /* eslint-enable react-you-might-not-need-an-effect/no-pass-data-to-parent */
 }

@@ -1,7 +1,14 @@
 'use client'
 
 import { Brain, Eye, Keyboard } from 'lucide-react'
-import React, { memo, useId, useRef, useState } from 'react'
+import React, {
+  memo,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -120,44 +127,50 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
     }
   }, [])
 
-  const handleSyncChange = async (next: BrainDumpSyncMode): Promise<void> => {
-    const previous = syncMode
-    setSyncMode(next)
-    setError(null)
-    try {
-      await window.electronAPI?.brainDump?.setSyncMode(next)
-    } catch (err) {
-      log.error('Failed to update BrainDump sync mode:', err)
-      setSyncMode(previous)
-      setError('Failed to update sync setting')
-    }
-  }
+  const handleSyncChange = useCallback(
+    async (next: BrainDumpSyncMode): Promise<void> => {
+      const previous = syncMode
+      setSyncMode(next)
+      setError(null)
+      try {
+        await window.electronAPI?.brainDump?.setSyncMode(next)
+      } catch (err) {
+        log.error('Failed to update BrainDump sync mode:', err)
+        setSyncMode(previous)
+        setError('Failed to update sync setting')
+      }
+    },
+    [syncMode],
+  )
 
-  const handleOpacityChange = (values: number[]): void => {
+  const handleOpacityChange = useCallback((values: number[]): void => {
     const next = values[0]
     if (next === undefined) return
     setOpacity(next)
-  }
+  }, [])
 
-  const handleOpacityCommit = async (values: number[]): Promise<void> => {
-    const next = values[0]
-    if (next === undefined) return
-    setError(null)
-    try {
-      const applied = await window.electronAPI?.brainDump?.setOpacity(next)
-      const persisted = typeof applied === 'number' ? applied : next
-      setOpacity(persisted)
-      lastGoodOpacityRef.current = persisted
-    } catch (err) {
-      log.error('Failed to update BrainDump opacity:', err)
-      // Roll back to the last value the main process confirmed, not the
-      // in-flight optimistic value held in `opacity` state.
-      setOpacity(lastGoodOpacityRef.current)
-      setError('Failed to update opacity')
-    }
-  }
+  const handleOpacityCommit = useCallback(
+    async (values: number[]): Promise<void> => {
+      const next = values[0]
+      if (next === undefined) return
+      setError(null)
+      try {
+        const applied = await window.electronAPI?.brainDump?.setOpacity(next)
+        const persisted = typeof applied === 'number' ? applied : next
+        setOpacity(persisted)
+        lastGoodOpacityRef.current = persisted
+      } catch (err) {
+        log.error('Failed to update BrainDump opacity:', err)
+        // Roll back to the last value the main process confirmed, not the
+        // in-flight optimistic value held in `opacity` state.
+        setOpacity(lastGoodOpacityRef.current)
+        setError('Failed to update opacity')
+      }
+    },
+    [],
+  )
 
-  const handleShortcutBlur = async (): Promise<void> => {
+  const handleShortcutBlur = useCallback(async (): Promise<void> => {
     setError(null)
     try {
       const ok = await window.electronAPI?.brainDump?.setShortcut(shortcut)
@@ -172,16 +185,23 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
       setShortcut(lastGoodShortcutRef.current)
       setError('Failed to update shortcut')
     }
-  }
+  }, [shortcut])
 
-  const handleOpenBrainDump = async (): Promise<void> => {
+  const handleOpenBrainDump = useCallback(async (): Promise<void> => {
     try {
       await window.electronAPI?.brainDump?.toggle()
     } catch (err) {
       log.error('Failed to toggle BrainDump window:', err)
       setError('Failed to toggle BrainDump window')
     }
-  }
+  }, [])
+
+  const handleShortcutChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setShortcut(event.target.value)
+    },
+    [],
+  )
 
   // Defer the non-Electron fallback until after hydration so server and
   // first client render produce the same markup. Until `hasMounted` is
@@ -217,6 +237,7 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
   }
 
   const opacityPercent = Math.round(opacity * 100)
+  const opacityValue = useMemo(() => [opacity], [opacity])
 
   return (
     <Card className={className}>
@@ -272,7 +293,7 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
             min={BRAINDUMP_OPACITY_MIN}
             max={BRAINDUMP_OPACITY_MAX}
             step={BRAINDUMP_OPACITY_STEP}
-            value={[opacity]}
+            value={opacityValue}
             onValueChange={handleOpacityChange}
             onValueCommit={handleOpacityCommit}
             aria-label="BrainDump window opacity"
@@ -295,7 +316,7 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
             id={shortcutId}
             value={shortcut}
             placeholder="e.g. CommandOrControl+Shift+B"
-            onChange={(event) => setShortcut(event.target.value)}
+            onChange={handleShortcutChange}
             onBlur={handleShortcutBlur}
           />
           <p className="text-xs text-muted-foreground">

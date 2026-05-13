@@ -1,6 +1,6 @@
 'use client'
 
-import HeatMap from '@uiw/react-heat-map'
+import HeatMap, { type HeatMapValue } from '@uiw/react-heat-map'
 import { useSearchParams } from 'next/navigation'
 import * as React from 'react'
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
@@ -75,6 +75,14 @@ const LEGEND_COLORS = [
 
 /** Week day labels for the heatmap Y-axis. */
 const WEEK_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', '']
+
+type HeatmapRectProps = React.SVGProps<SVGRectElement>
+
+type HeatmapRectValue = HeatMapValue & {
+  column: number
+  row: number
+  index: number
+}
 
 /**
  * Map of category color names to hex values.
@@ -232,6 +240,71 @@ export const ContributionGraph = memo(function ContributionGraph() {
       currentDate ? shiftIsoDate(currentDate, dayOffset) : currentDate,
     )
   }, [])
+  const heatmapStyle = useMemo(
+    () => ({
+      color: 'var(--muted-foreground)',
+      fontSize: '10px',
+    }),
+    [],
+  )
+  const renderHeatmapRect = useCallback(
+    (props: HeatmapRectProps, data: HeatmapRectValue) => {
+      const dateKey = toIsoDateKey(data.date)
+      const dayData = dataByDate.get(dateKey)
+      function handleSelect() {
+        if (dateKey) setSelectedDate(dateKey)
+      }
+      const isMonthlyPeak = monthlyMaxDates.has(dateKey)
+
+      if (!dayData || dayData.count === 0) {
+        return (
+          <rect
+            {...props}
+            onClick={handleSelect}
+            style={{ ...props.style, cursor: 'pointer' }}
+          />
+        )
+      }
+
+      // The peak mark is decorative; the rect keeps click and tooltip behavior.
+      const monthlyPeakMark = isMonthlyPeak ? (
+        <text
+          x={Number(props.x) + Number(props.width) / 2}
+          y={Number(props.y) + Number(props.height) / 2}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
+          fill="var(--primary-foreground)"
+          aria-hidden
+          style={{ pointerEvents: 'none' }}
+        >
+          ◎
+        </text>
+      ) : null
+
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <g>
+              <rect
+                {...props}
+                onClick={handleSelect}
+                style={{ ...props.style, cursor: 'pointer' }}
+              />
+              {monthlyPeakMark}
+            </g>
+          </TooltipTrigger>
+          <TooltipContent>
+            <CategoryBreakdown day={dayData} />
+          </TooltipContent>
+        </Tooltip>
+      )
+    },
+    [dataByDate, heatmapLayout.rectSize, monthlyMaxDates],
+  )
+  const handleDayDetailOpenChange = useCallback((open: boolean) => {
+    if (!open) setSelectedDate(null)
+  }, [])
 
   if (isLoading) {
     return (
@@ -268,67 +341,8 @@ export const ContributionGraph = memo(function ContributionGraph() {
               rectSize={heatmapLayout.rectSize}
               space={HEATMAP_SPACE}
               width={heatmapLayout.width}
-              style={{
-                color: 'var(--muted-foreground)',
-                fontSize: '10px',
-              }}
-              rectRender={(props, data) => {
-                const dateKey = toIsoDateKey(data.date)
-                const dayData = dataByDate.get(dateKey)
-                const handleSelect = () => {
-                  if (dateKey) setSelectedDate(dateKey)
-                }
-                const isMonthlyPeak = monthlyMaxDates.has(dateKey)
-
-                if (!dayData || dayData.count === 0) {
-                  return (
-                    <rect
-                      {...props}
-                      onClick={handleSelect}
-                      style={{ ...props.style, cursor: 'pointer' }}
-                    />
-                  )
-                }
-
-                // ◎ overlay marks each month's peak day. Painted in primary-foreground so
-                // it reads against the warmer L3/L4 bands without breaking the palette;
-                // pointer-events: none keeps the rect's click + tooltip intact.
-                // aria-hidden because the glyph is decorative — VoiceOver/NVDA would
-                // otherwise announce "circled bullet" between every neighboring cell's
-                // tooltip, which is noisy and adds no information the rect doesn't carry.
-                const monthlyPeakMark = isMonthlyPeak ? (
-                  <text
-                    x={Number(props.x) + Number(props.width) / 2}
-                    y={Number(props.y) + Number(props.height) / 2}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
-                    fill="var(--primary-foreground)"
-                    aria-hidden
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    ◎
-                  </text>
-                ) : null
-
-                return (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <g>
-                        <rect
-                          {...props}
-                          onClick={handleSelect}
-                          style={{ ...props.style, cursor: 'pointer' }}
-                        />
-                        {monthlyPeakMark}
-                      </g>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <CategoryBreakdown day={dayData} />
-                    </TooltipContent>
-                  </Tooltip>
-                )
-              }}
+              style={heatmapStyle}
+              rectRender={renderHeatmapRect}
             />
           </TooltipProvider>
         </div>
@@ -346,9 +360,7 @@ export const ContributionGraph = memo(function ContributionGraph() {
         </div>
         <DayDetailDialog
           date={selectedDate}
-          onOpenChange={(open) => {
-            if (!open) setSelectedDate(null)
-          }}
+          onOpenChange={handleDayDetailOpenChange}
           onNavigate={handleNavigate}
         />
       </CardContent>

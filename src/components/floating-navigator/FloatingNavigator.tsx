@@ -2,7 +2,14 @@
 
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
-import React, { useState, useRef, lazy, Suspense, useCallback } from 'react'
+import React, {
+  useState,
+  useRef,
+  lazy,
+  Suspense,
+  useCallback,
+  useMemo,
+} from 'react'
 
 import { useFloatingNavigatorMenuActions } from '@/components/floating-navigator/useFloatingNavigatorMenuActions'
 import { Button } from '@/components/ui/button'
@@ -98,6 +105,229 @@ interface FloatingNavigatorProps {
   isCategoryDeletePending?: boolean
 }
 
+interface PendingFloatingTodoRowProps {
+  todo: FloatingTodo
+  isDragging?: boolean
+  dragHandleRef?: React.Ref<HTMLButtonElement>
+  isEditing: boolean
+  editText: string
+  editInputRef: React.RefObject<HTMLInputElement | null>
+  onToggle: (id: string) => void
+  onDelete: (id: string) => void
+  onStartEditing: (todo: FloatingTodo) => void
+  onEditTextChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+  onEditKeyDown: (event: React.KeyboardEvent) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+}
+
+interface CompletedFloatingTodoRowProps {
+  todo: FloatingTodo
+  onToggle: (id: string) => void
+  onDelete: (id: string) => void
+}
+
+/**
+ * Renders one pending floating todo row with stable handlers for custom UI.
+ *
+ * @param props - Todo data, edit state, refs, and task callbacks.
+ * @returns A pending todo row for the floating navigator.
+ * @example
+ * <PendingFloatingTodoRow todo={todo} isEditing={false} editText="" editInputRef={editInputRef} onToggle={toggle} onDelete={remove} onStartEditing={startEditing} onEditTextChange={changeEditText} onEditKeyDown={handleKey} onSaveEdit={saveEdit} onCancelEdit={cancelEdit} />
+ */
+const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
+  todo,
+  isDragging = false,
+  dragHandleRef,
+  isEditing,
+  editText,
+  editInputRef,
+  onToggle,
+  onDelete,
+  onStartEditing,
+  onEditTextChange,
+  onEditKeyDown,
+  onSaveEdit,
+  onCancelEdit,
+}: PendingFloatingTodoRowProps): React.ReactNode {
+  const handleToggle = useCallback(() => {
+    onToggle(todo.id)
+  }, [onToggle, todo.id])
+  const handleDelete = useCallback(() => {
+    onDelete(todo.id)
+  }, [onDelete, todo.id])
+  const handleEditButtonClick = useCallback(() => {
+    onStartEditing(todo)
+  }, [onStartEditing, todo])
+
+  return (
+    <div
+      className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${isDragging ? 'ring-primary/20 shadow-lg ring-2' : ''}`}
+      role="listitem"
+      aria-label={`Task: ${todo.text}, ${todo.completed ? 'completed' : 'pending'}`}
+      aria-describedby={`task-${todo.id}-actions`}
+    >
+      {dragHandleRef && (
+        <button
+          ref={dragHandleRef}
+          type="button"
+          className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        >
+          <Suspense fallback={<IconFallback />}>
+            <GripVertical className="h-3 w-3" aria-hidden="true" />
+          </Suspense>
+        </button>
+      )}
+
+      <Checkbox
+        checked={todo.completed}
+        onCheckedChange={handleToggle}
+        className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
+      />
+
+      {isEditing ? (
+        <div className="flex flex-1 gap-1" role="group" aria-label="Edit task">
+          <Input
+            ref={editInputRef}
+            value={editText}
+            onChange={onEditTextChange}
+            onKeyDown={onEditKeyDown}
+            className="h-6 flex-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="Edit task title"
+            aria-describedby={`edit-help-${todo.id}`}
+          />
+          <div id={`edit-help-${todo.id}`} className="sr-only">
+            Press Enter to save, Escape to cancel
+          </div>
+          <Button
+            size="sm"
+            onClick={onSaveEdit}
+            className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="Save changes"
+            title="Save (Enter)"
+          >
+            <Suspense fallback={<IconFallback />}>
+              <Check className="h-3 w-3" aria-hidden="true" />
+            </Suspense>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onCancelEdit}
+            className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="Cancel editing"
+            title="Cancel (Escape)"
+          >
+            <Suspense fallback={<IconFallback />}>
+              <X className="h-3 w-3" aria-hidden="true" />
+            </Suspense>
+          </Button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={() => onStartEditing(todo)}
+            title={`${todo.text} - Click to edit`}
+            aria-label={`Edit task: ${todo.text}`}
+          >
+            {todo.text}
+          </button>
+          <div
+            id={`task-${todo.id}-actions`}
+            className="flex gap-1 opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+            role="group"
+            aria-label="Task actions"
+          >
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleEditButtonClick}
+              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label={`Edit task: ${todo.text}`}
+              title="Edit task (Enter)"
+            >
+              <Suspense fallback={<IconFallback />}>
+                <Edit2 className="h-3 w-3" aria-hidden="true" />
+              </Suspense>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleDelete}
+              className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label={`Delete task: ${todo.text}`}
+              title="Delete task (Delete)"
+            >
+              <Suspense fallback={<IconFallback />}>
+                <Trash2 className="h-3 w-3" aria-hidden="true" />
+              </Suspense>
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+})
+
+/**
+ * Renders one completed floating todo row with stable custom component handlers.
+ *
+ * @param props - Completed todo data and task callbacks.
+ * @returns A completed todo row.
+ * @example
+ * <CompletedFloatingTodoRow todo={todo} onToggle={toggle} onDelete={remove} />
+ */
+const CompletedFloatingTodoRow = React.memo(function CompletedFloatingTodoRow({
+  todo,
+  onToggle,
+  onDelete,
+}: CompletedFloatingTodoRowProps): React.ReactNode {
+  const handleToggle = useCallback(() => {
+    onToggle(todo.id)
+  }, [onToggle, todo.id])
+  const handleDelete = useCallback(() => {
+    onDelete(todo.id)
+  }, [onDelete, todo.id])
+
+  return (
+    <div
+      className="hover:bg-muted/50 group flex items-center gap-2 rounded p-2 opacity-60"
+      role="listitem"
+      aria-label={`Completed task: ${todo.text}`}
+    >
+      <Checkbox
+        checked={todo.completed}
+        onCheckedChange={handleToggle}
+        className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        aria-label={`Mark completed task "${todo.text}" as incomplete`}
+      />
+      <span
+        className="flex-1 truncate text-xs line-through"
+        title={todo.text}
+        aria-label={`Completed: ${todo.text}`}
+      >
+        {todo.text}
+      </span>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleDelete}
+        className="h-6 w-6 p-0 text-destructive opacity-0 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
+        aria-label={`Delete completed task: ${todo.text}`}
+        title="Delete task"
+      >
+        <Suspense fallback={<IconFallback />}>
+          <Trash2 className="h-3 w-3" aria-hidden="true" />
+        </Suspense>
+      </Button>
+    </div>
+  )
+})
+
 export const FloatingNavigator = React.memo(function FloatingNavigator({
   todos,
   onTaskToggle,
@@ -125,8 +355,14 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
   const taskListRef = useRef<HTMLDivElement>(null)
 
   // Separate todos by completion status
-  const pendingTodos = todos.filter((todo) => !todo.completed)
-  const completedTodos = todos.filter((todo) => todo.completed)
+  const pendingTodos = useMemo(
+    () => todos.filter((todo) => !todo.completed),
+    [todos],
+  )
+  const completedTodos = useMemo(
+    () => todos.filter((todo) => todo.completed),
+    [todos],
+  )
   const canReorderTasks = onTaskReorder !== undefined
 
   const startEditing = useCallback((todo: FloatingTodo) => {
@@ -154,60 +390,91 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
    * @example
    * handleDragEnd(event)
    */
-  const handleDragEnd = (event: DragEndEvent) => {
-    if (!canReorderTasks || event.canceled) {
-      return
-    }
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (!canReorderTasks || event.canceled) {
+        return
+      }
 
-    const { source } = event.operation
+      const { source } = event.operation
 
-    if (!isSortable(source) || source.initialIndex === source.index) {
-      return
-    }
+      if (!isSortable(source) || source.initialIndex === source.index) {
+        return
+      }
 
-    const destinationTodo = pendingTodos[source.index]
+      const destinationTodo = pendingTodos[source.index]
 
-    if (destinationTodo) {
-      onTaskReorder?.(String(source.id), destinationTodo.id)
-    }
-  }
+      if (destinationTodo) {
+        onTaskReorder?.(String(source.id), destinationTodo.id)
+      }
+    },
+    [canReorderTasks, onTaskReorder, pendingTodos],
+  )
 
-  const handleCreateTask = () => {
+  const handleCreateTask = useCallback(() => {
     if (newTaskText.trim()) {
       onTaskCreate(newTaskText.trim())
       setNewTaskText('')
     }
-  }
+  }, [newTaskText, onTaskCreate])
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (isEnterKeyPress(e)) {
-      handleCreateTask()
-    }
-  }
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isEnterKeyPress(e)) {
+        handleCreateTask()
+      }
+    },
+    [handleCreateTask],
+  )
 
-  const saveEdit = () => {
+  const saveEdit = useCallback(() => {
     if (editingId && editText.trim()) {
       onTaskEdit(editingId, editText.trim())
     }
     setEditingId(null)
     setEditText('')
-  }
+  }, [editText, editingId, onTaskEdit])
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setEditingId(null)
     setEditText('')
-  }
+  }, [])
 
-  const handleEditKeyPress = (e: React.KeyboardEvent) => {
-    if (isEnterKeyPress(e)) {
-      saveEdit()
-    } else if (e.key === 'Escape') {
-      cancelEdit()
-    }
-  }
+  const handleEditKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isEnterKeyPress(e)) {
+        saveEdit()
+      } else if (e.key === 'Escape') {
+        cancelEdit()
+      }
+    },
+    [cancelEdit, saveEdit],
+  )
+
+  const handleEditTextChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setEditText(event.target.value)
+    },
+    [],
+  )
+
+  const handleNewTaskTextChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setNewTaskText(event.target.value)
+    },
+    [],
+  )
+
+  const openManagePanel = useCallback(() => {
+    setShowManagePanel(true)
+  }, [])
+
+  const closeManagePanel = useCallback(() => {
+    setShowManagePanel(false)
+  }, [])
 
   // Window control functions
-  const handleMinimize = async () => {
+  const handleMinimize = useCallback(async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.minimize()
@@ -215,9 +482,9 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to minimize window:', error)
       }
     }
-  }
+  }, [])
 
-  const handleClose = async () => {
+  const handleClose = useCallback(async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.close()
@@ -225,9 +492,9 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to close window:', error)
       }
     }
-  }
+  }, [])
 
-  const handleToggleAlwaysOnTop = async () => {
+  const handleToggleAlwaysOnTop = useCallback(async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         const newState =
@@ -237,9 +504,9 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to toggle always on top:', error)
       }
     }
-  }
+  }, [])
 
-  const handleFocusMainWindow = async () => {
+  const handleFocusMainWindow = useCallback(async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.focusMainWindow()
@@ -247,158 +514,38 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to focus main window:', error)
       }
     }
-  }
+  }, [])
 
   // Toggle the BrainDump Note window via the floating navigator preload bridge.
-  const handleToggleBrainDump = async () => {
+  const handleToggleBrainDump = useCallback(async () => {
     if (!isFloatingNavigatorEnvironment()) return
     try {
       await window.floatingNavigatorAPI?.brainDump.toggle()
     } catch (error) {
       log.error('Failed to toggle BrainDump:', error)
     }
-  }
+  }, [])
 
   // Handle task toggle
-  const handleTaskToggle = (id: string) => {
-    const task = todos.find((t) => t.id === id)
-    if (task) {
-      onTaskToggle(id)
-    }
-  }
+  const handleTaskToggle = useCallback(
+    (id: string) => {
+      const task = todos.find((t) => t.id === id)
+      if (task) {
+        onTaskToggle(id)
+      }
+    },
+    [onTaskToggle, todos],
+  )
 
   // Handle task deletion
-  const handleTaskDelete = (id: string) => {
-    const task = todos.find((t) => t.id === id)
-    if (task) {
-      onTaskDelete(id)
-    }
-  }
-
-  /**
-   * Renders one pending task row for both sortable and static list modes.
-   * @param todo - Pending task to render.
-   * @param isDragging - Whether the latest dnd-kit sortable hook marks it active.
-   * @param dragHandleRef - Optional drag handle ref when reordering is enabled.
-   * @returns A pending task row with optional drag affordance.
-   * @example
-   * renderPendingTodoRow(todo, true, dragHandleRef)
-   */
-  const renderPendingTodoRow = (
-    todo: FloatingTodo,
-    isDragging = false,
-    dragHandleRef?: React.Ref<HTMLButtonElement>,
-  ) => (
-    <div
-      key={todo.id}
-      className={`hover:bg-muted/50 group flex items-center gap-2 rounded p-2 ${isDragging ? 'ring-primary/20 shadow-lg ring-2' : ''}`}
-      role="listitem"
-      aria-label={`Task: ${todo.text}, ${todo.completed ? 'completed' : 'pending'}`}
-      aria-describedby={`task-${todo.id}-actions`}
-    >
-      {dragHandleRef && (
-        <button
-          ref={dragHandleRef}
-          type="button"
-          className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-          aria-label="Drag to reorder"
-        >
-          <Suspense fallback={<IconFallback />}>
-            <GripVertical className="h-3 w-3" aria-hidden="true" />
-          </Suspense>
-        </button>
-      )}
-
-      <Checkbox
-        checked={todo.completed}
-        onCheckedChange={() => handleTaskToggle(todo.id)}
-        className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
-      />
-
-      {editingId === todo.id ? (
-        <div className="flex flex-1 gap-1" role="group" aria-label="Edit task">
-          <Input
-            ref={editInputRef}
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            onKeyDown={handleEditKeyPress}
-            className="h-6 flex-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label="Edit task title"
-            aria-describedby={`edit-help-${todo.id}`}
-          />
-          <div id={`edit-help-${todo.id}`} className="sr-only">
-            Press Enter to save, Escape to cancel
-          </div>
-          <Button
-            size="sm"
-            onClick={saveEdit}
-            className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label="Save changes"
-            title="Save (Enter)"
-          >
-            <Suspense fallback={<IconFallback />}>
-              <Check className="h-3 w-3" aria-hidden="true" />
-            </Suspense>
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={cancelEdit}
-            className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label="Cancel editing"
-            title="Cancel (Escape)"
-          >
-            <Suspense fallback={<IconFallback />}>
-              <X className="h-3 w-3" aria-hidden="true" />
-            </Suspense>
-          </Button>
-        </div>
-      ) : (
-        <>
-          <button
-            type="button"
-            className="flex-1 cursor-pointer overflow-scroll rounded px-1 text-left text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            onClick={() => startEditing(todo)}
-            title={`${todo.text} - Click to edit`}
-            aria-label={`Edit task: ${todo.text}`}
-          >
-            {todo.text}
-          </button>
-          <div
-            id={`task-${todo.id}-actions`}
-            className="flex gap-1 opacity-0 focus-within:opacity-100 group-hover:opacity-100"
-            role="group"
-            aria-label="Task actions"
-          >
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => startEditing(todo)}
-              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              aria-label={`Edit task: ${todo.text}`}
-              title="Edit task (Enter)"
-            >
-              <Suspense fallback={<IconFallback />}>
-                <Edit2 className="h-3 w-3" aria-hidden="true" />
-              </Suspense>
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => handleTaskDelete(todo.id)}
-              className="h-6 w-6 p-0 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              aria-label={`Delete task: ${todo.text}`}
-              title="Delete task (Delete)"
-            >
-              <Suspense fallback={<IconFallback />}>
-                <Trash2 className="h-3 w-3" aria-hidden="true" />
-              </Suspense>
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
+  const handleTaskDelete = useCallback(
+    (id: string) => {
+      const task = todos.find((t) => t.id === id)
+      if (task) {
+        onTaskDelete(id)
+      }
+    },
+    [onTaskDelete, todos],
   )
 
   const pendingTaskList = (
@@ -410,12 +557,39 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
       {pendingTodos.map((todo, index) =>
         canReorderTasks ? (
           <SortableFloatingTodoItem key={todo.id} todo={todo} index={index}>
-            {({ dragHandleRef, isDragging }) =>
-              renderPendingTodoRow(todo, isDragging, dragHandleRef)
-            }
+            {({ dragHandleRef, isDragging }) => (
+              <PendingFloatingTodoRow
+                todo={todo}
+                isDragging={isDragging}
+                dragHandleRef={dragHandleRef}
+                isEditing={editingId === todo.id}
+                editText={editText}
+                editInputRef={editInputRef}
+                onToggle={handleTaskToggle}
+                onDelete={handleTaskDelete}
+                onStartEditing={startEditing}
+                onEditTextChange={handleEditTextChange}
+                onEditKeyDown={handleEditKeyPress}
+                onSaveEdit={saveEdit}
+                onCancelEdit={cancelEdit}
+              />
+            )}
           </SortableFloatingTodoItem>
         ) : (
-          renderPendingTodoRow(todo)
+          <PendingFloatingTodoRow
+            key={todo.id}
+            todo={todo}
+            isEditing={editingId === todo.id}
+            editText={editText}
+            editInputRef={editInputRef}
+            onToggle={handleTaskToggle}
+            onDelete={handleTaskDelete}
+            onStartEditing={startEditing}
+            onEditTextChange={handleEditTextChange}
+            onEditKeyDown={handleEditKeyPress}
+            onSaveEdit={saveEdit}
+            onCancelEdit={cancelEdit}
+          />
         ),
       )}
     </div>
@@ -531,7 +705,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
           onCategoryCreate={onCategoryCreate}
           onCategoryUpdate={onCategoryUpdate}
           onCategoryDelete={onCategoryDelete}
-          onClose={() => setShowManagePanel(false)}
+          onClose={closeManagePanel}
           isCreatePending={isCategoryCreatePending}
           isUpdatePending={isCategoryUpdatePending}
           isDeletePending={isCategoryDeletePending}
@@ -569,7 +743,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowManagePanel(true)}
+                  onClick={openManagePanel}
                   className="h-6 w-6 shrink-0 p-0"
                   aria-label="Manage categories"
                   title="Manage categories"
@@ -593,7 +767,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
                 ref={inputRef}
                 placeholder="Add task... (Use View menu for actions)"
                 value={newTaskText}
-                onChange={(e) => setNewTaskText(e.target.value)}
+                onChange={handleNewTaskTextChange}
                 onKeyDown={handleKeyPress}
                 className="h-8 border-0 text-sm ring-0 focus-visible:border-0 focus-visible:ring-0"
                 aria-label="New task title"
@@ -655,38 +829,12 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
                   aria-label={`${completedTodos.length} completed task${completedTodos.length !== 1 ? 's' : ''}`}
                 >
                   {completedTodos.slice(0, 3).map((todo) => (
-                    <div
+                    <CompletedFloatingTodoRow
                       key={todo.id}
-                      className="hover:bg-muted/50 group flex items-center gap-2 rounded p-2 opacity-60"
-                      role="listitem"
-                      aria-label={`Completed task: ${todo.text}`}
-                    >
-                      <Checkbox
-                        checked={todo.completed}
-                        onCheckedChange={() => handleTaskToggle(todo.id)}
-                        className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        aria-label={`Mark completed task "${todo.text}" as incomplete`}
-                      />
-                      <span
-                        className="flex-1 truncate text-xs line-through"
-                        title={todo.text}
-                        aria-label={`Completed: ${todo.text}`}
-                      >
-                        {todo.text}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleTaskDelete(todo.id)}
-                        className="h-6 w-6 p-0 text-destructive opacity-0 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
-                        aria-label={`Delete completed task: ${todo.text}`}
-                        title="Delete task"
-                      >
-                        <Suspense fallback={<IconFallback />}>
-                          <Trash2 className="h-3 w-3" aria-hidden="true" />
-                        </Suspense>
-                      </Button>
-                    </div>
+                      todo={todo}
+                      onToggle={handleTaskToggle}
+                      onDelete={handleTaskDelete}
+                    />
                   ))}
                   {completedTodos.length > 3 && (
                     <div
