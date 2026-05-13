@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, StickyNote, ChevronDown, ChevronRight } from 'lucide-react'
 import React, { useCallback, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { type ControllerRenderProps, useForm } from 'react-hook-form'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -21,8 +21,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-// フォームのスキーマ定義
-// Form schema definition
+// Form schema definition for the add-todo inputs.
 const todoFormSchema = z.object({
   text: z.string().trim().min(1, 'Please enter a task'),
   notes: z.string().optional(),
@@ -53,11 +52,42 @@ export const AddTodoForm = React.memo(function AddTodoForm({
     },
   })
 
-  const handleSubmit = (values: TodoFormValues) => {
-    onAddTodo(values.text, values.notes || undefined)
-    form.reset()
-    setIsNotesOpen(false)
-  }
+  const handleSubmit = useCallback(
+    (values: TodoFormValues) => {
+      onAddTodo(values.text, values.notes || undefined)
+      form.reset()
+      setIsNotesOpen(false)
+    },
+    [form, onAddTodo],
+  )
+
+  const renderTextField = useCallback(
+    ({ field }: { field: ControllerRenderProps<TodoFormValues, 'text'> }) => (
+      <FormItem className="flex-1">
+        <FormControl>
+          <Input placeholder="Enter a new todo..." {...field} />
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    ),
+    [],
+  )
+
+  const renderNotesField = useCallback(
+    ({ field }: { field: ControllerRenderProps<TodoFormValues, 'notes'> }) => (
+      <FormItem>
+        <FormControl>
+          <Textarea
+            placeholder="Add notes (optional)..."
+            className="min-h-20 resize-none"
+            {...field}
+          />
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    ),
+    [],
+  )
 
   const notesValue = form.watch('notes')
 
@@ -73,14 +103,7 @@ export const AddTodoForm = React.memo(function AddTodoForm({
               <FormField
                 control={form.control}
                 name="text"
-                render={({ field }) => (
-                  <FormItem className="flex-1">
-                    <FormControl>
-                      <Input placeholder="Enter a new todo..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={renderTextField}
               />
               <Collapsible
                 open={isNotesOpen}
@@ -123,18 +146,7 @@ export const AddTodoForm = React.memo(function AddTodoForm({
                 <FormField
                   control={form.control}
                   name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Add notes (optional)..."
-                          className="min-h-20 resize-none"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={renderNotesField}
                 />
               </CollapsibleContent>
             </Collapsible>

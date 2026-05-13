@@ -4,7 +4,7 @@ import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { memo, Suspense, useMemo, useState } from 'react'
+import { memo, Suspense, useCallback, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -123,14 +123,17 @@ export const TodoList = memo(function TodoList() {
    * @example
    * addTodo('Buy milk')
    */
-  const addTodo = (text: string, notes?: string) => {
-    if (selectedCategoryId === null) return
-    createMutation.mutate({
-      text,
-      notes,
-      categoryId: selectedCategoryId,
-    })
-  }
+  const addTodo = useCallback(
+    (text: string, notes?: string) => {
+      if (selectedCategoryId === null) return
+      createMutation.mutate({
+        text,
+        notes,
+        categoryId: selectedCategoryId,
+      })
+    },
+    [createMutation, selectedCategoryId],
+  )
 
   /**
    * Toggles completion status for the given todo.
@@ -140,12 +143,15 @@ export const TodoList = memo(function TodoList() {
    * @example
    * toggleComplete('42')
    */
-  const toggleComplete = (id: string) => {
-    const todoId = parseInt(id, DECIMAL_RADIX)
-    if (!isNaN(todoId)) {
-      toggleMutation.mutate({ id: todoId })
-    }
-  }
+  const toggleComplete = useCallback(
+    (id: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        toggleMutation.mutate({ id: todoId })
+      }
+    },
+    [toggleMutation],
+  )
 
   /**
    * Deletes the specified todo item.
@@ -155,12 +161,15 @@ export const TodoList = memo(function TodoList() {
    * @example
    * deleteTodo('42')
    */
-  const deleteTodo = (id: string) => {
-    const todoId = parseInt(id, DECIMAL_RADIX)
-    if (!isNaN(todoId)) {
-      deleteMutation.mutate({ id: todoId })
-    }
-  }
+  const deleteTodo = useCallback(
+    (id: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        deleteMutation.mutate({ id: todoId })
+      }
+    },
+    [deleteMutation],
+  )
 
   /**
    * Updates the notes for a specific todo item.
@@ -171,12 +180,15 @@ export const TodoList = memo(function TodoList() {
    * @example
    * updateNotes('42', 'Call supplier')
    */
-  const updateNotes = (id: string, notes: string) => {
-    const todoId = parseInt(id, DECIMAL_RADIX)
-    if (!isNaN(todoId)) {
-      updateMutation.mutate({ id: todoId, data: { notes } })
-    }
-  }
+  const updateNotes = useCallback(
+    (id: string, notes: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        updateMutation.mutate({ id: todoId, data: { notes } })
+      }
+    },
+    [updateMutation],
+  )
 
   /**
    * Clears all completed todos via the bulk delete mutation.
@@ -185,9 +197,9 @@ export const TodoList = memo(function TodoList() {
    * @example
    * deleteCompleted()
    */
-  const deleteCompleted = () => {
+  const deleteCompleted = useCallback(() => {
     clearCompletedMutation.mutate({})
-  }
+  }, [clearCompletedMutation])
 
   // Transform data into Todo component format
   /**
@@ -242,42 +254,45 @@ export const TodoList = memo(function TodoList() {
    * @example
    * handleDragEnd(event)
    */
-  const handleDragEnd = (event: DragEndEvent) => {
-    if (event.canceled) {
-      return
-    }
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (event.canceled) {
+        return
+      }
 
-    const { source } = event.operation
+      const { source } = event.operation
 
-    if (!isSortable(source) || source.initialIndex === source.index) {
-      return
-    }
+      if (!isSortable(source) || source.initialIndex === source.index) {
+        return
+      }
 
-    const oldIndex = source.initialIndex
-    const newIndex = source.index
+      const oldIndex = source.initialIndex
+      const newIndex = source.index
 
-    if (
-      oldIndex < 0 ||
-      newIndex < 0 ||
-      oldIndex >= pendingTodos.length ||
-      newIndex >= pendingTodos.length
-    ) {
-      return
-    }
+      if (
+        oldIndex < 0 ||
+        newIndex < 0 ||
+        oldIndex >= pendingTodos.length ||
+        newIndex >= pendingTodos.length
+      ) {
+        return
+      }
 
-    // Optimistically update local state
-    const reorderedTodos = arrayMove(pendingTodos, oldIndex, newIndex)
-    setLocalPendingTodos(reorderedTodos)
+      // Optimistically update local state
+      const reorderedTodos = arrayMove(pendingTodos, oldIndex, newIndex)
+      setLocalPendingTodos(reorderedTodos)
 
-    // Build reorder items with new order values
-    const items = reorderedTodos.map((todo, index) => ({
-      id: parseInt(todo.id, DECIMAL_RADIX),
-      order: index,
-    }))
+      // Build reorder items with new order values
+      const items = reorderedTodos.map((todo, index) => ({
+        id: parseInt(todo.id, DECIMAL_RADIX),
+        order: index,
+      }))
 
-    // Call reorder mutation
-    reorderMutation.mutate({ items })
-  }
+      // Call reorder mutation
+      reorderMutation.mutate({ items })
+    },
+    [pendingTodos, reorderMutation],
+  )
 
   useComponentEffect(() => {
     // Cross-window sync: BrainDump / Floating Navigator completions broadcast

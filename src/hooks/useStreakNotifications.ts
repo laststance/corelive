@@ -1,12 +1,13 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 
 import type { StreakTier } from '@/lib/calc-streak'
 import { calcStreak, STREAK_TIERS } from '@/lib/calc-streak'
 import { log } from '@/lib/logger'
 
+import { useCycleEffect } from './use-cycle-effect'
 import { useElectronNotifications } from './useElectronNotifications'
 import type { HeatmapDay } from './useHeatmapData'
 
@@ -190,7 +191,7 @@ export function useStreakNotifications(input: {
     tier: 0,
   })
 
-  useEffect(() => {
+  useCycleEffect(() => {
     if (!isSupported || !isEnabled) return
     if (isLoading) return
     // Wait for the TanStack Query persister to finish rehydrating before

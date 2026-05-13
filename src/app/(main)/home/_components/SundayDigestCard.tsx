@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { memo, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -220,6 +220,11 @@ export const SundayDigestCard = memo(function SundayDigestCard({
     return { weekStats, bestDay }
   }, [dataByDate, today])
 
+  const handleDismiss = useCallback(() => {
+    writeDismissed(weekKey)
+    setDismissedAt(weekKey)
+  }, [weekKey])
+
   if (!isMounted) return null
   if (isLoading) return null
   if (!isSunday) return null
@@ -230,11 +235,6 @@ export const SundayDigestCard = memo(function SundayDigestCard({
   // self-affirmation, never failure framing).
 
   const { weekStats, bestDay } = summary
-
-  const handleDismiss = () => {
-    writeDismissed(weekKey)
-    setDismissedAt(weekKey)
-  }
 
   return (
     <Card aria-label="A quiet Sunday recap">

@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
-import { memo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Button } from '@/components/ui/button'
@@ -246,7 +246,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
    * is in flight so a double-click doesn't spawn parallel toPng calls
    * (each of which would append its own off-screen card).
    */
-  async function handleShare() {
+  const handleShare = useCallback(async () => {
     if (!date || dayCount === 0 || isSaving) return
     setIsSaving(true)
     try {
@@ -269,15 +269,23 @@ export const DayDetailDialog = memo(function DayDetailDialog({
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [data?.tasks, date, dayCount, isSaving])
+
+  const handlePreviousDay = useCallback(() => {
+    onNavigate?.(-1)
+  }, [onNavigate])
+
+  const handleNextDay = useCallback(() => {
+    onNavigate?.(1)
+  }, [onNavigate])
 
   // j/k keyboard nav reuses the same `onNavigate` contract as the `< >`
   // buttons, so the dialog has a single source of truth for day-stepping.
   // Esc dismiss is delegated to Radix Dialog natively (don't double-handle).
   useKeyboardNav({
     isOpen,
-    onPrev: () => onNavigate?.(-1),
-    onNext: () => onNavigate?.(1),
+    onPrev: handlePreviousDay,
+    onNext: handleNextDay,
   })
 
   return (
@@ -325,7 +333,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
                         variant="ghost"
                         size="icon"
                         className="size-8"
-                        onClick={() => onNavigate(-1)}
+                        onClick={handlePreviousDay}
                         aria-label="Previous day"
                       >
                         <ChevronLeft />
@@ -334,7 +342,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
                         variant="ghost"
                         size="icon"
                         className="size-8"
-                        onClick={() => onNavigate(1)}
+                        onClick={handleNextDay}
                         aria-label="Next day"
                       >
                         <ChevronRight />

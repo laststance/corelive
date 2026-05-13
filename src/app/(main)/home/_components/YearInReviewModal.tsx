@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
-import { memo, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -183,6 +183,14 @@ export const YearInReviewModal = memo(function YearInReviewModal({
     writeStoredYear(storageKey, summary.year)
   }, [dataByDate, isLoading, isRestoring, userId, forcedToday, forceParam])
 
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setOpen(false)
+  }, [])
+
   if (!open) return null
 
   // Recompute the summary at render time — `useEffect` decided to open;
@@ -191,7 +199,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
   const summary = aggregateYearInReview(dataByDate, forcedToday ?? new Date())
 
   return (
-    <Dialog open={open} onOpenChange={(open: boolean) => setOpen(open)}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">
@@ -260,7 +268,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
           <Button
             type="button"
             variant="ghost"
-            onClick={() => setOpen(false)}
+            onClick={handleClose}
             className="font-serif italic"
           >
             close

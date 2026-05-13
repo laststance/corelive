@@ -1,7 +1,7 @@
 'use client'
 
 import { Bell, BellOff, Volume2, VolumeX } from 'lucide-react'
-import { memo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,50 @@ interface NotificationSettingsProps {
   className?: string
 }
 
+interface NotificationPreferenceSwitchProps {
+  id: string
+  checked: boolean
+  disabled: boolean
+  preferenceKey: keyof NotificationPreferences
+  updatePreferences: (
+    newPreferences: Partial<NotificationPreferences>,
+  ) => Promise<void>
+}
+
+/**
+ * Updates one notification preference without inline JSX handlers.
+ *
+ * @param props - Preference key, checked state, disabled state, and updater.
+ * @returns A controlled Switch for notification preferences.
+ * @example
+ * <NotificationPreferenceSwitch id="task-created" preferenceKey="taskCreated" checked updatePreferences={updatePreferences} disabled={false} />
+ */
+const NotificationPreferenceSwitch = memo(
+  function NotificationPreferenceSwitch({
+    id,
+    checked,
+    disabled,
+    preferenceKey,
+    updatePreferences,
+  }: NotificationPreferenceSwitchProps) {
+    const handleCheckedChange = useCallback(
+      async (nextChecked: boolean) => {
+        await updatePreferences({ [preferenceKey]: nextChecked })
+      },
+      [preferenceKey, updatePreferences],
+    )
+
+    return (
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={handleCheckedChange}
+        disabled={disabled}
+      />
+    )
+  },
+)
+
 export const NotificationSettings = memo(function NotificationSettings({
   className,
 }: NotificationSettingsProps) {
@@ -60,17 +104,7 @@ export const NotificationSettings = memo(function NotificationSettings({
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  useComponentEffect(() => {
-    if (!isElectron) {
-      setIsLoading(false)
-      return
-    }
-
-    loadPreferences()
-    loadActiveCount()
-  }, [isElectron])
-
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     if (!isElectron) return
 
     try {
@@ -98,9 +132,9 @@ export const NotificationSettings = memo(function NotificationSettings({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [isElectron])
 
-  const loadActiveCount = async () => {
+  const loadActiveCount = useCallback(async () => {
     if (!isElectron) return
 
     try {
@@ -112,33 +146,44 @@ export const NotificationSettings = memo(function NotificationSettings({
     } catch (error) {
       log.error('Failed to load active notification count:', error)
     }
-  }
+  }, [isElectron])
 
-  const updatePreferences = async (
-    newPreferences: Partial<NotificationPreferences>,
-  ) => {
-    if (!isElectron) return
-
-    setIsSaving(true)
-    try {
-      if (!window.electronAPI?.notifications) {
-        throw new Error('Electron API not available')
-      }
-      const updatedPrefs = { ...preferences, ...newPreferences }
-      const success =
-        await window.electronAPI.notifications.updatePreferences(updatedPrefs)
-
-      if (success) {
-        setPreferences(updatedPrefs)
-      }
-    } catch (error) {
-      log.error('Failed to update notification preferences:', error)
-    } finally {
-      setIsSaving(false)
+  useComponentEffect(() => {
+    if (!isElectron) {
+      setIsLoading(false)
+      return
     }
-  }
 
-  const testNotification = async () => {
+    loadPreferences()
+    loadActiveCount()
+  }, [isElectron, loadActiveCount, loadPreferences])
+
+  const updatePreferences = useCallback(
+    async (newPreferences: Partial<NotificationPreferences>) => {
+      if (!isElectron) return
+
+      setIsSaving(true)
+      try {
+        if (!window.electronAPI?.notifications) {
+          throw new Error('Electron API not available')
+        }
+        const updatedPrefs = { ...preferences, ...newPreferences }
+        const success =
+          await window.electronAPI.notifications.updatePreferences(updatedPrefs)
+
+        if (success) {
+          setPreferences(updatedPrefs)
+        }
+      } catch (error) {
+        log.error('Failed to update notification preferences:', error)
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [isElectron, preferences],
+  )
+
+  const testNotification = useCallback(async () => {
     if (!isElectron) return
 
     try {
@@ -153,9 +198,9 @@ export const NotificationSettings = memo(function NotificationSettings({
     } catch (error) {
       log.error('Failed to show test notification:', error)
     }
-  }
+  }, [isElectron, preferences.sound])
 
-  const clearAllNotifications = async () => {
+  const clearAllNotifications = useCallback(async () => {
     if (!isElectron) return
 
     try {
@@ -167,7 +212,7 @@ export const NotificationSettings = memo(function NotificationSettings({
     } catch (error) {
       log.error('Failed to clear notifications:', error)
     }
-  }
+  }, [isElectron])
 
   if (!isElectron) {
     return (
@@ -242,12 +287,11 @@ export const NotificationSettings = memo(function NotificationSettings({
               Turn on desktop notifications for task updates
             </div>
           </div>
-          <Switch
+          <NotificationPreferenceSwitch
             id="notifications-enabled"
             checked={preferences.enabled}
-            onCheckedChange={async (checked) =>
-              updatePreferences({ enabled: checked })
-            }
+            preferenceKey="enabled"
+            updatePreferences={updatePreferences}
             disabled={isSaving}
           />
         </div>
@@ -263,12 +307,11 @@ export const NotificationSettings = memo(function NotificationSettings({
                   <Label htmlFor="task-created" className="text-sm">
                     Task Created
                   </Label>
-                  <Switch
+                  <NotificationPreferenceSwitch
                     id="task-created"
                     checked={preferences.taskCreated}
-                    onCheckedChange={async (checked) =>
-                      updatePreferences({ taskCreated: checked })
-                    }
+                    preferenceKey="taskCreated"
+                    updatePreferences={updatePreferences}
                     disabled={isSaving}
                   />
                 </div>
@@ -277,12 +320,11 @@ export const NotificationSettings = memo(function NotificationSettings({
                   <Label htmlFor="task-completed" className="text-sm">
                     Task Completed
                   </Label>
-                  <Switch
+                  <NotificationPreferenceSwitch
                     id="task-completed"
                     checked={preferences.taskCompleted}
-                    onCheckedChange={async (checked) =>
-                      updatePreferences({ taskCompleted: checked })
-                    }
+                    preferenceKey="taskCompleted"
+                    updatePreferences={updatePreferences}
                     disabled={isSaving}
                   />
                 </div>
@@ -291,12 +333,11 @@ export const NotificationSettings = memo(function NotificationSettings({
                   <Label htmlFor="task-updated" className="text-sm">
                     Task Updated
                   </Label>
-                  <Switch
+                  <NotificationPreferenceSwitch
                     id="task-updated"
                     checked={preferences.taskUpdated}
-                    onCheckedChange={async (checked) =>
-                      updatePreferences({ taskUpdated: checked })
-                    }
+                    preferenceKey="taskUpdated"
+                    updatePreferences={updatePreferences}
                     disabled={isSaving}
                   />
                 </div>
@@ -305,12 +346,11 @@ export const NotificationSettings = memo(function NotificationSettings({
                   <Label htmlFor="task-deleted" className="text-sm">
                     Task Deleted
                   </Label>
-                  <Switch
+                  <NotificationPreferenceSwitch
                     id="task-deleted"
                     checked={preferences.taskDeleted}
-                    onCheckedChange={async (checked) =>
-                      updatePreferences({ taskDeleted: checked })
-                    }
+                    preferenceKey="taskDeleted"
+                    updatePreferences={updatePreferences}
                     disabled={isSaving}
                   />
                 </div>
@@ -335,12 +375,11 @@ export const NotificationSettings = memo(function NotificationSettings({
                   Play sound with notifications
                 </div>
               </div>
-              <Switch
+              <NotificationPreferenceSwitch
                 id="notification-sound"
                 checked={preferences.sound}
-                onCheckedChange={async (checked) =>
-                  updatePreferences({ sound: checked })
-                }
+                preferenceKey="sound"
+                updatePreferences={updatePreferences}
                 disabled={isSaving}
               />
             </div>

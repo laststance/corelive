@@ -1,6 +1,6 @@
 'use client'
 
-import React, { lazy, Suspense, useState } from 'react'
+import React, { lazy, Suspense, useCallback, useState } from 'react'
 
 import {
   AlertDialog,
@@ -117,49 +117,113 @@ export const FloatingCategoryManager = React.memo(
      * Enters inline edit mode for a category.
      * @param category - The category to edit
      */
-    const startEditing = (category: CategoryWithCount) => {
+    const startEditing = useCallback((category: CategoryWithCount) => {
       setEditingId(category.id)
       setEditName(category.name)
       setEditColor(category.color as CategoryColor)
-    }
+    }, [])
 
     /**
      * Saves the inline edit and exits edit mode.
      */
-    const saveEdit = () => {
+    const saveEdit = useCallback(() => {
       if (editingId === null || !editName.trim()) return
       onCategoryUpdate(editingId, { name: editName.trim(), color: editColor })
       setEditingId(null)
-    }
+    }, [editColor, editName, editingId, onCategoryUpdate])
 
     /**
      * Cancels inline editing and resets state.
      */
-    const cancelEdit = () => {
+    const cancelEdit = useCallback(() => {
       setEditingId(null)
       setEditName('')
       setEditColor('blue')
-    }
+    }, [])
 
     /**
      * Creates a new category and resets the add form.
      */
-    const handleCreate = () => {
+    const handleCreate = useCallback(() => {
       if (!newName.trim()) return
       onCategoryCreate(newName.trim(), newColor)
       setNewName('')
       setNewColor('blue')
       setShowAddForm(false)
-    }
+    }, [newColor, newName, onCategoryCreate])
 
     /**
      * Confirms and executes category deletion.
      */
-    const confirmDelete = () => {
+    const confirmDelete = useCallback(() => {
       if (!deleteTarget) return
       onCategoryDelete(deleteTarget.id)
       setDeleteTarget(null)
-    }
+    }, [deleteTarget, onCategoryDelete])
+
+    const toggleAddForm = useCallback(() => {
+      setShowAddForm((currentShowAddForm) => !currentShowAddForm)
+    }, [])
+
+    const closeAddForm = useCallback(() => {
+      setShowAddForm(false)
+    }, [])
+
+    const handleNewNameChange = useCallback(
+      (event: React.ChangeEvent<HTMLInputElement>) => {
+        setNewName(event.target.value)
+      },
+      [],
+    )
+
+    const handleNewNameKeyDown = useCallback(
+      (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter') handleCreate()
+        if (event.key === 'Escape') closeAddForm()
+      },
+      [closeAddForm, handleCreate],
+    )
+
+    const handleEditNameChange = useCallback(
+      (event: React.ChangeEvent<HTMLInputElement>) => {
+        setEditName(event.target.value)
+      },
+      [],
+    )
+
+    const handleEditNameKeyDown = useCallback(
+      (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter') saveEdit()
+        if (event.key === 'Escape') cancelEdit()
+      },
+      [cancelEdit, saveEdit],
+    )
+
+    const handleEditCategoryClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        const categoryId = Number(event.currentTarget.dataset.categoryId)
+        const category = categories.find(
+          (candidate) => candidate.id === categoryId,
+        )
+        if (category) startEditing(category)
+      },
+      [categories, startEditing],
+    )
+
+    const handleDeleteCategoryClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        const categoryId = Number(event.currentTarget.dataset.categoryId)
+        const category = categories.find(
+          (candidate) => candidate.id === categoryId,
+        )
+        if (category) setDeleteTarget(category)
+      },
+      [categories],
+    )
+
+    const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+      if (!open) setDeleteTarget(null)
+    }, [])
 
     return (
       <>
@@ -182,7 +246,7 @@ export const FloatingCategoryManager = React.memo(
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={toggleAddForm}
               className="h-6 w-6 p-0"
               aria-label="Add new category"
               title="Add new category"
@@ -220,11 +284,8 @@ export const FloatingCategoryManager = React.memo(
               <div className="flex gap-1">
                 <Input
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreate()
-                    if (e.key === 'Escape') setShowAddForm(false)
-                  }}
+                  onChange={handleNewNameChange}
+                  onKeyDown={handleNewNameKeyDown}
                   placeholder="Category name"
                   className="h-7 flex-1 text-xs"
                   maxLength={30}
@@ -282,11 +343,8 @@ export const FloatingCategoryManager = React.memo(
                       </div>
                       <Input
                         value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveEdit()
-                          if (e.key === 'Escape') cancelEdit()
-                        }}
+                        onChange={handleEditNameChange}
+                        onKeyDown={handleEditNameKeyDown}
                         className="h-6 flex-1 text-xs"
                         maxLength={30}
                         autoFocus
@@ -335,7 +393,8 @@ export const FloatingCategoryManager = React.memo(
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => startEditing(category)}
+                          data-category-id={category.id}
+                          onClick={handleEditCategoryClick}
                           className="h-6 w-6 p-0 text-muted-foreground"
                           aria-label={`Edit ${category.name}`}
                           title="Edit category"
@@ -348,7 +407,8 @@ export const FloatingCategoryManager = React.memo(
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setDeleteTarget(category)}
+                            data-category-id={category.id}
+                            onClick={handleDeleteCategoryClick}
                             className="h-6 w-6 p-0 text-destructive hover:text-destructive"
                             aria-label={`Delete ${category.name}`}
                             title="Delete category"
@@ -370,9 +430,7 @@ export const FloatingCategoryManager = React.memo(
         {/* Delete confirmation dialog */}
         <AlertDialog
           open={!!deleteTarget}
-          onOpenChange={(open) => {
-            if (!open) setDeleteTarget(null)
-          }}
+          onOpenChange={handleDeleteDialogOpenChange}
         >
           <AlertDialogContent className="max-w-xs">
             <AlertDialogHeader>

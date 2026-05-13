@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -65,6 +65,123 @@ interface WindowStateStats {
   }
 }
 
+type WindowType = 'main' | 'floating'
+
+type SnapEdge =
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'bottom'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'maximize'
+
+interface WindowDisplaySelectProps {
+  windowType: WindowType
+  displays: Display[]
+  onMove: (windowType: WindowType, displayId: number) => Promise<void>
+}
+
+interface SnapWindowButtonProps {
+  windowType: WindowType
+  edge: SnapEdge
+  label: string
+  onSnap: (windowType: WindowType, edge: SnapEdge) => Promise<void>
+}
+
+interface ResetWindowButtonProps {
+  windowType: WindowType
+  label: string
+  onReset: (windowType: WindowType) => Promise<void>
+}
+
+/**
+ * Moves a window to the selected display without inline JSX handlers.
+ *
+ * @param props - Target window, display list, and move callback.
+ * @returns A display Select for the target window.
+ * @example
+ * <WindowDisplaySelect windowType="main" displays={displays} onMove={moveWindowToDisplay} />
+ */
+const WindowDisplaySelect = React.memo(function WindowDisplaySelect({
+  windowType,
+  displays,
+  onMove,
+}: WindowDisplaySelectProps): React.ReactNode {
+  const handleValueChange = useCallback(
+    async (value: string) => {
+      await onMove(windowType, parseInt(value, 10))
+    },
+    [onMove, windowType],
+  )
+
+  return (
+    <Select onValueChange={handleValueChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Select display" />
+      </SelectTrigger>
+      <SelectContent>
+        {displays.map((display) => (
+          <SelectItem key={display.id} value={display.id.toString()}>
+            {display.label} {display.isPrimary && '(Primary)'}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+})
+
+/**
+ * Snaps a window to a fixed edge without inline JSX handlers.
+ *
+ * @param props - Target window, edge, label, and snap callback.
+ * @returns A small outline Button.
+ * @example
+ * <SnapWindowButton windowType="main" edge="left" label="Left" onSnap={snapWindowToEdge} />
+ */
+const SnapWindowButton = React.memo(function SnapWindowButton({
+  windowType,
+  edge,
+  label,
+  onSnap,
+}: SnapWindowButtonProps): React.ReactNode {
+  const handleClick = useCallback(async () => {
+    await onSnap(windowType, edge)
+  }, [edge, onSnap, windowType])
+
+  return (
+    <Button variant="outline" size="sm" onClick={handleClick}>
+      {label}
+    </Button>
+  )
+})
+
+/**
+ * Resets one window state without inline JSX handlers.
+ *
+ * @param props - Target window, label, and reset callback.
+ * @returns A small outline Button.
+ * @example
+ * <ResetWindowButton windowType="main" label="Reset Main Window" onReset={resetWindowState} />
+ */
+const ResetWindowButton = React.memo(function ResetWindowButton({
+  windowType,
+  label,
+  onReset,
+}: ResetWindowButtonProps): React.ReactNode {
+  const handleClick = useCallback(async () => {
+    await onReset(windowType)
+  }, [onReset, windowType])
+
+  return (
+    <Button variant="outline" onClick={handleClick} size="sm">
+      {label}
+    </Button>
+  )
+})
+
 export const WindowStateSettings = React.memo(function WindowStateSettings() {
   const [stats, setStats] = useState<WindowStateStats | null>(null)
   const [displays, setDisplays] = useState<Display[]>([])
@@ -73,15 +190,7 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  useComponentEffect(() => {
-    if (isElectron) {
-      loadWindowStateData()
-    } else {
-      setLoading(false)
-    }
-  }, [isElectron])
-
-  const loadWindowStateData = async () => {
+  const loadWindowStateData = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -146,80 +255,80 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const moveWindowToDisplay = async (
-    windowType: 'main' | 'floating',
-    displayId: number,
-  ) => {
-    try {
-      if (!window.electronAPI?.windowState) {
-        throw new Error('Electron API not available')
-      }
-      const success = await window.electronAPI.windowState.moveToDisplay(
-        windowType,
-        displayId,
-      )
-      if (success) {
-        toast.success(`${windowType} window moved to display ${displayId}`)
-        await loadWindowStateData() // Refresh data
-      } else {
+  const moveWindowToDisplay = useCallback(
+    async (windowType: WindowType, displayId: number) => {
+      try {
+        if (!window.electronAPI?.windowState) {
+          throw new Error('Electron API not available')
+        }
+        const success = await window.electronAPI.windowState.moveToDisplay(
+          windowType,
+          displayId,
+        )
+        if (success) {
+          toast.success(`${windowType} window moved to display ${displayId}`)
+          await loadWindowStateData() // Refresh data
+        } else {
+          toast.error(`Failed to move ${windowType} window`)
+        }
+      } catch (error) {
+        log.error('Failed to move window:', error)
         toast.error(`Failed to move ${windowType} window`)
       }
-    } catch (error) {
-      log.error('Failed to move window:', error)
-      toast.error(`Failed to move ${windowType} window`)
-    }
-  }
+    },
+    [loadWindowStateData],
+  )
 
-  type SnapEdge =
-    | 'left'
-    | 'right'
-    | 'top'
-    | 'bottom'
-    | 'top-left'
-    | 'top-right'
-    | 'bottom-left'
-    | 'bottom-right'
-    | 'maximize'
-
-  const snapWindowToEdge = async (
-    windowType: 'main' | 'floating',
-    edge: SnapEdge,
-  ) => {
-    try {
-      if (!window.electronAPI?.windowState) {
-        throw new Error('Electron API not available')
-      }
-      const success = await window.electronAPI.windowState.snapToEdge(
-        windowType,
-        edge,
-      )
-      if (success) {
-        toast.success(`${windowType} window snapped to ${edge}`)
-        await loadWindowStateData() // Refresh data
-      } else {
+  const snapWindowToEdge = useCallback(
+    async (windowType: WindowType, edge: SnapEdge) => {
+      try {
+        if (!window.electronAPI?.windowState) {
+          throw new Error('Electron API not available')
+        }
+        const success = await window.electronAPI.windowState.snapToEdge(
+          windowType,
+          edge,
+        )
+        if (success) {
+          toast.success(`${windowType} window snapped to ${edge}`)
+          await loadWindowStateData() // Refresh data
+        } else {
+          toast.error(`Failed to snap ${windowType} window`)
+        }
+      } catch (error) {
+        log.error('Failed to snap window:', error)
         toast.error(`Failed to snap ${windowType} window`)
       }
-    } catch (error) {
-      log.error('Failed to snap window:', error)
-      toast.error(`Failed to snap ${windowType} window`)
-    }
-  }
+    },
+    [loadWindowStateData],
+  )
 
-  const resetWindowState = async (windowType: 'main' | 'floating') => {
-    try {
-      if (!window.electronAPI?.windowState) {
-        throw new Error('Electron API not available')
+  const resetWindowState = useCallback(
+    async (windowType: WindowType) => {
+      try {
+        if (!window.electronAPI?.windowState) {
+          throw new Error('Electron API not available')
+        }
+        await window.electronAPI.windowState.reset(windowType)
+        toast.success(`${windowType} window state reset to defaults`)
+        await loadWindowStateData() // Refresh data
+      } catch (error) {
+        log.error('Failed to reset window state:', error)
+        toast.error(`Failed to reset ${windowType} window state`)
       }
-      await window.electronAPI.windowState.reset(windowType)
-      toast.success(`${windowType} window state reset to defaults`)
-      await loadWindowStateData() // Refresh data
-    } catch (error) {
-      log.error('Failed to reset window state:', error)
-      toast.error(`Failed to reset ${windowType} window state`)
+    },
+    [loadWindowStateData],
+  )
+
+  useComponentEffect(() => {
+    if (isElectron) {
+      loadWindowStateData()
+    } else {
+      setLoading(false)
     }
-  }
+  }, [isElectron, loadWindowStateData])
 
   const formatLastSaved = (timestamp: number) => {
     if (!timestamp) return 'Never'
@@ -369,108 +478,79 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
             <div className="space-y-4">
               <div>
                 <div className="mb-2 text-sm font-medium">Move to Display</div>
-                <Select
-                  onValueChange={async (value) =>
-                    moveWindowToDisplay('main', parseInt(value, 10))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select display" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {displays.map((display) => (
-                      <SelectItem
-                        key={display.id}
-                        value={display.id.toString()}
-                      >
-                        {display.label} {display.isPrimary && '(Primary)'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <WindowDisplaySelect
+                  windowType="main"
+                  displays={displays}
+                  onMove={moveWindowToDisplay}
+                />
               </div>
 
               <div>
                 <div className="mb-2 text-sm font-medium">Snap to Edge</div>
                 <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'left')}
-                  >
-                    Left
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'top')}
-                  >
-                    Top
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'right')}
-                  >
-                    Right
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'top-left')}
-                  >
-                    Top Left
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'maximize')}
-                  >
-                    Maximize
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'top-right')}
-                  >
-                    Top Right
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () =>
-                      snapWindowToEdge('main', 'bottom-left')
-                    }
-                  >
-                    Bottom Left
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => snapWindowToEdge('main', 'bottom')}
-                  >
-                    Bottom
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () =>
-                      snapWindowToEdge('main', 'bottom-right')
-                    }
-                  >
-                    Bottom Right
-                  </Button>
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="left"
+                    label="Left"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="top"
+                    label="Top"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="right"
+                    label="Right"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="top-left"
+                    label="Top Left"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="maximize"
+                    label="Maximize"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="top-right"
+                    label="Top Right"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="bottom-left"
+                    label="Bottom Left"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="bottom"
+                    label="Bottom"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="main"
+                    edge="bottom-right"
+                    label="Bottom Right"
+                    onSnap={snapWindowToEdge}
+                  />
                 </div>
               </div>
 
               <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={async () => resetWindowState('main')}
-                  size="sm"
-                >
-                  Reset Main Window
-                </Button>
+                <ResetWindowButton
+                  windowType="main"
+                  label="Reset Main Window"
+                  onReset={resetWindowState}
+                />
               </div>
             </div>
           </CardContent>
@@ -521,77 +601,49 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
             <div className="space-y-4">
               <div>
                 <div className="mb-2 text-sm font-medium">Move to Display</div>
-                <Select
-                  onValueChange={async (value) =>
-                    moveWindowToDisplay('floating', parseInt(value, 10))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select display" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {displays.map((display) => (
-                      <SelectItem
-                        key={display.id}
-                        value={display.id.toString()}
-                      >
-                        {display.label} {display.isPrimary && '(Primary)'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <WindowDisplaySelect
+                  windowType="floating"
+                  displays={displays}
+                  onMove={moveWindowToDisplay}
+                />
               </div>
 
               <div>
                 <div className="mb-2 text-sm font-medium">Quick Position</div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () =>
-                      snapWindowToEdge('floating', 'top-left')
-                    }
-                  >
-                    Top Left
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () =>
-                      snapWindowToEdge('floating', 'top-right')
-                    }
-                  >
-                    Top Right
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () =>
-                      snapWindowToEdge('floating', 'bottom-left')
-                    }
-                  >
-                    Bottom Left
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () =>
-                      snapWindowToEdge('floating', 'bottom-right')
-                    }
-                  >
-                    Bottom Right
-                  </Button>
+                  <SnapWindowButton
+                    windowType="floating"
+                    edge="top-left"
+                    label="Top Left"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="floating"
+                    edge="top-right"
+                    label="Top Right"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="floating"
+                    edge="bottom-left"
+                    label="Bottom Left"
+                    onSnap={snapWindowToEdge}
+                  />
+                  <SnapWindowButton
+                    windowType="floating"
+                    edge="bottom-right"
+                    label="Bottom Right"
+                    onSnap={snapWindowToEdge}
+                  />
                 </div>
               </div>
 
               <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={async () => resetWindowState('floating')}
-                  size="sm"
-                >
-                  Reset Floating Navigator
-                </Button>
+                <ResetWindowButton
+                  windowType="floating"
+                  label="Reset Floating Navigator"
+                  onReset={resetWindowState}
+                />
               </div>
             </div>
           </CardContent>

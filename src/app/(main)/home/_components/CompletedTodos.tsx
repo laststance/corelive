@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Trash2 } from 'lucide-react'
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 
 import {
   AlertDialog,
@@ -47,6 +47,16 @@ export const CompletedTodos = React.memo(function CompletedTodos({
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const handleClearClick = useCallback(() => {
+    setClearDialogOpen(true)
+  }, [])
+  const handleClearDialogOpenChange = useCallback((open: boolean) => {
+    setClearDialogOpen(open)
+  }, [])
+  const handleConfirmClearCompleted = useCallback(() => {
+    onClearCompleted()
+    setClearDialogOpen(false)
+  }, [onClearCompleted])
 
   // Infinite scroll query
   const {
@@ -197,7 +207,7 @@ export const CompletedTodos = React.memo(function CompletedTodos({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setClearDialogOpen(true)}
+                onClick={handleClearClick}
                 className="text-destructive hover:text-destructive"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -251,7 +261,7 @@ export const CompletedTodos = React.memo(function CompletedTodos({
 
       <AlertDialog
         open={clearDialogOpen}
-        onOpenChange={(open: boolean) => setClearDialogOpen(open)}
+        onOpenChange={handleClearDialogOpenChange}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -266,10 +276,7 @@ export const CompletedTodos = React.memo(function CompletedTodos({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                onClearCompleted()
-                setClearDialogOpen(false)
-              }}
+              onClick={handleConfirmClearCompleted}
               className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- shadcn destructive tokens
             >
               Clear all

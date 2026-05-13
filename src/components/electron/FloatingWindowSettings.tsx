@@ -10,7 +10,7 @@
  * @module components/electron/FloatingWindowSettings
  */
 import { Monitor } from 'lucide-react'
-import { memo, type ReactElement } from 'react'
+import { memo, useCallback, type ReactElement } from 'react'
 import { useId, useState } from 'react'
 
 import {
@@ -90,32 +90,33 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
    * @param next - true keeps floating panels visible across macOS desktops
    * @returns Promise that resolves once the main process confirms the change
    */
-  const handleVisibleOnAllWorkspacesChange = async (
-    next: boolean,
-  ): Promise<void> => {
-    const previous = visibleOnAllWorkspaces
-    setVisibleOnAllWorkspaces(next)
-    setIsSaving(true)
-    setError(null)
+  const handleVisibleOnAllWorkspacesChange = useCallback(
+    async (next: boolean): Promise<void> => {
+      const previous = visibleOnAllWorkspaces
+      setVisibleOnAllWorkspaces(next)
+      setIsSaving(true)
+      setError(null)
 
-    try {
-      const api = window.electronAPI?.floatingPanels
-      // If the preload bridge disappears, rollback instead of showing a saved
-      // value that the main process never applied.
-      if (!api) {
-        throw new Error('Electron floating panels API is not available')
+      try {
+        const api = window.electronAPI?.floatingPanels
+        // If the preload bridge disappears, rollback instead of showing a saved
+        // value that the main process never applied.
+        if (!api) {
+          throw new Error('Electron floating panels API is not available')
+        }
+
+        const applied = await api.setVisibleOnAllWorkspaces(next)
+        setVisibleOnAllWorkspaces(applied)
+      } catch (saveError: unknown) {
+        log.error('Failed to update floating window settings:', saveError)
+        setVisibleOnAllWorkspaces(previous)
+        setError('Failed to update floating window settings')
+      } finally {
+        setIsSaving(false)
       }
-
-      const applied = await api.setVisibleOnAllWorkspaces(next)
-      setVisibleOnAllWorkspaces(applied)
-    } catch (saveError: unknown) {
-      log.error('Failed to update floating window settings:', saveError)
-      setVisibleOnAllWorkspaces(previous)
-      setError('Failed to update floating window settings')
-    } finally {
-      setIsSaving(false)
-    }
-  }
+    },
+    [visibleOnAllWorkspaces],
+  )
 
   if (hasMounted && !window.electronAPI?.floatingPanels) {
     return (

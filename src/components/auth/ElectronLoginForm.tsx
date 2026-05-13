@@ -252,6 +252,24 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
   const canSubmit =
     state.email.trim() && state.password.trim() && !isFormDisabled
 
+  const handleEmailChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      dispatch({ type: 'SET_EMAIL', email: event.target.value })
+    },
+    [dispatch],
+  )
+
+  const handlePasswordChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      dispatch({ type: 'SET_PASSWORD', password: event.target.value })
+    },
+    [dispatch],
+  )
+
+  const handleGoogleButtonClick = useCallback(() => {
+    void handleGoogleClick()
+  }, [handleGoogleClick])
+
   return (
     <div className="flex flex-col gap-6">
       {/* Email/Password Form */}
@@ -270,9 +288,7 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
               type="email"
               placeholder="you@example.com"
               value={state.email}
-              onChange={(e) =>
-                dispatch({ type: 'SET_EMAIL', email: e.target.value })
-              }
+              onChange={handleEmailChange}
               disabled={isFormDisabled}
               className="pl-10"
               autoComplete="email"
@@ -291,9 +307,7 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
               type={state.showPassword ? 'text' : 'password'}
               placeholder="Enter your password"
               value={state.password}
-              onChange={(e) =>
-                dispatch({ type: 'SET_PASSWORD', password: e.target.value })
-              }
+              onChange={handlePasswordChange}
               disabled={isFormDisabled}
               className="pr-10"
               autoComplete="current-password"
@@ -351,7 +365,7 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
       <Button
         variant="outline"
         className="flex w-full items-center justify-center gap-2"
-        onClick={() => void handleGoogleClick()}
+        onClick={handleGoogleButtonClick}
         disabled={isFormDisabled}
       >
         {isGoogleLoading ? (

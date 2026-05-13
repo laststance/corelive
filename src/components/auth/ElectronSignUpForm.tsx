@@ -238,6 +238,31 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
   const isFormDisabled =
     isLoading || isGoogleLoading || fetchStatus === 'fetching'
 
+  const handleCodeChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      dispatch({ type: 'SET_CODE', code: event.target.value })
+    },
+    [dispatch],
+  )
+
+  const handleEmailChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      dispatch({ type: 'SET_EMAIL', email: event.target.value })
+    },
+    [dispatch],
+  )
+
+  const handlePasswordChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      dispatch({ type: 'SET_PASSWORD', password: event.target.value })
+    },
+    [dispatch],
+  )
+
+  const handleGoogleButtonClick = useCallback(() => {
+    void handleGoogleClick()
+  }, [handleGoogleClick])
+
   // Verification code form
   if (state.pendingVerification) {
     return (
@@ -263,9 +288,7 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
               inputMode="numeric"
               placeholder="Enter 6-digit code"
               value={state.code}
-              onChange={(e) =>
-                dispatch({ type: 'SET_CODE', code: e.target.value })
-              }
+              onChange={handleCodeChange}
               disabled={isLoading}
               autoComplete="one-time-code"
               autoFocus
@@ -318,9 +341,7 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
               type="email"
               placeholder="you@example.com"
               value={state.email}
-              onChange={(e) =>
-                dispatch({ type: 'SET_EMAIL', email: e.target.value })
-              }
+              onChange={handleEmailChange}
               disabled={isFormDisabled}
               className="pl-10"
               autoComplete="email"
@@ -339,9 +360,7 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
               type={state.showPassword ? 'text' : 'password'}
               placeholder="Create a password"
               value={state.password}
-              onChange={(e) =>
-                dispatch({ type: 'SET_PASSWORD', password: e.target.value })
-              }
+              onChange={handlePasswordChange}
               disabled={isFormDisabled}
               className="pr-10"
               autoComplete="new-password"
@@ -398,7 +417,7 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
       <Button
         variant="outline"
         className="flex w-full items-center justify-center gap-2"
-        onClick={() => void handleGoogleClick()}
+        onClick={handleGoogleButtonClick}
         disabled={isFormDisabled}
       >
         {isGoogleLoading ? (
