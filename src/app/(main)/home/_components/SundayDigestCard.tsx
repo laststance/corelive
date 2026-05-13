@@ -186,14 +186,12 @@ export const SundayDigestCard = memo(function SundayDigestCard({
 }: SundayDigestCardProps) {
   const isMounted = useMounted()
 
-  // Recompute `today` per render rather than memoizing — if the home page
-  // stays open across a day boundary (Sat→Sun, Sun→Mon), a memoized
-  // `today` would freeze to the mount-day Date and the card would never
-  // appear on the new day. Re-deriving each render is cheap (small
-  // 7-element scan) and is the correctness win.
+  // Derive calendar keys per render so a re-render after midnight can move the
+  // card to the new local day without storing a stale Date object.
   const today = now ?? new Date()
   const isSunday = today.getDay() === SUNDAY_DAY_INDEX
-  const weekKey = `${DISMISS_KEY_PREFIX}${localSundayIso(today)}`
+  const sundayIso = localSundayIso(today)
+  const weekKey = `${DISMISS_KEY_PREFIX}${sundayIso}`
 
   // Render-time dismiss read (post-mount only) avoids hydration mismatch —
   // server can't know what's in client localStorage, so we treat the card
@@ -203,7 +201,7 @@ export const SundayDigestCard = memo(function SundayDigestCard({
     ? dismissedAt === weekKey || readDismissed(weekKey)
     : false
 
-  // Derive the stats once per `dataByDate` / `today` identity.
+  // Derive the stats once per `dataByDate` / local Sunday key.
   //
   // Why anchor on UTC-midnight-of-local-Sunday: `aggregateLastSevenDays`
   // builds its window via `formatUTCDateISO`, which would otherwise read
@@ -213,12 +211,11 @@ export const SundayDigestCard = memo(function SundayDigestCard({
   // ISO string keeps the visibility window (local Sunday) and the data
   // window (the same Sunday key) in lockstep.
   const summary = useMemo(() => {
-    const sundayIso = localSundayIso(today)
     const sundayAnchor = new Date(`${sundayIso}T00:00:00.000Z`)
     const weekStats = aggregateLastSevenDays(dataByDate, sundayAnchor)
     const bestDay = pickBestDay(dataByDate, sundayIso)
     return { weekStats, bestDay }
-  }, [dataByDate, today])
+  }, [dataByDate, sundayIso])
 
   const handleDismiss = useCallback(() => {
     writeDismissed(weekKey)

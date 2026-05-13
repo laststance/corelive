@@ -137,7 +137,7 @@ interface ConfigSwitchProps extends ConfigFieldProps {
   checked: boolean
 }
 
-interface ConfigSelectProps extends Omit<ConfigFieldProps, 'id'> {
+interface ConfigSelectProps extends ConfigFieldProps {
   value: string
   children: React.ReactNode
 }
@@ -259,6 +259,7 @@ const ConfigSwitch = React.memo(function ConfigSwitch({
  * <ConfigSelect path="tray.doubleClickAction" value="restore" updateConfig={updateConfig}>...</ConfigSelect>
  */
 const ConfigSelect = React.memo(function ConfigSelect({
+  id,
   path,
   value,
   updateConfig,
@@ -273,7 +274,16 @@ const ConfigSelect = React.memo(function ConfigSelect({
 
   return (
     <Select value={value} onValueChange={handleValueChange}>
-      {children}
+      {React.Children.map(children, (child): React.ReactNode => {
+        if (
+          React.isValidElement<{ id?: string }>(child) &&
+          child.type === SelectTrigger
+        ) {
+          return React.cloneElement(child, { id })
+        }
+
+        return child
+      })}
     </Select>
   )
 })
@@ -855,6 +865,7 @@ export const ConfigurationSettings = React.memo(
                           Double-click action
                         </Label>
                         <ConfigSelect
+                          id="double-click-action"
                           value={config.tray.doubleClickAction}
                           path="tray.doubleClickAction"
                           updateConfig={updateConfig}
@@ -879,6 +890,7 @@ export const ConfigurationSettings = React.memo(
                           Right-click action
                         </Label>
                         <ConfigSelect
+                          id="right-click-action"
                           value={config.tray.rightClickAction}
                           path="tray.rightClickAction"
                           updateConfig={updateConfig}
@@ -1087,6 +1099,7 @@ export const ConfigurationSettings = React.memo(
                           Notification position
                         </Label>
                         <ConfigSelect
+                          id="notification-position"
                           value={config.notifications.position}
                           path="notifications.position"
                           updateConfig={updateConfig}
@@ -1247,6 +1260,7 @@ export const ConfigurationSettings = React.memo(
                     <div className="space-y-2">
                       <Label htmlFor="log-level">Log level</Label>
                       <ConfigSelect
+                        id="log-level"
                         value={config.advanced.logLevel}
                         path="advanced.logLevel"
                         updateConfig={updateConfig}

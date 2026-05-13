@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 /**
  * Runs a callback only when the component unmounts.
@@ -13,8 +13,15 @@ import { useEffect } from 'react'
  * })
  */
 export function useUnmountEffect(callback: () => void): void {
+  const callbackRef = useRef(callback)
+
+  useEffect(() => {
+    // Keep cleanup behavior current when callers pass a new callback.
+    callbackRef.current = callback
+  }, [callback])
+
   useEffect(() => {
     // React calls the returned function during unmount.
-    return () => callback()
+    return () => callbackRef.current()
   }, [])
 }
