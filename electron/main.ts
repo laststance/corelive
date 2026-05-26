@@ -1731,15 +1731,21 @@ function setupIPCHandlers(): void {
     }
   })
 
-  // Show in Menu Bar IPC handler (placeholder for future implementation)
-  typedHandle('settings:setShowInMenuBar', (_event, show) => {
+  // Show in Menu Bar IPC handler — toggles the tray (menu-bar) icon live.
+  // Note: live-only by design (T11 scope). The tray is re-created at the next
+  // launch regardless of this setting; restart-persistence would be a separate
+  // settings-mirror feature. See SystemTrayManager.setMenuBarVisible.
+  typedHandle('settings:setShowInMenuBar', async (_event, show) => {
     try {
-      // SystemTrayManager handles menu bar visibility
-      // Currently not implemented - return false to indicate feature is not available
-      log.warn(
-        `settings:setShowInMenuBar - Menu bar visibility (${show ? 'show' : 'hide'}) not yet implemented`,
+      if (!systemTrayManager) {
+        log.warn('settings:setShowInMenuBar - systemTrayManager not available')
+        return false
+      }
+      const didApply = await systemTrayManager.setMenuBarVisible(show)
+      log.info(
+        `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didApply}`,
       )
-      return false
+      return didApply
     } catch (error) {
       log.error(
         'settings:setShowInMenuBar - Failed to change menu bar visibility:',

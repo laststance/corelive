@@ -645,6 +645,38 @@ export class SystemTrayManager {
   }
 
   /**
+   * Show or hide the menu-bar (tray) icon live, backing the "Show in Menu Bar"
+   * setting toggle. Creating is idempotent (no second `Tray` if one already
+   * exists); hiding tears the current tray down. On platforms without tray
+   * support it is a successful no-op, matching `setHideAppIcon` semantics.
+   *
+   * @param visible - true creates/keeps the tray, false destroys it.
+   * @returns
+   * - `true` when the tray now matches `visible` (incl. unsupported-platform no-op)
+   * - `false` only when `visible` was requested but tray creation failed
+   * @example
+   * await systemTrayManager.setMenuBarVisible(false) // tray icon disappears
+   */
+  async setMenuBarVisible(visible: boolean): Promise<boolean> {
+    // Hiding always succeeds: destroy() is a guarded no-op when no tray exists.
+    if (!visible) {
+      this.destroy()
+      return true
+    }
+    // Unsupported platform: treat as a successful no-op (mirrors setHideAppIcon).
+    if (!this.isSystemTraySupported()) {
+      return true
+    }
+    // Already visible: createTray() is not idempotent (it would leak a second
+    // Tray), so short-circuit when one is already on screen.
+    if (this.tray) {
+      return true
+    }
+    const tray = await this.createTray()
+    return tray !== null
+  }
+
+  /**
    * Destroy tray.
    */
   destroy(): void {
