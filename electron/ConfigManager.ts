@@ -21,6 +21,7 @@ import path from 'path'
 import { app } from 'electron'
 
 import { log } from './logger'
+import type { StartupWindowConfig } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -139,6 +140,8 @@ interface BehaviorConfig {
   autoSaveInterval: number
   confirmOnDelete: boolean
   confirmOnQuit: boolean
+  /** Which window(s) appear at Electron launch (≥1 must be true). */
+  startup: StartupWindowConfig
 }
 
 /** Advanced configuration */
@@ -249,6 +252,10 @@ export class ConfigManager {
 
     // Load existing config or create with defaults
     this.config = this.loadConfig()
+
+    // A hand-edited config.json (or a pre-startup-feature file) can carry an
+    // all-false startup block; normalize before any window code reads it.
+    this.ensureAtLeastOneStartupWindow()
   }
 
   /**
@@ -335,6 +342,12 @@ export class ConfigManager {
         autoSaveInterval: 30000,
         confirmOnDelete: true,
         confirmOnQuit: false,
+        // Default: only the main window opens at launch (showMain=true).
+        startup: {
+          showMain: true,
+          showBraindump: false,
+          showFloating: false,
+        },
       },
 
       advanced: {
@@ -380,6 +393,11 @@ export class ConfigManager {
       if (fs.existsSync(this.configPath)) {
         const data = fs.readFileSync(this.configPath, 'utf8')
         const loadedConfig = JSON.parse(data) as Partial<AppConfig>
+
+        // Migrate legacy fields on the RAW config — must run before merge,
+        // which would otherwise fill `showFloating` with its default and
+        // erase the signal that it was never explicitly set.
+        this.migrateFloatingStartVisible(loadedConfig)
 
         // Merge with defaults to ensure all properties exist
         const mergedConfig = this.mergeWithDefaults(loadedConfig)
@@ -471,6 +489,66 @@ export class ConfigManager {
       structuredClone(this.defaultConfig) as unknown as Record<string, unknown>,
       loadedConfig as unknown as Record<string, unknown>,
     ) as AppConfig
+  }
+
+  /**
+   * One-time migration of the legacy `window.floating.startVisible` flag into
+   * the new `behavior.startup.showFloating` field. Runs on the RAW loaded
+   * config BEFORE default-merge so an unset `showFloating` is detectable
+   * (merge would otherwise fill it with the default `false` and erase intent).
+   * Idempotent: skips once `showFloating` is explicitly present.
+   *
+   * @param raw - Config parsed from disk, before merge with defaults.
+   * @returns void — mutates `raw.behavior.startup` in place when migrating.
+   * @example
+   * // disk: { window: { floating: { startVisible: true } } }  (no behavior.startup)
+   * migrateFloatingStartVisible(raw) // => raw.behavior.startup.showFloating === true
+   */
+  private migrateFloatingStartVisible(raw: Partial<AppConfig>): void {
+    const legacyStartVisible = raw.window?.floating?.startVisible === true
+    // Partial<AppConfig> only marks top-level keys optional; nested objects are
+    // typed as fully-required even though raw JSON may omit fields. Treat the
+    // startup block as genuinely partial so the "unset" check is meaningful.
+    const startup = raw.behavior?.startup as
+      | Partial<StartupWindowConfig>
+      | undefined
+    const showFloatingAlreadySet = startup?.showFloating !== undefined
+    if (!legacyStartVisible || showFloatingAlreadySet) return
+
+    const behavior = (raw.behavior ?? {}) as BehaviorConfig
+    // Partial startup is fine here — mergeWithDefaults fills showMain/showBraindump.
+    behavior.startup = {
+      ...(startup ?? {}),
+      showFloating: true,
+    } as StartupWindowConfig
+    raw.behavior = behavior
+  }
+
+  /**
+   * Enforces the startup invariant (≥1 window true) on the in-memory config.
+   * The safety backstop for TENSION2: lives in ConfigManager (not the IPC
+   * handler) so a generic `set('behavior.startup.*')` or a hand-edited
+   * config.json can never persist an all-false state that boots zero windows.
+   * Coerces all three fields to real booleans, then falls back to showMain.
+   *
+   * @returns void — mutates `this.config.behavior.startup` in place.
+   * @example
+   * // this.config.behavior.startup = { showMain: false, showBraindump: false, showFloating: false }
+   * ensureAtLeastOneStartupWindow() // => showMain becomes true
+   */
+  private ensureAtLeastOneStartupWindow(): void {
+    const behavior = this.config.behavior
+    if (!behavior || typeof behavior !== 'object') return
+    const startup = behavior.startup
+    if (!startup || typeof startup !== 'object') return
+
+    startup.showMain = Boolean(startup.showMain)
+    startup.showBraindump = Boolean(startup.showBraindump)
+    startup.showFloating = Boolean(startup.showFloating)
+
+    if (!startup.showMain && !startup.showBraindump && !startup.showFloating) {
+      startup.showMain = true
+    }
   }
 
   /**
@@ -611,6 +689,9 @@ export class ConfigManager {
       return false
     }
     current[lastKey] = value
+    // Backstop the startup invariant: a generic set('behavior.startup.*')
+    // must never persist an all-false (zero-window) state.
+    this.ensureAtLeastOneStartupWindow()
     return this.saveConfig()
   }
 
@@ -648,6 +729,8 @@ export class ConfigManager {
         current[lastKey] = value
       }
     }
+    // Backstop the startup invariant before the single batched disk write.
+    this.ensureAtLeastOneStartupWindow()
     // Single disk write after all updates
     return this.saveConfig()
   }
@@ -777,9 +860,16 @@ export class ConfigManager {
       const data = fs.readFileSync(filePath, 'utf8')
       const importedConfig = JSON.parse(data) as Partial<AppConfig>
 
+      // Apply the same legacy migration as load — an imported file may predate
+      // the startup feature — on the RAW config before merge.
+      this.migrateFloatingStartVisible(importedConfig)
+
       // Validate imported config
       const tempConfig = this.config
       this.config = this.mergeWithDefaults(importedConfig)
+
+      // An imported file can carry an all-false startup block; normalize it.
+      this.ensureAtLeastOneStartupWindow()
 
       const validation = this.validate()
       if (!validation.isValid) {

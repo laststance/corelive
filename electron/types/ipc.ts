@@ -68,6 +68,24 @@ export interface WindowState extends WindowBounds {
   lastSaved?: number
 }
 
+/**
+ * Which window(s) Electron surfaces at launch — the source of truth for the
+ * configurable-startup feature, read synchronously from config.json at
+ * `app.whenReady()` before auth/DB exist. Lives here (a pure type module)
+ * because ConfigManager imports fs/electron and cannot be a type dependency.
+ *
+ * Invariant: at least one boolean is always true (enforced in ConfigManager,
+ * never the IPC handler, so generic config writes can't break it).
+ */
+export interface StartupWindowConfig {
+  /** Show the main `/home` window. Main is always created, hidden when false. */
+  showMain: boolean
+  /** Open the Brain Dump panel (`/braindump`) at launch. */
+  showBraindump: boolean
+  /** Open the Floating Navigator (`/floating-navigator`) at launch. */
+  showFloating: boolean
+}
+
 /** Display information (richer version from WindowStateManager) */
 export type DisplayInfo = WindowManagerDisplayInfo
 

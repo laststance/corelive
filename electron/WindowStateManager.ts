@@ -212,6 +212,12 @@ export class WindowStateManager {
     const brainDumpConfig = this.configManager.getSection(
       'braindump',
     ) as AppConfig['braindump']
+    // Floating startup visibility now lives in behavior.startup.showFloating
+    // (migrated from the legacy window.floating.startVisible flag) so the
+    // settings UI and cold-start path share a single source of truth.
+    const behaviorConfig = this.configManager.getSection(
+      'behavior',
+    ) as AppConfig['behavior']
 
     return {
       main: {
@@ -231,7 +237,7 @@ export class WindowStateManager {
         height: floatingConfig.height,
         x: screenWidth - floatingConfig.width - 50,
         y: 50,
-        isVisible: floatingConfig.startVisible,
+        isVisible: behaviorConfig.startup.showFloating,
         isAlwaysOnTop: floatingConfig.alwaysOnTop,
         isMaximized: false,
         isMinimized: false,
