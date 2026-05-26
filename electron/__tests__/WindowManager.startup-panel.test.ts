@@ -1,0 +1,388 @@
+/**
+ * @fileoverview Startup auxiliary-panel nav-watch tests.
+ *
+ * Exercises `WindowManager.openStartupPanel` — the auth gate that decides, from
+ * a panel's first navigation, whether to reveal the panel or suppress it and
+ * surface the main window so the user can sign in. Covers the redirect-to-auth,
+ * load-failure, and post-login re-show paths flagged as failure modes F3/F4.
+ *
+ * Triggered when: `pnpm test:electron` (Vitest).
+ *
+ * @example
+ *   pnpm test:electron -- WindowManager.startup-panel
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+type Spy = ReturnType<typeof vi.fn>
+
+/** Minimal mock of the BrowserWindow surface WindowManager touches at startup. */
+interface MockBrowserWindow {
+  show: Spy
+  hide: Spy
+  focus: Spy
+  restore: Spy
+  minimize: Spy
+  isMinimized: Spy
+  isVisible: Spy
+  isDestroyed: Spy
+  setOpacity: Spy
+  getOpacity: Spy
+  setVisibleOnAllWorkspaces: Spy
+  loadURL: Spy
+  on: Spy
+  once: Spy
+  webContents: {
+    on: Spy
+    removeListener: Spy
+    loadURL: Spy
+    reload: Spy
+    send: Spy
+    openDevTools: Spy
+    getURL: Spy
+  }
+}
+
+/**
+ * Each created window plus helpers to fire the webContents events the real
+ * Electron runtime would emit (which never fire under Vitest).
+ */
+interface CapturedMockWindow {
+  win: MockBrowserWindow
+  fireWebContents: (event: string, ...args: unknown[]) => void
+}
+
+const createdWindows: CapturedMockWindow[] = []
+
+// BrowserWindow mock: returns a plain instance and records the webContents
+// listeners WindowManager registers, so tests can fire did-navigate/did-fail-load.
+vi.mock('electron', () => ({
+  BrowserWindow: vi.fn(function () {
+    const webHandlers: Record<string, Array<(...args: unknown[]) => void>> = {}
+    const win: MockBrowserWindow = {
+      show: vi.fn(),
+      hide: vi.fn(),
+      focus: vi.fn(),
+      restore: vi.fn(),
+      minimize: vi.fn(),
+      isMinimized: vi.fn(() => false),
+      isVisible: vi.fn(() => false),
+      isDestroyed: vi.fn(() => false),
+      setOpacity: vi.fn(),
+      getOpacity: vi.fn(() => 1),
+      setVisibleOnAllWorkspaces: vi.fn(),
+      loadURL: vi.fn(),
+      on: vi.fn(),
+      once: vi.fn(),
+      webContents: {
+        on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+          const handlers = webHandlers[event] ?? []
+          handlers.push(handler)
+          webHandlers[event] = handlers
+        }),
+        removeListener: vi.fn(
+          (event: string, handler: (...args: unknown[]) => void) => {
+            const handlers = webHandlers[event]
+            if (handlers) {
+              webHandlers[event] = handlers.filter(
+                (registered) => registered !== handler,
+              )
+            }
+          },
+        ),
+        loadURL: vi.fn(),
+        reload: vi.fn(),
+        send: vi.fn(),
+        openDevTools: vi.fn(),
+        getURL: vi.fn(() => ''),
+      },
+    }
+    createdWindows.push({
+      win,
+      fireWebContents: (event: string, ...args: unknown[]) => {
+        ;(webHandlers[event] ?? []).forEach((handler) => handler(...args))
+      },
+    })
+    return win
+  }),
+  screen: {
+    getPrimaryDisplay: vi.fn(() => ({
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+    })),
+    getDisplayNearestPoint: vi.fn(() => ({
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+    })),
+  },
+}))
+
+vi.mock('../logger', () => ({
+  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
+
+// Imported after the mocks so WindowManager's `import { BrowserWindow }` is stubbed.
+import { WindowManager } from '../WindowManager'
+
+const SERVER_URL = 'https://corelive.app'
+
+/**
+ * Returns the Nth created window, failing the test if none exists. Narrows away
+ * the `| undefined` that `noUncheckedIndexedAccess` adds to array indexing.
+ *
+ * @param index - Zero-based creation order ([0] = main, [1] = the startup panel).
+ */
+function getWindow(index: number): CapturedMockWindow {
+  const capturedWindow = createdWindows[index]
+  if (!capturedWindow) {
+    throw new Error(`Expected a created window at index ${index}`)
+  }
+  return capturedWindow
+}
+
+describe('WindowManager startup panel nav-watch', () => {
+  beforeEach(() => {
+    createdWindows.length = 0
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('keeps a signed-out floating panel hidden and surfaces the main window', () => {
+    // Arrange: panel-only cold boot (main created hidden), then open the panel.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: proxy.ts redirected the unauthenticated panel load to /login.
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/login?redirect_url=/floating-navigator`,
+    )
+
+    // Assert: panel stays hidden, main is surfaced, fallback is recorded.
+    expect(panelWindow.win.show).not.toHaveBeenCalled()
+    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
+  })
+
+  it('treats a /sign-up landing as unauthenticated and surfaces the main window', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: the panel ended up on the sign-up page.
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/sign-up`)
+
+    // Assert
+    expect(panelWindow.win.show).not.toHaveBeenCalled()
+    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
+  })
+
+  it('shows the floating panel when its load lands on the panel route', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: authenticated load renders the real panel.
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/floating-navigator`,
+    )
+
+    // Assert: panel revealed, main untouched, no fallback recorded.
+    expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(mainWindow.win.show).not.toHaveBeenCalled()
+    expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
+  })
+
+  it('surfaces the main window when the panel fails to load (offline/5xx)', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: main-frame load failure, e.g. net::ERR_NAME_NOT_RESOLVED (-105).
+    panelWindow.fireWebContents(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      `${SERVER_URL}/floating-navigator`,
+      true,
+    )
+
+    // Assert: failed panel stays hidden, main is surfaced, fallback recorded.
+    expect(panelWindow.win.show).not.toHaveBeenCalled()
+    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
+  })
+
+  it('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: ERR_ABORTED (-3) fires when a navigation is intentionally cancelled.
+    panelWindow.fireWebContents(
+      'did-fail-load',
+      {},
+      -3,
+      'ERR_ABORTED',
+      `${SERVER_URL}/floating-navigator`,
+      true,
+    )
+
+    // Assert: no decision made — neither panel nor main shown, no fallback.
+    expect(panelWindow.win.show).not.toHaveBeenCalled()
+    expect(mainWindow.win.show).not.toHaveBeenCalled()
+    expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
+  })
+
+  it('ignores subresource load failures (isMainFrame false)', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: a sub-frame/asset failed, not the document itself.
+    panelWindow.fireWebContents(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      `${SERVER_URL}/some-asset.png`,
+      false,
+    )
+
+    // Assert: the panel's fate is undecided; nothing shown, no fallback.
+    expect(panelWindow.win.show).not.toHaveBeenCalled()
+    expect(mainWindow.win.show).not.toHaveBeenCalled()
+    expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
+  })
+
+  it('re-shows the suppressed panel after the user signs in on the main window', () => {
+    // Arrange: panel redirected to /login, so main was surfaced and re-show armed.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
+
+    // Act: the user signs in — main navigates to an authenticated route, then
+    // the reloaded panel lands on its real route.
+    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/floating-navigator`,
+    )
+
+    // Assert: the panel was reloaded to its route and then revealed.
+    expect(panelWindow.win.webContents.loadURL).toHaveBeenCalledWith(
+      `${SERVER_URL}/floating-navigator`,
+    )
+    expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
+  })
+
+  it('reloads the panel only once even if the main window navigates again', () => {
+    // Arrange: suppressed panel with re-show armed on the main window.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
+
+    // Act: main reaches an authed route once, then navigates again in-app.
+    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
+    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/skill-tree`)
+
+    // Assert: the one-shot re-show fired exactly once.
+    expect(panelWindow.win.webContents.loadURL).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the brain dump panel at its own route when requested', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+
+    // Act: dispatch by kind creates the brain dump window and watches its load.
+    windowManager.openStartupPanel('braindump')
+    const panelWindow = getWindow(1)
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/braindump`)
+
+    // Assert: brain dump loaded its route and was revealed once authenticated.
+    expect(panelWindow.win.loadURL).toHaveBeenCalledWith(
+      `${SERVER_URL}/braindump`,
+    )
+    expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
+  })
+
+  it('locks in the first navigation decision and ignores a later load failure', () => {
+    // Arrange: a panel-only cold boot.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: the panel lands on its real route (authed → shown), then a late
+    // did-fail-load arrives for the same panel load.
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/floating-navigator`,
+    )
+    panelWindow.fireWebContents(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      `${SERVER_URL}/floating-navigator`,
+      true,
+    )
+
+    // Assert: the first decision stands — panel shown once, main never
+    // surfaced, no fallback recorded by the stale second event.
+    expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(mainWindow.win.show).not.toHaveBeenCalled()
+    expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
+  })
+
+  it('does not reload a startup panel that was closed before sign-in completes', () => {
+    // Arrange: panel redirected to /login, so main was surfaced + re-show armed.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
+
+    // The user closes the suppressed panel before signing in.
+    panelWindow.win.isDestroyed.mockReturnValue(true)
+
+    // Act: the user signs in — main navigates to an authenticated route.
+    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
+
+    // Assert: the re-show bails on the destroyed panel instead of reloading it.
+    expect(panelWindow.win.webContents.loadURL).not.toHaveBeenCalled()
+  })
+})

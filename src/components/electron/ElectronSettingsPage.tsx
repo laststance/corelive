@@ -23,6 +23,7 @@ import { memo, useCallback } from 'react'
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
 import { FloatingWindowSettings } from '@/components/electron/FloatingWindowSettings'
+import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -213,7 +214,16 @@ export const ElectronSettingsPage = memo(
               />
             </div>
 
-            {/* Show in Menu Bar - Not yet implemented */}
+            {/*
+              Show in Menu Bar — stays disabled until `showInMenuBar` moves into
+              the main-process ConfigManager so the boot-time tray creation
+              (SystemIntegrationErrorHandler, which always creates the tray) can
+              read it. The IPC handler is live and truthful (T11 wired
+              SystemTrayManager.setMenuBarVisible), but it only toggles the tray
+              for the current session; persisting "hidden" across restarts is a
+              separate change. Un-gating before then would let the toggle lie
+              (off persists, yet the tray reappears at next launch).
+            */}
             <div className="flex items-center justify-between opacity-60">
               <div className="space-y-0.5">
                 <Label
@@ -256,6 +266,7 @@ export const ElectronSettingsPage = memo(
           </CardContent>
         </Card>
 
+        <StartupWindowSettings />
         <FloatingWindowSettings />
         <BrainDumpSettings />
       </div>

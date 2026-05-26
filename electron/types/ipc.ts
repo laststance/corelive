@@ -68,6 +68,55 @@ export interface WindowState extends WindowBounds {
   lastSaved?: number
 }
 
+/**
+ * Which window(s) Electron surfaces at launch — the source of truth for the
+ * configurable-startup feature, read synchronously from config.json at
+ * `app.whenReady()` before auth/DB exist. Lives here (a pure type module)
+ * because ConfigManager imports fs/electron and cannot be a type dependency.
+ *
+ * Invariant: at least one boolean is always true (enforced in ConfigManager,
+ * never the IPC handler, so generic config writes can't break it).
+ */
+export interface StartupWindowConfig {
+  /** Show the main `/home` window. Main is always created, hidden when false. */
+  showMain: boolean
+  /** Open the Brain Dump panel (`/braindump`) at launch. */
+  showBraindump: boolean
+  /** Open the Floating Navigator (`/floating-navigator`) at launch. */
+  showFloating: boolean
+}
+
+/**
+ * Boot-safe startup default — only the main window opens. The single source of
+ * truth shared by ConfigManager (factory default), both preload bridges, and
+ * the settings UI so the "what opens at launch" default can never drift between
+ * surfaces. Always satisfies the ≥1-true invariant. Spread it (`{ ...DEFAULT }`)
+ * at call sites that need a mutable copy.
+ *
+ * @example
+ * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showMain: true, showBraindump: false, showFloating: false }
+ */
+export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
+  showMain: true,
+  showBraindump: false,
+  showFloating: false,
+}
+
+/**
+ * Live visibility of the auxiliary (non-main) windows, read on demand from the
+ * main process. Lets the settings UI reflect what is *actually* on screen now
+ * (e.g. to label a "Try it now" action) rather than the persisted startup
+ * preference, which can drift once a panel is opened/closed at runtime.
+ *
+ * Both flags require the window to both exist and be visible.
+ */
+export interface AuxWindowVisibility {
+  /** The Floating Navigator window exists and is currently visible. */
+  floating: boolean
+  /** The Brain Dump window exists and is currently visible. */
+  braindump: boolean
+}
+
 /** Display information (richer version from WindowStateManager) */
 export type DisplayInfo = WindowManagerDisplayInfo
 
@@ -279,6 +328,15 @@ export interface IPCChannels {
   'window-toggle-braindump': {
     request: void
     response: boolean
+  }
+  /**
+   * Read-only snapshot of which auxiliary windows are visible right now. Used
+   * by the settings UI to label "Try it now" actions accurately. Never mutates
+   * window state.
+   */
+  'window-get-aux-visibility': {
+    request: void
+    response: AuxWindowVisibility
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -694,6 +752,25 @@ export interface IPCChannels {
   'settings:getLoginItemSettings': {
     request: void
     response: { openAtLogin: boolean; openAsHidden?: boolean }
+  }
+  /**
+   * Persist which window(s) open at Electron launch. The >=1-true invariant is
+   * enforced in ConfigManager (not here), so a renderer cannot persist a
+   * boot-nothing config. Returns the saved success flag.
+   */
+  'settings:setStartupConfig': {
+    request: StartupWindowConfig
+    response: boolean
+  }
+  /**
+   * Read the persisted startup-window config so the settings UI can show the
+   * saved choice. Mirrors the read+write pairs every other settings domain
+   * exposes, so the renderer never has to consume the untyped `config.getSection`
+   * surface. The returned config always satisfies the >=1-true invariant.
+   */
+  'settings:getStartupConfig': {
+    request: void
+    response: StartupWindowConfig
   }
 }
 

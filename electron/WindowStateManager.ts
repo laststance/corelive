@@ -212,6 +212,12 @@ export class WindowStateManager {
     const brainDumpConfig = this.configManager.getSection(
       'braindump',
     ) as AppConfig['braindump']
+    // Floating startup visibility now lives in behavior.startup.showFloating
+    // (migrated from the legacy window.floating.startVisible flag) so the
+    // settings UI and cold-start path share a single source of truth.
+    const behaviorConfig = this.configManager.getSection(
+      'behavior',
+    ) as AppConfig['behavior']
 
     return {
       main: {
@@ -231,7 +237,7 @@ export class WindowStateManager {
         height: floatingConfig.height,
         x: screenWidth - floatingConfig.width - 50,
         y: 50,
-        isVisible: floatingConfig.startVisible,
+        isVisible: behaviorConfig.startup.showFloating,
         isAlwaysOnTop: floatingConfig.alwaysOnTop,
         isMaximized: false,
         isMinimized: false,
@@ -290,6 +296,13 @@ export class WindowStateManager {
         defaultStates.floating,
         'floating',
       )
+      // Floating startup visibility has a single source of truth:
+      // behavior.startup.showFloating (read into defaultStates.floating.isVisible
+      // by getDefaultWindowStates). A stale window-state.json must not override
+      // it, or an old isVisible:true would reopen the floating window even after
+      // the user turned it off in settings. Pin it back to the default; the
+      // persisted width/height applied above stay honored, so the pin is narrow.
+      validatedStates.floating.isVisible = defaultStates.floating.isVisible
     }
 
     if (states.braindump) {

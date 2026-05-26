@@ -45,7 +45,11 @@ import type {
   SystemTrayManager as SystemTrayManagerType,
   TaskItem,
 } from './SystemTrayManager'
-import type { AuthUserPayload, WindowBounds } from './types/ipc'
+import {
+  DEFAULT_STARTUP_WINDOW_CONFIG,
+  type AuthUserPayload,
+  type WindowBounds,
+} from './types/ipc'
 import { WindowManager } from './WindowManager'
 import {
   WindowStateManager,
@@ -203,6 +207,15 @@ let windowStateManager: WindowStateManager
 let windowManager: WindowManager
 let ipcErrorHandler: IPCErrorHandler
 // Note: apiBridge and nextServerManager are no longer needed in WebView architecture
+
+/**
+ * Guards setupIPCHandlers against a second run. IPC handlers bind the
+ * module-level `windowManager`, so they are process-global and only need
+ * registering once; `ipcMain.handle` throws on duplicate channels, and the
+ * macOS `activate` path can call createWindow (→ setupIPCHandlers) again after
+ * every window is closed. The flag turns that re-entry into a no-op.
+ */
+let ipcHandlersInitialized = false
 
 /**
  * Lazy-loaded managers - initialized only when needed.
@@ -881,8 +894,30 @@ async function createWindow(): Promise<BrowserWindow> {
       windowStateManager,
     )
 
-    // Create main window immediately for better perceived performance
-    const mainWindow = windowManager.createMainWindow()
+    // Create main window immediately for better perceived performance.
+    // Panel-only startup configs (showMain === false) still create the window —
+    // just hidden — so it can be revealed later from the tray or `activate`.
+    const startupConfig = configManager.getSection('behavior').startup
+    const mainWindow = windowManager.createMainWindow(startupConfig.showMain)
+
+    // Open the auxiliary panels the user chose to start with. Each is created
+    // hidden and revealed only once it authenticates (WindowManager's
+    // nav-watch); a signed-out or failed panel surfaces the main window instead.
+    if (startupConfig.showFloating) {
+      windowManager.openStartupPanel('floating')
+    }
+    if (startupConfig.showBraindump) {
+      windowManager.openStartupPanel('braindump')
+    }
+
+    // Panel-only launches (showMain === false) can leave NOTHING on screen for a
+    // moment while each panel resolves its auth-gated load. Arm a tiny floating
+    // "Opening CoreLive…" pill so the boot reads as "waking up", never "is it
+    // broken?". Gated off under test/E2E (NODE_ENV === 'test') so the extra
+    // window never perturbs window-count assertions.
+    if (!startupConfig.showMain && !isTestEnvironment) {
+      windowManager.armStartupPill()
+    }
 
     performanceOptimizer.startupMetrics.windowsCreated++
 
@@ -1031,6 +1066,14 @@ function redactBrainDumpNotes(
 }
 
 function setupIPCHandlers(): void {
+  // Register IPC channels exactly once per process. A macOS re-launch via the
+  // `activate` handler can call createWindow again, which would re-enter here
+  // and make `ipcMain.handle` throw on the already-registered channels.
+  if (ipcHandlersInitialized) {
+    return
+  }
+  ipcHandlersInitialized = true
+
   /**
    * Basic app control handlers.
    * These provide controlled access to app-level functions.
@@ -1709,15 +1752,21 @@ function setupIPCHandlers(): void {
     }
   })
 
-  // Show in Menu Bar IPC handler (placeholder for future implementation)
-  typedHandle('settings:setShowInMenuBar', (_event, show) => {
+  // Show in Menu Bar IPC handler — toggles the tray (menu-bar) icon live.
+  // Note: live-only by design (T11 scope). The tray is re-created at the next
+  // launch regardless of this setting; restart-persistence would be a separate
+  // settings-mirror feature. See SystemTrayManager.setMenuBarVisible.
+  typedHandle('settings:setShowInMenuBar', async (_event, show) => {
     try {
-      // SystemTrayManager handles menu bar visibility
-      // Currently not implemented - return false to indicate feature is not available
-      log.warn(
-        `settings:setShowInMenuBar - Menu bar visibility (${show ? 'show' : 'hide'}) not yet implemented`,
+      if (!systemTrayManager) {
+        log.warn('settings:setShowInMenuBar - systemTrayManager not available')
+        return false
+      }
+      const didApply = await systemTrayManager.setMenuBarVisible(show)
+      log.info(
+        `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didApply}`,
       )
-      return false
+      return didApply
     } catch (error) {
       log.error(
         'settings:setShowInMenuBar - Failed to change menu bar visibility:',
@@ -1756,6 +1805,47 @@ function setupIPCHandlers(): void {
       )
       return { openAtLogin: false }
     }
+  })
+
+  // Persist which window(s) open at Electron launch. Writes through
+  // ConfigManager.update() (flat dot-paths) so the >=1-true invariant runs:
+  // a renderer cannot persist a boot-nothing config — all-false snaps showMain
+  // back on before saving.
+  typedHandle('settings:setStartupConfig', (_event, startup) => {
+    try {
+      if (!configManager) {
+        log.error('settings:setStartupConfig - ConfigManager not initialized')
+        return false
+      }
+      const didSave = configManager.update({
+        'behavior.startup.showMain': startup.showMain,
+        'behavior.startup.showBraindump': startup.showBraindump,
+        'behavior.startup.showFloating': startup.showFloating,
+      })
+      log.info(
+        'settings:setStartupConfig - startup window config saved',
+        startup,
+      )
+      return didSave
+    } catch (error) {
+      log.error(
+        'settings:setStartupConfig - Failed to save startup config:',
+        error,
+      )
+      return false
+    }
+  })
+
+  // Read side of the startup-window pair — lets the settings UI show the saved
+  // choice without consuming the untyped `config.getSection` surface. Falls back
+  // to the showMain-only default (which satisfies the >=1-true invariant) when
+  // ConfigManager is somehow unavailable, so the UI never renders an all-off state.
+  typedHandle('settings:getStartupConfig', () => {
+    if (!configManager) {
+      log.error('settings:getStartupConfig - ConfigManager not initialized')
+      return { ...DEFAULT_STARTUP_WINDOW_CONFIG }
+    }
+    return configManager.getSection('behavior').startup
   })
 
   // OAuth IPC handlers for browser-based OAuth flows
@@ -1958,6 +2048,25 @@ function setupIPCHandlers(): void {
     }
   })
 
+  // Read-only snapshot of which auxiliary windows are visible right now, so the
+  // settings UI can label a "Try it now" action accurately. has*() already
+  // guards destroyed windows; isVisible() only runs on a live reference.
+  typedHandle('window-get-aux-visibility', () => {
+    if (!windowManager) {
+      return { floating: false, braindump: false }
+    }
+    const floatingWindow = windowManager.hasFloatingNavigator()
+      ? windowManager.getFloatingNavigator()
+      : null
+    const braindumpWindow = windowManager.hasBrainDumpWindow()
+      ? windowManager.getBrainDumpWindow()
+      : null
+    return {
+      floating: Boolean(floatingWindow?.isVisible()),
+      braindump: Boolean(braindumpWindow?.isVisible()),
+    }
+  })
+
   // Auto-updater IPC handlers (Zod-validated)
   typedHandle('updater-check-for-updates', () => {
     if (autoUpdater) {
@@ -2025,41 +2134,89 @@ if (!gotTheLock) {
    * 2. Create the main window
    * 3. Initialize all systems
    */
-  app.whenReady().then(async () => {
-    // Setup security policies before any window creation
-    setupSecurity()
+  app
+    .whenReady()
+    .then(async () => {
+      // Setup security policies before any window creation
+      setupSecurity()
 
-    // Create the main application window
-    const mainWindow = await createWindow()
+      // Create the main application window
+      const mainWindow = await createWindow()
 
-    /**
-     * Test environment special handling.
-     * Makes the app behave differently during automated testing:
-     * - Shows notification for debugging
-     * - Window doesn't steal focus (better for parallel tests)
-     * - Can be hidden from dock to reduce visual noise
-     */
-    if (isTestEnvironment) {
-      new Notification({ title: 'Electron is Testing' }).show()
-      // Show window without stealing focus for better test stability
-      mainWindow.showInactive()
-      // Note: These are commented out but can be enabled if needed:
-      // app.hide() - Hide entire app
-      // app.setActivationPolicy('accessory') - Remove from dock (macOS)
-    }
+      /**
+       * Test environment special handling.
+       * Makes the app behave differently during automated testing:
+       * - Shows notification for debugging
+       * - Window doesn't steal focus (better for parallel tests)
+       * - Can be hidden from dock to reduce visual noise
+       */
+      if (isTestEnvironment) {
+        new Notification({ title: 'Electron is Testing' }).show()
+        // Show window without stealing focus for better test stability — but only
+        // when the startup config asks for the main window. A panel-only startup
+        // (showMain === false) must stay hidden here too, otherwise E2E would
+        // silently reveal a window the user opted out of.
+        if (configManager.getSection('behavior').startup.showMain) {
+          mainWindow.showInactive()
+        }
+        // Note: These are commented out but can be enabled if needed:
+        // app.hide() - Hide entire app
+        // app.setActivationPolicy('accessory') - Remove from dock (macOS)
+      }
 
-    /**
-     * macOS-specific: 'activate' event.
-     * Fired when user clicks dock icon. By convention, macOS apps
-     * recreate windows instead of quitting when all windows are closed.
-     */
-    app.on('activate', () => {
-      // Re-create window if none exist
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow()
+      /**
+       * macOS-specific: 'activate' event.
+       * Fired when user clicks dock icon. By convention, macOS apps
+       * recreate windows instead of quitting when all windows are closed.
+       */
+      app.on('activate', () => {
+        const allWindows = BrowserWindow.getAllWindows()
+        // No windows exist at all: recreate from scratch (macOS convention).
+        if (allWindows.length === 0) {
+          // createWindow is async; floating the promise unhandled would swallow
+          // a boot failure here silently, so log any rejection instead.
+          void createWindow().catch((error: unknown) => {
+            log.error('Failed to recreate window on activate:', error)
+          })
+          return
+        }
+        // Windows exist but no *real* one is visible — e.g. a panel-only startup
+        // whose panel was later closed, or the main window minimized to the tray.
+        // The startup pill is excluded: it is shown via `showInactive()` so
+        // `isVisible()` reports true, but it carries no surface the user can act
+        // on, so counting it would wrongly suppress the dock-click reveal. A dock
+        // click must always surface something, so reveal the always-created main
+        // window (restoreFromTray restores + shows + focuses it).
+        //
+        // The `windowManager?.` optional chain is intentional: if the manager is
+        // somehow absent, `!undefined` is true so the pill (if any) counts as a
+        // real window — the safe status-quo, since restoreFromTray would be a
+        // no-op there anyway.
+        const isAnyRealWindowVisible = allWindows.some(
+          (window) =>
+            window.isVisible() && !windowManager?.isStartupPill(window),
+        )
+        if (!isAnyRealWindowVisible) {
+          windowManager?.restoreFromTray()
+        }
+      })
+    })
+    .catch((bootError: unknown) => {
+      // Last-resort backstop: a throw anywhere in the boot chain (corrupt config
+      // read, window creation, security setup) would otherwise be an unhandled
+      // rejection that leaves the user staring at nothing. Fail loud — log always,
+      // and in production surface a dialog + quit rather than a silent blank boot.
+      // Stays quiet under test so a genuine boot failure surfaces via assertions,
+      // not a modal that wedges the headless runner.
+      log.error('Fatal error during app startup:', bootError)
+      if (!isTestEnvironment) {
+        dialog.showErrorBox(
+          'CoreLive failed to start',
+          `An unexpected error occurred during startup:\n\n${String(bootError)}`,
+        )
+        app.quit()
       }
     })
-  })
 }
 
 /**

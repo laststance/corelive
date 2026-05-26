@@ -21,6 +21,11 @@ import path from 'path'
 import { app } from 'electron'
 
 import { log } from './logger'
+import {
+  DEFAULT_STARTUP_WINDOW_CONFIG,
+  type StartupWindowConfig,
+} from './types/ipc'
+import { isPlainObject } from './utils/isPlainObject'
 
 // ============================================================================
 // Type Definitions
@@ -52,7 +57,12 @@ interface FloatingWindowConfig {
   frame: boolean
   rememberPosition: boolean
   rememberSize: boolean
-  startVisible: boolean
+  /**
+   * @deprecated Superseded by `behavior.startup.showFloating`. Retained only so
+   * `migrateFloatingStartVisible` can read + delete it from pre-feature configs;
+   * never written to new configs. Remove once no live config.json carries it.
+   */
+  startVisible?: boolean
 }
 
 /** Window configuration section */
@@ -139,6 +149,8 @@ interface BehaviorConfig {
   autoSaveInterval: number
   confirmOnDelete: boolean
   confirmOnQuit: boolean
+  /** Which window(s) appear at Electron launch (≥1 must be true). */
+  startup: StartupWindowConfig
 }
 
 /** Advanced configuration */
@@ -249,6 +261,10 @@ export class ConfigManager {
 
     // Load existing config or create with defaults
     this.config = this.loadConfig()
+
+    // A hand-edited config.json (or a pre-startup-feature file) can carry an
+    // all-false startup block; normalize before any window code reads it.
+    this.ensureAtLeastOneStartupWindow()
   }
 
   /**
@@ -285,7 +301,6 @@ export class ConfigManager {
           frame: false,
           rememberPosition: true,
           rememberSize: true,
-          startVisible: false,
         },
       },
 
@@ -335,6 +350,8 @@ export class ConfigManager {
         autoSaveInterval: 30000,
         confirmOnDelete: true,
         confirmOnQuit: false,
+        // Default: only the main window opens at launch (showMain=true).
+        startup: { ...DEFAULT_STARTUP_WINDOW_CONFIG },
       },
 
       advanced: {
@@ -380,6 +397,11 @@ export class ConfigManager {
       if (fs.existsSync(this.configPath)) {
         const data = fs.readFileSync(this.configPath, 'utf8')
         const loadedConfig = JSON.parse(data) as Partial<AppConfig>
+
+        // Migrate legacy fields on the RAW config — must run before merge,
+        // which would otherwise fill `showFloating` with its default and
+        // erase the signal that it was never explicitly set.
+        this.migrateFloatingStartVisible(loadedConfig)
 
         // Merge with defaults to ensure all properties exist
         const mergedConfig = this.mergeWithDefaults(loadedConfig)
@@ -471,6 +493,115 @@ export class ConfigManager {
       structuredClone(this.defaultConfig) as unknown as Record<string, unknown>,
       loadedConfig as unknown as Record<string, unknown>,
     ) as AppConfig
+  }
+
+  /**
+   * One-time migration of the legacy `window.floating.startVisible` flag into
+   * the new `behavior.startup.showFloating` field. Runs on the RAW loaded
+   * config BEFORE default-merge so an unset `showFloating` is detectable
+   * (merge would otherwise fill it with the default `false` and erase intent).
+   * Idempotent: migrates only when `showFloating` is still unset, and always
+   * drops the legacy key afterward so it never lingers once superseded.
+   *
+   * @param raw - Config parsed from disk, before merge with defaults.
+   * @returns void — sets `raw.behavior.startup.showFloating` and deletes the legacy flag in place.
+   * @example
+   * // disk: { window: { floating: { startVisible: true } } }  (no behavior.startup)
+   * migrateFloatingStartVisible(raw) // => raw.behavior.startup.showFloating === true; startVisible removed
+   */
+  private migrateFloatingStartVisible(raw: Partial<AppConfig>): void {
+    const floating = raw.window?.floating
+    // Nothing legacy to migrate or clean up.
+    if (!floating || floating.startVisible === undefined) return
+
+    // Partial<AppConfig> only marks top-level keys optional; nested objects are
+    // typed as fully-required even though raw JSON may omit fields. Treat the
+    // startup block as genuinely partial so the "unset" check is meaningful.
+    const startup = raw.behavior?.startup as
+      | Partial<StartupWindowConfig>
+      | undefined
+    const showFloatingAlreadySet = startup?.showFloating !== undefined
+
+    // Carry the legacy flag over only when the new field hasn't been set yet.
+    if (floating.startVisible === true && !showFloatingAlreadySet) {
+      // `raw.behavior` may be a corrupt non-object (string/array) from a
+      // hand-edited config; only reuse it when it is a real object. Assigning
+      // `.startup` to a string/array primitive throws in strict mode, which
+      // would abort loadConfig into a FULL default reset (losing unrelated
+      // settings like window sizes) instead of just repairing behavior.
+      const behavior = isPlainObject(raw.behavior)
+        ? (raw.behavior as BehaviorConfig)
+        : ({} as BehaviorConfig)
+      // Partial startup is fine here — mergeWithDefaults fills showMain/showBraindump.
+      behavior.startup = {
+        ...(startup ?? {}),
+        showFloating: true,
+      } as StartupWindowConfig
+      raw.behavior = behavior
+    }
+
+    // Drop the superseded key regardless, so a migrated config stops carrying it.
+    delete floating.startVisible
+  }
+
+  /**
+   * Enforces the startup invariant (≥1 window true) on the in-memory config.
+   * The safety backstop for TENSION2: lives in ConfigManager (not the IPC
+   * handler) so a generic `set('behavior.startup.*')` or a hand-edited
+   * config.json can never persist an all-false state that boots zero windows.
+   * Repairs a non-object `behavior`/`startup` (corrupt/hand-edited JSON) back to
+   * defaults instead of bailing — `main.ts` reads `getSection('behavior').startup`
+   * synchronously at boot, so a non-object here would otherwise throw or boot a
+   * blank desktop. Then coerces all three fields to real booleans and falls back
+   * to showMain. In-memory only; the corrupt file self-heals on the next config
+   * write (set/update/import all call this then saveConfig).
+   *
+   * @returns void — mutates `this.config.behavior(.startup)` in place.
+   * @example
+   * // this.config.behavior.startup = { showMain: false, showBraindump: false, showFloating: false }
+   * ensureAtLeastOneStartupWindow() // => showMain becomes true
+   * @example
+   * // this.config.behavior = 'corrupt'  (hand-edited config.json)
+   * ensureAtLeastOneStartupWindow() // => behavior reset to defaults (showMain: true)
+   */
+  private ensureAtLeastOneStartupWindow(): void {
+    const behavior = this.config.behavior
+    // A hand-edited or corrupted config.json can make `behavior` a non-object
+    // (string, null) OR an array — and `typeof [] === 'object'`, so a bare
+    // typeof check would let `behavior: []` through and later set a lost expando
+    // on the array. isPlainObject rejects arrays/null too. Reset to the factory
+    // default rather than bailing so the boot-time `getSection('behavior').startup`
+    // read can never throw or read garbage. The default satisfies the invariant.
+    if (!isPlainObject(behavior)) {
+      log.warn(
+        'Startup invariant: behavior config was not a plain object; resetting to defaults',
+      )
+      this.config.behavior = structuredClone(this.defaultConfig.behavior)
+      return
+    }
+    let startup = behavior.startup
+    // Same guard one level down: a non-plain-object `startup` block (including an
+    // array, which the boolean coercion below would silently mangle) gets reset.
+    if (!isPlainObject(startup)) {
+      log.warn(
+        'Startup invariant: behavior.startup was not a plain object; resetting to defaults',
+      )
+      startup = structuredClone(this.defaultConfig.behavior.startup)
+      behavior.startup = startup
+      return
+    }
+
+    // Coerce to strict booleans. A hand-edited config.json can carry a string
+    // like "false", and `Boolean("false") === true` would wrongly arm a window.
+    // `=== true` accepts only a real boolean true; any other value (string,
+    // number, undefined) becomes false and is caught by the >=1 invariant below.
+    startup.showMain = startup.showMain === true
+    startup.showBraindump = startup.showBraindump === true
+    startup.showFloating = startup.showFloating === true
+
+    if (!startup.showMain && !startup.showBraindump && !startup.showFloating) {
+      startup.showMain = true
+    }
   }
 
   /**
@@ -611,6 +742,9 @@ export class ConfigManager {
       return false
     }
     current[lastKey] = value
+    // Backstop the startup invariant: a generic set('behavior.startup.*')
+    // must never persist an all-false (zero-window) state.
+    this.ensureAtLeastOneStartupWindow()
     return this.saveConfig()
   }
 
@@ -648,6 +782,8 @@ export class ConfigManager {
         current[lastKey] = value
       }
     }
+    // Backstop the startup invariant before the single batched disk write.
+    this.ensureAtLeastOneStartupWindow()
     // Single disk write after all updates
     return this.saveConfig()
   }
@@ -777,9 +913,16 @@ export class ConfigManager {
       const data = fs.readFileSync(filePath, 'utf8')
       const importedConfig = JSON.parse(data) as Partial<AppConfig>
 
+      // Apply the same legacy migration as load — an imported file may predate
+      // the startup feature — on the RAW config before merge.
+      this.migrateFloatingStartVisible(importedConfig)
+
       // Validate imported config
       const tempConfig = this.config
       this.config = this.mergeWithDefaults(importedConfig)
+
+      // An imported file can carry an all-false startup block; normalize it.
+      this.ensureAtLeastOneStartupWindow()
 
       const validation = this.validate()
       if (!validation.isValid) {

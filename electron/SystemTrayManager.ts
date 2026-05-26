@@ -307,14 +307,26 @@ export class SystemTrayManager {
   }
 
   /**
+   * Single writer for fallback mode: keeps this manager's flag and the
+   * WindowManager's close-routing flag in lockstep, so window-close never tries
+   * to `.hide()` into a tray that no longer exists.
+   * @param enabled - true routes window-close to minimize; false restores hide-to-tray.
+   * @example
+   * this.setFallbackMode(true) // tray gone → minimize on close instead of hide
+   */
+  private setFallbackMode(enabled: boolean): void {
+    this.fallbackMode = enabled
+
+    if (this.windowManager) {
+      this.windowManager.setTrayFallbackMode(enabled)
+    }
+  }
+
+  /**
    * Enable fallback mode when tray is not available.
    */
   enableFallbackMode(): void {
-    this.fallbackMode = true
-
-    if (this.windowManager) {
-      this.windowManager.setTrayFallbackMode(true)
-    }
+    this.setFallbackMode(true)
   }
 
   /**
@@ -642,6 +654,51 @@ export class SystemTrayManager {
    */
   isAppQuitting(): boolean {
     return this.isQuitting
+  }
+
+  /**
+   * Show or hide the menu-bar (tray) icon live, backing the "Show in Menu Bar"
+   * setting toggle. Creating is idempotent (no second `Tray` if one already
+   * exists); hiding tears the current tray down. On platforms without tray
+   * support it is a successful no-op, matching `setHideAppIcon` semantics.
+   *
+   * @param visible - true creates/keeps the tray, false destroys it.
+   * @returns
+   * - `true` when the tray now matches `visible` (incl. unsupported-platform no-op)
+   * - `false` only when `visible` was requested but tray creation failed
+   * @example
+   * await systemTrayManager.setMenuBarVisible(false) // tray icon disappears
+   */
+  async setMenuBarVisible(visible: boolean): Promise<boolean> {
+    // Hiding always succeeds: destroy() is a guarded no-op when no tray exists.
+    if (!visible) {
+      this.destroy()
+      // Hiding removes the only tray surface, so route window-close through
+      // minimize — otherwise close would `.hide()` into a destroyed tray and
+      // strand the app with no way back.
+      this.setFallbackMode(true)
+      return true
+    }
+    // Unsupported platform: treat as a successful no-op (mirrors setHideAppIcon).
+    if (!this.isSystemTraySupported()) {
+      return true
+    }
+    // Already visible: createTray() is not idempotent (it would leak a second
+    // Tray), so short-circuit when one is already on screen.
+    if (this.hasTray()) {
+      // A live tray exists, so close should hide-to-tray, not minimize.
+      this.setFallbackMode(false)
+      return true
+    }
+    const tray = await this.createTray()
+    if (tray !== null) {
+      // Tray restored: leave fallback so window-close hides to the tray again.
+      this.setFallbackMode(false)
+      return true
+    }
+    // createTray failed; every null-return path already armed fallback. Report
+    // failure so the UI does not persist a "shown" state that never appeared.
+    return false
   }
 
   /**

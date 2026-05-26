@@ -20,8 +20,21 @@ import { fileURLToPath } from 'url'
 import { BrowserWindow, screen } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
+import {
+  AUTH_PATHNAMES,
+  ERR_ABORTED,
+  STARTUP_PILL_GAP_MS,
+  STARTUP_PILL_HEIGHT_PX,
+  STARTUP_PILL_TIMEOUT_MS,
+  STARTUP_PILL_WIDTH_PX,
+} from './constants'
 import { log } from './logger'
-import type { WindowStateManager, WindowOptions } from './WindowStateManager'
+import { buildStartupPillHtml } from './startup-pill-html'
+import type {
+  WindowStateManager,
+  WindowOptions,
+  WindowType,
+} from './WindowStateManager'
 
 // Resolve __dirname for ES modules
 // @ts-ignore - import.meta.url is valid at runtime (electron-vite handles this)
@@ -39,6 +52,13 @@ interface FloatingConfig {
   resizable: boolean
   visibleOnAllWorkspaces?: boolean
 }
+
+/**
+ * The auxiliary panels that can be requested at Electron startup. Derived from
+ * `WindowType` (the source of truth) so adding a panel type there flows here
+ * automatically; excludes `'main'` since the main window is handled separately.
+ */
+type StartupPanelKind = Exclude<WindowType, 'main'>
 
 // ============================================================================
 // Window Manager Class
@@ -86,6 +106,29 @@ export class WindowManager {
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
   /**
+   * Panels that were redirected to an auth page (or failed to load) at startup,
+   * so the main window was surfaced in their place. Exposed only through
+   * `getStartupAuthFallbacks()` as test-observable evidence of the
+   * suppress-and-surface decision; no production code branches on it (the pill
+   * shows a static "Opening CoreLive…"). Durable for the session — the entry
+   * stays even after the panel is re-shown post-login, since it records a fact
+   * about this boot.
+   */
+  private startupAuthFallbacks: Set<StartupPanelKind>
+
+  /**
+   * The cold-boot reassurance pill shown during a panel-only launch. Null until
+   * armed and after dismissal. See `armStartupPill` / `dismissStartupPill`.
+   */
+  private startupPill: BrowserWindow | null
+
+  /** Timer that reveals the pill once the no-window grace period elapses. */
+  private startupPillGapTimer: ReturnType<typeof setTimeout> | null
+
+  /** Timer that force-dismisses the pill + surfaces main on a wedged boot. */
+  private startupPillTimeoutTimer: ReturnType<typeof setTimeout> | null
+
+  /**
    * Creates a new WindowManager instance.
    *
    * @param serverUrl - URL of the Next.js server (null uses default)
@@ -107,6 +150,10 @@ export class WindowManager {
     this.windowStateManager = windowStateManager
     this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
+    this.startupAuthFallbacks = new Set()
+    this.startupPill = null
+    this.startupPillGapTimer = null
+    this.startupPillTimeoutTimer = null
   }
 
   /**
@@ -280,9 +327,19 @@ export class WindowManager {
   /**
    * Creates the main application window with security-first configuration.
    *
+   * The window is always *created* (so it can be revealed later from the tray,
+   * `app.activate`, or a settings change) but is only auto-shown on
+   * `ready-to-show` when `showOnReady` is true. Panel-only startup configs
+   * (`behavior.startup.showMain === false`) pass `false` to keep main hidden.
+   *
+   * @param showOnReady - Auto-show the window once its content is ready. Defaults
+   *   to `true` so existing no-arg callers (and tests) preserve prior behavior.
    * @returns The created main window
+   * @example
+   * windowManager.createMainWindow() // visible on launch (default)
+   * windowManager.createMainWindow(false) // created hidden for panel-only startup
    */
-  createMainWindow(): BrowserWindow {
+  createMainWindow(showOnReady: boolean = true): BrowserWindow {
     const windowOptions: WindowOptions = this.windowStateManager
       ? this.windowStateManager.getWindowOptions('main')
       : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
@@ -330,7 +387,11 @@ export class WindowManager {
     this.mainWindow.loadURL(startUrl)
 
     this.mainWindow.once('ready-to-show', () => {
-      this.mainWindow?.show()
+      // Panel-only startup configs create main hidden; skip the auto-show so
+      // the user only sees the windows they asked for at launch.
+      if (showOnReady) {
+        this.mainWindow?.show()
+      }
     })
 
     // Track window state changes with debouncing
@@ -443,8 +504,7 @@ export class WindowManager {
       trafficLightPosition: { x: -100, y: -100 },
     })
 
-    const baseUrl = this.serverUrl || 'https://corelive.app'
-    const floatingUrl = `${baseUrl}/floating-navigator`
+    const floatingUrl = this.getPanelUrl('floating')
 
     log.debug('Loading floating navigator URL:', floatingUrl)
     this.floatingNavigator.loadURL(floatingUrl)
@@ -579,8 +639,7 @@ export class WindowManager {
 
     this.brainDumpWindow.setOpacity(initialOpacity)
 
-    const baseUrl = this.serverUrl || 'https://corelive.app'
-    const brainDumpUrl = `${baseUrl}/braindump`
+    const brainDumpUrl = this.getPanelUrl('braindump')
 
     log.debug('Loading BrainDump URL:', brainDumpUrl)
     this.brainDumpWindow.loadURL(brainDumpUrl)
@@ -773,6 +832,9 @@ export class WindowManager {
    * Restore main window from tray.
    */
   restoreFromTray(): void {
+    // Any path that surfaces the main window retires the cold-boot pill: the
+    // user can now see a real window, so the "Opening…" reassurance is done.
+    this.dismissStartupPill()
     if (this.mainWindow) {
       if (this.mainWindow.isMinimized()) {
         this.mainWindow.restore()
@@ -836,6 +898,318 @@ export class WindowManager {
   hasFloatingNavigator(): boolean {
     return (
       this.floatingNavigator !== null && !this.floatingNavigator.isDestroyed()
+    )
+  }
+
+  // ==========================================================================
+  // Startup panel orchestration (nav-watch auth gate)
+  // ==========================================================================
+
+  /**
+   * Build a startup panel's URL from the configured server origin. Single
+   * source of truth shared by the create methods and the post-login re-show.
+   *
+   * @param kind - Which auxiliary panel.
+   * @returns The fully-qualified panel URL.
+   * @example
+   * this.getPanelUrl('floating')  // => 'https://corelive.app/floating-navigator'
+   * this.getPanelUrl('braindump') // => 'https://corelive.app/braindump'
+   */
+  private getPanelUrl(kind: StartupPanelKind): string {
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    return kind === 'floating'
+      ? `${baseUrl}/floating-navigator`
+      : `${baseUrl}/braindump`
+  }
+
+  /**
+   * Whether a navigated URL is a Clerk auth page, i.e. the user is not yet
+   * authenticated. A startup panel that lands here was redirected by proxy.ts.
+   *
+   * @param rawUrl - Full URL from a `did-navigate` event.
+   * @returns true when the pathname is `/login` or `/sign-up`.
+   * @example
+   * this.isAuthPathname('https://corelive.app/login?redirect_url=/braindump') // true
+   * this.isAuthPathname('https://corelive.app/floating-navigator')            // false
+   */
+  private isAuthPathname(rawUrl: string): boolean {
+    try {
+      const { pathname } = new URL(rawUrl)
+      return AUTH_PATHNAMES.includes(pathname)
+    } catch {
+      // A malformed URL can't be an auth page; never crash startup over it.
+      return false
+    }
+  }
+
+  /**
+   * Open an auxiliary panel as part of Electron startup, gated on auth.
+   *
+   * Why this exists: a panel-only cold boot must not flash an empty window when
+   * the user is signed out. We create the panel hidden, watch its first load,
+   * and only `show()` it once it actually renders the panel route (not /login).
+   * Called from `main.ts` for each panel enabled in `behavior.startup`.
+   *
+   * @param kind - 'floating' | 'braindump' — which startup panel to open.
+   * @example
+   * windowManager.openStartupPanel('floating')
+   */
+  openStartupPanel(kind: StartupPanelKind): void {
+    const panel =
+      kind === 'floating'
+        ? this.createFloatingNavigator()
+        : this.createBrainDumpWindow()
+    this.watchStartupPanelLoad(panel, kind)
+  }
+
+  /**
+   * Panels suppressed at startup because they hit an auth page or failed to
+   * load (so main was surfaced instead). A test-observability seam: the unit
+   * tests assert the suppress-and-surface decision through this set; no
+   * production code reads it.
+   *
+   * @returns A read-only view of the suppressed-panel set.
+   * @example
+   * if (windowManager.getStartupAuthFallbacks().has('braindump')) { ... }
+   */
+  getStartupAuthFallbacks(): ReadonlySet<StartupPanelKind> {
+    return this.startupAuthFallbacks
+  }
+
+  /**
+   * Decide a startup panel's fate from its first navigation: show it if the
+   * load lands on the panel route, or suppress it + surface main if the load
+   * redirects to an auth page or fails (offline/timeout/5xx).
+   *
+   * Ordering note: `createFloatingNavigator`/`createBrainDumpWindow` call
+   * `loadURL` synchronously *before* this runs. That is safe — `did-navigate`
+   * is async, so these listeners register in the same tick, before the network
+   * response arrives. Do NOT "fix" it by moving `loadURL`.
+   *
+   * @param panel - The freshly created (hidden) panel window.
+   * @param kind - Which startup panel, used for the fallback record + re-show.
+   */
+  private watchStartupPanelLoad(
+    panel: BrowserWindow,
+    kind: StartupPanelKind,
+  ): void {
+    const { webContents } = panel
+    // Removers run once the decision is made, so the panel's later in-app
+    // navigations never re-trigger the auth gate.
+    const removeListeners: Array<() => void> = []
+    // Guard so the show-or-suppress decision is made exactly once per load,
+    // even though `did-navigate` and `did-fail-load` can both fire.
+    let decided = false
+
+    const finish = (authenticated: boolean): void => {
+      if (decided) return
+      decided = true
+      removeListeners.forEach((remove) => remove())
+
+      if (authenticated) {
+        // Authed: reveal the panel the user asked to start with. A visible panel
+        // makes the cold-boot pill obsolete (this is the one show-path that does
+        // not go through `restoreFromTray`, so dismiss explicitly).
+        panel.show()
+        this.dismissStartupPill()
+        return
+      }
+
+      // Signed out or load failed: keep the panel hidden, surface the main
+      // window so the user can sign in / see the error, record the fallback,
+      // and arm a one-shot re-show for when sign-in completes.
+      // `restoreFromTray` also dismisses the cold-boot pill.
+      this.startupAuthFallbacks.add(kind)
+      this.restoreFromTray()
+      this.armPostLoginReshow(panel, kind)
+    }
+
+    const onDidNavigate = (_event: Electron.Event, url: string): void => {
+      finish(!this.isAuthPathname(url))
+    }
+
+    const onDidFailLoad = (
+      _event: Electron.Event,
+      errorCode: number,
+      _errorDescription: string,
+      _validatedURL: string,
+      isMainFrame: boolean,
+    ): void => {
+      // Subresource failures and intentional cancellations (ERR_ABORTED fires
+      // during the normal panel -> /login redirect chain) are not real errors.
+      if (!isMainFrame || errorCode === ERR_ABORTED) return
+      finish(false)
+    }
+
+    webContents.on('did-navigate', onDidNavigate)
+    webContents.on('did-fail-load', onDidFailLoad)
+    removeListeners.push(
+      () => webContents.removeListener('did-navigate', onDidNavigate),
+      () => webContents.removeListener('did-fail-load', onDidFailLoad),
+    )
+  }
+
+  /**
+   * After surfacing main for a signed-out startup panel, wait for the user to
+   * authenticate (main navigates away from the auth pages) and then reload +
+   * reveal the originally-requested panel.
+   *
+   * Uses a one-shot main-window listener that self-removes and re-arms a fresh
+   * load-watch on the panel, so ordinary in-app navigation never triggers a
+   * spurious panel reload.
+   *
+   * @param panel - The suppressed panel to re-show once authenticated.
+   * @param kind - Which startup panel, used to rebuild its URL + re-arm.
+   */
+  private armPostLoginReshow(
+    panel: BrowserWindow,
+    kind: StartupPanelKind,
+  ): void {
+    const mainWindow = this.mainWindow
+    if (!mainWindow) return
+
+    const onMainNavigate = (_event: Electron.Event, url: string): void => {
+      // Still on an auth page (e.g. /login -> /sign-up) — keep waiting.
+      if (this.isAuthPathname(url)) return
+      mainWindow.webContents.removeListener('did-navigate', onMainNavigate)
+      if (panel.isDestroyed()) return
+
+      // Re-arm a fresh decision watch, then reload the real panel route; the
+      // fresh watch shows the panel once the now-authed load lands.
+      this.watchStartupPanelLoad(panel, kind)
+      panel.webContents.loadURL(this.getPanelUrl(kind))
+    }
+
+    mainWindow.webContents.on('did-navigate', onMainNavigate)
+  }
+
+  /**
+   * Arm the cold-boot startup pill for a panel-only launch: a tiny frameless,
+   * click-through, always-on-top "Opening CoreLive…" window, revealed only if no
+   * real window paints within the grace period and force-cleared (surfacing
+   * main) if the boot is still wedged at the hard timeout. Called once from
+   * `main.ts` during criticalInit when `behavior.startup.showMain` is false (and
+   * not under test/E2E).
+   *
+   * @example
+   * if (!startup.showMain && !isTestEnvironment) windowManager.armStartupPill()
+   */
+  armStartupPill(): void {
+    // Deviation (DD3): the spec framed the pill as "armed every boot, shown only
+    // if no window painted within the grace period". We arm it ONLY on a
+    // panel-only boot — on a show-main boot the main window hits `ready-to-show`
+    // well inside the grace period, so the gap timer would never reveal a pill
+    // there anyway. Same observable behavior, less machinery.
+
+    // Idempotent: never stack two pills if armed more than once.
+    if (this.startupPill) return
+
+    const { workArea } = screen.getPrimaryDisplay()
+    const pill = new BrowserWindow({
+      width: STARTUP_PILL_WIDTH_PX,
+      height: STARTUP_PILL_HEIGHT_PX,
+      x: Math.round(workArea.x + (workArea.width - STARTUP_PILL_WIDTH_PX) / 2),
+      y: Math.round(
+        workArea.y + (workArea.height - STARTUP_PILL_HEIGHT_PX) / 2,
+      ),
+      show: false,
+      frame: false,
+      transparent: true,
+      hasShadow: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      focusable: false,
+      alwaysOnTop: true,
+      acceptFirstMouse: false,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        devTools: false,
+      },
+    })
+    this.startupPill = pill
+
+    // Fully passive: never intercept clicks/drags meant for the desktop.
+    pill.setIgnoreMouseEvents(true)
+
+    // Paint from memory via a data URL — see startup-pill-html for why the
+    // markup is inlined rather than loaded from a packaged .html file.
+    const html = buildStartupPillHtml()
+    pill.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+
+    // Grace period: only reveal the pill if no real window has appeared yet, so
+    // a fast boot never flashes it. `showInactive` keeps focus off the pill.
+    this.startupPillGapTimer = setTimeout(() => {
+      this.startupPillGapTimer = null
+      if (this.startupPill && !this.startupPill.isDestroyed()) {
+        this.startupPill.showInactive()
+      }
+    }, STARTUP_PILL_GAP_MS)
+
+    // Hard timeout: a boot still showing the pill this late is wedged (offline /
+    // timeout / 5xx). Surface the main window as a backstop so the user is never
+    // stranded on an empty desktop; `restoreFromTray` also dismisses the pill.
+    //
+    // Race note: if a panel's auth load resolves AFTER this fires (sign-in
+    // completes 9s into a slow boot), `finish(true)` still shows that panel, so
+    // the user ends up with BOTH main and the panel. That is correct — they
+    // asked for the panel and main is a harmless backstop. Do NOT add logic to
+    // suppress the panel after the timeout.
+    this.startupPillTimeoutTimer = setTimeout(() => {
+      this.startupPillTimeoutTimer = null
+      this.restoreFromTray()
+    }, STARTUP_PILL_TIMEOUT_MS)
+  }
+
+  /**
+   * Tear down the startup pill and its timers. Idempotent, so it is safe to call
+   * from every racing site that makes a real window visible (`restoreFromTray`,
+   * a panel showing after auth) plus the hard timeout — whichever happens first
+   * wins and the rest are no-ops.
+   *
+   * @example
+   * this.dismissStartupPill() // safe to call repeatedly; clears everything once
+   */
+  dismissStartupPill(): void {
+    if (this.startupPillGapTimer) {
+      clearTimeout(this.startupPillGapTimer)
+      this.startupPillGapTimer = null
+    }
+    if (this.startupPillTimeoutTimer) {
+      clearTimeout(this.startupPillTimeoutTimer)
+      this.startupPillTimeoutTimer = null
+    }
+    if (!this.startupPill) return
+    if (!this.startupPill.isDestroyed()) {
+      this.startupPill.destroy()
+    }
+    this.startupPill = null
+  }
+
+  /**
+   * Whether `window` is the live cold-boot startup pill. Lets callers (the macOS
+   * `activate` handler) exclude the passive pill when deciding if any *real*
+   * window is visible — the pill is shown via `showInactive()`, so `isVisible()`
+   * alone would wrongly count it and suppress the dock-click that should surface
+   * the main window.
+   *
+   * @param window - A window from `BrowserWindow.getAllWindows()`.
+   * @returns
+   * - true: `window` is the current, not-yet-destroyed startup pill
+   * - false: no pill armed, the pill was dismissed/destroyed, or a different window
+   * @example
+   * allWindows.some((w) => w.isVisible() && !windowManager.isStartupPill(w))
+   */
+  isStartupPill(window: BrowserWindow): boolean {
+    return (
+      this.startupPill !== null &&
+      !this.startupPill.isDestroyed() &&
+      window === this.startupPill
     )
   }
 

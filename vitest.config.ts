@@ -17,7 +17,13 @@ export default defineConfig({
     setupFiles: ['setupTests.ts'],
   },
   resolve: {
+    // Mirror tsconfig `paths`: `@/electron/*` -> ./electron/*, `@/*` -> ./src/*.
+    // The `@/electron` entry MUST come first so vite's prefix match resolves it
+    // before the broader `@` alias (which would otherwise rewrite it to
+    // ./src/electron and fail). Renderer code legitimately runtime-imports from
+    // electron/ (e.g. isFloatingNavigatorEnvironment, the shared IPC default).
     alias: {
+      '@/electron': path.resolve(__dirname, './electron'),
       '@': path.resolve(__dirname, './src'),
     },
   },

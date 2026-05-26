@@ -244,6 +244,18 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'settings:setShowInMenuBar': z.tuple([z.boolean()]),
   'settings:setStartAtLogin': z.tuple([z.boolean()]),
   'settings:getLoginItemSettings': z.tuple([]),
+  // The >=1-true invariant is enforced in ConfigManager, not here; this schema
+  // only guarantees the shape (three booleans) crossing the IPC boundary.
+  'settings:setStartupConfig': z.tuple([
+    z.object({
+      showMain: z.boolean(),
+      showBraindump: z.boolean(),
+      showFloating: z.boolean(),
+    }),
+  ]),
+  // The read side of the startup-window pair takes no arguments; the response
+  // shape (three booleans) is enforced by the typed IPC contract, not here.
+  'settings:getStartupConfig': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Window Management (all void-arg)
@@ -254,6 +266,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'window-show-floating-navigator': z.tuple([]),
   'window-hide-floating-navigator': z.tuple([]),
   'window-show-main': z.tuple([]),
+  'window-get-aux-visibility': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Floating Window
