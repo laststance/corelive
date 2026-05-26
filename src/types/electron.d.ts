@@ -1,5 +1,14 @@
 // Comprehensive Electron API type definitions
 
+// Reuse the canonical IPC shapes (source of truth lives in electron/) rather
+// than re-declaring the booleans here. This file is already a module (see the
+// `export type` lines at the bottom), so a top-level import is safe and does
+// not affect the `declare global` Window augmentation below.
+import type {
+  AuxWindowVisibility,
+  StartupWindowConfig,
+} from '@/electron/types/ipc'
+
 interface ElectronAuthUser {
   /**
    * Clerk user identifier. Required by the Electron main process to hydrate the
@@ -55,6 +64,8 @@ interface ElectronAPI {
     setFullScreen?: (flag: boolean) => void
     setAlwaysOnTop?: (flag: boolean) => void
     moveToDisplay?: (displayIndex: number) => void
+    /** Read which auxiliary windows (floating navigator, brain dump) are visible now */
+    getAuxVisibility?: () => Promise<AuxWindowVisibility>
   }
 
   // System integration
@@ -257,6 +268,24 @@ interface ElectronAPI {
     setShowInMenuBar: (show: boolean) => Promise<boolean>
     /** Set whether the app should start at system login */
     setStartAtLogin: (enable: boolean) => Promise<boolean>
+    /**
+     * Persist which window(s) open at Electron launch (main / brain dump /
+     * floating navigator). The >=1-true invariant is enforced in the main
+     * process; resolves true even when an all-false request is repaired.
+     */
+    setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
+  }
+
+  /**
+   * BrainDump window controls exposed to the main window's Settings UI.
+   *
+   * Minimal renderer-side mirror; the canonical surface lives in
+   * /electron/types/electron-api.d.ts. Only includes what the settings page
+   * needs (e.g. a "Try it now" open action).
+   */
+  brainDump?: {
+    /** Open the BrainDump window (additive — only shows, never hides). */
+    show: () => Promise<void>
   }
 }
 

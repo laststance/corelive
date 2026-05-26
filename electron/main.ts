@@ -881,8 +881,11 @@ async function createWindow(): Promise<BrowserWindow> {
       windowStateManager,
     )
 
-    // Create main window immediately for better perceived performance
-    const mainWindow = windowManager.createMainWindow()
+    // Create main window immediately for better perceived performance.
+    // Panel-only startup configs (showMain === false) still create the window —
+    // just hidden — so it can be revealed later from the tray or `activate`.
+    const startupConfig = configManager.getSection('behavior').startup
+    const mainWindow = windowManager.createMainWindow(startupConfig.showMain)
 
     performanceOptimizer.startupMetrics.windowsCreated++
 
@@ -1758,6 +1761,35 @@ function setupIPCHandlers(): void {
     }
   })
 
+  // Persist which window(s) open at Electron launch. Writes through
+  // ConfigManager.update() (flat dot-paths) so the >=1-true invariant runs:
+  // a renderer cannot persist a boot-nothing config — all-false snaps showMain
+  // back on before saving.
+  typedHandle('settings:setStartupConfig', (_event, startup) => {
+    try {
+      if (!configManager) {
+        log.error('settings:setStartupConfig - ConfigManager not initialized')
+        return false
+      }
+      const didSave = configManager.update({
+        'behavior.startup.showMain': startup.showMain,
+        'behavior.startup.showBraindump': startup.showBraindump,
+        'behavior.startup.showFloating': startup.showFloating,
+      })
+      log.info(
+        'settings:setStartupConfig - startup window config saved',
+        startup,
+      )
+      return didSave
+    } catch (error) {
+      log.error(
+        'settings:setStartupConfig - Failed to save startup config:',
+        error,
+      )
+      return false
+    }
+  })
+
   // OAuth IPC handlers for browser-based OAuth flows
   // OAuth IPC handlers (Zod-validated)
   // Used when WebView OAuth is blocked (e.g., Google OAuth)
@@ -1958,6 +1990,25 @@ function setupIPCHandlers(): void {
     }
   })
 
+  // Read-only snapshot of which auxiliary windows are visible right now, so the
+  // settings UI can label a "Try it now" action accurately. has*() already
+  // guards destroyed windows; isVisible() only runs on a live reference.
+  typedHandle('window-get-aux-visibility', () => {
+    if (!windowManager) {
+      return { floating: false, braindump: false }
+    }
+    const floatingWindow = windowManager.hasFloatingNavigator()
+      ? windowManager.getFloatingNavigator()
+      : null
+    const braindumpWindow = windowManager.hasBrainDumpWindow()
+      ? windowManager.getBrainDumpWindow()
+      : null
+    return {
+      floating: Boolean(floatingWindow?.isVisible()),
+      braindump: Boolean(braindumpWindow?.isVisible()),
+    }
+  })
+
   // Auto-updater IPC handlers (Zod-validated)
   typedHandle('updater-check-for-updates', () => {
     if (autoUpdater) {
@@ -2041,8 +2092,13 @@ if (!gotTheLock) {
      */
     if (isTestEnvironment) {
       new Notification({ title: 'Electron is Testing' }).show()
-      // Show window without stealing focus for better test stability
-      mainWindow.showInactive()
+      // Show window without stealing focus for better test stability — but only
+      // when the startup config asks for the main window. A panel-only startup
+      // (showMain === false) must stay hidden here too, otherwise E2E would
+      // silently reveal a window the user opted out of.
+      if (configManager.getSection('behavior').startup.showMain) {
+        mainWindow.showInactive()
+      }
       // Note: These are commented out but can be enabled if needed:
       // app.hide() - Hide entire app
       // app.setActivationPolicy('accessory') - Remove from dock (macOS)
@@ -2054,9 +2110,19 @@ if (!gotTheLock) {
      * recreate windows instead of quitting when all windows are closed.
      */
     app.on('activate', () => {
-      // Re-create window if none exist
-      if (BrowserWindow.getAllWindows().length === 0) {
+      const allWindows = BrowserWindow.getAllWindows()
+      // No windows exist at all: recreate from scratch (macOS convention).
+      if (allWindows.length === 0) {
         createWindow()
+        return
+      }
+      // Windows exist but every one is hidden — e.g. a panel-only startup whose
+      // panel was later closed, or the main window minimized to the tray. A dock
+      // click must always surface something, so reveal the always-created main
+      // window (restoreFromTray restores + shows + focuses it).
+      const isAnyWindowVisible = allWindows.some((window) => window.isVisible())
+      if (!isAnyWindowVisible) {
+        windowManager?.restoreFromTray()
       }
     })
   })

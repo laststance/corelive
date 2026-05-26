@@ -280,9 +280,19 @@ export class WindowManager {
   /**
    * Creates the main application window with security-first configuration.
    *
+   * The window is always *created* (so it can be revealed later from the tray,
+   * `app.activate`, or a settings change) but is only auto-shown on
+   * `ready-to-show` when `showOnReady` is true. Panel-only startup configs
+   * (`behavior.startup.showMain === false`) pass `false` to keep main hidden.
+   *
+   * @param showOnReady - Auto-show the window once its content is ready. Defaults
+   *   to `true` so existing no-arg callers (and tests) preserve prior behavior.
    * @returns The created main window
+   * @example
+   * windowManager.createMainWindow() // visible on launch (default)
+   * windowManager.createMainWindow(false) // created hidden for panel-only startup
    */
-  createMainWindow(): BrowserWindow {
+  createMainWindow(showOnReady: boolean = true): BrowserWindow {
     const windowOptions: WindowOptions = this.windowStateManager
       ? this.windowStateManager.getWindowOptions('main')
       : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
@@ -330,7 +340,11 @@ export class WindowManager {
     this.mainWindow.loadURL(startUrl)
 
     this.mainWindow.once('ready-to-show', () => {
-      this.mainWindow?.show()
+      // Panel-only startup configs create main hidden; skip the auto-show so
+      // the user only sees the windows they asked for at launch.
+      if (showOnReady) {
+        this.mainWindow?.show()
+      }
     })
 
     // Track window state changes with debouncing

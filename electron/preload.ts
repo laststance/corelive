@@ -30,12 +30,14 @@ import type { IpcRendererEvent } from 'electron'
 import { typedInvoke } from './ipc/typedInvoke'
 import { log } from './logger'
 import type {
+  AuxWindowVisibility,
   ConfigSection,
   DeepLinkExamples,
   IPCEventChannel,
   NotificationOptions,
   NotificationPreferences,
   ShortcutDefinition,
+  StartupWindowConfig,
   TrayIconState,
   WindowBounds,
   WindowState,
@@ -356,6 +358,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
         await typedInvoke('window-state-move-to-display', 'main', displayIndex)
       } catch (error) {
         log.error('Failed to move window to display:', error)
+      }
+    },
+
+    /**
+     * Read which auxiliary windows (floating navigator, brain dump) are visible
+     * right now, so the settings UI can label a "Try it now" action correctly.
+     * @returns Live visibility flags; `{ floating: false, braindump: false }` on error.
+     * @example
+     * const { floating } = await window.electronAPI.window.getAuxVisibility()
+     */
+    getAuxVisibility: async (): Promise<AuxWindowVisibility> => {
+      try {
+        return await typedInvoke('window-get-aux-visibility')
+      } catch (error) {
+        log.error('Failed to read auxiliary window visibility:', error)
+        return { floating: false, braindump: false }
       }
     },
   },
@@ -1568,6 +1586,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return false
       }
     },
+
+    /**
+     * Persist which window(s) open at Electron launch (main / brain dump /
+     * floating navigator). The >=1-true invariant is enforced in the main
+     * process, so an all-false request is repaired (showMain forced back on)
+     * before saving — this call still resolves true in that case.
+     * @param config - The three startup-window booleans.
+     * @returns true when persisted; false on IPC/validation failure.
+     * @example
+     * await window.electronAPI.settings.setStartupConfig({ showMain: false, showBraindump: true, showFloating: false })
+     */
+    setStartupConfig: async (config: StartupWindowConfig): Promise<boolean> => {
+      try {
+        return await typedInvoke('settings:setStartupConfig', config)
+      } catch (error) {
+        log.error('Failed to set startup window config:', error)
+        return false
+      }
+    },
   },
 
   /**
@@ -1586,6 +1623,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // Re-throw so the renderer can react (toast, retry); a swallowed
         // failure leaves the user thinking the toggle worked.
         log.error('Failed to toggle BrainDump:', error)
+        throw error
+      }
+    },
+    /** Open the BrainDump window (additive — only shows, never hides). */
+    show: async (): Promise<void> => {
+      try {
+        await typedInvoke('braindump-window-show')
+      } catch (error) {
+        // Re-throw so a failed "Try it now" surfaces to the user instead of
+        // silently doing nothing.
+        log.error('Failed to show BrainDump:', error)
         throw error
       }
     },

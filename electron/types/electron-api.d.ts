@@ -10,6 +10,7 @@
 
 import type {
   AuthUserPayload,
+  AuxWindowVisibility,
   WindowBounds,
   WindowState,
   DisplayInfo,
@@ -20,6 +21,7 @@ import type {
   OAuthResult,
   PendingSignInToken,
   ShortcutDefinition,
+  StartupWindowConfig,
   ConfigSection,
   DeepLinkExamples,
   UpdaterStatus,
@@ -59,6 +61,8 @@ export interface ElectronAPI {
     isAlwaysOnTop: () => Promise<boolean>
     /** Move window to specific display */
     moveToDisplay: (displayIndex: number) => Promise<void>
+    /** Read which auxiliary windows (floating navigator, brain dump) are visible now */
+    getAuxVisibility: () => Promise<AuxWindowVisibility>
   }
 
   /**
@@ -451,6 +455,14 @@ export interface ElectronAPI {
      * @returns Promise resolving to success status
      */
     setStartAtLogin: (enable: boolean) => Promise<boolean>
+    /**
+     * Persist which window(s) open at Electron launch. The >=1-true invariant is
+     * enforced in the main process, so an all-false request is repaired before
+     * saving and this still resolves true.
+     * @param config - The three startup-window booleans (main / brain dump / floating).
+     * @returns Promise resolving to success status
+     */
+    setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
   }
 
   /**
@@ -464,6 +476,8 @@ export interface ElectronAPI {
   brainDump?: {
     /** Toggle BrainDump window visibility. */
     toggle: () => Promise<void>
+    /** Open the BrainDump window (additive — only shows, never hides). */
+    show: () => Promise<void>
     /** Read current opacity (already clamped to [0.30, 1.00]). */
     getOpacity: () => Promise<number>
     /** Persist + apply opacity; returns the clamped value the main applied. */

@@ -44,6 +44,7 @@ describe('IPC contract', () => {
         'performance-get-metrics',
         'performance-trigger-cleanup',
         'window-minimize',
+        'window-get-aux-visibility',
         'auth-get-user',
         'auth-logout',
         'auth-is-authenticated',
@@ -78,6 +79,37 @@ describe('IPC contract', () => {
       expect(() => setHide.parse([true])).not.toThrow()
       expect(() => setHide.parse(['not a boolean'])).toThrow(ZodError)
       expect(() => setHide.parse([])).toThrow(ZodError)
+    })
+
+    it('requires three startup-window booleans for settings:setStartupConfig', () => {
+      // Arrange
+      const setStartupConfig = IPC_ARG_SCHEMAS['settings:setStartupConfig']
+
+      // Act + Assert: a complete three-boolean object passes the shape check.
+      expect(() =>
+        setStartupConfig.parse([
+          { showMain: true, showBraindump: false, showFloating: false },
+        ]),
+      ).not.toThrow()
+      // An all-false object still passes the *schema* — the >=1-true invariant
+      // is enforced in ConfigManager, not at the IPC boundary.
+      expect(() =>
+        setStartupConfig.parse([
+          { showMain: false, showBraindump: false, showFloating: false },
+        ]),
+      ).not.toThrow()
+      // A missing flag is rejected (renderer cannot send a partial config).
+      expect(() =>
+        setStartupConfig.parse([{ showMain: true, showBraindump: false }]),
+      ).toThrow(ZodError)
+      // A non-boolean flag is rejected.
+      expect(() =>
+        setStartupConfig.parse([
+          { showMain: 'yes', showBraindump: false, showFloating: false },
+        ]),
+      ).toThrow(ZodError)
+      // An empty tuple is rejected.
+      expect(() => setStartupConfig.parse([])).toThrow(ZodError)
     })
 
     it('requires boolean for floating panel desktop tracking', () => {

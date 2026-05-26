@@ -86,6 +86,21 @@ export interface StartupWindowConfig {
   showFloating: boolean
 }
 
+/**
+ * Live visibility of the auxiliary (non-main) windows, read on demand from the
+ * main process. Lets the settings UI reflect what is *actually* on screen now
+ * (e.g. to label a "Try it now" action) rather than the persisted startup
+ * preference, which can drift once a panel is opened/closed at runtime.
+ *
+ * Both flags require the window to both exist and be visible.
+ */
+export interface AuxWindowVisibility {
+  /** The Floating Navigator window exists and is currently visible. */
+  floating: boolean
+  /** The Brain Dump window exists and is currently visible. */
+  braindump: boolean
+}
+
 /** Display information (richer version from WindowStateManager) */
 export type DisplayInfo = WindowManagerDisplayInfo
 
@@ -297,6 +312,15 @@ export interface IPCChannels {
   'window-toggle-braindump': {
     request: void
     response: boolean
+  }
+  /**
+   * Read-only snapshot of which auxiliary windows are visible right now. Used
+   * by the settings UI to label "Try it now" actions accurately. Never mutates
+   * window state.
+   */
+  'window-get-aux-visibility': {
+    request: void
+    response: AuxWindowVisibility
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -712,6 +736,15 @@ export interface IPCChannels {
   'settings:getLoginItemSettings': {
     request: void
     response: { openAtLogin: boolean; openAsHidden?: boolean }
+  }
+  /**
+   * Persist which window(s) open at Electron launch. The >=1-true invariant is
+   * enforced in ConfigManager (not here), so a renderer cannot persist a
+   * boot-nothing config. Returns the saved success flag.
+   */
+  'settings:setStartupConfig': {
+    request: StartupWindowConfig
+    response: boolean
   }
 }
 
