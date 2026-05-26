@@ -5,6 +5,10 @@ const isProtectedRoute = createRouteMatcher([
   '/home(.*)',
   '/skill-tree(.*)',
   '/braindump(.*)',
+  // Floating Navigator must redirect to /login like the other panels so the
+  // Electron main-process nav-watch can detect an unauthenticated cold boot
+  // and surface the main window instead of an empty panel.
+  '/floating-navigator(.*)',
 ])
 
 const middleware = clerkMiddleware(async (auth, req) => {
