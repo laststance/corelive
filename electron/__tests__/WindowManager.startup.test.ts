@@ -12,6 +12,22 @@ interface CapturedWindow {
 
 const createdWindows: CapturedWindow[] = []
 
+/**
+ * Returns the Nth created window, failing the test if none exists. Narrows away
+ * the `| undefined` that `noUncheckedIndexedAccess` adds to array indexing, so
+ * the assertions read cleanly without non-null assertions.
+ *
+ * @param index - Zero-based creation order.
+ * @returns The captured window at that index.
+ */
+function getCreatedWindow(index: number): CapturedWindow {
+  const capturedWindow = createdWindows[index]
+  if (!capturedWindow) {
+    throw new Error(`Expected a created window at index ${index}`)
+  }
+  return capturedWindow
+}
+
 // BrowserWindow mock: returns a plain instance (so `new` yields it) and records
 // the 'ready-to-show' handler the WindowManager registers via `once`.
 vi.mock('electron', () => ({
@@ -71,10 +87,11 @@ describe('WindowManager main-window startup visibility', () => {
 
     // Act
     windowManager.createMainWindow()
-    createdWindows[0].fireReadyToShow()
+    const createdWindow = getCreatedWindow(0)
+    createdWindow.fireReadyToShow()
 
     // Assert
-    expect(createdWindows[0].show).toHaveBeenCalledTimes(1)
+    expect(createdWindow.show).toHaveBeenCalledTimes(1)
   })
 
   it('shows the main window when showOnReady is explicitly true', () => {
@@ -83,10 +100,11 @@ describe('WindowManager main-window startup visibility', () => {
 
     // Act
     windowManager.createMainWindow(true)
-    createdWindows[0].fireReadyToShow()
+    const createdWindow = getCreatedWindow(0)
+    createdWindow.fireReadyToShow()
 
     // Assert
-    expect(createdWindows[0].show).toHaveBeenCalledTimes(1)
+    expect(createdWindow.show).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the main window hidden on ready-to-show for a panel-only startup', () => {
@@ -95,9 +113,10 @@ describe('WindowManager main-window startup visibility', () => {
 
     // Act
     windowManager.createMainWindow(false)
-    createdWindows[0].fireReadyToShow()
+    const createdWindow = getCreatedWindow(0)
+    createdWindow.fireReadyToShow()
 
     // Assert: the window exists but was never auto-shown.
-    expect(createdWindows[0].show).not.toHaveBeenCalled()
+    expect(createdWindow.show).not.toHaveBeenCalled()
   })
 })

@@ -887,6 +887,16 @@ async function createWindow(): Promise<BrowserWindow> {
     const startupConfig = configManager.getSection('behavior').startup
     const mainWindow = windowManager.createMainWindow(startupConfig.showMain)
 
+    // Open the auxiliary panels the user chose to start with. Each is created
+    // hidden and revealed only once it authenticates (WindowManager's
+    // nav-watch); a signed-out or failed panel surfaces the main window instead.
+    if (startupConfig.showFloating) {
+      windowManager.openStartupPanel('floating')
+    }
+    if (startupConfig.showBraindump) {
+      windowManager.openStartupPanel('braindump')
+    }
+
     performanceOptimizer.startupMetrics.windowsCreated++
 
     return { mainWindow, serverUrl }

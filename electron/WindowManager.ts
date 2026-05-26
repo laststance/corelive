@@ -20,8 +20,13 @@ import { fileURLToPath } from 'url'
 import { BrowserWindow, screen } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
+import { AUTH_PATHNAMES, ERR_ABORTED } from './constants'
 import { log } from './logger'
-import type { WindowStateManager, WindowOptions } from './WindowStateManager'
+import type {
+  WindowStateManager,
+  WindowOptions,
+  WindowType,
+} from './WindowStateManager'
 
 // Resolve __dirname for ES modules
 // @ts-ignore - import.meta.url is valid at runtime (electron-vite handles this)
@@ -39,6 +44,13 @@ interface FloatingConfig {
   resizable: boolean
   visibleOnAllWorkspaces?: boolean
 }
+
+/**
+ * The auxiliary panels that can be requested at Electron startup. Derived from
+ * `WindowType` (the source of truth) so adding a panel type there flows here
+ * automatically; excludes `'main'` since the main window is handled separately.
+ */
+type StartupPanelKind = Exclude<WindowType, 'main'>
 
 // ============================================================================
 // Window Manager Class
@@ -86,6 +98,15 @@ export class WindowManager {
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
   /**
+   * Panels that were redirected to an auth page at startup (so the main window
+   * was surfaced instead). Read by the cold-boot pill to explain "we opened the
+   * main window so you can sign in". Durable for the session — the entry stays
+   * even after the panel is re-shown post-login, since it records a fact about
+   * this boot.
+   */
+  private startupAuthFallbacks: Set<StartupPanelKind>
+
+  /**
    * Creates a new WindowManager instance.
    *
    * @param serverUrl - URL of the Next.js server (null uses default)
@@ -107,6 +128,7 @@ export class WindowManager {
     this.windowStateManager = windowStateManager
     this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
+    this.startupAuthFallbacks = new Set()
   }
 
   /**
@@ -457,8 +479,7 @@ export class WindowManager {
       trafficLightPosition: { x: -100, y: -100 },
     })
 
-    const baseUrl = this.serverUrl || 'https://corelive.app'
-    const floatingUrl = `${baseUrl}/floating-navigator`
+    const floatingUrl = this.getPanelUrl('floating')
 
     log.debug('Loading floating navigator URL:', floatingUrl)
     this.floatingNavigator.loadURL(floatingUrl)
@@ -593,8 +614,7 @@ export class WindowManager {
 
     this.brainDumpWindow.setOpacity(initialOpacity)
 
-    const baseUrl = this.serverUrl || 'https://corelive.app'
-    const brainDumpUrl = `${baseUrl}/braindump`
+    const brainDumpUrl = this.getPanelUrl('braindump')
 
     log.debug('Loading BrainDump URL:', brainDumpUrl)
     this.brainDumpWindow.loadURL(brainDumpUrl)
@@ -851,6 +871,183 @@ export class WindowManager {
     return (
       this.floatingNavigator !== null && !this.floatingNavigator.isDestroyed()
     )
+  }
+
+  // ==========================================================================
+  // Startup panel orchestration (nav-watch auth gate)
+  // ==========================================================================
+
+  /**
+   * Build a startup panel's URL from the configured server origin. Single
+   * source of truth shared by the create methods and the post-login re-show.
+   *
+   * @param kind - Which auxiliary panel.
+   * @returns The fully-qualified panel URL.
+   * @example
+   * this.getPanelUrl('floating')  // => 'https://corelive.app/floating-navigator'
+   * this.getPanelUrl('braindump') // => 'https://corelive.app/braindump'
+   */
+  private getPanelUrl(kind: StartupPanelKind): string {
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    return kind === 'floating'
+      ? `${baseUrl}/floating-navigator`
+      : `${baseUrl}/braindump`
+  }
+
+  /**
+   * Whether a navigated URL is a Clerk auth page, i.e. the user is not yet
+   * authenticated. A startup panel that lands here was redirected by proxy.ts.
+   *
+   * @param rawUrl - Full URL from a `did-navigate` event.
+   * @returns true when the pathname is `/login` or `/sign-up`.
+   * @example
+   * this.isAuthPathname('https://corelive.app/login?redirect_url=/braindump') // true
+   * this.isAuthPathname('https://corelive.app/floating-navigator')            // false
+   */
+  private isAuthPathname(rawUrl: string): boolean {
+    try {
+      const { pathname } = new URL(rawUrl)
+      return AUTH_PATHNAMES.includes(pathname)
+    } catch {
+      // A malformed URL can't be an auth page; never crash startup over it.
+      return false
+    }
+  }
+
+  /**
+   * Open an auxiliary panel as part of Electron startup, gated on auth.
+   *
+   * Why this exists: a panel-only cold boot must not flash an empty window when
+   * the user is signed out. We create the panel hidden, watch its first load,
+   * and only `show()` it once it actually renders the panel route (not /login).
+   * Called from `main.ts` for each panel enabled in `behavior.startup`.
+   *
+   * @param kind - 'floating' | 'braindump' — which startup panel to open.
+   * @example
+   * windowManager.openStartupPanel('floating')
+   */
+  openStartupPanel(kind: StartupPanelKind): void {
+    const panel =
+      kind === 'floating'
+        ? this.createFloatingNavigator()
+        : this.createBrainDumpWindow()
+    this.watchStartupPanelLoad(panel, kind)
+  }
+
+  /**
+   * Panels suppressed at startup because they hit an auth page (so main was
+   * surfaced instead). Consumed by the cold-boot pill to explain why the main
+   * window opened.
+   *
+   * @returns A read-only view of the suppressed-panel set.
+   * @example
+   * if (windowManager.getStartupAuthFallbacks().has('braindump')) { ... }
+   */
+  getStartupAuthFallbacks(): ReadonlySet<StartupPanelKind> {
+    return this.startupAuthFallbacks
+  }
+
+  /**
+   * Decide a startup panel's fate from its first navigation: show it if the
+   * load lands on the panel route, or suppress it + surface main if the load
+   * redirects to an auth page or fails (offline/timeout/5xx).
+   *
+   * Ordering note: `createFloatingNavigator`/`createBrainDumpWindow` call
+   * `loadURL` synchronously *before* this runs. That is safe — `did-navigate`
+   * is async, so these listeners register in the same tick, before the network
+   * response arrives. Do NOT "fix" it by moving `loadURL`.
+   *
+   * @param panel - The freshly created (hidden) panel window.
+   * @param kind - Which startup panel, used for the fallback record + re-show.
+   */
+  private watchStartupPanelLoad(
+    panel: BrowserWindow,
+    kind: StartupPanelKind,
+  ): void {
+    const { webContents } = panel
+    // Removers run once the decision is made, so the panel's later in-app
+    // navigations never re-trigger the auth gate.
+    const removeListeners: Array<() => void> = []
+    // Guard so the show-or-suppress decision is made exactly once per load,
+    // even though `did-navigate` and `did-fail-load` can both fire.
+    let decided = false
+
+    const finish = (authenticated: boolean): void => {
+      if (decided) return
+      decided = true
+      removeListeners.forEach((remove) => remove())
+
+      if (authenticated) {
+        // Authed: reveal the panel the user asked to start with.
+        panel.show()
+        return
+      }
+
+      // Signed out or load failed: keep the panel hidden, surface the main
+      // window so the user can sign in / see the error, record the fallback,
+      // and arm a one-shot re-show for when sign-in completes.
+      this.startupAuthFallbacks.add(kind)
+      this.restoreFromTray()
+      this.armPostLoginReshow(panel, kind)
+    }
+
+    const onDidNavigate = (_event: Electron.Event, url: string): void => {
+      finish(!this.isAuthPathname(url))
+    }
+
+    const onDidFailLoad = (
+      _event: Electron.Event,
+      errorCode: number,
+      _errorDescription: string,
+      _validatedURL: string,
+      isMainFrame: boolean,
+    ): void => {
+      // Subresource failures and intentional cancellations (ERR_ABORTED fires
+      // during the normal panel -> /login redirect chain) are not real errors.
+      if (!isMainFrame || errorCode === ERR_ABORTED) return
+      finish(false)
+    }
+
+    webContents.on('did-navigate', onDidNavigate)
+    webContents.on('did-fail-load', onDidFailLoad)
+    removeListeners.push(
+      () => webContents.removeListener('did-navigate', onDidNavigate),
+      () => webContents.removeListener('did-fail-load', onDidFailLoad),
+    )
+  }
+
+  /**
+   * After surfacing main for a signed-out startup panel, wait for the user to
+   * authenticate (main navigates away from the auth pages) and then reload +
+   * reveal the originally-requested panel.
+   *
+   * Uses a one-shot main-window listener that self-removes and re-arms a fresh
+   * load-watch on the panel, so ordinary in-app navigation never triggers a
+   * spurious panel reload.
+   *
+   * @param panel - The suppressed panel to re-show once authenticated.
+   * @param kind - Which startup panel, used to rebuild its URL + re-arm.
+   */
+  private armPostLoginReshow(
+    panel: BrowserWindow,
+    kind: StartupPanelKind,
+  ): void {
+    const mainWindow = this.mainWindow
+    if (!mainWindow) return
+
+    const onMainNavigate = (_event: Electron.Event, url: string): void => {
+      // Still on an auth page (e.g. /login -> /sign-up) — keep waiting.
+      if (this.isAuthPathname(url)) return
+      mainWindow.webContents.removeListener('did-navigate', onMainNavigate)
+      if (panel.isDestroyed()) return
+
+      // Re-arm a fresh decision watch, then reload the real panel route; the
+      // fresh watch shows the panel once the now-authed load lands.
+      this.watchStartupPanelLoad(panel, kind)
+      panel.webContents.loadURL(this.getPanelUrl(kind))
+    }
+
+    mainWindow.webContents.on('did-navigate', onMainNavigate)
   }
 
   /**
