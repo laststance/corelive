@@ -1,3 +1,4 @@
+import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -207,5 +208,52 @@ describe('WindowManager cold-boot startup pill', () => {
 
     // Assert
     expect(pill.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('arms only one pill even when called twice', () => {
+    // Arrange
+    const windowManager = new WindowManager('https://corelive.app')
+
+    // Act: a double-arm (e.g. a racy startup path) must not stack two pills.
+    windowManager.armStartupPill()
+    windowManager.armStartupPill()
+
+    // Assert: exactly one transparent pill window was ever created.
+    const pills = createdWindows.filter(
+      (window) => window.options.transparent === true,
+    )
+    expect(pills).toHaveLength(1)
+  })
+
+  it('recognizes the live armed pill and rejects the main window', () => {
+    // Arrange: a panel-only boot creates the hidden main window, then arms the pill.
+    const windowManager = new WindowManager('https://corelive.app')
+    windowManager.createMainWindow(false)
+    windowManager.armStartupPill()
+
+    // Act + Assert: only the transparent pill is identified as the startup pill,
+    // so the macOS activate handler treats the opaque main window as real.
+    expect(
+      windowManager.isStartupPill(getPill() as unknown as BrowserWindow),
+    ).toBe(true)
+    expect(
+      windowManager.isStartupPill(getMainWindow() as unknown as BrowserWindow),
+    ).toBe(false)
+  })
+
+  it('stops recognizing the pill once it has been dismissed', () => {
+    // Arrange
+    const windowManager = new WindowManager('https://corelive.app')
+    windowManager.armStartupPill()
+    const pill = getPill()
+
+    // Act
+    windowManager.dismissStartupPill()
+
+    // Assert: the dismissed (destroyed + cleared) pill is no longer the pill, so
+    // a later dock click is not fooled into leaving the desktop empty.
+    expect(windowManager.isStartupPill(pill as unknown as BrowserWindow)).toBe(
+      false,
+    )
   })
 })

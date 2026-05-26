@@ -106,11 +106,13 @@ export class WindowManager {
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
   /**
-   * Panels that were redirected to an auth page at startup (so the main window
-   * was surfaced instead). Read by the cold-boot pill to explain "we opened the
-   * main window so you can sign in". Durable for the session — the entry stays
-   * even after the panel is re-shown post-login, since it records a fact about
-   * this boot.
+   * Panels that were redirected to an auth page (or failed to load) at startup,
+   * so the main window was surfaced in their place. Exposed only through
+   * `getStartupAuthFallbacks()` as test-observable evidence of the
+   * suppress-and-surface decision; no production code branches on it (the pill
+   * shows a static "Opening CoreLive…"). Durable for the session — the entry
+   * stays even after the panel is re-shown post-login, since it records a fact
+   * about this boot.
    */
   private startupAuthFallbacks: Set<StartupPanelKind>
 
@@ -961,9 +963,10 @@ export class WindowManager {
   }
 
   /**
-   * Panels suppressed at startup because they hit an auth page (so main was
-   * surfaced instead). Consumed by the cold-boot pill to explain why the main
-   * window opened.
+   * Panels suppressed at startup because they hit an auth page or failed to
+   * load (so main was surfaced instead). A test-observability seam: the unit
+   * tests assert the suppress-and-surface decision through this set; no
+   * production code reads it.
    *
    * @returns A read-only view of the suppressed-panel set.
    * @example
@@ -1186,6 +1189,28 @@ export class WindowManager {
       this.startupPill.destroy()
     }
     this.startupPill = null
+  }
+
+  /**
+   * Whether `window` is the live cold-boot startup pill. Lets callers (the macOS
+   * `activate` handler) exclude the passive pill when deciding if any *real*
+   * window is visible — the pill is shown via `showInactive()`, so `isVisible()`
+   * alone would wrongly count it and suppress the dock-click that should surface
+   * the main window.
+   *
+   * @param window - A window from `BrowserWindow.getAllWindows()`.
+   * @returns
+   * - true: `window` is the current, not-yet-destroyed startup pill
+   * - false: no pill armed, the pill was dismissed/destroyed, or a different window
+   * @example
+   * allWindows.some((w) => w.isVisible() && !windowManager.isStartupPill(w))
+   */
+  isStartupPill(window: BrowserWindow): boolean {
+    return (
+      this.startupPill !== null &&
+      !this.startupPill.isDestroyed() &&
+      window === this.startupPill
+    )
   }
 
   /**

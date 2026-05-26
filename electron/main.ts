@@ -45,7 +45,11 @@ import type {
   SystemTrayManager as SystemTrayManagerType,
   TaskItem,
 } from './SystemTrayManager'
-import type { AuthUserPayload, WindowBounds } from './types/ipc'
+import {
+  DEFAULT_STARTUP_WINDOW_CONFIG,
+  type AuthUserPayload,
+  type WindowBounds,
+} from './types/ipc'
 import { WindowManager } from './WindowManager'
 import {
   WindowStateManager,
@@ -1822,7 +1826,7 @@ function setupIPCHandlers(): void {
   typedHandle('settings:getStartupConfig', () => {
     if (!configManager) {
       log.error('settings:getStartupConfig - ConfigManager not initialized')
-      return { showMain: true, showBraindump: false, showFloating: false }
+      return { ...DEFAULT_STARTUP_WINDOW_CONFIG }
     }
     return configManager.getSection('behavior').startup
   })
@@ -2113,56 +2117,85 @@ if (!gotTheLock) {
    * 2. Create the main window
    * 3. Initialize all systems
    */
-  app.whenReady().then(async () => {
-    // Setup security policies before any window creation
-    setupSecurity()
+  app
+    .whenReady()
+    .then(async () => {
+      // Setup security policies before any window creation
+      setupSecurity()
 
-    // Create the main application window
-    const mainWindow = await createWindow()
+      // Create the main application window
+      const mainWindow = await createWindow()
 
-    /**
-     * Test environment special handling.
-     * Makes the app behave differently during automated testing:
-     * - Shows notification for debugging
-     * - Window doesn't steal focus (better for parallel tests)
-     * - Can be hidden from dock to reduce visual noise
-     */
-    if (isTestEnvironment) {
-      new Notification({ title: 'Electron is Testing' }).show()
-      // Show window without stealing focus for better test stability — but only
-      // when the startup config asks for the main window. A panel-only startup
-      // (showMain === false) must stay hidden here too, otherwise E2E would
-      // silently reveal a window the user opted out of.
-      if (configManager.getSection('behavior').startup.showMain) {
-        mainWindow.showInactive()
+      /**
+       * Test environment special handling.
+       * Makes the app behave differently during automated testing:
+       * - Shows notification for debugging
+       * - Window doesn't steal focus (better for parallel tests)
+       * - Can be hidden from dock to reduce visual noise
+       */
+      if (isTestEnvironment) {
+        new Notification({ title: 'Electron is Testing' }).show()
+        // Show window without stealing focus for better test stability — but only
+        // when the startup config asks for the main window. A panel-only startup
+        // (showMain === false) must stay hidden here too, otherwise E2E would
+        // silently reveal a window the user opted out of.
+        if (configManager.getSection('behavior').startup.showMain) {
+          mainWindow.showInactive()
+        }
+        // Note: These are commented out but can be enabled if needed:
+        // app.hide() - Hide entire app
+        // app.setActivationPolicy('accessory') - Remove from dock (macOS)
       }
-      // Note: These are commented out but can be enabled if needed:
-      // app.hide() - Hide entire app
-      // app.setActivationPolicy('accessory') - Remove from dock (macOS)
-    }
 
-    /**
-     * macOS-specific: 'activate' event.
-     * Fired when user clicks dock icon. By convention, macOS apps
-     * recreate windows instead of quitting when all windows are closed.
-     */
-    app.on('activate', () => {
-      const allWindows = BrowserWindow.getAllWindows()
-      // No windows exist at all: recreate from scratch (macOS convention).
-      if (allWindows.length === 0) {
-        createWindow()
-        return
-      }
-      // Windows exist but every one is hidden — e.g. a panel-only startup whose
-      // panel was later closed, or the main window minimized to the tray. A dock
-      // click must always surface something, so reveal the always-created main
-      // window (restoreFromTray restores + shows + focuses it).
-      const isAnyWindowVisible = allWindows.some((window) => window.isVisible())
-      if (!isAnyWindowVisible) {
-        windowManager?.restoreFromTray()
+      /**
+       * macOS-specific: 'activate' event.
+       * Fired when user clicks dock icon. By convention, macOS apps
+       * recreate windows instead of quitting when all windows are closed.
+       */
+      app.on('activate', () => {
+        const allWindows = BrowserWindow.getAllWindows()
+        // No windows exist at all: recreate from scratch (macOS convention).
+        if (allWindows.length === 0) {
+          createWindow()
+          return
+        }
+        // Windows exist but no *real* one is visible — e.g. a panel-only startup
+        // whose panel was later closed, or the main window minimized to the tray.
+        // The startup pill is excluded: it is shown via `showInactive()` so
+        // `isVisible()` reports true, but it carries no surface the user can act
+        // on, so counting it would wrongly suppress the dock-click reveal. A dock
+        // click must always surface something, so reveal the always-created main
+        // window (restoreFromTray restores + shows + focuses it).
+        //
+        // The `windowManager?.` optional chain is intentional: if the manager is
+        // somehow absent, `!undefined` is true so the pill (if any) counts as a
+        // real window — the safe status-quo, since restoreFromTray would be a
+        // no-op there anyway.
+        const isAnyRealWindowVisible = allWindows.some(
+          (window) =>
+            window.isVisible() && !windowManager?.isStartupPill(window),
+        )
+        if (!isAnyRealWindowVisible) {
+          windowManager?.restoreFromTray()
+        }
+      })
+    })
+    .catch((bootError: unknown) => {
+      // Last-resort backstop: a throw anywhere in the boot chain (corrupt config
+      // read, window creation, security setup) would otherwise be an unhandled
+      // rejection that leaves the user staring at nothing. Fail loud — log always,
+      // and in production surface a dialog + quit rather than a silent blank boot.
+      // Stays quiet under test so a genuine boot failure surfaces via assertions,
+      // not a modal that wedges the headless runner.
+      log.error('Fatal error during app startup:', bootError)
+      if (!isTestEnvironment) {
+        dialog.showErrorBox(
+          'CoreLive failed to start',
+          `An unexpected error occurred during startup:\n\n${String(bootError)}`,
+        )
+        app.quit()
       }
     })
-  })
 }
 
 /**
