@@ -1600,7 +1600,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     setStartupConfig: async (config: StartupWindowConfig): Promise<boolean> => {
       try {
-        return await typedInvoke('settings:setStartupConfig', config)
+        // Defense-in-depth: strip forbidden keys / trim strings, then assert all
+        // three flags are real booleans before crossing the IPC boundary, so a
+        // malformed renderer payload can never poison the persisted config.
+        const sanitized = sanitizeData(config) as Partial<StartupWindowConfig>
+        if (
+          typeof sanitized.showMain !== 'boolean' ||
+          typeof sanitized.showBraindump !== 'boolean' ||
+          typeof sanitized.showFloating !== 'boolean'
+        ) {
+          throw new Error('Startup config flags must be booleans')
+        }
+        return await typedInvoke('settings:setStartupConfig', {
+          showMain: sanitized.showMain,
+          showBraindump: sanitized.showBraindump,
+          showFloating: sanitized.showFloating,
+        })
       } catch (error) {
         log.error('Failed to set startup window config:', error)
         return false

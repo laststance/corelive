@@ -25,19 +25,31 @@ vi.mock('../logger', () => ({
 import { SystemTrayManager } from '../SystemTrayManager'
 import type { WindowManager } from '../WindowManager'
 
-// A minimal stand-in Tray: setMenuBarVisible only checks `this.tray` for
-// truthiness and never touches the icon, so an empty object is enough.
-const fakeTray = {} as unknown as Tray
+// A minimal stand-in Tray. hasTray() reads `this.tray !== null && !isDestroyed()`,
+// so the stub needs a never-destroyed isDestroyed(); nothing touches the icon.
+const fakeTray = { isDestroyed: () => false } as unknown as Tray
 
 /**
- * Build a SystemTrayManager over a stub WindowManager; setMenuBarVisible never
- * calls into the window manager, so an empty stub keeps the test focused.
+ * Build a SystemTrayManager over a stub WindowManager exposing a spyable
+ * setTrayFallbackMode, so a test can assert that toggling the menu bar keeps the
+ * window-close routing flag in sync (the tray-vs-minimize decision).
  *
- * @returns A fresh manager whose tray starts hidden (`this.tray === null`).
+ * @returns The manager (tray starts null) plus the setTrayFallbackMode spy.
+ * @example
+ * const { manager, setTrayFallbackMode } = createManager()
  */
-function createManager(): SystemTrayManager {
-  const stubWindowManager = {} as unknown as WindowManager
-  return new SystemTrayManager(stubWindowManager)
+function createManager(): {
+  manager: SystemTrayManager
+  setTrayFallbackMode: ReturnType<typeof vi.fn>
+} {
+  const setTrayFallbackMode = vi.fn()
+  const stubWindowManager = {
+    setTrayFallbackMode,
+  } as unknown as WindowManager
+  return {
+    manager: new SystemTrayManager(stubWindowManager),
+    setTrayFallbackMode,
+  }
 }
 
 /**
@@ -58,24 +70,28 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
   })
 
   it('hides the menu bar by tearing down the existing tray', async () => {
-    // Arrange
-    const manager = createManager()
+    // Arrange: a tray is already on screen, so this exercises the real
+    // tear-down path rather than a no-op hide over an absent tray.
+    const { manager, setTrayFallbackMode } = createManager()
+    primeExistingTray(manager)
     const destroySpy = vi.spyOn(manager, 'destroy').mockImplementation(() => {})
     const createSpy = vi.spyOn(manager, 'createTray')
 
     // Act
     const didApply = await manager.setMenuBarVisible(false)
 
-    // Assert: the tray is torn down, no new tray is created, and the caller
-    // hears success so the UI can persist the "hidden" choice.
+    // Assert: the tray is torn down, no new tray is created, fallback mode is
+    // armed so window-close minimizes (never .hide() into a gone tray), and the
+    // caller hears success so the UI can persist the "hidden" choice.
     expect(destroySpy).toHaveBeenCalledTimes(1)
     expect(createSpy).not.toHaveBeenCalled()
+    expect(setTrayFallbackMode).toHaveBeenCalledWith(true)
     expect(didApply).toBe(true)
   })
 
   it('shows the menu bar by creating a tray when none exists', async () => {
     // Arrange
-    const manager = createManager()
+    const { manager, setTrayFallbackMode } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
     const createSpy = vi
       .spyOn(manager, 'createTray')
@@ -84,14 +100,16 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     // Act
     const didApply = await manager.setMenuBarVisible(true)
 
-    // Assert
+    // Assert: a tray is created and fallback mode is cleared so window-close
+    // hides to the tray again instead of minimizing.
     expect(createSpy).toHaveBeenCalledTimes(1)
+    expect(setTrayFallbackMode).toHaveBeenCalledWith(false)
     expect(didApply).toBe(true)
   })
 
   it('never leaks a second tray icon when shown while already visible', async () => {
     // Arrange: a tray is already on screen (createTray previously set it).
-    const manager = createManager()
+    const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
     const createSpy = vi
       .spyOn(manager, 'createTray')
@@ -108,7 +126,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
 
   it('treats showing on a platform without tray support as a successful no-op', async () => {
     // Arrange
-    const manager = createManager()
+    const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(false)
     const createSpy = vi.spyOn(manager, 'createTray')
 
@@ -123,7 +141,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
 
   it('reports failure when the tray cannot be created', async () => {
     // Arrange: createTray fails (e.g. icon load failure) and returns null.
-    const manager = createManager()
+    const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
     vi.spyOn(manager, 'createTray').mockResolvedValue(null)
 

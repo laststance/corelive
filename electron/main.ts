@@ -2156,7 +2156,11 @@ if (!gotTheLock) {
         const allWindows = BrowserWindow.getAllWindows()
         // No windows exist at all: recreate from scratch (macOS convention).
         if (allWindows.length === 0) {
-          createWindow()
+          // createWindow is async; floating the promise unhandled would swallow
+          // a boot failure here silently, so log any rejection instead.
+          void createWindow().catch((error: unknown) => {
+            log.error('Failed to recreate window on activate:', error)
+          })
           return
         }
         // Windows exist but no *real* one is visible — e.g. a panel-only startup

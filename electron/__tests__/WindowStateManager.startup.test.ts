@@ -73,6 +73,23 @@ function createConfigManager(showFloating: boolean): ConfigManager {
   return configManager as unknown as ConfigManager
 }
 
+/**
+ * Persists a raw window-state.json into the active temp userData dir so the next
+ * `new WindowStateManager()` loads and validates it (instead of falling back to
+ * defaults), exercising the persisted-state path through validateWindowState.
+ *
+ * @param rawStates - Partial window-state object to persist verbatim.
+ * @example
+ * writeWindowStateFile({ floating: { isVisible: true, width: 480, height: 720 } })
+ */
+function writeWindowStateFile(rawStates: Record<string, unknown>): void {
+  fs.writeFileSync(
+    path.join(userDataDir.current, 'window-state.json'),
+    JSON.stringify(rawStates),
+    'utf8',
+  )
+}
+
 describe('WindowStateManager floating startup visibility', () => {
   beforeEach(() => {
     // Arrange: isolate every test in its own empty temp userData directory.
@@ -106,5 +123,52 @@ describe('WindowStateManager floating startup visibility', () => {
 
     // Assert
     expect(states.floating.isVisible).toBe(false)
+  })
+})
+
+describe('WindowStateManager persisted floating visibility', () => {
+  beforeEach(() => {
+    // Arrange: isolate every test in its own empty temp userData directory.
+    userDataDir.current = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'corelive-window-state-'),
+    )
+  })
+
+  afterEach(() => {
+    fs.rmSync(userDataDir.current, { recursive: true, force: true })
+    vi.clearAllMocks()
+  })
+
+  it('ignores a persisted floating isVisible:true when startup.showFloating is off', () => {
+    // Arrange: a stale window-state.json says floating was visible, but the user
+    // has since turned startup.showFloating off — the settings choice must win.
+    writeWindowStateFile({
+      floating: { isVisible: true, width: 480, height: 720 },
+    })
+    const manager = new WindowStateManager(createConfigManager(false))
+
+    // Act
+    const floating = manager.getWindowState('floating')
+
+    // Assert: visibility is pinned to the single source of truth (off), so a
+    // stale persisted flag never reopens the floating window against the choice.
+    expect(floating?.isVisible).toBe(false)
+  })
+
+  it('still applies persisted floating width and height while pinning visibility', () => {
+    // Arrange: the same stale-visible state, carrying custom geometry.
+    writeWindowStateFile({
+      floating: { isVisible: true, width: 480, height: 720 },
+    })
+    const manager = new WindowStateManager(createConfigManager(false))
+
+    // Act
+    const floating = manager.getWindowState('floating')
+
+    // Assert: only isVisible is overridden — persisted size still flows through
+    // validateWindowState, proving the pin is narrow, not a blanket reset.
+    expect(floating?.width).toBe(480)
+    expect(floating?.height).toBe(720)
+    expect(floating?.isVisible).toBe(false)
   })
 })

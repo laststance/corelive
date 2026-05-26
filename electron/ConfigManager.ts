@@ -591,9 +591,13 @@ export class ConfigManager {
       return
     }
 
-    startup.showMain = Boolean(startup.showMain)
-    startup.showBraindump = Boolean(startup.showBraindump)
-    startup.showFloating = Boolean(startup.showFloating)
+    // Coerce to strict booleans. A hand-edited config.json can carry a string
+    // like "false", and `Boolean("false") === true` would wrongly arm a window.
+    // `=== true` accepts only a real boolean true; any other value (string,
+    // number, undefined) becomes false and is caught by the >=1 invariant below.
+    startup.showMain = startup.showMain === true
+    startup.showBraindump = startup.showBraindump === true
+    startup.showFloating = startup.showFloating === true
 
     if (!startup.showMain && !startup.showBraindump && !startup.showFloating) {
       startup.showMain = true
