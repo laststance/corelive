@@ -1815,6 +1815,18 @@ function setupIPCHandlers(): void {
     }
   })
 
+  // Read side of the startup-window pair — lets the settings UI show the saved
+  // choice without consuming the untyped `config.getSection` surface. Falls back
+  // to the showMain-only default (which satisfies the >=1-true invariant) when
+  // ConfigManager is somehow unavailable, so the UI never renders an all-off state.
+  typedHandle('settings:getStartupConfig', () => {
+    if (!configManager) {
+      log.error('settings:getStartupConfig - ConfigManager not initialized')
+      return { showMain: true, showBraindump: false, showFloating: false }
+    }
+    return configManager.getSection('behavior').startup
+  })
+
   // OAuth IPC handlers for browser-based OAuth flows
   // OAuth IPC handlers (Zod-validated)
   // Used when WebView OAuth is blocked (e.g., Google OAuth)

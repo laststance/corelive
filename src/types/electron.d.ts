@@ -274,6 +274,11 @@ interface ElectronAPI {
      * process; resolves true even when an all-false request is repaired.
      */
     setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
+    /**
+     * Read the persisted startup-window config so the settings UI can show the
+     * saved choice. Returns the showMain-only default on failure, never all-off.
+     */
+    getStartupConfig: () => Promise<StartupWindowConfig>
   }
 
   /**

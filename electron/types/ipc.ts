@@ -746,6 +746,16 @@ export interface IPCChannels {
     request: StartupWindowConfig
     response: boolean
   }
+  /**
+   * Read the persisted startup-window config so the settings UI can show the
+   * saved choice. Mirrors the read+write pairs every other settings domain
+   * exposes, so the renderer never has to consume the untyped `config.getSection`
+   * surface. The returned config always satisfies the >=1-true invariant.
+   */
+  'settings:getStartupConfig': {
+    request: void
+    response: StartupWindowConfig
+  }
 }
 
 // ============================================================================

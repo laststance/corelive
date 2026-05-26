@@ -112,6 +112,18 @@ describe('IPC contract', () => {
       expect(() => setStartupConfig.parse([])).toThrow(ZodError)
     })
 
+    it('takes no arguments for settings:getStartupConfig', () => {
+      // Arrange
+      const getStartupConfig = IPC_ARG_SCHEMAS['settings:getStartupConfig']
+
+      // Act + Assert: the read side is a pure getter — an empty tuple passes.
+      expect(() => getStartupConfig.parse([])).not.toThrow()
+      // Any argument is rejected (the getter reads, it does not accept input).
+      expect(() => getStartupConfig.parse([{ showMain: true }])).toThrow(
+        ZodError,
+      )
+    })
+
     it('requires boolean for floating panel desktop tracking', () => {
       const setVisibleOnAllWorkspaces =
         IPC_ARG_SCHEMAS['floating-window-set-visible-on-all-workspaces']

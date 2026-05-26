@@ -1605,6 +1605,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return false
       }
     },
+
+    /**
+     * Read the persisted startup-window config so the settings UI can show the
+     * saved choice. On IPC failure it returns the showMain-only default (which
+     * satisfies the >=1-true invariant), so the UI never renders an all-off state.
+     * @returns The saved startup-window config, or the showMain-only default on failure.
+     * @example
+     * const startup = await window.electronAPI.settings.getStartupConfig() // => { showMain: true, ... }
+     */
+    getStartupConfig: async (): Promise<StartupWindowConfig> => {
+      try {
+        return await typedInvoke('settings:getStartupConfig')
+      } catch (error) {
+        log.error('Failed to read startup window config:', error)
+        return { showMain: true, showBraindump: false, showFloating: false }
+      }
+    },
   },
 
   /**

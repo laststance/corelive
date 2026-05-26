@@ -463,6 +463,12 @@ export interface ElectronAPI {
      * @returns Promise resolving to success status
      */
     setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
+    /**
+     * Read the persisted startup-window config so the settings UI can show the
+     * saved choice without consuming the untyped `config.getSection` surface.
+     * @returns Promise resolving to the saved config (showMain-only default on failure).
+     */
+    getStartupConfig: () => Promise<StartupWindowConfig>
   }
 
   /**
