@@ -209,6 +209,15 @@ let ipcErrorHandler: IPCErrorHandler
 // Note: apiBridge and nextServerManager are no longer needed in WebView architecture
 
 /**
+ * Guards setupIPCHandlers against a second run. IPC handlers bind the
+ * module-level `windowManager`, so they are process-global and only need
+ * registering once; `ipcMain.handle` throws on duplicate channels, and the
+ * macOS `activate` path can call createWindow (→ setupIPCHandlers) again after
+ * every window is closed. The flag turns that re-entry into a no-op.
+ */
+let ipcHandlersInitialized = false
+
+/**
  * Lazy-loaded managers - initialized only when needed.
  * This improves startup time by deferring non-critical features.
  *
@@ -1057,6 +1066,14 @@ function redactBrainDumpNotes(
 }
 
 function setupIPCHandlers(): void {
+  // Register IPC channels exactly once per process. A macOS re-launch via the
+  // `activate` handler can call createWindow again, which would re-enter here
+  // and make `ipcMain.handle` throw on the already-registered channels.
+  if (ipcHandlersInitialized) {
+    return
+  }
+  ipcHandlersInitialized = true
+
   /**
    * Basic app control handlers.
    * These provide controlled access to app-level functions.
