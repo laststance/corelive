@@ -20,8 +20,16 @@ import { fileURLToPath } from 'url'
 import { BrowserWindow, screen } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
-import { AUTH_PATHNAMES, ERR_ABORTED } from './constants'
+import {
+  AUTH_PATHNAMES,
+  ERR_ABORTED,
+  STARTUP_PILL_GAP_MS,
+  STARTUP_PILL_HEIGHT_PX,
+  STARTUP_PILL_TIMEOUT_MS,
+  STARTUP_PILL_WIDTH_PX,
+} from './constants'
 import { log } from './logger'
+import { buildStartupPillHtml } from './startup-pill-html'
 import type {
   WindowStateManager,
   WindowOptions,
@@ -107,6 +115,18 @@ export class WindowManager {
   private startupAuthFallbacks: Set<StartupPanelKind>
 
   /**
+   * The cold-boot reassurance pill shown during a panel-only launch. Null until
+   * armed and after dismissal. See `armStartupPill` / `dismissStartupPill`.
+   */
+  private startupPill: BrowserWindow | null
+
+  /** Timer that reveals the pill once the no-window grace period elapses. */
+  private startupPillGapTimer: ReturnType<typeof setTimeout> | null
+
+  /** Timer that force-dismisses the pill + surfaces main on a wedged boot. */
+  private startupPillTimeoutTimer: ReturnType<typeof setTimeout> | null
+
+  /**
    * Creates a new WindowManager instance.
    *
    * @param serverUrl - URL of the Next.js server (null uses default)
@@ -129,6 +149,9 @@ export class WindowManager {
     this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
     this.startupAuthFallbacks = new Set()
+    this.startupPill = null
+    this.startupPillGapTimer = null
+    this.startupPillTimeoutTimer = null
   }
 
   /**
@@ -807,6 +830,9 @@ export class WindowManager {
    * Restore main window from tray.
    */
   restoreFromTray(): void {
+    // Any path that surfaces the main window retires the cold-boot pill: the
+    // user can now see a real window, so the "Opening…" reassurance is done.
+    this.dismissStartupPill()
     if (this.mainWindow) {
       if (this.mainWindow.isMinimized()) {
         this.mainWindow.restore()
@@ -978,14 +1004,18 @@ export class WindowManager {
       removeListeners.forEach((remove) => remove())
 
       if (authenticated) {
-        // Authed: reveal the panel the user asked to start with.
+        // Authed: reveal the panel the user asked to start with. A visible panel
+        // makes the cold-boot pill obsolete (this is the one show-path that does
+        // not go through `restoreFromTray`, so dismiss explicitly).
         panel.show()
+        this.dismissStartupPill()
         return
       }
 
       // Signed out or load failed: keep the panel hidden, surface the main
       // window so the user can sign in / see the error, record the fallback,
       // and arm a one-shot re-show for when sign-in completes.
+      // `restoreFromTray` also dismisses the cold-boot pill.
       this.startupAuthFallbacks.add(kind)
       this.restoreFromTray()
       this.armPostLoginReshow(panel, kind)
@@ -1048,6 +1078,114 @@ export class WindowManager {
     }
 
     mainWindow.webContents.on('did-navigate', onMainNavigate)
+  }
+
+  /**
+   * Arm the cold-boot startup pill for a panel-only launch: a tiny frameless,
+   * click-through, always-on-top "Opening CoreLive…" window, revealed only if no
+   * real window paints within the grace period and force-cleared (surfacing
+   * main) if the boot is still wedged at the hard timeout. Called once from
+   * `main.ts` during criticalInit when `behavior.startup.showMain` is false (and
+   * not under test/E2E).
+   *
+   * @example
+   * if (!startup.showMain && !isTestEnvironment) windowManager.armStartupPill()
+   */
+  armStartupPill(): void {
+    // Deviation (DD3): the spec framed the pill as "armed every boot, shown only
+    // if no window painted within the grace period". We arm it ONLY on a
+    // panel-only boot — on a show-main boot the main window hits `ready-to-show`
+    // well inside the grace period, so the gap timer would never reveal a pill
+    // there anyway. Same observable behavior, less machinery.
+
+    // Idempotent: never stack two pills if armed more than once.
+    if (this.startupPill) return
+
+    const { workArea } = screen.getPrimaryDisplay()
+    const pill = new BrowserWindow({
+      width: STARTUP_PILL_WIDTH_PX,
+      height: STARTUP_PILL_HEIGHT_PX,
+      x: Math.round(workArea.x + (workArea.width - STARTUP_PILL_WIDTH_PX) / 2),
+      y: Math.round(
+        workArea.y + (workArea.height - STARTUP_PILL_HEIGHT_PX) / 2,
+      ),
+      show: false,
+      frame: false,
+      transparent: true,
+      hasShadow: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      focusable: false,
+      alwaysOnTop: true,
+      acceptFirstMouse: false,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        devTools: false,
+      },
+    })
+    this.startupPill = pill
+
+    // Fully passive: never intercept clicks/drags meant for the desktop.
+    pill.setIgnoreMouseEvents(true)
+
+    // Paint from memory via a data URL — see startup-pill-html for why the
+    // markup is inlined rather than loaded from a packaged .html file.
+    const html = buildStartupPillHtml()
+    pill.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+
+    // Grace period: only reveal the pill if no real window has appeared yet, so
+    // a fast boot never flashes it. `showInactive` keeps focus off the pill.
+    this.startupPillGapTimer = setTimeout(() => {
+      this.startupPillGapTimer = null
+      if (this.startupPill && !this.startupPill.isDestroyed()) {
+        this.startupPill.showInactive()
+      }
+    }, STARTUP_PILL_GAP_MS)
+
+    // Hard timeout: a boot still showing the pill this late is wedged (offline /
+    // timeout / 5xx). Surface the main window as a backstop so the user is never
+    // stranded on an empty desktop; `restoreFromTray` also dismisses the pill.
+    //
+    // Race note: if a panel's auth load resolves AFTER this fires (sign-in
+    // completes 9s into a slow boot), `finish(true)` still shows that panel, so
+    // the user ends up with BOTH main and the panel. That is correct — they
+    // asked for the panel and main is a harmless backstop. Do NOT add logic to
+    // suppress the panel after the timeout.
+    this.startupPillTimeoutTimer = setTimeout(() => {
+      this.startupPillTimeoutTimer = null
+      this.restoreFromTray()
+    }, STARTUP_PILL_TIMEOUT_MS)
+  }
+
+  /**
+   * Tear down the startup pill and its timers. Idempotent, so it is safe to call
+   * from every racing site that makes a real window visible (`restoreFromTray`,
+   * a panel showing after auth) plus the hard timeout — whichever happens first
+   * wins and the rest are no-ops.
+   *
+   * @example
+   * this.dismissStartupPill() // safe to call repeatedly; clears everything once
+   */
+  dismissStartupPill(): void {
+    if (this.startupPillGapTimer) {
+      clearTimeout(this.startupPillGapTimer)
+      this.startupPillGapTimer = null
+    }
+    if (this.startupPillTimeoutTimer) {
+      clearTimeout(this.startupPillTimeoutTimer)
+      this.startupPillTimeoutTimer = null
+    }
+    if (!this.startupPill) return
+    if (!this.startupPill.isDestroyed()) {
+      this.startupPill.destroy()
+    }
+    this.startupPill = null
   }
 
   /**

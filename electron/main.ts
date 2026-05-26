@@ -897,6 +897,15 @@ async function createWindow(): Promise<BrowserWindow> {
       windowManager.openStartupPanel('braindump')
     }
 
+    // Panel-only launches (showMain === false) can leave NOTHING on screen for a
+    // moment while each panel resolves its auth-gated load. Arm a tiny floating
+    // "Opening CoreLive…" pill so the boot reads as "waking up", never "is it
+    // broken?". Gated off under test/E2E (NODE_ENV === 'test') so the extra
+    // window never perturbs window-count assertions.
+    if (!startupConfig.showMain && !isTestEnvironment) {
+      windowManager.armStartupPill()
+    }
+
     performanceOptimizer.startupMetrics.windowsCreated++
 
     return { mainWindow, serverUrl }
