@@ -87,6 +87,22 @@ export interface StartupWindowConfig {
 }
 
 /**
+ * Boot-safe startup default — only the main window opens. The single source of
+ * truth shared by ConfigManager (factory default), both preload bridges, and
+ * the settings UI so the "what opens at launch" default can never drift between
+ * surfaces. Always satisfies the ≥1-true invariant. Spread it (`{ ...DEFAULT }`)
+ * at call sites that need a mutable copy.
+ *
+ * @example
+ * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showMain: true, showBraindump: false, showFloating: false }
+ */
+export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
+  showMain: true,
+  showBraindump: false,
+  showFloating: false,
+}
+
+/**
  * Live visibility of the auxiliary (non-main) windows, read on demand from the
  * main process. Lets the settings UI reflect what is *actually* on screen now
  * (e.g. to label a "Try it now" action) rather than the persisted startup

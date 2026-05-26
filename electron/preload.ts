@@ -42,6 +42,7 @@ import type {
   WindowBounds,
   WindowState,
 } from './types/ipc'
+import { DEFAULT_STARTUP_WINDOW_CONFIG } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -1619,7 +1620,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('settings:getStartupConfig')
       } catch (error) {
         log.error('Failed to read startup window config:', error)
-        return { showMain: true, showBraindump: false, showFloating: false }
+        return { ...DEFAULT_STARTUP_WINDOW_CONFIG }
       }
     },
   },

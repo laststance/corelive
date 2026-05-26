@@ -335,4 +335,54 @@ describe('WindowManager startup panel nav-watch', () => {
     )
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
   })
+
+  it('locks in the first navigation decision and ignores a later load failure', () => {
+    // Arrange: a panel-only cold boot.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: the panel lands on its real route (authed → shown), then a late
+    // did-fail-load arrives for the same panel load.
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/floating-navigator`,
+    )
+    panelWindow.fireWebContents(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      `${SERVER_URL}/floating-navigator`,
+      true,
+    )
+
+    // Assert: the first decision stands — panel shown once, main never
+    // surfaced, no fallback recorded by the stale second event.
+    expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(mainWindow.win.show).not.toHaveBeenCalled()
+    expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
+  })
+
+  it('does not reload a startup panel that was closed before sign-in completes', () => {
+    // Arrange: panel redirected to /login, so main was surfaced + re-show armed.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
+
+    // The user closes the suppressed panel before signing in.
+    panelWindow.win.isDestroyed.mockReturnValue(true)
+
+    // Act: the user signs in — main navigates to an authenticated route.
+    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
+
+    // Assert: the re-show bails on the destroyed panel instead of reloading it.
+    expect(panelWindow.win.webContents.loadURL).not.toHaveBeenCalled()
+  })
 })

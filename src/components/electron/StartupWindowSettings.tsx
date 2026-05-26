@@ -24,7 +24,10 @@ import {
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import type { StartupWindowConfig } from '@/electron/types/ipc'
+import {
+  DEFAULT_STARTUP_WINDOW_CONFIG,
+  type StartupWindowConfig,
+} from '@/electron/types/ipc'
 import { useMounted } from '@/hooks/use-mounted'
 import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { log } from '@/lib/logger'
@@ -60,13 +63,6 @@ const STARTUP_WINDOW_OPTIONS: ReadonlyArray<{
   },
 ]
 
-/** The boot-safe default mirrored from ConfigManager — shown until the real config loads. */
-const DEFAULT_STARTUP_CONFIG: StartupWindowConfig = {
-  showMain: true,
-  showBraindump: false,
-  showFloating: false,
-}
-
 /**
  * Settings card for choosing which window(s) open when CoreLive launches.
  *
@@ -87,9 +83,9 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
   const hasMounted = useMounted()
   const [isReady, setIsReady] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [startup, setStartup] = useState<StartupWindowConfig>(
-    DEFAULT_STARTUP_CONFIG,
-  )
+  const [startup, setStartup] = useState<StartupWindowConfig>({
+    ...DEFAULT_STARTUP_WINDOW_CONFIG,
+  })
   const [error, setError] = useState<string | null>(null)
 
   // Fetch the saved config once after mount; the fallback branch below handles
