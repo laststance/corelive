@@ -758,9 +758,9 @@ export class WindowStateManager {
         browserWindow.setAlwaysOnTop(state.isAlwaysOnTop)
       }
 
-      if (state.isVisible && windowType === 'floating') {
-        browserWindow.show()
-      }
+      // Visibility is owned by WindowManager's explicit show paths. Restoring
+      // it here would let stale window-state.json bypass startup config and the
+      // signed-out auth gate for auxiliary panels.
 
       return true
     } catch (error) {

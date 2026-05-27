@@ -15,6 +15,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
+import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock can resolve a fresh temp
@@ -88,6 +89,30 @@ function writeWindowStateFile(rawStates: Record<string, unknown>): void {
     JSON.stringify(rawStates),
     'utf8',
   )
+}
+
+/**
+ * Builds the BrowserWindow surface `applyWindowState` needs without creating
+ * a real Electron window.
+ *
+ * @returns BrowserWindow-shaped mock with spies for state application.
+ * @example
+ * const window = createBrowserWindowMock()
+ */
+function createBrowserWindowMock(): BrowserWindow & {
+  show: ReturnType<typeof vi.fn>
+  setAlwaysOnTop: ReturnType<typeof vi.fn>
+} {
+  return {
+    isDestroyed: vi.fn(() => false),
+    maximize: vi.fn(),
+    setFullScreen: vi.fn(),
+    setAlwaysOnTop: vi.fn(),
+    show: vi.fn(),
+  } as unknown as BrowserWindow & {
+    show: ReturnType<typeof vi.fn>
+    setAlwaysOnTop: ReturnType<typeof vi.fn>
+  }
 }
 
 describe('WindowStateManager floating startup visibility', () => {
@@ -170,5 +195,28 @@ describe('WindowStateManager persisted floating visibility', () => {
     expect(floating?.width).toBe(480)
     expect(floating?.height).toBe(720)
     expect(floating?.isVisible).toBe(false)
+  })
+
+  it('does not show the floating window while applying persisted state', () => {
+    // Arrange: startup wants the panel, but auth gating must still decide when
+    // it becomes visible; state application may only restore non-visibility bits.
+    writeWindowStateFile({
+      floating: {
+        isVisible: true,
+        isAlwaysOnTop: false,
+        width: 480,
+        height: 720,
+      },
+    })
+    const manager = new WindowStateManager(createConfigManager(true))
+    const browserWindow = createBrowserWindowMock()
+
+    // Act
+    const applied = manager.applyWindowState('floating', browserWindow)
+
+    // Assert
+    expect(applied).toBe(true)
+    expect(browserWindow.setAlwaysOnTop).toHaveBeenCalledWith(false)
+    expect(browserWindow.show).not.toHaveBeenCalled()
   })
 })
