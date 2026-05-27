@@ -202,6 +202,7 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
     },
     [],
   )
+  const opacityValue = useMemo(() => [opacity], [opacity])
 
   // Defer the non-Electron fallback until after hydration so server and
   // first client render produce the same markup. Until `hasMounted` is
@@ -237,7 +238,6 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
   }
 
   const opacityPercent = Math.round(opacity * 100)
-  const opacityValue = useMemo(() => [opacity], [opacity])
 
   return (
     <Card className={className}>
