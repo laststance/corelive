@@ -58,6 +58,7 @@ const createdWindows: CapturedMockWindow[] = []
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(function () {
     const webHandlers: Record<string, Array<(...args: unknown[]) => void>> = {}
+    let currentUrl = ''
     const win: MockBrowserWindow = {
       show: vi.fn(),
       hide: vi.fn(),
@@ -70,7 +71,9 @@ vi.mock('electron', () => ({
       setOpacity: vi.fn(),
       getOpacity: vi.fn(() => 1),
       setVisibleOnAllWorkspaces: vi.fn(),
-      loadURL: vi.fn(),
+      loadURL: vi.fn((url: string) => {
+        currentUrl = url
+      }),
       on: vi.fn(),
       once: vi.fn(),
       webContents: {
@@ -89,16 +92,22 @@ vi.mock('electron', () => ({
             }
           },
         ),
-        loadURL: vi.fn(),
+        loadURL: vi.fn((url: string) => {
+          currentUrl = url
+        }),
         reload: vi.fn(),
         send: vi.fn(),
         openDevTools: vi.fn(),
-        getURL: vi.fn(() => ''),
+        getURL: vi.fn(() => currentUrl),
       },
     }
     createdWindows.push({
       win,
       fireWebContents: (event: string, ...args: unknown[]) => {
+        const navigatedUrl = args[1]
+        if (event === 'did-navigate' && typeof navigatedUrl === 'string') {
+          currentUrl = navigatedUrl
+        }
         ;(webHandlers[event] ?? []).forEach((handler) => handler(...args))
       },
     })
@@ -167,6 +176,33 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
   })
 
+  it('waits for the panel load to settle so auth redirects can win', () => {
+    // Arrange: panel-only cold boot starts at the requested panel route.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createMainWindow(false)
+    windowManager.openStartupPanel('floating')
+    const mainWindow = getWindow(0)
+    const panelWindow = getWindow(1)
+
+    // Act: Chromium first reports the requested URL, then proxy.ts redirects
+    // to /login before the load settles.
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/floating-navigator`,
+    )
+    panelWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/login?redirect_url=/floating-navigator`,
+    )
+
+    // Assert: the panel was never revealed from the transient panel URL.
+    expect(panelWindow.win.show).not.toHaveBeenCalled()
+    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
+  })
+
   it('treats a /sign-up landing as unauthenticated and surfaces the main window', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
@@ -198,6 +234,7 @@ describe('WindowManager startup panel nav-watch', () => {
       {},
       `${SERVER_URL}/floating-navigator`,
     )
+    panelWindow.fireWebContents('did-finish-load')
 
     // Assert: panel revealed, main untouched, no fallback recorded.
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
@@ -294,6 +331,7 @@ describe('WindowManager startup panel nav-watch', () => {
       {},
       `${SERVER_URL}/floating-navigator`,
     )
+    panelWindow.fireWebContents('did-finish-load')
 
     // Assert: the panel was reloaded to its route and then revealed.
     expect(panelWindow.win.webContents.loadURL).toHaveBeenCalledWith(
@@ -328,6 +366,7 @@ describe('WindowManager startup panel nav-watch', () => {
     windowManager.openStartupPanel('braindump')
     const panelWindow = getWindow(1)
     panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/braindump`)
+    panelWindow.fireWebContents('did-finish-load')
 
     // Assert: brain dump loaded its route and was revealed once authenticated.
     expect(panelWindow.win.loadURL).toHaveBeenCalledWith(
@@ -351,6 +390,7 @@ describe('WindowManager startup panel nav-watch', () => {
       {},
       `${SERVER_URL}/floating-navigator`,
     )
+    panelWindow.fireWebContents('did-finish-load')
     panelWindow.fireWebContents(
       'did-fail-load',
       {},

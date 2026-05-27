@@ -977,8 +977,8 @@ export class WindowManager {
   }
 
   /**
-   * Decide a startup panel's fate from its first navigation: show it if the
-   * load lands on the panel route, or suppress it + surface main if the load
+   * Decide a startup panel's fate from its settled load: show it if the load
+   * lands on the panel route, or suppress it + surface main if the load
    * redirects to an auth page or fails (offline/timeout/5xx).
    *
    * Ordering note: `createFloatingNavigator`/`createBrainDumpWindow` call
@@ -1000,6 +1000,7 @@ export class WindowManager {
     // Guard so the show-or-suppress decision is made exactly once per load,
     // even though `did-navigate` and `did-fail-load` can both fire.
     let decided = false
+    let latestMainFrameUrl: string | null = null
 
     const finish = (authenticated: boolean): void => {
       if (decided) return
@@ -1025,7 +1026,19 @@ export class WindowManager {
     }
 
     const onDidNavigate = (_event: Electron.Event, url: string): void => {
-      finish(!this.isAuthPathname(url))
+      latestMainFrameUrl = url
+      // Auth redirects are terminal for this startup attempt: keep the panel
+      // hidden and surface main immediately so a login page never flashes in
+      // the auxiliary panel.
+      if (this.isAuthPathname(url)) finish(false)
+    }
+
+    const onDidFinishLoad = (): void => {
+      // Non-auth panel routes are only trusted after load settles; during an
+      // unauthenticated cold boot Chromium can report the requested panel URL
+      // before the redirect lands on /login.
+      const currentUrl = webContents.getURL() || latestMainFrameUrl
+      finish(currentUrl === null ? false : !this.isAuthPathname(currentUrl))
     }
 
     const onDidFailLoad = (
@@ -1042,9 +1055,11 @@ export class WindowManager {
     }
 
     webContents.on('did-navigate', onDidNavigate)
+    webContents.on('did-finish-load', onDidFinishLoad)
     webContents.on('did-fail-load', onDidFailLoad)
     removeListeners.push(
       () => webContents.removeListener('did-navigate', onDidNavigate),
+      () => webContents.removeListener('did-finish-load', onDidFinishLoad),
       () => webContents.removeListener('did-fail-load', onDidFailLoad),
     )
   }
