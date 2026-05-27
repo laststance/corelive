@@ -53,3 +53,18 @@ test('preload IPC round-trip reaches the main process', async () => {
   expect(typeof version).toBe('string')
   expect(version.length).toBeGreaterThan(0)
 })
+
+test('settings login item getter reaches the main process', async () => {
+  const loginItemSettings = await mainWindow.evaluate(async () => {
+    const getLoginItemSettings =
+      window.electronAPI?.settings?.getLoginItemSettings
+    if (!getLoginItemSettings) {
+      throw new Error(
+        'window.electronAPI.settings.getLoginItemSettings is not exposed',
+      )
+    }
+    return getLoginItemSettings()
+  })
+
+  expect(typeof loginItemSettings.openAtLogin).toBe('boolean')
+})
