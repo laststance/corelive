@@ -13,6 +13,7 @@ import { setupElectronTest } from './_helpers/launch'
 
 /** Tolerance (px) for window bounds/size round-trips under xvfb DPI scaling. */
 const DPI_TOLERANCE_PX = 1
+const MAIN_WINDOW_URL_PATTERN = /\/(home|login|sign-in)(?:\?|$|\/)/
 
 let electronApp: ElectronApplication
 
@@ -33,7 +34,11 @@ test.afterAll(async () => {
 
 test('main window has non-zero bounds after creation', async () => {
   const bounds = await electronApp.evaluate(({ BrowserWindow }) => {
-    const window = BrowserWindow.getAllWindows()[0]
+    const window = BrowserWindow.getAllWindows().find((candidate) => {
+      return /\/(home|login|sign-in)(?:\?|$|\/)/.test(
+        candidate.webContents.getURL(),
+      )
+    })
     return window?.getBounds() ?? null
   })
 
@@ -46,15 +51,18 @@ test('setBounds round-trips with DPI tolerance', async () => {
   const targetBounds = { x: 50, y: 50, width: 1024, height: 768 }
 
   const actualBounds = await electronApp.evaluate(
-    ({ BrowserWindow }, target) => {
-      const window = BrowserWindow.getAllWindows()[0]
+    ({ BrowserWindow }, { patternSource, target }) => {
+      const mainWindowPattern = new RegExp(patternSource)
+      const window = BrowserWindow.getAllWindows().find((candidate) => {
+        return mainWindowPattern.test(candidate.webContents.getURL())
+      })
       if (!window) {
         throw new Error('No BrowserWindow available')
       }
       window.setBounds(target)
       return window.getBounds()
     },
-    targetBounds,
+    { patternSource: MAIN_WINDOW_URL_PATTERN.source, target: targetBounds },
   )
 
   // ±1px tolerance: xvfb at non-1.0 DPI scales rounds the size — see
@@ -80,7 +88,11 @@ test('setSize is idempotent', async () => {
   // Read via `getBounds()` (Rectangle object) instead of `getSize()`
   // (number[] tuple) so strict-index typing doesn't surface noise here.
   const sizes = await electronApp.evaluate(({ BrowserWindow }, target) => {
-    const window = BrowserWindow.getAllWindows()[0]
+    const window = BrowserWindow.getAllWindows().find((candidate) => {
+      return /\/(home|login|sign-in)(?:\?|$|\/)/.test(
+        candidate.webContents.getURL(),
+      )
+    })
     if (!window) {
       throw new Error('No BrowserWindow available')
     }
