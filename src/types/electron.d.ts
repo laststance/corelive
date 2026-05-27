@@ -6,6 +6,7 @@
 // not affect the `declare global` Window augmentation below.
 import type {
   AuxWindowVisibility,
+  IPCResponse,
   StartupWindowConfig,
 } from '@/electron/types/ipc'
 
@@ -252,6 +253,10 @@ interface ElectronAPI {
     setShowInMenuBar: (show: boolean) => Promise<boolean>
     /** Set whether the app should start at system login */
     setStartAtLogin: (enable: boolean) => Promise<boolean>
+    /** Read the current OS login-item settings */
+    getLoginItemSettings: () => Promise<
+      IPCResponse<'settings:getLoginItemSettings'>
+    >
     /**
      * Persist which window(s) open at Electron launch (main / brain dump /
      * floating navigator). The >=1-true invariant is enforced in the main

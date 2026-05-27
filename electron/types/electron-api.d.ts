@@ -25,6 +25,7 @@ import type {
   ConfigSection,
   DeepLinkExamples,
   UpdaterStatus,
+  IPCResponse,
   IPCEventChannel,
   IPCEventData,
 } from './ipc'
@@ -455,6 +456,13 @@ export interface ElectronAPI {
      * @returns Promise resolving to success status
      */
     setStartAtLogin: (enable: boolean) => Promise<boolean>
+    /**
+     * Read the current OS login-item settings.
+     * @returns Promise resolving to the login-item state
+     */
+    getLoginItemSettings: () => Promise<
+      IPCResponse<'settings:getLoginItemSettings'>
+    >
     /**
      * Persist which window(s) open at Electron launch. The >=1-true invariant is
      * enforced in the main process, so an all-false request is repaired before

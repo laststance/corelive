@@ -34,6 +34,7 @@ import type {
   ConfigSection,
   DeepLinkExamples,
   IPCEventChannel,
+  IPCResponse,
   NotificationOptions,
   NotificationPreferences,
   ShortcutDefinition,
@@ -1585,6 +1586,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         log.error('Failed to set start at login:', error)
         return false
+      }
+    },
+
+    /**
+     * Read the OS login-item state from the main process.
+     *
+     * @returns The current login-item settings, or openAtLogin=false on failure.
+     * @example
+     * const { openAtLogin } = await window.electronAPI.settings.getLoginItemSettings()
+     */
+    getLoginItemSettings: async (): Promise<
+      IPCResponse<'settings:getLoginItemSettings'>
+    > => {
+      try {
+        return await typedInvoke('settings:getLoginItemSettings')
+      } catch (error) {
+        log.error('Failed to read login item settings:', error)
+        return { openAtLogin: false }
       }
     },
 
