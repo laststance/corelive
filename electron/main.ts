@@ -2331,9 +2331,12 @@ app.on('web-contents-created', (_event, contents: WebContents) => {
    * If legitimate popups are needed, implement them
    * through controlled IPC calls instead.
    */
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
   contents.on('did-create-window', () => {
-    // Note: 'new-window' is deprecated, using 'did-create-window'
-    // Popups are blocked by the webPreferences.disablePopups option
+    // Defense-in-depth telemetry if a future Electron path creates a popup
+    // despite the window-open handler above.
+    log.warn('Blocked unexpected renderer-created window')
   })
 
   /**
