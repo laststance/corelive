@@ -46,3 +46,32 @@ test('app reports the expected name from the main process', async () => {
   expect(appName).toBeTruthy()
   expect(typeof appName).toBe('string')
 })
+
+test('renderer window.open requests do not create unmanaged BrowserWindows', async () => {
+  const mainWindow = await electronApp.firstWindow()
+  await mainWindow.waitForLoadState('domcontentloaded')
+  await mainWindow.waitForURL(/(login|home|sign-in)/, {
+    timeout: LOAD_TIMEOUT_MS,
+  })
+
+  const windowCountBefore = await electronApp.evaluate(({ BrowserWindow }) => {
+    return BrowserWindow.getAllWindows().length
+  })
+  const unexpectedWindow = electronApp
+    .waitForEvent('window', { timeout: 1_000 })
+    .then(() => true)
+    .catch(() => false)
+
+  const popupResult = await mainWindow.evaluate(() => {
+    const popup = window.open('https://example.com/qa-popup', '_blank')
+    return popup === null ? 'blocked' : 'opened'
+  })
+
+  expect(popupResult).toBe('blocked')
+  expect(await unexpectedWindow).toBe(false)
+
+  const windowCountAfter = await electronApp.evaluate(({ BrowserWindow }) => {
+    return BrowserWindow.getAllWindows().length
+  })
+  expect(windowCountAfter).toBe(windowCountBefore)
+})
