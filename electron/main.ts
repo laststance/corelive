@@ -150,6 +150,13 @@ const isDev = process.env.NODE_ENV === 'development'
 const isTestEnvironment = process.env.NODE_ENV === 'test'
 
 /**
+ * Test-only userData override for Playwright Electron E2E isolation.
+ */
+if (isTestEnvironment && process.env.ELECTRON_E2E_USER_DATA_DIR) {
+  app.setPath('userData', process.env.ELECTRON_E2E_USER_DATA_DIR)
+}
+
+/**
  * E2E system-integration kill switch.
  *
  * Linux CI runs Electron under `xvfb` (virtual display). Several lazy-loaded
