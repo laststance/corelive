@@ -6,7 +6,9 @@ import {
 } from './procedures/category'
 import {
   createCompleted,
+  createManyCompleted,
   deleteCompleted,
+  deleteManyCompleted,
   getDayDetail,
   getHeatmap,
 } from './procedures/completed'
@@ -50,7 +52,9 @@ export const router = {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     create: createCompleted,
+    createMany: createManyCompleted,
     delete: deleteCompleted,
+    deleteMany: deleteManyCompleted,
   },
   electronSettings: {
     get: getElectronSettings,

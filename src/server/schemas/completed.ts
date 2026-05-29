@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { MAX_IMPORT_LINES_PER_BATCH } from '@/lib/constants/import'
+
 /**
  * Input schema for the completed tasks heatmap endpoint.
  * @example
@@ -28,6 +30,79 @@ export const CreateCompletedSchema = z.object({
  */
 export const DeleteCompletedSchema = z.object({
   id: z.number().int(),
+})
+
+/**
+ * A single item in a paste-import batch destined for the Completed zone.
+ *
+ * `categoryId` is optional: when omitted the server resolves the user's
+ * get-or-create default category. `completedAt` is optional: when omitted the
+ * server stamps `now()` (Slice 1 lands everything on today). Title is validated
+ * 1..255 here, but the server still re-runs `normalizeCompletedTitle` (Zod's
+ * `.min(1)` does not reject a whitespace-only title that normalizes to empty).
+ *
+ * @example
+ * { title: 'shipped the release' }
+ * @example
+ * { title: 'gym', categoryId: 3, completedAt: new Date('2026-05-01T00:00:00Z') }
+ */
+export const CreateManyCompletedItemSchema = z.object({
+  title: z.string().min(1).max(255),
+  categoryId: z.number().int().positive().optional(),
+  completedAt: z.date().optional(),
+})
+
+/**
+ * Input schema for `completed.createMany` (paste-import → Completed zone).
+ * `items` is bounded by `MAX_IMPORT_LINES_PER_BATCH` so the cap is single-sourced
+ * with the PR2 client preview. `importBatchId` is the client-generated, globally
+ * unique idempotency key (one per paste-confirm).
+ *
+ * @example
+ * { items: [{ title: 'a' }, { title: 'b' }], importBatchId: 'b2c1…' }
+ */
+export const CreateManyCompletedSchema = z.object({
+  items: z
+    .array(CreateManyCompletedItemSchema)
+    .min(1)
+    .max(MAX_IMPORT_LINES_PER_BATCH),
+  importBatchId: z.string().min(1),
+})
+
+/**
+ * Output schema for `completed.createMany`. `count` is how many rows the batch
+ * resolved to; `idempotent` is `true` when the batch id already existed (P2002
+ * no-op → re-queried prior count) and `false` on a fresh insert.
+ *
+ * @example
+ * { count: 50, idempotent: false } // fresh import
+ * @example
+ * { count: 50, idempotent: true }  // resubmit of the same importBatchId
+ */
+export const CreateManyCompletedResponseSchema = z.object({
+  count: z.number().int().min(0),
+  idempotent: z.boolean(),
+})
+
+/**
+ * Input schema for `completed.deleteMany` (bulk undo of a paste batch).
+ * @example
+ * { importBatchId: 'b2c1…' }
+ */
+export const DeleteManyCompletedSchema = z.object({
+  importBatchId: z.string().min(1),
+})
+
+/**
+ * Output schema for `completed.deleteMany`. `count` is the number of rows the
+ * window-guarded delete actually removed (0 once the undo window expires).
+ * @example
+ * { count: 50 } // undone within the window
+ * @example
+ * { count: 0 }  // window expired, nothing deleted
+ */
+export const DeleteManyCompletedResponseSchema = z.object({
+  count: z.number().int().min(0),
 })
 
 /**
