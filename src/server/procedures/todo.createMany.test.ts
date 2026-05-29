@@ -181,7 +181,7 @@ describe('todo.createMany', () => {
       authContext(attackerClerkId),
     )
 
-    // Act + Assert
+    // Act + Assert — attacker references the owner's categoryId → NOT_FOUND
     await expect(
       call(
         createManyTodo,
@@ -191,7 +191,7 @@ describe('todo.createMany', () => {
         },
         authContext(attackerClerkId),
       ),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/category not found/i)
   })
 
   it('drops lines that normalize to empty before inserting', async () => {
@@ -223,14 +223,15 @@ describe('todo.createMany', () => {
       title: `task ${index}`,
     }))
 
-    // Act + Assert
+    // Act + Assert — Zod .max(1000) rejects 1001; oRPC surfaces the schema
+    // failure as an "Input validation failed" BAD_REQUEST (not a DB/other error)
     await expect(
       call(
         createManyTodo,
         { items, importBatchId: randomUUID() },
         authContext(clerkId),
       ),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/input validation failed/i)
   })
 })
 
