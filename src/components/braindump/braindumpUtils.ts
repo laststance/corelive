@@ -18,8 +18,13 @@
 
 import type { Completed } from '@/server/schemas/completed'
 
-/** Regex for a markdown checkbox line. Captures the [ ] state and the title. */
-const CHECKBOX_LINE_REGEX = /^- \[([ x])\] (.+)$/
+/**
+ * Regex for a markdown checkbox line. Captures the `[ ]`/`[x]` state in group 1
+ * and the title in group 2. Exported so the paste-import parser
+ * (`src/lib/parsePasteToTasks.ts`) reuses one source of truth for checkbox
+ * detection instead of redefining the grammar.
+ */
+export const CHECKBOX_LINE_REGEX = /^- \[([ x])\] (.+)$/
 
 /** Maximum allowed Completed.title length, mirroring `CreateCompletedSchema`. */
 export const COMPLETED_TITLE_MAX_LENGTH = 255
