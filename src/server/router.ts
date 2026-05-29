@@ -25,6 +25,8 @@ import {
 import {
   listTodos,
   createTodo,
+  createManyTodo,
+  deleteManyTodo,
   updateTodo,
   deleteTodo,
   toggleTodo,
@@ -42,8 +44,10 @@ export const router = {
   todo: {
     list: listTodos,
     create: createTodo,
+    createMany: createManyTodo,
     update: updateTodo,
     delete: deleteTodo,
+    deleteMany: deleteManyTodo,
     toggle: toggleTodo,
     clearCompleted: clearCompleted,
     reorder: reorderTodos,
