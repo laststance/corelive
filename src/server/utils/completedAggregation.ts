@@ -25,8 +25,14 @@ export type CompletedEntry = {
  * oRPC procedures.
  *
  * Heatmap UNION semantics (locked decision D2=A):
- *   Todo bucket      = updatedAt.toISOString().split('T')[0]   (UTC date)
- *   Completed bucket = createdAt.toISOString().split('T')[0]   (UTC date)
+ *   Todo bucket      = updatedAt.toISOString().split('T')[0]            (UTC date)
+ *   Completed bucket = (completedAt ?? createdAt).toISOString()[0..10]  (UTC date)
+ *
+ * Completed buckets by `completedAt ?? createdAt` (paste-import, Issue #53):
+ * completedAt is the semantic completion day; createdAt is the defensive
+ * fallback for any row missed by the migration backfill (which set
+ * completedAt = createdAt, so existing rows do not shift days). The date-range
+ * FILTER still uses createdAt in Slice 1 — see the inline TODO in the query.
  *
  * Known drift: Todo.updatedAt mutates on text/notes edit, so a completed
  * Todo edited later will move dates on the heatmap. Acceptable for now;
@@ -83,11 +89,24 @@ export async function fetchCompletedEntries(
         // sets archived=true, but filtering defensively avoids surprises
         // when an archive flow eventually lands.
         archived: false,
+        // Slice 1: the date-range filter stays on `createdAt` (the insert
+        // time). Paste-import lands everything on today (`completedAt = now()`),
+        // so createdAt and completedAt coincide and the window is correct.
+        // TODO(Slice 2 — dated import): when date-override ships, a row may have
+        // a past `completedAt` with a today `createdAt`; this filter must then
+        // move to `completedAt` or the row will be dropped from its real day's
+        // range. (See docs/plans/2026-05-29-paste-import-plan.md, Heatmap §.)
         createdAt: { gte: startDate, lte: endDate },
       },
       select: {
         id: true,
         title: true,
+        // Select both: bucket by `completedAt ?? createdAt` (coalesced in JS
+        // below). completedAt is the semantic completion day; createdAt is the
+        // defensive fallback for any historical row the migration backfill
+        // missed (it backfilled completedAt = createdAt, so existing rows do
+        // NOT shift days on the heatmap).
+        completedAt: true,
         createdAt: true,
         category: { select: { id: true, name: true, color: true } },
       },
@@ -107,7 +126,10 @@ export async function fetchCompletedEntries(
     source: 'completed',
     id: row.id,
     title: row.title,
-    completedAt: row.createdAt,
+    // Bucket by the semantic completion day, falling back to the insert time
+    // for any row whose completedAt is null (defensive — the migration
+    // backfilled existing rows with completedAt = createdAt).
+    completedAt: row.completedAt ?? row.createdAt,
     category: row.category,
   }))
 
