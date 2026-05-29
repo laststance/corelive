@@ -22,11 +22,32 @@ jobs:
           echo "CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}" >> .env
           echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
           echo "POSTGRES_PRISMA_URL=postgresql://postgres:password@localhost:5432/corelive?schema=public" >> .env
+      # Provision Postgres for the real-DB integration suites (paste-import
+      # procedures). Mirrors e2e.web.yml. Those tests are gated behind
+      # RUN_DB_INTEGRATION_TESTS (set on the unit-test step below); mocked/pure
+      # unit tests are unaffected.
+      - name: Start Postgres via Docker Compose 🐳
+        run: |
+          docker compose -f compose.yml -p corelive up -d postgres --wait
+          docker ps -a
+      - name: Show Postgres logs on failure 🪵
+        if: failure()
+        run: docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true
+      - name: Verify database connection 🧪
+        run: |
+          timeout 60 bash -c 'until docker compose -f compose.yml -p corelive exec postgres env PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive; do sleep 2; done'
+          echo "Database 'corelive' exists and is ready!"
+      - name: Run Prisma migrations 📦
+        run: pnpm prisma migrate deploy
+      - name: Generate Prisma Client 🗄️
+        run: pnpm prisma generate
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
       - name: Generate Icons 🎨
         run: pnpm build:icons
       - name: Run unit tests
+        env:
+          RUN_DB_INTEGRATION_TESTS: '1'
         run: pnpm test --run --coverage
       - name: Run Electron tests
         run: pnpm test:electron --run

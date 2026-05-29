@@ -77,6 +77,54 @@ describe('fetchCompletedEntries', () => {
     ])
   })
 
+  it('buckets a Completed row by completedAt when it differs from createdAt (dated import)', async () => {
+    // Arrange — a paste-imported row whose semantic completion day (completedAt)
+    // is earlier than its insert time (createdAt). The heatmap must use
+    // completedAt so the row lands on the day it actually happened.
+    mockedTodoFindMany.mockResolvedValue([])
+    mockedCompletedFindMany.mockResolvedValue([
+      {
+        id: 7,
+        title: 'gym last week',
+        completedAt: new Date('2026-05-05T09:00:00.000Z'),
+        createdAt: new Date('2026-05-09T18:30:00.000Z'),
+        category: null,
+      },
+    ] as never)
+
+    // Act
+    const entries = await fetchCompletedEntries(1, RANGE_START, RANGE_END)
+
+    // Assert — completedAt wins over createdAt
+    expect(entries[0]?.completedAt).toEqual(
+      new Date('2026-05-05T09:00:00.000Z'),
+    )
+  })
+
+  it('falls back to createdAt when a Completed row has a null completedAt (existing-row stability)', async () => {
+    // Arrange — a pre-migration row the backfill conceptually covers; a null
+    // completedAt must coalesce to createdAt so old rows keep their heatmap day
+    // (they do NOT jump to migration-day).
+    mockedTodoFindMany.mockResolvedValue([])
+    mockedCompletedFindMany.mockResolvedValue([
+      {
+        id: 8,
+        title: 'legacy completed row',
+        completedAt: null,
+        createdAt: new Date('2026-05-06T12:00:00.000Z'),
+        category: null,
+      },
+    ] as never)
+
+    // Act
+    const entries = await fetchCompletedEntries(1, RANGE_START, RANGE_END)
+
+    // Assert — bucket date is createdAt's day, not null/migration-day
+    expect(entries[0]?.completedAt).toEqual(
+      new Date('2026-05-06T12:00:00.000Z'),
+    )
+  })
+
   it('UNIONs rows from both tables sorted ascending by completedAt', async () => {
     // Todo updated later than the Completed row, so the sort needs to flip
     // them relative to insertion order.

@@ -1,6 +1,9 @@
 import { ORPCError } from '@orpc/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
+import { normalizeCompletedTitle } from '@/components/braindump/braindumpUtils'
+import { COMPLETED_UNDO_WINDOW_MS } from '@/lib/constants/import'
 import { prisma } from '@/lib/prisma'
 
 import { log } from '../../lib/logger'
@@ -8,13 +11,18 @@ import { authMiddleware } from '../middleware/auth'
 import {
   CompletedSchema,
   CreateCompletedSchema,
+  CreateManyCompletedResponseSchema,
+  CreateManyCompletedSchema,
   DayDetailInputSchema,
   DayDetailResponseSchema,
   DeleteCompletedSchema,
+  DeleteManyCompletedResponseSchema,
+  DeleteManyCompletedSchema,
   HeatmapInputSchema,
   HeatmapResponseSchema,
 } from '../schemas/completed'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
+import { resolveImportCategoryIds } from '../utils/resolveImportCategoryIds'
 
 /**
  * Fetches heatmap data for completed tasks, aggregated by UTC date with a
@@ -304,14 +312,6 @@ export const createCompleted = authMiddleware
   })
 
 /**
- * Window during which a Completed row may be hard-deleted via this endpoint.
- * Picked to cover the 5 s toast plus generous slack for slow networks; older
- * rows must go through archival flows so the destructive endpoint cannot be
- * weaponised against historical data.
- */
-const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
-
-/**
  * Hard-deletes a Completed row owned by the authenticated user, but only
  * within {@link COMPLETED_UNDO_WINDOW_MS} of creation. Used by BrainDump's
  * 5-second toast-undo flow when the user retracts a checkbox tick — the
@@ -364,4 +364,152 @@ export const deleteCompleted = authMiddleware
     throw new ORPCError('NOT_FOUND', {
       message: 'Completed row not found',
     })
+  })
+
+/**
+ * Bulk-inserts paste-imported rows into the Completed zone for the
+ * authenticated user, lighting the heatmap. Triggered by the PR2 paste-import
+ * dialog's confirm on the Completed zone. Idempotent via `importBatchId`: a
+ * resubmit of the same batch (network retry, double-click, second tab) is a
+ * no-op that returns the already-inserted count instead of duplicating rows.
+ *
+ * No dedup — repeated titles are intentional habit/XP signals. The only
+ * uniqueness is on the batch id (the `ImportBatch` PK), never on task content.
+ *
+ * Flow:
+ * 1. Server-side normalize + drop empty titles (Zod `.min(1)` does not catch a
+ *    whitespace-only title that normalizes to `""`), so preview == inserted.
+ * 2. Resolve every item's categoryId BEFORE the transaction (ownership-verify
+ *    provided ids; get-or-create the default for omitted ones) so the only
+ *    in-transaction P2002 source is the ImportBatch insert.
+ * 3. In one `$transaction`: insert the ImportBatch guard row, then createMany.
+ *    A duplicate batch id throws P2002 (caught outside) → idempotent re-query.
+ *
+ * @param input.items - 1..1000 items `{ title, categoryId?, completedAt? }`
+ * @param input.importBatchId - Client-generated globally-unique batch id
+ * @returns
+ * - `{ count, idempotent: false }` on a fresh insert (count = rows inserted)
+ * - `{ count, idempotent: true }` when the batch id already existed (no-op)
+ * @throws ORPCError('BAD_REQUEST') when every line normalizes to empty
+ * @throws ORPCError('NOT_FOUND') when a provided categoryId is not owned
+ * @example
+ * createManyCompleted({ items: [{ title: 'gym' }, { title: 'gym' }], importBatchId: 'b2c1…' })
+ * // => { count: 2, idempotent: false } (two real rows — repetition preserved)
+ */
+export const createManyCompleted = authMiddleware
+  .input(CreateManyCompletedSchema)
+  .output(CreateManyCompletedResponseSchema)
+  .handler(async ({ input, context }) => {
+    try {
+      const { user } = context
+      const { items, importBatchId } = input
+
+      // Step 1: normalize titles and drop lines that become empty. This mirrors
+      // the client preview's parser so the inserted count == the previewed
+      // count, and prevents a whitespace-only title from reaching the DB.
+      const normalizedItems = items
+        .map((item) => ({
+          title: normalizeCompletedTitle(item.title),
+          categoryId: item.categoryId,
+          completedAt: item.completedAt,
+        }))
+        .filter((item) => item.title.length > 0)
+
+      if (normalizedItems.length === 0) {
+        throw new ORPCError('BAD_REQUEST', {
+          message: 'No importable lines after normalization',
+        })
+      }
+
+      // Step 2: resolve categories outside the transaction so the only
+      // in-transaction P2002 source is the ImportBatch guard insert.
+      const resolveCategoryId = await resolveImportCategoryIds(
+        user.id,
+        normalizedItems,
+      )
+
+      // Slice 1 lands everything on today; `completedAt` defaults to now() when
+      // the item omits it. createdAt (real insert time) stays separate so the
+      // undo window works even for a past completedAt.
+      const importedAt = new Date()
+      const rows = normalizedItems.map((item) => ({
+        title: item.title,
+        categoryId: resolveCategoryId(item),
+        userId: user.id,
+        completedAt: item.completedAt ?? importedAt,
+        importBatchId,
+      }))
+
+      // Step 3: ImportBatch guard insert + createMany in one transaction. A
+      // failed createMany rolls back the guard so a genuine retry still inserts.
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.importBatch.create({
+          data: { id: importBatchId, userId: user.id },
+        })
+        const created = await tx.completed.createMany({ data: rows })
+        return { count: created.count, idempotent: false }
+      })
+
+      return result
+    } catch (error) {
+      // P2002 on the ImportBatch insert = this batch id was already imported.
+      // Idempotent no-op: re-query the prior count and return it. Caught here,
+      // OUTSIDE the transaction, because a failed statement aborts the PG tx
+      // (cannot catch-and-continue on `tx`).
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const count = await prisma.completed.count({
+          where: {
+            userId: context.user.id,
+            importBatchId: input.importBatchId,
+          },
+        })
+        return { count, idempotent: true }
+      }
+      if (error instanceof ORPCError) throw error
+      log.error('Error in createManyCompleted:', error)
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to import completed rows',
+        cause: error,
+      })
+    }
+  })
+
+/**
+ * Bulk-undoes a paste-import batch by deleting every Completed row tagged with
+ * the given `importBatchId`, scoped to the caller and guarded by
+ * {@link COMPLETED_UNDO_WINDOW_MS}. Triggered by PR2's "Undo import" toast /
+ * inline control within 60 s of the import.
+ *
+ * Atomic single-statement delete: ownership + freshness are part of the `where`
+ * so a second tab or an undo racing the window expiry cannot double-delete.
+ * Deletes by `importBatchId` (never by ids — `createMany` returns only a
+ * count); the window keys off `createdAt` (the real insert time), so it works
+ * even when the batch's `completedAt` is a past date.
+ *
+ * @param input.importBatchId - The batch id returned/used at import time
+ * @returns `{ count }` — rows removed (0 once the undo window has expired)
+ * @example
+ * deleteManyCompleted({ importBatchId: 'b2c1…' }) // => { count: 50 }
+ */
+export const deleteManyCompleted = authMiddleware
+  .input(DeleteManyCompletedSchema)
+  .output(DeleteManyCompletedResponseSchema)
+  .handler(async ({ input, context }) => {
+    const { user } = context
+    const { importBatchId } = input
+
+    const result = await prisma.completed.deleteMany({
+      where: {
+        userId: user.id,
+        importBatchId,
+        createdAt: {
+          gte: new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
+        },
+      },
+    })
+
+    return { count: result.count }
   })

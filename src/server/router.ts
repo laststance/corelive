@@ -6,7 +6,9 @@ import {
 } from './procedures/category'
 import {
   createCompleted,
+  createManyCompleted,
   deleteCompleted,
+  deleteManyCompleted,
   getDayDetail,
   getHeatmap,
 } from './procedures/completed'
@@ -23,6 +25,8 @@ import {
 import {
   listTodos,
   createTodo,
+  createManyTodo,
+  deleteManyTodo,
   updateTodo,
   deleteTodo,
   toggleTodo,
@@ -40,8 +44,10 @@ export const router = {
   todo: {
     list: listTodos,
     create: createTodo,
+    createMany: createManyTodo,
     update: updateTodo,
     delete: deleteTodo,
+    deleteMany: deleteManyTodo,
     toggle: toggleTodo,
     clearCompleted: clearCompleted,
     reorder: reorderTodos,
@@ -50,7 +56,9 @@ export const router = {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     create: createCompleted,
+    createMany: createManyCompleted,
     delete: deleteCompleted,
+    deleteMany: deleteManyCompleted,
   },
   electronSettings: {
     get: getElectronSettings,
