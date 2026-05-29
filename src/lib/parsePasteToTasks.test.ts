@@ -206,4 +206,15 @@ describe('parsePasteLine', () => {
     // Assert
     expect(parsed).toEqual({ title: 'done already', done: true })
   })
+
+  it('matches an indented checkbox instead of leaking the marker into the title', () => {
+    // Arrange
+    const rawLine = '  - [x] nested done'
+
+    // Act
+    const parsed = parsePasteLine(rawLine)
+
+    // Assert
+    expect(parsed).toEqual({ title: 'nested done', done: true })
+  })
 })
