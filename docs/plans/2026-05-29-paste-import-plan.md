@@ -161,7 +161,9 @@ deleted/missing categoryId.
   Slice 2 (Completed zone ready immediately via `completedAt`; Todo zone waits for `Todo.completedAt`).
 - categoryId: shared picker, context-default (get-or-create fallback). Per-line override added (PR2).
 - Routing: by paste-destination (location-based). Completed zone → Completed; active surfaces → Todo.
-- Heatmap colors by COUNT (level 0-4), not category. Null/unset category still lights the cell.
+- Heatmap colors by COUNT (level 0-4), not category. **Every imported row gets a real `categoryId`** —
+  `categoryId` is NOT NULL with `onDelete: Restrict`, so there is no null-category row; get-or-create the
+  default category before insert (see Eng fold-ins).
 
 ## Success copy
 
@@ -172,7 +174,7 @@ Copy must honor repetition-as-habit-count without implying "days" and never use 
 
 | Moment                       | English                                           | 日本語                            |
 | ---------------------------- | ------------------------------------------------- | --------------------------------- |
-| Completed import success     | `50 added to your year`                           | `50個、一年に。`                  |
+| Completed import success     | `50 added — today's lit`                          | `50個、今日に。`                  |
 | Active-Todo import success   | `50 added to your list`                           | `50個、リストに。`                |
 | Active-Todo expectation note | `they'll light the heatmap as you complete them`  | `終えるとヒートマップが灯る`      |
 | Paste textarea placeholder   | `paste your wins — one per line`                  | `やったこと、1行ずつ貼って`       |
@@ -219,7 +221,7 @@ system warm-up (Track 1) automatically. No hardcoded decoration.
 Read order: serif title → textarea → shared category + count → preview list → confirm.
 
 - Container: Radix `Dialog`, `lg` radius (12px), warm `--card` surface, single soft modal elevation.
-- Title: Newsreader (H2 24px), e.g. `Archive to Completed` / `Add to your list`.
+- Title: Newsreader (H2 24px), e.g. `Add to Completed` / `Add to your list` (warm — not the cold "Archive").
 - Textarea: Inter Tight 15px, `md` radius (8px), placeholder in the quiet voice (see copy table).
 - Count: Geist Mono 13px tabular — `N tasks · M skipped` (and the over-cap line below).
 - Shared category: one Select (default = `useSelectedCategory()`); per-row override (T11) shown as a
@@ -229,17 +231,17 @@ Read order: serif title → textarea → shared category + count → preview lis
 
 ### Interaction states (Pass 2)
 
-| State                    | What the user sees                                                                                                                                             |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Idle / empty             | Placeholder `paste your wins — one per line`; confirm disabled; preview shows the empty line below                                                             |
-| Typing / parsing         | Live preview per non-blank line; count updates (`12 tasks`); parse is synchronous/instant                                                                      |
-| Preview (valid)          | Rows listed; `12 tasks · 2 skipped`; confirm enabled `Add 12 to Completed`                                                                                     |
-| Over cap (>1000)         | `1,200 lines · importing the first 1,000` (Geist Mono); confirm `Add 1,000`; nothing silently dropped                                                          |
-| Submitting               | Confirm spinner + `Adding…`; textarea/rows locked; double-submit guarded (+ per-paste `importBatchId`)                                                         |
-| Success                  | Dialog closes; **Completed** → heatmap fill + toast `50 added to your year` (~10s) + 60s inline `Undo import`; **Todo** → toast `50 added to your list` + note |
-| Partial                  | N/A by design — invalid lines are filtered in preview before insert, so "1 bad line fails 1000" cannot occur                                                   |
-| Error / offline          | Toast `Couldn't reach the server — your paste is safe`; dialog stays open, textarea + rows preserved, `Try again` re-submits the **same** `importBatchId`      |
-| Empty preview (no valid) | `nothing to import yet — paste a few lines above` (warm, never "No items found.")                                                                              |
+| State                    | What the user sees                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idle / empty             | Placeholder `paste your wins — one per line`; confirm disabled; preview shows the empty line below                                                              |
+| Typing / parsing         | Live preview per non-blank line; count updates (`12 tasks`); parse is synchronous/instant                                                                       |
+| Preview (valid)          | Rows listed; `12 tasks · 2 skipped`; confirm enabled `Add 12 to Completed`                                                                                      |
+| Over cap (>1000)         | `1,200 lines · importing the first 1,000` (Geist Mono); confirm `Add 1,000`; nothing silently dropped                                                           |
+| Submitting               | Confirm spinner + `Adding…`; textarea/rows locked; double-submit guarded (+ per-paste `importBatchId`)                                                          |
+| Success                  | Dialog closes; **Completed** → heatmap fill + toast `50 added — today's lit` (~10s) + 60s inline `Undo import`; **Todo** → toast `50 added to your list` + note |
+| Partial                  | N/A by design — invalid lines are filtered in preview before insert, so "1 bad line fails 1000" cannot occur                                                    |
+| Error / offline          | Toast `Couldn't reach the server — your paste is safe`; dialog stays open, textarea + rows preserved, `Try again` re-submits the **same** `importBatchId`       |
+| Empty preview (no valid) | `nothing to import yet — paste a few lines above` (warm, never "No items found.")                                                                               |
 
 ### Bulk Undo (D5)
 
@@ -286,16 +288,61 @@ interaction). No decorative blobs/orbs/vignette/candle. One amber accent. Serif 
 | ----------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | PasteImport dialog (Completed-zone) | `~/.gstack/projects/laststance-corelive/designs/paste-import-20260530/variant-C.png` | Calm, warm "Archive to Completed" dialog; one shared category pill; preview list as the anchor | Structure locked. Literal candle/window/vignette **not shipped** — warmth via OKLCH tokens. User chose C (D2) for calm + warmth; D3=B → whole-app warm-up tracked as Track 1 / `/design-consultation`. |
 
+## Eng + DevEx review fold-ins (2026-05-30, autonomous auto-decide)
+
+Both plan reviews ran in autonomous mode (recommended options, no blocking questions); criticals
+resolved before implementation.
+
+### Engineering (plan-eng-review)
+
+- **Idempotency mechanism** (was a hand-wave; `importBatchId` is non-unique, so existence-checks race).
+  New **`ImportBatch { id String @id; userId Int; createdAt DateTime @default(now()) }`** table
+  (`id` = client batchId). `createMany` runs inside a `$transaction` that **first inserts the
+  `ImportBatch` row**; a duplicate id throws Prisma **P2002** → caught → no-op that re-queries and returns
+  the existing batch count. Same-txn ⇒ a failed `createMany` rolls back the guard, so a genuine retry
+  still inserts. Uniqueness is on the **batch id only**, never task content → respects no-dedup.
+- **Migration:** `Completed.completedAt DateTime?` with **NO `@default`** (a non-null default stamps
+  historical rows + causes Prisma drift). `prisma migrate dev` won't generate the backfill —
+  **hand-edit the migration SQL** to append `UPDATE "Completed" SET "completedAt" = "createdAt" WHERE "completedAt" IS NULL;`.
+  Add `ImportBatch` table, `Completed.importBatchId String? @@index`, `Todo.importBatchId String? @@index`.
+  Import path sets `completedAt: new Date()`; `createCompleted` unchanged (null → coalesce).
+- **Category is NOT NULL (`onDelete: Restrict`).** Get-or-create the default category (`findFirst`
+  `isDefault`, else create + catch P2002 + re-query) is mandatory before `createMany`.
+- **`todo.deleteMany({ importBatchId })`** includes the same `createdAt >= now()-COMPLETED_UNDO_WINDOW_MS`
+  window guard as `completed.deleteMany` (parity, atomic).
+- **Promote `COMPLETED_UNDO_WINDOW_MS`** from a private const in `completed.ts` to a shared constants
+  module (batch undo + UI 60s window both consume it).
+- **Todo bulk `order`:** imports land last (documented); no per-item position fidelity in Slice 1.
+- **Heatmap:** coalesce in **JS** (`row.completedAt ?? row.createdAt`); select `completedAt`; date-range
+  **filter stays on `createdAt`** for Slice 1 (latent Slice-2 bug → TODOS note + test stub).
+- **Parser** lives in `src/lib/` (pure, type-only schema import), reusing `braindumpUtils`
+  `normalizeCompletedTitle` + checkbox regex.
+- **Tests add:** resubmit-returns-prior-count under concurrency (P2002 path); undo isolation across users
+  AND batches; other-user `categoryId` rejected; server-side post-normalize empty-line drop; over-cap at
+  exactly 1001; existing-row heatmap stability.
+
+### DevEx (plan-devex-review)
+
+- **Wrong-zone defense pre-confirm:** the Todo dialog shows the expectation note **at preview**, not only
+  on success: `these stay open — they'll light the heatmap as you complete them` / `終えるとヒートマップが灯る`.
+- **Wrong-zone recovery:** the imported Todo batch group offers **`Move to Completed`** (re-routes the
+  `importBatchId` set) within the 60s window.
+- **Slice-1 copy honesty:** Slice 1 lands everything on **today's** cell (`completedAt = now()`), so
+  Completed success copy → `50 added — today's lit` / `50個、今日に。`. D6's `added to your year` framing
+  returns in **Slice 2** (dated import). Reversible if the aspirational framing is preferred.
+- **Day-one discoverability:** the empty Heatmap / empty Completed state surfaces the Import affordance inline.
+- **Dialog title** `Archive to Completed` → `Add to Completed` (warmer).
+
 ## GSTACK REVIEW REPORT
 
-| Review        | Trigger               | Why                             | Runs | Status                | Findings                                                           |
-| ------------- | --------------------- | ------------------------------- | ---- | --------------------- | ------------------------------------------------------------------ |
-| CEO Review    | `/plan-ceo-review`    | Scope & strategy                | 1    | clean (prior session) | 4 proposals · 3 accepted · 1 rejected (dedup); D7=A architecture   |
-| Outside Voice | `/codex review`       | Independent 2nd opinion         | 1    | revised (prior)       | 23 findings · 2 critical fixed (createMany ids, undo window)       |
-| Eng Review    | `/plan-eng-review`    | Architecture & tests (required) | 0    | — (pending)           | next in pipeline                                                   |
-| Design Review | `/plan-design-review` | UI/UX gaps                      | 1    | CLEAR (FULL)          | score 5/10 → 9/10 · 7 decisions · 0 unresolved · mockup C approved |
-| DX Review     | `/plan-devex-review`  | Developer experience gaps       | 0    | — (pending)           | next in pipeline                                                   |
+| Review        | Trigger               | Why                             | Runs | Status                | Findings                                                                                                  |
+| ------------- | --------------------- | ------------------------------- | ---- | --------------------- | --------------------------------------------------------------------------------------------------------- |
+| CEO Review    | `/plan-ceo-review`    | Scope & strategy                | 1    | clean (prior session) | 4 proposals · 3 accepted · 1 rejected (dedup); D7=A architecture                                          |
+| Outside Voice | `/codex review`       | Independent 2nd opinion         | 1    | revised (prior)       | 23 findings · 2 critical fixed (createMany ids, undo window)                                              |
+| Eng Review    | `/plan-eng-review`    | Architecture & tests (required) | 1    | issues folded         | 2 CRITICAL (idempotency → ImportBatch/P2002; migration backfill) + NOT-NULL-category + 6 more, all folded |
+| Design Review | `/plan-design-review` | UI/UX gaps                      | 1    | CLEAR (FULL)          | score 5/10 → 9/10 · 7 decisions · 0 unresolved · mockup C approved                                        |
+| DX Review     | `/plan-devex-review`  | Developer experience gaps       | 1    | issues folded         | wrong-zone pre-confirm + Move-to-Completed recovery; Slice-1 copy honesty; empty-state discoverability    |
 
 - **CROSS-MODEL:** Design cross-model gate (GPT-4o vision) flagged variant C (over-decoration); user overrode on taste (D2/D3) and the literal decoration is dropped — warmth via tokens. Recorded as Track 1.
 - **UNRESOLVED:** 0 design decisions unresolved. Entry points (D4), bulk undo (D5), success copy (D6), FloatingNav (D7), states, responsive, a11y all specced into the plan.
-- **VERDICT:** DESIGN CLEARED (9/10). Eng Review required before ship (`skip_eng_review=false`) — running next.
+- **VERDICT:** DESIGN + ENG + DEVEX CLEARED — all fold-ins applied, implementation-ready. Eng gate (`skip_eng_review=false`) satisfied at plan stage; re-validated by CI on the PRs.
