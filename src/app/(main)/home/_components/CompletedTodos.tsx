@@ -185,6 +185,10 @@ export const CompletedTodos = React.memo(function CompletedTodos({
             <p>No completed tasks yet</p>
             {/* Day-one discoverability: surface the Import affordance inline. */}
             <CompletedImportEntry variant="inline" />
+            {/* Quiet hint: completed imports write to the heatmap, not this list. */}
+            <p className="text-xs text-muted-foreground">
+              Imported wins appear on your heatmap ↑
+            </p>
           </div>
         </CardContent>
       </Card>
