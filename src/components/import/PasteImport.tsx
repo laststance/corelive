@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { match } from 'ts-pattern'
 
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import { COMPLETED_UNDO_WINDOW_MS } from '@/lib/constants/import'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
@@ -18,6 +19,13 @@ import { PasteImportDialog } from './PasteImportDialog'
 
 /** How long the success toast (with Undo) stays up. */
 const UNDO_TOAST_MS = 10000
+
+/**
+ * The 60s undo window the banner's expiry is keyed to. Single-sourced from the
+ * server constant so the UI window can never drift from the server's
+ * window-guarded `deleteMany` (plan eng fold-in).
+ */
+const UNDO_WINDOW_MS = COMPLETED_UNDO_WINDOW_MS
 
 /**
  * Records the just-imported batch so the caller can render a 60s inline undo
@@ -58,9 +66,6 @@ export interface PasteImportProps {
   /** Controlled open setter (optional). */
   onOpenChange?: (open: boolean) => void
 }
-
-/** Undo window (kept in sync with the server's COMPLETED_UNDO_WINDOW_MS = 60s). */
-const UNDO_WINDOW_MS = 60 * 1000
 
 /**
  * oRPC container for paste-import. Wires `completed.createMany` /

@@ -3,36 +3,14 @@
 import { useMutation } from '@tanstack/react-query'
 import { Undo2, ArrowRightLeft } from 'lucide-react'
 import * as React from 'react'
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { orpc } from '@/lib/orpc/client-query'
 
 import type { LastImport } from './PasteImport'
-
-/**
- * Subscribes to a wall-clock tick so the banner can hide itself the instant the
- * 60s undo window closes (no setInterval state, SSR-safe). Re-renders ~once per
- * second while mounted.
- *
- * @param callback - React's store-changed callback.
- * @returns Cleanup that clears the interval.
- */
-function subscribeToClock(callback: () => void): () => void {
-  const id = window.setInterval(callback, 1000)
-  return () => window.clearInterval(id)
-}
-
-/** Snapshot getter: current epoch ms (the value the banner compares to expiry). */
-function getNowSnapshot(): number {
-  return Date.now()
-}
-
-/** SSR fallback: 0 → banner never renders during server render. */
-function getNowServerSnapshot(): number {
-  return 0
-}
 
 /**
  * Props for the inline post-import undo banner.
@@ -64,11 +42,22 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
   onDismiss,
   onChanged,
 }: ImportUndoBannerProps) {
-  const now = useSyncExternalStore(
-    subscribeToClock,
-    getNowSnapshot,
-    getNowServerSnapshot,
-  )
+  // The banner shows no countdown — just "Imported N just now" — so a single
+  // timer that flips an `expired` flag at the window edge is enough (no
+  // per-second clock, no unstable `Date.now()` snapshot that would re-render
+  // loop). Re-arms whenever a new batch (new `lastImport` object) arrives.
+  const [expired, setExpired] = useState(false)
+  useComponentEffect(() => {
+    if (!lastImport) return
+    const remainingMs = lastImport.expiresAt - Date.now()
+    if (remainingMs <= 0) {
+      setExpired(true)
+      return
+    }
+    setExpired(false)
+    const timeoutId = window.setTimeout(() => setExpired(true), remainingMs)
+    return () => window.clearTimeout(timeoutId)
+  }, [lastImport])
 
   const deleteCompletedMutation = useMutation(
     orpc.completed.deleteMany.mutationOptions({}),
@@ -156,9 +145,12 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
     onDismiss,
   ])
 
-  // Nothing to show, or the 60s window has closed → render nothing.
+  // Nothing to show, or the 60s window has closed → render nothing. The
+  // `expired` flag handles the live transition; the inline Date.now() guard
+  // covers an already-expired batch on first render (a plain render read is
+  // safe — unlike a useSyncExternalStore snapshot it never re-renders).
   if (!lastImport || lastImport.count === 0) return null
-  if (now !== 0 && now >= lastImport.expiresAt) return null
+  if (expired || Date.now() >= lastImport.expiresAt) return null
 
   return (
     <div
