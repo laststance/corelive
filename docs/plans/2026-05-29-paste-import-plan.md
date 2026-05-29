@@ -2,7 +2,7 @@
 
 |            |                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| **Status** | Planned (architecture resolved; awaiting eng-review before implementation)                                 |
+| **Status** | In review — PRs #54 (server) + #55 (UI); design + eng + devex cleared, implementation-ready                |
 | **Issue**  | [#53](https://github.com/laststance/corelive/issues/53)                                                    |
 | **Date**   | 2026-05-29 (office-hours + CEO review) · revised 2026-05-30 after an independent (cross-model) plan review |
 | **Origin** | office-hours design session → CEO strategy/scope review → Codex outside-voice review                       |

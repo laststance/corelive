@@ -8,6 +8,12 @@ import { prisma } from '@/lib/prisma'
 
 import { createManyCompleted, deleteManyCompleted } from './completed'
 
+// Real-DB integration suites: run only when RUN_DB_INTEGRATION_TESTS=1 (the CI
+// `test` job sets it after Postgres is up; set it locally with `docker compose
+// up`). Skip cleanly in DB-less contexts so they never block unrelated runs.
+const describeIfDb =
+  process.env.RUN_DB_INTEGRATION_TESTS === '1' ? describe : describe.skip
+
 /**
  * Real-DB procedure harness. Each test creates a fresh user via a unique Clerk
  * id so rows never collide across runs of the persistent dev database. We run
@@ -48,7 +54,7 @@ afterEach(async () => {
   createdClerkIds.clear()
 })
 
-describe('completed.createMany', () => {
+describeIfDb('completed.createMany', () => {
   it('inserts one Completed row per item without deduplicating repeated titles', async () => {
     // Arrange
     const clerkId = freshClerkId()
@@ -235,7 +241,7 @@ describe('completed.createMany', () => {
   })
 })
 
-describe('completed.deleteMany (bulk undo)', () => {
+describeIfDb('completed.deleteMany (bulk undo)', () => {
   it('deletes only the matching batch and leaves a sibling batch untouched', async () => {
     // Arrange — two batches for the same user
     const clerkId = freshClerkId()
@@ -343,36 +349,39 @@ describe('completed.deleteMany (bulk undo)', () => {
   })
 })
 
-describe('completed.createMany heatmap-day stability after migration', () => {
-  it('buckets an existing row with null completedAt on its createdAt day', async () => {
-    // Arrange — simulate a pre-migration row whose completedAt was never set
-    // (backfill is a no-op on an empty table, so we exercise the `?? createdAt`
-    // coalesce directly). Insert a Completed row, then null its completedAt.
-    const clerkId = freshClerkId()
-    const importBatchId = randomUUID()
-    await call(
-      createManyCompleted,
-      { items: [{ title: 'legacy row' }], importBatchId },
-      authContext(clerkId),
-    )
-    const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
-    const legacyCreatedAt = new Date('2026-03-15T08:30:00.000Z')
-    await prisma.completed.updateMany({
-      where: { userId: user.id, importBatchId },
-      data: { completedAt: null, createdAt: legacyCreatedAt },
-    })
+describeIfDb(
+  'completed.createMany heatmap-day stability after migration',
+  () => {
+    it('buckets an existing row with null completedAt on its createdAt day', async () => {
+      // Arrange — simulate a pre-migration row whose completedAt was never set
+      // (backfill is a no-op on an empty table, so we exercise the `?? createdAt`
+      // coalesce directly). Insert a Completed row, then null its completedAt.
+      const clerkId = freshClerkId()
+      const importBatchId = randomUUID()
+      await call(
+        createManyCompleted,
+        { items: [{ title: 'legacy row' }], importBatchId },
+        authContext(clerkId),
+      )
+      const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
+      const legacyCreatedAt = new Date('2026-03-15T08:30:00.000Z')
+      await prisma.completed.updateMany({
+        where: { userId: user.id, importBatchId },
+        data: { completedAt: null, createdAt: legacyCreatedAt },
+      })
 
-    // Act — read the row the way the heatmap aggregation does
-    const row = await prisma.completed.findFirstOrThrow({
-      where: { userId: user.id, importBatchId },
-      select: { completedAt: true, createdAt: true },
-    })
-    const bucketDate = (row.completedAt ?? row.createdAt)
-      .toISOString()
-      .split('T')[0]
+      // Act — read the row the way the heatmap aggregation does
+      const row = await prisma.completed.findFirstOrThrow({
+        where: { userId: user.id, importBatchId },
+        select: { completedAt: true, createdAt: true },
+      })
+      const bucketDate = (row.completedAt ?? row.createdAt)
+        .toISOString()
+        .split('T')[0]
 
-    // Assert — falls back to createdAt's day, not migration-day
-    expect(row.completedAt).toBeNull()
-    expect(bucketDate).toBe('2026-03-15')
-  })
-})
+      // Assert — falls back to createdAt's day, not migration-day
+      expect(row.completedAt).toBeNull()
+      expect(bucketDate).toBe('2026-03-15')
+    })
+  },
+)

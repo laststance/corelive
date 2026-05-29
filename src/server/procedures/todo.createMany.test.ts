@@ -8,6 +8,12 @@ import { prisma } from '@/lib/prisma'
 
 import { createManyTodo, deleteManyTodo } from './todo'
 
+// Real-DB integration suites: run only when RUN_DB_INTEGRATION_TESTS=1 (the CI
+// `test` job sets it after Postgres is up; set it locally with `docker compose
+// up`). Skip cleanly in DB-less contexts so they never block unrelated runs.
+const describeIfDb =
+  process.env.RUN_DB_INTEGRATION_TESTS === '1' ? describe : describe.skip
+
 /**
  * Real-DB procedure harness. Each test creates a fresh user via a unique Clerk
  * id so rows never collide across runs of the persistent dev database. The REAL
@@ -45,7 +51,7 @@ afterEach(async () => {
   createdClerkIds.clear()
 })
 
-describe('todo.createMany', () => {
+describeIfDb('todo.createMany', () => {
   it('inserts one incomplete Todo per item without deduplicating repeated titles', async () => {
     // Arrange
     const clerkId = freshClerkId()
@@ -235,7 +241,7 @@ describe('todo.createMany', () => {
   })
 })
 
-describe('todo.deleteMany (bulk undo)', () => {
+describeIfDb('todo.deleteMany (bulk undo)', () => {
   it('deletes only the matching batch and leaves a sibling batch untouched', async () => {
     // Arrange — two batches for the same user
     const clerkId = freshClerkId()

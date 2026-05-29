@@ -70,9 +70,14 @@ const LIST_PREFIX_REGEX = /^\s*(?:[-*+]|\d+[.)])\s+/
  * parsePasteLine('-   ')                   // => null  (prefix-only)
  */
 export function parsePasteLine(rawLine: string): ParsedPasteTask | null {
+  // Trim leading whitespace first so an indented checkbox / list item (e.g. a
+  // nested "  - [x] task") matches the checkbox grammar instead of falling
+  // through to prefix-stripping, which would leak "[x]" into the title.
+  const line = rawLine.trimStart()
+
   // Checkbox first: capture done-state, then derive the title from the
   // post-prefix capture group so the `[x] ` marker never leaks into the title.
-  const checkboxMatch = CHECKBOX_LINE_REGEX.exec(rawLine)
+  const checkboxMatch = CHECKBOX_LINE_REGEX.exec(line)
   if (checkboxMatch) {
     const checkboxState = checkboxMatch[1]
     const checkboxBody = checkboxMatch[2]
@@ -86,7 +91,7 @@ export function parsePasteLine(rawLine: string): ParsedPasteTask | null {
   // Not a checkbox: strip at most one leading bullet/ordered prefix, then
   // normalize. Anything that wasn't a list (URL, heading, prose) is untouched
   // by the strip and preserved as the title.
-  const withoutPrefix = rawLine.replace(LIST_PREFIX_REGEX, '')
+  const withoutPrefix = line.replace(LIST_PREFIX_REGEX, '')
   const title = normalizeCompletedTitle(withoutPrefix)
   if (title.length === 0) return null
   return { title, done: false }
