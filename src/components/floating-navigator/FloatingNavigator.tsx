@@ -19,6 +19,7 @@ import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client
 import { COLOR_DOT_CLASSES } from '@/lib/category-colors'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { log } from '@/lib/logger'
+import { requestOpenCompletedImport } from '@/lib/paste-import-channel'
 import { isEnterKeyPress } from '@/lib/utils'
 import type {
   CategoryColor,
@@ -64,6 +65,9 @@ const Settings = lazy(async () =>
 )
 const Brain = lazy(async () =>
   import('lucide-react').then((mod) => ({ default: mod.Brain })),
+)
+const ClipboardPaste = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.ClipboardPaste })),
 )
 
 // Icon fallback component for loading state
@@ -516,6 +520,21 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
     }
   }, [])
 
+  // D7: the floating window is too narrow for the import dialog, so Import
+  // broadcasts an open-intent (the main window's Completed entry subscribes)
+  // and surfaces the main window. Broadcast first so the subscriber fires even
+  // if focusing the window is what brings the main renderer to the foreground.
+  const handleOpenImport = useCallback(async () => {
+    requestOpenCompletedImport()
+    if (isFloatingNavigatorEnvironment()) {
+      try {
+        await window.floatingNavigatorAPI!.window.focusMainWindow()
+      } catch (error) {
+        log.error('Failed to focus main window for import:', error)
+      }
+    }
+  }, [])
+
   // Toggle the BrainDump Note window via the floating navigator preload bridge.
   const handleToggleBrainDump = useCallback(async () => {
     if (!isFloatingNavigatorEnvironment()) return
@@ -632,6 +651,18 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
             >
               <Suspense fallback={<IconFallback />}>
                 <Brain className="h-3 w-3" aria-hidden="true" />
+              </Suspense>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleOpenImport}
+              className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Import to Completed in main window"
+              title="Import to Completed"
+            >
+              <Suspense fallback={<IconFallback />}>
+                <ClipboardPaste className="h-3 w-3" aria-hidden="true" />
               </Suspense>
             </Button>
             <Button

@@ -31,6 +31,7 @@ import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import { SortableTodoItem } from './SortableTodoItem'
 import { SundayDigestCard } from './SundayDigestCard'
+import { TodoImportEntry } from './TodoImportEntry'
 import type { Todo } from './TodoItem'
 import { WeeklySummaryCard } from './WeeklySummaryCard'
 import { YearInReviewModal } from './YearInReviewModal'
@@ -339,16 +340,22 @@ export const TodoList = memo(function TodoList() {
               onAddTodo={addTodo}
               disabled={selectedCategoryId === null}
             />
+            {/* Active-Todo-zone Import entry (D4) — next to the Add form. */}
+            <div className="flex justify-end">
+              <TodoImportEntry />
+            </div>
           </CardContent>
         </Card>
 
         {pendingTodos.length === 0 ? (
           <Card>
-            <CardContent className="p-8 text-center">
-              <Circle className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+            <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
+              <Circle className="h-12 w-12 text-muted-foreground" />
               <p className="text-muted-foreground">
                 No pending tasks. Add a new task to get started.
               </p>
+              {/* Empty-state discoverability for bulk import. */}
+              <TodoImportEntry variant="inline" />
             </CardContent>
           </Card>
         ) : (
