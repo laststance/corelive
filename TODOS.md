@@ -36,3 +36,16 @@ function that will pull it off the deferred list.
       tie for the max contribution, the "month max" marker currently picks
       the earliest. Revisit if users surface complaints about "missed" tied
       days. Forcing function: user feedback on PR1.5.
+
+## Design system
+
+- [ ] **App-wide warm-up — push the whole UI toward the golden-hour mood.**
+      Surfaced in `/plan-design-review` (2026-05-30, Issue #53). When choosing the
+      paste-import mockup, the user picked the warmest/most-atmospheric variant (C)
+      and confirmed (D3) the real intent: the app still feels too cold, they want
+      the whole thing warmer — toward C's golden-hour light. This is a design-system
+      change, NOT paste-import: revise `globals.css` OKLCH tokens (warmer neutrals /
+      light) + `DESIGN.md`. Needs the user's eye (subjective feel). paste-import uses
+      tokens only, so it inherits this automatically once landed — no rework.
+      Forcing function: run `/design-consultation` as the next design session.
+      Effort: ~half day human / ~1–2h CC.

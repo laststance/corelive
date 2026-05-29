@@ -166,8 +166,20 @@ deleted/missing categoryId.
 ## Success copy
 
 "N more days you showed up" is **wrong** for bulk same-day imports (50 items today = 1 day, not 50).
-Copy must honor repetition-as-habit-count without implying "days" (e.g. "N more wins logged" / warm
-temperature, never "N tasks (+12%)"). Exact wording → design review.
+Copy must honor repetition-as-habit-count without implying "days" and never use a KPI/percentage.
+
+**Resolved (`/plan-design-review` D6 — "quiet accumulation", let the heatmap perform):**
+
+| Moment                       | English                                           | 日本語                            |
+| ---------------------------- | ------------------------------------------------- | --------------------------------- |
+| Completed import success     | `50 added to your year`                           | `50個、一年に。`                  |
+| Active-Todo import success   | `50 added to your list`                           | `50個、リストに。`                |
+| Active-Todo expectation note | `they'll light the heatmap as you complete them`  | `終えるとヒートマップが灯る`      |
+| Paste textarea placeholder   | `paste your wins — one per line`                  | `やったこと、1行ずつ貼って`       |
+| Empty preview (all blank)    | `nothing to import yet — paste a few lines above` | `まだ何も無いよ — 上に数行貼って` |
+
+The heatmap fill animation is the celebration; copy stays one quiet line. No "days", no `(+12%)`, no
+streak-shame. Honors no-dedup (50 logged = 50, same day or not).
 
 ## Slice 2 — AI auto-labeling (open design)
 
@@ -182,3 +194,108 @@ the model runs). Stack: Vercel AI SDK + OpenRouter + `generateObject` + Zod, **s
 - `Todo.completedAt` migration (`TODOS.md`) — blocks **only** the Todo-zone _date-override_ (a Slice 2
   Todo concern). Shared forcing function with the Streak feature.
 - user-TZ bucketing — pre-existing deferred item (`TODOS.md`).
+- **Design-system warm-up (Track 1, separate from #53):** make the whole app feel warmer — toward the
+  golden-hour mood of approved mockup variant C. Touches `globals.css` OKLCH tokens + `DESIGN.md`. Pursue
+  via `/design-consultation`; paste-import uses tokens only, so it inherits this automatically. See `TODOS.md`.
+
+## Design decisions (`/plan-design-review` · 2026-05-30 · score 5/10 → 9/10)
+
+Visual reference: approved mockup variant **C** (see Approved mockup). C's _structure_ is locked; its
+literal candle / cathedral-window / vignette are **not shipped** (mockup atmosphere only — the real
+backdrop is `/home`). Warmth comes from approved OKLCH tokens, so paste-import inherits the future
+system warm-up (Track 1) automatically. No hardcoded decoration.
+
+### Entry points (D4 — explicit button per zone)
+
+- Each zone gets a quiet **"Import"** affordance (text button + paste icon) that opens the shared
+  `PasteImport` dialog. No paste-hijacking of single-line inputs.
+- `/home` Completed zone: Import near `CompletedTodos` (by the existing "Clear all").
+- `/home` Active-Todo zone: Import next to `AddTodoForm`'s "Add".
+- FloatingNav (D7): Import **activates the main window** and opens the dialog there (no cramped dialog in
+  the narrow Electron window). Needs a transition cue so the window-switch isn't jarring.
+
+### PasteImport dialog — hierarchy & tokens (variant C + DESIGN.md)
+
+Read order: serif title → textarea → shared category + count → preview list → confirm.
+
+- Container: Radix `Dialog`, `lg` radius (12px), warm `--card` surface, single soft modal elevation.
+- Title: Newsreader (H2 24px), e.g. `Archive to Completed` / `Add to your list`.
+- Textarea: Inter Tight 15px, `md` radius (8px), placeholder in the quiet voice (see copy table).
+- Count: Geist Mono 13px tabular — `N tasks · M skipped` (and the over-cap line below).
+- Shared category: one Select (default = `useSelectedCategory()`); per-row override (T11) shown as a
+  quiet **inherited chip at rest**, revealing a small Select only on hover/focus — **no always-on per-row
+  dropdowns** (the calm that made C beat B).
+- Footer: ghost `Cancel` + ONE amber `--primary` confirm `Add N to Completed`. Amber appears nowhere else.
+
+### Interaction states (Pass 2)
+
+| State                    | What the user sees                                                                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idle / empty             | Placeholder `paste your wins — one per line`; confirm disabled; preview shows the empty line below                                                             |
+| Typing / parsing         | Live preview per non-blank line; count updates (`12 tasks`); parse is synchronous/instant                                                                      |
+| Preview (valid)          | Rows listed; `12 tasks · 2 skipped`; confirm enabled `Add 12 to Completed`                                                                                     |
+| Over cap (>1000)         | `1,200 lines · importing the first 1,000` (Geist Mono); confirm `Add 1,000`; nothing silently dropped                                                          |
+| Submitting               | Confirm spinner + `Adding…`; textarea/rows locked; double-submit guarded (+ per-paste `importBatchId`)                                                         |
+| Success                  | Dialog closes; **Completed** → heatmap fill + toast `50 added to your year` (~10s) + 60s inline `Undo import`; **Todo** → toast `50 added to your list` + note |
+| Partial                  | N/A by design — invalid lines are filtered in preview before insert, so "1 bad line fails 1000" cannot occur                                                   |
+| Error / offline          | Toast `Couldn't reach the server — your paste is safe`; dialog stays open, textarea + rows preserved, `Try again` re-submits the **same** `importBatchId`      |
+| Empty preview (no valid) | `nothing to import yet — paste a few lines above` (warm, never "No items found.")                                                                              |
+
+### Bulk Undo (D5)
+
+~10s toast `Undo` **plus** the freshly-imported batch rendered as a group in the Completed list —
+`Imported just now · Undo import` — for the full 60s `COMPLETED_UNDO_WINDOW_MS`. Undo deletes by
+`importBatchId`. Discoverable and forgiving for a 50-item action; does not depend on the transient toast.
+
+### Emotional arc & copy (D6 = quiet accumulation)
+
+See the resolved copy table under **Success copy**. The heatmap fill is the payoff; words stay one quiet
+line. Active-Todo import explicitly sets the expectation that it does **not** light the heatmap (bulk
+entry; completing lights it) — preventing the "imported 50, nothing lit" let-down.
+
+### Responsive (Pass 6)
+
+- Mobile web (<640px): dialog becomes a near-full-width sheet (`Dialog` is already `sm:max-w-lg`);
+  textarea + preview stack; touch targets ≥44px; per-row override via tap (no hover dependency).
+- Desktop / main window: `max-w-xl`/`2xl` to give the preview room (wider than the default `lg`).
+- FloatingNav: opens in the main window (D7).
+
+### Accessibility (Pass 6)
+
+- Radix `Dialog` gives focus-trap, ESC, focus-restore, labelled title/description.
+- `aria-live="polite"` announces `12 parsed, 2 skipped` as the textarea changes (debounced).
+- Preview rows keyboard-navigable; per-row category Select Tab-reachable; remove-row control labelled.
+- Contrast ≥4.5:1 on body (warm charcoal on paper passes); amber confirm uses `--primary-foreground`.
+- Toast `Undo` and inline `Undo import` are real buttons (not hover-only); SR announces the success line.
+
+### AI-slop guardrails (Pass 4)
+
+Preview rows are a quiet **dense list, not a card grid** (App UI rule: cards only when the card IS the
+interaction). No decorative blobs/orbs/vignette/candle. One amber accent. Serif title. Themed Sonner toast.
+
+### Deferred (design)
+
+- Honoring a `[x]` paste prefix to route a line to Completed even from the Active-Todo zone — v1 keeps
+  routing purely by destination (`[x]` is stripped, not honored for routing) to keep the model simple.
+- Decoration-free regeneration of the C mockup (optional — `approved.json` records that candle/vignette
+  are not shipped).
+
+## Approved mockup
+
+| Screen                              | Path                                                                                 | Direction                                                                                      | Notes                                                                                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PasteImport dialog (Completed-zone) | `~/.gstack/projects/laststance-corelive/designs/paste-import-20260530/variant-C.png` | Calm, warm "Archive to Completed" dialog; one shared category pill; preview list as the anchor | Structure locked. Literal candle/window/vignette **not shipped** — warmth via OKLCH tokens. User chose C (D2) for calm + warmth; D3=B → whole-app warm-up tracked as Track 1 / `/design-consultation`. |
+
+## GSTACK REVIEW REPORT
+
+| Review        | Trigger               | Why                             | Runs | Status                | Findings                                                           |
+| ------------- | --------------------- | ------------------------------- | ---- | --------------------- | ------------------------------------------------------------------ |
+| CEO Review    | `/plan-ceo-review`    | Scope & strategy                | 1    | clean (prior session) | 4 proposals · 3 accepted · 1 rejected (dedup); D7=A architecture   |
+| Outside Voice | `/codex review`       | Independent 2nd opinion         | 1    | revised (prior)       | 23 findings · 2 critical fixed (createMany ids, undo window)       |
+| Eng Review    | `/plan-eng-review`    | Architecture & tests (required) | 0    | — (pending)           | next in pipeline                                                   |
+| Design Review | `/plan-design-review` | UI/UX gaps                      | 1    | CLEAR (FULL)          | score 5/10 → 9/10 · 7 decisions · 0 unresolved · mockup C approved |
+| DX Review     | `/plan-devex-review`  | Developer experience gaps       | 0    | — (pending)           | next in pipeline                                                   |
+
+- **CROSS-MODEL:** Design cross-model gate (GPT-4o vision) flagged variant C (over-decoration); user overrode on taste (D2/D3) and the literal decoration is dropped — warmth via tokens. Recorded as Track 1.
+- **UNRESOLVED:** 0 design decisions unresolved. Entry points (D4), bulk undo (D5), success copy (D6), FloatingNav (D7), states, responsive, a11y all specced into the plan.
+- **VERDICT:** DESIGN CLEARED (9/10). Eng Review required before ship (`skip_eng_review=false`) — running next.
