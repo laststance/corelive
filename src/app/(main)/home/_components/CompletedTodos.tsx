@@ -25,6 +25,7 @@ import { Separator } from '@/components/ui/separator'
 import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { orpc } from '@/lib/orpc/client-query'
 
+import { CompletedImportEntry } from './CompletedImportEntry'
 import { TodoItem } from './TodoItem'
 import type { Todo } from './TodoItem'
 
@@ -179,9 +180,11 @@ export const CompletedTodos = React.memo(function CompletedTodos({
           <CardDescription>Completed tasks will appear here</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-1 items-center justify-center p-8">
-          <div className="text-center text-muted-foreground">
-            <CheckCircle2 className="mx-auto mb-4 h-12 w-12 opacity-50" />
+          <div className="flex flex-col items-center gap-4 text-center text-muted-foreground">
+            <CheckCircle2 className="h-12 w-12 opacity-50" />
             <p>No completed tasks yet</p>
+            {/* Day-one discoverability: surface the Import affordance inline. */}
+            <CompletedImportEntry variant="inline" />
           </div>
         </CardContent>
       </Card>
@@ -203,7 +206,9 @@ export const CompletedTodos = React.memo(function CompletedTodos({
           </CardTitle>
           <CardDescription>Recently completed tasks</CardDescription>
           {allTodos.length > 0 && (
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2">
+              {/* Completed-zone Import entry (D4) — next to Clear all. */}
+              <CompletedImportEntry />
               <Button
                 variant="outline"
                 size="sm"
