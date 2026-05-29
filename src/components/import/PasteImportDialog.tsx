@@ -592,7 +592,7 @@ const PasteImportPreviewRow = React.memo(function PasteImportPreviewRow({
                 onClick={() => onClearOverride(rowIndex)}
                 disabled={isSubmitting}
                 aria-label={`Reset "${title}" to the shared category`}
-                className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -604,7 +604,7 @@ const PasteImportPreviewRow = React.memo(function PasteImportPreviewRow({
             type="button"
             onClick={() => onRevealOverride(rowIndex)}
             onFocus={() => onRevealOverride(rowIndex)}
-            className="flex min-h-9 shrink-0 items-center"
+            className="flex min-h-11 shrink-0 items-center"
             aria-label={`Category ${categoryName(effectiveCategoryId)} — change`}
           >
             <Badge
