@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server'
 import { z } from 'zod'
 
+import { COMPLETED_UNDO_WINDOW_MS } from '@/lib/constants/import'
 import { prisma } from '@/lib/prisma'
 
 import { log } from '../../lib/logger'
@@ -302,14 +303,6 @@ export const createCompleted = authMiddleware
       })
     }
   })
-
-/**
- * Window during which a Completed row may be hard-deleted via this endpoint.
- * Picked to cover the 5 s toast plus generous slack for slow networks; older
- * rows must go through archival flows so the destructive endpoint cannot be
- * weaponised against historical data.
- */
-const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
 
 /**
  * Hard-deletes a Completed row owned by the authenticated user, but only
