@@ -21,10 +21,22 @@ model Completed {
   userId     Int
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   categoryId Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  // Semantic "when it happened" timestamp, distinct from the DB insert time
+  // (createdAt). NULLABLE with NO @default: a non-null default would stamp
+  // every historical row with the migration timestamp, jumping all old rows
+  // to migration-day on the heatmap. The migration backfills existing rows
+  // with completedAt = createdAt; new rows (paste-import) write it on insert.
+  // The heatmap buckets by `completedAt ?? createdAt` (coalesced in JS).
+  completedAt DateTime?
+  // Tags a paste-import batch so a bulk undo can delete the whole batch by id
+  // (createMany returns only {count}, never the inserted ids). Indexed for the
+  // undo deleteMany lookup. NULL for rows created outside paste-import.
+  importBatchId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([categoryId])
+  @@index([importBatchId])
 }
 
 model Category {
@@ -51,10 +63,27 @@ model User {
   categories       Category[]
   completed        Completed[]
   todos            Todo[]
+  importBatches    ImportBatch[]
   electronSettings ElectronSettings?
   skillTrees       SkillTree[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+}
+
+/// Idempotency guard for paste-import. `id` is the client-supplied, globally
+/// unique batch id generated once per paste-confirm. `completed.createMany` /
+/// `todo.createMany` insert this row first inside a $transaction; a duplicate
+/// id throws Prisma P2002, which the procedure catches as an idempotent no-op
+/// (re-query the existing batch's count and return it). Uniqueness is on the
+/// batch id ONLY — never on task title/content — so intentional repetition
+/// (the habit/XP signal) is never collapsed. Cascade-deletes with the user.
+model ImportBatch {
+  id        String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Todo {
@@ -67,11 +96,15 @@ model Todo {
   userId      Int
   category    Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   categoryId  Int
+  // Tags a paste-import batch so a bulk undo can delete the whole batch by id.
+  // Indexed for the undo deleteMany lookup. NULL for non-imported todos.
+  importBatchId String?
   assignments NodeAssignment[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   @@index([categoryId])
+  @@index([importBatchId])
 }
 
 model ElectronSettings {
