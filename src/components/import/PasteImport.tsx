@@ -30,17 +30,19 @@ const UNDO_WINDOW_MS = COMPLETED_UNDO_WINDOW_MS
 /**
  * Records the just-imported batch so the caller can render a 60s inline undo
  * banner (D5) and, for the Todo zone, a Move-to-Completed recovery (P2). The
- * parsed `titles` are retained (not just the count) so Move-to-Completed can
- * re-route the same items under a new batch id without re-parsing.
+ * full `items` (title + categoryId) are retained so Move-to-Completed can
+ * re-route the same items — including per-row categories — under a new batch
+ * id without re-parsing or discarding user overrides.
  *
  * @example
- * { importBatchId: 'b2c1…', zone: 'todo', count: 3, titles: ['a','b','c'], expiresAt: 1717000000000 }
+ * { importBatchId: 'b2c1…', zone: 'todo', count: 3, items: [{title:'a'},{title:'gym',categoryId:3}], expiresAt: 1717000000000 }
  */
 export type LastImport = {
   importBatchId: string
   zone: PasteImportZone
   count: number
-  titles: string[]
+  /** Full parsed items (title + optional categoryId per row) for undo and Move-to-Completed replay. */
+  items: PasteImportItem[]
   /** Epoch ms when the 60s undo window closes. */
   expiresAt: number
 }
@@ -184,7 +186,6 @@ export const PasteImport = React.memo(function PasteImport({
         batchIdRef.current = crypto.randomUUID()
       }
       const importBatchId = batchIdRef.current
-      const titles = items.map((item) => item.title)
 
       try {
         const result = await match(zone)
@@ -200,7 +201,9 @@ export const PasteImport = React.memo(function PasteImport({
           importBatchId,
           zone,
           count: result.count,
-          titles,
+          // Retain full items (title + categoryId) so Move-to-Completed can
+          // replay them with all per-row overrides intact, not just titles.
+          items,
           expiresAt: Date.now() + UNDO_WINDOW_MS,
         }
 

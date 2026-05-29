@@ -27,10 +27,12 @@ export interface ImportUndoBannerProps {
 /**
  * Discoverable 60s inline undo affordance (D5) shown above the relevant list:
  * `Imported N just now · Undo import`. For the Todo zone it also offers
- * `Move to Completed` (P2 wrong-zone recovery) — client-orchestrated:
- * `todo.deleteMany(oldBatch)` then `completed.createMany` of the retained
- * titles under a NEW batch id (no new server proc). Hides on undo, move, or
- * window expiry. Complements the transient success toast.
+ * `Move to Completed` (P2 wrong-zone recovery) — client-orchestrated, ordered
+ * create-before-delete so a network blip on the delete step leaves recoverable
+ * duplicates rather than irrecoverable loss: `completed.createMany` (new batch
+ * id, full items with categoryIds) first; only on its success, `todo.deleteMany`
+ * (old batch id). On create failure the banner stays mounted for retry.
+ * Hides on undo, successful move, or window expiry.
  *
  * @param props - See {@link ImportUndoBannerProps}.
  * @returns The banner, or null when there is nothing to undo / the window expired.
@@ -102,29 +104,35 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
 
   const handleMoveToCompleted = useCallback(() => {
     if (!lastImport || lastImport.zone !== 'todo') return
-    // Re-route: delete the Todo batch, then re-create the SAME titles in
-    // Completed under a fresh batch id. We still hold the parsed titles.
-    deleteTodoMutation.mutate(
-      { importBatchId: lastImport.importBatchId },
+    // Create-before-delete: add to Completed first (new batch id, all categoryId
+    // overrides retained). Only on create success do we delete the Todo batch.
+    // If create fails → banner stays mounted for retry, todos untouched (no loss).
+    // If delete fails after a successful create → duplicates in both zones, but
+    // that is recoverable via Undo in either banner; irrecoverable loss is not.
+    createCompletedMutation.mutate(
       {
-        onSuccess: () => {
-          createCompletedMutation.mutate(
+        items: lastImport.items,
+        importBatchId: crypto.randomUUID(),
+      },
+      {
+        onSuccess: (createResult) => {
+          deleteTodoMutation.mutate(
+            { importBatchId: lastImport.importBatchId },
             {
-              items: lastImport.titles.map((title) => ({ title })),
-              importBatchId: crypto.randomUUID(),
-            },
-            {
-              onSuccess: (result) => {
+              onSuccess: () => {
                 toast.success(
-                  `${result.count.toLocaleString()} moved — today's lit`,
+                  `${createResult.count.toLocaleString()} moved — today's lit`,
                 )
                 onChanged()
                 onDismiss()
               },
               onError: () => {
-                // The Todo rows are already gone; surface a clear recovery hint.
-                toast.error(
-                  "Moved out of your list but couldn't add to Completed — paste them again",
+                // Create succeeded, delete failed → tasks appear in both zones.
+                // Primary goal (Completed) is achieved. Dismiss cleanly and let
+                // the user undo via either zone's banner. A second move attempt
+                // would create another Completed batch, making it worse.
+                toast.success(
+                  `Added to Completed — your list may still show them too`,
                 )
                 onChanged()
                 onDismiss()
@@ -133,6 +141,7 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
           )
         },
         onError: () => {
+          // Create failed → todos untouched, banner stays visible for retry.
           toast.error("Couldn't move — your tasks are still in the list")
         },
       },
