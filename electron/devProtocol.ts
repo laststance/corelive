@@ -179,6 +179,7 @@ export function ensureDevProtocolRegistration(options: {
   }
 
   // 1. Rewrite bundle id + declare the corelive scheme.
+  let patchFailed = false
   for (const step of plistBuddyCommandPlan({
     bundleId: DEV_BUNDLE_ID,
     scheme: DEEP_LINK_SCHEME,
@@ -187,9 +188,17 @@ export function ensureDevProtocolRegistration(options: {
       runCommand(PLIST_BUDDY, ['-c', step.command, plistPath])
     } catch (error) {
       if (!step.tolerateError) {
+        patchFailed = true
         log.warn(`devProtocol: PlistBuddy "${step.command}" failed:`, error)
       }
     }
+  }
+
+  // If the plist couldn't be rewritten, the identity is unchanged — re-signing,
+  // refreshing LaunchServices, and logging success would all be misleading. Bail
+  // honestly so the caller (and logs) reflect that the binding was NOT fixed.
+  if (patchFailed) {
+    return { skipped: false, reason: 'patch failed' }
   }
 
   // 2. Ad-hoc re-sign so any Electron build that seals Info.plist still launches.

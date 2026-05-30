@@ -91,6 +91,32 @@ describe('ensureDevProtocolRegistration', () => {
     ])
   })
 
+  it('reports patch failed and skips re-signing when a required PlistBuddy step throws', () => {
+    // Arrange — the bundle-id Set fails (e.g. a read-only plist); without an
+    // honest failure path the function would still claim success.
+    const runCommand = vi.fn((_file: string, args: string[]) => {
+      if (args.includes('Set :CFBundleIdentifier com.corelive.app.dev')) {
+        throw new Error('Permission denied')
+      }
+      return ''
+    })
+
+    // Act
+    const result = ensureDevProtocolRegistration({
+      platform: 'darwin',
+      electronAppPath: __dirname,
+      runCommand,
+      readBundleId: () => 'com.github.Electron',
+    })
+
+    // Assert — honest result, and no codesign attempted after the early bail
+    expect(result).toEqual({ skipped: false, reason: 'patch failed' })
+    const codesignCalls = runCommand.mock.calls.filter(
+      ([file]) => file === '/usr/bin/codesign',
+    )
+    expect(codesignCalls).toHaveLength(0)
+  })
+
   it('skips work when the dev Electron is already stamped with the unique id', () => {
     // Arrange — idempotency: a second `pnpm electron:dev` must not re-sign
     const runCommand = vi.fn((_file: string, _args: string[]) => '')
