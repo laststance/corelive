@@ -29,6 +29,7 @@ import { spawn, type ChildProcess } from 'child_process'
 import http from 'http'
 import path from 'path'
 
+import { ensureDevProtocolRegistration } from './devProtocol'
 import { log } from './logger'
 
 /**
@@ -106,6 +107,24 @@ async function startElectron(): Promise<void> {
     log.info('⏳ Waiting for Next.js dev server...')
     await checkServer('http://localhost:3011')
     log.info('✅ Next.js is ready')
+
+    // macOS only: stamp the unpackaged dev Electron with a unique bundle id so
+    // `corelive://` deep links (Google OAuth return leg) resolve to THIS app and
+    // not an arbitrary other `com.github.Electron` copy on the machine. No-op off
+    // macOS and once already patched. Never block startup if it fails.
+    try {
+      ensureDevProtocolRegistration({
+        electronAppPath: path.join(
+          process.cwd(),
+          'node_modules',
+          'electron',
+          'dist',
+          'Electron.app',
+        ),
+      })
+    } catch (error) {
+      log.warn('Dev deep-link protocol registration skipped:', error)
+    }
 
     // Path to compiled main process (built by electron-vite)
     // dev-runner is executed from project root, so use process.cwd()
