@@ -60,3 +60,17 @@ function that will pull it off the deferred list.
       tokens were untouched). Left as a follow-up because fixing it darkens the brand
       amber — a taste call that needs the user's eye and a fresh screenshot pass, not a
       drive-by token tweak. Affects primary CTA / button label text on the amber fill.
+
+## Tooling / Safety
+
+- [ ] **Extend the local-DB guard to per-user write paths.** PR #58 added
+      `scripts/assert-local-db.cjs` as a fail-closed chokepoint on the destructive
+      reset paths (`db:reset` / `db:truncate` / `prisma:migrate`). Still ungated:
+      `pnpm prisma:seed` and the `*.createMany.test.ts` integration suites run a
+      per-user-scoped `deleteMany` against whatever `POSTGRES_PRISMA_URL` points at.
+      Blast radius is bounded (one test user's named fixture rows, not a wipe), so
+      this is LOW — but a misconfigured prod URL would still mutate prod data.
+      Plan: chain the guard onto `prisma:seed` (mind the double-run via `db:reset`)
+      and assert local in the integration-test setup (extend `describeIfDb`).
+      Forcing function: any incident, or the next time dev→Neon is revisited.
+      Effort: ~30 min CC.
