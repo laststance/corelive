@@ -50,7 +50,7 @@ function that will pull it off the deferred list.
       **Done via `/design-consultation`:** captured the live authenticated `/home`
       at 3 warmth tiers × light/dark (runtime token injection, no rebuild), user
       picked the **golden-hour** tier. Raised OKLCH chroma on the cold neutral
-      surfaces only (bg/card/muted/border/muted-fg) — light 0.016–0.024, dark
+      surfaces only (bg/card/muted/border/muted-fg) — light 0.016–0.026, dark
       0.026–0.028 — accent/text/heatmap untouched. WCAG AA re-verified before
       write (text/bg 17:1, muted-fg/card 5.6:1 light / 7.3:1 dark). Branch
       `feat/golden-hour-warmup`.
