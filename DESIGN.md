@@ -52,50 +52,50 @@ OKLCH color space throughout. Departing deliberately from the current cold-neutr
 ### Approach
 
 - **Restrained chromatic accent:** amber-warm is the only saturated color in chrome. Heatmap cells get the chromatic stage.
-- **Warm neutrals:** every neutral has chroma ≥0.005 to remove the "Linear cold" feel.
+- **Warm neutrals:** every _solid_ neutral surface carries OKLCH chroma ≥0.016 (light) / ≥0.026 (dark) — the golden-hour warm-up (2026-06-03) that pushed the whole UI off clinical white toward late-afternoon light. Earlier values (0.005–0.015) read as "Linear cold". Exception: dark `--border`/`--input` stay translucent white (`oklch(1 0 0 / 8–12%)`); they composite over the warm coal background, so the rendered line reads warm without carrying its own chroma.
 - **Temperature gradient over lightness gradient** for the Heatmap — the eureka. Cooler-empty → hotter-full, not lighter → darker.
 
 ### Light mode (primary)
 
 | Token                    | Value                   | Role                                                        |
 | ------------------------ | ----------------------- | ----------------------------------------------------------- |
-| `--background`           | `oklch(0.985 0.005 75)` | Paper white with faint warm tint                            |
-| `--card` / surface       | `oklch(0.98 0.008 70)`  | Sand-lit elevated surface                                   |
-| `--popover`              | `oklch(0.98 0.008 70)`  | Same as card                                                |
+| `--background`           | `oklch(0.975 0.016 80)` | Golden-hour paper (warmed off white)                        |
+| `--card` / surface       | `oklch(0.972 0.018 78)` | Sand-lit elevated surface                                   |
+| `--popover`              | `oklch(0.972 0.018 78)` | Same as card                                                |
 | `--foreground`           | `oklch(0.18 0.015 30)`  | Deep warm charcoal (not pure black)                         |
-| `--muted-foreground`     | `oklch(0.5 0.015 50)`   | Earthy taupe for secondary copy                             |
-| `--border`               | `oklch(0.92 0.01 70)`   | Warm light gray                                             |
-| `--input`                | `oklch(0.92 0.01 70)`   | Form input border                                           |
+| `--muted-foreground`     | `oklch(0.5 0.026 56)`   | Earthy taupe for secondary copy (5.6:1 on card, AA)         |
+| `--border`               | `oklch(0.908 0.022 76)` | Warm dawn gray                                              |
+| `--input`                | `oklch(0.908 0.022 76)` | Form input border                                           |
 | `--ring`                 | `oklch(0.62 0.16 50)`   | Focus ring = primary amber                                  |
 | `--primary`              | `oklch(0.62 0.16 50)`   | Amber CTA                                                   |
 | `--primary-foreground`   | `oklch(0.99 0 0)`       | Paper text on amber                                         |
-| `--secondary`            | `oklch(0.95 0.01 70)`   | Quiet button bg                                             |
+| `--secondary`            | `oklch(0.942 0.024 78)` | Quiet button bg                                             |
 | `--secondary-foreground` | `oklch(0.18 0.015 30)`  | Same as foreground                                          |
-| `--accent`               | `oklch(0.95 0.01 70)`   | Hover surfaces                                              |
+| `--accent`               | `oklch(0.942 0.024 78)` | Hover surfaces                                              |
 | `--accent-foreground`    | `oklch(0.18 0.015 30)`  |                                                             |
-| `--muted`                | `oklch(0.95 0.01 70)`   | Disabled/quiet bg                                           |
+| `--muted`                | `oklch(0.942 0.024 78)` | Disabled/quiet bg                                           |
 | `--destructive`          | `oklch(0.6 0.20 25)`    | Clay red, retuned warmer than the default oklch destructive |
 
 ### Dark mode
 
-Dark mode is a redesign of the surfaces, not a saturation reduction. The warm undertone (chroma 0.005–0.015 on hue 30–75) is preserved.
+Dark mode is a redesign of the surfaces, not a saturation reduction. The warm undertone (chroma 0.026–0.028 on hue 40–66, raised in the 2026-06-03 golden-hour warm-up from 0.012–0.015) makes the coal glow like embers rather than slate.
 
-| Token                  | Value                  | Role                                              |
-| ---------------------- | ---------------------- | ------------------------------------------------- |
-| `--background`         | `oklch(0.16 0.012 35)` | Warm near-black, slight ochre undertone           |
-| `--card` / surface     | `oklch(0.22 0.015 40)` | Warm coal                                         |
-| `--popover`            | `oklch(0.22 0.015 40)` |                                                   |
-| `--foreground`         | `oklch(0.96 0.005 75)` | Warm white                                        |
-| `--muted-foreground`   | `oklch(0.72 0.012 70)` | Warm fog                                          |
-| `--border`             | `oklch(1 0 0 / 8%)`    | Soft glow boundary                                |
-| `--input`              | `oklch(1 0 0 / 12%)`   |                                                   |
-| `--ring`               | `oklch(0.7 0.16 55)`   | Focus ring slightly brighter than primary in dark |
-| `--primary`            | `oklch(0.7 0.16 55)`   | Amber lifted for dark contrast                    |
-| `--primary-foreground` | `oklch(0.16 0.012 35)` | Background on amber                               |
-| `--secondary`          | `oklch(0.27 0.012 40)` |                                                   |
-| `--accent`             | `oklch(0.27 0.012 40)` |                                                   |
-| `--muted`              | `oklch(0.27 0.012 40)` |                                                   |
-| `--destructive`        | `oklch(0.7 0.19 25)`   | Clay red lifted                                   |
+| Token                  | Value                   | Role                                              |
+| ---------------------- | ----------------------- | ------------------------------------------------- |
+| `--background`         | `oklch(0.172 0.026 40)` | Ember coal, warm ochre undertone                  |
+| `--card` / surface     | `oklch(0.235 0.028 44)` | Warm coal                                         |
+| `--popover`            | `oklch(0.235 0.028 44)` |                                                   |
+| `--foreground`         | `oklch(0.96 0.005 75)`  | Warm white                                        |
+| `--muted-foreground`   | `oklch(0.74 0.026 66)`  | Warm fog (7.3:1 on card, AA)                      |
+| `--border`             | `oklch(1 0 0 / 8%)`     | Soft glow boundary                                |
+| `--input`              | `oklch(1 0 0 / 12%)`    |                                                   |
+| `--ring`               | `oklch(0.7 0.16 55)`    | Focus ring slightly brighter than primary in dark |
+| `--primary`            | `oklch(0.7 0.16 55)`    | Amber lifted for dark contrast                    |
+| `--primary-foreground` | `oklch(0.16 0.012 35)`  | Background on amber                               |
+| `--secondary`          | `oklch(0.285 0.026 44)` |                                                   |
+| `--accent`             | `oklch(0.285 0.026 44)` |                                                   |
+| `--muted`              | `oklch(0.285 0.026 44)` |                                                   |
+| `--destructive`        | `oklch(0.7 0.19 25)`    | Clay red lifted                                   |
 
 ### Heatmap palette — temperature gradient
 

@@ -47,37 +47,40 @@
 /* ---break--- */
 :root {
   --radius: 0.625rem;
-  /* Warm Cathedral — light theme (paper, dawn, amber, terracotta) */
-  --background: oklch(0.985 0.005 75);
+  /* Warm Cathedral — light theme · golden-hour neutrals (warmed paper, dawn, amber, terracotta).
+     Neutral surfaces carry OKLCH chroma 0.016–0.024 (was 0.005–0.01) so the room reads as
+     late-afternoon light, not clinical white. Accent/text/heatmap are unchanged. WCAG AA holds
+     (text/bg 17.5:1, muted-fg/card 5.6:1). See DESIGN.md "App-wide warm-up". */
+  --background: oklch(0.975 0.016 80);
   --foreground: oklch(0.18 0.015 30);
-  --card: oklch(0.98 0.008 70);
+  --card: oklch(0.972 0.018 78);
   --card-foreground: oklch(0.18 0.015 30);
-  --popover: oklch(0.98 0.008 70);
+  --popover: oklch(0.972 0.018 78);
   --popover-foreground: oklch(0.18 0.015 30);
   --primary: oklch(0.62 0.16 50);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.95 0.01 70);
+  --secondary: oklch(0.942 0.024 78);
   --secondary-foreground: oklch(0.18 0.015 30);
-  --muted: oklch(0.95 0.01 70);
-  --muted-foreground: oklch(0.5 0.015 50);
-  --accent: oklch(0.95 0.01 70);
+  --muted: oklch(0.942 0.024 78);
+  --muted-foreground: oklch(0.5 0.026 56);
+  --accent: oklch(0.942 0.024 78);
   --accent-foreground: oklch(0.18 0.015 30);
   --destructive: oklch(0.6 0.2 25);
-  --border: oklch(0.92 0.01 70);
-  --input: oklch(0.92 0.01 70);
+  --border: oklch(0.908 0.022 76);
+  --input: oklch(0.908 0.022 76);
   --ring: oklch(0.62 0.16 50);
   --chart-1: oklch(0.62 0.16 50);
   --chart-2: oklch(0.65 0.13 145);
   --chart-3: oklch(0.6 0.1 230);
   --chart-4: oklch(0.7 0.14 80);
   --chart-5: oklch(0.55 0.16 40);
-  --sidebar: oklch(0.98 0.008 70);
+  --sidebar: oklch(0.972 0.018 78);
   --sidebar-foreground: oklch(0.18 0.015 30);
   --sidebar-primary: oklch(0.62 0.16 50);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.95 0.01 70);
+  --sidebar-accent: oklch(0.942 0.024 78);
   --sidebar-accent-foreground: oklch(0.18 0.015 30);
-  --sidebar-border: oklch(0.92 0.01 70);
+  --sidebar-border: oklch(0.908 0.022 76);
   --sidebar-ring: oklch(0.62 0.16 50);
   /* Heatmap temperature gradient — paper → dawn → amber → honey → terracotta */
   --hm-0: oklch(0.96 0.008 80);
@@ -94,20 +97,23 @@
 }
 /* ---break--- */
 [data-theme='dark'] {
-  /* Warm Cathedral — dark theme (warm coal, ember, copper, warm sun) */
-  --background: oklch(0.16 0.012 35);
+  /* Warm Cathedral — dark theme · golden-hour neutrals (warm coal, ember, copper, warm sun).
+     Coal surfaces carry OKLCH chroma 0.026–0.028 (was 0.012–0.015) so the dark room glows like
+     embers, not slate. Accent/text/heatmap unchanged. WCAG AA holds (text/bg 17:1, muted-fg/card
+     7.3:1). See DESIGN.md "App-wide warm-up". */
+  --background: oklch(0.172 0.026 40);
   --foreground: oklch(0.96 0.005 75);
-  --card: oklch(0.22 0.015 40);
+  --card: oklch(0.235 0.028 44);
   --card-foreground: oklch(0.96 0.005 75);
-  --popover: oklch(0.22 0.015 40);
+  --popover: oklch(0.235 0.028 44);
   --popover-foreground: oklch(0.96 0.005 75);
   --primary: oklch(0.7 0.16 55);
   --primary-foreground: oklch(0.16 0.012 35);
-  --secondary: oklch(0.27 0.012 40);
+  --secondary: oklch(0.285 0.026 44);
   --secondary-foreground: oklch(0.96 0.005 75);
-  --muted: oklch(0.27 0.012 40);
-  --muted-foreground: oklch(0.72 0.012 70);
-  --accent: oklch(0.27 0.012 40);
+  --muted: oklch(0.285 0.026 44);
+  --muted-foreground: oklch(0.74 0.026 66);
+  --accent: oklch(0.285 0.026 44);
   --accent-foreground: oklch(0.96 0.005 75);
   --destructive: oklch(0.7 0.19 25);
   --border: oklch(1 0 0 / 8%);
@@ -118,11 +124,11 @@
   --chart-3: oklch(0.6 0.1 230);
   --chart-4: oklch(0.7 0.14 80);
   --chart-5: oklch(0.7 0.15 65);
-  --sidebar: oklch(0.22 0.015 40);
+  --sidebar: oklch(0.235 0.028 44);
   --sidebar-foreground: oklch(0.96 0.005 75);
   --sidebar-primary: oklch(0.7 0.16 55);
   --sidebar-primary-foreground: oklch(0.16 0.012 35);
-  --sidebar-accent: oklch(0.27 0.012 40);
+  --sidebar-accent: oklch(0.285 0.026 44);
   --sidebar-accent-foreground: oklch(0.96 0.005 75);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.7 0.16 55);

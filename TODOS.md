@@ -39,7 +39,7 @@ function that will pull it off the deferred list.
 
 ## Design system
 
-- [ ] **App-wide warm-up — push the whole UI toward the golden-hour mood.**
+- [x] **App-wide warm-up — push the whole UI toward the golden-hour mood.** ✅ 2026-06-03
       Surfaced in `/plan-design-review` (2026-05-30, Issue #53). When choosing the
       paste-import mockup, the user picked the warmest/most-atmospheric variant (C)
       and confirmed (D3) the real intent: the app still feels too cold, they want
@@ -47,5 +47,16 @@ function that will pull it off the deferred list.
       change, NOT paste-import: revise `globals.css` OKLCH tokens (warmer neutrals /
       light) + `DESIGN.md`. Needs the user's eye (subjective feel). paste-import uses
       tokens only, so it inherits this automatically once landed — no rework.
-      Forcing function: run `/design-consultation` as the next design session.
-      Effort: ~half day human / ~1–2h CC.
+      **Done via `/design-consultation`:** captured the live authenticated `/home`
+      at 3 warmth tiers × light/dark (runtime token injection, no rebuild), user
+      picked the **golden-hour** tier. Raised OKLCH chroma on the cold neutral
+      surfaces only (bg/card/muted/border/muted-fg) — light 0.016–0.024, dark
+      0.026–0.028 — accent/text/heatmap untouched. WCAG AA re-verified before
+      write (text/bg 17:1, muted-fg/card 5.6:1 light / 7.3:1 dark). Branch
+      `feat/golden-hour-warmup`.
+- [ ] **a11y: `--primary` + `--primary-foreground` contrast is 3.75:1 (below WCAG AA 4.5:1 for normal text).**
+      Pre-existing — surfaced by the codex design-voice review during the golden-hour
+      warm-up ship (2026-06-03); NOT introduced by that diff (the amber `--primary`
+      tokens were untouched). Left as a follow-up because fixing it darkens the brand
+      amber — a taste call that needs the user's eye and a fresh screenshot pass, not a
+      drive-by token tweak. Affects primary CTA / button label text on the amber fill.
