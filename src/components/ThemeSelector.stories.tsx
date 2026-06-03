@@ -146,10 +146,10 @@ export const DefaultThemeTest: Story = {
       .getPropertyValue('--foreground')
       .trim()
 
-    // Warm Cathedral light theme — accept oklch/lab serializations across browsers.
-    // --background: oklch(0.985 0.005 75), --foreground: oklch(0.18 0.015 30)
+    // Golden-hour light theme — accept oklch/lab serializations across browsers.
+    // --background: oklch(0.975 0.016 80), --foreground: oklch(0.18 0.015 30)
     expect(backgroundColor).toMatch(
-      /^(oklch\(0\.985 0\.005 75\)|oklch\(98\.5% 0\.005 75\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
+      /^(oklch\(0\.975 0\.016 80\)|oklch\(97\.5% 0\.016 80\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
     )
     expect(foregroundColor).toMatch(
       /^(oklch\(0\.18 0\.015 30\)|oklch\(18% 0\.015 30\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
@@ -205,10 +205,10 @@ export const SwitchToDarkThemeTest: Story = {
       .getPropertyValue('--background')
       .trim()
 
-    // Warm Cathedral dark theme — accept oklch/lab serializations across browsers.
-    // --background: oklch(0.16 0.012 35)
+    // Golden-hour dark theme — accept oklch/lab serializations across browsers.
+    // --background: oklch(0.172 0.026 40)
     expect(backgroundColor).toMatch(
-      /^(oklch\(0\.16 0\.012 35\)|oklch\(16% 0\.012 35\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
+      /^(oklch\(0\.172 0\.026 40\)|oklch\(17\.2% 0\.026 40\)|lab\([\d.]+% [-\d.]+ [-\d.]+\))$/,
     )
   },
 }
