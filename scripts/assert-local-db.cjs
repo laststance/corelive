@@ -30,8 +30,13 @@ const ALLOWED_HOSTS = new Set([
   'corelive-postgres', // コンテナ名
 ])
 
-// prisma.config.ts の解決順を完全に再現（POSTGRES_PRISMA_URL → DATABASE_URL）
-const rawUrl = process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_URL || ''
+// prisma.config.ts の解決順を完全に再現（POSTGRES_PRISMA_URL → DATABASE_URL → localhost フォールバック）。
+// 両env未設定時、prisma.config.ts は同じ localhost DSN へ接続するため、ここでも同じ既定値に倒して挙動を一致させる
+// （未設定で abort すると、prisma 側はローカルへ繋ぐのにゲートだけが止まる乖離が起きる）。
+const rawUrl =
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.DATABASE_URL ||
+  'postgresql://user:pass@localhost:5432/db?schema=public'
 
 function abort(reason) {
   console.error('\n🛑 [assert-local-db] 破壊的DB操作を中止しました。')
@@ -52,11 +57,7 @@ function isLocalHost(value) {
   return ALLOWED_HOSTS.has(h)
 }
 
-if (!rawUrl) {
-  abort(
-    'POSTGRES_PRISMA_URL / DATABASE_URL が未設定（ローカルだと確証できない）',
-  )
-}
+// rawUrl は上の localhost フォールバックにより常に非空（prisma.config.ts と同一）。空文字ガードは不要。
 
 // バックスラッシュは WHATWG と libpq で authority の切れ目の解釈が割れる（パーサ差分）。正当なローカル接続文字列には
 // 出現しないので、曖昧なパースを信用せず安全側に倒して停止する。
@@ -93,8 +94,16 @@ for (const qh of queryHosts) {
   }
 }
 
+// authority の hostname が空でも、query 上の host(`?host=/var/run/postgresql` や `?host=::1` 等)が
+// 上のループで全てローカルと検証済みなら、prisma/libpq の実接続先はローカルなので許可する。
+// query host が1つも無い空ホストは「ローカルだと確証できない」ため停止（fail closed）。
 const host = parsed.hostname
-if (!ALLOWED_HOSTS.has(host)) {
+if (!host) {
+  if (queryHosts.length === 0) {
+    abort('接続先ホストが空です（ローカルだと確証できません）')
+  }
+  // queryHosts は上で全てローカル検証済み（非ローカルがあれば既に abort 済み）→ 許可
+} else if (!ALLOWED_HOSTS.has(host)) {
   abort(`接続先ホスト "${host}" はローカル許可リストに含まれません`)
 }
 
