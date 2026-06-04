@@ -55,8 +55,20 @@ export function ElectronStartupSync(): null {
     // failure signal here is the boolean `false`, not a thrown error. The
     // `.catch` is still kept as defense-in-depth in case preload behavior
     // changes or someone exposes the raw IPC channel later.
-    const syncPromise =
-      window.electronAPI?.settings?.setHideAppIcon(hideAppIcon)
+    // Guard on the METHOD, not just the `settings` namespace. This component
+    // is mounted in the root layout, so it runs on every route — and the
+    // installed desktop app loads remote web against its own FROZEN preload.
+    // Calling `undefined()` on an older preload would throw a synchronous
+    // TypeError out of this effect, past its own `.catch`, to the error
+    // boundary (and from the root layout it escapes `error.tsx` entirely —
+    // see `global-error.tsx`). Defensive only: `settings` and `setHideAppIcon`
+    // shipped in the same release, so no published preload has the gap today;
+    // uniform method-guarding future-proofs the bridge against a reshuffle and
+    // matches the other Electron settings components.
+    const settings = window.electronAPI?.settings
+    if (typeof settings?.setHideAppIcon !== 'function') return
+    // Call as a method so `this` stays bound to `settings`.
+    const syncPromise = settings.setHideAppIcon(hideAppIcon)
     syncPromise
       ?.then((ok) => {
         if (ok === false) {
