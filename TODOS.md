@@ -6,7 +6,11 @@ function that will pull it off the deferred list.
 
 ## Heatmap / Completion semantics
 
-- [ ] **Migrate Todo heatmap bucket to a stable `completedAt` field.**
+- [x] **Migrate Todo heatmap bucket to a stable `completedAt` field.** ✅ 2026-06-04 (feat/completion-feedback-idokori)
+      Done in the completion-feedback / 居残りモード work: (a) `Todo.completedAt`
+      added in migration `20260603235155_add_todo_completedat`, (b) backfilled
+      from `updatedAt`, (c) `toggleTodo` stamps it on false→true, (d)
+      `fetchCompletedEntries` filters/buckets by `completedAt ?? updatedAt`.
       Today `getHeatmap` and `getDayDetail` bucket Todo rows by
       `updatedAt`, which mutates on every edit and can shift heatmap dots
       forward in time when a user edits a long-completed Todo. Plan:
@@ -60,6 +64,22 @@ function that will pull it off the deferred list.
       tokens were untouched). Left as a follow-up because fixing it darkens the brand
       amber — a taste call that needs the user's eye and a fresh screenshot pass, not a
       drive-by token tweak. Affects primary CTA / button label text on the amber fill.
+- [ ] **a11y: empty/unchecked `<Checkbox>` border is ~1.22:1 on the ivory bg (fails WCAG 1.4.11 — 3:1 for UI-component boundaries).**
+      Surfaced in `/plan-design-review` (2026-06-04, D12). The unchecked shadcn
+      `<Checkbox>` uses `border-input` (`--input` = oklch(0.908 0.022 76)); against the
+      warm-ivory `--background` (oklch(0.975 0.016 80)) that is only ~1.22:1 — well below
+      the 3:1 bar for non-text UI-component boundaries. Pre-existing and app-wide (NOT
+      introduced by the completion-feedback / 居残りモード work), but that feature centers
+      the pending checkbox as the actionable foreground, so it raises the stakes.
+      Tracked HIGH priority (D12). Proper fix = a thin, "papery" warm stroke that still
+      reaches ≥3:1, applied to the GLOBAL `<Checkbox>` (NOT a per-surface override — that
+      would make checkboxes inconsistent across the app). Needs the user's eye (the stroke
+      must stay quiet/papery per DESIGN.md while passing AA). DISTINCT from the
+      `--primary`/`--primary-foreground` 3.75:1 entry above (that is the amber CTA label;
+      this is the unchecked checkbox border).
+      Forcing function: a focused checkbox-component a11y pass, or the next time the
+      pending checkbox is touched (e.g. the 居残りモード build).
+      Effort: ~1h human / ~15 min CC.
 
 ## Tooling / Safety
 
@@ -74,3 +94,19 @@ function that will pull it off the deferred list.
       and assert local in the integration-test setup (extend `describeIfDb`).
       Forcing function: any incident, or the next time dev→Neon is revisited.
       Effort: ~30 min CC.
+
+## Completion feedback / affirmation
+
+- [ ] **Clear-moment affirmation — a quiet acknowledgment when the user clears the completed list.**
+      Surfaced in `/plan-design-review` (2026-06-04, D9). With Part 0 (archive-on-clear),
+      clearing now safely archives completed tasks — but there is no moment of closure;
+      the rows just leave. A quiet, NON-gamified acknowledgment at the clear moment (e.g.
+      a soft "8 things done — good day" / 「今日は8個 — お疲れさま」 microcopy, NOT a
+      celebration, NOT a streak) could honor the north star
+      「些細でも経験値、今日自分頑張ったなと自分を肯定できる感覚」. DEFERRED as a fast-follow
+      (D9: "record, don't build now") to respect the CEO-review HOLD SCOPE — the current
+      feature set (completion feedback + 居残りモード) ships first. Voice must follow
+      DESIGN.md "quiet companion" (no KPI %, no scoreboard).
+      Depends on: Part 0 (archive-on-clear) landing first.
+      Forcing function: post-ship polish pass on the completion-feedback feature.
+      Effort: ~1-2h human / ~20 min CC.
