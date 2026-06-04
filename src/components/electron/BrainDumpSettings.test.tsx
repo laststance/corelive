@@ -129,4 +129,48 @@ describe('BrainDumpSettings', () => {
       await screen.findByText(/Update CoreLive to the latest version/i),
     ).toBeInTheDocument()
   })
+
+  it('shows a desktop-only message when the brainDump bridge is absent', async () => {
+    // Arrange: a web renderer has no electronAPI at all.
+    installElectronAPI(undefined)
+
+    // Act
+    render(<BrainDumpSettings />)
+
+    // Assert: the fallback copy renders and no toggles are offered.
+    expect(
+      await screen.findByText(
+        'BrainDump Note is only available in the desktop application.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  it('shows a loading state until the saved BrainDump settings arrive', async () => {
+    // Arrange: getSyncMode never resolves, so the load Promise.all keeps the
+    // card in its loading state (all three getters exist, so the guards pass).
+    getSyncModeMock.mockReturnValue(new Promise<boolean>(() => {}))
+    getOpacityMock.mockResolvedValue(0.7)
+    getShortcutMock.mockResolvedValue('CommandOrControl+Shift+B')
+    installElectronAPI({
+      brainDump: {
+        getSyncMode: getSyncModeMock,
+        setSyncMode: setSyncModeMock,
+        getOpacity: getOpacityMock,
+        setOpacity: setOpacityMock,
+        getShortcut: getShortcutMock,
+        setShortcut: setShortcutMock,
+        toggle: toggleMock,
+      },
+    })
+
+    // Act
+    render(<BrainDumpSettings />)
+
+    // Assert: the loading copy shows and no toggles have rendered yet.
+    expect(
+      await screen.findByText('Loading BrainDump settings…'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
 })
