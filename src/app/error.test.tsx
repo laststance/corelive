@@ -52,4 +52,23 @@ describe('RouteError (route-level error boundary)', () => {
     // Assert: Next.js's reset() is invoked to re-render the segment.
     expect(reset).toHaveBeenCalledTimes(1)
   })
+
+  it('does not throw when mounting through the real (unmocked) logger', () => {
+    // Lock the last-line-of-defense invariant: the boundary's own mount-time
+    // logging must run through the REAL logger without throwing, or the
+    // recovery UI would itself crash and defeat the boundary. Drop the
+    // beforeEach stub so the genuine pino browser path executes; keep console
+    // quiet for hygiene only.
+    vi.restoreAllMocks()
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+
+    // Act + Assert
+    expect(() =>
+      render(<RouteError error={new Error('boom')} reset={vi.fn()} />),
+    ).not.toThrow()
+
+    consoleErrorSpy.mockRestore()
+  })
 })

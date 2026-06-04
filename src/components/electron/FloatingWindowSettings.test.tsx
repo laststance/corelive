@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FloatingWindowSettings } from './FloatingWindowSettings'
@@ -107,5 +108,39 @@ describe('FloatingWindowSettings', () => {
       await screen.findByText('Loading floating window settings...'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  it('rolls the switch back when the main process fails to persist it', async () => {
+    // Arrange: the saved preference is off, and the save will reject — mirroring
+    // StartupWindowSettings' rollback test so both share the same safety net.
+    getVisibleOnAllWorkspacesMock.mockResolvedValue(false)
+    setVisibleOnAllWorkspacesMock.mockRejectedValue(
+      new Error('main process unavailable'),
+    )
+    installElectronAPI({
+      floatingPanels: {
+        getVisibleOnAllWorkspaces: getVisibleOnAllWorkspacesMock,
+        setVisibleOnAllWorkspaces: setVisibleOnAllWorkspacesMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<FloatingWindowSettings />)
+    const desktopSwitch = await screen.findByRole('switch', {
+      name: 'Show on all Mac desktops',
+    })
+    expect(desktopSwitch).not.toBeChecked()
+
+    // Act: try to enable it; persistence rejects.
+    await user.click(desktopSwitch)
+
+    // Assert: the optimistic on-state reverts and an error surfaces.
+    await waitFor(() => {
+      expect(
+        screen.getByRole('switch', { name: 'Show on all Mac desktops' }),
+      ).not.toBeChecked()
+    })
+    expect(
+      screen.getByText('Failed to update floating window settings'),
+    ).toBeInTheDocument()
   })
 })

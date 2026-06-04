@@ -92,6 +92,21 @@ describe('ElectronStartupSync', () => {
     expect(setHideAppIconMock).not.toHaveBeenCalled()
   })
 
+  it('does not throw when an old preload exposes settings but not setHideAppIcon', async () => {
+    // Arrange: an OUTDATED desktop app exposes the `settings` namespace but
+    // predates the `setHideAppIcon` method this effect calls. Mounted in the
+    // root layout, a synchronous TypeError here would bubble past error.tsx to
+    // global-error and blank every route. The method guard must skip the call.
+    installElectronAPI({ settings: {} })
+
+    // Act + Assert: mounting must not throw, and no IPC is attempted.
+    expect(() =>
+      render(wrapWithStore(<ElectronStartupSync />, true)),
+    ).not.toThrow()
+    await Promise.resolve()
+    expect(setHideAppIconMock).not.toHaveBeenCalled()
+  })
+
   it('logs an error when setHideAppIcon rejects', async () => {
     // Surface IPC failures so main-process regressions don't go silent.
     // Without this test, a future refactor could remove the .catch handler
