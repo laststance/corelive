@@ -54,7 +54,7 @@ import {
  * @returns Settings page with toggle switches, or fallback for web users
  */
 export const ElectronSettingsPage = memo(
-  function ElectronSettingsPage(): React.ReactElement {
+  function ElectronSettingsPage(): React.ReactElement | null {
     const dispatch = useAppDispatch()
     const isElectron = useIsElectron() // SSR-safe via useSyncExternalStore
 
@@ -172,22 +172,11 @@ export const ElectronSettingsPage = memo(
       [dispatch],
     )
 
-    // Environment guard: Show fallback for web users
+    // Web users see the shared Preferences section (rendered by the settings
+    // page); the Electron window-chrome settings below are desktop-only, so
+    // render nothing here off-Electron (D15 — one settings home, prefs for all).
     if (!isElectron) {
-      return (
-        <div className="mx-auto max-w-2xl p-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">Settings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                These settings are only available in the desktop application.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )
+      return null
     }
 
     return (

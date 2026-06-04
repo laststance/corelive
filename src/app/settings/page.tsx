@@ -1,33 +1,39 @@
 import type { Metadata } from 'next'
 import * as React from 'react'
 import { memo } from 'react'
+
 /**
- * Settings Page (Electron Only)
+ * Settings Page
  *
- * This page displays Electron-specific settings and is only
- * accessible when running in the Electron environment.
- * Web users attempting to access this route will be redirected.
+ * The single settings home across web and Electron (D15). Everyone sees the
+ * shared Preferences section; the Electron window-chrome settings render only
+ * under the desktop app (ElectronSettingsPage returns null on web).
  *
  * @module app/settings/page
  */
-
 import { ElectronSettingsPage } from '@/components/electron/ElectronSettingsPage'
+import { PreferencesSettings } from '@/components/settings/PreferencesSettings'
 
 export const metadata: Metadata = {
   title: 'Settings',
-  description: 'Electron application settings',
+  description: 'CoreLive preferences and desktop application settings',
 }
 
 /**
  * Settings page component.
  *
- * Renders the ElectronSettingsPage component for Electron users.
- * The component itself handles checking for Electron environment.
+ * Renders the web-common Preferences section for all users, followed by the
+ * Electron-only window-chrome settings (which self-gate to the desktop app).
  *
  * @returns Settings page
  */
 const SettingsPage = memo(function SettingsPage(): React.ReactNode {
-  return <ElectronSettingsPage />
+  return (
+    <div className="mx-auto h-full max-w-2xl">
+      <PreferencesSettings />
+      <ElectronSettingsPage />
+    </div>
+  )
 })
 
 export default SettingsPage
