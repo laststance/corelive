@@ -2,8 +2,11 @@
 
 import type { InfiniteData } from '@tanstack/react-query'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
+import { TODO_DELETE_UNDO_WINDOW_MS } from '@/lib/constants/todo'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 
@@ -42,6 +45,11 @@ interface TodoResponse {
  * @param categoryId - Currently selected category ID for correct cache key matching.
  *   Must match the categoryId used in the todo list query so optimistic updates
  *   target the right cache entry.
+ * @param isRetaining - 居残りモード on/off. When on, the active list drops the
+ *   completed:false filter (holds ALL todos), so the cache key omits `completed`
+ *   and toggle flips a row IN PLACE instead of moving it to the Completed list.
+ *   Passed in (not read from Redux) so consumers without a ReduxProvider — and
+ *   the hook's own unit tests — stay decoupled from the store.
  * @returns Object containing all todo mutations with optimistic updates
  *
  * @example
@@ -49,17 +57,23 @@ interface TodoResponse {
  * createMutation.mutate({ text: 'New task', categoryId: 5 })
  * toggleMutation.mutate({ id: 42 })
  */
-export function useTodoMutations(categoryId: number | null) {
+export function useTodoMutations(
+  categoryId: number | null,
+  isRetaining = false,
+) {
   const queryClient = useQueryClient()
 
   // Query keys for cache operations
-  // - pendingKey: exact match for useQuery in TodoList (includes categoryId filter)
+  // - pendingKey: exact match for useQuery in TodoList (includes categoryId filter).
+  //   In retain mode (居残りモード) it drops the completed:false filter so the
+  //   active list holds ALL todos; the key MUST match TodoList's query input
+  //   exactly (same omission) or optimistic updates miss the cache.
   // - completedBaseKey: partial match for useInfiniteQuery in CompletedTodos
   //   (infiniteOptions with function input generates unpredictable keys,
   //    so we use partial matching for completed list operations)
   const pendingKey = orpc.todo.list.queryOptions({
     input: {
-      completed: false,
+      ...(isRetaining ? {} : { completed: false }),
       limit: 100,
       offset: 0,
       ...(categoryId !== null && { categoryId }),
@@ -125,6 +139,35 @@ export function useTodoMutations(categoryId: number | null) {
     ...orpc.todo.toggle.mutationOptions({}),
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: pendingKey })
+
+      // Retain mode (居残りモード): the active list holds ALL todos, so a toggle
+      // flips the row IN PLACE — it keeps its `order` position with the checked
+      // + strikethrough look instead of moving to the Completed section.
+      if (isRetaining) {
+        const previousActive =
+          queryClient.getQueryData<TodoResponse>(pendingKey)
+        queryClient.setQueryData<TodoResponse>(pendingKey, (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            todos: old.todos.map((todoRow) =>
+              todoRow.id === id
+                ? {
+                    ...todoRow,
+                    completed: !todoRow.completed,
+                    updatedAt: new Date(),
+                  }
+                : todoRow,
+            ),
+          }
+        })
+        return {
+          previousActive,
+          previousPending: undefined,
+          previousCompletedQueries: undefined,
+        }
+      }
+
       await queryClient.cancelQueries({ queryKey: completedBaseKey })
 
       const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
@@ -219,9 +262,20 @@ export function useTodoMutations(categoryId: number | null) {
         }
       }
 
-      return { previousPending, previousCompletedQueries }
+      return {
+        previousActive: undefined,
+        previousPending,
+        previousCompletedQueries,
+      }
     },
     onError: (_err, _input, context) => {
+      // Retain mode rollback: restore the single active-list snapshot.
+      if (isRetaining) {
+        if (context?.previousActive) {
+          queryClient.setQueryData(pendingKey, context.previousActive)
+        }
+        return
+      }
       if (context?.previousPending) {
         queryClient.setQueryData(pendingKey, context.previousPending)
       }
@@ -422,6 +476,21 @@ export function useTodoMutations(categoryId: number | null) {
     ...orpc.todo.clearCompleted.mutationOptions({}),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: pendingKey })
+
+      // Retain mode (居残りモード): completed todos live in the active list
+      // (pendingKey), not the suppressed Completed section, so clear removes the
+      // completed rows from there optimistically (the server archives them).
+      if (isRetaining) {
+        const previousActive =
+          queryClient.getQueryData<TodoResponse>(pendingKey)
+        queryClient.setQueryData<TodoResponse>(pendingKey, (old) => {
+          if (!old) return old
+          const remaining = old.todos.filter((todoRow) => !todoRow.completed)
+          return { ...old, todos: remaining, total: remaining.length }
+        })
+        return { previousActive, previousCompletedQueries: undefined }
+      }
+
       await queryClient.cancelQueries({ queryKey: completedBaseKey })
 
       const previousCompletedQueries = queryClient.getQueriesData<
@@ -437,9 +506,16 @@ export function useTodoMutations(categoryId: number | null) {
         }),
       )
 
-      return { previousCompletedQueries }
+      return { previousActive: undefined, previousCompletedQueries }
     },
     onError: (_err, _input, context) => {
+      // Retain mode rollback: restore the active-list snapshot.
+      if (isRetaining) {
+        if (context?.previousActive) {
+          queryClient.setQueryData(pendingKey, context.previousActive)
+        }
+        return
+      }
       if (context?.previousCompletedQueries) {
         for (const [queryKey, data] of context.previousCompletedQueries) {
           if (data) {
@@ -523,6 +599,67 @@ export function useTodoMutations(categoryId: number | null) {
     },
   })
 
+  // ============================================
+  // DELETE-COMPLETED-WITH-UNDO - Deferred-commit per-item delete
+  // ============================================
+  // Used by the Completed section's per-row trash (D3). Optimistically removes
+  // the row at once, shows a Sonner Undo toast, and only commits the real
+  // archive-then-delete (via deleteMutation → the server archives the
+  // completion, so the heatmap day survives) when the undo window closes. Undo
+  // is a pure client-side restore — no server call is made. Separate from
+  // deleteMutation, which is used directly for PENDING rows (no undo needed,
+  // no heatmap day to lose).
+  const deleteCompletedWithUndo = useCallback(
+    (id: number) => {
+      // Snapshot every completed query so Undo can restore the exact prior state.
+      const completedSnapshot = queryClient.getQueriesData<
+        InfiniteData<TodoResponse>
+      >({ queryKey: completedBaseKey })
+
+      // Optimistically remove the row from all completed queries immediately.
+      queryClient.setQueriesData<InfiniteData<TodoResponse>>(
+        { queryKey: completedBaseKey },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              todos: page.todos.filter((t) => t.id !== id),
+              total: page.total - 1,
+            })),
+          }
+        },
+      )
+
+      // Commit the server-side archive+delete only when the window closes; Undo
+      // flips this guard so the scheduled commit (and its timer) become a no-op.
+      let isCancelled = false
+      const commit = () => {
+        if (isCancelled) return
+        isCancelled = true
+        deleteMutation.mutate({ id })
+      }
+      const undoTimer = setTimeout(commit, TODO_DELETE_UNDO_WINDOW_MS)
+
+      toast('Removed from completed', {
+        duration: TODO_DELETE_UNDO_WINDOW_MS,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            clearTimeout(undoTimer)
+            isCancelled = true
+            // Restore the snapshot: the completed row reappears in place.
+            for (const [queryKey, data] of completedSnapshot) {
+              if (data) queryClient.setQueryData(queryKey, data)
+            }
+          },
+        },
+      })
+    },
+    [queryClient, completedBaseKey, deleteMutation],
+  )
+
   return {
     createMutation,
     toggleMutation,
@@ -530,5 +667,6 @@ export function useTodoMutations(categoryId: number | null) {
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
+    deleteCompletedWithUndo,
   }
 }

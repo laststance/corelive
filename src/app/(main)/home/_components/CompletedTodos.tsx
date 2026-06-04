@@ -276,10 +276,11 @@ export const CompletedTodos = React.memo(function CompletedTodos({
           <AlertDialogHeader>
             <AlertDialogTitle>Clear all completed tasks?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete{' '}
-              {data?.pages[0]?.total ?? allTodos.length} completed task
-              {(data?.pages[0]?.total ?? allTodos.length) !== 1 ? 's' : ''}.
-              This action cannot be undone.
+              This clears {data?.pages[0]?.total ?? allTodos.length} completed
+              task
+              {(data?.pages[0]?.total ?? allTodos.length) !== 1 ? 's' : ''} from
+              this list. They stay counted on your heatmap — clearing only
+              tidies the list, it doesn&apos;t erase the record.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
