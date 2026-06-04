@@ -30,6 +30,7 @@ import {
 } from './constants'
 import { log } from './logger'
 import { buildStartupPillHtml } from './startup-pill-html'
+import { isDevToolsEnabled } from './utils/debugMode'
 import type {
   WindowStateManager,
   WindowOptions,
@@ -367,7 +368,15 @@ export class WindowManager {
         allowRunningInsecureContent: false,
         sandbox: false,
         spellcheck: false,
-        devTools: true,
+        // Secure-by-default (#61): DevTools is unavailable in a packaged build
+        // unless opted in via the advanced.enableDevTools config or the
+        // CORELIVE_DEBUG launch flag. Previously this was an unconditional
+        // `true`, so the prod main window was always inspectable.
+        devTools: isDevToolsEnabled(
+          this.isDev,
+          this.configManager?.get('advanced.enableDevTools', false) ?? false,
+          process.env,
+        ),
       },
       icon: path.join(__dirname, '../build/icons/icon.icns'),
       show: false,
@@ -488,9 +497,11 @@ export class WindowManager {
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,
-        devTools:
-          this.isDev ||
-          (this.configManager?.get('advanced.enableDevTools', false) ?? false),
+        devTools: isDevToolsEnabled(
+          this.isDev,
+          this.configManager?.get('advanced.enableDevTools', false) ?? false,
+          process.env,
+        ),
       },
       frame: floatingConfig.frame,
       alwaysOnTop: floatingConfig.alwaysOnTop,
@@ -620,9 +631,11 @@ export class WindowManager {
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,
-        devTools:
-          this.isDev ||
-          (this.configManager?.get('advanced.enableDevTools', false) ?? false),
+        devTools: isDevToolsEnabled(
+          this.isDev,
+          this.configManager?.get('advanced.enableDevTools', false) ?? false,
+          process.env,
+        ),
       },
       frame: false,
       alwaysOnTop: true,
@@ -1277,9 +1290,11 @@ export class WindowManager {
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,
-        devTools:
-          this.isDev ||
-          (this.configManager?.get('advanced.enableDevTools', false) ?? false),
+        devTools: isDevToolsEnabled(
+          this.isDev,
+          this.configManager?.get('advanced.enableDevTools', false) ?? false,
+          process.env,
+        ),
       },
       show: false,
     })

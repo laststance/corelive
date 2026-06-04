@@ -63,3 +63,20 @@ export const STARTUP_PILL_WIDTH_PX = 260
 
 /** Startup-pill window height (transparent; the visible pill is centered). */
 export const STARTUP_PILL_HEIGHT_PX = 76
+
+// ============================================================================
+// Opt-in debug mode (Issue #61 — DevTools / CDP in packaged builds)
+// ============================================================================
+
+/**
+ * Chrome DevTools Protocol port opened when `CORELIVE_DEBUG` is set without an
+ * explicit `CORELIVE_REMOTE_DEBUGGING_PORT`. 9222 is Chromium's conventional
+ * remote-debugging port — the one `chrome://inspect` probes by default.
+ */
+export const DEFAULT_REMOTE_DEBUGGING_PORT = 9222
+
+/** Lowest valid TCP port — lower bound when validating a user-supplied debug port. */
+export const MIN_TCP_PORT = 1
+
+/** Highest valid TCP port (16-bit unsigned max) — upper bound for the debug port. */
+export const MAX_TCP_PORT = 65535

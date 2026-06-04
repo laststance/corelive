@@ -50,6 +50,7 @@ import {
   type AuthUserPayload,
   type WindowBounds,
 } from './types/ipc'
+import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { WindowManager } from './WindowManager'
 import {
   WindowStateManager,
@@ -84,19 +85,23 @@ function toWindowType(value: unknown): WindowType {
 }
 
 // ============================================================================
-// Remote Debugging for Playwright
+// Remote Debugging (Playwright E2E + opt-in prod debug — Issue #61)
 // ============================================================================
 
 /**
- * Enable remote debugging for automated testing with Playwright.
- * This allows Playwright to connect to the Electron app via Chrome DevTools Protocol.
- * Only enabled when the environment variable is set to prevent security risks in production.
+ * Open a Chrome DevTools Protocol port only when a debug opt-in is set.
+ *
+ * Two independent levers, both resolved by `resolveRemoteDebuggingPort`:
+ * - `PLAYWRIGHT_REMOTE_DEBUGGING_PORT` — the E2E suite's lever (unchanged).
+ * - `CORELIVE_DEBUG=1` — the prod debug opt-in; opens the default port (9222)
+ *   unless `CORELIVE_REMOTE_DEBUGGING_PORT` overrides it.
+ * A default packaged build sets neither, so no port is opened — the production
+ * app exposes no remote-debugging surface unless deliberately launched in debug
+ * mode. (DevTools availability is gated separately in WindowManager.)
  */
-if (process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
-  app.commandLine.appendSwitch(
-    'remote-debugging-port',
-    process.env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT,
-  )
+const remoteDebuggingPort = resolveRemoteDebuggingPort(process.env)
+if (remoteDebuggingPort) {
+  app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
 }
 
 /**
