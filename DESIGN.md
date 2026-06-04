@@ -161,22 +161,40 @@ Intentional choreography. Most motion is in the 150–250ms range. The one motio
 
 ### Specific motion choreography
 
-| Action                              | Motion                             | Duration | Easing             |
-| ----------------------------------- | ---------------------------------- | -------- | ------------------ |
-| Task completion → Heatmap cell fill | radial-sweep fill                  | 400ms    | ease-out           |
-| Hover lift (cell, card, button)     | `translateY(-1px)` + `scale(1.04)` | 150ms    | ease-out           |
-| Page transition                     | fade                               | 200ms    | ease-out           |
-| Modal / Dialog                      | `scale(0.96 → 1)` + fade           | 250ms    | celebration easing |
-| Tooltip                             | fade + 4px slide-up                | 100ms    | ease-out           |
-| Theme toggle                        | crossfade (no transition flash)    | n/a      | n/a                |
+| Action                              | Motion                              | Duration | Easing             |
+| ----------------------------------- | ----------------------------------- | -------- | ------------------ |
+| Task completion → Heatmap cell fill | radial-sweep fill                   | 400ms    | ease-out           |
+| Task completion → checkbox fill     | amber fill (checkbox only, NOT row) | ~200ms   | ease-out           |
+| Hover lift (cell, card, button)     | `translateY(-1px)` + `scale(1.04)`  | 150ms    | ease-out           |
+| Page transition                     | fade                                | 200ms    | ease-out           |
+| Modal / Dialog                      | `scale(0.96 → 1)` + fade            | 250ms    | celebration easing |
+| Tooltip                             | fade + 4px slide-up                 | 100ms    | ease-out           |
+| Theme toggle                        | crossfade (no transition flash)     | n/a      | n/a                |
+
+> **Checkbox completion fill (2026-06-04, opt-in-feedback feature).** Checking a
+> task plays a soft amber fill on the CHECKBOX (not the whole row) over ~200ms
+> `ease-out` — short tier, deliberately NOT the heatmap's radial-sweep geometry
+> or celebration easing. The heatmap-cell fill stays the single performative
+> "hero" moment (400ms); the checkbox fill is the quiet, repeatable
+> acknowledgment of the app's most-frequent gesture, and that restraint is what
+> lets it fire on every check without fatigue. Gated behind `motion-safe:` —
+> `prefers-reduced-motion` users get an instant, motionless state change. On an
+> optimistic-update rollback the state snaps back instantly (no reverse-celebration).
 
 ### Forbidden
 
 - Bounce springs (any `cubic-bezier` with overshoot >1.05 except modals)
 - Confetti, particle bursts, screen-flash
-- SFX, haptics
+- SFX, haptics — EXCEPT a single soft, opt-in completion sound (default OFF; see note below)
 - Scroll-driven hero animations
 - Loading spinners that exceed 3s without progress text
+
+> **Opt-in completion sound (2026-06-04).** The one sanctioned exception to the
+> SFX ban: a single soft, warm, non-melodic completion sound (≤~400ms), played
+> ONLY when the user explicitly enables it (default OFF). It is a quiet
+> companion's acknowledgment, never a gamified "level-up" chime, and never plays
+> by default. OS mute is honored by the OS (the app does not detect it). At most
+> one sound is in-flight; a rapid second check cuts/restarts rather than layering.
 
 ## Voice & Microcopy
 
@@ -219,19 +237,20 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 
 ## Decisions Log
 
-| Date       | Decision                                                                             | Rationale                                                                                                                                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-10 | DESIGN.md created from `/design-consultation` (dry-run, OpenAI verification pending) | First codified design system; supersedes implicit shadcn/ui defaults                                                                                                                                                      |
-| 2026-05-10 | Aesthetic: Warm Cathedral (vs cold Linear / Things baseline)                         | Aligns with north star "self-affirmation feeling"; differentiates from productivity category convergence                                                                                                                  |
-| 2026-05-10 | Heatmap recolored from green to warm temperature gradient                            | Eureka: temperature carries the "personal pride" signal that green carries "GitHub work" — orthogonal axis to North Star                                                                                                  |
-| 2026-05-10 | Newsreader serif for display (vs Inter / Geist / DM Sans)                            | Productivity apps 100% converge on geometric sans; a serif says "craft" within 0.3s of page load                                                                                                                          |
-| 2026-05-10 | Inter Tight (not Inter) for body                                                     | Inter alone is the AI default; Tight is denser and pairs with Newsreader's character                                                                                                                                      |
-| 2026-05-10 | Geist Mono for data/code (vs JetBrains Mono)                                         | Warmer character, tabular-nums, fewer false-positive associations with terminal/code                                                                                                                                      |
-| 2026-05-10 | Streak counter replaced with "shown-up days this month"                              | Eliminates streak-guilt; empty days = rest, never failure; aligns with "self-affirmation"                                                                                                                                 |
-| 2026-05-10 | Tooltip copy as quiet praise, not raw stats                                          | Each hover delivers a small affirmation moment — north star delivered at the interaction layer                                                                                                                            |
-| 2026-05-10 | Cell size: 12px min / 32px max                                                       | Locked by Heatmap Cathedral eng review D6                                                                                                                                                                                 |
-| 2026-05-10 | OKLCH color space throughout                                                         | Perceptually even gradient steps; current globals.css already uses oklch — alignment, not migration                                                                                                                       |
-| 2026-05-27 | Startup-window settings ("On launch") — Sunrise framing + quiet-companion microcopy  | Choosing the boot window reads as "waking up for me," not "is it broken?"; the last enabled toggle locks with "At least one window opens at launch" — gentle guidance, never an error; north star: control, not KPI guilt |
+| Date       | Decision                                                                                                                           | Rationale                                                                                                                                                                                                                                                                                                                                    |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-10 | DESIGN.md created from `/design-consultation` (dry-run, OpenAI verification pending)                                               | First codified design system; supersedes implicit shadcn/ui defaults                                                                                                                                                                                                                                                                         |
+| 2026-05-10 | Aesthetic: Warm Cathedral (vs cold Linear / Things baseline)                                                                       | Aligns with north star "self-affirmation feeling"; differentiates from productivity category convergence                                                                                                                                                                                                                                     |
+| 2026-05-10 | Heatmap recolored from green to warm temperature gradient                                                                          | Eureka: temperature carries the "personal pride" signal that green carries "GitHub work" — orthogonal axis to North Star                                                                                                                                                                                                                     |
+| 2026-05-10 | Newsreader serif for display (vs Inter / Geist / DM Sans)                                                                          | Productivity apps 100% converge on geometric sans; a serif says "craft" within 0.3s of page load                                                                                                                                                                                                                                             |
+| 2026-05-10 | Inter Tight (not Inter) for body                                                                                                   | Inter alone is the AI default; Tight is denser and pairs with Newsreader's character                                                                                                                                                                                                                                                         |
+| 2026-05-10 | Geist Mono for data/code (vs JetBrains Mono)                                                                                       | Warmer character, tabular-nums, fewer false-positive associations with terminal/code                                                                                                                                                                                                                                                         |
+| 2026-05-10 | Streak counter replaced with "shown-up days this month"                                                                            | Eliminates streak-guilt; empty days = rest, never failure; aligns with "self-affirmation"                                                                                                                                                                                                                                                    |
+| 2026-05-10 | Tooltip copy as quiet praise, not raw stats                                                                                        | Each hover delivers a small affirmation moment — north star delivered at the interaction layer                                                                                                                                                                                                                                               |
+| 2026-05-10 | Cell size: 12px min / 32px max                                                                                                     | Locked by Heatmap Cathedral eng review D6                                                                                                                                                                                                                                                                                                    |
+| 2026-05-10 | OKLCH color space throughout                                                                                                       | Perceptually even gradient steps; current globals.css already uses oklch — alignment, not migration                                                                                                                                                                                                                                          |
+| 2026-05-27 | Startup-window settings ("On launch") — Sunrise framing + quiet-companion microcopy                                                | Choosing the boot window reads as "waking up for me," not "is it broken?"; the last enabled toggle locks with "At least one window opens at launch" — gentle guidance, never an error; north star: control, not KPI guilt                                                                                                                    |
+| 2026-06-04 | Completion feedback: checkbox amber fill (~200ms ease-out, NOT the heatmap hero) always-on + opt-in completion sound (default OFF) | The app's most-repeated gesture returned nothing; a quiet, design-sanctioned fill turns each check into self-affirmation without gamification. Motion stays subordinate to the heatmap hero so it repeats without fatigue; sound is opt-in so it is a deliberate choice, never default SFX (north star: self-affirmation, not dopamine hits) |
 
 ## Implementation Migration Notes
 
