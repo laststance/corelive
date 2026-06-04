@@ -145,6 +145,7 @@ export default defineConfig([
             'floating-navigator-*',
             // Custom utility classes (defined in globals.css @layer utilities)
             'cathedral-lit',
+            'tap-target-24',
             // Tailwind default color palette (temporary - will migrate to tokens)
             'text-red-*',
             'text-blue-*',

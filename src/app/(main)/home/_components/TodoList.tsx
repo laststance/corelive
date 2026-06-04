@@ -6,7 +6,18 @@ import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
 import { memo, Suspense, useCallback, useMemo, useState } from 'react'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -22,6 +33,8 @@ import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
+import { useAppSelector } from '@/lib/redux/hooks'
+import { selectRetainCompletedInList } from '@/lib/redux/slices/preferencesSlice'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
@@ -55,6 +68,9 @@ export const TodoList = memo(function TodoList() {
 
   // Category filter state (persisted to localStorage)
   const [selectedCategoryId] = useSelectedCategory()
+  // 居残りモード (keep completed todos in the active list) — drives the
+  // retain-aware query input + cache keys below.
+  const isRetaining = useAppSelector(selectRetainCompletedInList)
 
   // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
@@ -64,7 +80,8 @@ export const TodoList = memo(function TodoList() {
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
-  } = useTodoMutations(selectedCategoryId)
+    deleteCompletedWithUndo,
+  } = useTodoMutations(selectedCategoryId, isRetaining)
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
@@ -86,7 +103,10 @@ export const TodoList = memo(function TodoList() {
   const { data: pendingData, isLoading: pendingLoading } = useQuery({
     ...orpc.todo.list.queryOptions({
       input: {
-        completed: false,
+        // 居残りモード drops the completed:false filter so the active list holds
+        // ALL todos (pending + completed-since-clear); MUST mirror the
+        // retain-aware pendingKey in useTodoMutations or optimistic updates miss.
+        ...(isRetaining ? {} : { completed: false }),
         limit: TODO_QUERY_LIMIT,
         offset: TODO_QUERY_OFFSET,
         ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
@@ -173,6 +193,23 @@ export const TodoList = memo(function TodoList() {
   )
 
   /**
+   * Deletes a COMPLETED todo with a 5s Undo toast (D3). The row is removed
+   * optimistically; the server archive-then-delete commits only when the undo
+   * window closes, so the heatmap day is preserved and Undo fully restores it.
+   * @param id - Todo identifier as a string.
+   * @example deleteCompletedTodo('42')
+   */
+  const deleteCompletedTodo = useCallback(
+    (id: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        deleteCompletedWithUndo(todoId)
+      }
+    },
+    [deleteCompletedWithUndo],
+  )
+
+  /**
    * Updates the notes for a specific todo item.
    * @param id - Todo identifier as a string.
    * @param notes - New notes content.
@@ -201,6 +238,22 @@ export const TodoList = memo(function TodoList() {
   const deleteCompleted = useCallback(() => {
     clearCompletedMutation.mutate({})
   }, [clearCompletedMutation])
+
+  // Retain-mode Clear confirmation: Clear is the ONLY way to remove
+  // completed-retained rows (D14 hides the per-row trash) and it archives the
+  // whole done-list in one click, so it confirms first — matching the safety of
+  // CompletedTodos' clear and the per-item Undo toast (advisor).
+  const [retainClearDialogOpen, setRetainClearDialogOpen] = useState(false)
+  const handleRetainClearClick = useCallback(() => {
+    setRetainClearDialogOpen(true)
+  }, [])
+  const handleRetainClearDialogOpenChange = useCallback((open: boolean) => {
+    setRetainClearDialogOpen(open)
+  }, [])
+  const handleConfirmRetainClear = useCallback(() => {
+    deleteCompleted()
+    setRetainClearDialogOpen(false)
+  }, [deleteCompleted])
 
   // Transform data into Todo component format
   /**
@@ -245,6 +298,13 @@ export const TodoList = memo(function TodoList() {
 
   // Use local state for rendering to enable optimistic reordering
   const pendingTodos = localPendingTodos
+  // In retain mode the active list holds completed todos too; split the counts
+  // so the header reads honestly (pending count) and can surface a quiet
+  // "N done" (D6). In non-retain mode completedInListCount is always 0.
+  const completedInListCount = pendingTodos.filter(
+    (todoRow) => todoRow.completed,
+  ).length
+  const pendingCount = pendingTodos.length - completedInListCount
 
   /**
    * Handles drag end event to reorder todos.
@@ -330,10 +390,28 @@ export const TodoList = memo(function TodoList() {
               <span>Todo List</span>
               <Badge variant="outline" className="flex items-center gap-1">
                 <Circle className="h-3 w-3" />
-                {pendingTodos.length} pending
+                {pendingCount} pending
               </Badge>
             </CardTitle>
             <CardDescription>Manage your tasks efficiently</CardDescription>
+            {/* 居残りモード — quiet "N done" count + Clear (archives completed,
+                keeping them on the heatmap). Hidden entirely when nothing is
+                done (D6); the count is ambient, not an assertive live region. */}
+            {isRetaining && completedInListCount > 0 && (
+              <div className="flex items-center justify-between pt-2">
+                <span className="font-mono text-sm tabular-nums text-muted-foreground">
+                  {completedInListCount} done
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRetainClearClick}
+                  className="h-auto px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <AddTodoForm
@@ -413,12 +491,44 @@ export const TodoList = memo(function TodoList() {
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
-        <CompletedTodos
-          onDelete={deleteTodo}
-          onClearCompleted={deleteCompleted}
-          onToggleComplete={toggleComplete}
-        />
+        {/* In 居残りモード completed todos live in the active list above, so the
+            separate Completed section is suppressed (no double display). */}
+        {!isRetaining && (
+          <CompletedTodos
+            onDelete={deleteCompletedTodo}
+            onClearCompleted={deleteCompleted}
+            onToggleComplete={toggleComplete}
+          />
+        )}
       </div>
+
+      {/* Retain-mode Clear confirmation — Clear is the only path to remove
+          completed-retained rows (D14 hides the per-row trash) and it archives
+          the whole done-list at once, so it confirms first (mirrors the
+          CompletedTodos clear dialog). Archiving keeps every completion on the
+          heatmap. */}
+      <AlertDialog
+        open={retainClearDialogOpen}
+        onOpenChange={handleRetainClearDialogOpenChange}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear finished tasks?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This clears {completedInListCount} finished task
+              {completedInListCount !== 1 ? 's' : ''} from your list. They stay
+              counted on your heatmap — clearing only tidies the list, it
+              doesn&apos;t erase the record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmRetainClear}>
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 })

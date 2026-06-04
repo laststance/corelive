@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import React, { useCallback, useState } from 'react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -16,7 +15,10 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { Textarea } from '@/components/ui/textarea'
+import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { getColorDotClass } from '@/lib/category-colors'
+import { useAppSelector } from '@/lib/redux/hooks'
+import { selectRetainCompletedInList } from '@/lib/redux/slices/preferencesSlice'
 
 export interface Todo {
   id: string
@@ -59,9 +61,23 @@ export const TodoItem = React.memo(function TodoItem({
     setIsNotesOpen(open)
   }, [])
 
+  const { checkboxMotionClassName, fire } = useCompletionFeedback()
+
+  // D14: in 居残りモード the per-row trash is hidden on completed-retained rows
+  // (tidy via Clear, which archives + keeps the heatmap); pending rows keep it.
+  // In the non-retain Completed section the trash stays (routed through the
+  // Undo-toast delete). So hide only when this row is completed AND retain is on.
+  const isRetaining = useAppSelector(selectRetainCompletedInList)
+  const showDeleteButton = !todo.completed || !isRetaining
+
   const handleToggleComplete = useCallback(() => {
+    // Fire the opt-in sound only on a real completion (false→true); the CSS
+    // checkbox fill plays on the state change itself. Un-completing is quiet.
+    if (!todo.completed) {
+      fire()
+    }
     onToggleComplete(todo.id)
-  }, [onToggleComplete, todo.id])
+  }, [fire, onToggleComplete, todo.completed, todo.id])
 
   const handleDelete = useCallback(() => {
     onDelete(todo.id)
@@ -101,11 +117,14 @@ export const TodoItem = React.memo(function TodoItem({
             <GripVertical className="h-5 w-5" />
           </button>
         )}
+        {/* Expand the 16px checkbox to a ≥24px hit target (WCAG 2.5.8 AA) with a
+            transparent ::before, without resizing the global Checkbox (D12). */}
         <Checkbox
           checked={todo.completed}
           onCheckedChange={handleToggleComplete}
           id={`todo-${todo.id}`}
           aria-label={todo.text}
+          className={`${checkboxMotionClassName} tap-target-24`}
         />
         <div className="min-w-0 flex-1">
           <div
@@ -132,9 +151,6 @@ export const TodoItem = React.memo(function TodoItem({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={todo.completed ? 'secondary' : 'default'}>
-            {todo.completed ? 'Completed' : 'Pending'}
-          </Badge>
           {onUpdateNotes && (
             <Collapsible
               open={isNotesOpen}
@@ -157,15 +173,17 @@ export const TodoItem = React.memo(function TodoItem({
               </CollapsibleTrigger>
             </Collapsible>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDelete}
-            className="hover:bg-destructive/10 text-destructive hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-            <span className="sr-only">Delete</span>
-          </Button>
+          {showDeleteButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDelete}
+              className="hover:bg-destructive/10 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          )}
         </div>
       </div>
       {onUpdateNotes && (
