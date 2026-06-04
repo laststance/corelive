@@ -90,6 +90,15 @@ model Todo {
   id          Int              @id @default(autoincrement())
   text        String           @db.VarChar(255)
   completed   Boolean          @default(false)
+  // Semantic "when it was completed" timestamp, distinct from updatedAt (which
+  // mutates on every text/notes edit, so a completed todo edited later would
+  // drift its heatmap day). NULLABLE with NO @default: a non-null default would
+  // stamp every historical row with the migration timestamp, jumping all old
+  // rows to migration-day. The migration backfills existing completed rows with
+  // completedAt = updatedAt; toggleTodo writes it on each false→true completion.
+  // The heatmap buckets the Todo half by `completedAt ?? updatedAt` (coalesced
+  // in JS), so a null (un-converted write path) still lands on a day.
+  completedAt DateTime?
   notes       String?          @db.Text
   order       Int?             // Sort order for drag-and-drop reordering (nullable for backwards compatibility)
   user        User             @relation(fields: [userId], references: [id])
