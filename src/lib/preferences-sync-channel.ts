@@ -40,10 +40,17 @@ const isPreferencesSyncMessage = (
 ): data is PreferencesSyncMessage => {
   if (typeof data !== 'object' || data === null) return false
   const message = data as Partial<PreferencesSyncMessage>
+  if (message.type !== PREFERENCES_SYNC_EVENT_TYPE) return false
+  // Validate the inner preference fields, not just that `state` is an object: a
+  // malformed channel payload (e.g. `completionSound: 'yes'`) would otherwise be
+  // hydrated into Redux and persisted, since the selectors only coalesce
+  // null/undefined and would let non-boolean junk through unchanged.
+  const state = message.state as Partial<PreferencesState> | undefined
   return (
-    message.type === PREFERENCES_SYNC_EVENT_TYPE &&
-    typeof message.state === 'object' &&
-    message.state !== null
+    typeof state === 'object' &&
+    state !== null &&
+    typeof state.completionSound === 'boolean' &&
+    typeof state.retainCompletedInList === 'boolean'
   )
 }
 
