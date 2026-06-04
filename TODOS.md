@@ -145,3 +145,41 @@ function that will pull it off the deferred list.
       Forcing function: a focused motion-polish pass on the completion feature,
       or whenever `AnimatePresence` lands for any list.
       Effort: ~1.5-2h human / ~30 min CC.
+
+## Electron resilience
+
+- [x] **Harden the remote-web / frozen-preload version-skew crash class in Settings.** ✅ 2026-06-04 (fix/electron-preload-version-skew-settings)
+      Installed CoreLive loads remote prod web over its OWN frozen preload, so a
+      newly-deployed component can call a preload METHOD an older app lacks →
+      `undefined()` throws synchronously inside a bare effect → bubbles past the
+      (previously absent) error boundary → blank app. Root-caused via /investigate:
+      app v0.5.0 + web v0.8.0; `StartupWindowSettings` guarded the `settings`
+      namespace but called `getStartupConfig` (landed later in commit 774cb55 / v0.6.0).
+      Fix: (a) all Electron settings cards (Startup / Floating / BrainDump) **and**
+      `ElectronStartupSync` now guard on the METHOD (`typeof api?.method === 'function'`),
+      not just the namespace, rendering a calm "Update CoreLive…" card instead of
+      throwing; (b) added `src/app/error.tsx` (route boundary) + `src/app/global-error.tsx`
+      (the root-layout boundary `error.tsx` cannot cover — it only catches the page
+      subtree, not the layout itself or its children like `ElectronStartupSync`) as
+      systemic nets. `global-error.tsx` is dependency-free (own `<html>/<body>`, inline
+      styles, no shadcn/logger/globals.css) so the last line of defense never re-enters
+      a possibly-failed import graph. `ElectronStartupSync`'s guard is DEFENSIVE only
+      (`settings` + `setHideAppIcon` shipped together in 9b800ba/4d2728d — no published
+      gap), unlike the proven-live `getStartupConfig` crash. A web deploy protects old
+      apps once live; users still must update the app to USE the startup settings.
+
+- [ ] **error.tsx / global-error.tsx want a design sign-off + a reset() escape hatch.**
+      The two new error boundaries above ship with placeholder copy/styling ("Give
+      that another try" + a plain card) pending Raphtalia's design eye — `global-error.tsx`
+      is intentionally inline-styled (no design tokens) for robustness, so it especially
+      wants a later pass once the failure mode is confirmed rare. Separately, both
+      boundaries' only affordance is `reset()`, which DEAD-ENDS on a deterministic error
+      (e.g. the version-skew case before the app is updated): reset re-renders the same
+      crashing tree. Add a secondary escape (a full `window.location.reload()` / "reload"
+      / "go home" action) in the same pass. Deferred review findings folded here:
+      degradation-copy consistency across the non-crashing components (R6) and a shared
+      `SettingsStateCard` extraction (M-series dedup) are separate-branch refactors, not
+      blockers.
+      Forcing function: a design polish pass on the error screens, or the next report of
+      a stuck recovery screen.
+      Effort: ~1h human / ~20 min CC.
