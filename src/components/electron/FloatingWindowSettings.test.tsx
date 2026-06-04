@@ -86,4 +86,26 @@ describe('FloatingWindowSettings', () => {
       await screen.findByText(/Update CoreLive to the latest version/i),
     ).toBeInTheDocument()
   })
+
+  it('shows a loading state until the saved Spaces preference arrives', async () => {
+    // Arrange: a never-resolving fetch keeps the card in its loading state.
+    getVisibleOnAllWorkspacesMock.mockReturnValue(
+      new Promise<boolean>(() => {}),
+    )
+    installElectronAPI({
+      floatingPanels: {
+        getVisibleOnAllWorkspaces: getVisibleOnAllWorkspacesMock,
+        setVisibleOnAllWorkspaces: setVisibleOnAllWorkspacesMock,
+      },
+    })
+
+    // Act
+    render(<FloatingWindowSettings />)
+
+    // Assert: the loading copy shows and no switch has rendered yet.
+    expect(
+      await screen.findByText('Loading floating window settings...'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
 })
