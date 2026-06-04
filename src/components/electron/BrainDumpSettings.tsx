@@ -99,7 +99,17 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
   useComponentEffect(() => {
     const api =
       typeof window === 'undefined' ? undefined : window.electronAPI?.brainDump
-    if (!api) return
+    // Guard on the METHODS, not just the namespace: an outdated desktop preload
+    // can expose `brainDump` (the window toggle) without the newer settings
+    // getters. A missing method in this Promise.all throws synchronously inside
+    // the effect and bubbles to global-error, so bail out and let the
+    // fallback card render instead.
+    if (
+      typeof api?.getSyncMode !== 'function' ||
+      typeof api?.getOpacity !== 'function' ||
+      typeof api?.getShortcut !== 'function'
+    )
+      return
 
     let cancelled = false
 
@@ -217,6 +227,29 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
           </CardTitle>
           <CardDescription>
             BrainDump Note is only available in the desktop application.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  // Outdated desktop app: the brainDump bridge exists but predates the settings
+  // getters. Invite an update instead of crashing the page.
+  if (
+    hasMounted &&
+    (typeof window.electronAPI?.brainDump?.getSyncMode !== 'function' ||
+      typeof window.electronAPI?.brainDump?.getOpacity !== 'function' ||
+      typeof window.electronAPI?.brainDump?.getShortcut !== 'function')
+  ) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            BrainDump Note
+          </CardTitle>
+          <CardDescription>
+            Update CoreLive to the latest version to manage BrainDump Note.
           </CardDescription>
         </CardHeader>
       </Card>

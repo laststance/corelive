@@ -93,7 +93,12 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
   useComponentEffect(() => {
     const api =
       typeof window === 'undefined' ? undefined : window.electronAPI?.settings
-    if (!api) return
+    // Guard on the METHOD, not just the namespace: an outdated desktop preload
+    // can expose `settings` (shipped earlier for hide-app-icon) without the
+    // newer getStartupConfig. Calling a missing method here throws synchronously
+    // inside the effect, and that throw bubbles past the .catch() below to
+    // Next.js global-error. The missing-method render branch handles this case.
+    if (typeof api?.getStartupConfig !== 'function') return
 
     let cancelled = false
 
@@ -168,6 +173,29 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
           <CardDescription>
             Startup window settings are only available in the desktop
             application.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  // Outdated desktop app: the settings bridge exists but predates
+  // getStartupConfig, so reading the saved config is impossible. Invite an
+  // update in the quiet-companion voice instead of crashing the whole page.
+  if (
+    hasMounted &&
+    typeof window.electronAPI?.settings?.getStartupConfig !== 'function'
+  ) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sunrise className="h-5 w-5" />
+            On launch
+          </CardTitle>
+          <CardDescription>
+            Update CoreLive to the latest version to choose which windows greet
+            you at launch.
           </CardDescription>
         </CardHeader>
       </Card>

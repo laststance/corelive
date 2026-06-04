@@ -30,7 +30,7 @@ type BrainDumpBridge = {
  * installElectronAPI({ brainDump: fakeBridge })
  */
 function installElectronAPI(
-  api: { brainDump?: BrainDumpBridge } | undefined,
+  api: { brainDump?: Partial<BrainDumpBridge> } | undefined,
 ): void {
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
@@ -113,5 +113,20 @@ describe('BrainDumpSettings', () => {
         'React has detected a change in the order of Hooks',
       ),
     )
+  })
+
+  it('degrades gracefully when an old preload exposes brainDump but not the settings getters', async () => {
+    // Arrange: an OUTDATED desktop app exposes the brainDump window-toggle bridge
+    // but predates the getSyncMode/getOpacity/getShortcut settings getters that
+    // the load effect's Promise.all calls.
+    installElectronAPI({ brainDump: { toggle: toggleMock } })
+
+    // Act + Assert: mounting must NOT throw a synchronous TypeError from the
+    // Promise.all (which would bubble out of useEffect to Next.js global-error
+    // and blank the whole page). A graceful update card must render instead.
+    render(<BrainDumpSettings />)
+    expect(
+      await screen.findByText(/Update CoreLive to the latest version/i),
+    ).toBeInTheDocument()
   })
 })
