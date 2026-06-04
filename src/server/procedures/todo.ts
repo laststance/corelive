@@ -20,6 +20,7 @@ import {
   TodoResponseSchema,
   ReorderTodosSchema,
 } from '../schemas/todo'
+import { archiveCompletedTodos } from '../utils/archiveCompletedTodos'
 import { resolveImportCategoryIds } from '../utils/resolveImportCategoryIds'
 
 // Fetch todo list
@@ -175,9 +176,20 @@ export const deleteTodo = authMiddleware
       })
     }
 
-    await prisma.todo.delete({
-      where: { id },
-    })
+    if (existingTodo.completed) {
+      // A completed todo feeds the heatmap, so it is ARCHIVED (copied into
+      // Completed with archived:false) before removal rather than hard-deleted —
+      // otherwise deleting one completed item silently erases its heatmap day.
+      // Same shared, heatmap-safe semantic as clearCompleted.
+      await prisma.$transaction(async (tx) =>
+        archiveCompletedTodos({ tx, userId: user.id, todoIds: [id] }),
+      )
+    } else {
+      // Pending todos carry no heatmap day, so a plain delete loses nothing.
+      await prisma.todo.delete({
+        where: { id },
+      })
+    }
 
     return { success: true }
   })
@@ -222,7 +234,15 @@ export const toggleTodo = authMiddleware
       }
       return tx.todo.update({
         where: { id },
-        data: { completed: nextCompleted },
+        // Stamp the stable completion day on every false→true transition so the
+        // heatmap buckets by completedAt, not the edit-drifting updatedAt. Left
+        // untouched on un-complete: nothing reads completedAt on a
+        // completed:false row (the heatmap filters completed:true), and the next
+        // completion overwrites it with a fresh now().
+        data: {
+          completed: nextCompleted,
+          ...(nextCompleted && { completedAt: new Date() }),
+        },
       })
     })
 
@@ -235,14 +255,15 @@ export const clearCompleted = authMiddleware
   .handler(async ({ context }) => {
     const { user } = context
 
-    const result = await prisma.todo.deleteMany({
-      where: {
-        userId: user.id,
-        completed: true,
-      },
-    })
+    // Archive-and-remove instead of hard delete: completed Todo rows feed the
+    // heatmap directly, so deleting them erased their days. The shared helper
+    // copies each completion into Completed (archived:false) before removing the
+    // Todo, inside one transaction, so the heatmap day survives the clear.
+    const deletedCount = await prisma.$transaction(async (tx) =>
+      archiveCompletedTodos({ tx, userId: user.id }),
+    )
 
-    return { deletedCount: result.count }
+    return { deletedCount }
   })
 
 /**

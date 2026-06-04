@@ -27,10 +27,13 @@ export const CreateTodoSchema = TodoSchema.pick({
   categoryId: true,
 })
 
+// `completed` is intentionally NOT updatable here: completion state flows ONLY
+// through `toggleTodo`, the single seam that also maintains `completedAt` (the
+// stable heatmap day) and the NodeAssignment double-XP exploit guard. Letting
+// `updateTodo` flip `completed` would bypass both.
 export const UpdateTodoSchema = TodoSchema.pick({
   text: true,
   notes: true,
-  completed: true,
   categoryId: true,
 }).partial()
 
