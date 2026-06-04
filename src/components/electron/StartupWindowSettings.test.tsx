@@ -162,6 +162,23 @@ describe('StartupWindowSettings', () => {
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
+  it('degrades gracefully when an old preload exposes settings but not getStartupConfig', async () => {
+    // Arrange: an OUTDATED installed desktop app whose preload still exposes the
+    // long-lived `settings` namespace but predates the newer getStartupConfig
+    // method. The freshly deployed web bundle mounts this component anyway
+    // because window.electronAPI exists (version skew between app and web).
+    installElectronAPI({ settings: {} })
+
+    // Act + Assert: mounting must NOT throw a synchronous TypeError from the
+    // load effect. An unguarded `api.getStartupConfig()` call would bubble out
+    // of useEffect to Next.js global-error and blank the whole page. Instead a
+    // graceful update card must render.
+    render(<StartupWindowSettings />)
+    expect(
+      await screen.findByText(/Update CoreLive to the latest version/i),
+    ).toBeInTheDocument()
+  })
+
   it('shows a loading state until the saved config arrives', async () => {
     // Arrange: a never-resolving fetch keeps the component in its loading state.
     getStartupConfigMock.mockReturnValue(

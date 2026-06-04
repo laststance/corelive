@@ -59,7 +59,10 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
       typeof window === 'undefined'
         ? undefined
         : window.electronAPI?.floatingPanels
-    if (!api) return
+    // Guard on the METHOD, not just the namespace, so an outdated desktop
+    // preload that exposes `floatingPanels` without getVisibleOnAllWorkspaces
+    // degrades to the fallback card instead of throwing inside this effect.
+    if (typeof api?.getVisibleOnAllWorkspaces !== 'function') return
 
     let cancelled = false
 
@@ -129,6 +132,28 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
           <CardDescription>
             Floating window settings are only available in the desktop
             application.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  // Outdated desktop app: the floatingPanels bridge exists but predates
+  // getVisibleOnAllWorkspaces. Invite an update instead of crashing the page.
+  if (
+    hasMounted &&
+    typeof window.electronAPI?.floatingPanels?.getVisibleOnAllWorkspaces !==
+      'function'
+  ) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Monitor className="h-5 w-5" />
+            Floating windows
+          </CardTitle>
+          <CardDescription>
+            Update CoreLive to the latest version to manage floating windows.
           </CardDescription>
         </CardHeader>
       </Card>
