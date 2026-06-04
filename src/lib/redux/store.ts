@@ -16,7 +16,10 @@
 import { createStorageMiddleware } from '@laststance/redux-storage-middleware'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
 
+import { createPreferencesSyncMiddleware } from '../preferences-sync-channel'
+
 import electronSettingsReducer from './slices/electronSettingsSlice'
+import preferencesReducer from './slices/preferencesSlice'
 
 /**
  * Root reducer combining all slice reducers.
@@ -24,6 +27,7 @@ import electronSettingsReducer from './slices/electronSettingsSlice'
  */
 const rootReducer = combineReducers({
   electronSettings: electronSettingsReducer,
+  preferences: preferencesReducer,
 })
 
 /**
@@ -45,7 +49,7 @@ const { middleware: storageMiddleware, reducer: hydratedReducer } =
   createStorageMiddleware({
     rootReducer,
     key: STORAGE_KEY,
-    slices: ['electronSettings'], // Slices to persist to localStorage
+    slices: ['electronSettings', 'preferences'], // Slices to persist to localStorage
   })
 
 /**
@@ -66,7 +70,10 @@ export const store = configureStore({
     getDefaultMiddleware({
       // Disable serializable check for storage middleware compatibility
       serializableCheck: false,
-    }).concat(storageMiddleware),
+    })
+      .concat(storageMiddleware)
+      // Mirror preference toggles across windows (web / Electron / Floating).
+      .concat(createPreferencesSyncMiddleware()),
   devTools: process.env.NODE_ENV !== 'production',
 })
 
