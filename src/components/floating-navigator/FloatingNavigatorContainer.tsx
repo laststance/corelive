@@ -15,6 +15,8 @@ import {
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
+import { useAppSelector } from '@/lib/redux/hooks'
+import { selectRetainCompletedInList } from '@/lib/redux/slices/preferencesSlice'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type {
   CategoryColor,
@@ -50,6 +52,9 @@ export const FloatingNavigatorContainer = React.memo(
 
     // Category filter state (shared with main app via localStorage)
     const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
+    // 居残りモード (app-wide pref, D11): keep completed todos visible instead of
+    // letting them vanish on check. Drives the retain-aware query + mutations.
+    const isRetaining = useAppSelector(selectRetainCompletedInList)
 
     // Mutations with optimistic updates (pass categoryId for correct cache key)
     const {
@@ -58,7 +63,7 @@ export const FloatingNavigatorContainer = React.memo(
       deleteMutation,
       updateMutation,
       reorderMutation,
-    } = useTodoMutations(selectedCategoryId)
+    } = useTodoMutations(selectedCategoryId, isRetaining)
 
     // Category CRUD mutations with optimistic updates
     const {
@@ -97,7 +102,10 @@ export const FloatingNavigatorContainer = React.memo(
     const { data, isLoading, error } = useQuery({
       ...orpc.todo.list.queryOptions({
         input: {
-          completed: false,
+          // 居残りモード drops completed:false so completed todos stay in the
+          // result (shown in the Completed section) instead of vanishing on
+          // check; mirrors the retain-aware pendingKey in useTodoMutations.
+          ...(isRetaining ? {} : { completed: false }),
           limit: TODO_QUERY_LIMIT,
           offset: TODO_QUERY_OFFSET,
           ...(selectedCategoryId !== null && {
