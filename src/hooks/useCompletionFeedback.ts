@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 
 import {
   COMPLETION_SOUND_ATTACK_MS,
@@ -10,6 +10,17 @@ import {
 } from '@/lib/constants/completionFeedback'
 import { useAppSelector } from '@/lib/redux/hooks'
 import { selectCompletionSound } from '@/lib/redux/slices/preferencesSlice'
+
+// Module-level singletons (NOT per-hook refs): useCompletionFeedback mounts once
+// per row surface (TodoItem + the two Floating rows), so per-instance state would
+// let two rows each open their own AudioContext and play overlapping tones —
+// browsers also cap the number of live AudioContexts, so per-row contexts would
+// eventually be refused. Sharing one context + one in-flight oscillator across
+// all instances is what actually enforces the hook's "at most one sound
+// in-flight" contract app-wide. Per-JS-context (so per Electron window) is the
+// intended scope; we never share audio across windows.
+let sharedAudioContext: AudioContext | null = null
+let sharedActiveOscillator: OscillatorNode | null = null
 
 /**
  * motion-safe gated amber fill for the checkbox (~200ms ease-out, `duration-200`
@@ -51,31 +62,30 @@ export interface CompletionFeedback {
  */
 export function useCompletionFeedback(): CompletionFeedback {
   const isSoundEnabled = useAppSelector(selectCompletionSound)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const activeOscillatorRef = useRef<OscillatorNode | null>(null)
 
   const fire = useCallback(() => {
     // Opt-in only (default OFF) and browser-only — no-op otherwise.
     if (!isSoundEnabled || typeof window === 'undefined') return
 
     try {
-      // Lazily create the AudioContext on first real use so users who never
-      // enable sound never pay for one.
-      audioContextRef.current ??= new AudioContext()
-      const audioContext = audioContextRef.current
+      // Lazily create the single shared AudioContext on first real use so users
+      // who never enable sound never pay for one.
+      sharedAudioContext ??= new AudioContext()
+      const audioContext = sharedAudioContext
       // Browsers suspend audio until a user gesture; a checkbox click is one, so
       // resume here is the moment playback can legitimately start.
       if (audioContext.state === 'suspended') void audioContext.resume()
 
-      // At most one in-flight: cut any still-ringing tone so rapid checks never
-      // layer into a cacophony — they restart the single cue instead.
-      if (activeOscillatorRef.current) {
+      // At most one in-flight (app-wide via the shared singleton): cut any
+      // still-ringing tone so rapid checks — even across different rows — never
+      // layer into a cacophony; they restart the single cue instead.
+      if (sharedActiveOscillator) {
         try {
-          activeOscillatorRef.current.stop()
+          sharedActiveOscillator.stop()
         } catch {
           // Already stopped — nothing to cut.
         }
-        activeOscillatorRef.current = null
+        sharedActiveOscillator = null
       }
 
       const startTime = audioContext.currentTime
@@ -101,10 +111,10 @@ export function useCompletionFeedback(): CompletionFeedback {
       oscillator.connect(gainNode).connect(audioContext.destination)
       oscillator.start(startTime)
       oscillator.stop(endTime)
-      activeOscillatorRef.current = oscillator
+      sharedActiveOscillator = oscillator
       oscillator.addEventListener('ended', () => {
-        if (activeOscillatorRef.current === oscillator) {
-          activeOscillatorRef.current = null
+        if (sharedActiveOscillator === oscillator) {
+          sharedActiveOscillator = null
         }
       })
     } catch {
@@ -114,4 +124,19 @@ export function useCompletionFeedback(): CompletionFeedback {
   }, [isSoundEnabled])
 
   return { checkboxMotionClassName: CHECKBOX_COMPLETION_MOTION_CLASS, fire }
+}
+
+/**
+ * Test-only reset of the module-level shared audio singletons. Exists because
+ * the AudioContext + in-flight oscillator now live at module scope (so the
+ * "one sound in-flight" contract holds across row surfaces), which means state
+ * leaks between test cases unless explicitly cleared. Call from `afterEach`.
+ *
+ * @returns void
+ * @example
+ * afterEach(() => resetCompletionFeedbackAudioForTest())
+ */
+export function resetCompletionFeedbackAudioForTest(): void {
+  sharedAudioContext = null
+  sharedActiveOscillator = null
 }

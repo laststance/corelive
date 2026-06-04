@@ -113,12 +113,18 @@ test.describe('QA Fixes Verification', () => {
       await expect(clearButton).toBeVisible()
       await clearButton.click()
 
-      // Assert — confirmation dialog appears with the right copy
+      // Assert — confirmation dialog appears with the right copy. Clearing now
+      // ARCHIVES (the heatmap day survives), so the dialog reassures rather than
+      // warning "cannot be undone" — assert the on-brand "stays counted on your
+      // heatmap" reassurance instead. (Substring match avoids the dynamic count
+      // clause and the curly/straight apostrophe in "doesn't erase the record".)
       const dialog = page.getByRole('alertdialog')
       await expect(dialog).toBeVisible()
       await expect(dialog.getByText('Clear all completed tasks?')).toBeVisible()
       await expect(
-        dialog.getByText('This action cannot be undone'),
+        dialog.getByText('They stay counted on your heatmap', {
+          exact: false,
+        }),
       ).toBeVisible()
 
       // Act 2 — cancel the dialog
