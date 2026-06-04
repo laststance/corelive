@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
+import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { COLOR_DOT_CLASSES } from '@/lib/category-colors'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { log } from '@/lib/logger'
@@ -154,9 +155,15 @@ const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
   onSaveEdit,
   onCancelEdit,
 }: PendingFloatingTodoRowProps): React.ReactNode {
+  const { checkboxMotionClassName, fire } = useCompletionFeedback()
   const handleToggle = useCallback(() => {
+    // Fire the opt-in sound only on a real completion (false→true); the CSS
+    // checkbox fill plays on the state change. Un-completing is quiet.
+    if (!todo.completed) {
+      fire()
+    }
     onToggle(todo.id)
-  }, [onToggle, todo.id])
+  }, [fire, onToggle, todo.completed, todo.id])
   const handleDelete = useCallback(() => {
     onDelete(todo.id)
   }, [onDelete, todo.id])
@@ -187,7 +194,7 @@ const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
       <Checkbox
         checked={todo.completed}
         onCheckedChange={handleToggle}
-        className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className={`tap-target-24 h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${checkboxMotionClassName}`}
         aria-label={`Mark task "${todo.text}" as ${todo.completed ? 'incomplete' : 'complete'}`}
       />
 
@@ -290,6 +297,7 @@ const CompletedFloatingTodoRow = React.memo(function CompletedFloatingTodoRow({
   onToggle,
   onDelete,
 }: CompletedFloatingTodoRowProps): React.ReactNode {
+  const { checkboxMotionClassName } = useCompletionFeedback()
   const handleToggle = useCallback(() => {
     onToggle(todo.id)
   }, [onToggle, todo.id])
@@ -306,7 +314,7 @@ const CompletedFloatingTodoRow = React.memo(function CompletedFloatingTodoRow({
       <Checkbox
         checked={todo.completed}
         onCheckedChange={handleToggle}
-        className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className={`tap-target-24 h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${checkboxMotionClassName}`}
         aria-label={`Mark completed task "${todo.text}" as incomplete`}
       />
       <span
