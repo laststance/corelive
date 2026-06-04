@@ -35,6 +35,9 @@ function renderWithSound(completionSound: boolean) {
  * stop()ped when a new fire() starts a replacement).
  */
 interface FakeAudioState {
+  // How many times the AudioContext constructor ran — lets a test prove the
+  // module-level singleton builds ONE context across multiple hook instances.
+  constructCount: number
   context: { state: AudioContextState; resumeCount: number; closed: boolean }
   oscillators: Array<{
     started: boolean
@@ -54,6 +57,7 @@ function installFakeAudioContext(): {
   uninstall: () => void
 } {
   const state: FakeAudioState = {
+    constructCount: 0,
     context: { state: 'suspended', resumeCount: 0, closed: false },
     oscillators: [],
   }
@@ -69,6 +73,9 @@ function installFakeAudioContext(): {
 
   class FakeAudioContext {
     currentTime = 0
+    constructor() {
+      state.constructCount += 1
+    }
     get state(): AudioContextState {
       return state.context.state
     }
@@ -209,9 +216,10 @@ describe('useCompletionFeedback', () => {
       first.result.current.fire()
       second.result.current.fire()
 
-      // Assert — both fires shared a single AudioContext (the second oscillator
-      // was cut by being created in the same shared context), proving the audio
-      // state is app-wide rather than per-row.
+      // Assert — exactly ONE AudioContext was constructed across both instances
+      // (the singleton is shared, not per-row), and the first instance's
+      // oscillator was cut when the second fired (one sound in-flight app-wide).
+      expect(state.constructCount).toBe(1)
       expect(state.oscillators).toHaveLength(2)
       const [firstSharedOscillator] = state.oscillators
       expect(firstSharedOscillator?.stopped).toBe(true)
