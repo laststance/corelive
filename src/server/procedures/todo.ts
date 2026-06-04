@@ -165,31 +165,40 @@ export const deleteTodo = authMiddleware
       return { success: true }
     }
 
-    // Permission check
-    const existingTodo = await prisma.todo.findFirst({
-      where: { id, userId: user.id },
-    })
-
-    if (!existingTodo) {
-      throw new ORPCError('NOT_FOUND', {
-        message: 'Todo not found',
+    // Decide archive-vs-delete ATOMICALLY inside one transaction. Reading
+    // `completed` outside the transaction was a TOCTOU race (CodeRabbit #4): if a
+    // todo flipped false→true between the read and the delete, the pending branch
+    // would hard-delete a now-completed todo and erase its heatmap day. Instead
+    // archiveCompletedTodos (which filters completed:true) runs first inside the
+    // tx and returns the count archived; it returns 0 only when the row is
+    // genuinely pending at tx time, the sole case the fallback hard-deletes.
+    await prisma.$transaction(async (tx) => {
+      // Permission check on the same snapshot as the archive/delete below.
+      const existingTodo = await tx.todo.findFirst({
+        where: { id, userId: user.id },
       })
-    }
 
-    if (existingTodo.completed) {
+      if (!existingTodo) {
+        throw new ORPCError('NOT_FOUND', {
+          message: 'Todo not found',
+        })
+      }
+
       // A completed todo feeds the heatmap, so it is ARCHIVED (copied into
-      // Completed with archived:false) before removal rather than hard-deleted —
-      // otherwise deleting one completed item silently erases its heatmap day.
-      // Same shared, heatmap-safe semantic as clearCompleted.
-      await prisma.$transaction(async (tx) =>
-        archiveCompletedTodos({ tx, userId: user.id, todoIds: [id] }),
-      )
-    } else {
-      // Pending todos carry no heatmap day, so a plain delete loses nothing.
-      await prisma.todo.delete({
-        where: { id },
+      // Completed with archived:false) before removal rather than hard-deleted.
+      // archivedCount is 0 only when the row is pending at tx time.
+      const archivedCount = await archiveCompletedTodos({
+        tx,
+        userId: user.id,
+        todoIds: [id],
       })
-    }
+
+      // Fallback: a pending todo carries no heatmap day, so a plain delete loses
+      // nothing. Only reached when nothing was archived (the row is pending now).
+      if (archivedCount === 0) {
+        await tx.todo.delete({ where: { id } })
+      }
+    })
 
     return { success: true }
   })

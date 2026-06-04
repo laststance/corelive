@@ -22,6 +22,22 @@ function that will pull it off the deferred list.
       completion timestamps to avoid streak drift on backdated edits.
       Effort: ~half day human / ~30 min CC.
 
+- [ ] **archiveCompletedTodos is not idempotent — a rapid double-clear inflates the heatmap COUNT.**
+      Surfaced by CodeRabbit on PR #60 (#3). Two clears (or clear + per-item
+      delete) firing in parallel can each archive the same completed Todo before
+      either deletes it, inserting two Completed rows for one completion, so that
+      day's heatmap count is over-stated. NO data or XP loss (the Todo is still
+      removed, NodeAssignment SetNull, the archived:false invariant holds).
+      ACCEPTED as a known limitation (PR #60, user call): it needs a deliberate
+      double-action (and Clear is already confirm-gated) and only affects a
+      display count. Full-fix options when revisited: (a) add `Completed.todoId` + a unique constraint + `skipDuplicates` on the archive insert, or (b) run
+      the archive tx at `Serializable` isolation with P2034 retry. Both touch the
+      LOAD-BEARING archive path (archived:false / SetNull / completedAt ??
+      updatedAt) so they need care + a re-run of the heatmap-survives integration
+      tests.
+      Forcing function: a report of a wrong heatmap count, or the next change to the archive path.
+      Effort: ~1-2h human / ~30 min CC.
+
 - [ ] **User-TZ bucketing.** Heatmap currently uses UTC midnight buckets.
       JST 8:00 completion lands on previous UTC day. Defer until PR3
       requires it (streak calcs need user TZ per CEO §11.4).

@@ -20,6 +20,17 @@ import type { Prisma } from '@prisma/client'
  * would destroy XP). `importBatchId` stays null so archive rows are unreachable
  * by the paste-import bulk-undo (the only undo-safety layer under Approach B).
  *
+ * Concurrency (CodeRabbit #3 — accepted limitation, NOT idempotent): two clears
+ * firing in parallel can each read the same completed Todo before either deletes
+ * it, inserting two Completed rows for one completion and inflating that day's
+ * heatmap COUNT. No data or XP loss (the Todo is still removed, NodeAssignment
+ * still SetNull, archived:false holds). Accepted because it needs a deliberate
+ * double-action (e.g. double-firing Clear, which the confirm dialog already
+ * guards) and only affects a display count. A full fix (a unique Completed.todoId
+ * + skipDuplicates, or Serializable isolation + P2034 retry) was deferred to
+ * avoid touching the load-bearing archive invariants above for a count-only edge
+ * case. Tracked in TODOS.md.
+ *
  * @param tx - An active Prisma transaction client (from `prisma.$transaction`).
  * @param userId - Internal `User.id` whose completed todos to archive.
  * @param todoIds - Optional id subset to archive; omit to archive ALL completed.
