@@ -5,6 +5,9 @@ const isProtectedRoute = createRouteMatcher([
   '/home(.*)',
   '/skill-tree(.*)',
   '/braindump(.*)',
+  // /settings is web-reachable (D15) but still requires auth like the rest of
+  // the app — the preferences it edits belong to a signed-in user's experience.
+  '/settings(.*)',
   // Floating Navigator must redirect to /login like the other panels so the
   // Electron main-process nav-watch can detect an unauthenticated cold boot
   // and surface the main window instead of an empty panel.

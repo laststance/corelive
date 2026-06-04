@@ -220,14 +220,15 @@ export const AppSidebar = memo(function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {isElectron && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton onClick={handleOpenSettings}>
-                      <Settings className="h-4 w-4" />
-                      <span>Settings</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
+                {/* Settings is web-reachable (D15): the shared Preferences
+                    section is shown to everyone; Electron window-chrome settings
+                    self-gate to the desktop app. */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={handleOpenSettings}>
+                    <Settings className="h-4 w-4" />
+                    <span>Settings</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton>
                     <Trash2 className="h-4 w-4" />
