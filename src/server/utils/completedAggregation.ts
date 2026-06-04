@@ -24,21 +24,23 @@ export type CompletedEntry = {
  * with category join. Single source of truth for the heatmap and day-detail
  * oRPC procedures.
  *
- * Heatmap UNION semantics (locked decision D2=A):
- *   Todo bucket      = updatedAt.toISOString().split('T')[0]            (UTC date)
+ * Heatmap UNION semantics (both halves now key off the stable completion day):
+ *   Todo bucket      = (completedAt ?? updatedAt).toISOString()[0..10]  (UTC date)
  *   Completed bucket = (completedAt ?? createdAt).toISOString()[0..10]  (UTC date)
  *
- * Completed buckets by `completedAt ?? createdAt` (paste-import, Issue #53):
- * completedAt is the semantic completion day; createdAt is the defensive
- * fallback for any row missed by the migration backfill (which set
- * completedAt = createdAt, so existing rows do not shift days). The date-range
- * FILTER still uses createdAt in Slice 1 — see the inline TODO in the query.
+ * Both halves FILTER and BUCKET by `completedAt`, with a null-coalescing
+ * fallback (Todo → updatedAt, Completed → createdAt) for any row whose
+ * completedAt is null. Migration 20260603235155 added Todo.completedAt and
+ * backfilled it from updatedAt; toggleTodo writes it on each false→true
+ * completion. Migration 20260529164052 added Completed.completedAt and
+ * backfilled it from createdAt. Because the filter and the bucket now use the
+ * SAME field, a completion always lands on its real day's range — this fixes
+ * both the dated-import drop and the edit-drift noted below.
  *
- * Known drift: Todo.updatedAt mutates on text/notes edit, so a completed
- * Todo edited later will move dates on the heatmap. Acceptable for now;
- * tracked in TODOS.md → "Migrate Todo heatmap bucket to a stable
- * completedAt column". PR3 (Streak Notifications) is the forcing function
- * for that migration.
+ * Resolved drift: Todo.updatedAt mutates on text/notes edit, so before
+ * completedAt existed a completed Todo edited later moved dates on the heatmap.
+ * Keying off the stable completedAt removes that drift (居残りモード was the
+ * forcing function for the migration).
  *
  * Dedup: Todo and Completed are disjoint surfaces by construction —
  * BrainDump's checkbox-tick bypasses the Todo lifecycle (writes Completed
@@ -69,14 +71,20 @@ export async function fetchCompletedEntries(
       where: {
         userId,
         completed: true,
-        // Drift caveat: this bucket field is `updatedAt`, which mutates on
-        // every edit. Migration to a stable `completedAt` column is tracked
-        // in TODOS.md.
-        updatedAt: { gte: startDate, lte: endDate },
+        // Filter by the stable completion day. `completedAt` is the semantic
+        // completion timestamp (migration 20260603235155); fall back to
+        // `updatedAt` only for rows whose `completedAt` is still null (an
+        // unconverted write path or a pre-backfill row) so they never vanish
+        // from the heatmap.
+        OR: [
+          { completedAt: { gte: startDate, lte: endDate } },
+          { completedAt: null, updatedAt: { gte: startDate, lte: endDate } },
+        ],
       },
       select: {
         id: true,
         text: true,
+        completedAt: true,
         updatedAt: true,
         category: { select: { id: true, name: true, color: true } },
       },
@@ -85,27 +93,26 @@ export async function fetchCompletedEntries(
     prisma.completed.findMany({
       where: {
         userId,
-        // archived rows are excluded from the heatmap surface. Today nothing
-        // sets archived=true, but filtering defensively avoids surprises
-        // when an archive flow eventually lands.
+        // archived rows are excluded from the heatmap surface. The archive flow
+        // (archiveCompletedTodos) writes every row archived:false, so cleared
+        // todos still count; an archived:true row would silently drop its day.
         archived: false,
-        // Slice 1: the date-range filter stays on `createdAt` (the insert
-        // time). Paste-import lands everything on today (`completedAt = now()`),
-        // so createdAt and completedAt coincide and the window is correct.
-        // TODO(Slice 2 — dated import): when date-override ships, a row may have
-        // a past `completedAt` with a today `createdAt`; this filter must then
-        // move to `completedAt` or the row will be dropped from its real day's
-        // range. (See docs/plans/2026-05-29-paste-import-plan.md, Heatmap §.)
-        createdAt: { gte: startDate, lte: endDate },
+        // Filter by the semantic completion day, falling back to `createdAt`
+        // (insert time) only for rows whose `completedAt` is null. This lands
+        // the dated-import case (a row with a past `completedAt` and a today
+        // `createdAt`) on its REAL day, and keeps Slice-1 paste-import correct
+        // (those rows have completedAt = now() = createdAt). The backfill set
+        // completedAt = createdAt, so nulls are not expected — the fallback is
+        // defensive.
+        OR: [
+          { completedAt: { gte: startDate, lte: endDate } },
+          { completedAt: null, createdAt: { gte: startDate, lte: endDate } },
+        ],
       },
       select: {
         id: true,
         title: true,
-        // Select both: bucket by `completedAt ?? createdAt` (coalesced in JS
-        // below). completedAt is the semantic completion day; createdAt is the
-        // defensive fallback for any historical row the migration backfill
-        // missed (it backfilled completedAt = createdAt, so existing rows do
-        // NOT shift days on the heatmap).
+        // Bucket by `completedAt ?? createdAt` (coalesced in JS below).
         completedAt: true,
         createdAt: true,
         category: { select: { id: true, name: true, color: true } },
@@ -118,7 +125,9 @@ export async function fetchCompletedEntries(
     source: 'todo',
     id: row.id,
     title: row.text,
-    completedAt: row.updatedAt,
+    // Bucket by the stable completion day, falling back to updatedAt for any
+    // row whose completedAt is null (defensive — see the where clause).
+    completedAt: row.completedAt ?? row.updatedAt,
     category: row.category,
   }))
 

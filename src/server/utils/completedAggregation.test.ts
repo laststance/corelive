@@ -31,18 +31,24 @@ describe('fetchCompletedEntries', () => {
     expect(entries).toEqual([])
   })
 
-  it('maps Todo rows with source="todo" using updatedAt as completedAt', async () => {
+  it('maps Todo rows with source="todo" using completedAt as the bucket day', async () => {
+    // Arrange — a completed Todo whose stable completedAt differs from updatedAt
+    // (completed earlier, then edited). The heatmap must use completedAt.
     mockedTodoFindMany.mockResolvedValue([
       {
         id: 12,
         text: 'draft digest',
-        updatedAt: new Date('2026-05-07T10:00:00.000Z'),
+        completedAt: new Date('2026-05-07T10:00:00.000Z'),
+        updatedAt: new Date('2026-05-10T15:00:00.000Z'),
         category: { id: 3, name: 'writing', color: 'blue' },
       },
     ] as never)
     mockedCompletedFindMany.mockResolvedValue([])
 
+    // Act
     const entries = await fetchCompletedEntries(1, RANGE_START, RANGE_END)
+
+    // Assert — completedAt (05-07) wins, NOT the edit-day updatedAt (05-10)
     expect(entries).toEqual([
       {
         source: 'todo',
@@ -52,6 +58,29 @@ describe('fetchCompletedEntries', () => {
         category: { id: 3, name: 'writing', color: 'blue' },
       },
     ])
+  })
+
+  it('falls back to updatedAt when a Todo row has a null completedAt', async () => {
+    // Arrange — an unconverted / pre-backfill completed Todo (null completedAt)
+    // must coalesce to updatedAt so it never vanishes from the heatmap.
+    mockedTodoFindMany.mockResolvedValue([
+      {
+        id: 13,
+        text: 'legacy completed todo',
+        completedAt: null,
+        updatedAt: new Date('2026-05-06T12:00:00.000Z'),
+        category: null,
+      },
+    ] as never)
+    mockedCompletedFindMany.mockResolvedValue([])
+
+    // Act
+    const entries = await fetchCompletedEntries(1, RANGE_START, RANGE_END)
+
+    // Assert — bucket date is updatedAt's day, not null
+    expect(entries[0]?.completedAt).toEqual(
+      new Date('2026-05-06T12:00:00.000Z'),
+    )
   })
 
   it('maps Completed rows with source="completed" using createdAt as completedAt', async () => {
@@ -171,7 +200,7 @@ describe('fetchCompletedEntries', () => {
     ])
   })
 
-  it('passes userId, completed=true, and the date range to the Todo query', async () => {
+  it('passes userId, completed=true, and the completedAt-or-updatedAt range to the Todo query', async () => {
     mockedTodoFindMany.mockResolvedValue([])
     mockedCompletedFindMany.mockResolvedValue([])
 
@@ -182,13 +211,19 @@ describe('fetchCompletedEntries', () => {
         where: expect.objectContaining({
           userId: 7,
           completed: true,
-          updatedAt: { gte: RANGE_START, lte: RANGE_END },
+          OR: [
+            { completedAt: { gte: RANGE_START, lte: RANGE_END } },
+            {
+              completedAt: null,
+              updatedAt: { gte: RANGE_START, lte: RANGE_END },
+            },
+          ],
         }),
       }),
     )
   })
 
-  it('filters archived=false on the Completed query (defensive)', async () => {
+  it('filters archived=false and the completedAt-or-createdAt range on the Completed query', async () => {
     mockedTodoFindMany.mockResolvedValue([])
     mockedCompletedFindMany.mockResolvedValue([])
 
@@ -199,7 +234,13 @@ describe('fetchCompletedEntries', () => {
         where: expect.objectContaining({
           userId: 7,
           archived: false,
-          createdAt: { gte: RANGE_START, lte: RANGE_END },
+          OR: [
+            { completedAt: { gte: RANGE_START, lte: RANGE_END } },
+            {
+              completedAt: null,
+              createdAt: { gte: RANGE_START, lte: RANGE_END },
+            },
+          ],
         }),
       }),
     )
@@ -220,22 +261,24 @@ describe('fetchCompletedEntries', () => {
     expect(entries[0]?.category).toBeNull()
   })
 
-  it('uses Todo.updatedAt verbatim as completedAt (drift assertion, see TODOS.md)', async () => {
-    // Locks the documented drift: editing a long-completed Todo bumps the
-    // heatmap bucket to the edit day. The migration to a stable
-    // Todo.completedAt column is tracked in TODOS.md.
-    const recentEdit = new Date('2026-05-10T15:00:00.000Z')
+  it('uses Todo.completedAt over updatedAt so a later edit does NOT drift the heatmap day', async () => {
+    // The migration to a stable Todo.completedAt resolved the old drift: editing
+    // a long-completed Todo used to bump its heatmap bucket to the edit day.
+    // Now completedAt holds the real completion day regardless of later edits.
+    const completionDay = new Date('2026-05-07T09:00:00.000Z')
+    const laterEdit = new Date('2026-05-10T15:00:00.000Z')
     mockedTodoFindMany.mockResolvedValue([
       {
         id: 1,
         text: 'long-completed todo, edited today',
-        updatedAt: recentEdit,
+        completedAt: completionDay,
+        updatedAt: laterEdit,
         category: null,
       },
     ] as never)
     mockedCompletedFindMany.mockResolvedValue([])
 
     const entries = await fetchCompletedEntries(1, RANGE_START, RANGE_END)
-    expect(entries[0]?.completedAt).toEqual(recentEdit)
+    expect(entries[0]?.completedAt).toEqual(completionDay)
   })
 })
