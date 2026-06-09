@@ -94,6 +94,14 @@ test.describe('TODO App E2E Tests', () => {
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
+    // Wait for the create mutation to settle with a positive server ID before
+    // deleting. Optimistic create assigns a temporary negative id ("todo--<ts>");
+    // deleting then targets that phantom id, the server no-ops, and create's
+    // refetch brings the real row back — leaving the checkbox visible and the
+    // assertion failing. Matches the toggle/uncheck tests' positive-id guard.
+    await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+      timeout: 5000,
+    })
 
     // Act — click the per-row Delete button (sr-only labelled)
     const todoItem = page.locator('.rounded-lg.border').filter({
