@@ -21,6 +21,7 @@ import { memo, useCallback } from 'react'
  * <ElectronSettingsPage />
  */
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
+import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
 import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
 import { FloatingWindowSettings } from '@/components/electron/FloatingWindowSettings'
 import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
@@ -181,6 +182,8 @@ export const ElectronSettingsPage = memo(
 
     return (
       <div className="h-full space-y-4 p-4">
+        <AppUpdateSettings />
+
         <Card className="border-0 bg-transparent shadow-none">
           <CardHeader className="px-2 pb-2 pt-0">
             <CardTitle className="text-lg">Settings</CardTitle>

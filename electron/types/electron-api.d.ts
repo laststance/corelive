@@ -335,7 +335,7 @@ export interface ElectronAPI {
    */
   updater: {
     /** Check for updates */
-    checkForUpdates: () => Promise<UpdaterStatus>
+    checkForUpdates: () => Promise<boolean>
     /** Quit and install update */
     quitAndInstall: () => Promise<void>
     /** Get current update status */
