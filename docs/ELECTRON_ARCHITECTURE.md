@@ -732,14 +732,40 @@ log.debug('Debug info')
 **開発環境:** コンソールにカラー出力  
 **本番環境:** JSON形式でファイル出力
 
-### 7.2 DevTools を開く
+### 7.2 DevTools を開く / パッケージ版をデバッグモードで起動
 
-開発環境では自動的にDevToolsが開きます。本番環境で開くには：
+開発環境（`pnpm electron:dev`）では自動的に DevTools が開きます。
 
-```javascript
-// View → Toggle Developer Tools
-// または Cmd+Option+I (macOS)
+**パッケージ版（署名/公証済みビルド）は secure-by-default です（Issue #61）。** 既定では全ウィンドウ（main / floating / braindump / settings）で DevTools が**無効**で、リモートデバッグポートも開きません。そのため既定状態では `View → Toggle Developer Tools`（Cmd+Option+I）は**何も起きません**（以前の main ウィンドウは常時 `devTools: true` だったため開けましたが、この挙動は変更されました）。
+
+パッケージ版をデバッグするには、起動時にオプトインの環境変数を渡します。これにより **全ウィンドウの DevTools が有効**になり、かつ **Chrome DevTools Protocol（CDP）ポート**が開きます。
+
+```bash
+# DevTools を有効化 + CDP ポート(既定 9222)を開いて起動
+CORELIVE_DEBUG=1 /Applications/CoreLive.app/Contents/MacOS/CoreLive
+
+# dev ビルド(electron:build:dir)の .app をデバッグ起動する場合
+CORELIVE_DEBUG=1 dist/mac-arm64/CoreLive.app/Contents/MacOS/CoreLive
+
+# CDP ポートを変更したい場合(任意・1〜65535)
+CORELIVE_DEBUG=1 CORELIVE_REMOTE_DEBUGGING_PORT=9333 \
+  /Applications/CoreLive.app/Contents/MacOS/CoreLive
 ```
+
+> **Note:** macOS の `open -a CoreLive` は環境変数をアプリへ確実に渡せないため、上記のように **実行バイナリを直接起動**してください。
+
+起動後の確認：
+
+- **DevTools:** `View → Toggle Developer Tools`（Cmd+Option+I）が各ウィンドウで開けるようになります。
+- **CDP（外部ツール接続）:** Chrome で `chrome://inspect` を開く、または `curl http://localhost:<PORT>/json`（既定: `9222`、`CORELIVE_REMOTE_DEBUGGING_PORT` 指定時はその値）でターゲット一覧が返ればポートが開いています。
+
+| レバー                            | 何が有効になるか                              | 既定値  | どこで判定                    |
+| --------------------------------- | --------------------------------------------- | ------- | ----------------------------- |
+| `CORELIVE_DEBUG=1`                | 全ウィンドウの DevTools + CDP ポート          | 無効    | `electron/utils/debugMode.ts` |
+| `CORELIVE_REMOTE_DEBUGGING_PORT`  | CDP ポート番号の上書き（要 `CORELIVE_DEBUG`） | `9222`  | `resolveRemoteDebuggingPort`  |
+| `advanced.enableDevTools`（設定） | DevTools のみ（CDP ポートは開かない）         | `false` | `isDevToolsEnabled`           |
+
+> **セキュリティ上の区別:** 永続設定 `advanced.enableDevTools` は DevTools の表示のみを切り替え、**CDP リモートデバッグポートは決して開きません**。常時開放される localhost デバッグポートは攻撃面になり得るため、ポート開放は毎回の起動時オプトイン（`CORELIVE_DEBUG`）を必須にしています。E2E 用の `PLAYWRIGHT_REMOTE_DEBUGGING_PORT` は従来どおり独立して機能します。
 
 ### 7.3 IPCデバッグ
 
@@ -757,12 +783,12 @@ ipcErrorHandler.getStats()
 
 ### 7.4 よくある問題
 
-| 問題               | 原因             | 解決策                             |
-| ------------------ | ---------------- | ---------------------------------- |
-| ウィンドウが白い   | CSP違反          | DevTools Console でエラー確認      |
-| IPC応答なし        | チャンネル未登録 | `ALLOWED_CHANNELS` 確認            |
-| トレイアイコンなし | アイコンパス誤り | `build/icons/` 確認                |
-| Deep Link未動作    | プロトコル未登録 | `app.isDefaultProtocolClient` 確認 |
+| 問題               | 原因             | 解決策                                                              |
+| ------------------ | ---------------- | ------------------------------------------------------------------- |
+| ウィンドウが白い   | CSP違反          | DevTools Console でエラー確認（パッケージ版は §7.2 でデバッグ起動） |
+| IPC応答なし        | チャンネル未登録 | `ALLOWED_CHANNELS` 確認                                             |
+| トレイアイコンなし | アイコンパス誤り | `build/icons/` 確認                                                 |
+| Deep Link未動作    | プロトコル未登録 | `app.isDefaultProtocolClient` 確認                                  |
 
 ---
 
