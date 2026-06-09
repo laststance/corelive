@@ -38,6 +38,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Hide the Next.js dev tools indicator (the floating "N" logo overlay shown
+  // only in `next dev`). It otherwise floats over the app UI during local web
+  // and Electron development. Compile/runtime errors are still surfaced, and
+  // this setting has no effect on production builds.
+  devIndicators: false,
   // Turbopack configuration (Next.js 16+)
   // code-inspector-plugin enables Alt+click to jump to source code in IDE
   // Next dev evaluates this config before it sets NODE_ENV=development, so we
