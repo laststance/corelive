@@ -740,7 +740,7 @@ export interface IPCChannels {
     request: boolean
     response: boolean
   }
-  /** Placeholder for future SystemTrayManager integration. */
+  /** macOS: show/hide the tray (menu-bar) icon via `SystemTrayManager.setMenuBarVisible`. */
   'settings:setShowInMenuBar': {
     request: boolean
     response: boolean

@@ -117,9 +117,14 @@ export const ElectronSettingsPage = memo(
             if (success) {
               dispatch(setShowInMenuBar(checked))
             } else {
-              // IPC call failed (feature not implemented) - log but don't update state
+              // IPC returned false: the tray could not be created (e.g.
+              // createTray failed), so don't persist a "shown" state that
+              // never actually appeared. ElectronStartupSync re-pushes the
+              // persisted value at next launch, keeping the toggle truthful.
               if (process.env.NODE_ENV === 'development') {
-                console.warn('Menu bar visibility change not yet implemented')
+                console.error(
+                  'Failed to update menu bar visibility: IPC returned false',
+                )
               }
             }
           } catch (error) {
@@ -207,25 +212,19 @@ export const ElectronSettingsPage = memo(
             </div>
 
             {/*
-              Show in Menu Bar — stays disabled until `showInMenuBar` moves into
-              the main-process ConfigManager so the boot-time tray creation
-              (SystemIntegrationErrorHandler, which always creates the tray) can
-              read it. The IPC handler is live and truthful (T11 wired
-              SystemTrayManager.setMenuBarVisible), but it only toggles the tray
-              for the current session; persisting "hidden" across restarts is a
-              separate change. Un-gating before then would let the toggle lie
-              (off persists, yet the tray reappears at next launch).
+              Show in Menu Bar — the IPC handler shows/hides the tray live
+              (SystemTrayManager.setMenuBarVisible), and ElectronStartupSync
+              re-pushes the persisted value at every launch so an "off" choice
+              survives restarts (boot creates the tray, then the startup sync
+              hides it — same correct-after-boot pattern as Hide App Icon).
             */}
-            <div className="flex items-center justify-between opacity-60">
+            <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label
                   htmlFor="show-in-menu-bar"
                   className="text-sm font-medium"
                 >
-                  Show in Menu Bar{' '}
-                  <span className="text-xs text-muted-foreground">
-                    (Coming Soon)
-                  </span>
+                  Show in Menu Bar
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   Display CoreLive in the system menu bar
@@ -235,7 +234,6 @@ export const ElectronSettingsPage = memo(
                 id="show-in-menu-bar"
                 checked={showInMenuBar}
                 onCheckedChange={handleShowInMenuBarChange}
-                disabled
               />
             </div>
 

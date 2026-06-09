@@ -69,6 +69,16 @@ export class SystemTrayManager {
    */
   async createTray(): Promise<Tray | null> {
     try {
+      // Idempotent: this method is reached from two paths that can interleave —
+      // boot (SystemIntegrationErrorHandler.initializeTrayWithErrorHandling) and
+      // the live "Show in Menu Bar" toggle / ElectronStartupSync re-push (via
+      // setMenuBarVisible). A second call while a tray already exists would
+      // overwrite `this.tray` and orphan the previous native Tray (a leaked
+      // menu-bar icon), so short-circuit and return the live one.
+      if (this.hasTray()) {
+        return this.tray
+      }
+
       if (!this.isSystemTraySupported()) {
         log.warn('System tray is not supported on this platform')
         this.tray = null
@@ -683,8 +693,9 @@ export class SystemTrayManager {
     if (!this.isSystemTraySupported()) {
       return true
     }
-    // Already visible: createTray() is not idempotent (it would leak a second
-    // Tray), so short-circuit when one is already on screen.
+    // Already visible: short-circuit to keep the existing tray. createTray() is
+    // now idempotent on its own, but returning early also skips the redundant
+    // icon/menu rebuild and just re-asserts the close-to-tray routing below.
     if (this.hasTray()) {
       // A live tray exists, so close should hide-to-tray, not minimize.
       this.setFallbackMode(false)

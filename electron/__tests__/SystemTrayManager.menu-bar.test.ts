@@ -151,4 +151,22 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     // Assert: the UI must NOT persist "shown" when no tray actually appeared.
     expect(didApply).toBe(false)
   })
+
+  it('createTray() keeps the existing tray instead of leaking a second one', async () => {
+    // Arrange: a tray is already on screen. createTray() is reached from BOTH
+    // boot (SystemIntegrationErrorHandler) and the live toggle / startup sync,
+    // and those paths can interleave — a second build would overwrite this.tray
+    // and orphan the first native Tray (a leaked menu-bar icon).
+    const { manager } = createManager()
+    primeExistingTray(manager)
+    const supportedSpy = vi.spyOn(manager, 'isSystemTraySupported')
+
+    // Act
+    const result = await manager.createTray()
+
+    // Assert: the live tray is returned and the whole build path is skipped
+    // (the idempotency guard short-circuits before the platform check).
+    expect(result).toBe(fakeTray)
+    expect(supportedSpy).not.toHaveBeenCalled()
+  })
 })

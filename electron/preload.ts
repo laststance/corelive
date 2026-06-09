@@ -1558,7 +1558,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     /**
-     * Set show in menu bar - not yet implemented.
+     * Show or hide the macOS menu-bar (tray) icon — bridges to
+     * `settings:setShowInMenuBar`, which calls SystemTrayManager.setMenuBarVisible.
+     * @param show - true creates/keeps the tray icon, false tears it down.
+     * @returns Promise<boolean> success; false on a thrown error or when the
+     *   handler could not apply the change (e.g. tray creation failed).
      */
     setShowInMenuBar: async (show: boolean): Promise<boolean> => {
       if (typeof show !== 'boolean') {
