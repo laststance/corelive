@@ -757,7 +757,7 @@ CORELIVE_DEBUG=1 CORELIVE_REMOTE_DEBUGGING_PORT=9333 \
 起動後の確認：
 
 - **DevTools:** `View → Toggle Developer Tools`（Cmd+Option+I）が各ウィンドウで開けるようになります。
-- **CDP（外部ツール接続）:** Chrome で `chrome://inspect` を開く、または `curl http://localhost:9222/json` でターゲット一覧が返ればポートが開いています。
+- **CDP（外部ツール接続）:** Chrome で `chrome://inspect` を開く、または `curl http://localhost:<PORT>/json`（既定: `9222`、`CORELIVE_REMOTE_DEBUGGING_PORT` 指定時はその値）でターゲット一覧が返ればポートが開いています。
 
 | レバー                            | 何が有効になるか                              | 既定値  | どこで判定                    |
 | --------------------------------- | --------------------------------------------- | ------- | ----------------------------- |

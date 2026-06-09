@@ -99,7 +99,26 @@ function toWindowType(value: unknown): WindowType {
  * app exposes no remote-debugging surface unless deliberately launched in debug
  * mode. (DevTools availability is gated separately in WindowManager.)
  */
-const remoteDebuggingPort = resolveRemoteDebuggingPort(process.env)
+// Must run at module scope: Chromium reads `remote-debugging-port` during
+// browser-process init (before `app.whenReady()` resolves), so appending it
+// inside `whenReady` would be a no-op and the CDP port would never open.
+// `resolveRemoteDebuggingPort` throws on a bad `CORELIVE_REMOTE_DEBUGGING_PORT`,
+// but here — before the `app.whenReady().catch(...)` boot backstop — an
+// uncaught throw would crash startup outside the friendly fatal-error path.
+// Since this is an opt-in *debug* lever, fail soft: warn loudly (the debug user
+// who set the var needs to know it was rejected) and boot without the CDP port.
+// (The `ELECTRON_RENDERER_URL` block below also throws at module scope but is
+// left fail-loud on purpose: it's an E2E-only knob, so a typo there should abort
+// the test run rather than silently load production.)
+let remoteDebuggingPort: string | null = null
+try {
+  remoteDebuggingPort = resolveRemoteDebuggingPort(process.env)
+} catch (error) {
+  log.warn(
+    '⚠️ Ignoring invalid CORELIVE_REMOTE_DEBUGGING_PORT — no CDP port opened.',
+    error,
+  )
+}
 if (remoteDebuggingPort) {
   app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
 }
