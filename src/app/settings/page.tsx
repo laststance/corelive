@@ -13,6 +13,7 @@ import { memo } from 'react'
  */
 import { ElectronSettingsPage } from '@/components/electron/ElectronSettingsPage'
 import { PreferencesSettings } from '@/components/settings/PreferencesSettings'
+import { SettingsBackButton } from '@/components/settings/SettingsBackButton'
 
 export const metadata: Metadata = {
   title: 'Settings',
@@ -30,6 +31,9 @@ export const metadata: Metadata = {
 const SettingsPage = memo(function SettingsPage(): React.ReactNode {
   return (
     <div className="mx-auto h-full max-w-2xl">
+      {/* Standalone /settings has no sidebar; this is the only way back
+          (essential in Electron, which has no browser chrome). */}
+      <SettingsBackButton />
       <PreferencesSettings />
       <ElectronSettingsPage />
     </div>
