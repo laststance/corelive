@@ -67,7 +67,7 @@ export function meetsAA(
  * white (which fails AA on light accents — design decision D-D / #12).
  * @param background - The surface the text will sit on.
  * @param candidates - Foreground options; the first wins ties. Defaults to the
- *   brand near-white and near-ink.
+ *   brand near-white and near-ink; an empty array falls back to `DEFAULT_FOREGROUNDS[0]`.
  * @returns the candidate with the greatest contrast ratio against `background`.
  * @example
  * readableForeground('#ffffff', ['#ffffff', '#000000']) // => '#000000'

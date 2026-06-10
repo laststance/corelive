@@ -20,7 +20,11 @@ const stylesCss = readFileSync(
 
 /** Reads a `--st-*` value out of a single CSS block body, or fails loudly. */
 const stVar = (blockBody: string, name: string): string => {
-  const match = blockBody.match(new RegExp(`${name}:\\s*([^;]+);`))
+  // Escape regex metacharacters in `name` before interpolation — defends the
+  // helper against ReDoS / pattern injection even though current callers pass
+  // only controlled `--st-*` literals.
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = blockBody.match(new RegExp(`${escapedName}:\\s*([^;]+);`))
   const value = match?.[1]
   if (value === undefined)
     throw new Error(`${name} not found in skill-tree block`)

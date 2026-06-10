@@ -54,12 +54,11 @@ export const ThemePreviewSwatch = memo(function ThemePreviewSwatch({
       </div>
       {/* Heatmap ramp (40% height) — rest→warm-apex, the app's signature gradient. */}
       <div className="flex h-2/5 w-full">
-        {preview.heatmap.map((color) => (
-          <span
-            key={color}
-            className="flex-1"
-            style={{ backgroundColor: color }}
-          />
+        {preview.heatmap.map((color, i) => (
+          // Index key: the ramp is a fixed-order, decorative gradient that never
+          // reorders, and two stops can share a hex at certain brightness levels
+          // (a color-value key would then collide).
+          <span key={i} className="flex-1" style={{ backgroundColor: color }} />
         ))}
       </div>
     </div>

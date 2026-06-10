@@ -209,7 +209,7 @@ Intentional choreography. Most motion is in the 150–250ms range. The one motio
 | Page transition                     | fade                                | 200ms    | ease-out           |
 | Modal / Dialog                      | `scale(0.96 → 1)` + fade            | 250ms    | celebration easing |
 | Tooltip                             | fade + 4px slide-up                 | 100ms    | ease-out           |
-| Theme toggle                        | crossfade (no transition flash)     | n/a      | n/a                |
+| Theme toggle                        | crossfade (body-only, bg+text)      | 200ms    | ease-out           |
 
 > **Checkbox completion fill (2026-06-04, opt-in-feedback feature).** Checking a
 > task plays a soft amber fill on the CHECKBOX (not the whole row) over ~200ms
