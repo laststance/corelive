@@ -1,6 +1,6 @@
 {
   "name": "corelive",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "A comprehensive design system and web application built with Next.js, featuring authentication, database integration, and desktop support",
   "author": "Ryota Murakami <dojce1048@gmail.com> (https://github.com/ryota-murakami)",
   "private": true,
@@ -53,7 +53,7 @@
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
     "electron:build:ts": "electron-vite build",
-    "electron:build:mac": "pnpm electron:build:ts && electron-builder --mac",
+    "electron:build:mac": "pnpm electron:build:ts && electron-builder --mac && node scripts/finalize-mac-release-artifacts.js",
     "electron:build:dir": "pnpm electron:build:ts && electron-builder --dir",
     "electron:publish": "pnpm electron:build:ts && electron-builder --publish=always",
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run"
