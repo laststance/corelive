@@ -1,14 +1,14 @@
-[![Build](https://github.com/laststance/unfarely/actions/workflows/build.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/build.yml)
-[![Lint](https://github.com/laststance/unfarely/actions/workflows/lint.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/lint.yml)
-[![Test](https://github.com/laststance/unfarely/actions/workflows/test.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/test.yml)
-[![Typecheck](https://github.com/laststance/unfarely/actions/workflows/typecheck.yml/badge.svg)](https://github.com/laststance/unfarely/actions/workflows/typecheck.yml)
+[![Build](https://github.com/laststance/corelive/actions/workflows/build.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/build.yml)
+[![Lint](https://github.com/laststance/corelive/actions/workflows/lint.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/lint.yml)
+[![Test](https://github.com/laststance/corelive/actions/workflows/test.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/test.yml)
+[![Typecheck](https://github.com/laststance/corelive/actions/workflows/typecheck.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/typecheck.yml)
 [![E2E Tests (Web)](https://github.com/laststance/corelive/actions/workflows/e2e.web.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/e2e.web.yml)
 [![E2E Tests (Electron)](https://github.com/laststance/corelive/actions/workflows/e2e.electron.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/e2e.electron.yml)
 [![Storybook Testing](https://github.com/laststance/corelive/actions/workflows/storybook-test.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/storybook-test.yml)
 
 # 🚧 It is a work in progress 🚧
 
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+CoreLive is a personal task tracker and BrainDump archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. Built with [Next.js](https://nextjs.org/), available as a web app and a macOS desktop app (Electron).
 
 ## Platform Support
 
@@ -24,7 +24,7 @@ This project supports:
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [Node.js](https://nodejs.org/) (recommended version 22+)
+- [Node.js](https://nodejs.org/) (version 24+; CI uses 24.13.0)
 - [pnpm](https://pnpm.io/)
 - [Clerk](https://clerk.com/)
 - [ngrok](https://ngrok.com/) (for local development see [Clerk docs](https://clerk.com/docs/webhooks/sync-data#set-up-ngrok))
@@ -80,11 +80,11 @@ This project uses PostgreSQL v17 as the database, managed through Docker Compose
 # Start the PostgreSQL database
 docker compose up -d postgres
 
-# Push the database schema
-PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 pnpm prisma:reset
+# Apply migrations (also generates the Prisma client)
+pnpm prisma:migrate
 
-# Generate Prisma client
-PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 pnpm prisma generate
+# Seed initial data (optional)
+pnpm prisma:seed
 ```
 
 #### Database Management
@@ -121,9 +121,9 @@ bun dev
 
 Open [http://localhost:3011](http://localhost:3011) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You can start editing the page by modifying files under `src/app/`. The page auto-updates as you edit.
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to optimize and load its three-font stack: **Inter Tight** (body/UI), **Newsreader** (display serif), and **Geist Mono** (data/code).
 
 ### Ngrok
 
@@ -154,7 +154,7 @@ pnpm electron
 ```bash
 # Local production testing (connects to corelive.app)
 pnpm electron:build:dir
-open dist/mac/CoreLive.app
+open dist/mac-arm64/CoreLive.app  # Apple Silicon; dist/mac/ on Intel
 
 # Production release
 pnpm electron:build:mac
