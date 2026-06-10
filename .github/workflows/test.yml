@@ -51,6 +51,8 @@ jobs:
         run: pnpm test --run --coverage
       - name: Run workspace package tests
         run: pnpm test:packages
+      - name: Verify generated theme CSS is not stale
+        run: pnpm theme:check
       - name: Run Electron tests
         run: pnpm test:electron --run
       - name: Upload coverage reports

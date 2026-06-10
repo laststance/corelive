@@ -6,6 +6,7 @@ import {
   DEFAULT_THEME_ID,
   isThemeId,
   getThemeMode,
+  getThemeId,
 } from './registry'
 
 describe('theme registry', () => {
@@ -92,5 +93,13 @@ describe('getThemeMode — resolves a theme id to its light/dark axis', () => {
   it('falls back to light before hydration when the id is undefined', () => {
     // Arrange / Act / Assert
     expect(getThemeMode(undefined)).toBe('light')
+  })
+})
+
+describe('getThemeId — builds the stored id for a (family, mode) pair', () => {
+  it('maps the cathedral family to the flat light and dark ids', () => {
+    // Arrange / Act / Assert — cathedral keeps the flat ids (T7 adds colored families)
+    expect(getThemeId('cathedral', 'light')).toBe('light')
+    expect(getThemeId('cathedral', 'dark')).toBe('dark')
   })
 })

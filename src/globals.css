@@ -1,6 +1,10 @@
 @import 'tailwindcss' source('.');
 @import 'tw-animate-css';
 @import './components/animations/animations.css';
+/* Generated colored-family theme blocks (build-time, scripts/generate-theme-css.ts).
+   Cathedral light/dark stay hand-authored below; derived families use
+   :root[data-theme='…'] so they win regardless of @import order. */
+@import './lib/themes/generated.css';
 
 @plugin 'tailwindcss-animate';
 

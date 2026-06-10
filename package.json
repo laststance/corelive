@@ -33,6 +33,8 @@
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
     "test:packages": "pnpm --filter eslint-plugin-dslint test",
+    "theme:generate": "tsx scripts/generate-theme-css.ts",
+    "theme:check": "tsx scripts/generate-theme-css.ts && git diff --exit-code src/lib/themes/generated.css && test -z \"$(git status --porcelain src/lib/themes/generated.css)\"",
     "prettier": "prettier --ignore-unknown --write .",
     "typecheck": "tsc --noEmit",
     "validate": "concurrently -n test,pkg,lint,build,type -c blue,magenta,yellow,green,cyan --kill-others-on-fail \"pnpm test\" \"pnpm test:packages\" \"pnpm lint:fix\" \"pnpm build\" \"pnpm typecheck\"",

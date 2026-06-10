@@ -28,3 +28,7 @@ storybook-static
 
 # Vitest
 html
+
+# Generated (machine-written; formatting is owned by scripts/generate-theme-css.ts
+# so prettier must not reformat it and break the generated-not-stale CI check)
+src/lib/themes/generated.css
