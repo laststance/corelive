@@ -33,7 +33,10 @@
     --color-danger: oklch(0.577 0.245 27.325);
   }
 
-  [data-theme='dark'] {
+  /* Match every dark theme — flat `dark` and future `*-dark` families (T7) — so
+     colored-dark themes get the dark status palette instead of falling through to
+     the light :root values on a dark surface. Mirrors the globals.css dark variant. */
+  [data-theme$='dark'] {
     --color-success: oklch(0.696 0.17 162.48);
     --color-warning: oklch(0.828 0.189 84.429);
     --color-danger: oklch(0.704 0.191 22.216);

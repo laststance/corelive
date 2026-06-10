@@ -3,6 +3,7 @@
 import * as React from 'react'
 import * as RechartsPrimitive from 'recharts'
 
+import type { ThemeMode } from '@/lib/themes/registry'
 import { cn } from '@/lib/utils'
 
 // Local minimal types matching the subset of Recharts payload shape we consume.
@@ -20,8 +21,17 @@ type LegendItem = {
   color?: string
 }
 
-// Format: { THEME_NAME: CSS_SELECTOR }
-const THEMES = { light: '', dark: '.dark' } as const
+/**
+ * CSS selector prefix per theme MODE, scoping the chart color vars. `light` is
+ * unscoped (applies under :root). `dark` keys off the app's data-theme attribute
+ * (`$=dark` matches the flat `dark` id AND any future `*-dark` family), mirroring
+ * getThemeMode() so charts flip with the rest of the `dark:` utilities — never the
+ * dead `.dark` class (no `.dark` is ever set in this app).
+ */
+const THEME_SELECTORS: Record<ThemeMode, string> = {
+  light: '',
+  dark: "[data-theme$='dark']",
+}
 
 export type ChartConfig = {
   [k in string]: {
@@ -29,7 +39,7 @@ export type ChartConfig = {
     icon?: React.ComponentType
   } & (
     | { color?: string; theme?: never }
-    | { color?: never; theme: Record<keyof typeof THEMES, string> }
+    | { color?: never; theme: Record<ThemeMode, string> }
   )
 }
 
@@ -127,15 +137,14 @@ const ChartStyle = React.memo(
     return (
       <style
         dangerouslySetInnerHTML={{
-          __html: Object.entries(THEMES)
-            .map(
-              ([theme, prefix]) => `
+          __html: (Object.keys(THEME_SELECTORS) as ThemeMode[])
+            .map((mode) => {
+              const prefix = THEME_SELECTORS[mode]
+              return `
 ${prefix ? `${prefix} ` : ''}[data-chart="${chartSelectorId}"] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
+    const color = itemConfig.theme?.[mode] || itemConfig.color
     const sanitizedColor = sanitizeChartColor(color)
 
     return sanitizedColor
@@ -144,8 +153,8 @@ ${colorConfig
   })
   .join('\n')}
 }
-`,
-            )
+`
+            })
             .join('\n'),
         }}
       />

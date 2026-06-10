@@ -4,6 +4,14 @@
 
 @plugin 'tailwindcss-animate';
 
+/* Bind Tailwind's `dark:` variant to the app's data-theme attribute instead of
+   the OS prefers-color-scheme. `$=dark` matches the flat `dark` id AND every
+   future `*-dark` family id (e.g. `harbor-dark`), mirroring getThemeMode() in
+   src/lib/themes/registry.ts; `light`/`*-light` never end in `dark`, so they are
+   excluded. Required because Tailwind v4 ignores tailwind.config `darkMode`
+   without a `@config` directive. `:where()` keeps specificity at 0. */
+@custom-variant dark (&:where([data-theme$=dark], [data-theme$=dark] *));
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
