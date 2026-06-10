@@ -12,6 +12,7 @@ import {
 import type { ThemeId } from '@/lib/themes/registry'
 
 import { ThemeAllowlistGuard } from './ThemeAllowlistGuard'
+import { ThemeTransition } from './ThemeTransition'
 
 /**
  * Available theme ids, sourced from the theme registry (the single source of
@@ -66,6 +67,9 @@ export const ThemeProvider = React.memo(function ThemeProvider({
       {/* Self-heals a stale/tampered persisted theme back to the default
           (next-themes does not validate its own localStorage value). */}
       <ThemeAllowlistGuard />
+      {/* Crossfades the whole UI during a theme switch by toggling a transient
+          class on <html>, without animating every hover/focus interaction. */}
+      <ThemeTransition />
       {children}
     </NextThemesProvider>
   )
