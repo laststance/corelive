@@ -16,7 +16,8 @@ describe('ThemeProvider — heals a tampered persisted theme end to end', () => 
 
   it('rewrites an unregistered persisted theme to the default after mount', async () => {
     // Arrange — a stale/tampered id next-themes would otherwise apply verbatim
-    window.localStorage.setItem(STORAGE_KEY, 'harbor-dark')
+    // ('sunset' is not a registered family — mimics a downgrade that dropped one)
+    window.localStorage.setItem(STORAGE_KEY, 'sunset-dark')
 
     // Act
     render(

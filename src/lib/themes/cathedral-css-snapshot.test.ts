@@ -32,6 +32,7 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
     // Assert
     expect(rootBlock).toMatchInlineSnapshot(`
       ":root {
+        color-scheme: light;
         --radius: 0.625rem;
         /* Warm Cathedral — light theme · golden-hour neutrals (warmed paper, dawn, amber, terracotta).
            Neutral surfaces carry OKLCH chroma 0.016–0.024 (was 0.005–0.01) so the room reads as
@@ -85,6 +86,7 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
     // Assert
     expect(darkBlock).toMatchInlineSnapshot(`
       "[data-theme='dark'] {
+        color-scheme: dark;
         /* Warm Cathedral — dark theme · golden-hour neutrals (warm coal, ember, copper, warm sun).
            Coal surfaces carry OKLCH chroma 0.026–0.028 (was 0.012–0.015) so the dark room glows like
            embers, not slate. Accent/text/heatmap unchanged. WCAG AA holds (text/bg 17:1, muted-fg/card

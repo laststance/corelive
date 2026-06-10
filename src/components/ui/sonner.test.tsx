@@ -31,7 +31,7 @@ describe('Toaster theme resolution', () => {
   })
 
   it('resolves a *-dark family id down to the dark mode Sonner accepts', () => {
-    // Arrange — a future colored-dark id Sonner cannot accept raw
+    // Arrange — a colored-dark family id Sonner cannot accept raw
     useThemeMock.mockReturnValue({ theme: 'harbor-dark' })
 
     // Act

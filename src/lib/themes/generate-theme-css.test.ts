@@ -8,7 +8,7 @@ import {
   type DerivationSeed,
 } from '../../../scripts/generate-theme-css'
 
-import { meetsAA } from './contrast'
+import { contrastRatio, meetsAA } from './contrast'
 import { THEME_REGISTRY, type DerivedTheme } from './registry'
 
 const toOklch = converter('oklch')
@@ -72,6 +72,13 @@ const lightnessOf = (oklchValue: string): number => {
   const parsed = toOklch(oklchValue)
   if (!parsed) throw new Error(`unparsable color ${oklchValue}`)
   return parsed.l
+}
+
+/** OKLCH lightness/chroma/hue of a token value (achromatic hue falls back to 0). */
+const oklchOf = (oklchValue: string): { l: number; c: number; h: number } => {
+  const parsed = toOklch(oklchValue)
+  if (!parsed) throw new Error(`unparsable color ${oklchValue}`)
+  return { l: parsed.l, c: parsed.c, h: parsed.h ?? 0 }
 }
 
 describe('deriveThemeTokens — classification map', () => {
@@ -231,4 +238,76 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(blockCount).toBe(0)
     expect(css).toContain('AUTO-GENERATED')
   })
+})
+
+// Every SHIPPED colored family (preserve:false). The per-theme gates below iterate
+// these so a bad seed fails CI by name. generated.css staleness is a separate guard
+// (`theme:check` regenerates + git-diffs); here we prove the SEEDS themselves are sound.
+const DERIVED_THEMES = Object.values(THEME_REGISTRY).filter(
+  (theme): theme is DerivedTheme => !theme.preserve,
+)
+
+describe('every registered colored family — WCAG AA gate', () => {
+  it.each(DERIVED_THEMES)(
+    '$id clears AA on body text, muted labels, and the computed primary foreground',
+    (theme) => {
+      // Arrange
+      const t = deriveThemeTokens(theme)
+
+      // Assert — body text keeps cathedral's strong contrast (gate at AAA-ish 7:1);
+      // muted-on-card and the *computed* primary-foreground clear AA body text 4.5:1
+      expect(
+        contrastRatio(token(t, '--foreground'), token(t, '--background')),
+      ).toBeGreaterThanOrEqual(7)
+      expect(
+        contrastRatio(token(t, '--muted-foreground'), token(t, '--card')),
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(token(t, '--primary-foreground'), token(t, '--primary')),
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(
+          token(t, '--sidebar-primary-foreground'),
+          token(t, '--sidebar-primary'),
+        ),
+      ).toBeGreaterThanOrEqual(4.5)
+    },
+  )
+})
+
+describe('every registered colored family — heatmap "temperature = pride" invariant', () => {
+  // The hottest cell's hue must stay in the warm band so "more completions = hotter"
+  // reads the same across families (cathedral apex sits at hue 40/65; seeds land 38–45).
+  const WARM_APEX_MIN_HUE = 20
+  const WARM_APEX_MAX_HUE = 70
+
+  it.each(DERIVED_THEMES)(
+    '$id ramps lightness/chroma monotonically and lands the apex in the warm band',
+    (theme) => {
+      // Arrange — the five heatmap stops, coolest (rest) → warmest (apex)
+      const tokens = deriveThemeTokens(theme)
+      const ramp = HEATMAP_TOKENS.map((k) => oklchOf(token(tokens, k)))
+
+      // Assert — light cools→warms (L falls); dark glows brighter (L rises)
+      const lightnessMonotonic = ramp.every((stop, i) =>
+        i === 0
+          ? true
+          : theme.mode === 'light'
+            ? stop.l < ramp[i - 1]!.l
+            : stop.l > ramp[i - 1]!.l,
+      )
+      expect(lightnessMonotonic).toBe(true)
+
+      // chroma intensifies toward the apex in both modes
+      const chromaRising = ramp.every((stop, i) =>
+        i === 0 ? true : stop.c > ramp[i - 1]!.c,
+      )
+      expect(chromaRising).toBe(true)
+
+      // shared warm apex — the hottest cell hue stays warm regardless of the rest hue
+      const apexHue = oklchOf(token(tokens, '--hm-4')).h
+      expect(apexHue).toBeGreaterThanOrEqual(WARM_APEX_MIN_HUE)
+      expect(apexHue).toBeLessThanOrEqual(WARM_APEX_MAX_HUE)
+    },
+  )
 })

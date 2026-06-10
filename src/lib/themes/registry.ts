@@ -15,10 +15,18 @@ export type ThemeMode = 'light' | 'dark'
 
 /**
  * A color identity. Each family ships a light + dark pair. The default
- * "cathedral" family keeps the flat `light`/`dark` ids for zero migration;
- * colored families are appended here (T7), and `ThemeId` expands automatically.
+ * "cathedral" family keeps the flat `light`/`dark` ids for zero migration; the
+ * colored families tint neutrals toward their accent hue and re-aim the heatmap's
+ * rest→warm-apex hue path, while the heatmap L/C ramp and the warm
+ * chart/destructive identity stay fixed across every family (design decision #15).
  */
-export type ThemeFamilyId = 'cathedral'
+export type ThemeFamilyId =
+  | 'cathedral'
+  | 'harbor'
+  | 'grove'
+  | 'rose-tea'
+  | 'iris'
+  | 'graphite'
 
 /**
  * Stored theme id — the value next-themes persists to localStorage and writes
@@ -97,6 +105,182 @@ export const THEME_REGISTRY = {
     preview: '#1a1a1a',
     colorScheme: 'dark',
     preserve: true,
+  },
+
+  // ── Colored families (design doc 2026-06-10, lines 501-506) ──────────────────
+  // Accent L/C/H + heatmapHues are the approved seed. neutralHue = accentHue (each
+  // family tints its neutral surfaces toward its own signature); neutralChroma is a
+  // low, mode-scoped tint (~0.012 light / 0.014 dark). `preview` = the accent hex
+  // (current picker swatch; T8 replaces it with a token composite). primary-foreground
+  // is contrast-computed by the generator, never stored here.
+
+  // Harbor — calm blue. light accentL nudged 0.56→0.555 for a stable AA margin
+  // (0.56 cleared 4.5 by only 0.014; 0.555 → 4.61).
+  'harbor-light': {
+    family: 'harbor',
+    mode: 'light',
+    id: 'harbor-light',
+    name: 'Harbor Light',
+    preview: '#2776be',
+    colorScheme: 'light',
+    preserve: false,
+    accentL: 0.555,
+    accentChroma: 0.135,
+    accentHue: 250,
+    neutralChroma: 0.012,
+    neutralHue: 250,
+    heatmapHues: [235, 220, 95, 60, 42],
+  },
+  'harbor-dark': {
+    family: 'harbor',
+    mode: 'dark',
+    id: 'harbor-dark',
+    name: 'Harbor Dark',
+    preview: '#57a3ef',
+    colorScheme: 'dark',
+    preserve: false,
+    accentL: 0.7,
+    accentChroma: 0.135,
+    accentHue: 250,
+    neutralChroma: 0.014,
+    neutralHue: 250,
+    heatmapHues: [235, 220, 95, 60, 42],
+  },
+
+  // Grove — forest green. light accentL nudged 0.55→0.54 to clear the AA gate
+  // (0.55 → 4.48, below 4.5; 0.54 → 4.67). Accent hue 145 lands on the fixed
+  // `--chart-2` (145) and near `--success` (149); a green theme also dilutes
+  // green's "success everywhere" semantic. Separable by chroma/lightness but
+  // flagged for design-review (design doc collision note, line 512).
+  'grove-light': {
+    family: 'grove',
+    mode: 'light',
+    id: 'grove-light',
+    name: 'Grove Light',
+    preview: '#3b8040',
+    colorScheme: 'light',
+    preserve: false,
+    accentL: 0.54,
+    accentChroma: 0.12,
+    accentHue: 145,
+    neutralChroma: 0.012,
+    neutralHue: 145,
+    heatmapHues: [140, 132, 95, 65, 42],
+  },
+  'grove-dark': {
+    family: 'grove',
+    mode: 'dark',
+    id: 'grove-dark',
+    name: 'Grove Dark',
+    preview: '#70b972',
+    colorScheme: 'dark',
+    preserve: false,
+    accentL: 0.72,
+    accentChroma: 0.125,
+    accentHue: 145,
+    neutralChroma: 0.014,
+    neutralHue: 145,
+    heatmapHues: [140, 132, 95, 65, 42],
+  },
+
+  // Rose Tea — dusty rose. Accent hue 18 sits near the fixed `--destructive` (25);
+  // they stay separable by chroma/lightness, flagged for design-review.
+  'rose-tea-light': {
+    family: 'rose-tea',
+    mode: 'light',
+    id: 'rose-tea-light',
+    name: 'Rose Tea Light',
+    preview: '#b84c55',
+    colorScheme: 'light',
+    preserve: false,
+    accentL: 0.56,
+    accentChroma: 0.14,
+    accentHue: 18,
+    neutralChroma: 0.012,
+    neutralHue: 18,
+    heatmapHues: [25, 32, 45, 55, 38],
+  },
+  'rose-tea-dark': {
+    family: 'rose-tea',
+    mode: 'dark',
+    id: 'rose-tea-dark',
+    name: 'Rose Tea Dark',
+    preview: '#ed7f84',
+    colorScheme: 'dark',
+    preserve: false,
+    accentL: 0.72,
+    accentChroma: 0.135,
+    accentHue: 18,
+    neutralChroma: 0.014,
+    neutralHue: 18,
+    heatmapHues: [25, 32, 45, 55, 38],
+  },
+
+  // Iris — soft violet. Heatmap rests violet (300) and arcs through magenta to the
+  // shared warm apex (45).
+  'iris-light': {
+    family: 'iris',
+    mode: 'light',
+    id: 'iris-light',
+    name: 'Iris Light',
+    preview: '#7764ba',
+    colorScheme: 'light',
+    preserve: false,
+    accentL: 0.56,
+    accentChroma: 0.13,
+    accentHue: 292,
+    neutralChroma: 0.012,
+    neutralHue: 292,
+    heatmapHues: [300, 315, 340, 25, 45],
+  },
+  'iris-dark': {
+    family: 'iris',
+    mode: 'dark',
+    id: 'iris-dark',
+    name: 'Iris Dark',
+    preview: '#a795ef',
+    colorScheme: 'dark',
+    preserve: false,
+    accentL: 0.72,
+    accentChroma: 0.13,
+    accentHue: 292,
+    neutralChroma: 0.014,
+    neutralHue: 292,
+    heatmapHues: [300, 315, 340, 25, 45],
+  },
+
+  // Graphite — near-neutral slate. The accent itself is nearly desaturated
+  // (chroma ~0.02): the only real chroma on screen is the heatmap bloom — the
+  // purest expression of the temperature=pride invariant (design doc lines 506-510).
+  'graphite-light': {
+    family: 'graphite',
+    mode: 'light',
+    id: 'graphite-light',
+    name: 'Graphite Light',
+    preview: '#4d5660',
+    colorScheme: 'light',
+    preserve: false,
+    accentL: 0.45,
+    accentChroma: 0.02,
+    accentHue: 250,
+    neutralChroma: 0.008,
+    neutralHue: 250,
+    heatmapHues: [250, 250, 90, 55, 42],
+  },
+  'graphite-dark': {
+    family: 'graphite',
+    mode: 'dark',
+    id: 'graphite-dark',
+    name: 'Graphite Dark',
+    preview: '#9ba6b2',
+    colorScheme: 'dark',
+    preserve: false,
+    accentL: 0.72,
+    accentChroma: 0.022,
+    accentHue: 250,
+    neutralChroma: 0.01,
+    neutralHue: 250,
+    heatmapHues: [250, 250, 90, 55, 42],
   },
 } satisfies Record<ThemeId, ThemeSeed>
 

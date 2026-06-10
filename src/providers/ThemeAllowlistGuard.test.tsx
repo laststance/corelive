@@ -19,7 +19,7 @@ describe('ThemeAllowlistGuard — heals an unregistered persisted theme', () => 
   it('resets a stale colored-family id (dark utilities, no token block) to the default', () => {
     // Arrange — a *-dark id left after a downgrade that dropped the family
     useThemeMock.mockReturnValue({
-      theme: 'harbor-dark',
+      theme: 'sunset-dark',
       setTheme: setThemeSpy,
     })
 

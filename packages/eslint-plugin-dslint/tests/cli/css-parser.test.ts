@@ -179,6 +179,24 @@ describe('parseCSSContent — generator contract', () => {
     // Assert — no 'light'-tagged definition exists (the precise loss condition)
     expect(lightShared).toBeUndefined()
   })
+
+  it("tags a compound :root[data-theme='id'] block (the generator's real output) by its id, not light", () => {
+    // Arrange — generated.css emits `:root[data-theme='harbor-light']` (specificity
+    // 0,2,0, so a derived theme outranks cathedral's :root regardless of @import
+    // order). The :root matcher requires `:root` immediately before `{`, so the
+    // compound is NOT mis-tagged 'light'; the [data-theme] matcher claims it by id.
+    const variables = parseCSSContent(
+      `:root[data-theme='harbor-light'] { --primary: oklch(0.555 0.135 250); }`,
+    )
+
+    // Act
+    const themes = variables
+      .filter((v) => v.name === '--primary')
+      .map((v) => v.theme)
+
+    // Assert — one definition, tagged with the colored id (not 'light', not 'base')
+    expect(themes).toEqual(['harbor-light'])
+  })
 })
 
 describe('extractColorVariables', () => {

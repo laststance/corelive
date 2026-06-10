@@ -20,7 +20,7 @@ const SYSTEM_THEME = 'system'
  * interaction.
  * @returns null — renders nothing; its only job is the corrective side effect.
  * @example
- * // localStorage['corelive-theme'] === 'harbor-dark' (unregistered)
+ * // localStorage['corelive-theme'] === 'sunset-dark' (unregistered family)
  * // → after mount: setTheme('light') rewrites storage + data-theme
  */
 export function ThemeAllowlistGuard(): null {
