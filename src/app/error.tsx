@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { log } from '@/lib/logger'
 
 interface RouteErrorProps {
@@ -49,7 +49,7 @@ const RouteError = memo(function RouteError({
   reset,
 }: RouteErrorProps): ReactElement {
   // Surface the real error to logs/telemetry; the UI stays calm and vague.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     log.error('Page boundary caught a client error:', error)
   }, [error])
 

@@ -18,5 +18,7 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "registries": {}
+  "registries": {
+    "@laststance-hooks": "https://raw.githubusercontent.com/laststance/laststance-hooks/main/public/r/{name}.json"
+  }
 }

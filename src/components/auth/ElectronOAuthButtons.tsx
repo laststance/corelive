@@ -4,7 +4,7 @@ import { useUser } from '@clerk/nextjs'
 import { memo, useCallback, useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useReducerState } from '@/hooks/useReducerState'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
@@ -56,7 +56,7 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
   const isLoading = user ? null : state.isLoading
   const error = user ? null : state.error
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isElectronEnvironment()) return
 
     // Register OAuth event listeners

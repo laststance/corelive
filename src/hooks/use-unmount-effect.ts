@@ -1,27 +1,23 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 
 /**
- * Runs a callback only when the component unmounts.
+ * Run a callback only when the component unmounts.
  *
- * Use this for teardown work that has no mount-time side effect of its own.
+ * The callback is wrapped in React's Effect Event API so the cleanup phase
+ * calls the latest callback even if props or state changed after mount.
  *
- * @param callback - Cleanup callback invoked during unmount.
- * @returns Nothing; React owns the unmount lifecycle.
+ * @param callback - Teardown work to run during unmount.
+ * @returns Nothing; React invokes `callback` from the cleanup phase.
+ *
  * @example
  * useUnmountEffect(() => {
- *   connection.close()
+ *   window.clearTimeout(timerId)
  * })
  */
 export function useUnmountEffect(callback: () => void): void {
-  const callbackRef = useRef(callback)
+  const onUnmount = useEffectEvent(callback)
 
   useEffect(() => {
-    // Keep cleanup behavior current when callers pass a new callback.
-    callbackRef.current = callback
-  }, [callback])
-
-  useEffect(() => {
-    // React calls the returned function during unmount.
-    return () => callbackRef.current()
+    return () => onUnmount()
   }, [])
 }

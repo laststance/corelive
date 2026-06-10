@@ -22,8 +22,8 @@ import {
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { log } from '@/lib/logger'
 
 interface FloatingWindowSettingsProps {
@@ -54,7 +54,7 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
 
   // Fetch once from the preload bridge after mount; the fallback branch below
   // handles non-Electron renderers without needing a separate effect path.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const api =
       typeof window === 'undefined'
         ? undefined

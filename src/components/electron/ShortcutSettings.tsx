@@ -21,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 import { log } from '../../lib/logger'
 
@@ -110,7 +110,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     }
   }, [isElectron])
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isElectron) {
       setIsLoading(false)
       return

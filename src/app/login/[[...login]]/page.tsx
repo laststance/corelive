@@ -8,7 +8,7 @@ import {
   ElectronLoginForm,
   useIsElectron,
 } from '@/components/auth/ElectronLoginForm'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 /**
  * Login Page with Electron Email/Password Support
@@ -27,7 +27,7 @@ const Page = memo(function Page() {
   const router = useRouter()
 
   // Redirect to home if user is already authenticated
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (isLoaded && user) {
       router.replace('/home')
     }

@@ -4,10 +4,10 @@ import { arrayMove } from '@dnd-kit/helpers'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, { useCallback, useMemo, useState } from 'react'
 
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
@@ -285,7 +285,7 @@ export const FloatingNavigatorContainer = React.memo(
     )
 
     // Sync local state with query data when it changes
-    useComponentEffect(() => {
+    useCycleEffect(() => {
       setLocalPendingTodos(todosFromQuery.filter((t) => !t.completed))
     }, [todosFromQuery])
 
@@ -302,7 +302,7 @@ export const FloatingNavigatorContainer = React.memo(
       [completedTodos, pendingTodos],
     )
 
-    useComponentEffect(() => {
+    useCycleEffect(() => {
       // Cross-window sync: BrainDump + Home todo completions also write to the
       // Completed table, so the heatmap + day-detail caches must invalidate
       // alongside the todo list. Mirrors TodoList.tsx — without these two keys,
@@ -320,7 +320,7 @@ export const FloatingNavigatorContainer = React.memo(
     }, [queryClient])
 
     // Cross-window category sync
-    useComponentEffect(() => {
+    useCycleEffect(() => {
       return subscribeToCategorySync(() => {
         queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       })

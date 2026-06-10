@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation'
 import { memo, Suspense, useState } from 'react'
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 /**
  * OAuth Callback Page - Browser-to-Electron Bridge with Sign-In Token
@@ -39,7 +39,7 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
   const [status, setStatus] = useState<CallbackStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     let isMounted = true
     let redirectTimer: number | undefined
     let successTimer: number | undefined

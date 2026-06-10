@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 import { log } from '../../lib/logger'
 
@@ -148,7 +148,7 @@ export const NotificationSettings = memo(function NotificationSettings({
     }
   }, [isElectron])
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isElectron) {
       setIsLoading(false)
       return

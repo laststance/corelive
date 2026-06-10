@@ -1,19 +1,21 @@
 import { useEffect, type EffectCallback } from 'react'
 
 /**
- * Runs an effect exactly once after the component mounts.
+ * Run a React effect exactly once after the component mounts.
  *
- * This hook gives mount-only effects an explicit lifecycle name so component
- * code does not need a raw `useEffect(..., [])` call.
+ * Use this for mount-only setup such as one-time subscriptions, probes, or
+ * bootstrapping code. For effects that should run again after later renders,
+ * use `useUpdateEffect`, `useRenderEffect`, or `useCycleEffect`.
  *
- * @param effect - Effect body and optional cleanup returned to React.
- * @returns Nothing; React owns the mount lifecycle.
+ * @param effect - Work to run after the initial mount. May return cleanup.
+ * @returns Nothing; React owns the optional cleanup returned by `effect`.
+ *
  * @example
  * useInitialEffect(() => {
- *   analytics.track('settings_opened')
+ *   analytics.track('viewed-dashboard')
  * })
  */
-export function useInitialEffect(effect: EffectCallback): void {
+export const useInitialEffect = (effect: EffectCallback): void => {
   // Mount-only work intentionally maps to React's empty dependency list.
   useEffect(effect, [])
 }

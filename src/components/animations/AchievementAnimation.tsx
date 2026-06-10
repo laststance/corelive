@@ -3,7 +3,7 @@
 import { Trophy, Star, Gift, Medal, Crown } from 'lucide-react'
 import React, { useState, useCallback } from 'react'
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { cn } from '@/lib/utils'
 
 export interface Achievement {
@@ -133,7 +133,7 @@ export const AchievementNotifications = React.memo(
     }, [])
 
     // Expose methods via ref or context if needed
-    useComponentEffect(() => {
+    useCycleEffect(() => {
       // Example: Listen for achievement events
       const handleAchievementUnlock = (event: CustomEvent<Achievement>) => {
         addAchievement(event.detail)
@@ -153,7 +153,7 @@ export const AchievementNotifications = React.memo(
 
     // Auto-advance after animation completes (you can adjust timing)
 
-    useComponentEffect(() => {
+    useCycleEffect(() => {
       if (achievement) {
         const timer = setTimeout(() => {
           handleComplete()

@@ -10,7 +10,7 @@ import type { DayButton } from 'react-day-picker'
 import { DayPicker, getDefaultClassNames } from 'react-day-picker'
 
 import { Button, buttonVariants } from '@/components/ui/button'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { cn } from '@/lib/utils'
 
 const Calendar = React.memo(function Calendar({
@@ -183,7 +183,7 @@ function CalendarDayButtonBase({
   const defaultClassNames = getDefaultClassNames()
 
   const ref = React.useRef<HTMLButtonElement>(null)
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
 

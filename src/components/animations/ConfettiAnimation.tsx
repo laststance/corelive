@@ -2,7 +2,7 @@
 
 import React, { useRef, useMemo, useState, useSyncExternalStore } from 'react'
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { cn } from '@/lib/utils'
 
 interface ConfettiParticle {
@@ -115,7 +115,7 @@ export const ConfettiAnimation = React.memo(function ConfettiAnimation({
     timerStore.getServerSnapshot,
   )
 
-  useComponentEffect(() => () => timerStore.stop(), [timerStore])
+  useCycleEffect(() => () => timerStore.stop(), [timerStore])
 
   // Detect trigger rising edge during render (not in effect)
   if (trigger && !prevTriggerRef.current && !isActive) {

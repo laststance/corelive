@@ -29,9 +29,9 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
@@ -87,7 +87,7 @@ export const Category = memo(function Category({
   )
 
   // Cross-tab sync for categories
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     return subscribeToCategorySync(() => {
       queryClient.invalidateQueries({
         queryKey: orpc.category.list.key(),

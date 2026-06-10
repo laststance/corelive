@@ -81,7 +81,7 @@ const buttonStyle = {
 /**
  * Logs the root-level boundary error once per error to the console — the only
  * sink global-error trusts at this layer. A deliberately LOCAL hook rather than
- * the app's `useComponentEffect`: the last line of defense must not re-enter the
+ * the app's `useCycleEffect`: the last line of defense must not re-enter the
  * app's effect/logging import graph, which may be exactly what failed. The
  * console call is guarded so a logging failure can never crash the recovery UI.
  *

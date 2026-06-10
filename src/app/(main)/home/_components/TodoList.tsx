@@ -25,8 +25,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
@@ -292,7 +292,7 @@ export const TodoList = memo(function TodoList() {
   )
 
   // Sync local state with query data when it changes
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     setLocalPendingTodos(pendingTodosFromQuery)
   }, [pendingTodosFromQuery])
 
@@ -355,7 +355,7 @@ export const TodoList = memo(function TodoList() {
     [pendingTodos, reorderMutation],
   )
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     // Cross-window sync: BrainDump / Floating Navigator completions broadcast
     // via the BroadcastChannel and also write to the Completed table, so the
     // Home heatmap + day-detail caches need invalidation alongside the todo
