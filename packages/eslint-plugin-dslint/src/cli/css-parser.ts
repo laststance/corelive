@@ -5,12 +5,27 @@
  * Used by the sync command to read globals.css
  */
 import { readFileSync, existsSync } from 'fs'
+
 import * as csstree from 'css-tree'
+
+/**
+ * Which theme block a CSS variable was declared in. Open-ended (a bare string)
+ * because new theme families are added over time, so it cannot be a fixed union.
+ * Values:
+ * - `'light'` — the unscoped `:root` block (the default-light palette)
+ * - `'base'` — a declaration outside any theme block (e.g. `@theme inline`)
+ * - otherwise — the `data-theme` attribute value of the block it sits in, e.g.
+ *   `'dark'`, `'harbor'`, `'harbor-dark'` (one entry per `[data-theme='…']` block)
+ * @example
+ * // ':root { --x: red }'               => theme 'light'
+ * // "[data-theme='harbor'] {--x:blue}" => theme 'harbor'
+ */
+export type ThemeName = string
 
 export interface CSSVariable {
   name: string
   value: string
-  theme: 'light' | 'dark' | 'base'
+  theme: ThemeName
 }
 
 /**
@@ -38,73 +53,74 @@ export function parseCSSContent(content: string): CSSVariable[] {
   try {
     const ast = csstree.parse(content)
 
+    // Pass 1: collect every custom property in document order, defaulting each
+    // to 'base'. css-tree visits declarations in source order but does not
+    // expose the parent rule's selector, so the owning theme is assigned in
+    // pass 2 by matching each variable back to its selector block.
     csstree.walk(ast, {
       visit: 'Declaration',
       enter(node) {
-        // Check if it's a CSS custom property (starts with --)
+        // Only CSS custom properties (names starting with `--`)
         if (
           typeof node.property === 'string' &&
           node.property.startsWith('--')
         ) {
-          // Find the parent rule to determine theme
-          let theme: 'light' | 'dark' | 'base' = 'base'
-
-          // Walk up to find the rule selector
-          // Note: css-tree doesn't provide direct parent access in walk
-          // We'll use a workaround by checking the selector context
-
-          // For now, we'll use a simpler approach - parse the CSS manually
-          // to associate variables with their selectors
-
-          const value = csstree.generate(node.value)
-
           variables.push({
             name: node.property,
-            value,
-            theme,
+            value: csstree.generate(node.value),
+            theme: 'base',
           })
         }
       },
     })
 
-    // Post-process to determine themes
-    // This is a simplified approach - we re-parse to get selector context
-    const rootMatch = content.match(/:root\s*\{([^}]+)\}/g)
-    const darkMatch = content.match(
-      /\[data-theme=['"]dark['"]\]\s*\{([^}]+)\}/g,
-    )
-
-    // Mark variables from :root as light theme
-    if (rootMatch) {
-      for (const match of rootMatch) {
-        const varMatches = match.matchAll(/--([a-zA-Z0-9-]+)\s*:/g)
-        for (const varMatch of varMatches) {
-          const varName = `--${varMatch[1]}`
-          const variable = variables.find(
-            (v) => v.name === varName && v.theme === 'base',
-          )
-          if (variable) {
-            variable.theme = 'light'
-          }
+    // Pass 2: assign each variable to the theme of the selector block it sits
+    // in. `:root` → 'light'; every `[data-theme='X']` block → its id 'X' (so
+    // 'dark', 'harbor', 'harbor-dark', … each get their own tag). Anything left
+    // stays 'base' (e.g. `@theme inline`). A `data-theme` mention that is not a
+    // quoted `[data-theme='…'] { … }` block — such as T2's
+    // `@custom-variant dark (… [data-theme$=dark] …)` — is deliberately not
+    // matched (the pattern requires `=` then a quote, not `$=`).
+    //
+    // PRECONDITION: blocks are processed with `:root` first, then each
+    // `[data-theme]` block in document order — mirroring css-tree's pass-1 push
+    // order — so "the first still-'base' variable of this name" lines each
+    // declaration up with its own block. globals.css and the theme generator
+    // both emit `:root` first; placing a `[data-theme]` block ahead of `:root`
+    // would mis-tag variable names shared across themes.
+    //
+    // GENERATOR CONTRACT (this regex association silently mis-tags otherwise, so
+    // the theme generator must emit): kebab-case `--var` names only, and each
+    // block a bare `:root {` or `[data-theme='x'] {`. NOT a combined
+    // `:root, [data-theme='x']` selector list — that tags the shared token as
+    // the family, which sync then DROPS as neither 'light' nor 'base' — and no
+    // compound/descendant selector. All hold for globals.css and the
+    // registry-driven generator.
+    const assignThemeToBlock = (blockBody: string, theme: ThemeName): void => {
+      for (const varMatch of blockBody.matchAll(/--([a-zA-Z0-9-]+)\s*:/g)) {
+        const varName = `--${varMatch[1]}`
+        const variable = variables.find(
+          (v) => v.name === varName && v.theme === 'base',
+        )
+        if (variable) {
+          variable.theme = theme
         }
       }
     }
 
-    // Mark variables from [data-theme='dark'] as dark theme
-    if (darkMatch) {
-      for (const match of darkMatch) {
-        const varMatches = match.matchAll(/--([a-zA-Z0-9-]+)\s*:/g)
-        for (const varMatch of varMatches) {
-          const varName = `--${varMatch[1]}`
-          // Find the dark theme variable (it might have the same name but different value)
-          const variable = variables.find(
-            (v) => v.name === varName && v.theme === 'base',
-          )
-          if (variable) {
-            // Mark as dark theme
-            variable.theme = 'dark'
-          }
-        }
+    // `:root` → the default-light palette
+    for (const rootBlock of content.matchAll(/:root\s*\{([^}]+)\}/g)) {
+      assignThemeToBlock(rootBlock[1] ?? '', 'light')
+    }
+
+    // Each `[data-theme='X']` block → its own theme id `X`
+    for (const themeBlock of content.matchAll(
+      /\[data-theme=['"]([^'"]+)['"]\]\s*\{([^}]+)\}/g,
+    )) {
+      const themeName = themeBlock[1]
+      const blockBody = themeBlock[2]
+      if (themeName && blockBody) {
+        assignThemeToBlock(blockBody, themeName)
       }
     }
   } catch (error) {
@@ -130,23 +146,6 @@ export function extractColorVariables(variables: CSSVariable[]): CSSVariable[] {
       v.value.includes('color(')
     )
   })
-}
-
-/**
- * Group variables by theme
- * @param variables - Array of CSS variables
- * @returns Object with variables grouped by theme
- */
-export function groupByTheme(variables: CSSVariable[]): {
-  light: CSSVariable[]
-  dark: CSSVariable[]
-  base: CSSVariable[]
-} {
-  return {
-    light: variables.filter((v) => v.theme === 'light'),
-    dark: variables.filter((v) => v.theme === 'dark'),
-    base: variables.filter((v) => v.theme === 'base'),
-  }
 }
 
 /**
