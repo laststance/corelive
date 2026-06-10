@@ -96,12 +96,6 @@
   --hm-2: oklch(0.78 0.11 70);
   --hm-3: oklch(0.65 0.14 60);
   --hm-4: oklch(0.55 0.16 40);
-  /* Legacy aliases — kept for ContributionGraph.tsx until PR1 migrates */
-  --heatmap-level-0: var(--hm-0);
-  --heatmap-level-1: var(--hm-1);
-  --heatmap-level-2: var(--hm-2);
-  --heatmap-level-3: var(--hm-3);
-  --heatmap-level-4: var(--hm-4);
 }
 /* ---break--- */
 [data-theme='dark'] {
@@ -146,11 +140,6 @@
   --hm-2: oklch(0.45 0.1 55);
   --hm-3: oklch(0.58 0.13 60);
   --hm-4: oklch(0.7 0.15 65);
-  --heatmap-level-0: var(--hm-0);
-  --heatmap-level-1: var(--hm-1);
-  --heatmap-level-2: var(--hm-2);
-  --heatmap-level-3: var(--hm-3);
-  --heatmap-level-4: var(--hm-4);
 }
 /* ---break--- */
 @layer base {

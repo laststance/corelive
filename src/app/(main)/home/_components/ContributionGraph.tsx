@@ -24,6 +24,12 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
+import {
+  HEATMAP_CATHEDRAL_MIN,
+  HEATMAP_FULL_DAY_MIN,
+  HEATMAP_GOOD_DAY_MIN,
+  HEATMAP_LEVEL_TOKENS,
+} from '@/lib/heatmap-intensity'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 import { DayDetailInputSchema } from '@/server/schemas/completed'
 
@@ -48,30 +54,33 @@ const HEATMAP_MAX_RECT_SIZE = 32
 const HEATMAP_SPACE = 2
 
 /**
- * Theme-aware heatmap gradient expressed through global CSS variables.
- *
- * Keys are threshold *upper bounds* for `existColor` semantics in
- * @uiw/react-heat-map: it returns the value of the smallest key strictly
- * greater than the day's count. So count=1,2,3 falls into bucket `4` (L1),
- * count=4..9 falls into `10` (L2), and so on — matching DESIGN.md's
- * intensity bands and DayDetailDialog's `getIntensityFromCount`.
+ * @uiw/react-heat-map upper-bound sentinel: a key larger than any realistic
+ * daily count, so every count ≥ HEATMAP_CATHEDRAL_MIN lands in the top (L4)
+ * bucket. Defined here, not in heatmap-intensity.ts, because it encodes the
+ * library's panelColors format rather than a domain threshold.
  */
-const PANEL_COLORS: Record<string, string> = {
-  0: 'var(--heatmap-level-0)',
-  4: 'var(--heatmap-level-1)',
-  10: 'var(--heatmap-level-2)',
-  20: 'var(--heatmap-level-3)',
-  1000: 'var(--heatmap-level-4)',
+const HEATMAP_PANEL_OVERFLOW = 1000
+
+/**
+ * Heatmap cell gradient in @uiw/react-heat-map `existColor` form: keys are
+ * threshold *upper bounds* — the library returns the value of the smallest key
+ * strictly greater than the day's count, so count 1–3 → L1, 4–9 → L2, 10–19 →
+ * L3, 20+ → L4 (matching getHeatmapIntensityFromCount and DESIGN.md's bands).
+ * Built from the shared thresholds + tokens in heatmap-intensity.ts so cells,
+ * the dialog band, and these buckets share one source of truth. The tokens
+ * resolve to the same colors as the former `--heatmap-level-N` aliases (which
+ * were `var(--hm-N)` underneath), so this is a pure refactor — zero visual change.
+ */
+const PANEL_COLORS: Record<number, string> = {
+  0: HEATMAP_LEVEL_TOKENS[0],
+  [HEATMAP_GOOD_DAY_MIN]: HEATMAP_LEVEL_TOKENS[1],
+  [HEATMAP_FULL_DAY_MIN]: HEATMAP_LEVEL_TOKENS[2],
+  [HEATMAP_CATHEDRAL_MIN]: HEATMAP_LEVEL_TOKENS[3],
+  [HEATMAP_PANEL_OVERFLOW]: HEATMAP_LEVEL_TOKENS[4],
 }
 
-/** Legend color squares matching the gradient. */
-const LEGEND_COLORS = [
-  'var(--heatmap-level-0)',
-  'var(--heatmap-level-1)',
-  'var(--heatmap-level-2)',
-  'var(--heatmap-level-3)',
-  'var(--heatmap-level-4)',
-]
+/** Legend color squares, one per intensity band, matching the cell gradient. */
+const LEGEND_COLORS = [...HEATMAP_LEVEL_TOKENS]
 
 /** Week day labels for the heatmap Y-axis. */
 const WEEK_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', '']
