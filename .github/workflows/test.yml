@@ -49,6 +49,8 @@ jobs:
         env:
           RUN_DB_INTEGRATION_TESTS: '1'
         run: pnpm test --run --coverage
+      - name: Run workspace package tests
+        run: pnpm test:packages
       - name: Run Electron tests
         run: pnpm test:electron --run
       - name: Upload coverage reports
