@@ -11,6 +11,8 @@ import {
 } from '@/lib/themes/registry'
 import type { ThemeId } from '@/lib/themes/registry'
 
+import { ThemeAllowlistGuard } from './ThemeAllowlistGuard'
+
 /**
  * Available theme ids, sourced from the theme registry (the single source of
  * truth). To add a theme, add a seed to `src/lib/themes/registry.ts` — never
@@ -61,6 +63,9 @@ export const ThemeProvider = React.memo(function ThemeProvider({
       storageKey="corelive-theme"
       {...props}
     >
+      {/* Self-heals a stale/tampered persisted theme back to the default
+          (next-themes does not validate its own localStorage value). */}
+      <ThemeAllowlistGuard />
       {children}
     </NextThemesProvider>
   )
