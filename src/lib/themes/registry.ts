@@ -152,10 +152,11 @@ export const THEME_REGISTRY = {
   },
 
   // Grove — forest green. light accentL nudged 0.55→0.54 to clear the AA gate
-  // (0.55 → 4.48, below 4.5; 0.54 → 4.67). Accent hue 145 lands on the fixed
-  // `--chart-2` (145) and near `--success` (149); a green theme also dilutes
-  // green's "success everywhere" semantic. Separable by chroma/lightness but
-  // flagged for design-review (design doc collision note, line 512).
+  // (0.55 → 4.48, below 4.5; 0.54 → 4.67). Accent hue 145 sits by the fixed
+  // `--chart-2` (145) and `--color-success` (149 light / 162 dark). Design-review
+  // (2026-06-11) cleared this: `--color-success` is consumed only by the
+  // (orphaned) confetti animation — there is no persistent success-colored UI to
+  // collide with — and the accent stays separable by chroma/lightness anyway.
   'grove-light': {
     family: 'grove',
     mode: 'light',

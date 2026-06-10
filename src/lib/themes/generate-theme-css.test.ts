@@ -280,19 +280,27 @@ describe('every registered colored family — WCAG AA gate', () => {
 })
 
 describe('every registered colored family — heatmap "temperature = pride" invariant', () => {
-  // The hottest cell's hue must stay in the warm band so "more completions = hotter"
-  // reads the same across families (cathedral apex sits at hue 40/65; seeds land 38–45).
-  const WARM_APEX_MIN_HUE = 20
-  const WARM_APEX_MAX_HUE = 70
+  // The HOT END of the ramp must bloom warm so "more completions = hotter" reads
+  // the same across families. The band brackets the cathedral apex (hue 40/65)
+  // with headroom for seeds (which land 25–65 at the two hottest stops).
+  const WARM_BAND_MIN_HUE = 20
+  const WARM_BAND_MAX_HUE = 70
+  // The two hottest stops carry the "pride" payoff — they, not the cool rest
+  // stops, are what must read warm. (--hm-3 = second-hottest, --hm-4 = apex.)
+  const WARMEST_STOPS = ['--hm-3', '--hm-4'] as const
 
   it.each(DERIVED_THEMES)(
-    '$id ramps lightness/chroma monotonically and lands the apex in the warm band',
+    '$id reuses the cathedral L/C ramp and blooms its two hottest stops into the warm band',
     (theme) => {
       // Arrange — the five heatmap stops, coolest (rest) → warmest (apex)
       const tokens = deriveThemeTokens(theme)
       const ramp = HEATMAP_TOKENS.map((k) => oklchOf(token(tokens, k)))
 
-      // Assert — light cools→warms (L falls); dark glows brighter (L rises)
+      // Assert (STRUCTURAL) — the generator reuses the cathedral L/C ladder
+      // verbatim for every family, so these two checks hold *by construction*:
+      // they guard against a GENERATOR regression that breaks that reuse, NOT
+      // against a bad seed (a `heatmapHues` seed only controls hue, not L or C).
+      // Light cools→warms as it deepens (L falls); dark glows brighter (L rises).
       const lightnessMonotonic = ramp.every((stop, i) =>
         i === 0
           ? true
@@ -302,16 +310,25 @@ describe('every registered colored family — heatmap "temperature = pride" inva
       )
       expect(lightnessMonotonic).toBe(true)
 
-      // chroma intensifies toward the apex in both modes
+      // Chroma intensifies toward the apex in both modes (also structural).
       const chromaRising = ramp.every((stop, i) =>
         i === 0 ? true : stop.c > ramp[i - 1]!.c,
       )
       expect(chromaRising).toBe(true)
 
-      // shared warm apex — the hottest cell hue stays warm regardless of the rest hue
-      const apexHue = oklchOf(token(tokens, '--hm-4')).h
-      expect(apexHue).toBeGreaterThanOrEqual(WARM_APEX_MIN_HUE)
-      expect(apexHue).toBeLessThanOrEqual(WARM_APEX_MAX_HUE)
+      // Assert (SEED CONSTRAINT) — per-stop hue is the ONLY thing a seed controls,
+      // so this is the real "temperature = pride" gate. Requiring BOTH hottest
+      // stops (not just the apex) in the warm band rejects a degenerate all-cool
+      // body like heatmapHues [145,145,145,145,42] — which keeps the L/C ramp but
+      // renders a GitHub-green grid with a single warm cell, exactly the failure
+      // the north star forbids. The cool rest stops (--hm-0..--hm-2) keep the
+      // family's hue by design and are intentionally unconstrained.
+      for (const stop of WARMEST_STOPS) {
+        const hue = oklchOf(token(tokens, stop)).h
+        const message = `${stop} hue ${hue.toFixed(1)} must bloom warm (∈ [${WARM_BAND_MIN_HUE}, ${WARM_BAND_MAX_HUE}])`
+        expect(hue, message).toBeGreaterThanOrEqual(WARM_BAND_MIN_HUE)
+        expect(hue, message).toBeLessThanOrEqual(WARM_BAND_MAX_HUE)
+      }
     },
   )
 })
