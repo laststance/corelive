@@ -158,20 +158,29 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* Theme crossfade (DESIGN.md Motion → "Theme toggle: crossfade, no flash").
-     Scoped to the page surface: body's background/text only change on a theme
-     switch (never on hover/focus), so this animates the switch WITHOUT the
-     all-elements transition that would also animate every interaction. Component
-     surfaces hard-switch, which reads as a clean crossfade against the fading
-     page. next-themes no longer suppresses transitions (T8 set
-     disableTransitionOnChange={false}). prefers-reduced-motion users get an
-     instant, motionless switch. */
-  @media (prefers-reduced-motion: no-preference) {
-    body {
-      transition:
-        background-color 200ms ease-out,
-        color 200ms ease-out;
-    }
+}
+
+/* Theme crossfade (DESIGN.md Motion → "Theme toggle: crossfade, no flash").
+   The whole UI — page background/text AND component surfaces (cards, sidebar,
+   popovers) — crossfades together on a theme switch. To avoid animating every
+   hover/focus color change, the transition is scoped to the transient
+   `theme-transition` class that <ThemeTransition> adds to <html> ONLY for the
+   switch window (it watches next-themes' data-theme; disableTransitionOnChange
+   is false). This rule is intentionally UNLAYERED so it wins over Tailwind's
+   `transition-*` utilities — cascade layers beat specificity, and `utilities`
+   sorts after `base`, so a layered rule here would lose. prefers-reduced-motion
+   users get an instant, motionless switch. */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition:
+      background-color 200ms ease-out,
+      border-color 200ms ease-out,
+      color 200ms ease-out,
+      fill 200ms ease-out,
+      stroke 200ms ease-out;
   }
 }
 
