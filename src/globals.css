@@ -155,6 +155,21 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Theme crossfade (DESIGN.md Motion → "Theme toggle: crossfade, no flash").
+     Scoped to the page surface: body's background/text only change on a theme
+     switch (never on hover/focus), so this animates the switch WITHOUT the
+     all-elements transition that would also animate every interaction. Component
+     surfaces hard-switch, which reads as a clean crossfade against the fading
+     page. next-themes no longer suppresses transitions (T8 set
+     disableTransitionOnChange={false}). prefers-reduced-motion users get an
+     instant, motionless switch. */
+  @media (prefers-reduced-motion: no-preference) {
+    body {
+      transition:
+        background-color 200ms ease-out,
+        color 200ms ease-out;
+    }
+  }
 }
 
 @layer utilities {

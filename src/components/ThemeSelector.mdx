@@ -13,7 +13,10 @@ import * as ThemeSelectorStories from './ThemeSelector.stories'
 
 # ThemeSelector
 
-Theme switching component for the CoreLive application.
+Two-axis theme picker for CoreLive — pick a **color family** (Warm Cathedral,
+Harbor, Grove, Rose Tea, Iris, Graphite) and a **mode** (Light / Dark, plus
+System for the default family). Each family card previews the real theme tokens
+(surface · accent · text · heatmap ramp) — no single hex dot.
 
 <Primary />
 
@@ -21,15 +24,17 @@ Theme switching component for the CoreLive application.
 
 ## Components
 
-| Component               | Use Case                         |
-| ----------------------- | -------------------------------- |
-| `ThemeSelector`         | Standalone dropdown button       |
-| `ThemeSelectorCompact`  | Native select element            |
-| `ThemeSelectorMenuItem` | Embed in existing dropdown menus |
+| Component               | Use Case                                          |
+| ----------------------- | ------------------------------------------------- |
+| `ThemeSelector`         | Two-axis picker for the Settings page             |
+| `ThemeSelectorMenuItem` | Sidebar quick-switch submenu (same axes, compact) |
+
+Both consume the shared `useThemeAxis` hook, which maps a `(family, mode)` pair to
+a stored theme id and back.
 
 ## Usage
 
-### Standalone Dropdown
+### Settings picker
 
 <Canvas>
   <Story id="ui-themeselector--default" />
@@ -37,12 +42,12 @@ Theme switching component for the CoreLive application.
 
 <Source language="tsx" code={`import { ThemeSelector } from '@/components/ThemeSelector'
 
-export function Header() {
+export function SettingsPage() {
   return <ThemeSelector />
 }
 `} />
 
-### In User Dropdown Menu
+### Sidebar quick-switch
 
 <Source language="tsx" code={`import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -59,22 +64,9 @@ export function UserMenu() {
 }
 `} />
 
-### Compact Version
-
-<Canvas>
-  <Story id="ui-themeselector--compact" />
-</Canvas>
-
-<Source language="tsx" code={`import { ThemeSelectorCompact } from '@/components/ThemeSelector'
-
-export function Settings() {
-  return <ThemeSelectorCompact />
-}
-`} />
-
 ## Theme Provider Setup
 
-<Source language="tsx" code={`// app/layout.tsx
+<Source language="tsx" code={`// app/layout.tsx — attribute + crossfade config live in ThemeProvider, not here
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
 export default function RootLayout({ children }) {
@@ -88,30 +80,26 @@ export default function RootLayout({ children }) {
 }
 `} />
 
-## Using Theme in Components
+## Reading the active theme
 
-<Source language="tsx" code={`import { useTheme } from 'next-themes'
-import { THEME_META } from '@/providers/ThemeProvider'
+<Source language="tsx" code={`import { useThemeAxis } from '@/hooks/useThemeAxis'
 
 export function MyComponent() {
-  const { theme, setTheme } = useTheme()
-  const meta = theme ? THEME_META[theme] : null
-  
-  return <p>Current: {meta?.name}</p>
+  const { family, mode, setFamily, setMode } = useThemeAxis()
+  return <p>Current: {family} / {mode}</p>
 }
 `} />
 
-## Adding New Themes
+## Adding a new theme family
 
-1. Add a seed entry to `THEME_REGISTRY` in `src/lib/themes/registry.ts`. `THEMES` and `THEME_META` derive from it automatically — never edit them directly.
-2. Add CSS variables in `globals.css`:
+1. Add a \`DerivedTheme\` seed (one per light/dark) to \`THEME_REGISTRY\` in
+   \`src/lib/themes/registry.ts\`, and its label to \`THEME_FAMILY_LABEL\`. \`THEMES\`,
+   \`THEME_META\`, the picker, and \`useThemeAxis\` all derive from the registry —
+   never edit them directly.
+2. Regenerate the static CSS — the build-time generator emits the colored family's
+   token block; the default Warm Cathedral stays hand-authored in \`globals.css\`:
 
 <Source
-  language="css"
-  code={`[data-theme='my-theme'] {
-  --background: oklch(98% 0 0);
-  --foreground: oklch(10% 0 0);
-  /* ... other tokens */
-}
-`}
+  language="bash"
+  code={`pnpm theme:generate # writes src/lib/themes/generated.css`}
 />

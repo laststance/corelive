@@ -46,7 +46,11 @@ interface ThemeBase {
   id: ThemeId
   /** Display name shown in the theme picker. */
   name: string
-  /** Hex swatch shown in the current picker (replaced by a token preview in T8). */
+  /**
+   * Coarse representative hex (brand/meta color). The picker no longer renders
+   * this as a dot — it shows a composite built from the derived tokens (see
+   * `src/lib/themes/preview.ts`); `preview` is kept as lightweight metadata.
+   */
   preview: string
   /** Emitted as `color-scheme` in generated CSS; also hints UA form controls. */
   colorScheme: ThemeMode
@@ -343,3 +347,32 @@ export function getThemeId(family: ThemeFamilyId, mode: ThemeMode): ThemeId {
   if (family === 'cathedral') return mode
   return `${family}-${mode}`
 }
+
+/**
+ * Human-readable family names for the two-axis theme picker (T8). The default
+ * family carries the brand name "Warm Cathedral" — its ids are the flat
+ * `light`/`dark`, so the label is NOT derivable by stripping the mode from a
+ * theme name. Insertion order is default-first, matching how the picker lists
+ * families.
+ * @example
+ * THEME_FAMILY_LABEL.cathedral // => 'Warm Cathedral'
+ * THEME_FAMILY_LABEL.harbor    // => 'Harbor'
+ */
+export const THEME_FAMILY_LABEL: Record<ThemeFamilyId, string> = {
+  cathedral: 'Warm Cathedral',
+  harbor: 'Harbor',
+  grove: 'Grove',
+  'rose-tea': 'Rose Tea',
+  iris: 'Iris',
+  graphite: 'Graphite',
+}
+
+/**
+ * All theme family ids, default-first — the family axis of the T8 picker. The
+ * cast is required because `Object.keys` widens to `string[]`; the `Record<
+ * ThemeFamilyId, …>` type guarantees the keys are exactly the family ids (same
+ * documented pattern as `THEME_META` in ThemeProvider).
+ */
+export const THEME_FAMILY_IDS = Object.keys(
+  THEME_FAMILY_LABEL,
+) as ThemeFamilyId[]

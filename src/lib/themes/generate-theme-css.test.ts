@@ -9,7 +9,7 @@ import {
 } from '../../../scripts/generate-theme-css'
 
 import { contrastRatio, meetsAA } from './contrast'
-import { THEME_REGISTRY, type DerivedTheme } from './registry'
+import { THEME_REGISTRY, type DerivedTheme, type ThemeSeed } from './registry'
 
 const toOklch = converter('oklch')
 
@@ -243,7 +243,11 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
 // Every SHIPPED colored family (preserve:false). The per-theme gates below iterate
 // these so a bad seed fails CI by name. generated.css staleness is a separate guard
 // (`theme:check` regenerates + git-diffs); here we prove the SEEDS themselves are sound.
-const DERIVED_THEMES = Object.values(THEME_REGISTRY).filter(
+// Widen the literal value union from the `satisfies`-typed registry to ThemeSeed
+// first, so the `theme is DerivedTheme` predicate is assignable (DerivedTheme is a
+// ThemeSeed, but is NOT assignable to any single narrow literal member).
+const ALL_THEMES: ThemeSeed[] = Object.values(THEME_REGISTRY)
+const DERIVED_THEMES = ALL_THEMES.filter(
   (theme): theme is DerivedTheme => !theme.preserve,
 )
 
