@@ -1,10 +1,13 @@
 @import 'tailwindcss' source('.');
 @import 'tw-animate-css';
 @import './components/animations/animations.css';
+@import './lib/themes/generated.css';
 /* Generated colored-family theme blocks (build-time, scripts/generate-theme-css.ts).
    Cathedral light/dark stay hand-authored below; derived families use
-   :root[data-theme='…'] so they win regardless of @import order. */
-@import './lib/themes/generated.css';
+   :root[data-theme='…'] so they win regardless of @import order. Kept CONTIGUOUS
+   with the @imports above (no comment between) because Turbopack `next dev` stops
+   inlining @imports after a comment break and silently drops this one — see the
+   QA finding in the theme-expansion PR. The webpack production build is unaffected. */
 
 @plugin 'tailwindcss-animate';
 
