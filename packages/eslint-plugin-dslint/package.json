@@ -26,7 +26,7 @@
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
     "css-tree": "^2.3.1",

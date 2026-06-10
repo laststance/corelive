@@ -5,6 +5,7 @@
  * Design System Lint command line interface.
  */
 import { Command } from 'commander'
+
 import { runSync } from './sync.js'
 
 const program = new Command()

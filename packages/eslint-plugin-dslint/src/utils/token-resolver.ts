@@ -5,7 +5,7 @@
  * Builds an allowlist of valid Tailwind classes from the config.
  */
 import { readFileSync, existsSync } from 'fs'
-import { resolve, dirname } from 'path'
+import { resolve } from 'path'
 
 export interface DesignTokens {
   colors: string[]
