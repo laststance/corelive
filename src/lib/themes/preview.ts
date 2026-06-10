@@ -6,7 +6,9 @@ import type { ThemeId, ThemeMode } from './registry'
  * built from the SAME OKLCH derivation as the generated CSS, so the chip the user
  * sees matches the real theme exactly (no single hex dot). Runtime-safe: unlike
  * `scripts/generate-theme-css.ts` this never imports culori, so it ships in the
- * client bundle. `preview.test.ts` pins these against `generated.css`.
+ * client bundle. `preview.test.ts` cross-checks every swatch against the
+ * generator's own output (`deriveThemeTokens` / the exported `CATHEDRAL` map), so
+ * any drift from the real generated CSS fails CI.
  */
 export interface ThemePreview {
   /** `--background` — the page surface the chip sits on. */
@@ -26,7 +28,8 @@ export interface ThemePreview {
  * (mirrors the `CATHEDRAL` ladder in `scripts/generate-theme-css.ts`). Colored
  * families reuse these L (and the heatmap C) and only swap in their own
  * neutral/heatmap hue + neutral/accent chroma — exactly what the generator does.
- * Pinned to `generated.css` by `preview.test.ts`, so drift fails CI.
+ * Cross-checked against the generator's `CATHEDRAL` ladder by `preview.test.ts`:
+ * if this copy diverges from what the generator emits, CI fails.
  */
 const SURFACE_LIGHTNESS = { light: 0.975, dark: 0.172 } as const
 const CARD_LIGHTNESS = { light: 0.972, dark: 0.235 } as const
@@ -48,7 +51,10 @@ const oklch = (lightness: number, chroma: number, hue: number): string =>
  * Warm Cathedral is hand-authored (`preserve: true`) with a DIFFERENT neutral
  * chroma per token (0.016 bg / 0.018 card / 0.015 text), so it cannot be rebuilt
  * from a single `neutralChroma` like the colored families. Its swatches are taken
- * verbatim from globals.css instead. Pinned by `preview.test.ts`.
+ * verbatim from globals.css instead. Cross-checked against the generator's
+ * exported `CATHEDRAL` map by `preview.test.ts` — and `CATHEDRAL` is itself pinned
+ * to globals.css by `cathedral-css-snapshot.test.ts` — so this hand-copy cannot
+ * silently diverge from what the user actually renders.
  */
 const CATHEDRAL_PREVIEW: Record<ThemeMode, ThemePreview> = {
   light: {
@@ -84,7 +90,7 @@ const CATHEDRAL_PREVIEW: Record<ThemeMode, ThemePreview> = {
  * (T8) can render every family's identity without the runtime importing culori or
  * reading the generated CSS. Cathedral is returned verbatim; colored families are
  * reconstructed from their registry seed at the cathedral ladder — identical to
- * `generated.css` (verified in `preview.test.ts`).
+ * the generator's output (cross-checked in `preview.test.ts`).
  * @param id - A registered theme id.
  * @returns the surface/card/accent/text swatches plus the 5-stop heatmap ramp,
  *   each an `oklch(...)` string ready for a CSS `background`/`color` value.

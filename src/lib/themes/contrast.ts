@@ -17,7 +17,10 @@ export const AA_LARGE_CONTRAST = 3
 /**
  * The brand near-white and near-ink, used as the default foreground candidates so
  * contrast-computed text keeps the Warm Cathedral voice (matches the cathedral
- * `--primary-foreground` / `--foreground` lightness in globals.css).
+ * `--foreground` lightness in globals.css). FALLBACK ONLY: the theme generator
+ * always passes its OWN candidates (`FOREGROUND_CANDIDATES`, whose near-ink is the
+ * cathedral *dark* `--primary-foreground` `oklch(0.16 0.012 35)`), so this default
+ * near-ink applies only if some other caller omits its candidates.
  */
 const DEFAULT_FOREGROUNDS = ['oklch(0.99 0 0)', 'oklch(0.18 0.015 30)'] as const
 

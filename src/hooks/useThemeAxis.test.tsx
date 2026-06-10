@@ -136,4 +136,29 @@ describe('useThemeAxis — two-axis (family × mode) theme selection', () => {
     expect(screen.getByTestId('modes')).toHaveTextContent('light,dark')
     expect(screen.getByTestId('modes')).not.toHaveTextContent('system')
   })
+
+  it('maps the default family back to the FLAT light/dark id (never cathedral-dark) and restores System', async () => {
+    // Arrange — move onto a colored family in dark mode (harbor-dark)
+    renderHarness()
+    await waitFor(() =>
+      expect(screen.getByTestId('family')).toHaveTextContent('cathedral'),
+    )
+    fireEvent.click(screen.getByTestId('fam-harbor'))
+    fireEvent.click(screen.getByTestId('mode-dark'))
+    await waitFor(() =>
+      expect(screen.getByTestId('active')).toHaveTextContent('harbor-dark'),
+    )
+
+    // Act — return to the default (cathedral) family, mode preserved (dark)
+    fireEvent.click(screen.getByTestId('fam-cathedral'))
+
+    // Assert — cathedral uses the FLAT id 'dark' (the getThemeId cathedral branch),
+    // NOT 'cathedral-dark', and System is offered again on the default family
+    await waitFor(() =>
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBe('dark'),
+    )
+    expect(screen.getByTestId('active')).toHaveTextContent(/^dark$/)
+    expect(screen.getByTestId('family')).toHaveTextContent('cathedral')
+    expect(screen.getByTestId('modes')).toHaveTextContent('light,dark,system')
+  })
 })

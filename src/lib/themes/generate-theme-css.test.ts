@@ -251,6 +251,14 @@ const DERIVED_THEMES = ALL_THEMES.filter(
   (theme): theme is DerivedTheme => !theme.preserve,
 )
 
+// it.each([]) passes vacuously — so if the registry ever empties or the preserve
+// filter regresses, the per-theme gates below would silently test NOTHING. Lock
+// the shipped set to the full 10 (5 colored families × light/dark) up front.
+it('ships exactly 10 colored families (5 families × light + dark)', () => {
+  // Arrange / Act / Assert
+  expect(DERIVED_THEMES).toHaveLength(10)
+})
+
 describe('every registered colored family — WCAG AA gate', () => {
   it.each(DERIVED_THEMES)(
     '$id clears AA on body text, muted labels, and the computed primary foreground',
@@ -258,14 +266,20 @@ describe('every registered colored family — WCAG AA gate', () => {
       // Arrange
       const t = deriveThemeTokens(theme)
 
-      // Assert — body text keeps cathedral's strong contrast (gate at AAA-ish 7:1);
-      // muted-on-card and the *computed* primary-foreground clear AA body text 4.5:1
+      // Assert (STRUCTURAL) — foreground/background and muted/card are both
+      // neutral-on-neutral at the FIXED cathedral L ladder; a seed only tints the
+      // shared hue/chroma, so these ratios are ~constant across families. They
+      // guard a GENERATOR regression that breaks the ladder reuse, not a bad seed.
       expect(
         contrastRatio(token(t, '--foreground'), token(t, '--background')),
       ).toBeGreaterThanOrEqual(7)
       expect(
         contrastRatio(token(t, '--muted-foreground'), token(t, '--card')),
       ).toBeGreaterThanOrEqual(4.5)
+      // Assert (SEED-SENSITIVE) — the real per-seed AA gate: --primary is the
+      // seed-controlled accent and --primary-foreground is contrast-COMPUTED on
+      // it, so a bad accentL can leave neither candidate (near-white/near-ink)
+      // clearing 4.5. Same for the sidebar accent pair.
       expect(
         contrastRatio(token(t, '--primary-foreground'), token(t, '--primary')),
       ).toBeGreaterThanOrEqual(4.5)
