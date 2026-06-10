@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 import { log } from '../../lib/logger'
 
@@ -322,7 +322,7 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
     [loadWindowStateData],
   )
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (isElectron) {
       loadWindowStateData()
     } else {

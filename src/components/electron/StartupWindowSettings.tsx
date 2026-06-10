@@ -28,8 +28,8 @@ import {
   DEFAULT_STARTUP_WINDOW_CONFIG,
   type StartupWindowConfig,
 } from '@/electron/types/ipc'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { log } from '@/lib/logger'
 
 interface StartupWindowSettingsProps {
@@ -90,7 +90,7 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
 
   // Fetch the saved config once after mount; the fallback branch below handles
   // non-Electron renderers, so this effect simply no-ops when the API is absent.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const api =
       typeof window === 'undefined' ? undefined : window.electronAPI?.settings
     // Guard on the METHOD, not just the namespace: an outdated desktop preload

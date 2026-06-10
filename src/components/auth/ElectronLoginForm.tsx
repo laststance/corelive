@@ -9,7 +9,7 @@ import { memo, useCallback, useRef, useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useReducerState } from '@/hooks/useReducerState'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
@@ -86,7 +86,7 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
   )
 
   // Listen for OAuth errors from ElectronAuthProvider to reset loading state
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const handleOAuthError = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail
       dispatch({
@@ -102,7 +102,7 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
   }, [])
 
   // Safety timeout: reset Google loading after 60s
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (state.isGoogleLoading) {
       googleLoadingTimeoutRef.current = setTimeout(() => {
         dispatch({
@@ -123,7 +123,7 @@ export const ElectronLoginForm = memo(function ElectronLoginForm() {
   }, [state.isGoogleLoading])
 
   // Reset Google loading if user becomes authenticated
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (user && state.isGoogleLoading) {
       dispatch({ type: 'STOP_GOOGLE_LOADING' })
     }

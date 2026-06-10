@@ -22,8 +22,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import {
   type BrainDumpOpacity,
   type BrainDumpShortcut,
@@ -96,7 +96,7 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
   // renders and the env check runs only once on mount.
   // The non-Electron branch is rendered via the early-return below, so it
   // never observes `isReady`; we only flip it after the IPC fetch resolves.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const api =
       typeof window === 'undefined' ? undefined : window.electronAPI?.brainDump
     // Guard on the METHODS, not just the namespace: an outdated desktop preload

@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { orpc } from '@/lib/orpc/client-query'
 
 import { CompletedImportEntry } from './CompletedImportEntry'
@@ -118,7 +118,7 @@ export const CompletedTodos = React.memo(function CompletedTodos({
   })
 
   // Intersection Observer for infinite scroll
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {

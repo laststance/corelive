@@ -4,7 +4,7 @@ import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
 import * as React from 'react'
 import { memo, useRef } from 'react'
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 import { log } from '../logger'
@@ -32,7 +32,7 @@ export const ElectronAuthProvider = memo(function ElectronAuthProvider({
   const pendingToken = useRef<{ token: string; provider: string } | null>(null)
 
   // Handle sign-in token from browser OAuth
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     // Only run in Electron environment
     if (!isElectronEnvironment()) {
       return
@@ -251,7 +251,7 @@ export const ElectronAuthProvider = memo(function ElectronAuthProvider({
   }, [client, setActive, signIn, signInFetchStatus, user])
 
   // Store token if it arrives before signIn is ready
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isElectronEnvironment()) return
     if (signIn) {
       log.debug('[OAuth] Temp effect: signIn ready, skipping temp listener')
@@ -277,7 +277,7 @@ export const ElectronAuthProvider = memo(function ElectronAuthProvider({
   }, [signIn])
 
   // Sync auth state with Electron main process
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     // Only run in Electron environment
     if (!isElectronEnvironment()) {
       return

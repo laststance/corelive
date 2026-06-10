@@ -7,7 +7,7 @@ import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { orpc } from '@/lib/orpc/client-query'
 
 import type { LastImport } from './PasteImport'
@@ -49,7 +49,7 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
   // per-second clock, no unstable `Date.now()` snapshot that would re-render
   // loop). Re-arms whenever a new batch (new `lastImport` object) arrives.
   const [expired, setExpired] = useState(false)
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!lastImport) return
     const remainingMs = lastImport.expiresAt - Date.now()
     if (remainingMs <= 0) {

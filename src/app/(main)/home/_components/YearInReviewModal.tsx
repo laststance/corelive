@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import {
   aggregateYearInReview,
@@ -153,7 +153,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
   // side effect, not "adjusting state from a prop change". The lint
   // heuristic mis-fires here.
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (isLoading) return
     if (isRestoring) return
     if (dataByDate.size === 0 && !forcedToday) return

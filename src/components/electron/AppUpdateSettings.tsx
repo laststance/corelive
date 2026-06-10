@@ -21,8 +21,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { log } from '@/lib/logger'
 
 interface AppUpdateSettingsProps {
@@ -80,7 +80,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
   const [isChecking, setIsChecking] = useState(false)
   const [updateDownloaded, setUpdateDownloaded] = useState(false)
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const updaterApi = window.electronAPI?.updater
     const appApi = window.electronAPI?.app
 

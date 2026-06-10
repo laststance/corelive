@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
@@ -185,7 +185,7 @@ export const ContributionGraph = memo(function ContributionGraph() {
   const searchParams = useSearchParams()
   const dateParam = searchParams.get('date')
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     // Closing the dialog when `?date=` is removed or invalidated keeps URL
     // and dialog state coupled. Without this, navigating from `?date=valid`
     // → `?date=` (or `?date=garbage`) would leave a stale dialog open even
@@ -385,7 +385,7 @@ function useObservedElementWidth<T extends HTMLElement>(
 ): number | null {
   const [elementWidth, setElementWidth] = useState<number | null>(null)
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!enabled) {
       return
     }

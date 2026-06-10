@@ -5,7 +5,7 @@ import type { OAuthStrategy } from '@clerk/shared/types'
 import { useSearchParams } from 'next/navigation'
 import { memo, Suspense, useRef, useState } from 'react'
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 /**
  * OAuth Start Page - System Browser Entry Point for Electron OAuth
@@ -47,7 +47,7 @@ const OAuthStartContent = memo(function OAuthStartContent() {
   const provider = searchParams.get('provider') as 'google' | 'github' | null
   const state = searchParams.get('state')
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const signIn = client?.signIn
 
     // Wait for Clerk to load

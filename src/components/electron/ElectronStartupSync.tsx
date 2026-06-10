@@ -20,7 +20,7 @@
  * @module components/electron/ElectronStartupSync
  */
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useAppSelector } from '@/lib/redux/hooks'
 import {
   selectHideAppIcon,
@@ -100,7 +100,7 @@ export function ElectronStartupSync(): null {
   // error boundary (and from the root layout it escapes `error.tsx` entirely —
   // see `global-error.tsx`). Uniform method-guarding future-proofs the bridge
   // against a reshuffle and matches the other Electron settings components.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isElectronEnvironment()) return
     const settings = window.electronAPI?.settings
     if (typeof settings?.setHideAppIcon !== 'function') return
@@ -111,7 +111,7 @@ export function ElectronStartupSync(): null {
   // Sync the menu-bar (tray) visibility. Independent method guard for the same
   // frozen-preload reason as above; an old preload that lacks `setShowInMenuBar`
   // is skipped rather than crashing every route.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isElectronEnvironment()) return
     const settings = window.electronAPI?.settings
     if (typeof settings?.setShowInMenuBar !== 'function') return

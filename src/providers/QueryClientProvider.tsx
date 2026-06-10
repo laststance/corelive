@@ -11,7 +11,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import * as React from 'react'
 import { memo, useCallback, useRef, useState } from 'react'
 
-import { useComponentEffect } from '@/hooks/useComponentEffect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { serializer } from '@/lib/orpc/serializer'
 
 /**
@@ -84,7 +84,7 @@ function PersisterSignOutGuard({
   const { isSignedIn, isLoaded } = useAuth()
   const wasSignedIn = useRef<boolean | null>(null)
 
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     if (!isLoaded) return
     if (wasSignedIn.current === true && isSignedIn === false) {
       onSessionReset()

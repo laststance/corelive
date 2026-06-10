@@ -7,8 +7,8 @@ import { memo, useCallback, useState } from 'react'
 import { ImportUndoBanner } from '@/components/import/ImportUndoBanner'
 import { PasteImport, type LastImport } from '@/components/import/PasteImport'
 import { Button } from '@/components/ui/button'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { orpc } from '@/lib/orpc/client-query'
 import { subscribeToOpenCompletedImport } from '@/lib/paste-import-channel'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
@@ -57,7 +57,7 @@ export const CompletedImportEntry = memo(function CompletedImportEntry({
 
   // Cross-window D7: the floating navigator broadcasts an open-intent after it
   // focuses the main window; only this main-window entry opens the dialog.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     return subscribeToOpenCompletedImport(() => setOpen(true))
   }, [])
 

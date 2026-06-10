@@ -23,8 +23,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { useComponentEffect } from '@/hooks/useComponentEffect'
 import { cn } from '@/lib/utils'
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
@@ -96,7 +96,7 @@ const SidebarProvider = React.memo(function SidebarProvider({
   }, [isMobile, setOpen, setOpenMobile])
 
   // Adds a keyboard shortcut to toggle the sidebar.
-  useComponentEffect(() => {
+  useCycleEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
