@@ -151,4 +151,60 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     // Assert: the UI must NOT persist "shown" when no tray actually appeared.
     expect(didApply).toBe(false)
   })
+
+  it('createTray() keeps the existing tray instead of leaking a second one', async () => {
+    // Arrange: a tray is already on screen. createTray() is reached from BOTH
+    // boot (SystemIntegrationErrorHandler) and the live toggle / startup sync,
+    // and those paths can interleave — a second build would overwrite this.tray
+    // and orphan the first native Tray (a leaked menu-bar icon).
+    const { manager } = createManager()
+    primeExistingTray(manager)
+    const supportedSpy = vi.spyOn(manager, 'isSystemTraySupported')
+
+    // Act
+    const result = await manager.createTray()
+
+    // Assert: the live tray is returned and the whole build path is skipped
+    // (the idempotency guard short-circuits before the platform check).
+    expect(result).toBe(fakeTray)
+    expect(supportedSpy).not.toHaveBeenCalled()
+  })
+
+  it('createTray() builds only one native tray when two creations race in flight', async () => {
+    // Arrange: NO tray exists yet, so the sync hasTray() guard does not apply.
+    // Let createTray run for real (the other tests prime a tray or mock it
+    // wholesale) and make createTrayWithRetry yield once before returning — that
+    // await is the interleave window where, without the in-flight promise guard,
+    // a second concurrent caller slips past hasTray() and builds a second tray.
+    const { manager } = createManager()
+    vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
+    // createTrayIcon reads the filesystem; a truthy stub gets past its null check
+    // (returning null would short-circuit before the race point).
+    vi.spyOn(manager, 'createTrayIcon').mockReturnValue(
+      {} as unknown as ReturnType<SystemTrayManager['createTrayIcon']>,
+    )
+    const createTrayWithRetrySpy = vi
+      .spyOn(manager, 'createTrayWithRetry')
+      .mockImplementation(async () => {
+        // Yield so the second createTray() call runs before this.tray is set.
+        await Promise.resolve()
+        return fakeTray
+      })
+    // Post-construction steps touch the native tray; stub them to no-ops.
+    vi.spyOn(manager, 'setTrayTooltipSafely').mockReturnValue(true)
+    vi.spyOn(manager, 'setupTrayMenuSafely').mockReturnValue(true)
+    vi.spyOn(manager, 'setupTrayEventsSafely').mockReturnValue(true)
+
+    // Act: fire two creations concurrently.
+    const [first, second] = await Promise.all([
+      manager.createTray(),
+      manager.createTray(),
+    ])
+
+    // Assert: the native tray is constructed exactly once and both callers get
+    // that same instance — no orphaned, leaked menu-bar icon.
+    expect(createTrayWithRetrySpy).toHaveBeenCalledTimes(1)
+    expect(first).toBe(fakeTray)
+    expect(second).toBe(fakeTray)
+  })
 })

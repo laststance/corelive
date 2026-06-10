@@ -1783,10 +1783,12 @@ function setupIPCHandlers(): void {
     }
   })
 
-  // Show in Menu Bar IPC handler — toggles the tray (menu-bar) icon live.
-  // Note: live-only by design (T11 scope). The tray is re-created at the next
-  // launch regardless of this setting; restart-persistence would be a separate
-  // settings-mirror feature. See SystemTrayManager.setMenuBarVisible.
+  // Show in Menu Bar IPC handler — shows/hides the tray (menu-bar) icon. Boot
+  // always (re)creates the tray (SystemIntegrationErrorHandler), but the
+  // renderer's ElectronStartupSync re-pushes the persisted Redux/localStorage
+  // value at every launch, so an "off" choice survives restarts: the tray
+  // appears at boot, then the startup sync hides it (the same correct-after-
+  // boot pattern as setHideAppIcon). See SystemTrayManager.setMenuBarVisible.
   typedHandle('settings:setShowInMenuBar', async (_event, show) => {
     try {
       if (!systemTrayManager) {

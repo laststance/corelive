@@ -45,6 +45,13 @@ export class SystemTrayManager {
   /** Tray instance */
   private tray: Tray | null
 
+  /**
+   * In-flight createTray() promise, memoized so concurrent callers share one
+   * native Tray instead of each constructing their own during the async window
+   * between the hasTray() guard and the this.tray assignment.
+   */
+  private trayCreationPromise: Promise<Tray | null> | null
+
   /** Flag to distinguish quit vs minimize */
   private isQuitting: boolean
 
@@ -57,18 +64,56 @@ export class SystemTrayManager {
   constructor(windowManager: WindowManager) {
     this.windowManager = windowManager
     this.tray = null
+    this.trayCreationPromise = null
     this.isQuitting = false
     this.fallbackMode = false
     this.hasShownTrayNotification = false
   }
 
   /**
-   * Creates the system tray with icon and context menu.
+   * Creates the system tray, idempotent under both sequential and concurrent
+   * calls. Reached from two paths that can interleave — boot
+   * (SystemIntegrationErrorHandler.initializeTrayWithErrorHandling) and the live
+   * "Show in Menu Bar" toggle / ElectronStartupSync re-push (via
+   * setMenuBarVisible). The synchronous hasTray() guard alone does not cover the
+   * await inside createTrayInternal(), so a second caller could slip in before
+   * this.tray is assigned and build a duplicate native Tray (orphaning a menu-bar
+   * icon); memoizing the in-flight promise makes concurrent callers share one.
    *
-   * @returns The tray instance or null if failed
+   * @returns The tray instance or null if creation failed.
    */
   async createTray(): Promise<Tray | null> {
+    // A creation is already running: share its promise so concurrent callers
+    // receive the same tray instead of racing to build a second one.
+    if (this.trayCreationPromise) {
+      return this.trayCreationPromise
+    }
+    this.trayCreationPromise = this.createTrayInternal()
     try {
+      return await this.trayCreationPromise
+    } finally {
+      // Clear so a later call (re-show after a hide/destroy, or retry after a
+      // failed attempt that returned null) can create the tray again.
+      this.trayCreationPromise = null
+    }
+  }
+
+  /**
+   * Actual tray creation logic, serialized by createTray()'s in-flight guard.
+   * Returns null (never throws) on any failure so createTray()'s finally always
+   * clears the memoized promise and a subsequent call may retry.
+   *
+   * @returns The tray instance or null if creation failed.
+   */
+  private async createTrayInternal(): Promise<Tray | null> {
+    try {
+      // Sequential idempotency: a tray already exists (e.g. boot created it
+      // before a toggle re-push), so return it rather than overwriting and
+      // orphaning the previous native Tray.
+      if (this.hasTray()) {
+        return this.tray
+      }
+
       if (!this.isSystemTraySupported()) {
         log.warn('System tray is not supported on this platform')
         this.tray = null
@@ -683,8 +728,9 @@ export class SystemTrayManager {
     if (!this.isSystemTraySupported()) {
       return true
     }
-    // Already visible: createTray() is not idempotent (it would leak a second
-    // Tray), so short-circuit when one is already on screen.
+    // Already visible: short-circuit to keep the existing tray. createTray() is
+    // now idempotent on its own, but returning early also skips the redundant
+    // icon/menu rebuild and just re-asserts the close-to-tray routing below.
     if (this.hasTray()) {
       // A live tray exists, so close should hide-to-tray, not minimize.
       this.setFallbackMode(false)
