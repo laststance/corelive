@@ -133,10 +133,16 @@ interface NotificationsConfig {
   position: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft'
 }
 
-/** Appearance configuration */
+/**
+ * Appearance configuration.
+ *
+ * NOTE: theme + accent color are NOT here. The web app owns theme entirely via
+ * localStorage (`storageKey="corelive-theme"`, applied as `data-theme`); the
+ * Electron shell only loads the remote site, so a native `appearance.theme` /
+ * `accentColor` had zero readers and was removed (would only drift from the
+ * real, web-persisted value). Keep appearance config web-localStorage-owned.
+ */
 interface AppearanceConfig {
-  theme: 'light' | 'dark' | 'system'
-  accentColor: string
   fontSize: 'small' | 'medium' | 'large'
   compactMode: boolean
 }
@@ -336,9 +342,9 @@ export class ConfigManager {
         position: 'topRight',
       },
 
+      // theme/accentColor intentionally absent — the web app owns theme via
+      // localStorage (see AppearanceConfig note); native shell never reads it.
       appearance: {
-        theme: 'system',
-        accentColor: '#3b82f6',
         fontSize: 'medium',
         compactMode: false,
       },
