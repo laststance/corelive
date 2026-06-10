@@ -57,11 +57,9 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
         )}
       >
         <body className={cn('mx-auto min-h-screen font-sans antialiased')}>
-          <ThemeProvider
-            attribute="data-theme"
-            defaultTheme="light"
-            disableTransitionOnChange
-          >
+          {/* attribute + disableTransitionOnChange are owned by ThemeProvider;
+              passing them here would override its crossfade config (T8). */}
+          <ThemeProvider>
             <CodeInspectorClient />
             <QueryClientProvider>
               <ReduxProvider>

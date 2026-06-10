@@ -9,8 +9,8 @@
  */
 import type { ESLint } from 'eslint'
 
-import { tokenOnly } from './rules/token-only.js'
 import { banStylelist } from './rules/ban-stylelist.js'
+import { tokenOnly } from './rules/token-only.js'
 
 const plugin = {
   meta: {

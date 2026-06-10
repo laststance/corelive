@@ -10,10 +10,12 @@
 import type { Rule } from 'eslint'
 
 import {
-  resolveTokens,
-  buildAllowedClasses,
-  isAllowedClass,
-} from '../utils/token-resolver.js'
+  extractStringValues,
+  isStringLiteral,
+  isTemplateLiteral,
+  isClassUtilityCall,
+  CLASS_UTILITY_NAMES,
+} from '../utils/ast-utils.js'
 import {
   parseClassString,
   hasArbitraryValue,
@@ -21,12 +23,10 @@ import {
   isCalcExpression,
 } from '../utils/class-parser.js'
 import {
-  extractStringValues,
-  isStringLiteral,
-  isTemplateLiteral,
-  isClassUtilityCall,
-  CLASS_UTILITY_NAMES,
-} from '../utils/ast-utils.js'
+  resolveTokens,
+  buildAllowedClasses,
+  isAllowedClass,
+} from '../utils/token-resolver.js'
 
 interface TokenOnlyOptions {
   tokenSource: string

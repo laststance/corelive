@@ -11,6 +11,13 @@
 import type { Rule } from 'eslint'
 
 import {
+  extractStringValues,
+  isStringLiteral,
+  isTemplateLiteral,
+  isClassUtilityCall,
+  CLASS_UTILITY_NAMES,
+} from '../utils/ast-utils.js'
+import {
   parseClassString,
   hasArbitraryValue,
   isCSSVariableValue,
@@ -18,13 +25,6 @@ import {
   categorizeArbitraryValue,
   type ArbitraryCategory,
 } from '../utils/class-parser.js'
-import {
-  extractStringValues,
-  isStringLiteral,
-  isTemplateLiteral,
-  isClassUtilityCall,
-  CLASS_UTILITY_NAMES,
-} from '../utils/ast-utils.js'
 
 interface ForbidConfig {
   colors?: boolean

@@ -14,6 +14,7 @@ import { memo } from 'react'
 import { ElectronSettingsPage } from '@/components/electron/ElectronSettingsPage'
 import { PreferencesSettings } from '@/components/settings/PreferencesSettings'
 import { SettingsBackButton } from '@/components/settings/SettingsBackButton'
+import { ThemeSelector } from '@/components/ThemeSelector'
 
 export const metadata: Metadata = {
   title: 'Settings',
@@ -35,6 +36,7 @@ const SettingsPage = memo(function SettingsPage(): React.ReactNode {
           (essential in Electron, which has no browser chrome). */}
       <SettingsBackButton />
       <PreferencesSettings />
+      <ThemeSelector />
       <ElectronSettingsPage />
     </div>
   )

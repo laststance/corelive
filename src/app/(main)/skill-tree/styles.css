@@ -17,7 +17,9 @@ select {
   -webkit-app-region: no-drag;
 }
 
-/* Default = Dark Fantasy (the chosen visual identity for this feature). */
+/* Default = Dark Fantasy (the chosen visual identity for this feature). Applies to
+   every dark family — the flat `dark` and each `*-dark` colored family — since only
+   light families override it below. */
 [data-skill-tree='true'] {
   --st-bg-deep: #0a0e1e;
   --st-bg-mid: #1a1e3a;
@@ -29,7 +31,10 @@ select {
   --st-border-rune: #4a5580;
 }
 
-/* Light theme override → parchment variant.
+/* Light-mode override → parchment variant. Matches EVERY light family — the flat
+ * `light` and every `*-light` colored family ([data-theme$='light']) — so a light
+ * colored theme (e.g. harbor-light) shows parchment, never the dark-fantasy default.
+ * Dark families fall through to the default block above.
  *
  * WCAG 2.2 AA contrast (computed against bg-deep #f5ecd4, relative luminance
  * ≈0.85). All foreground text/stroke colors meet the 4.5:1 minimum for normal
@@ -46,7 +51,7 @@ select {
  *   --st-muted  #5a4a3a → ≈7.27:1 (secondary text / locked edges)
  *   --st-border-rune #4a3520 → ≈9.48:1 (card borders)
  */
-[data-theme='light'] [data-skill-tree='true'] {
+[data-theme$='light'] [data-skill-tree='true'] {
   --st-bg-deep: #f5ecd4;
   --st-bg-mid: #e8d9b0;
   --st-surface: #ddc89c;

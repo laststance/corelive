@@ -133,10 +133,16 @@ interface NotificationsConfig {
   position: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft'
 }
 
-/** Appearance configuration */
+/**
+ * Appearance configuration.
+ *
+ * NOTE: theme + accent color are NOT here. The web app owns theme entirely via
+ * localStorage (`storageKey="corelive-theme"`, applied as `data-theme`); the
+ * Electron shell only loads the remote site, so a native `appearance.theme` /
+ * `accentColor` had zero readers and was removed (would only drift from the
+ * real, web-persisted value). Keep appearance config web-localStorage-owned.
+ */
 interface AppearanceConfig {
-  theme: 'light' | 'dark' | 'system'
-  accentColor: string
   fontSize: 'small' | 'medium' | 'large'
   compactMode: boolean
 }
@@ -336,9 +342,9 @@ export class ConfigManager {
         position: 'topRight',
       },
 
+      // theme/accentColor intentionally absent — the web app owns theme via
+      // localStorage (see AppearanceConfig note); native shell never reads it.
       appearance: {
-        theme: 'system',
-        accentColor: '#3b82f6',
         fontSize: 'medium',
         compactMode: false,
       },
@@ -401,6 +407,7 @@ export class ConfigManager {
         // Migrate legacy fields on the RAW config — must run before merge,
         // which would otherwise fill `showFloating` with its default and
         // erase the signal that it was never explicitly set.
+        this.pruneLegacyAppearanceKeys(loadedConfig)
         this.migrateFloatingStartVisible(loadedConfig)
 
         // Merge with defaults to ensure all properties exist
@@ -509,6 +516,29 @@ export class ConfigManager {
    * // disk: { window: { floating: { startVisible: true } } }  (no behavior.startup)
    * migrateFloatingStartVisible(raw) // => raw.behavior.startup.showFloating === true; startVisible removed
    */
+  /**
+   * Strips the removed `appearance.theme` / `appearance.accentColor` keys (T9)
+   * out of a persisted/imported config before merge. `mergeWithDefaults` copies
+   * every unknown source key verbatim, so without this an older `config.json`
+   * would carry the dead native theme fields indefinitely and never converge to
+   * the new {fontSize, compactMode} shape (theme is web-localStorage-owned).
+   * Runs on the RAW config so the keys are gone before they reach the merge.
+   *
+   * @param raw - Config parsed from disk, before merge with defaults.
+   * @returns void — deletes the legacy `appearance` keys in place (no-op if absent or non-object).
+   * @example
+   * // disk: { appearance: { fontSize: 'large', theme: 'dark', accentColor: '#f00' } }
+   * pruneLegacyAppearanceKeys(raw) // => raw.appearance === { fontSize: 'large' }
+   */
+  private pruneLegacyAppearanceKeys(raw: Partial<AppConfig>): void {
+    // A hand-edited config may have a corrupt non-object `appearance`; only
+    // touch a real object so deleting keys can't throw and abort the load.
+    if (!isPlainObject(raw.appearance)) return
+    const appearance = raw.appearance as Record<string, unknown>
+    delete appearance.theme
+    delete appearance.accentColor
+  }
+
   private migrateFloatingStartVisible(raw: Partial<AppConfig>): void {
     const floating = raw.window?.floating
     // Nothing legacy to migrate or clean up.
@@ -914,7 +944,9 @@ export class ConfigManager {
       const importedConfig = JSON.parse(data) as Partial<AppConfig>
 
       // Apply the same legacy migration as load — an imported file may predate
-      // the startup feature — on the RAW config before merge.
+      // the startup feature (or carry removed appearance keys) — on the RAW
+      // config before merge.
+      this.pruneLegacyAppearanceKeys(importedConfig)
       this.migrateFloatingStartVisible(importedConfig)
 
       // Validate imported config

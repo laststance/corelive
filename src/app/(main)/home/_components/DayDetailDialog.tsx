@@ -17,6 +17,11 @@ import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
 import { exportDayAsImage } from '@/lib/export-day-as-image'
+import {
+  getHeatmapIntensityFromCount,
+  HEATMAP_LEVEL_TOKENS,
+  type Intensity,
+} from '@/lib/heatmap-intensity'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { cn } from '@/lib/utils'
@@ -34,8 +39,6 @@ interface DayDetailDialogProps {
   onNavigate?: (dayOffset: -1 | 1) => void
 }
 
-type Intensity = 0 | 1 | 2 | 3 | 4
-
 interface DayState {
   intensity: Intensity
   bandToken: string
@@ -45,32 +48,10 @@ interface DayState {
 }
 
 /**
- * Maps the day's completion count to one of five Warm Cathedral intensity
- * levels. Mirrors the existing heatmap thresholds in ContributionGraph so a
- * cell's visual level and the dialog's level band stay in lockstep.
- * @param dayCount - Completed tasks on the clicked day
- * @returns
- * - 0 when no tasks (rest)
- * - 1 for 1–3 tasks (started)
- * - 2 for 4–9 tasks (good day)
- * - 3 for 10–19 tasks (full day)
- * - 4 for 20+ tasks (cathedral lit)
- * @example
- * getIntensityFromCount(0)  // => 0
- * getIntensityFromCount(7)  // => 2
- * getIntensityFromCount(22) // => 4
- */
-function getIntensityFromCount(dayCount: number): Intensity {
-  if (dayCount === 0) return 0
-  if (dayCount < 4) return 1
-  if (dayCount < 10) return 2
-  if (dayCount < 20) return 3
-  return 4
-}
-
-/**
- * Turns a day's completion count into the design-finalized state copy and
- * the heatmap palette token used by the dialog's level band.
+ * Turns a day's completion count into the design-finalized state copy and the
+ * heatmap palette token used by the dialog's level band. Intensity and its band
+ * token come from heatmap-intensity.ts, so the dialog band and the
+ * ContributionGraph cell for the same day always agree.
  * @param dayCount - Completed tasks on the clicked day
  * @returns A DayState describing band color, italic display name, voice line, and cathedral-lit flag.
  * @example
@@ -78,39 +59,41 @@ function getIntensityFromCount(dayCount: number): Intensity {
  * getDayState(22) // => { intensity: 4, bandToken: "var(--hm-4)", name: "cathedral lit", isCathedralLit: true, ... }
  */
 function getDayState(dayCount: number): DayState {
-  const intensity = getIntensityFromCount(dayCount)
+  const intensity = getHeatmapIntensityFromCount(dayCount)
+  // Band color is purely intensity-indexed; the match below only varies the copy.
+  const bandToken = HEATMAP_LEVEL_TOKENS[intensity]
   return match(intensity)
     .with(0, () => ({
       intensity: 0 as const,
-      bandToken: 'var(--hm-0)',
+      bandToken,
       name: 'rest day',
       voice: 'rest days are days too. the cathedral keeps the light on.',
       isCathedralLit: false,
     }))
     .with(1, () => ({
       intensity: 1 as const,
-      bandToken: 'var(--hm-1)',
+      bandToken,
       name: 'started',
       voice: 'a couple things landed. that counts.',
       isCathedralLit: false,
     }))
     .with(2, () => ({
       intensity: 2 as const,
-      bandToken: 'var(--hm-2)',
+      bandToken,
       name: 'good day',
       voice: 'a productive rhythm — solid showing.',
       isCathedralLit: false,
     }))
     .with(3, () => ({
       intensity: 3 as const,
-      bandToken: 'var(--hm-3)',
+      bandToken,
       name: 'full day',
       voice: 'the day kept its rhythm — quietly full.',
       isCathedralLit: false,
     }))
     .with(4, () => ({
       intensity: 4 as const,
-      bandToken: 'var(--hm-4)',
+      bandToken,
       name: 'cathedral lit',
       voice: "the day held everything. that's not a fluke.",
       isCathedralLit: true,
