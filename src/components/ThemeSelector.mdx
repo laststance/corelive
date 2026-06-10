@@ -103,9 +103,8 @@ export function MyComponent() {
 
 ## Adding New Themes
 
-1. Add theme id to `THEMES` array in `ThemeProvider.tsx`
-2. Add metadata to `THEME_META` object
-3. Add CSS variables in `globals.css`:
+1. Add a seed entry to `THEME_REGISTRY` in `src/lib/themes/registry.ts`. `THEMES` and `THEME_META` derive from it automatically — never edit them directly.
+2. Add CSS variables in `globals.css`:
 
 <Source
   language="css"

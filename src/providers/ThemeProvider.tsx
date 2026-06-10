@@ -4,24 +4,35 @@ import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import type { ThemeProviderProps as NextThemesProviderProps } from 'next-themes'
 import React from 'react'
 
-/**
- * Available themes in the application.
- * To add a new theme:
- * 1. Add the theme id to this array
- * 2. Add CSS variables in globals.css with `[data-theme='theme-id']` selector
- */
-export const THEMES = ['light', 'dark'] as const
-
-export type ThemeId = (typeof THEMES)[number]
+import {
+  DEFAULT_THEME_ID,
+  THEME_IDS,
+  THEME_REGISTRY,
+} from '@/lib/themes/registry'
+import type { ThemeId } from '@/lib/themes/registry'
 
 /**
- * Theme display metadata for UI components.
- * Key = theme id, value = display properties
+ * Available theme ids, sourced from the theme registry (the single source of
+ * truth). To add a theme, add a seed to `src/lib/themes/registry.ts` — never
+ * here and never directly in globals.css.
  */
-export const THEME_META: Record<ThemeId, { name: string; preview: string }> = {
-  light: { name: 'Light', preview: '#ffffff' },
-  dark: { name: 'Dark', preview: '#1a1a1a' },
-}
+export const THEMES = THEME_IDS
+
+export type { ThemeId }
+
+/**
+ * Theme display metadata for picker UI, derived from the registry so it never
+ * drifts from the source of truth and automatically includes new families.
+ * Key = theme id, value = display properties.
+ * The assertion is required because `Object.fromEntries` cannot express a
+ * literal-keyed Record; the keys come straight from THEME_IDS, so it is exact.
+ */
+export const THEME_META = Object.fromEntries(
+  THEME_IDS.map((id) => [
+    id,
+    { name: THEME_REGISTRY[id].name, preview: THEME_REGISTRY[id].preview },
+  ]),
+) as Record<ThemeId, { name: string; preview: string }>
 
 interface ThemeProviderProps extends Omit<NextThemesProviderProps, 'themes'> {
   children: React.ReactNode
@@ -42,7 +53,7 @@ export const ThemeProvider = React.memo(function ThemeProvider({
   return (
     <NextThemesProvider
       attribute="data-theme"
-      defaultTheme="light"
+      defaultTheme={DEFAULT_THEME_ID}
       enableSystem
       enableColorScheme={false}
       disableTransitionOnChange={false}

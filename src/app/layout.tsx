@@ -57,11 +57,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
         )}
       >
         <body className={cn('mx-auto min-h-screen font-sans antialiased')}>
-          <ThemeProvider
-            attribute="data-theme"
-            defaultTheme="light"
-            disableTransitionOnChange
-          >
+          <ThemeProvider attribute="data-theme" disableTransitionOnChange>
             <CodeInspectorClient />
             <QueryClientProvider>
               <ReduxProvider>
