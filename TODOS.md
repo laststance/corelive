@@ -159,22 +159,37 @@ function that will pull it off the deferred list.
       opacity time-series + recorded video frames; OFF→ON toggle driven over the
       preferences BroadcastChannel): the completed rows fade opacity 0→1 over
       ~200ms (`animationName: enter`) with **NO leading blink** — they paint at
-      opacity 0 on the very first frame (the Loading-flash full-remount resolves
-      the fade-ids before paint, so rows never paint without the class). The
-      pending control row stays opacity 1 / `anim:none` (selectivity holds, D7).
-      Reduced-motion run: opacity flat at 1, `enter` never runs → instant (a11y
-      honored). The advisor-flagged "fade class lands one commit after mount"
-      blink does NOT materialize in practice — no layout-effect fix needed. Side
-      note (pre-existing, NOT this work): toggling retain briefly blanks the list
-      ~100ms (TanStack query-key change, no `keepPreviousData`); the fade plays
-      cleanly right after. A `placeholderData: keepPreviousData` pass could smooth
-      that flash — separate follow-up.
-      STILL DEFERRED: the symmetric fade-OUT (ON→OFF) needs an unmount animation
-      (framer-motion `AnimatePresence`, not yet wired for this list), so OFF is
-      enter-only / instant for now (TODOS.md-sanctioned fallback). Feature works
-      without it: rows disappear instantly on toggle-OFF.
-      Forcing function: whenever `AnimatePresence` lands for any list.
-      Effort remaining: the fade-OUT waits on `AnimatePresence` (~30 min CC then).
+      opacity 0 on the very first frame. The pending control row stays opacity 1 /
+      `anim:none` (selectivity holds, D7). Reduced-motion run: opacity flat at 1,
+      `enter` never runs → instant (a11y honored).
+      L1 UPDATE (2026-06-11, this PR): the pre-existing ~100ms blank-flash on toggle
+      (TanStack query-key change) is now smoothed by `placeholderData: keepPreviousData`
+      on the todo.list query (TodoList + FloatingNavigatorContainer). That removed the
+      blank-flash the enter diff used to lean on ("first non-empty render is the settled
+      one"), so the fade machinery was RE-ARCHITECTED to diff `pendingTodosFromQuery`
+      (lockstep with `isPlaceholderData`) instead of the one-render-lagged
+      `localPendingTodos`, gating the disarm on `!isPlaceholderData` so the kept-previous
+      placeholder render can't swallow the fade. Net visual: pending rows stay rock-stable
+      (no blank), only the completed rows fade in. ⚠️ NEEDS VIDEO RE-VERIFY — visible
+      behavior change to verified motion (the old blank-flash-then-fade-all look is gone);
+      confirm the NEW look matches DESIGN intent, not just "a fade still plays."
+      STILL DEFERRED — the symmetric fade-OUT (ON→OFF). Spiked 2026-06-11: it is NOT a
+      simple "wire AnimatePresence" task. An in-place exit needs each leaving completed
+      row to hold its INTERLEAVED list position while it fades (TodoList renders pending +
+      completed-since-clear in ONE sortable `.map`, ~line 533), but those rows are
+      `@dnd-kit/react@0.4` sortables registered by positional `index` (SortableTodoItem) —
+      keeping a leaving row mounted to fade desyncs that index from the data array for the
+      animation window. None of the clean paths escape it: a CSS "ghost" row pollutes the
+      counts / SortableContext / sync (a background refetch in the 200ms window cuts the
+      fade); Radix Presence keeps `useSortable` mounted → same index drift; a non-sortable
+      overlay would need a two-index-space (visual vs sortable) rewrite because the leaving
+      rows are interleaved, not a trailing block. Plus a design read: ON→OFF is a deliberate
+      "hide my completed" action where instant removal reads correctly — the enter fade is
+      the affirmation-bearing half and it ships. So OFF stays instant (DESIGN-defensible).
+      Forcing function: a presence-capable sortable exit (dnd-kit exposes exit hooks, or the
+      list moves off positional-index sortables), OR a product decision that the exit fade is
+      worth a non-sortable-overlay rewrite. Effort: ~1-2h CC for the overlay rewrite + video
+      verify; deferred as disproportionate to polish on a deliberate hide.
 
 ## Electron resilience
 

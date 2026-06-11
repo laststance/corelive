@@ -1,7 +1,11 @@
 'use client'
 
 import { arrayMove } from '@dnd-kit/helpers'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import React, { useCallback, useMemo, useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
@@ -114,6 +118,10 @@ export const FloatingNavigatorContainer = React.memo(
         },
       }),
       enabled: isClerkQueryReady,
+      // Keep the previous list painted through the 居残りモード toggle / category
+      // refetch so the floating navigator never blank-flashes (L1). No D8 fade
+      // machinery lives here, so this is purely the flicker-free smoothing half.
+      placeholderData: keepPreviousData,
     })
 
     /**
