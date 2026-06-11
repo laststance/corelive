@@ -32,3 +32,9 @@ html
 # Generated (machine-written; formatting is owned by scripts/generate-theme-css.ts
 # so prettier must not reformat it and break the generated-not-stale CI check)
 src/lib/themes/generated.css
+
+# Agent tooling — AGENTS.md is a symlink → CLAUDE.md (single source for agents).
+# Prettier 3.x refuses to format a symlink ("is a symbolic link"), which would
+# hard-block the lint-staged pre-commit `*` glob; ignore it so the symlink can
+# be tracked without breaking commits.
+AGENTS.md

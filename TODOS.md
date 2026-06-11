@@ -127,24 +127,37 @@ function that will pull it off the deferred list.
       Forcing function: post-ship polish pass on the completion-feedback feature.
       Effort: ~1-2h human / ~20 min CC.
 
-- [ ] **居残りモード切替時の fade トランジション (D8) — deferred polish.**
+- [ ] **居残りモード切替時の fade トランジション (D8) — enter-half SHIPPED + runtime-verified; only the fade-OUT remains.**
       Surfaced in `/plan-design-review` (2026-06-04, D8); built as plan task T10
       (P2). Toggling 居残りモード ON should make todos completed since the last
       clear RETROACTIVELY fade INTO the active list (DESIGN.md enter easing,
       `motion-safe:` gated); toggling OFF should fade them OUT symmetrically, so
       the "watch your day accumulate" reveal feels gentle, not a jarring pop.
-      DEFERRED from the completion-feedback / 居残りモード ship (PR #60) because a
-      naive `animate-in` on completed-retained rows MISFIRES — it also fires on
-      every in-place check, contradicting D7 ("the check feedback is the checkbox
-      motion, not a row fade"). A correct impl must DISTINGUISH
-      mode-toggle-retroactive-populate from in-place-check (track previous retain
-      state + diff the visible row set), and the fade-OUT needs an unmount
-      animation (framer-motion `AnimatePresence`, not yet wired for this list —
-      or limit to enter-only via the existing `tw-animate-css`). Feature works
-      without it: rows appear / disappear instantly on toggle.
-      Forcing function: a focused motion-polish pass on the completion feature,
-      or whenever `AnimatePresence` lands for any list.
-      Effort: ~1.5-2h human / ~30 min CC.
+      STATUS (branch `feat/d8-fade-and-agents-md`, PR #75): the ENTER half is
+      IMPLEMENTED + RUNTIME-VERIFIED. `retroactivePopulateFade.ts` tells a
+      mode-toggle populate apart from an in-place check by diffing the visible
+      row-id set against the previous render (armed on the OFF→ON transition via
+      `useUpdateEffect`), so D7 stays quiet; matching rows get a `motion-safe:`
+      `tw-animate-css` fade-in. Verified on a live `pnpm dev` via Playwright (rAF
+      opacity time-series + recorded video frames; OFF→ON toggle driven over the
+      preferences BroadcastChannel): the completed rows fade opacity 0→1 over
+      ~200ms (`animationName: enter`) with **NO leading blink** — they paint at
+      opacity 0 on the very first frame (the Loading-flash full-remount resolves
+      the fade-ids before paint, so rows never paint without the class). The
+      pending control row stays opacity 1 / `anim:none` (selectivity holds, D7).
+      Reduced-motion run: opacity flat at 1, `enter` never runs → instant (a11y
+      honored). The advisor-flagged "fade class lands one commit after mount"
+      blink does NOT materialize in practice — no layout-effect fix needed. Side
+      note (pre-existing, NOT this work): toggling retain briefly blanks the list
+      ~100ms (TanStack query-key change, no `keepPreviousData`); the fade plays
+      cleanly right after. A `placeholderData: keepPreviousData` pass could smooth
+      that flash — separate follow-up.
+      STILL DEFERRED: the symmetric fade-OUT (ON→OFF) needs an unmount animation
+      (framer-motion `AnimatePresence`, not yet wired for this list), so OFF is
+      enter-only / instant for now (TODOS.md-sanctioned fallback). Feature works
+      without it: rows disappear instantly on toggle-OFF.
+      Forcing function: whenever `AnimatePresence` lands for any list.
+      Effort remaining: the fade-OUT waits on `AnimatePresence` (~30 min CC then).
 
 ## Electron resilience
 
