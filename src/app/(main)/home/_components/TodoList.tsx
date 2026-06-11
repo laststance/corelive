@@ -4,7 +4,7 @@ import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
 import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { memo, Suspense, useCallback, useMemo, useState } from 'react'
+import { memo, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 
 import {
   AlertDialog,
@@ -26,6 +26,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
@@ -42,6 +43,11 @@ import { AddTodoForm } from './AddTodoForm'
 import { CategoryFilterChips } from './CategoryFilterChips'
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
+import {
+  EMPTY_TODO_ID_SET,
+  RETROACTIVE_POPULATE_FADE_MS,
+  selectNewlyPresentCompletedTodoIds,
+} from './retroactivePopulateFade'
 import { SortableTodoItem } from './SortableTodoItem'
 import { SundayDigestCard } from './SundayDigestCard'
 import { TodoImportEntry } from './TodoImportEntry'
@@ -306,6 +312,56 @@ export const TodoList = memo(function TodoList() {
   ).length
   const pendingCount = pendingTodos.length - completedInListCount
 
+  // ── 居残りモード retroactive-populate fade (D8) ───────────────────────────
+  // Flipping 居残りモード ON refetches the active list WITH completed-since-clear
+  // rows; those should fade IN gently (DESIGN.md enter, motion-safe). An in-place
+  // check must stay quiet (D7), so we fade only rows that are NEWLY present vs the
+  // previous render — never a row that was already on screen and merely flipped to
+  // completed. The completed rows land a few renders after the toggle (the toggle
+  // changes the query input → refetch), so we ARM on the OFF→ON transition and
+  // play the fade when they actually arrive. Enter-only by design: ON→OFF removes
+  // the rows instantly — no framer-motion exit animation is wired here (TODOS.md T10).
+  const previousVisibleTodoIdsRef =
+    useRef<ReadonlySet<string>>(EMPTY_TODO_ID_SET)
+  const [retroactivePopulateFadeIds, setRetroactivePopulateFadeIds] =
+    useState<ReadonlySet<string>>(EMPTY_TODO_ID_SET)
+  // Armed ONLY by an OFF→ON toggle; ON→OFF clears it so a stale arm can't replay.
+  const retroactivePopulateArmedRef = useRef(false)
+
+  useUpdateEffect(() => {
+    retroactivePopulateArmedRef.current = isRetaining
+  }, [isRetaining])
+
+  // After the toggle's refetch settles, fade the rows it surfaced — once. The
+  // newly-present diff excludes in-place checks even within the armed window, so
+  // checking a task right after toggling ON (with nothing else done) stays quiet.
+  useCycleEffect(() => {
+    if (retroactivePopulateArmedRef.current) {
+      const newlyPresentCompletedIds = selectNewlyPresentCompletedTodoIds(
+        pendingTodos,
+        previousVisibleTodoIdsRef.current,
+      )
+      if (newlyPresentCompletedIds.length > 0) {
+        retroactivePopulateArmedRef.current = false
+        setRetroactivePopulateFadeIds(new Set(newlyPresentCompletedIds))
+      }
+    }
+    previousVisibleTodoIdsRef.current = new Set(
+      pendingTodos.map((todoRow) => todoRow.id),
+    )
+  }, [pendingTodos])
+
+  // Strip the fade class once the enter animation has played, so a later
+  // re-render/remount (reorder, cross-window sync) can't replay it.
+  useUpdateEffect(() => {
+    if (retroactivePopulateFadeIds.size === 0) return
+    const fadeCleanupTimer = setTimeout(
+      () => setRetroactivePopulateFadeIds(EMPTY_TODO_ID_SET),
+      RETROACTIVE_POPULATE_FADE_MS,
+    )
+    return () => clearTimeout(fadeCleanupTimer)
+  }, [retroactivePopulateFadeIds])
+
   /**
    * Handles drag end event to reorder todos.
    * Updates local state optimistically and syncs with server.
@@ -450,6 +506,9 @@ export const TodoList = memo(function TodoList() {
                   onToggleComplete={toggleComplete}
                   onDelete={deleteTodo}
                   onUpdateNotes={updateNotes}
+                  isRetroactivelyPopulated={retroactivePopulateFadeIds.has(
+                    todo.id,
+                  )}
                 />
               ))}
             </div>
