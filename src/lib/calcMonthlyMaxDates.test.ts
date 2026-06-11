@@ -38,6 +38,19 @@ describe('calcMonthlyMaxDates', () => {
     expect(calcMonthlyMaxDates(dataByDate)).toEqual(new Set(['2026-05-04']))
   })
 
+  it('keeps the mark on the day that first reached the peak when a later day ties it', () => {
+    // Locks the ratified tie policy's affirmation rationale: the ◎ anchors to
+    // the FIRST high-water-mark day and a later equal day must NOT steal it
+    // (latest-wins would, making the glyph jump and stripping earned
+    // recognition). Insertion order is chronological here — the mark stays put.
+    const dataByDate = new Map<string, HeatmapDay>([
+      day('2026-05-04', 6), // first reaches the month peak — earns the ◎
+      day('2026-05-09', 2),
+      day('2026-05-25', 6), // ties the peak later — must NOT move the mark
+    ])
+    expect(calcMonthlyMaxDates(dataByDate)).toEqual(new Set(['2026-05-04']))
+  })
+
   it('omits months whose days all have count === 0', () => {
     const dataByDate = new Map<string, HeatmapDay>([
       day('2026-04-01', 0),

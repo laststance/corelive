@@ -52,10 +52,15 @@ function that will pull it off the deferred list.
 
 ## Heatmap visual
 
-- [ ] **Per-month tie-break for max mark.** When multiple days in a month
-      tie for the max contribution, the "month max" marker currently picks
-      the earliest. Revisit if users surface complaints about "missed" tied
-      days. Forcing function: user feedback on PR1.5.
+- [x] **Per-month tie-break for max mark.** ✅ 2026-06-11 (feat/deferred-a11y-polish-and-tz)
+      Ratified earliest-wins as the deliberate final rule (was an
+      earliest-by-default placeholder pending feedback). Weighed + rejected
+      _all-tied-marked_ (scatters ◎ as wallpaper in low-uniform months,
+      breaks DESIGN.md sparsity) and _latest-wins_ (the glyph jumps / strips
+      an earlier earned mark — anti-affirmation). Earliest = exactly one quiet
+      anchor per month AND stable (pins to the first high-water-mark day,
+      never moves). Locked in `calcMonthlyMaxDates.ts` doc + a stability spec
+      test; code already implemented this behavior.
 
 ## Design system
 
