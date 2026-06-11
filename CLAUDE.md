@@ -23,12 +23,17 @@ Most experienced developers (90%+) follow these practices:
 
 ## ❌ Violations
 
-| Forbidden Action            | Consequence                            |
-| --------------------------- | -------------------------------------- |
-| Use `ryota-murakami` org    | Code deployed to personal account      |
-| Skip pre-commit checks      | CI failures, broken releases           |
-| Mock auth/DB in E2E tests   | Tests pass locally, fail in production |
-| Commit with ESLint warnings | husky blocks commit                    |
+| Forbidden Action                      | Consequence                             |
+| ------------------------------------- | --------------------------------------- |
+| Deploy to `ryota-murakami` **Vercel** | Code/billing on personal Vercel account |
+| Skip pre-commit checks                | CI failures, broken releases            |
+| Mock auth/DB in E2E tests             | Tests pass locally, fail in production  |
+| Commit with ESLint warnings           | husky blocks commit                     |
+
+> **Scope note:** the `ryota-murakami` prohibition is about the **Vercel** (deploy +
+> billing) account only. The `ryota-murakami` **GitHub** account is the repo
+> admin/owner — it is the correct identity for SSH pushes and PR creation on
+> `laststance/corelive`. Deploys must always target the `laststance` Vercel org.
 
 ## Services
 
