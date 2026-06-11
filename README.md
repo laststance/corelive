@@ -12,6 +12,15 @@ CoreLive is a personal task tracker and BrainDump archive whose centerpiece is a
 
 > **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Prisma schema, APIs, or any other element freely and abruptly — there is **no need to write or preserve migrations, keep existing data, or maintain backward compatibility**. When the schema changes, just reset the database (`pnpm db:reset`).
 
+## Documentation
+
+Developer documentation lives in **[`docs/dev/`](docs/dev/README.md)**, organized by
+the [Diátaxis](https://diataxis.fr/) framework — tutorial, how-to, reference, and
+explanation. New to the codebase? Start with the
+**[Getting Started tutorial](docs/dev/tutorial-getting-started.md)**, then read the
+**[architecture overview](docs/dev/explanation-architecture.md)**. The design system
+(typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**.
+
 ## Platform Support
 
 This project supports:
