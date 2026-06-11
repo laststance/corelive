@@ -14,8 +14,9 @@
  * design tokens, no logger, no global stylesheet. Every such import is a way
  * for the last line of defense to fail in precisely the situation it exists to
  * catch (a root-layout / provider / CSS failure re-triggering through the same
- * import graph). Styling is inline and deliberately plain — robust now, a
- * designer pass can prettify it later (tracked as a follow-up).
+ * import graph). Styling is inline and deliberately plain, but the hex values
+ * are hand-matched to the Warm Cathedral light palette so the backstop stays
+ * on-brand (warm paper / ink / taupe) without importing a single token.
  *
  * @module app/global-error
  */
@@ -31,14 +32,17 @@ interface GlobalErrorProps {
 
 // Inline, token-free styles: global-error must not depend on globals.css, which
 // may be exactly what failed to load. Plain values keep the backstop standing.
+// The hex values are hand-matched to the Warm Cathedral light palette (the
+// oklch tokens converted to sRGB) so the backstop still feels on-brand without
+// importing a single design token — warm paper, warm ink, warm taupe.
 const pageStyle = {
   minHeight: '100vh',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   padding: '24px',
-  backgroundColor: '#fafaf9',
-  color: '#1c1917',
+  backgroundColor: '#faf4ea', // warm paper (≈ --background)
+  color: '#1f1611', // warm ink (≈ --foreground)
   fontFamily:
     'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
 }
@@ -46,11 +50,11 @@ const pageStyle = {
 const cardStyle = {
   maxWidth: '28rem',
   width: '100%',
-  border: '1px solid #e7e5e4',
+  border: '1px solid #ece3d4', // warm dawn (≈ --border)
   borderRadius: '12px',
-  backgroundColor: '#ffffff',
+  backgroundColor: '#fffdf8', // warm white, lifts off the page (≈ --card)
   padding: '24px',
-  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+  boxShadow: '0 1px 2px rgba(31, 22, 17, 0.05)',
 }
 
 const titleStyle = {
@@ -63,19 +67,34 @@ const descriptionStyle = {
   margin: '0 0 20px',
   fontSize: '0.875rem',
   lineHeight: 1.6,
-  color: '#57534e',
+  color: '#6c6158', // warm taupe (≈ --muted-foreground), AA on the card (5.9:1)
+}
+
+// Row holding the retry + reload escape side by side.
+const actionsStyle = {
+  display: 'flex',
+  flexWrap: 'wrap' as const,
+  gap: '8px',
 }
 
 const buttonStyle = {
   appearance: 'none' as const,
   cursor: 'pointer',
-  border: '1px solid #1c1917',
+  border: '1px solid #1f1611',
   borderRadius: '8px',
-  backgroundColor: '#1c1917',
-  color: '#fafaf9',
+  backgroundColor: '#1f1611', // warm-ink fill, paper text (16:1)
+  color: '#faf4ea',
   fontSize: '0.875rem',
   fontWeight: 500,
   padding: '8px 16px',
+}
+
+// Quieter outline twin for the secondary "Reload the app" escape.
+const secondaryButtonStyle = {
+  ...buttonStyle,
+  backgroundColor: 'transparent',
+  color: '#1f1611',
+  border: '1px solid #d8ccba', // warm hairline, calmer than the filled retry
 }
 
 /**
@@ -108,7 +127,9 @@ function useReportRootError(error: Error & { digest?: string }): void {
  * @param props - Next.js error-boundary props
  * @param props.error - The caught error (its `digest` is set for server errors)
  * @param props.reset - Retries rendering the app shell
- * @returns A standalone, reassuring page with a "Try again" action
+ * @returns A standalone, reassuring page with a "Try again" retry plus a
+ *   "Reload the app" full-reload escape (reset() re-renders the same universal
+ *   root layout, so a deterministic throw needs a fresh-bundle reload to clear)
  * @example
  * // Rendered automatically by Next.js when the root layout subtree throws.
  */
@@ -127,9 +148,22 @@ const GlobalError = memo(function GlobalError({
             Something hiccuped while loading CoreLive. Your data is safe — give
             it another go.
           </p>
-          <button type="button" onClick={reset} style={buttonStyle}>
-            Try again
-          </button>
+          <div style={actionsStyle}>
+            <button type="button" onClick={reset} style={buttonStyle}>
+              Try again
+            </button>
+            {/* Secondary escape: reset() re-renders the SAME root layout, so a
+                deterministic throw just re-throws — and going "home" can't help
+                either, since every route shares this layout. A full reload is
+                the one move that fetches a fresh bundle (the stale-preload fix). */}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={secondaryButtonStyle}
+            >
+              Reload the app
+            </button>
+          </div>
         </div>
       </body>
     </html>
