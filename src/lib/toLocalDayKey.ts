@@ -38,7 +38,9 @@ function getDayKeyFormatter(timeZone: string): Intl.DateTimeFormat {
  *
  * A `null`/empty/unrecognized `timeZone` falls back to the UTC day, which is
  * exactly the pre-timezone behavior — so absent-tz callers are byte-for-byte
- * unchanged and a malformed client header can never throw in the hot loop.
+ * unchanged. An unrecognized zone is caught per call and degrades to UTC
+ * *silently* (no signal): callers that must surface a bad zone should
+ * pre-validate it rather than infer it from the bucketed output.
  *
  * @param instant - The absolute moment to bucket (e.g. a `completedAt`)
  * @param timeZone - IANA zone (e.g. `'Asia/Tokyo'`); `null` → UTC fallback

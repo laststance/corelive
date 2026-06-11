@@ -36,6 +36,18 @@ describe('toLocalDayKey', () => {
     expect(dayKey).toBe('2026-06-12')
   })
 
+  it('buckets onto the previous day for the far-west -12 zone (the extreme negative offset)', () => {
+    // Arrange: 11:00 UTC is 23:00 the PREVIOUS day at -12:00 — the symmetric
+    // counterpart to the +14 Kiritimati case, pinning the widest negative edge.
+    const instant = new Date('2026-06-11T11:00:00.000Z')
+
+    // Act — Etc/GMT+12 is IANA's sign-flipped spelling of UTC-12.
+    const dayKey = toLocalDayKey(instant, 'Etc/GMT+12')
+
+    // Assert
+    expect(dayKey).toBe('2026-06-10')
+  })
+
   it('honors a DST offset when the instant straddles local midnight', () => {
     // Arrange: New York is on EDT (-04:00) in June; 03:30 UTC is 23:30 EDT
     // the previous day, so the local calendar day is still the 7th.
