@@ -44,11 +44,18 @@ function that will pull it off the deferred list.
 
 ## URL / Deep-link
 
-- [ ] **Bidirectional `?date=` URL sync.** PR2 introduces inbound deep-link
-      handling (`/home?date=YYYY-MM-DD` opens the day dialog). Promote day-nav
-      (`←` / `→`) to call `router.replace('?date=…')` so the URL stays in
-      sync with the dialog. Pairs cleanly with PR6 share image (URL
-      pre-populated in clipboard). Forcing function: PR6 share flow.
+- [x] **Bidirectional `?date=` URL sync.** ✅ 2026-06-11 (feat/deferred-a11y-polish-and-tz)
+      The inbound deep-link (`/home?date=YYYY-MM-DD` opens the dialog) now has an
+      outbound mirror: opening a cell, day-nav (`←`/`→`/`j`/`k`), and closing all
+      write `?date=` via `window.history.replaceState` (Next 16 syncs it to
+      `useSearchParams` with NO RSC refetch — avoids the "thrash" the old one-way
+      design feared). `useUpdateEffect` skips mount so it can't clobber an inbound
+      deep-link; a `nextUrl !== current` guard makes the inbound→outbound feedback
+      a no-op (and `setSelectedDate` to the same value bails — no loop). URL build
+      extracted to a pure, unit-tested `buildDateSyncUrl` (preserves other params);
+      outbound behavior locked with two new `heatmap-day-detail.spec.ts` E2E cases.
+      Chose replaceState uniformly (per the `router.replace` intent) so holding
+      `→` doesn't spam history. Pairs cleanly with PR6 share image.
 
 ## Heatmap visual
 
