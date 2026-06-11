@@ -38,6 +38,9 @@ on:
       - 'prisma/migrations/**'
       - 'prisma/schema.prisma'
 
+permissions:
+  contents: read
+
 # Prevent concurrent migrations
 concurrency:
   group: db-migrate-production
@@ -59,7 +62,7 @@ jobs:
           exit 1
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Node.js and pnpm
         uses: ./.github/actions/prepare

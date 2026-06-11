@@ -46,6 +46,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-electron-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e-electron-linux:
     name: E2E Electron (Linux + xvfb) 🧪
@@ -59,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout repository 🔄
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Use shared prepare action 🔧
         uses: ./.github/actions/prepare
@@ -140,7 +147,7 @@ jobs:
 
       - name: Upload Playwright HTML report 📊
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: playwright-report-electron
           path: playwright-report/
@@ -148,7 +155,7 @@ jobs:
 
       - name: Upload Test Results 📋
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           # `test-results/` contains Playwright traces, screenshots,
           # videos AND the streaming Electron main-process logs that

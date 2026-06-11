@@ -4,24 +4,40 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Tokyo
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/prepare
       - name: Set environment variables
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}
+          NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_UP_URL }}
+          NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL: ${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
-          touch .env
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=${{ secrets.NEXT_PUBLIC_CLERK_SIGN_UP_URL }}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=${{ secrets.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL }}" >> .env
-          echo "CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}" >> .env
-          echo "WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}" >> .env
-          echo "POSTGRES_PRISMA_URL=postgresql://postgres:password@localhost:5432/corelive?schema=public" >> .env
+          {
+            printf 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=%s\n' "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_IN_URL"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_UP_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_UP_URL"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL"
+            printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
+            printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5432/corelive?schema=public'
+          } > .env
       # Provision Postgres for the real-DB integration suites (paste-import
       # procedures). Mirrors e2e.web.yml. Those tests are gated behind
       # RUN_DB_INTEGRATION_TESTS (set on the unit-test step below); mocked/pure
@@ -56,7 +72,7 @@ jobs:
       - name: Run Electron tests
         run: pnpm test:electron --run
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@04b047e8bb82a0c002c8312c1c880fbc6a999d45 # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
