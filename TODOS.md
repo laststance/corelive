@@ -102,7 +102,7 @@ function that will pull it off the deferred list.
       dark) in `src/globals.css` + the theme generator just enough to clear AA on
       `--primary-foreground` label text while keeping the brand warmth per DESIGN.md
       (DESIGN.md note updated). Pre-existing (NOT from the golden-hour diff); the
-      taste call was resolved this PR with the user delegating design calls to
+      taste call was resolved in PR #77 with the user delegating design calls to
       DESIGN.md. Locked with `cathedral-contrast.test.ts` so a future token tweak
       that drops the pair below AA fails CI.
 - [x] **a11y: empty/unchecked `<Checkbox>` border.** ✅ 2026-06-11 (feat/deferred-a11y-polish-and-tz)
@@ -165,7 +165,7 @@ function that will pull it off the deferred list.
       opacity 0 on the very first frame. The pending control row stays opacity 1 /
       `anim:none` (selectivity holds, D7). Reduced-motion run: opacity flat at 1,
       `enter` never runs → instant (a11y honored).
-      L1 UPDATE (2026-06-11, this PR): the pre-existing ~100ms blank-flash on toggle
+      L1 UPDATE (2026-06-11, PR #77, merged): the pre-existing ~100ms blank-flash on toggle
       (TanStack query-key change) is now smoothed by `placeholderData: keepPreviousData`
       on the todo.list query (TodoList + FloatingNavigatorContainer). That removed the
       blank-flash the enter diff used to lean on ("first non-empty render is the settled
@@ -226,7 +226,7 @@ function that will pull it off the deferred list.
       stays intentionally inline-styled / token-free for robustness (last line of defense
       must not re-enter a possibly-failed import graph).
       STILL OPEN (separate-branch refactors, were only folded here — NOT blockers, NOT
-      done in this PR): degradation-copy consistency across the non-crashing components
+      done in PR #77): degradation-copy consistency across the non-crashing components
       (R6) and a shared `SettingsStateCard` extraction (M-series dedup).
       Forcing function: the next touch of the Settings degradation cards.
       Effort: ~30 min CC.
