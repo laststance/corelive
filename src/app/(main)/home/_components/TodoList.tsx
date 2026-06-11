@@ -344,6 +344,12 @@ export const TodoList = memo(function TodoList() {
       if (newlyPresentCompletedIds.length > 0) {
         retroactivePopulateArmedRef.current = false
         setRetroactivePopulateFadeIds(new Set(newlyPresentCompletedIds))
+      } else if (pendingTodos.length > 0) {
+        // Refetch settled with rows but none surfaced — consume the arm so a later
+        // unrelated diff (an imported/synced completed row) can't replay the fade.
+        // The flash blanks the list, so the first non-empty render is the settled
+        // one; revisit if placeholderData/keepPreviousData is added (stale rows race).
+        retroactivePopulateArmedRef.current = false
       }
     }
     previousVisibleTodoIdsRef.current = new Set(
