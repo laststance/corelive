@@ -7,7 +7,7 @@ watching that day light up on the Activity Heatmap. Follow every step in order
 
 > **You will run the web app only.** The macOS Electron wrapper loads the same
 > web app remotely and is **not** needed to reach the heatmap. Skip it for now;
-> see [the Electron architecture doc](../ELECTRON_ARCHITECTURE.md) when you are
+> see [the Electron architecture doc](./explanation-electron-architecture.md) when you are
 > ready.
 
 ---
@@ -339,7 +339,7 @@ You've seen the core loop. The rest of the developer docs are organized by the
   family](./howto-add-theme-family.md).
 - **Look things up** — the [oRPC API](./reference-orpc-api.md) and [data
   model](./reference-data-model.md) references, or the deeper [Electron
-  internals](../ELECTRON_ARCHITECTURE.md).
+  internals](./explanation-electron-architecture.md).
 
 The authoritative command list is always the `scripts` block in
 [`package.json`](../../package.json); environment variables are in

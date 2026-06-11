@@ -79,7 +79,7 @@ pnpm dev
 pnpm electron:dev
 ```
 
-This runs `node scripts/dev.js`, an orchestrator that (1) compiles the Electron main + preload via `electron-vite build`, (2) starts `pnpm dev` on `:3011`, (3) polls until the server answers `200`, then (4) launches `electron/dev-runner.ts` with `NODE_ENV=development` and `PLAYWRIGHT_REMOTE_DEBUGGING_PORT=9222` so MCP / Playwright tooling can attach (`scripts/dev.js:93-180`). It loads the **local** dev server in a `BrowserWindow`, not the production site. For the architecture of the desktop wrapper, see [the Electron reference](./reference-electron.md).
+This runs `node scripts/dev.js`, an orchestrator that (1) compiles the Electron main + preload via `electron-vite build`, (2) starts `pnpm dev` on `:3011`, (3) polls until the server answers `200`, then (4) launches `electron/dev-runner.ts` with `NODE_ENV=development` and `PLAYWRIGHT_REMOTE_DEBUGGING_PORT=9222` so MCP / Playwright tooling can attach (`scripts/dev.js:93-180`; step 3's poll-until-`200` loop is `checkServer`, `scripts/dev.js:55-91`). It loads the **local** dev server in a `BrowserWindow`, not the production site. For the architecture of the desktop wrapper, see [the Electron reference](./reference-electron.md).
 
 > **Clerk webhook in local dev.** New Postgres `User` rows are provisioned by a Clerk `user.created` webhook (`src/app/api/webhooks/route.ts`), which Clerk delivers over HTTP — so Clerk needs a public URL to reach your machine. Tunnel `:3011` with ngrok and point the Clerk Dashboard webhook at it (`README.md:130-133`):
 >
