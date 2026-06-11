@@ -2,6 +2,7 @@
 
 import { memo, useCallback } from 'react'
 
+import { Box } from '@/components/box'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -44,7 +45,7 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
   )
 
   return (
-    <div className="space-y-4 p-4">
+    <Box className="space-y-4 p-4">
       <Card className="border-0 bg-transparent shadow-none">
         <CardHeader className="px-2 pb-2 pt-0">
           <CardTitle className="text-lg">Preferences</CardTitle>
@@ -89,7 +90,7 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </Box>
   )
 })
 
