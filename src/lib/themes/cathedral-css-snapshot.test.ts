@@ -44,7 +44,7 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
         --card-foreground: oklch(0.18 0.015 30);
         --popover: oklch(0.972 0.018 78);
         --popover-foreground: oklch(0.18 0.015 30);
-        --primary: oklch(0.62 0.16 50);
+        --primary: oklch(0.56 0.16 50);
         --primary-foreground: oklch(0.99 0 0);
         --secondary: oklch(0.942 0.024 78);
         --secondary-foreground: oklch(0.18 0.015 30);
@@ -55,7 +55,7 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
         --destructive: oklch(0.6 0.2 25);
         --border: oklch(0.908 0.022 76);
         --input: oklch(0.908 0.022 76);
-        --ring: oklch(0.62 0.16 50);
+        --ring: oklch(0.56 0.16 50);
         --chart-1: oklch(0.62 0.16 50);
         --chart-2: oklch(0.65 0.13 145);
         --chart-3: oklch(0.6 0.1 230);
@@ -63,12 +63,12 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
         --chart-5: oklch(0.55 0.16 40);
         --sidebar: oklch(0.972 0.018 78);
         --sidebar-foreground: oklch(0.18 0.015 30);
-        --sidebar-primary: oklch(0.62 0.16 50);
+        --sidebar-primary: oklch(0.56 0.16 50);
         --sidebar-primary-foreground: oklch(0.99 0 0);
         --sidebar-accent: oklch(0.942 0.024 78);
         --sidebar-accent-foreground: oklch(0.18 0.015 30);
         --sidebar-border: oklch(0.908 0.022 76);
-        --sidebar-ring: oklch(0.62 0.16 50);
+        --sidebar-ring: oklch(0.56 0.16 50);
         /* Heatmap temperature gradient — paper → dawn → amber → honey → terracotta */
         --hm-0: oklch(0.96 0.008 80);
         --hm-1: oklch(0.89 0.06 75);

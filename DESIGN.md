@@ -66,8 +66,8 @@ OKLCH color space throughout. Departing deliberately from the current cold-neutr
 | `--muted-foreground`     | `oklch(0.5 0.026 56)`   | Earthy taupe for secondary copy (5.6:1 on card, AA)         |
 | `--border`               | `oklch(0.908 0.022 76)` | Warm dawn gray                                              |
 | `--input`                | `oklch(0.908 0.022 76)` | Form input border                                           |
-| `--ring`                 | `oklch(0.62 0.16 50)`   | Focus ring = primary amber                                  |
-| `--primary`              | `oklch(0.62 0.16 50)`   | Amber CTA                                                   |
+| `--ring`                 | `oklch(0.56 0.16 50)`   | Focus ring = primary amber                                  |
+| `--primary`              | `oklch(0.56 0.16 50)`   | Amber CTA                                                   |
 | `--primary-foreground`   | `oklch(0.99 0 0)`       | Paper text on amber                                         |
 | `--secondary`            | `oklch(0.942 0.024 78)` | Quiet button bg                                             |
 | `--secondary-foreground` | `oklch(0.18 0.015 30)`  | Same as foreground                                          |
@@ -75,6 +75,14 @@ OKLCH color space throughout. Departing deliberately from the current cold-neutr
 | `--accent-foreground`    | `oklch(0.18 0.015 30)`  |                                                             |
 | `--muted`                | `oklch(0.942 0.024 78)` | Disabled/quiet bg                                           |
 | `--destructive`          | `oklch(0.6 0.20 25)`    | Clay red, retuned warmer than the default oklch destructive |
+
+> **`--primary` / `--ring` darkened L0.62 → L0.56 (2026-06-11, WCAG AA).** White
+> `--primary-foreground` on the old lighter amber was only 3.75:1 — below the AA
+> 4.5:1 floor for CTA text. L0.56 lifts white-on-amber to 4.81:1 while staying
+> brand amber (hue 50, chroma 0.16). `--sidebar-primary` / `--sidebar-ring` move
+> with it; `--chart-1` stays L0.62 (data-viz fill, no overlaid text). Dark mode
+> already passed (dark ink on lifted amber, 6.93:1). Locked by
+> `cathedral-contrast.test.ts`.
 
 ### Dark mode
 

@@ -60,7 +60,7 @@ const CATHEDRAL_PREVIEW: Record<ThemeMode, ThemePreview> = {
   light: {
     surface: 'oklch(0.975 0.016 80)',
     card: 'oklch(0.972 0.018 78)',
-    accent: 'oklch(0.62 0.16 50)',
+    accent: 'oklch(0.56 0.16 50)',
     text: 'oklch(0.18 0.015 30)',
     heatmap: [
       'oklch(0.96 0.008 80)',
