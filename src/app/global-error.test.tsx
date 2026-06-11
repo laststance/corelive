@@ -55,4 +55,25 @@ describe('GlobalError (root-layout error boundary)', () => {
     // Assert: Next.js's reset() is invoked to re-render the app shell.
     expect(reset).toHaveBeenCalledTimes(1)
   })
+
+  it('reloads a fresh bundle when "Reload the app" is pressed', async () => {
+    // Arrange: the root layout is universal, so reset() re-renders the SAME
+    // failing layout and a "go home" nav can't escape it either — only a full
+    // reload fetches a fresh bundle (the stale-preload fix). Spy reload to
+    // assert the wiring without actually navigating the test runner.
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const reset = vi.fn()
+    const reloadFreshBundle = vi
+      .spyOn(window.location, 'reload')
+      .mockImplementation(() => {})
+    const user = userEvent.setup()
+    render(<GlobalError error={new Error('boom')} reset={reset} />)
+
+    // Act
+    await user.click(screen.getByRole('button', { name: /reload the app/i }))
+
+    // Assert: a full reload is triggered; reset() is not the escape here.
+    expect(reloadFreshBundle).toHaveBeenCalledTimes(1)
+    expect(reset).not.toHaveBeenCalled()
+  })
 })

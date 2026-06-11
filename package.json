@@ -46,7 +46,7 @@
     "prisma:validate": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma validate",
     "prisma:generate": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma generate",
     "prisma:studio": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma studio",
-    "prisma:seed": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 tsx prisma/seed.ts",
+    "prisma:seed": "node scripts/assert-local-db.cjs && cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 tsx prisma/seed.ts",
     "db:reset": "node scripts/assert-local-db.cjs && cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate reset --force && pnpm prisma:seed",
     "db:truncate": "node scripts/assert-local-db.cjs && cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate reset --force",
     "storybook": "storybook dev -p 6006",

@@ -211,4 +211,41 @@ test.describe('Heatmap Day Detail E2E', () => {
       await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 })
     })
   })
+
+  test.describe('URL sync (outbound)', () => {
+    test('mirrors day navigation into the ?date= URL so the open day stays shareable', async ({
+      page,
+    }) => {
+      // Arrange — deep-link open; the URL already carries the anchor date.
+      await openDialogViaDeepLink(page, DEEP_LINK_DATE)
+      await expect(page).toHaveURL(new RegExp(`date=${DEEP_LINK_DATE}`))
+      const dialog = page.getByRole('dialog')
+
+      // Act — advance one day via the chevron.
+      await dialog.getByRole('button', { name: 'Next day' }).click()
+
+      // Assert — the dialog AND the address bar both move to April 2 2026, so a
+      // copied URL reopens the day the user is actually looking at.
+      await expect(dialog.getByText(NEXT_DAY_LABEL)).toBeVisible({
+        timeout: 5000,
+      })
+      await expect(page).toHaveURL(/date=2026-04-02/)
+    })
+
+    test('clears ?date= from the URL when the dialog closes', async ({
+      page,
+    }) => {
+      // Arrange — deep-link open; URL carries the date.
+      await openDialogViaDeepLink(page, DEEP_LINK_DATE)
+      await expect(page).toHaveURL(new RegExp(`date=${DEEP_LINK_DATE}`))
+
+      // Act — close via Esc.
+      await page.keyboard.press('Escape')
+
+      // Assert — dialog gone and the now-stale ?date= is dropped, so a copied
+      // URL after closing doesn't reopen a dialog the user already dismissed.
+      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 })
+      await expect(page).not.toHaveURL(/date=/)
+    })
+  })
 })

@@ -11,8 +11,8 @@
  *
  * @module app/error
  */
-import { RotateCcw } from 'lucide-react'
-import { memo, type ReactElement } from 'react'
+import { House, RotateCcw } from 'lucide-react'
+import { memo, useCallback, type ReactElement } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -40,7 +40,10 @@ interface RouteErrorProps {
  * @param props - Next.js error-boundary props
  * @param props.error - The caught error (digest is set for server errors)
  * @param props.reset - Retries rendering the crashed segment
- * @returns A reassuring card with a "Try again" action
+ * @returns A reassuring card with a "Try again" retry plus a "Back to home"
+ *   hard-navigation escape (reset() alone dead-ends on deterministic throws —
+ *   e.g. a stale preload — so the secondary action leaves the broken route and
+ *   reloads a fresh bundle)
  * @example
  * // Rendered automatically by Next.js when a page subtree throws.
  */
@@ -53,6 +56,11 @@ const RouteError = memo(function RouteError({
     log.error('Page boundary caught a client error:', error)
   }, [error])
 
+  // Hard nav to home — stable ref so the memo'd Button never re-renders for it.
+  const goHome = useCallback(() => {
+    window.location.assign('/')
+  }, [])
+
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <Card className="max-w-md">
@@ -63,10 +71,18 @@ const RouteError = memo(function RouteError({
             it another go.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
           <Button onClick={reset} className="gap-2">
             <RotateCcw className="h-4 w-4" />
             Try again
+          </Button>
+          {/* Secondary escape: reset() re-renders the SAME crashed segment, so a
+              deterministic throw just re-throws. A hard nav to "/" leaves the
+              broken route entirely and reloads a fresh bundle (fixes a stale
+              Electron preload that reset() never could). */}
+          <Button variant="outline" onClick={goHome} className="gap-2">
+            <House className="h-4 w-4" />
+            Back to home
           </Button>
         </CardContent>
       </Card>

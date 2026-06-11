@@ -35,7 +35,7 @@ function buildActivity(input: {
 
 describe('aggregateYearInReview', () => {
   it('returns zeros and `eligible: false` on an empty heatmap', () => {
-    const result = aggregateYearInReview(new Map(), new Date('2026-12-15Z'))
+    const result = aggregateYearInReview(new Map(), '2026-12-15')
     expect(result).toMatchObject({
       totalCompleted: 0,
       activeDays: 0,
@@ -74,7 +74,7 @@ describe('aggregateYearInReview', () => {
         },
       ],
     ])
-    const result = aggregateYearInReview(map, new Date('2026-12-15Z'))
+    const result = aggregateYearInReview(map, '2026-12-15')
     expect(result.totalCompleted).toBe(10) // 3 + 7 (2025 excluded)
     expect(result.activeDays).toBe(2)
     expect(result.topCategories).toEqual([
@@ -88,7 +88,7 @@ describe('aggregateYearInReview', () => {
       days: YIR_MIN_ACTIVE_DAYS,
       category: { id: 1, name: 'writing', color: 'blue' },
     })
-    const result = aggregateYearInReview(activity, new Date('2026-12-15Z'))
+    const result = aggregateYearInReview(activity, '2026-12-15')
     expect(result.activeDays).toBe(YIR_MIN_ACTIVE_DAYS)
     expect(result.eligible).toBe(true)
   })
@@ -99,7 +99,7 @@ describe('aggregateYearInReview', () => {
       days: YIR_MIN_ACTIVE_DAYS - 1,
       category: { id: 1, name: 'writing', color: 'blue' },
     })
-    const result = aggregateYearInReview(activity, new Date('2026-12-15Z'))
+    const result = aggregateYearInReview(activity, '2026-12-15')
     expect(result.eligible).toBe(false)
   })
 
@@ -123,7 +123,7 @@ describe('aggregateYearInReview', () => {
         categories: [{ id: 1, name: 'writing', color: 'blue', count: 1 }],
       })
     }
-    const result = aggregateYearInReview(map, new Date('2026-12-15Z'))
+    const result = aggregateYearInReview(map, '2026-12-15')
     expect(result.longestStreak).toBe(10)
   })
 
@@ -143,7 +143,7 @@ describe('aggregateYearInReview', () => {
         },
       ],
     ])
-    const result = aggregateYearInReview(map, new Date('2026-12-15Z'))
+    const result = aggregateYearInReview(map, '2026-12-15')
     expect(result.topCategories).toHaveLength(3)
     expect(result.topCategories.map((c) => c.name)).toEqual([
       'exercise', // 4 — highest
@@ -154,7 +154,7 @@ describe('aggregateYearInReview', () => {
 })
 
 describe('shouldAutoOpenYir', () => {
-  it('opens in December (UTC month 11) when summary is eligible', () => {
+  it('opens in December when summary is eligible', () => {
     const eligibleSummary = {
       totalCompleted: 100,
       activeDays: YIR_MIN_ACTIVE_DAYS,
@@ -163,9 +163,7 @@ describe('shouldAutoOpenYir', () => {
       year: 2026,
       eligible: true,
     }
-    expect(shouldAutoOpenYir(new Date('2026-12-15Z'), eligibleSummary)).toBe(
-      true,
-    )
+    expect(shouldAutoOpenYir('2026-12-15', eligibleSummary)).toBe(true)
   })
 
   it('does NOT open outside December even if eligible', () => {
@@ -177,12 +175,8 @@ describe('shouldAutoOpenYir', () => {
       year: 2026,
       eligible: true,
     }
-    expect(shouldAutoOpenYir(new Date('2026-11-30Z'), eligibleSummary)).toBe(
-      false,
-    )
-    expect(shouldAutoOpenYir(new Date('2026-05-12Z'), eligibleSummary)).toBe(
-      false,
-    )
+    expect(shouldAutoOpenYir('2026-11-30', eligibleSummary)).toBe(false)
+    expect(shouldAutoOpenYir('2026-05-12', eligibleSummary)).toBe(false)
   })
 
   it('does NOT open in December when summary is ineligible (<30 days)', () => {
@@ -194,9 +188,7 @@ describe('shouldAutoOpenYir', () => {
       year: 2026,
       eligible: false,
     }
-    expect(shouldAutoOpenYir(new Date('2026-12-15Z'), ineligibleSummary)).toBe(
-      false,
-    )
+    expect(shouldAutoOpenYir('2026-12-15', ineligibleSummary)).toBe(false)
   })
 })
 
@@ -223,7 +215,7 @@ describe('shouldAutoOpenYir (with fake timers — guards against real-clock leak
     }
     // Pass an explicit December date — even though wall clock says May,
     // the gate should respect the argument and return true.
-    expect(shouldAutoOpenYir(new Date('2026-12-15Z'), eligible)).toBe(true)
+    expect(shouldAutoOpenYir('2026-12-15', eligible)).toBe(true)
   })
 })
 
@@ -247,9 +239,8 @@ describe('parseForceDate', () => {
     expect(parseForceDate('2025-12-32')).toBeNull()
   })
 
-  it('parses a YYYY-MM-DD string into UTC midnight', () => {
-    const parsed = parseForceDate('2026-12-31')
-    expect(parsed).toBeInstanceOf(Date)
-    expect(parsed?.toISOString()).toBe('2026-12-31T00:00:00.000Z')
+  it('returns the validated YYYY-MM-DD local-day key for a real calendar date', () => {
+    expect(parseForceDate('2026-12-31')).toBe('2026-12-31')
+    expect(parseForceDate('2026-01-01')).toBe('2026-01-01')
   })
 })

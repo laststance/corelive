@@ -17,6 +17,7 @@ import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
 import { exportDayAsImage } from '@/lib/export-day-as-image'
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import {
   getHeatmapIntensityFromCount,
   HEATMAP_LEVEL_TOKENS,
@@ -142,17 +143,6 @@ function formatTime(when: Date): string {
 }
 
 /**
- * Returns today's calendar date in YYYY-MM-DD using UTC, matching the
- * heatmap aggregation bucketing in getDayDetail / getHeatmap.
- * @returns YYYY-MM-DD string
- * @example
- * getTodayDateString() // => "2026-05-11"
- */
-function getTodayDateString(): string {
-  return new Date().toISOString().split('T')[0]!
-}
-
-/**
  * Picks the single most-used category name across a day's completed
  * tasks. Used by the share card to render the "mostly <category>" line.
  * Ties broken alphabetically (locale-insensitive 'en') so two days with
@@ -212,7 +202,12 @@ export const DayDetailDialog = memo(function DayDetailDialog({
   // `isPlaceholderData` so we can still gate the task list separately.
   const { data, isLoading, isPlaceholderData } = useQuery({
     ...orpc.completed.dayDetail.queryOptions({
-      input: { date: date ?? '1970-01-01' },
+      input: {
+        date: date ?? '1970-01-01',
+        // Bucket the cell's day by the browser's local zone (L3) so the
+        // dialog's entries match the locally-rendered heatmap cell exactly.
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
     }),
     enabled: isClerkQueryReady && date !== null,
     placeholderData: keepPreviousData,
@@ -221,7 +216,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
   const isOpen = date !== null
   const dayCount = data?.count ?? 0
   const state = getDayState(dayCount)
-  const isToday = date !== null && date === getTodayDateString()
+  const isToday = date !== null && date === getLocalTodayIsoDate()
 
   /**
    * Captures the day's stats as a PNG via html-to-image and triggers a

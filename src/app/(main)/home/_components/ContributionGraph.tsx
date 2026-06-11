@@ -21,8 +21,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
+import { buildDateSyncUrl } from '@/lib/buildDateSyncUrl'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
 import {
   HEATMAP_CATHEDRAL_MIN,
@@ -186,11 +188,12 @@ export const ContributionGraph = memo(function ContributionGraph() {
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef, !isLoading)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  // `?date=YYYY-MM-DD` deep-link: validated via the same Zod schema the
-  // server uses for `getDayDetail`, so invalid input is rejected with the
-  // identical contract. The dep `[dateParam]` keeps the effect a one-shot
-  // per URL change — internal day-nav (<,>,j,k) does not write back to the
-  // URL (per plan §1.6), so this never thrashes.
+  // `?date=YYYY-MM-DD` deep-link (INBOUND): validated via the same Zod schema
+  // the server uses for `getDayDetail`, so invalid input is rejected with the
+  // identical contract. The dep `[dateParam]` keeps the effect a one-shot per
+  // URL change. The OUTBOUND mirror below now writes day-nav / open / close back
+  // to `?date=`, which feeds a fresh `dateParam` here — but setSelectedDate to
+  // the same value bails, so the two effects settle in one extra render, no loop.
   const searchParams = useSearchParams()
   const dateParam = searchParams.get('date')
 
@@ -218,6 +221,24 @@ export const ContributionGraph = memo(function ContributionGraph() {
       })
     }
   }, [dateParam])
+
+  // OUTBOUND `?date=` sync: mirror the open day (cell click / ← → nav / close)
+  // into the address bar so it stays shareable and back-button-navigable.
+  // `history.replaceState` (Next 16 keeps `useSearchParams` in sync) updates the
+  // URL WITHOUT an RSC refetch — the "thrash" the old one-way design feared.
+  // `useUpdateEffect` SKIPS mount so this can't clobber an inbound deep-link
+  // before the effect above reads it; the `!==` guard makes the redundant write
+  // (e.g. right after that inbound read set the same value) a no-op.
+  useUpdateEffect(() => {
+    const nextUrl = buildDateSyncUrl(
+      window.location.search,
+      window.location.pathname,
+      selectedDate,
+    )
+    if (nextUrl !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, '', nextUrl)
+    }
+  }, [selectedDate])
 
   const endDate = useMemo(() => normalizeDate(new Date()), [])
   const startDate = useMemo(

@@ -17,13 +17,14 @@ function buildDataByDate(activeDates: string[]): Map<string, HeatmapDay> {
   )
 }
 
-const TODAY = new Date('2026-05-12T08:00:00.000Z')
+// "Today" is now a local-day key string (the caller derives it via
+// getLocalTodayIsoDate); calcStreak is pure on it, so tests pin it directly.
 const TODAY_ISO = '2026-05-12'
 
 describe('calcStreak', () => {
   describe('empty data', () => {
     it('returns zeros for an empty map', () => {
-      expect(calcStreak(new Map(), TODAY)).toStrictEqual({
+      expect(calcStreak(new Map(), TODAY_ISO)).toStrictEqual({
         currentStreak: 0,
         longestStreak: 0,
         currentTier: null,
@@ -33,7 +34,7 @@ describe('calcStreak', () => {
 
     it('returns zero current streak when last activity is older than yesterday', () => {
       const data = buildDataByDate([shiftIsoDate(TODAY_ISO, -3)])
-      const result = calcStreak(data, TODAY)
+      const result = calcStreak(data, TODAY_ISO)
       expect(result.currentStreak).toBe(0)
       expect(result.longestStreak).toBe(1)
     })
@@ -42,17 +43,17 @@ describe('calcStreak', () => {
   describe('current streak grace period', () => {
     it('counts today as a 1-day streak', () => {
       const data = buildDataByDate([TODAY_ISO])
-      expect(calcStreak(data, TODAY).currentStreak).toBe(1)
+      expect(calcStreak(data, TODAY_ISO).currentStreak).toBe(1)
     })
 
     it('keeps the streak when only yesterday has activity (today not yet shown up)', () => {
       const data = buildDataByDate([shiftIsoDate(TODAY_ISO, -1)])
-      expect(calcStreak(data, TODAY).currentStreak).toBe(1)
+      expect(calcStreak(data, TODAY_ISO).currentStreak).toBe(1)
     })
 
     it('still counts the current streak when both today and yesterday are present', () => {
       const data = buildDataByDate([shiftIsoDate(TODAY_ISO, -1), TODAY_ISO])
-      expect(calcStreak(data, TODAY).currentStreak).toBe(2)
+      expect(calcStreak(data, TODAY_ISO).currentStreak).toBe(2)
     })
   })
 
@@ -61,7 +62,7 @@ describe('calcStreak', () => {
       const days = Array.from({ length: 7 }, (_, i) =>
         shiftIsoDate(TODAY_ISO, -i),
       )
-      const result = calcStreak(buildDataByDate(days), TODAY)
+      const result = calcStreak(buildDataByDate(days), TODAY_ISO)
       expect(result.currentStreak).toBe(7)
       expect(result.longestStreak).toBe(7)
       expect(result.currentTier).toBe(7)
@@ -71,7 +72,7 @@ describe('calcStreak', () => {
       const days = Array.from({ length: 7 }, (_, i) =>
         shiftIsoDate(TODAY_ISO, -i - 1),
       )
-      const result = calcStreak(buildDataByDate(days), TODAY)
+      const result = calcStreak(buildDataByDate(days), TODAY_ISO)
       expect(result.currentStreak).toBe(7)
       expect(result.currentTier).toBe(7)
     })
@@ -84,7 +85,7 @@ describe('calcStreak', () => {
         shiftIsoDate(TODAY_ISO, -3),
         shiftIsoDate(TODAY_ISO, -4),
       ])
-      const result = calcStreak(data, TODAY)
+      const result = calcStreak(data, TODAY_ISO)
       expect(result.currentStreak).toBe(2)
       expect(result.longestStreak).toBe(2)
     })
@@ -97,7 +98,7 @@ describe('calcStreak', () => {
       const recentDays = [TODAY_ISO, shiftIsoDate(TODAY_ISO, -1)]
       const result = calcStreak(
         buildDataByDate([...longRunDays, ...recentDays]),
-        TODAY,
+        TODAY_ISO,
       )
       expect(result.currentStreak).toBe(2)
       expect(result.longestStreak).toBe(10)
@@ -109,7 +110,9 @@ describe('calcStreak', () => {
       const days = Array.from({ length: 6 }, (_, i) =>
         shiftIsoDate(TODAY_ISO, -i),
       )
-      expect(calcStreak(buildDataByDate(days), TODAY).currentTier).toBeNull()
+      expect(
+        calcStreak(buildDataByDate(days), TODAY_ISO).currentTier,
+      ).toBeNull()
     })
 
     it.each([
@@ -125,7 +128,7 @@ describe('calcStreak', () => {
       const days = Array.from({ length: streakLength }, (_, i) =>
         shiftIsoDate(TODAY_ISO, -i),
       )
-      expect(calcStreak(buildDataByDate(days), TODAY).currentTier).toBe(
+      expect(calcStreak(buildDataByDate(days), TODAY_ISO).currentTier).toBe(
         expectedTier,
       )
     })
@@ -144,31 +147,31 @@ describe('calcStreak', () => {
         '2026-05-03',
         '2026-05-12', // today
       ])
-      expect(calcStreak(data, TODAY).shownUpThisMonth).toBe(3)
+      expect(calcStreak(data, TODAY_ISO).shownUpThisMonth).toBe(3)
     })
 
     it('returns zero when no activity falls inside the month', () => {
       const data = buildDataByDate(['2026-04-29'])
-      expect(calcStreak(data, TODAY).shownUpThisMonth).toBe(0)
+      expect(calcStreak(data, TODAY_ISO).shownUpThisMonth).toBe(0)
     })
 
     it('stays correct across a year boundary anchor', () => {
-      const newYearDay = new Date('2026-01-01T00:00:00.000Z')
+      const newYearDay = '2026-01-01'
       const data = buildDataByDate(['2025-12-31', '2026-01-01'])
       expect(calcStreak(data, newYearDay).shownUpThisMonth).toBe(1)
     })
   })
 
-  describe('TZ / DST boundaries', () => {
-    it('handles the US spring-forward day without an off-by-one (UTC math)', () => {
-      const dstAnchor = new Date('2026-03-09T08:00:00.000Z')
+  describe('calendar boundaries', () => {
+    it('handles the US spring-forward day without an off-by-one (string calendar math)', () => {
+      const dstAnchor = '2026-03-09'
       const data = buildDataByDate(['2026-03-08', '2026-03-09'])
       const result = calcStreak(data, dstAnchor)
       expect(result.currentStreak).toBe(2)
     })
 
     it('matches across a leap-day boundary', () => {
-      const anchor = new Date('2024-03-01T00:00:00.000Z')
+      const anchor = '2024-03-01'
       const data = buildDataByDate([
         '2024-02-27',
         '2024-02-28',

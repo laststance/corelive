@@ -6,6 +6,7 @@ import { useCallback } from 'react'
 import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
+import { clearedAffirmation } from '@/lib/clearedAffirmation'
 import { TODO_DELETE_UNDO_WINDOW_MS } from '@/lib/constants/todo'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
@@ -507,6 +508,13 @@ export function useTodoMutations(
       )
 
       return { previousActive: undefined, previousCompletedQueries }
+    },
+    onSuccess: ({ deletedCount }) => {
+      // Quiet end-of-session affirmation (D9 / DESIGN.md "Voice & Microcopy").
+      // The cleared completions are ARCHIVED, not lost (the heatmap keeps the
+      // day), so this celebrates the work as it is tidied away — silent at 0.
+      const affirmation = clearedAffirmation(deletedCount)
+      if (affirmation) toast(affirmation)
     },
     onError: (_err, _input, context) => {
       // Retain mode rollback: restore the active-list snapshot.

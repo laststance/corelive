@@ -53,6 +53,26 @@ describe('RouteError (route-level error boundary)', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
+  it('escapes to home with a hard navigation when "Back to home" is pressed', async () => {
+    // Arrange: reset() re-renders the SAME crashed segment, so a deterministic
+    // throw (e.g. a stale preload) dead-ends — the secondary action must leave
+    // the route via a hard nav (fresh document + fresh bundle), never reset().
+    const reset = vi.fn()
+    const assignToHome = vi
+      .spyOn(window.location, 'assign')
+      .mockImplementation(() => {})
+    const user = userEvent.setup()
+    render(<RouteError error={new Error('boom')} reset={reset} />)
+
+    // Act
+    await user.click(screen.getByRole('button', { name: /back to home/i }))
+
+    // Assert: a hard navigation to the safe home route, and reset() is NOT it.
+    expect(assignToHome).toHaveBeenCalledWith('/')
+    expect(reset).not.toHaveBeenCalled()
+    assignToHome.mockRestore()
+  })
+
   it('does not throw when mounting through the real (unmocked) logger', () => {
     // Lock the last-line-of-defense invariant: the boundary's own mount-time
     // logging must run through the REAL logger without throwing, or the

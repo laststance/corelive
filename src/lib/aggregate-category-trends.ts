@@ -134,8 +134,8 @@ function computeCategoryTrend(
 /**
  * Aggregates per-category 7-day totals and WoW trends from the heatmap
  * response that the home page already fetched. Pure client-side math —
- * no new oRPC procedure needed. Anchored on caller-supplied `today` so
- * tests can pin the window.
+ * no new oRPC procedure needed. Anchored on the caller-supplied `todayIso`
+ * local-day key so tests can pin the window.
  *
  * Ordering: descending by `currentCount`; ties broken alphabetically by
  * `name` (locale-insensitive `'en'` so CI runners stay deterministic).
@@ -144,21 +144,21 @@ function computeCategoryTrend(
  * "quiet week" instead of disappearing, matching DESIGN.md's voice.
  *
  * @param dataByDate - Per-day heatmap entries from `useHeatmapData()`
- * @param today - "Today" anchor (UTC midnight is fine; only UTC parts read)
+ * @param todayIso - "Today" as a YYYY-MM-DD local-day key (callers pass
+ *   `getLocalTodayIsoDate()`)
  * @returns
  * - Array of `CategoryTrendEntry` sorted by `currentCount` desc
  * @example
- * aggregateCategoryTrends(new Map(), new Date('2026-05-12Z'))
+ * aggregateCategoryTrends(new Map(), '2026-05-12')
  * // => []
  * @example
- * aggregateCategoryTrends(dataByDate, new Date('2026-05-12Z'))
+ * aggregateCategoryTrends(dataByDate, '2026-05-12')
  * // => [{ id: 1, name: 'writing', color: 'blue', currentCount: 5, priorCount: 4, trend: { kind: 'percent', value: 25 } }, ...]
  */
 export function aggregateCategoryTrends(
   dataByDate: Map<string, HeatmapDay>,
-  today: Date,
+  todayIso: string,
 ): CategoryTrendEntry[] {
-  const todayIso = today.toISOString().slice(0, 10)
   const priorWindowEndIso = shiftIsoDate(todayIso, -CATEGORY_WINDOW_DAYS)
 
   const currentCounts = sumCategoriesInWindow(dataByDate, todayIso)

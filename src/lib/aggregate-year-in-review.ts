@@ -41,7 +41,7 @@ export type YearInReview = {
     color: string
     count: number
   }>
-  /** Calendar year the review is anchored on (UTC year of `today`). */
+  /** Calendar year the review is anchored on (year of the local `todayIso`). */
   year: number
   /**
    * Whether the user has enough distinct active days for the modal to
@@ -70,18 +70,19 @@ const TOP_CATEGORIES_COUNT = 3
  * are counted, so the rollup stays year-pure.
  *
  * @param dataByDate - Per-day heatmap entries from `useHeatmapData()`
- * @param today - "Today" anchor — production callers pass `new Date()`
+ * @param todayIso - "Today" as a YYYY-MM-DD local-day key — production callers
+ *   pass `getLocalTodayIsoDate()`
  * @returns
- * - `YearInReview` summary for `today`'s UTC calendar year
+ * - `YearInReview` summary for `todayIso`'s calendar year
  * @example
- * aggregateYearInReview(new Map(), new Date('2026-12-15Z'))
+ * aggregateYearInReview(new Map(), '2026-12-15')
  * // => { totalCompleted: 0, activeDays: 0, longestStreak: 0, topCategories: [], year: 2026, eligible: false }
  */
 export function aggregateYearInReview(
   dataByDate: Map<string, HeatmapDay>,
-  today: Date,
+  todayIso: string,
 ): YearInReview {
-  const year = today.getUTCFullYear()
+  const year = Number(todayIso.slice(0, 4))
   const yearPrefix = `${year}-`
 
   let totalCompleted = 0
@@ -128,7 +129,7 @@ export function aggregateYearInReview(
   for (const [isoDate, day] of dataByDate) {
     if (isoDate.startsWith(yearPrefix)) yearScopedData.set(isoDate, day)
   }
-  const { longestStreak } = calcStreak(yearScopedData, today)
+  const { longestStreak } = calcStreak(yearScopedData, todayIso)
 
   return {
     totalCompleted,
@@ -144,7 +145,7 @@ export function aggregateYearInReview(
  * Decides whether the Year-in-Review modal should auto-open for the
  * supplied date + summary. The modal opens when:
  *
- * 1. The anchor date is in December (UTC month index 11), AND
+ * 1. The anchor date is in December (local month 12), AND
  * 2. The user has crossed {@link YIR_MIN_ACTIVE_DAYS} active days for
  *    the year.
  *
@@ -156,24 +157,28 @@ export function aggregateYearInReview(
  * snapshot the modal mid-May without time-warping the system clock —
  * see {@link parseForceDate}.
  *
- * @param today - Anchor date (UTC parts inspected)
+ * @param todayIso - Anchor day as a YYYY-MM-DD local-day key
  * @param summary - Aggregated review for that date's year
  * @returns
  * - `true` when the modal should auto-open, `false` otherwise
  * @example
- * shouldAutoOpenYir(new Date('2026-12-15Z'), eligibleSummary) // => true
- * shouldAutoOpenYir(new Date('2026-05-12Z'), eligibleSummary) // => false
- * shouldAutoOpenYir(new Date('2026-12-15Z'), notEligibleSummary) // => false
+ * shouldAutoOpenYir('2026-12-15', eligibleSummary) // => true
+ * shouldAutoOpenYir('2026-05-12', eligibleSummary) // => false
+ * shouldAutoOpenYir('2026-12-15', notEligibleSummary) // => false
  */
-export function shouldAutoOpenYir(today: Date, summary: YearInReview): boolean {
-  const isDecember = today.getUTCMonth() === 11
+export function shouldAutoOpenYir(
+  todayIso: string,
+  summary: YearInReview,
+): boolean {
+  const isDecember = todayIso.slice(5, 7) === '12'
   return isDecember && summary.eligible
 }
 
 /**
- * Parses a `?force=YYYY-MM-DD` URL search param into a UTC midnight Date.
- * Returns `null` for missing, malformed, or out-of-range values so the
- * caller can fall back to `new Date()` without throwing.
+ * Parses a `?force=YYYY-MM-DD` URL search param into a validated YYYY-MM-DD
+ * local-day key. Returns `null` for missing, malformed, or non-calendar
+ * values so the caller can fall back to `getLocalTodayIsoDate()` without
+ * throwing.
  *
  * The flag is strictly opt-in (QA-only) and never exposed in the UI —
  * users who land on a URL carrying `?force=` see the same modal a real
@@ -181,14 +186,15 @@ export function shouldAutoOpenYir(today: Date, summary: YearInReview): boolean {
  *
  * @param raw - Raw `?force=` value or `null` from `URLSearchParams.get`
  * @returns
- * - `Date` at UTC midnight when `raw` is a valid YYYY-MM-DD
+ * - The validated YYYY-MM-DD string when `raw` is a real calendar date
  * - `null` when missing or malformed
  * @example
- * parseForceDate('2026-12-31')  // => Date('2026-12-31T00:00:00.000Z')
+ * parseForceDate('2026-12-31')  // => '2026-12-31'
+ * parseForceDate('2026-02-30')  // => null (not a real calendar date)
  * parseForceDate('bogus')       // => null
  * parseForceDate(null)          // => null
  */
-export function parseForceDate(raw: string | null): Date | null {
+export function parseForceDate(raw: string | null): string | null {
   if (!raw) return null
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
   const candidate = new Date(`${raw}T00:00:00.000Z`)
@@ -197,5 +203,5 @@ export function parseForceDate(raw: string | null): Date | null {
   // JS Date silently rolls to `2026-03-02`). Without this, the URL surface
   // says one date but the modal renders a different year.
   if (candidate.toISOString().slice(0, 10) !== raw) return null
-  return candidate
+  return raw
 }

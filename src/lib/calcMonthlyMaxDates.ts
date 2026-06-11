@@ -6,11 +6,19 @@ import type { HeatmapDay } from '@/hooks/useHeatmapData'
  * a `◎` glyph on these cells so each month's "best day" reads at a glance
  * without crowding lighter days.
  *
- * Decisions (locked in eng review §1.5):
- * - **Tie policy:** earliest date wins. Visual sparsity > completeness; a
- *   single anchor per month keeps the heatmap quiet. Tracked as a deferred
- *   TODO ("Per-month tie-break for max mark") if user feedback wants ties
- *   surfaced.
+ * Decisions (locked in eng review §1.5; tie policy ratified 2026-06-11):
+ * - **Tie policy:** earliest date wins — and this is the deliberate, final
+ *   rule, not a placeholder. Two alternatives were weighed and rejected:
+ *   *all-tied-marked* scatters ◎ across every active day in a low-uniform
+ *   month (e.g. one task most days → max 1 → dozens of marks), turning the
+ *   quiet "best day" anchor into meaningless wallpaper and breaking DESIGN.md
+ *   sparsity; *latest-wins* makes the glyph JUMP — a later equal day strips
+ *   the ◎ off the day that first earned it, which reads as recognition being
+ *   taken away (the opposite of the self-affirmation north star). Earliest
+ *   gives exactly one quiet anchor per month AND is stable: it pins to the
+ *   first day you reached your high-water mark and never moves or vanishes as
+ *   the month fills. A later tie is silently un-marked (no glyph, no absence
+ *   highlight) — nothing earned is ever visibly lost.
  * - **Empty months:** months whose days are all `count === 0` are excluded.
  *   A peak of zero is not a peak; rendering ◎ on a fully-rest month would
  *   read as a false accomplishment.

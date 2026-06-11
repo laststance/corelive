@@ -5,10 +5,10 @@ import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { aggregateLastSevenDays } from './aggregate-last-seven-days'
 
 /**
- * Anchor "today" used across cases. UTC midnight is fine — the util reads UTC
- * parts only, so the picked moment maps cleanly onto YYYY-MM-DD buckets.
+ * Anchor "today" used across cases — a local-day key string, since the util
+ * now takes the caller's pre-derived YYYY-MM-DD rather than a Date.
  */
-const TODAY = new Date('2026-05-11T00:00:00.000Z')
+const TODAY_ISO = '2026-05-11'
 
 /**
  * Builds a single HeatmapDay entry for tests. Defaults to one "writing" task
@@ -27,7 +27,7 @@ function buildHeatmapDay(
 
 describe('aggregateLastSevenDays', () => {
   it('returns firstWeek when the heatmap response is empty', () => {
-    const stats = aggregateLastSevenDays(new Map(), TODAY)
+    const stats = aggregateLastSevenDays(new Map(), TODAY_ISO)
     expect(stats).toEqual({
       totalCompleted: 0,
       priorTotal: 0,
@@ -43,7 +43,7 @@ describe('aggregateLastSevenDays', () => {
     const dataByDate = new Map<string, HeatmapDay>([
       buildHeatmapDay('2026-04-11', 3),
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.totalCompleted).toBe(0)
     expect(stats.priorTotal).toBe(0)
     expect(stats.trend).toEqual({ kind: 'flat' })
@@ -55,7 +55,7 @@ describe('aggregateLastSevenDays', () => {
     const dataByDate = new Map<string, HeatmapDay>([
       buildHeatmapDay('2026-05-08', 5),
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.totalCompleted).toBe(5)
     expect(stats.priorTotal).toBe(0)
     expect(stats.trend).toEqual({ kind: 'new' })
@@ -66,7 +66,7 @@ describe('aggregateLastSevenDays', () => {
       buildHeatmapDay('2026-05-08', 5), // current window
       buildHeatmapDay('2026-05-01', 5), // prior window
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.totalCompleted).toBe(5)
     expect(stats.priorTotal).toBe(5)
     expect(stats.trend).toEqual({ kind: 'percent', value: 0 })
@@ -77,7 +77,7 @@ describe('aggregateLastSevenDays', () => {
       buildHeatmapDay('2026-05-08', 10),
       buildHeatmapDay('2026-05-01', 5),
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.totalCompleted).toBe(10)
     expect(stats.priorTotal).toBe(5)
     expect(stats.trend).toEqual({ kind: 'percent', value: 100 })
@@ -88,7 +88,7 @@ describe('aggregateLastSevenDays', () => {
       buildHeatmapDay('2026-05-08', 4),
       buildHeatmapDay('2026-05-01', 8),
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.trend).toEqual({ kind: 'percent', value: -50 })
   })
 
@@ -109,7 +109,7 @@ describe('aggregateLastSevenDays', () => {
         },
       ],
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.topCategories.map((category) => category.id)).toEqual([
       1, 2, 3,
     ])
@@ -133,7 +133,7 @@ describe('aggregateLastSevenDays', () => {
         },
       ],
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.topCategories.map((category) => category.name)).toEqual([
       'amber',
       'blue',
@@ -147,7 +147,7 @@ describe('aggregateLastSevenDays', () => {
       buildHeatmapDay('2026-05-08', 7),
       buildHeatmapDay('2026-05-01', 3),
     ])
-    const stats = aggregateLastSevenDays(dataByDate, TODAY)
+    const stats = aggregateLastSevenDays(dataByDate, TODAY_ISO)
     expect(stats.trend).toEqual({ kind: 'percent', value: 133 })
   })
 })

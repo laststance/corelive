@@ -1,5 +1,7 @@
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
+import { shiftIsoDate } from './shiftIsoDate'
+
 /**
  * Length of the "current" and "prior" windows used by the weekly summary.
  * Seven calendar days each, rolling, anchored on the day passed as `today`.
@@ -55,8 +57,8 @@ export type WeeklyTrend =
 
 /**
  * Output of {@link aggregateLastSevenDays}. `totalCompleted` and `priorTotal`
- * use UTC day buckets so they line up with the heatmap data they were
- * derived from.
+ * are summed over the same local-day keys as the heatmap data they were
+ * derived from, so the windows line up with what the user actually sees.
  *
  * @example
  * {
@@ -77,34 +79,12 @@ export type WeeklyStats = {
 }
 
 /**
- * Returns the YYYY-MM-DD UTC date string offset `dayOffset` days from
- * `anchor`. Positive offsets move forward in time. Used to walk the
- * rolling 7-day windows for the WoW calculation.
- *
- * Pure UTC arithmetic — DST-safe by construction since UTC has no DST.
- *
- * @param anchor - Reference Date the offset is measured from
- * @param dayOffset - Integer days to shift (e.g. -7 → "one week earlier")
- * @returns
- * - YYYY-MM-DD string in UTC
- * @example
- * shiftedIsoDate(new Date('2026-05-11T00:00:00.000Z'), -1) // => "2026-05-10"
- * @example
- * shiftedIsoDate(new Date('2026-05-11T00:00:00.000Z'), 0)  // => "2026-05-11"
- */
-function shiftedIsoDate(anchor: Date, dayOffset: number): string {
-  const shifted = new Date(anchor)
-  shifted.setUTCDate(shifted.getUTCDate() + dayOffset)
-  return shifted.toISOString().slice(0, 10)
-}
-
-/**
  * Sums the per-day counts and folds the per-day category rollups in a
  * sliding window of `WEEKLY_WINDOW_DAYS` ending at `windowEndIsoDate`. The
  * fold is the same shape the heatmap response already returns, so the
  * weekly summary stays consistent with what the heatmap renders.
  *
- * @param dataByDate - Heatmap data keyed by YYYY-MM-DD UTC date
+ * @param dataByDate - Heatmap data keyed by local YYYY-MM-DD date
  * @param windowEndIsoDate - Inclusive end of the window (YYYY-MM-DD)
  * @param windowLength - How many days the window covers (>=1)
  * @returns
@@ -122,12 +102,11 @@ function sumWindow(
   total: number
   categoryCounts: Map<number, TopCategory>
 } {
-  const windowEnd = new Date(`${windowEndIsoDate}T00:00:00.000Z`)
   const categoryCounts = new Map<number, TopCategory>()
   let total = 0
 
   for (let dayOffset = 0; dayOffset < windowLength; dayOffset++) {
-    const isoDate = shiftedIsoDate(windowEnd, -dayOffset)
+    const isoDate = shiftIsoDate(windowEndIsoDate, -dayOffset)
     const day = dataByDate.get(isoDate)
     if (!day) continue
     total += day.count
@@ -153,8 +132,9 @@ function sumWindow(
 /**
  * Derives weekly summary stats (count, top categories, WoW trend) from the
  * heatmap response that the home page already fetches. Pure client-side
- * computation — no new procedure needed. Today is supplied by the caller so
- * tests can pin the anchor; production callers pass `new Date()`.
+ * computation — no new procedure needed. Today is supplied by the caller as a
+ * local-day key so tests can pin the anchor; production callers pass
+ * `getLocalTodayIsoDate()`.
  *
  * Trend state semantics:
  * - `firstWeek` — heatmap is empty for the entire 14-day inspection window;
@@ -165,25 +145,25 @@ function sumWindow(
  * - `percent` — both windows non-zero; `value` is `(current - prior) / prior * 100`.
  *
  * @param dataByDate - Per-day heatmap entries from `useHeatmapData()`
- * @param today - "Today" anchor (UTC midnight is fine; the function only reads UTC parts)
+ * @param todayIso - "Today" as a YYYY-MM-DD local-day key (callers pass
+ *   `getLocalTodayIsoDate()`)
  * @returns
  * - `WeeklyStats` with totals, top-3 categories, and discriminated trend
  * @example
- * aggregateLastSevenDays(new Map(), new Date('2026-05-11Z'))
+ * aggregateLastSevenDays(new Map(), '2026-05-11')
  * // => { totalCompleted: 0, priorTotal: 0, topCategories: [], trend: { kind: 'firstWeek' } }
  * @example
  * // Map has 7 entries in current window, 0 in prior window
- * aggregateLastSevenDays(dataByDate, new Date('2026-05-11Z'))
+ * aggregateLastSevenDays(dataByDate, '2026-05-11')
  * // => { totalCompleted: 7, priorTotal: 0, topCategories: [...], trend: { kind: 'new' } }
  */
 export function aggregateLastSevenDays(
   dataByDate: Map<string, HeatmapDay>,
-  today: Date,
+  todayIso: string,
 ): WeeklyStats {
-  const todayIsoDate = today.toISOString().slice(0, 10)
-  const priorWindowEnd = shiftedIsoDate(today, -WEEKLY_WINDOW_DAYS)
+  const priorWindowEnd = shiftIsoDate(todayIso, -WEEKLY_WINDOW_DAYS)
 
-  const current = sumWindow(dataByDate, todayIsoDate, WEEKLY_WINDOW_DAYS)
+  const current = sumWindow(dataByDate, todayIso, WEEKLY_WINDOW_DAYS)
   const prior = sumWindow(dataByDate, priorWindowEnd, WOW_PRIOR_WINDOW_DAYS)
 
   const topCategories = Array.from(current.categoryCounts.values())

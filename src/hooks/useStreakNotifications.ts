@@ -5,6 +5,7 @@ import { useRef } from 'react'
 
 import type { StreakTier } from '@/lib/calc-streak'
 import { calcStreak, STREAK_TIERS } from '@/lib/calc-streak'
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { log } from '@/lib/logger'
 
 import { useCycleEffect } from './use-cycle-effect'
@@ -153,7 +154,8 @@ function writeStoredTier(storageKey: string, tier: number): void {
  *   stale persisted snapshot from firing the wrong tier *before* the live
  *   fetch settles — without this gate a long-offline user could trip the
  *   max-tier latch with last week's data and never see future milestones.
- * @param input.now - Optional injection for tests; defaults to `new Date()`
+ * @param input.todayIso - Optional "today" YYYY-MM-DD local-day key for tests;
+ *   defaults to `getLocalTodayIsoDate()` (the browser's local day)
  * @returns
  * - Nothing — the hook is fire-and-forget
  * @example
@@ -165,9 +167,9 @@ export function useStreakNotifications(input: {
   dataByDate: Map<string, HeatmapDay>
   isLoading: boolean
   isRestoring?: boolean
-  now?: Date
+  todayIso?: string
 }): void {
-  const { dataByDate, isLoading, isRestoring, now } = input
+  const { dataByDate, isLoading, isRestoring, todayIso } = input
   const { isSupported, isEnabled, showNotification } =
     useElectronNotifications()
   // Scope the dedupe key to the signed-in Clerk user so two accounts
@@ -208,7 +210,10 @@ export function useStreakNotifications(input: {
       latchedTierRef.current = { userId, tier: 0 }
     }
 
-    const { currentTier } = calcStreak(dataByDate, now ?? new Date())
+    const { currentTier } = calcStreak(
+      dataByDate,
+      todayIso ?? getLocalTodayIsoDate(),
+    )
     if (currentTier === null) return
 
     const storageKey = storageKeyFor(userId)
@@ -239,7 +244,7 @@ export function useStreakNotifications(input: {
     isSupported,
     isEnabled,
     showNotification,
-    now,
+    todayIso,
     userId,
   ])
 }

@@ -2,7 +2,12 @@
 import { arrayMove } from '@dnd-kit/helpers'
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
-import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useIsRestoring,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
 import { memo, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 
@@ -106,7 +111,15 @@ export const TodoList = memo(function TodoList() {
   )
 
   // Fetch pending todos (filtered by selected category)
-  const { data: pendingData, isLoading: pendingLoading } = useQuery({
+  const {
+    data: pendingData,
+    isLoading: pendingLoading,
+    // True while the kept-previous list is on screen during a refetch (the
+    // 居残りモード toggle and category switches change the query input). The D8
+    // fade keys off this to tell the STALE placeholder render apart from the
+    // settled one — see the retroactive-populate effect below.
+    isPlaceholderData: isPendingPlaceholderData,
+  } = useQuery({
     ...orpc.todo.list.queryOptions({
       input: {
         // 居残りモード drops the completed:false filter so the active list holds
@@ -119,6 +132,10 @@ export const TodoList = memo(function TodoList() {
       },
     }),
     enabled: isClerkQueryReady,
+    // Keep the previous list painted while the toggle/category refetch is in
+    // flight so the pending rows never blank-flash; the completed-since-clear
+    // rows arrive with the settled result and fade IN over them (L1 + D8).
+    placeholderData: keepPreviousData,
   })
 
   // Heatmap data shared with WeeklySummaryCard + SundayDigestCard + the
@@ -320,7 +337,13 @@ export const TodoList = memo(function TodoList() {
   // completed. The completed rows land a few renders after the toggle (the toggle
   // changes the query input → refetch), so we ARM on the OFF→ON transition and
   // play the fade when they actually arrive. Enter-only by design: ON→OFF removes
-  // the rows instantly — no framer-motion exit animation is wired here (TODOS.md T10).
+  // the rows instantly. A symmetric fade-OUT (L6) is deferred — an in-place exit
+  // needs the leaving rows to hold their INTERLEAVED positions while they fade, but
+  // those rows are sortables registered by positional `index` (@dnd-kit/react 0.4,
+  // see SortableTodoItem); keeping them mounted to fade desyncs that index from the
+  // data array. A CSS ghost (pollutes counts/dnd/sync) and Radix Presence (keeps
+  // useSortable mounted → same index drift) don't escape it. The enter fade carries
+  // the affirmation; ON→OFF is a deliberate "hide" where instant removal reads right.
   const previousVisibleTodoIdsRef =
     useRef<ReadonlySet<string>>(EMPTY_TODO_ID_SET)
   const [retroactivePopulateFadeIds, setRetroactivePopulateFadeIds] =
@@ -335,27 +358,39 @@ export const TodoList = memo(function TodoList() {
   // After the toggle's refetch settles, fade the rows it surfaced — once. The
   // newly-present diff excludes in-place checks even within the armed window, so
   // checking a task right after toggling ON (with nothing else done) stays quiet.
+  //
+  // Diffed against pendingTodosFromQuery (the raw query snapshot), NOT pendingTodos
+  // (= localPendingTodos, which lags it by one render through the optimistic-reorder
+  // buffer). With keepPreviousData the settle and the isPlaceholderData=false signal
+  // land on the SAME query snapshot, so keying off the query list keeps the diff and
+  // the placeholder gate in lockstep — diffing the lagged list would let the stale
+  // placeholder render disarm before the completed rows arrive and swallow the fade.
   useCycleEffect(() => {
     if (retroactivePopulateArmedRef.current) {
       const newlyPresentCompletedIds = selectNewlyPresentCompletedTodoIds(
-        pendingTodos,
+        pendingTodosFromQuery,
         previousVisibleTodoIdsRef.current,
       )
       if (newlyPresentCompletedIds.length > 0) {
         retroactivePopulateArmedRef.current = false
         setRetroactivePopulateFadeIds(new Set(newlyPresentCompletedIds))
-      } else if (pendingTodos.length > 0) {
-        // Refetch settled with rows but none surfaced — consume the arm so a later
-        // unrelated diff (an imported/synced completed row) can't replay the fade.
-        // The flash blanks the list, so the first non-empty render is the settled
-        // one; revisit if placeholderData/keepPreviousData is added (stale rows race).
+      } else if (
+        pendingTodosFromQuery.length > 0 &&
+        !isPendingPlaceholderData
+      ) {
+        // Settled (fresh, not the kept-previous placeholder) with rows but none
+        // surfaced — consume the arm so a later unrelated diff (an imported/synced
+        // completed row) can't replay the fade. The !isPendingPlaceholderData gate
+        // is load-bearing under keepPreviousData: the placeholder render shows the
+        // PRE-toggle list (no completed rows yet), so disarming there would consume
+        // the arm one render before the real completed rows land.
         retroactivePopulateArmedRef.current = false
       }
     }
     previousVisibleTodoIdsRef.current = new Set(
-      pendingTodos.map((todoRow) => todoRow.id),
+      pendingTodosFromQuery.map((todoRow) => todoRow.id),
     )
-  }, [pendingTodos])
+  }, [pendingTodosFromQuery, isPendingPlaceholderData])
 
   // Strip the fade class once the enter animation has played, so a later
   // re-render/remount (reorder, cross-window sync) can't replay it.

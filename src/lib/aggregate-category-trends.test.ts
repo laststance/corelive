@@ -5,7 +5,6 @@ import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { aggregateCategoryTrends } from './aggregate-category-trends'
 import { shiftIsoDate } from './shiftIsoDate'
 
-const TODAY = new Date('2026-05-12T00:00:00.000Z')
 const TODAY_ISO = '2026-05-12'
 
 /**
@@ -65,7 +64,7 @@ function mergeHeatmaps(
 
 describe('aggregateCategoryTrends', () => {
   it('returns an empty array on an empty heatmap', () => {
-    expect(aggregateCategoryTrends(new Map(), TODAY)).toEqual([])
+    expect(aggregateCategoryTrends(new Map(), TODAY_ISO)).toEqual([])
   })
 
   it('reports `new` trend when category has current-week activity but no prior-week activity', () => {
@@ -79,7 +78,7 @@ describe('aggregateCategoryTrends', () => {
       countPerDay: 1,
     })
 
-    const result = aggregateCategoryTrends(dataByDate, TODAY)
+    const result = aggregateCategoryTrends(dataByDate, TODAY_ISO)
 
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
@@ -103,7 +102,7 @@ describe('aggregateCategoryTrends', () => {
       countPerDay: 1,
     })
 
-    const result = aggregateCategoryTrends(olderActivity, TODAY)
+    const result = aggregateCategoryTrends(olderActivity, TODAY_ISO)
     // Older-only categories are still surfaced because the prior-window
     // walk includes them — they aren't in either inspection window, but
     // since `hasHistoricalActivity` is true their trend MUST read `flat`
@@ -129,7 +128,7 @@ describe('aggregateCategoryTrends', () => {
     })
     const dataByDate = mergeHeatmaps(currentWeek, priorWeek)
 
-    const result = aggregateCategoryTrends(dataByDate, TODAY)
+    const result = aggregateCategoryTrends(dataByDate, TODAY_ISO)
     expect(result).toHaveLength(1)
     expect(result[0]?.trend).toEqual({ kind: 'percent', value: 25 })
     expect(result[0]?.currentCount).toBe(5)
@@ -151,7 +150,7 @@ describe('aggregateCategoryTrends', () => {
     })
     const dataByDate = mergeHeatmaps(currentWeek, priorWeek)
 
-    const result = aggregateCategoryTrends(dataByDate, TODAY)
+    const result = aggregateCategoryTrends(dataByDate, TODAY_ISO)
     expect(result[0]?.trend).toEqual({ kind: 'percent', value: -50 })
   })
 
@@ -176,7 +175,7 @@ describe('aggregateCategoryTrends', () => {
     })
     const dataByDate = mergeHeatmaps(mergeHeatmaps(writing, reading), exercise)
 
-    const result = aggregateCategoryTrends(dataByDate, TODAY)
+    const result = aggregateCategoryTrends(dataByDate, TODAY_ISO)
     expect(result.map((entry) => entry.name)).toEqual([
       'exercise', // 5 — highest count
       'reading', // 3 — tied count, alphabetically before 'writing'
@@ -206,7 +205,7 @@ describe('aggregateCategoryTrends', () => {
       )
     }
 
-    const result = aggregateCategoryTrends(dataByDate, TODAY)
+    const result = aggregateCategoryTrends(dataByDate, TODAY_ISO)
     // The util surfaces ALL categories — the chip component (not the util)
     // decides whether to collapse them into a `<Select>` on mobile. This
     // separation lets the chip row stay an opinion-free renderer.
@@ -224,7 +223,7 @@ describe('aggregateCategoryTrends', () => {
       countPerDay: 1,
     })
 
-    const result = aggregateCategoryTrends(priorWeek, TODAY)
+    const result = aggregateCategoryTrends(priorWeek, TODAY_ISO)
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
       id: 7,

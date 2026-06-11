@@ -2,17 +2,12 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
 import { createManyCompleted, deleteManyCompleted } from './completed'
-
-// Real-DB integration suites: run only when RUN_DB_INTEGRATION_TESTS=1 (the CI
-// `test` job sets it after Postgres is up; set it locally with `docker compose
-// up`). Skip cleanly in DB-less contexts so they never block unrelated runs.
-const describeIfDb =
-  process.env.RUN_DB_INTEGRATION_TESTS === '1' ? describe : describe.skip
+import { describeIfDb } from './describeIfDb'
 
 /**
  * Real-DB procedure harness. Each test creates a fresh user via a unique Clerk
