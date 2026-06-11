@@ -9,31 +9,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  # Needed for creating GitHub Releases via gh CLI
-  contents: write
-  # Needed for uploading SARIF (Trivy)
-  security-events: write
+  contents: read
 
-env:
-  NODE_VERSION: '24.13.0'
+concurrency:
+  group: build-and-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
 
       - name: Run type check
         run: pnpm typecheck
@@ -53,18 +43,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
 
       - name: Set environment variables
         env:
@@ -77,21 +59,22 @@ jobs:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
         shell: bash
         run: |
-          touch .env
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}" >> .env
-          echo "NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL}" >> .env
-          echo "CLERK_SECRET_KEY=${CLERK_SECRET_KEY}" >> .env
-          echo "WEBHOOK_SECRET=${WEBHOOK_SECRET}" >> .env
-          echo "POSTGRES_PRISMA_URL=${POSTGRES_PRISMA_URL}" >> .env
+          {
+            printf 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=%s\n' "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_IN_URL"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_UP_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_UP_URL"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL"
+            printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
+            printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
+            printf 'POSTGRES_PRISMA_URL=%s\n' "$POSTGRES_PRISMA_URL"
+          } > .env
 
       - name: Build Next.js app
         run: pnpm build
 
       - name: Import Code-Signing Certificates
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        uses: Apple-Actions/import-codesign-certs@v6
+        uses: Apple-Actions/import-codesign-certs@8cd59b36c197ab4209cc6cf6eb93e47835f79b28 # v6
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
@@ -112,7 +95,7 @@ jobs:
         run: pnpm electron:build:dir
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: electron-app-macos
           path: |
@@ -127,13 +110,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      # Needed for creating GitHub Releases via gh CLI.
+      contents: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
 
@@ -161,12 +147,17 @@ jobs:
 
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed for uploading SARIF (Trivy).
+      security-events: write
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -174,7 +165,7 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@411bbbe57033eedfc1a82d68c01345aa96c737d7 # v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'

@@ -8,26 +8,22 @@ on:
   # Allow manual workflow dispatch
   workflow_dispatch:
 
-env:
-  NODE_VERSION: '24.13.0'
+permissions:
+  contents: read
+
+concurrency:
+  group: storybook-test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   storybook-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
 
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
@@ -40,7 +36,7 @@ jobs:
 
       - name: Upload Storybook test results
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: storybook-test-results
           path: storybook-test-results/

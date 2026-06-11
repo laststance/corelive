@@ -11,6 +11,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-web-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ----------------------------------------------------------------------------
   # detect-specs
@@ -36,7 +43,7 @@ jobs:
       total: ${{ steps.list.outputs.total }}
     steps:
       - name: Checkout repository 🔄
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Enumerate e2e/web/*.spec.ts
         id: list
@@ -74,7 +81,7 @@ jobs:
 
     steps:
       - name: Checkout repository 🔄
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Use shared prepare action 🔧
         uses: ./.github/actions/prepare
@@ -159,7 +166,7 @@ jobs:
 
       - name: Upload Blob Report 🧊
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           # Each spec gets its own blob artifact so `merge-reports` can fan
           # them back into a single HTML report. The pattern `blob-report-*`
@@ -170,7 +177,7 @@ jobs:
 
       - name: Upload Test Results 📋
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           # Only upload on failure — test-results/ holds traces, screenshots,
           # and videos that bloat artifact storage when every shard ships
@@ -192,13 +199,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository 🔄
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Use shared prepare action 🔧
         uses: ./.github/actions/prepare
 
       - name: Download blob reports
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           # `merge-multiple: true` flattens every `blob-report-*` artifact
           # into the same `all-blob-reports/` directory. Blob filenames
@@ -211,7 +218,7 @@ jobs:
         run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           # Suffix with `attempt-N` so re-runs don't overwrite prior reports
           # in the same workflow run.
