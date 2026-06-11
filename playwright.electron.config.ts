@@ -19,7 +19,7 @@ import baseConfig from './playwright.config'
  *
  * The `webServer`, `use`, `globalSetup`, and other top-level options are
  * inherited unchanged from the base config — `_electron.launch()` still
- * needs Next.js running on `localhost:3011`, and the `webServer` block
+ * needs Next.js running on `localhost:4991`, and the `webServer` block
  * fires globally for every project including this one.
  */
 export default defineConfig({

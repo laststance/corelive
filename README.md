@@ -130,7 +130,7 @@ yarn dev
 bun dev
 ```
 
-Open [http://localhost:3011](http://localhost:3011) with your browser to see the result.
+Open [http://localhost:4991](http://localhost:4991) with your browser to see the result.
 
 You can start editing the page by modifying files under `src/app/`. The page auto-updates as you edit.
 
@@ -139,7 +139,7 @@ This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-opti
 ### Ngrok
 
 Need ngrok to recive create.user event [webhook](https://clerk.com/docs/webhooks/overview) from Clerk in local.  
-like `ngrok http --domain=foo.bar-ngrok.app 3011`
+like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
 ## Desktop Application (Electron - macOS only)
 

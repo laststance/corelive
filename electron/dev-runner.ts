@@ -43,7 +43,7 @@ import { log } from './logger'
  *
  * This can take 5-30 seconds depending on project size.
  *
- * @param url - URL to check (http://localhost:3011)
+ * @param url - URL to check (http://localhost:4991)
  * @param retries - Max attempts (default: 30 = 30 seconds)
  * @returns Promise that resolves when server is ready
  */
@@ -105,7 +105,7 @@ async function startElectron(): Promise<void> {
   try {
     // Wait for Next.js to be fully ready
     log.info('⏳ Waiting for Next.js dev server...')
-    await checkServer('http://localhost:3011')
+    await checkServer('http://localhost:4991')
     log.info('✅ Next.js is ready')
 
     // macOS only: stamp the unpackaged dev Electron with a unique bundle id so

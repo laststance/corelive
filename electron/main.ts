@@ -127,7 +127,7 @@ if (remoteDebuggingPort) {
  * E2E renderer URL override.
  *
  * The Playwright Electron E2E suite (`e2e/electron/*.spec.ts`) loads the
- * renderer from a local Next.js server (`http://localhost:3011`) so tests
+ * renderer from a local Next.js server (`http://localhost:4991`) so tests
  * never hit production. To swap the URL without flipping the rest of the
  * dev/prod surface (CSP `'unsafe-eval'`, optimization level), we accept a
  * dedicated `ELECTRON_RENDERER_URL` env var. Production runs leave this
@@ -914,7 +914,7 @@ async function createWindow(): Promise<BrowserWindow> {
     // optimization level identical to production for high-fidelity tests.
     const serverUrl =
       process.env.ELECTRON_RENDERER_URL ??
-      (isDev ? 'http://localhost:3011' : 'https://corelive.app')
+      (isDev ? 'http://localhost:4991' : 'https://corelive.app')
 
     // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 

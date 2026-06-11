@@ -175,10 +175,10 @@ not duplicate rows (`prisma/seed.ts:60-83`).
 pnpm dev
 ```
 
-**Expected:** Next.js starts on port **3011** (`package.json:22`) and prints a
+**Expected:** Next.js starts on port **4991** (`package.json:22`) and prints a
 ready message. Leave this running.
 
-Open <http://localhost:3011> in your browser.
+Open <http://localhost:4991> in your browser.
 
 **Expected:** the app loads. Because the home routes are protected by Clerk
 (`src/proxy.ts`), an unauthenticated visit redirects you to the `/login` page.

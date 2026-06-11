@@ -166,11 +166,11 @@ export class OAuthManager {
    * Resolves the web app origin from the current BrowserWindow URL.
    *
    * @returns
-   * - The current app origin, such as `http://localhost:3011` in development.
+   * - The current app origin, such as `http://localhost:4991` in development.
    * - The production origin fallback when no window URL is available.
    * @example
-   * // Dev BrowserWindow URL: http://localhost:3011/login
-   * // => 'http://localhost:3011'
+   * // Dev BrowserWindow URL: http://localhost:4991/login
+   * // => 'http://localhost:4991'
    * @example
    * // Production BrowserWindow URL: https://corelive.app/home
    * // => 'https://corelive.app'

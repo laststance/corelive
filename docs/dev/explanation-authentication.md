@@ -108,7 +108,7 @@ Some Clerk outcomes can't complete inside the WebView session. If the ticket exc
 
 ### Why the OAuth origin is derived, not hardcoded
 
-`buildOAuthURL` reads the origin from the **live `BrowserWindow` URL** rather than a constant (`electron/OAuthManager.ts:156-192`). This keeps the Clerk environment aligned across the browser hop: a dev Electron build (loaded from `localhost:3011`) starts OAuth on the _dev_ origin with _dev_ Clerk keys, and prod (loaded from `corelive.app`) uses prod. Hardcoding the origin would let a dev build create OAuth state on a production page and then fail to consume the returned ticket with development keys. The environment must stay consistent end-to-end, so the origin follows the window.
+`buildOAuthURL` reads the origin from the **live `BrowserWindow` URL** rather than a constant (`electron/OAuthManager.ts:156-192`). This keeps the Clerk environment aligned across the browser hop: a dev Electron build (loaded from `localhost:4991`) starts OAuth on the _dev_ origin with _dev_ Clerk keys, and prod (loaded from `corelive.app`) uses prod. Hardcoding the origin would let a dev build create OAuth state on a production page and then fail to consume the returned ticket with development keys. The environment must stay consistent end-to-end, so the origin follows the window.
 
 ## Smaller things worth keeping straight
 

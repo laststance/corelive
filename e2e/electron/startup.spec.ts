@@ -34,7 +34,7 @@ test('main window opens and loads the local Next.js renderer', async () => {
   })
 
   const url = mainWindow.url()
-  expect(url).toContain('localhost:3011')
+  expect(url).toContain('localhost:4991')
   expect(url).toMatch(/(login|home|sign-in)/)
 })
 
