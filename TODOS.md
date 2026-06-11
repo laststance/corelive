@@ -22,7 +22,7 @@ function that will pull it off the deferred list.
       completion timestamps to avoid streak drift on backdated edits.
       Effort: ~half day human / ~30 min CC.
 
-- [ ] **archiveCompletedTodos is not idempotent — a rapid double-clear inflates the heatmap COUNT.**
+- [x] **archiveCompletedTodos is not idempotent — a rapid double-clear inflates the heatmap COUNT.** ✅ 2026-06-12 (CLOSED — accepted as a known limitation, NOT code-fixed; the forcing function below still reopens it if a wrong count is reported)
       Surfaced by CodeRabbit on PR #60 (#3). Two clears (or clear + per-item
       delete) firing in parallel can each archive the same completed Todo before
       either deletes it, inserting two Completed rows for one completion, so that
@@ -147,7 +147,7 @@ function that will pull it off the deferred list.
       on a real clear (archives ≥1) and stays a soft microcopy beat, not a celebration.
       Part 0 (archive-on-clear) already landed, so the dependency was satisfied.
 
-- [ ] **居残りモード切替時の fade トランジション (D8) — enter-half SHIPPED + runtime-verified; only the fade-OUT remains.**
+- [x] **居残りモード切替時の fade トランジション (D8) — enter SHIPPED + video-verified; fade-OUT intentionally instant (DESIGN-defensible).** ✅ 2026-06-12 (closed — user call; fade-OUT stays instant by design)
       Surfaced in `/plan-design-review` (2026-06-04, D8); built as plan task T10
       (P2). Toggling 居残りモード ON should make todos completed since the last
       clear RETROACTIVELY fade INTO the active list (DESIGN.md enter easing,
@@ -173,10 +173,27 @@ function that will pull it off the deferred list.
       (lockstep with `isPlaceholderData`) instead of the one-render-lagged
       `localPendingTodos`, gating the disarm on `!isPlaceholderData` so the kept-previous
       placeholder render can't swallow the fade. Net visual: pending rows stay rock-stable
-      (no blank), only the completed rows fade in. ⚠️ NEEDS VIDEO RE-VERIFY — visible
-      behavior change to verified motion (the old blank-flash-then-fade-all look is gone);
-      confirm the NEW look matches DESIGN intent, not just "a fade still plays."
-      STILL DEFERRED — the symmetric fade-OUT (ON→OFF). Spiked 2026-06-11: it is NOT a
+      (no blank), only the completed rows fade in. ✅ VIDEO RE-VERIFIED 2026-06-12 (post-#77
+      merge), live `pnpm dev` + Playwright, OFF→ON driven over the preferences BroadcastChannel,
+      both motion AND reduced-motion. Precondition was DB-seeded (`UPDATE Todo SET completed`):
+      UI completion clicks do NOT persist under the synthetic Clerk-test token — a HARNESS
+      artifact, NOT a product issue (the fade only needs rows completed + newly-surfaced, not
+      HOW). rAF opacity time-series + extracted `.webm` frames:
+      — Pending control row rock-stable: opacity flat 1.0, `anim:none`, 0 frames unmounted, 0
+      "No pending tasks" frames across the toggle (the keepPreviousData blank-flash fix holds;
+      D7 selectivity holds).
+      — Completed rows (motion): fade opacity 0→1, firstOp=0, monotonic ramp ≈175ms,
+      `animationName: enter`, NO leading blink (frames go absent→faint→full, never bright-then-dim).
+      — Completed rows (reduced-motion): firstOp=1, flat `[1,1,1,1,1]`, `anim:none`, `enter` never
+      runs → instant snap (frames: clean absent→full in one frame, no ghost).
+      Matches DESIGN.md Motion (short-tier fade 150–250ms, enter `ease-out`, `motion-safe:` gated,
+      subordinate to the heatmap hero); the NEW look is MORE aligned with the "watch your day
+      accumulate" reveal than the old blank-flash-then-fade-all.
+      Scope: verified the toggle-while-TodoList-mounted path — exactly the in-place query refetch
+      L1 touched. The navigate-to-Settings-then-back path is by-design fade-less (`useUpdateEffect`
+      skips the mount run, so the arm never sets — no fade when the user wasn't watching); correct,
+      untouched by L1, out of scope. **Enter half DONE + re-verified.**
+      CLOSED 2026-06-12 (user call) — the symmetric fade-OUT (ON→OFF) ships INSTANT by design. Spiked 2026-06-11: it is NOT a
       simple "wire AnimatePresence" task. An in-place exit needs each leaving completed
       row to hold its INTERLEAVED list position while it fades (TodoList renders pending +
       completed-since-clear in ONE sortable `.map`, ~line 533), but those rows are
@@ -192,7 +209,7 @@ function that will pull it off the deferred list.
       Forcing function: a presence-capable sortable exit (dnd-kit exposes exit hooks, or the
       list moves off positional-index sortables), OR a product decision that the exit fade is
       worth a non-sortable-overlay rewrite. Effort: ~1-2h CC for the overlay rewrite + video
-      verify; deferred as disproportionate to polish on a deliberate hide.
+      verify; closed out as disproportionate to polish on a deliberate hide.
 
 ## Electron resilience
 
