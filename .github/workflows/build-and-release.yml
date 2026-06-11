@@ -74,7 +74,7 @@ jobs:
 
       - name: Import Code-Signing Certificates
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        uses: Apple-Actions/import-codesign-certs@fe74d46e82474f87e1ba79832ad28a4013d0e33a # v6
+        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
