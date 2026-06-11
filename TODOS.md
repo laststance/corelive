@@ -104,16 +104,21 @@ function that will pull it off the deferred list.
 
 ## Tooling / Safety
 
-- [ ] **Extend the local-DB guard to per-user write paths.** PR #58 added
-      `scripts/assert-local-db.cjs` as a fail-closed chokepoint on the destructive
-      reset paths (`db:reset` / `db:truncate` / `prisma:migrate`). Still ungated:
-      `pnpm prisma:seed` and the `*.createMany.test.ts` integration suites run a
-      per-user-scoped `deleteMany` against whatever `POSTGRES_PRISMA_URL` points at.
-      Blast radius is bounded (one test user's named fixture rows, not a wipe), so
-      this is LOW — but a misconfigured prod URL would still mutate prod data.
-      Plan: chain the guard onto `prisma:seed` (mind the double-run via `db:reset`)
-      and assert local in the integration-test setup (extend `describeIfDb`).
-      Forcing function: any incident, or the next time dev→Neon is revisited.
+- [x] **Extend the local-DB guard to per-user write paths.** ✅ 2026-06-11 (feat/deferred-a11y-polish-and-tz)
+      PR #58 added `scripts/assert-local-db.cjs` as a fail-closed chokepoint on
+      the destructive reset paths (`db:reset` / `db:truncate` / `prisma:migrate`).
+      Previously ungated: `pnpm prisma:seed` and the `*.createMany.test.ts` /
+      `todo.archive.test.ts` integration suites run a per-user-scoped `deleteMany`
+      against whatever `POSTGRES_PRISMA_URL` points at. Done: (a) chained the gate
+      onto `prisma:seed` (benign double-run via `db:reset` accepted — the gate is
+      idempotent and read-only); (b) extracted the three suites' duplicated
+      `describeIfDb` into a shared `src/server/procedures/describeIfDb.ts` that —
+      when `RUN_DB_INTEGRATION_TESTS=1` — shells out to the SAME gate at import and
+      throws (fail-closed) before any suite/teardown runs, so a remote URL aborts
+      the run instead of mutating prod. Reuses the gate verbatim (one source of
+      truth — no URL parsing duplicated). Locked with `assertLocalDbGate.test.ts`
+      (the gate had zero tests; covers localhost-allow, neon-block, the
+      `?host=` parser-fail-open, backslash, and unparseable cases).
       Effort: ~30 min CC.
 
 ## Completion feedback / affirmation

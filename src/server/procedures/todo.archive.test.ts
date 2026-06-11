@@ -2,24 +2,19 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
 import { fetchCompletedEntries } from '../utils/completedAggregation'
 
+import { describeIfDb } from './describeIfDb'
 import { clearCompleted, createManyTodo, deleteTodo, toggleTodo } from './todo'
 
 // Each case makes several sequential round-trips to the real Postgres (user
 // upsert + category get-or-create + writes), which can exceed the 5s default —
 // give the whole suite a generous ceiling so it never flakes on DB latency.
 vi.setConfig({ testTimeout: 30_000 })
-
-// Real-DB integration suite: runs only when RUN_DB_INTEGRATION_TESTS=1 (the CI
-// `test` job sets it after Postgres is up; set it locally with `docker compose
-// up`). Skips cleanly in DB-less contexts so it never blocks unrelated runs.
-const describeIfDb =
-  process.env.RUN_DB_INTEGRATION_TESTS === '1' ? describe : describe.skip
 
 // A date window wide enough to always contain "now" plus the fixed past day the
 // edit-drift test uses, so fetchCompletedEntries never excludes a row on range.
