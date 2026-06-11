@@ -57,8 +57,8 @@ export type WeeklyTrend =
 
 /**
  * Output of {@link aggregateLastSevenDays}. `totalCompleted` and `priorTotal`
- * use UTC day buckets so they line up with the heatmap data they were
- * derived from.
+ * are summed over the same local-day keys as the heatmap data they were
+ * derived from, so the windows line up with what the user actually sees.
  *
  * @example
  * {

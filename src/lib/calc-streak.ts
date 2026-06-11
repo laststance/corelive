@@ -20,8 +20,8 @@ export type StreakTier = (typeof STREAK_TIERS)[number] | null
 
 /**
  * Result of {@link calcStreak}. All fields are computed against the supplied
- * `today` anchor in UTC so tests and SSR are deterministic; the hook layer
- * is responsible for sourcing "now" appropriately.
+ * `todayIso` local-day key via pure string math so tests and SSR are
+ * deterministic; the hook layer is responsible for sourcing "today" appropriately.
  *
  * @example
  * {
@@ -32,12 +32,12 @@ export type StreakTier = (typeof STREAK_TIERS)[number] | null
  * }
  */
 export type StreakSummary = {
-  /** Consecutive UTC days ending today (or yesterday — grace period) with at
-   * least one completed entry. Zero when the most recent activity is older
-   * than yesterday. */
+  /** Consecutive calendar days ending today (or yesterday — grace period)
+   * with at least one completed entry. Zero when the most recent activity is
+   * older than yesterday. */
   currentStreak: number
-  /** Longest run of consecutive UTC days with at least one entry anywhere in
-   * `dataByDate`. */
+  /** Longest run of consecutive calendar days with at least one entry anywhere
+   * in `dataByDate`. */
   longestStreak: number
   /** Highest tier the current streak has crossed: `7`, `30`, `100`, `365`,
    * or `null` (streak < 7). Used by `useStreakNotifications` to decide
@@ -46,7 +46,7 @@ export type StreakSummary = {
    * after the user breaks and rebuilds a streak (DESIGN.md D12:
    * "never decreases without explanation"). */
   currentTier: StreakTier
-  /** Distinct UTC dates with activity within `today`'s calendar month.
+  /** Distinct local-day keys with activity within `todayIso`'s calendar month.
    * Surfaced as "shown up N days this month" per DESIGN.md voice — never
    * decreases mid-month because it is a count, not a delta. */
   shownUpThisMonth: number
@@ -74,8 +74,9 @@ function hasActivity(
 
 /**
  * Calculates current and longest "shown-up" streaks and the current tier
- * from a heatmap data Map. Pure UTC math via {@link shiftIsoDate} so the
- * function is DST-safe by construction.
+ * from a heatmap data Map. Pure local-day-key string math via
+ * {@link shiftIsoDate} (which steps dates UTC-internally) so the function is
+ * DST-safe by construction.
  *
  * Grace period: a current streak is preserved when the most recent activity
  * is *yesterday* (e.g. user hasn't done their first task of today yet). When
@@ -131,8 +132,8 @@ export function calcStreak(
   }
 
   // Longest streak: collect all active dates, sort, single pass counting
-  // consecutive UTC days. Using ISO strings as the comparison key keeps this
-  // independent of `Date` parsing edge cases.
+  // consecutive calendar days. Using ISO strings as the comparison key keeps
+  // this independent of `Date` parsing edge cases.
   const activeDates = Array.from(dataByDate.keys())
     .filter((isoDate) => hasActivity(dataByDate, isoDate))
     .sort()
@@ -155,7 +156,7 @@ export function calcStreak(
 
   const currentTier = computeTier(currentStreak)
 
-  // "Shown up N days this month": distinct UTC dates with activity inside
+  // "Shown up N days this month": distinct local-day keys with activity inside
   // today's calendar month. Pure count, never a delta — copy stays additive
   // even mid-month per DESIGN.md voice.
   const monthPrefix = todayIso.slice(0, 7) // YYYY-MM
