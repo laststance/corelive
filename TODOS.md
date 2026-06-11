@@ -127,32 +127,37 @@ function that will pull it off the deferred list.
       Forcing function: post-ship polish pass on the completion-feedback feature.
       Effort: ~1-2h human / ~20 min CC.
 
-- [ ] **居残りモード切替時の fade トランジション (D8) — enter-half built, runtime-unverified.**
+- [ ] **居残りモード切替時の fade トランジション (D8) — enter-half SHIPPED + runtime-verified; only the fade-OUT remains.**
       Surfaced in `/plan-design-review` (2026-06-04, D8); built as plan task T10
       (P2). Toggling 居残りモード ON should make todos completed since the last
       clear RETROACTIVELY fade INTO the active list (DESIGN.md enter easing,
       `motion-safe:` gated); toggling OFF should fade them OUT symmetrically, so
       the "watch your day accumulate" reveal feels gentle, not a jarring pop.
-      STATUS (branch `feat/d8-fade-and-agents-md`): the ENTER half is IMPLEMENTED.
-      `retroactivePopulateFade.ts` tells a mode-toggle populate apart from an
-      in-place check by diffing the visible row-id set against the previous render
-      (armed on the OFF→ON transition via `useUpdateEffect`), so D7 stays quiet;
-      matching rows get a `motion-safe:` `tw-animate-css` fade-in. LOGIC-verified
-      (4 unit tests, `pnpm validate` green) but RUNTIME-UNVERIFIED: the fade class
-      lands one commit AFTER the rows mount (passive settle effect + the
-      `localPendingTodos` one-render lag), so there may be a leading ~1-frame
-      opacity-1 blink before the fade — needs the global video-frame check (record
-      the OFF→ON toggle, `ffmpeg` the frames); the existing Loading-flash on toggle
-      may mask it. IF frames show a blink, the fix is to apply the class before
-      paint (a layout-effect for the settle step) — verify first, don't pre-fix.
+      STATUS (branch `feat/d8-fade-and-agents-md`, PR #75): the ENTER half is
+      IMPLEMENTED + RUNTIME-VERIFIED. `retroactivePopulateFade.ts` tells a
+      mode-toggle populate apart from an in-place check by diffing the visible
+      row-id set against the previous render (armed on the OFF→ON transition via
+      `useUpdateEffect`), so D7 stays quiet; matching rows get a `motion-safe:`
+      `tw-animate-css` fade-in. Verified on a live `pnpm dev` via Playwright (rAF
+      opacity time-series + recorded video frames; OFF→ON toggle driven over the
+      preferences BroadcastChannel): the completed rows fade opacity 0→1 over
+      ~200ms (`animationName: enter`) with **NO leading blink** — they paint at
+      opacity 0 on the very first frame (the Loading-flash full-remount resolves
+      the fade-ids before paint, so rows never paint without the class). The
+      pending control row stays opacity 1 / `anim:none` (selectivity holds, D7).
+      Reduced-motion run: opacity flat at 1, `enter` never runs → instant (a11y
+      honored). The advisor-flagged "fade class lands one commit after mount"
+      blink does NOT materialize in practice — no layout-effect fix needed. Side
+      note (pre-existing, NOT this work): toggling retain briefly blanks the list
+      ~100ms (TanStack query-key change, no `keepPreviousData`); the fade plays
+      cleanly right after. A `placeholderData: keepPreviousData` pass could smooth
+      that flash — separate follow-up.
       STILL DEFERRED: the symmetric fade-OUT (ON→OFF) needs an unmount animation
       (framer-motion `AnimatePresence`, not yet wired for this list), so OFF is
       enter-only / instant for now (TODOS.md-sanctioned fallback). Feature works
-      without either: rows appear / disappear instantly on toggle.
-      Forcing function: the macOS native smoke that closes this surface, or
-      whenever `AnimatePresence` lands for any list.
-      Effort remaining: ~20 min CC (frame check + conditional layout-effect fix);
-      the fade-OUT waits on `AnimatePresence`.
+      without it: rows disappear instantly on toggle-OFF.
+      Forcing function: whenever `AnimatePresence` lands for any list.
+      Effort remaining: the fade-OUT waits on `AnimatePresence` (~30 min CC then).
 
 ## Electron resilience
 
