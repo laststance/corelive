@@ -110,20 +110,31 @@ function themeTokens(seed: ThemeSeed): Record<string, string> {
   return seed.preserve ? CATHEDRAL[seed.mode] : deriveThemeTokens(seed)
 }
 
+/** Reads a required token, failing loudly if a theme is missing it. */
+function tokenOf(tokens: Record<string, string>, name: string): string {
+  const value = tokens[name]
+  if (value === undefined) throw new Error(`theme is missing ${name}`)
+  return value
+}
+
 describe('control-border stroke meets WCAG 1.4.11 (≥3:1) on every theme', () => {
   for (const id of THEME_IDS) {
     it(`${id}: an unchecked checkbox is distinguishable from its surface`, () => {
       // Arrange
       const tokens = themeTokens(THEME_REGISTRY[id])
-      const input = tokens['--input']
-      const foreground = tokens['--foreground']
+      const input = tokenOf(tokens, '--input')
+      const foreground = tokenOf(tokens, '--foreground')
       // Act — the control may sit on either the page background or a card
       const vsBackground = controlBorderContrast(
         input,
         foreground,
-        tokens['--background'],
+        tokenOf(tokens, '--background'),
       )
-      const vsCard = controlBorderContrast(input, foreground, tokens['--card'])
+      const vsCard = controlBorderContrast(
+        input,
+        foreground,
+        tokenOf(tokens, '--card'),
+      )
       // Assert — worst-case surface still clears the non-text UI threshold
       expect(Math.min(vsBackground, vsCard)).toBeGreaterThanOrEqual(
         AA_LARGE_CONTRAST,

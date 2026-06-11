@@ -22,6 +22,13 @@ const ACCENT_TEXT_PAIRS = [
   ['--sidebar-primary', '--sidebar-primary-foreground'],
 ] as const
 
+/** Reads a required token, failing loudly if cathedral is missing it. */
+function tokenOf(tokens: Record<string, string>, name: string): string {
+  const value = tokens[name]
+  if (value === undefined) throw new Error(`cathedral is missing ${name}`)
+  return value
+}
+
 describe('Warm Cathedral accent CTAs carry AA-readable text (≥4.5:1)', () => {
   for (const mode of ['light', 'dark'] as const satisfies ThemeMode[]) {
     for (const [fill, foreground] of ACCENT_TEXT_PAIRS) {
@@ -29,7 +36,10 @@ describe('Warm Cathedral accent CTAs carry AA-readable text (≥4.5:1)', () => {
         // Arrange
         const tokens = CATHEDRAL[mode]
         // Act
-        const ratio = contrastRatio(tokens[foreground], tokens[fill])
+        const ratio = contrastRatio(
+          tokenOf(tokens, foreground),
+          tokenOf(tokens, fill),
+        )
         // Assert
         expect(ratio).toBeGreaterThanOrEqual(AA_TEXT_CONTRAST)
       })
