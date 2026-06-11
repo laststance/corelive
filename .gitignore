@@ -3,6 +3,7 @@
 
 # icons
 build/icons/icon-manifest.json
+build/icons/icon.iconset/
 
 # dependencies
 /node_modules
