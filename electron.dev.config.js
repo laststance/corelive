@@ -6,7 +6,7 @@
 module.exports = {
   // Development server settings
   devServer: {
-    port: process.env.PORT || 3011,
+    port: process.env.PORT || 4991,
     host: 'localhost',
     protocol: 'http',
   },

@@ -135,7 +135,7 @@ jobs:
       # NOTE: Next.js is started by the `webServer` block in
       # `playwright.config.ts` (inherited by `playwright.electron.config.ts`).
       # That block fires for ALL projects globally — including `_electron`
-      # — so a manual `pnpm start &` here would cause port-3011 double-start.
+      # — so a manual `pnpm start &` here would cause port-4991 double-start.
 
       - name: Run Electron Playwright tests 🧪
         env:

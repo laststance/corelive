@@ -15,7 +15,7 @@ The renderer URL is resolved once, at boot, in `electron/main.ts:915-917`:
 ```ts
 const serverUrl =
   process.env.ELECTRON_RENDERER_URL ??
-  (isDev ? 'http://localhost:3011' : 'https://corelive.app')
+  (isDev ? 'http://localhost:4991' : 'https://corelive.app')
 ```
 
 Every window then loads a route off that origin — `${serverUrl}/home`, `/floating-navigator`, `/braindump`, `/settings`.
@@ -30,7 +30,7 @@ This is the reasoning behind the project's "one codebase, two runtimes, one data
 
 | Context            | `serverUrl` resolves to                    | Driven by                                    |
 | ------------------ | ------------------------------------------ | -------------------------------------------- |
-| `pnpm dev` (local) | `http://localhost:3011`                    | `isDev` (`NODE_ENV === 'development'`)       |
+| `pnpm dev` (local) | `http://localhost:4991`                    | `isDev` (`NODE_ENV === 'development'`)       |
 | Packaged / shipped | `https://corelive.app`                     | the `??` fallback (`isDev` is false)         |
 | Electron E2E       | a local `http://localhost`/`127.0.0.1` URL | `ELECTRON_RENDERER_URL` (highest precedence) |
 
@@ -47,7 +47,7 @@ const isDev = process.env.NODE_ENV === 'development'
 This is a correctness property, not a style choice. **A packaged, electron-builder-produced app runs with `NODE_ENV` unset.** Trace the two possible spellings against an unset value:
 
 - `NODE_ENV === 'development'` → `undefined === 'development'` → `false` → loads `https://corelive.app`. **Correct.**
-- `NODE_ENV !== 'production'` → `undefined !== 'production'` → `true` → would treat the shipped app as dev and load `http://localhost:3011`, which isn't running. **A blank, broken app.**
+- `NODE_ENV !== 'production'` → `undefined !== 'production'` → `true` → would treat the shipped app as dev and load `http://localhost:4991`, which isn't running. **A blank, broken app.**
 
 So any code in `electron/` whose behavior must differ between dev and a shipped build gates on the explicit `'development'` value — the same reasoning governs the auto-updater's dev-skip (`electron/AutoUpdater.ts:163-165`, `if (process.env.NODE_ENV === 'development') return`). The companion failure mode (a `!== 'production'` check that crashed a packaged build via a dev-only logger path) is recorded in the project's local memory under `packaged-electron-node-env-unset`; that note's `app.isPackaged` advice is about the _logger_ — in this subsystem the gate is `NODE_ENV`, and there is intentionally no `app.isPackaged` check in the window/URL path.
 

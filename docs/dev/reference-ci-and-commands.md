@@ -23,7 +23,7 @@ The canonical list is `package.json:20-63` ("scripts"). The most load-bearing en
 | Command                                       | `package.json`        | What it is                                                                                                                         |
 | --------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm validate`                               | `:40`                 | Local pre-commit gate — six checks in parallel via `concurrently --kill-others-on-fail`. See [below](#the-validate-parallel-gate). |
-| `pnpm dev`                                    | `:22`                 | Next.js dev server on port 3011 (web only).                                                                                        |
+| `pnpm dev`                                    | `:22`                 | Next.js dev server on port 4991 (web only).                                                                                        |
 | `pnpm build`                                  | `:23`                 | Production Next.js build, `--webpack` (not Turbopack); `prebuild` (`:25`) regenerates icons first.                                 |
 | `pnpm typecheck`                              | `:39`                 | `tsc --noEmit`.                                                                                                                    |
 | `pnpm lint` / `lint:fix`                      | `:27` / `:28`         | ESLint, zero-warning policy, 8 GB heap; `validate` uses `lint:fix`.                                                                |
@@ -35,7 +35,7 @@ The canonical list is `package.json:20-63` ("scripts"). The most load-bearing en
 | `pnpm build:icons`                            | `:24`                 | Regenerate app/tray/favicon assets via `sharp`; wired as `prebuild` (`:25`).                                                       |
 | `pnpm e2e:web`                                | `:54`                 | Web E2E (`--project=web`). Boots the app via the Playwright `webServer` block (`pnpm start`).                                      |
 | `pnpm e2e:electron`                           | `:55`                 | Electron E2E — compiles main/preload then launches via `_electron.launch`; prefix with `xvfb-run -a` on Linux.                     |
-| `pnpm electron:dev`                           | `:57`                 | Dev orchestrator (`scripts/dev.js`): build electron → start Next → poll `:3011` → launch.                                          |
+| `pnpm electron:dev`                           | `:57`                 | Dev orchestrator (`scripts/dev.js`): build electron → start Next → poll `:4991` → launch.                                          |
 | `pnpm electron:build:ts`                      | `:58`                 | `electron-vite build` — compiles `electron/` main + preload to CJS into `dist-electron/`.                                          |
 | `pnpm electron:build:dir`                     | `:60`                 | Unpacked `.app` for local prod testing (no DMG, no signing).                                                                       |
 | `pnpm electron:build:mac`                     | `:59`                 | Full signed+notarized release build, then DMG finalize. See [release builds](#release-build-pipeline).                             |

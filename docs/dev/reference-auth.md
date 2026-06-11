@@ -60,7 +60,7 @@ Hop-by-hop, with the owner of each step:
 | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
 | Renderer requests OAuth → `oauth-start` IPC                                                                                          | `electron/main.ts:1887-1905`                                   |
 | Generate CSRF `state`, store it, open system browser at `/oauth/start`                                                               | `electron/OAuthManager.ts:200-228`                             |
-| Build the start URL from the **live BrowserWindow origin** (dev `localhost:3011` / prod `corelive.app`)                              | `electron/OAuthManager.ts:156-163` (origin resolver `178-192`) |
+| Build the start URL from the **live BrowserWindow origin** (dev `localhost:4991` / prod `corelive.app`)                              | `electron/OAuthManager.ts:156-163` (origin resolver `178-192`) |
 | Browser runs Clerk `authenticateWithRedirect` (or shortcuts if already signed in)                                                    | `src/app/oauth/start/page.tsx:50-114`                          |
 | Browser POSTs `create-signin-token`, then redirects to `corelive://oauth/callback?state&token`                                       | `src/app/oauth/callback/page.tsx:62-103`                       |
 | macOS `open-url` routes the deep link into `DeepLinkManager`                                                                         | `electron/main.ts:312`                                         |

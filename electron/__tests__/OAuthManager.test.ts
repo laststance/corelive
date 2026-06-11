@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
  * @param currentUrl - URL currently loaded in the main BrowserWindow.
  * @returns WindowManager-compatible mock object.
  * @example
- * createWindowManagerMock('http://localhost:3011/login')
+ * createWindowManagerMock('http://localhost:4991/login')
  */
 function createWindowManagerMock(currentUrl?: string) {
   return {
@@ -33,12 +33,12 @@ function createWindowManagerMock(currentUrl?: string) {
 describe('OAuthManager', () => {
   it('builds the OAuth start URL from the current BrowserWindow origin in development', () => {
     const oauthManager = new OAuthManager(
-      createWindowManagerMock('http://localhost:3011/login') as never,
+      createWindowManagerMock('http://localhost:4991/login') as never,
       null,
     )
 
     expect(oauthManager.buildOAuthURL('google', 'state_123')).toBe(
-      'http://localhost:3011/oauth/start?provider=google&state=state_123',
+      'http://localhost:4991/oauth/start?provider=google&state=state_123',
     )
   })
 

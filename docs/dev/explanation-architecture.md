@@ -151,7 +151,7 @@ The desktop build could have bundled a Next.js server and run the UI locally. It
 // electron/main.ts:915-917
 const serverUrl =
   process.env.ELECTRON_RENDERER_URL ??
-  (isDev ? 'http://localhost:3011' : 'https://corelive.app')
+  (isDev ? 'http://localhost:4991' : 'https://corelive.app')
 ```
 
 The payoff of loading the remote site instead:

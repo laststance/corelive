@@ -15,7 +15,7 @@ pnpm prisma:migrate
 #    …or, to wipe + re-migrate + reseed in one shot (the pre-launch habit):
 pnpm db:reset
 
-# 3. Run the web dev server on http://localhost:3011
+# 3. Run the web dev server on http://localhost:4991
 pnpm dev
 
 # 4. In another terminal, run the unit tests
@@ -71,7 +71,7 @@ The seed is idempotent (`prisma/seed.ts` wraps delete+insert in a transaction), 
 pnpm dev
 ```
 
-`next dev -p 3011` (`package.json:22`) — the web app on `http://localhost:3011`. Hot-reloads `src/**`. This is what you want most of the time; both the web app and the Electron renderer load the same Next.js app.
+`next dev -p 4991` (`package.json:22`) — the web app on `http://localhost:4991`. Hot-reloads `src/**`. This is what you want most of the time; both the web app and the Electron renderer load the same Next.js app.
 
 ### Electron (desktop wrapper)
 
@@ -79,12 +79,12 @@ pnpm dev
 pnpm electron:dev
 ```
 
-This runs `node scripts/dev.js`, an orchestrator that (1) compiles the Electron main + preload via `electron-vite build`, (2) starts `pnpm dev` on `:3011`, (3) polls until the server answers `200`, then (4) launches `electron/dev-runner.ts` with `NODE_ENV=development` and `PLAYWRIGHT_REMOTE_DEBUGGING_PORT=9222` so MCP / Playwright tooling can attach (`scripts/dev.js:93-180`; step 3's poll-until-`200` loop is `checkServer`, `scripts/dev.js:55-91`). It loads the **local** dev server in a `BrowserWindow`, not the production site. For the architecture of the desktop wrapper, see [the Electron reference](./reference-electron.md).
+This runs `node scripts/dev.js`, an orchestrator that (1) compiles the Electron main + preload via `electron-vite build`, (2) starts `pnpm dev` on `:4991`, (3) polls until the server answers `200`, then (4) launches `electron/dev-runner.ts` with `NODE_ENV=development` and `PLAYWRIGHT_REMOTE_DEBUGGING_PORT=9222` so MCP / Playwright tooling can attach (`scripts/dev.js:93-180`; step 3's poll-until-`200` loop is `checkServer`, `scripts/dev.js:55-91`). It loads the **local** dev server in a `BrowserWindow`, not the production site. For the architecture of the desktop wrapper, see [the Electron reference](./reference-electron.md).
 
-> **Clerk webhook in local dev.** New Postgres `User` rows are provisioned by a Clerk `user.created` webhook (`src/app/api/webhooks/route.ts`), which Clerk delivers over HTTP — so Clerk needs a public URL to reach your machine. Tunnel `:3011` with ngrok and point the Clerk Dashboard webhook at it (`README.md:130-133`):
+> **Clerk webhook in local dev.** New Postgres `User` rows are provisioned by a Clerk `user.created` webhook (`src/app/api/webhooks/route.ts`), which Clerk delivers over HTTP — so Clerk needs a public URL to reach your machine. Tunnel `:4991` with ngrok and point the Clerk Dashboard webhook at it (`README.md:130-133`):
 >
 > ```bash
-> ngrok http --domain=foo.bar-ngrok.app 3011
+> ngrok http --domain=foo.bar-ngrok.app 4991
 > ```
 >
 > The webhook is Svix-HMAC-verified against `WEBHOOK_SECRET`. You don't strictly need this for the dev backdoor login (below), but you do need it to test the real "sign up → row appears in Postgres" path.
@@ -124,7 +124,7 @@ pnpm e2e:web
 
 This runs `playwright test --project=web` (`package.json:54`). Two things must hold:
 
-1. **It needs a production build.** The Playwright `webServer` block runs `pnpm start` = `next start -p 3011` (`playwright.config.ts:103`, `package.json:26`), which serves the **built** app — so run `pnpm build` first (or have a build present). `next start` will not serve un-built sources.
+1. **It needs a production build.** The Playwright `webServer` block runs `pnpm start` = `next start -p 4991` (`playwright.config.ts:103`, `package.json:26`), which serves the **built** app — so run `pnpm build` first (or have a build present). `next start` will not serve un-built sources.
 2. **The webServer may not boot locally on macOS.** On the maintainer's Mac the Playwright `webServer` fails to come up due to an IPv6/loopback mismatch (the server itself is healthy; Playwright's health-poll can't reach it). If `pnpm e2e:web` hangs at "waiting for server" locally, that's the known issue — **verify web E2E on CI** (the `E2E Tests (Web)` workflow) rather than fighting it locally.
 
 The web suite forces `workers: 1` (`playwright.config.ts:36`) because every spec shares one seeded Clerk user and one Postgres DB; parallel workers cause cross-file data races. True parallelism comes from the CI per-spec matrix, not Playwright workers — the _why_ is in [the build & CI explanation](./explanation-build-and-ci.md).
