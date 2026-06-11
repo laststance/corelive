@@ -45,8 +45,13 @@ export type HeatmapDay = {
  */
 export function useHeatmapData(days: number = 365) {
   const isClerkQueryReady = useClerkQueryReady()
+  // Report the browser's IANA zone so the server buckets completions by the
+  // user's LOCAL calendar day (L3) — keeping heatmap data aligned with the
+  // locally-rendered grid. Stable per session, so the query key stays stable;
+  // an absent/garbage zone makes the server fall back to UTC bucketing.
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const { data, isLoading, isError } = useQuery({
-    ...orpc.completed.heatmap.queryOptions({ input: { days } }),
+    ...orpc.completed.heatmap.queryOptions({ input: { days, timezone } }),
     enabled: isClerkQueryReady,
   })
 

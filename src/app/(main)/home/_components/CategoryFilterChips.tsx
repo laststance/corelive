@@ -20,6 +20,7 @@ import {
   type CategoryTrendEntry,
 } from '@/lib/aggregate-category-trends'
 import { getColorDotClass } from '@/lib/category-colors'
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { cn } from '@/lib/utils'
 
 /**
@@ -201,10 +202,10 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
 }: CategoryFilterChipsProps) {
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
   const isMobile = useIsMobile()
-  // Compute against `new Date()` per render so the window rolls forward
-  // at the day boundary without a useMemo on stale anchor — same trade-
-  // off SundayDigestCard made (correctness > re-render micro-opt).
-  const entries = aggregateCategoryTrends(dataByDate, new Date())
+  // Compute against the local "today" key per render so the window rolls
+  // forward at the local day boundary without a useMemo on a stale anchor —
+  // same trade-off SundayDigestCard made (correctness > re-render micro-opt).
+  const entries = aggregateCategoryTrends(dataByDate, getLocalTodayIsoDate())
   function handleClearSelection() {
     setSelectedCategoryId(null)
   }

@@ -3,12 +3,27 @@ import { z } from 'zod'
 import { MAX_IMPORT_LINES_PER_BATCH } from '@/lib/constants/import'
 
 /**
+ * Optional IANA timezone the client reports (e.g. `'Asia/Tokyo'`) so the
+ * server can bucket completions by the user's *local* calendar day instead
+ * of UTC. Kept loose — a sane max-length string, NOT a strict IANA enum —
+ * because `toLocalDayKey` validates the zone at use-time and falls back to
+ * UTC for absent/garbage values, so an unknown zone degrades gracefully
+ * instead of 400-ing an otherwise valid heatmap request.
+ *
+ * @example
+ * 'Asia/Tokyo' // bucket by JST local day
+ * undefined    // omitted → server buckets by UTC (legacy behavior)
+ */
+const TimeZoneInputSchema = z.string().min(1).max(64).optional()
+
+/**
  * Input schema for the completed tasks heatmap endpoint.
  * @example
- * { days: 365 } // last 365 days of activity
+ * { days: 365, timezone: 'Asia/Tokyo' } // last 365 local days of activity
  */
 export const HeatmapInputSchema = z.object({
   days: z.number().int().min(1).max(365).default(365),
+  timezone: TimeZoneInputSchema,
 })
 
 /**
@@ -186,6 +201,7 @@ export const DayDetailInputSchema = z.object({
       },
       { message: 'date must be a valid calendar date' },
     ),
+  timezone: TimeZoneInputSchema,
 })
 
 /**

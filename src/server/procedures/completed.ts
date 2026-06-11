@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { normalizeCompletedTitle } from '@/components/braindump/braindumpUtils'
 import { COMPLETED_UNDO_WINDOW_MS } from '@/lib/constants/import'
 import { prisma } from '@/lib/prisma'
+import { shiftIsoDate } from '@/lib/shiftIsoDate'
+import { toLocalDayKey } from '@/lib/toLocalDayKey'
 
 import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
@@ -25,19 +27,26 @@ import { fetchCompletedEntries } from '../utils/completedAggregation'
 import { resolveImportCategoryIds } from '../utils/resolveImportCategoryIds'
 
 /**
- * Fetches heatmap data for completed tasks, aggregated by UTC date with a
- * category breakdown. Reads the Todo+Completed UNION via
- * {@link fetchCompletedEntries} so BrainDump checkbox-tick completions
- * (which write directly to the `Completed` table) appear on the heatmap
- * alongside Todos completed through the TodoList lifecycle.
+ * Fetches heatmap data for completed tasks, aggregated by the user's *local*
+ * calendar day with a category breakdown. Reads the Todo+Completed UNION via
+ * {@link fetchCompletedEntries} so BrainDump checkbox-tick completions (which
+ * write directly to the `Completed` table) appear on the heatmap alongside
+ * Todos completed through the TodoList lifecycle.
+ *
+ * Local-day bucketing (L3): the client reports its IANA `timezone`; each
+ * completion is keyed by {@link toLocalDayKey} so a late-night completion
+ * lands on the cell the user sees, not the next UTC day. Absent/garbage zone
+ * → UTC (the legacy behavior). Not persisted — passed per request because no
+ * server-only consumer needs a stored zone.
  *
  * @param input.days - Number of days to look back (default: 365, max 365)
+ * @param input.timezone - Optional IANA zone; omitted → UTC bucketing
  * @returns
  * - data: Array of daily entries with count and category breakdown
  * - streaks: Current and longest consecutive-day streaks
- * - total: Total completed tasks in the period (Todo + Completed union)
+ * - total: Total completed tasks within the displayed local-day window
  * @example
- * getHeatmap({ days: 365 })
+ * getHeatmap({ days: 365, timezone: 'Asia/Tokyo' })
  * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89 }
  */
 export const getHeatmap = authMiddleware
@@ -45,35 +54,35 @@ export const getHeatmap = authMiddleware
   .output(HeatmapResponseSchema)
   .handler(async ({ input, context }) => {
     try {
-      const { days } = input
+      const { days, timezone } = input
       const { user } = context
+      // `timezone` is optional on the schema; `toLocalDayKey(_, null)` is the
+      // UTC fallback that reproduces the pre-L3 bucketing exactly.
+      const zone = timezone ?? null
 
-      // UTC-anchored bounds — `fetchCompletedEntries` buckets via
-      // `entry.completedAt.toISOString().split('T')[0]` (UTC date string).
-      // If we anchored `startDate` to *local* midnight (the previous
-      // implementation), rows in the first/last UTC hours that straddle
-      // the local-vs-UTC boundary would mis-bucket on any non-UTC host
-      // (e.g., a regional deployment). Vercel happens to run UTC by
-      // default, which masked the bug — but the contract should be
-      // explicit. `getDayDetail` already uses this discipline.
-      const todayIso = new Date().toISOString().split('T')[0]!
-      const startDate = new Date(`${todayIso}T00:00:00.000Z`)
-      // Inclusive bounds: `fetchCompletedEntries` uses `gte`/`lte`, so the
-      // window covers `(days - 1)` past calendar dates + today = exactly
-      // `days` dates. Subtracting the full `days` would include one extra
-      // day at the lower edge (CodeRabbit review on PR #38).
-      startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
-      // Upper bound = "now" so future-dated rows (clock skew, test seeds)
-      // never accidentally surface on the heatmap. fetchCompletedEntries
-      // requires an explicit endDate.
+      // Bucket completions by the user's LOCAL calendar day (L3). The window
+      // edges and "today" are local-day keys; `shiftIsoDate` is tz-neutral
+      // calendar-string math, so it stays correct on local keys.
+      const todayLocalKey = toLocalDayKey(new Date(), zone)
+      // `days` local calendar days ending today = today + (days - 1) prior.
+      const startLocalKey = shiftIsoDate(todayLocalKey, -(days - 1))
+
+      // Over-fetch a UTC window wide enough to contain every instant that can
+      // map into [startLocalKey, todayLocalKey]. A local day can begin up to
+      // ~14h before its UTC midnight, so one UTC buffer day below the start
+      // covers any IANA offset; the upper bound is "now" because no completion
+      // is dated in the future. Buffer-day spill is dropped by the in-loop
+      // filter below (`fetchCompletedEntries` uses inclusive gte/lte bounds).
+      const startDate = new Date(
+        `${shiftIsoDate(startLocalKey, -1)}T00:00:00.000Z`,
+      )
       const endDate = new Date()
 
       const entries = await fetchCompletedEntries(user.id, startDate, endDate)
 
-      // Bucket entries by UTC date string. Per-day category rollup mirrors
-      // the previous shape so the API contract (HeatmapResponseSchema) is
-      // unchanged — the only difference vs. pre-UNION is that `Completed`
-      // rows now contribute counts too.
+      // Per-day rollup keyed by local-day string. Mirrors the previous shape
+      // so the API contract (HeatmapResponseSchema) is unchanged — `Completed`
+      // rows contribute counts alongside lifecycle Todos.
       const dayMap = new Map<
         string,
         {
@@ -85,8 +94,14 @@ export const getHeatmap = authMiddleware
         }
       >()
 
+      // Count only completions inside the requested local-day window; the
+      // over-fetched buffer day is discarded here so `total` and the cells
+      // reflect exactly what is rendered.
+      let totalInWindow = 0
       for (const entry of entries) {
-        const dateKey = entry.completedAt.toISOString().split('T')[0]!
+        const dateKey = toLocalDayKey(entry.completedAt, zone)
+        if (dateKey < startLocalKey || dateKey > todayLocalKey) continue
+        totalInWindow++
         if (!dayMap.has(dateKey)) {
           dayMap.set(dateKey, { count: 0, categories: new Map() })
         }
@@ -113,12 +128,19 @@ export const getHeatmap = authMiddleware
         categories: Array.from(entry.categories.values()),
       }))
 
-      const streaks = calculateStreaks(data.map((d) => d.date))
+      // Streaks must use the SAME local today/yesterday the buckets use — a
+      // user who completed something tonight (local) but not yet in UTC would
+      // otherwise see a broken streak. `calculateStreaks` is pure on the keys.
+      const streaks = calculateStreaks(
+        data.map((d) => d.date),
+        todayLocalKey,
+        shiftIsoDate(todayLocalKey, -1),
+      )
 
       return {
         data,
         streaks,
-        total: entries.length,
+        total: totalInWindow,
       }
     } catch (error) {
       log.error('Error in getHeatmap:', error)
@@ -130,24 +152,32 @@ export const getHeatmap = authMiddleware
   })
 
 /**
- * Calculates current and longest consecutive-day streaks from a sorted list of date strings.
- * @param dates - Array of date strings in "YYYY-MM-DD" format (must be sorted ascending)
+ * Calculates current and longest consecutive-day streaks from a list of date
+ * strings. Pure on its inputs: `today`/`yesterday` are supplied by the caller
+ * (the local-day keys from getHeatmap) rather than derived from `new Date()`
+ * here, so the "is the streak still alive?" check honors the user's timezone.
+ *
+ * @param dates - Date strings in "YYYY-MM-DD" format (any order; de-duped here)
+ * @param today - The caller's "today" as a YYYY-MM-DD local-day key
+ * @param yesterday - The caller's "yesterday" as a YYYY-MM-DD local-day key
  * @returns
- * - current: Number of consecutive days ending today (or yesterday)
+ * - current: Number of consecutive days ending today (or yesterday — grace)
  * - longest: Maximum consecutive-day streak in the dataset
  * @example
- * calculateStreaks(["2026-03-22", "2026-03-23", "2026-03-24"])
+ * calculateStreaks(["2026-03-22", "2026-03-23", "2026-03-24"], "2026-03-24", "2026-03-23")
  * // => { current: 3, longest: 3 }
  */
-function calculateStreaks(dates: string[]): {
+function calculateStreaks(
+  dates: string[],
+  today: string,
+  yesterday: string,
+): {
   current: number
   longest: number
 } {
   if (dates.length === 0) return { current: 0, longest: 0 }
 
   const uniqueDates = [...new Set(dates)].sort()
-  const today = new Date().toISOString().split('T')[0]!
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]!
 
   let longest = 1
   let currentStreak = 1
@@ -190,19 +220,21 @@ function calculateStreaks(dates: string[]): {
 
 /**
  * Fetches a single day's completed tasks for the DayDetailDialog opened from
- * a heatmap cell click. Date range covers the calendar day in UTC; this
- * matches the heatmap's existing aggregation, so cell counts and dialog
- * counts stay in lockstep.
+ * a heatmap cell click. The cell is a *local* calendar day (L3), so this
+ * over-fetches a ±1 UTC-day window and filters entries by
+ * {@link toLocalDayKey} === `date` — matching the heatmap's local bucketing
+ * exactly, so cell counts and dialog counts stay in lockstep.
  *
  * Reads the Todo+Completed UNION via {@link fetchCompletedEntries} so both
  * lifecycle paths (TodoList complete() and BrainDump checkbox-tick) surface
  * inside the dialog's task list.
  *
- * @param input.date - YYYY-MM-DD date string the user clicked on the heatmap
+ * @param input.date - YYYY-MM-DD local day the user clicked on the heatmap
+ * @param input.timezone - Optional IANA zone; omitted → UTC day boundaries
  * @returns
  * - date, count, tasks (id/title/completedAt/category), categories (rollup)
  * @example
- * getDayDetail({ date: "2026-05-10" })
+ * getDayDetail({ date: "2026-05-10", timezone: "Asia/Tokyo" })
  * // => { date: "2026-05-10", count: 3, tasks: [...], categories: [...] }
  */
 export const getDayDetail = authMiddleware
@@ -210,15 +242,28 @@ export const getDayDetail = authMiddleware
   .output(DayDetailResponseSchema)
   .handler(async ({ input, context }) => {
     try {
-      const { date } = input
+      const { date, timezone } = input
       const { user } = context
+      const zone = timezone ?? null
 
-      // Use UTC day bounds so a dialog opened from a heatmap cell matches the
-      // cell's bucket exactly (`completedAt.toISOString().split('T')[0]`).
-      const dayStart = new Date(`${date}T00:00:00.000Z`)
-      const dayEnd = new Date(`${date}T23:59:59.999Z`)
+      // The clicked cell is a LOCAL calendar day. A single local day can map
+      // to UTC instants spanning ~3 UTC dates (±14h/±12h offsets), so widen
+      // the fetch to ±1 UTC day and then filter precisely by local day —
+      // this keeps the dialog in lockstep with the heatmap cell's bucketing.
+      const dayStart = new Date(`${shiftIsoDate(date, -1)}T00:00:00.000Z`)
+      const dayEnd = new Date(`${shiftIsoDate(date, 1)}T23:59:59.999Z`)
 
-      const entries = await fetchCompletedEntries(user.id, dayStart, dayEnd)
+      const fetchedEntries = await fetchCompletedEntries(
+        user.id,
+        dayStart,
+        dayEnd,
+      )
+      // Filter to the requested local day FIRST, then build both the task
+      // list and the category rollup from this set so count, list, and
+      // rollup are guaranteed to agree.
+      const entries = fetchedEntries.filter(
+        (entry) => toLocalDayKey(entry.completedAt, zone) === date,
+      )
 
       const tasks = entries.map((entry) => ({
         source: entry.source,

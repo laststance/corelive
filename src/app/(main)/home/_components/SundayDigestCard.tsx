@@ -203,16 +203,13 @@ export const SundayDigestCard = memo(function SundayDigestCard({
 
   // Derive the stats once per `dataByDate` / local Sunday key.
   //
-  // Why anchor on UTC-midnight-of-local-Sunday: `aggregateLastSevenDays`
-  // builds its window via `formatUTCDateISO`, which would otherwise read
-  // the UTC calendar day of `today` — at e.g. JST Sunday 06:00 that day
-  // is still Saturday in UTC, so the user would see a "Sunday recap" that
-  // misses Sunday's data. Re-deriving the anchor from the local Sunday's
-  // ISO string keeps the visibility window (local Sunday) and the data
-  // window (the same Sunday key) in lockstep.
+  // Pass the local Sunday's YYYY-MM-DD key straight to
+  // `aggregateLastSevenDays`, which now anchors on a local-day key (L3). The
+  // visibility window (local Sunday) and the data window stay in lockstep, so
+  // a JST Sunday-morning recap includes Sunday's data instead of mis-bucketing
+  // it as the prior UTC (Saturday) day.
   const summary = useMemo(() => {
-    const sundayAnchor = new Date(`${sundayIso}T00:00:00.000Z`)
-    const weekStats = aggregateLastSevenDays(dataByDate, sundayAnchor)
+    const weekStats = aggregateLastSevenDays(dataByDate, sundayIso)
     const bestDay = pickBestDay(dataByDate, sundayIso)
     return { weekStats, bestDay }
   }, [dataByDate, sundayIso])

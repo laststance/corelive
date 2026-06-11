@@ -53,21 +53,6 @@ export type StreakSummary = {
 }
 
 /**
- * UTC ISO date string for `today` (YYYY-MM-DD). Centralised so streak math
- * stays anchored to the same key shape that `useHeatmapData`'s `dataByDate`
- * Map is keyed by.
- *
- * @param today - Anchor Date (caller may pass `new Date()`)
- * @returns
- * - YYYY-MM-DD string in UTC
- * @example
- * isoDateOf(new Date('2026-05-12T08:00:00.000Z')) // => "2026-05-12"
- */
-function isoDateOf(today: Date): string {
-  return today.toISOString().slice(0, 10)
-}
-
-/**
  * Returns `true` when the supplied YYYY-MM-DD key maps to a `HeatmapDay` with
  * at least one completion. The Map is shaped by the heatmap response —
  * absent dates are zero-count rest days.
@@ -104,24 +89,24 @@ function hasActivity(
  * The longest-streak scan walks every key in the Map, not just a window, so
  * it is correct for arbitrary heatmap response sizes (default 365 days).
  *
- * @param dataByDate - Per-day heatmap entries keyed by UTC YYYY-MM-DD
- * @param today - "Today" anchor; production callers pass `new Date()`
+ * @param dataByDate - Per-day heatmap entries keyed by local YYYY-MM-DD
+ * @param todayIso - "Today" as a YYYY-MM-DD local-day key; production callers
+ *   pass {@link import('./getLocalTodayIsoDate').getLocalTodayIsoDate}()
  * @returns
  * - `StreakSummary` with `currentStreak`, `longestStreak`, `currentTier`,
  *   `shownUpThisMonth`
  * @example
- * calcStreak(new Map(), new Date('2026-05-12Z'))
+ * calcStreak(new Map(), '2026-05-12')
  * // => { currentStreak: 0, longestStreak: 0, currentTier: null, shownUpThisMonth: 0 }
  * @example
  * // dataByDate has 8 consecutive days ending today
- * calcStreak(dataByDate, new Date('2026-05-12Z'))
+ * calcStreak(dataByDate, '2026-05-12')
  * // => { currentStreak: 8, longestStreak: 8, currentTier: 7, ... }
  */
 export function calcStreak(
   dataByDate: Map<string, HeatmapDay>,
-  today: Date,
+  todayIso: string,
 ): StreakSummary {
-  const todayIso = isoDateOf(today)
   const yesterdayIso = shiftIsoDate(todayIso, -1)
 
   // Anchor the backward walk on whichever of (today, yesterday) is the most

@@ -52,7 +52,6 @@ vi.mock('@/lib/logger', () => ({
 const STORAGE_KEY_PREFIX = 'corelive.streak-max-tier-notified.'
 const TEST_USER_ID = 'user_test_alpha'
 const STORAGE_KEY = `${STORAGE_KEY_PREFIX}${TEST_USER_ID}`
-const TODAY = new Date('2026-05-12T08:00:00.000Z')
 const TODAY_ISO = '2026-05-12'
 
 /** Builds a heatmap data Map of N consecutive UTC days ending on TODAY_ISO. */
@@ -80,7 +79,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -92,7 +91,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -103,7 +102,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: true,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -114,7 +113,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: new Map(),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -125,7 +124,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(6),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -136,7 +135,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
@@ -152,7 +151,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(30),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
@@ -166,7 +165,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(8),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -179,7 +178,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(8),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -192,7 +191,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(30),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
@@ -205,7 +204,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
@@ -220,7 +219,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
@@ -235,7 +234,7 @@ describe('useStreakNotifications', () => {
         dataByDate: buildConsecutive(7),
         isLoading: false,
         isRestoring: true,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -250,7 +249,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).not.toHaveBeenCalled()
@@ -264,7 +263,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(1)
@@ -280,7 +279,7 @@ describe('useStreakNotifications', () => {
       useStreakNotifications({
         dataByDate: buildConsecutive(7),
         isLoading: false,
-        now: TODAY,
+        todayIso: TODAY_ISO,
       }),
     )
     expect(electronMocks.showNotification).toHaveBeenCalledTimes(2)

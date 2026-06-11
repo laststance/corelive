@@ -10,6 +10,7 @@ import {
   type WeeklyTrend,
 } from '@/lib/aggregate-last-seven-days'
 import { getColorDotClass } from '@/lib/category-colors'
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { cn } from '@/lib/utils'
 
 interface WeeklySummaryCardProps {
@@ -77,7 +78,7 @@ export const WeeklySummaryCard = memo(function WeeklySummaryCard({
   dataByDate,
   isLoading,
 }: WeeklySummaryCardProps) {
-  const stats = aggregateLastSevenDays(dataByDate, new Date())
+  const stats = aggregateLastSevenDays(dataByDate, getLocalTodayIsoDate())
 
   return (
     <Card aria-busy={isLoading} aria-label="This week summary">

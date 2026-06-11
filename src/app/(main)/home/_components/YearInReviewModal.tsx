@@ -21,6 +21,7 @@ import {
   shouldAutoOpenYir,
 } from '@/lib/aggregate-year-in-review'
 import { getColorDotClass } from '@/lib/category-colors'
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { log } from '@/lib/logger'
 import { cn } from '@/lib/utils'
 
@@ -119,11 +120,11 @@ export const YearInReviewModal = memo(function YearInReviewModal({
   const userId = user?.id
   const searchParams = useSearchParams()
   const forceParam = searchParams.get('force')
-  // Memoize by the raw URL string — `parseForceDate` returns a fresh `Date`
-  // on every call, so without `useMemo` the effect's `forcedToday` dep
-  // changes identity each render. That made `?force=YYYY-MM-DD` re-open the
-  // modal immediately after the user clicked Close (a re-render produced a
-  // new Date → effect re-fired → setOpen(true)).
+  // Parse the `?force=` flag into a YYYY-MM-DD local-day key (or null).
+  // `parseForceDate` now returns a value-stable string, so the memo mainly
+  // documents intent: the effect's `forcedToday` dep stays stable across
+  // re-renders for the same `?force=` value, so a background `dataByDate`
+  // refetch can't re-fire the open after the QA user clicked Close.
   const forcedToday = useMemo(() => parseForceDate(forceParam), [forceParam])
 
   const [open, setOpen] = useState(false)
@@ -159,8 +160,8 @@ export const YearInReviewModal = memo(function YearInReviewModal({
     if (dataByDate.size === 0 && !forcedToday) return
     if (!userId) return
 
-    const todayAnchor = forcedToday ?? new Date()
-    const summary = aggregateYearInReview(dataByDate, todayAnchor)
+    const todayIso = forcedToday ?? getLocalTodayIsoDate()
+    const summary = aggregateYearInReview(dataByDate, todayIso)
 
     if (forcedToday) {
       // QA override: open unconditionally; do NOT write the dedupe key
@@ -173,7 +174,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
       return
     }
 
-    if (!shouldAutoOpenYir(todayAnchor, summary)) return
+    if (!shouldAutoOpenYir(todayIso, summary)) return
 
     const storageKey = `${STORAGE_KEY_PREFIX}${userId}`
     const storedYear = readStoredYear(storageKey)
@@ -196,7 +197,10 @@ export const YearInReviewModal = memo(function YearInReviewModal({
   // Recompute the summary at render time — `useEffect` decided to open;
   // here we just need the values to display. Recomputing is cheap (single
   // Map walk) and avoids carrying state in two places.
-  const summary = aggregateYearInReview(dataByDate, forcedToday ?? new Date())
+  const summary = aggregateYearInReview(
+    dataByDate,
+    forcedToday ?? getLocalTodayIsoDate(),
+  )
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
