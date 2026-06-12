@@ -145,6 +145,8 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   const [isLoadingNote, setIsLoadingNote] = useState<boolean>(false)
   const [spacesTrackingEnabled, setSpacesTrackingEnabled] =
     useState<boolean>(false)
+  const [isUpdatingSpacesTracking, setIsUpdatingSpacesTracking] =
+    useState<boolean>(false)
   const noteInputId = useId()
   const opacityInputId = useId()
   const syncInputId = useId()
@@ -162,6 +164,8 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   )
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
   const noteTextRef = useRef<string>('')
+  // Synchronous guard because state-driven disabled UI applies after render.
+  const isUpdatingSpacesTrackingRef = useRef<boolean>(false)
   // Last value persisted via `note.set` — guards against the load effect
   // re-emitting a write for content the renderer just received from main.
   const lastPersistedRef = useRef<{
@@ -362,6 +366,10 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
    */
   const handleSpacesTrackingChange = useCallback(
     async (enabled: boolean): Promise<void> => {
+      if (isUpdatingSpacesTrackingRef.current) return
+      isUpdatingSpacesTrackingRef.current = true
+      setIsUpdatingSpacesTracking(true)
+
       const previous = spacesTrackingEnabled
       setSpacesTrackingEnabled(enabled)
 
@@ -373,6 +381,9 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
         setSpacesTrackingEnabled(previous)
         toast.error('Failed to update desktop tracking')
         log.error('BrainDump Spaces tracking update failed', error)
+      } finally {
+        isUpdatingSpacesTrackingRef.current = false
+        setIsUpdatingSpacesTracking(false)
       }
     },
     [spacesTrackingEnabled],
@@ -641,8 +652,15 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             id={spacesInputId}
             checked={spacesTrackingEnabled}
             onCheckedChange={handleSpacesTrackingChange}
+            disabled={isUpdatingSpacesTracking}
             aria-label="Show BrainDump on all Mac desktops"
           />
+          <Label
+            htmlFor={spacesInputId}
+            className="cursor-pointer text-xs text-muted-foreground"
+          >
+            Follow Spaces
+          </Label>
           <button
             type="button"
             onClick={closeWindow}

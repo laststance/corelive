@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -137,6 +137,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     })
 
     // Assert
+    expect(screen.getByText('Follow Spaces')).toBeInTheDocument()
     await waitFor(() => {
       expect(spacesSwitch).toBeChecked()
     })
@@ -198,5 +199,40 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     expect(toast.error).toHaveBeenCalledWith(
       'Failed to update desktop tracking',
     )
+  })
+
+  it('blocks rapid repeats while the Mac desktop tracking save is pending', async () => {
+    // Arrange
+    let resolveSpacesUpdate: (value: boolean) => void = () => undefined
+    const pendingSpacesUpdate = new Promise<boolean>((resolve) => {
+      resolveSpacesUpdate = resolve
+    })
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn(async () => pendingSpacesUpdate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    render(<BrainDumpEditor categories={categories} />)
+    const spacesSwitch = screen.getByRole('switch', {
+      name: 'Show BrainDump on all Mac desktops',
+    })
+    await waitFor(() => {
+      expect(spacesSwitch).not.toBeChecked()
+    })
+
+    // Act
+    fireEvent.click(spacesSwitch)
+    fireEvent.click(spacesSwitch)
+
+    // Assert
+    expect(setVisibleOnAllWorkspaces).toHaveBeenCalledTimes(1)
+    expect(spacesSwitch).toBeDisabled()
+
+    resolveSpacesUpdate(true)
+    await waitFor(() => {
+      expect(spacesSwitch).toBeChecked()
+    })
+    expect(spacesSwitch).not.toBeDisabled()
   })
 })
