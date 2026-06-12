@@ -357,7 +357,11 @@ export class AutoUpdater {
    */
   private showUpdateProgressWindow(progress: UpdaterDownloadProgress): void {
     if (!this.updateProgressWindow || this.updateProgressWindow.isDestroyed()) {
-      const { workArea } = screen.getPrimaryDisplay()
+      const display =
+        this.mainWindow && !this.mainWindow.isDestroyed()
+          ? screen.getDisplayMatching(this.mainWindow.getBounds())
+          : screen.getPrimaryDisplay()
+      const { workArea } = display
       const x = Math.round(
         workArea.x + (workArea.width - UPDATE_PROGRESS_WINDOW_WIDTH_PX) / 2,
       )

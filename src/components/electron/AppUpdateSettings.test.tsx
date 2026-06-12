@@ -151,6 +151,9 @@ describe('AppUpdateSettings', () => {
     expect(
       screen.getByText('Update ready. Restart CoreLive to finish installing.'),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Check for Updates' }),
+    ).toBeEnabled()
   })
 
   it('hides update download progress when the updater reports an error', async () => {

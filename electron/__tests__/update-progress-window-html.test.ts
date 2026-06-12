@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import type { UpdaterDownloadProgress } from '../types/ipc'
 import {
   buildUpdateProgressWindowHtml,
   buildUpdateProgressWindowUpdateScript,
 } from '../update-progress-window-html'
 
-const halfwayProgress = {
+const halfwayProgress: UpdaterDownloadProgress = {
   percent: 42,
   bytesPerSecond: 1024,
   transferred: 42,

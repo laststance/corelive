@@ -173,6 +173,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
 
         if (message === 'Update downloaded') {
           setUpdateDownloaded(true)
+          setIsChecking(false)
           setDownloadProgress(null)
         }
 

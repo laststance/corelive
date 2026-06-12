@@ -1,2 +1,1 @@
-/** Maximum percent shown by auto-update download progress UI. */
-export const UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT = 100
+export { UPDATE_PROGRESS_PERCENT_MAX as UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT } from '@/electron/constants'

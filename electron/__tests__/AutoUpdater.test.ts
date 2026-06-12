@@ -87,6 +87,9 @@ vi.mock('electron', () => ({
     showMessageBox: electronMocks.mockShowMessageBox,
   },
   screen: {
+    getDisplayMatching: vi.fn(() => ({
+      workArea: { x: 1440, y: 0, width: 1440, height: 900 },
+    })),
     getPrimaryDisplay: vi.fn(() => ({
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     })),
@@ -109,6 +112,8 @@ vi.mock('../logger', () => ({
  */
 function createMainWindowStub(): BrowserWindow {
   return {
+    getBounds: vi.fn(() => ({ x: 1500, y: 40, width: 900, height: 700 })),
+    isDestroyed: vi.fn(() => false),
     webContents: {
       isDestroyed: vi.fn(() => false),
       send: vi.fn(),
@@ -208,6 +213,8 @@ describe('AutoUpdater download progress', () => {
     expect(progressWindow.options.alwaysOnTop).toBe(true)
     expect(progressWindow.options.skipTaskbar).toBe(true)
     expect(progressWindow.options.focusable).toBe(false)
+    expect(progressWindow.options.x).toBe(1980)
+    expect(progressWindow.options.y).toBe(690)
     expect(progressWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(true)
     expect(progressWindow.loadURL).toHaveBeenCalledWith(
       expect.stringMatching(/^data:text\/html;charset=utf-8,/),
