@@ -117,6 +117,8 @@ interface ShortcutsConfig {
   minimize: string
   toggleAlwaysOnTop: string
   focusFloatingNavigator: string
+  toggleFloatingNavigator: string
+  toggleBrainDump: string
 }
 
 /** Notifications configuration */
@@ -327,6 +329,8 @@ export class ConfigManager {
         minimize: `${modifier}+M`,
         toggleAlwaysOnTop: `${modifier}+Shift+A`,
         focusFloatingNavigator: `${modifier}+Shift+N`,
+        toggleFloatingNavigator: `${modifier}+3`,
+        toggleBrainDump: 'Alt+Space',
       },
 
       notifications: {
@@ -375,7 +379,7 @@ export class ConfigManager {
         visibleOnAllWorkspaces: false,
         opacity: 0.95,
         syncMode: true,
-        shortcut: '',
+        shortcut: 'Alt+Space',
         lastCategoryId: null,
         notes: {},
       },

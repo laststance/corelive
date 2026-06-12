@@ -44,6 +44,7 @@ const SHORTCUT_DESCRIPTIONS: Record<string, string> = {
   newTask: 'Create new task',
   search: 'Focus search',
   toggleFloatingNavigator: 'Toggle floating navigator',
+  toggleBrainDump: 'Toggle BrainDump',
   minimize: 'Minimize window',
   toggleAlwaysOnTop: 'Toggle always on top',
   focusFloatingNavigator: 'Focus floating navigator',

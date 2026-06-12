@@ -93,7 +93,7 @@ describe('BrainDumpSettings', () => {
     installBrainDumpBridge({
       syncMode: false,
       opacity: 0.7,
-      shortcut: 'CommandOrControl+Shift+B',
+      shortcut: 'Alt+Space',
     })
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -105,9 +105,7 @@ describe('BrainDumpSettings', () => {
     // Assert: the ready UI renders; the old conditional useMemo crash would abort here.
     expect(await screen.findByText('Window opacity')).toBeInTheDocument()
     expect(screen.getByText('70%')).toBeInTheDocument()
-    expect(
-      screen.getByDisplayValue('CommandOrControl+Shift+B'),
-    ).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Alt+Space')).toBeInTheDocument()
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining(
         'React has detected a change in the order of Hooks',
