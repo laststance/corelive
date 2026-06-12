@@ -221,6 +221,15 @@ export interface DeepLinkExamples {
 export interface UpdaterStatus {
   updateAvailable: boolean
   updateDownloaded: boolean
+  downloadProgress: UpdaterDownloadProgress | null
+}
+
+/** Normalized auto-update download progress sent from main to renderer. */
+export interface UpdaterDownloadProgress {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
 }
 
 // ============================================================================
@@ -800,6 +809,7 @@ export interface IPCEventChannels {
   'app-update-available': { version: string; releaseNotes?: string }
   'app-update-downloaded': { version: string }
   'updater-message': string
+  'updater-download-progress': UpdaterDownloadProgress
 
   // Task events (from shortcuts/deep links)
   'focus-task': { taskId: string }

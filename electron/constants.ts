@@ -65,6 +65,25 @@ export const STARTUP_PILL_WIDTH_PX = 260
 export const STARTUP_PILL_HEIGHT_PX = 76
 
 // ============================================================================
+// Auto-update download progress window
+// ============================================================================
+
+/** Update-progress window width (transparent; the visible panel is centered). */
+export const UPDATE_PROGRESS_WINDOW_WIDTH_PX = 360
+
+/** Update-progress window height (transparent; the visible panel is centered). */
+export const UPDATE_PROGRESS_WINDOW_HEIGHT_PX = 118
+
+/** Distance from the bottom of the active work area for the progress window. */
+export const UPDATE_PROGRESS_WINDOW_BOTTOM_OFFSET_PX = 92
+
+/** Minimum percent emitted for update download progress. */
+export const UPDATE_PROGRESS_PERCENT_MIN = 0
+
+/** Maximum percent emitted for update download progress. */
+export const UPDATE_PROGRESS_PERCENT_MAX = 100
+
+// ============================================================================
 // Opt-in debug mode (Issue #61 — DevTools / CDP in packaged builds)
 // ============================================================================
 

@@ -21,12 +21,35 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import type { UpdaterDownloadProgress } from '@/electron/types/ipc'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
+import { UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT } from '@/lib/constants/appUpdate'
 import { log } from '@/lib/logger'
 
 interface AppUpdateSettingsProps {
   className?: string
+}
+
+/**
+ * Verifies the updater progress event payload before rendering the fallback bar.
+ * @param value - Unknown IPC payload from the generic Electron event bridge.
+ * @returns True when value has the numeric progress fields AppUpdateSettings needs.
+ * @example
+ * isUpdaterDownloadProgress({ percent: 42, bytesPerSecond: 1, transferred: 2, total: 4 }) // => true
+ */
+function isUpdaterDownloadProgress(
+  value: unknown,
+): value is UpdaterDownloadProgress {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Partial<UpdaterDownloadProgress>
+  return (
+    typeof candidate.percent === 'number' &&
+    typeof candidate.bytesPerSecond === 'number' &&
+    typeof candidate.transferred === 'number' &&
+    typeof candidate.total === 'number'
+  )
 }
 
 /** User-facing copy derived from main-process updater status strings. */
@@ -63,6 +86,21 @@ function formatUpdaterStatus(rawMessage: string): string {
 }
 
 /**
+ * Converts a normalized progress payload into the existing updater status copy.
+ * @param progress - Download progress emitted by the Electron main process.
+ * @returns Human-readable status text with rounded percent.
+ * @example
+ * formatUpdaterDownloadProgress({ percent: 41.6, bytesPerSecond: 1, transferred: 2, total: 4 }) // => "Downloading update — 42%"
+ */
+function formatUpdaterDownloadProgress(
+  progress: UpdaterDownloadProgress,
+): string {
+  return formatUpdaterStatus(
+    `Downloading update: ${Math.round(progress.percent)}%`,
+  )
+}
+
+/**
  * Settings card for manually checking and installing desktop app updates.
  *
  * @param props - Component props
@@ -79,6 +117,8 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [updateDownloaded, setUpdateDownloaded] = useState(false)
+  const [downloadProgress, setDownloadProgress] =
+    useState<UpdaterDownloadProgress | null>(null)
 
   useCycleEffect(() => {
     const updaterApi = window.electronAPI?.updater
@@ -104,13 +144,22 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
         setUpdateDownloaded(status.updateDownloaded)
         if (status.updateDownloaded) {
           setStatusMessage(formatUpdaterStatus('Update downloaded'))
+          setDownloadProgress(null)
+          return
+        }
+        if (status.downloadProgress) {
+          setDownloadProgress(status.downloadProgress)
+          setStatusMessage(
+            formatUpdaterDownloadProgress(status.downloadProgress),
+          )
+          setIsChecking(true)
         }
       })
       .catch((statusError: unknown) => {
         log.error('Failed to load updater status:', statusError)
       })
 
-    const cleanup = window.electronAPI?.on(
+    const cleanupMessage = window.electronAPI?.on(
       'updater-message',
       (message: unknown) => {
         if (typeof message !== 'string') return
@@ -118,8 +167,13 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
         setStatusMessage(formatUpdaterStatus(message))
         setIsChecking(message.startsWith('Checking for update'))
 
+        if (message.startsWith('Checking for update')) {
+          setDownloadProgress(null)
+        }
+
         if (message === 'Update downloaded') {
           setUpdateDownloaded(true)
+          setDownloadProgress(null)
         }
 
         if (
@@ -128,6 +182,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
           message === 'Failed to download update'
         ) {
           setIsChecking(false)
+          setDownloadProgress(null)
         }
 
         if (message.startsWith('Downloading update:')) {
@@ -136,13 +191,25 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
 
         if (message === 'Update available') {
           setIsChecking(false)
+          setDownloadProgress(null)
         }
+      },
+    )
+
+    const cleanupProgress = window.electronAPI?.on(
+      'updater-download-progress',
+      (progress: unknown) => {
+        if (!isUpdaterDownloadProgress(progress)) return
+        setDownloadProgress(progress)
+        setStatusMessage(formatUpdaterDownloadProgress(progress))
+        setIsChecking(true)
       },
     )
 
     return () => {
       cancelled = true
-      cleanup?.()
+      cleanupMessage?.()
+      cleanupProgress?.()
     }
   }, [])
 
@@ -155,6 +222,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
 
     setIsChecking(true)
     setStatusMessage(formatUpdaterStatus('Checking for update...'))
+    setDownloadProgress(null)
 
     try {
       await updaterApi.checkForUpdates()
@@ -162,6 +230,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
       log.error('Failed to check for updates:', checkError)
       setStatusMessage(formatUpdaterStatus('Error in auto-updater'))
       setIsChecking(false)
+      setDownloadProgress(null)
     }
   }, [])
 
@@ -177,6 +246,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
     } catch (installError: unknown) {
       log.error('Failed to restart for update:', installError)
       setStatusMessage(formatUpdaterStatus('Failed to download update'))
+      setDownloadProgress(null)
     }
   }, [])
 
@@ -209,7 +279,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
             : 'Check for the latest CoreLive release.'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -241,6 +311,23 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
           >
             {statusMessage}
           </p>
+        ) : null}
+
+        {downloadProgress ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>Download progress</span>
+              <span className="font-mono tabular-nums">
+                {Math.round(downloadProgress.percent)}%
+              </span>
+            </div>
+            <Progress
+              value={downloadProgress.percent}
+              max={UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT}
+              aria-label="Update download progress"
+              aria-valuenow={Math.round(downloadProgress.percent)}
+            />
+          </div>
         ) : null}
       </CardContent>
     </Card>
