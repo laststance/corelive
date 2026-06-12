@@ -233,16 +233,22 @@ Intentional choreography. Most motion is in the 150–250ms range. The one motio
 
 - Bounce springs (any `cubic-bezier` with overshoot >1.05 except modals)
 - Confetti, particle bursts, screen-flash
-- SFX, haptics — EXCEPT a single soft, opt-in completion sound (default OFF; see note below)
+- SFX, haptics — EXCEPT an opt-in palette of soft sounds at a few earned moments (default OFF; see note below)
 - Scroll-driven hero animations
 - Loading spinners that exceed 3s without progress text
 
-> **Opt-in completion sound (2026-06-04).** The one sanctioned exception to the
-> SFX ban: a single soft, warm, non-melodic completion sound (≤~400ms), played
-> ONLY when the user explicitly enables it (default OFF). It is a quiet
-> companion's acknowledgment, never a gamified "level-up" chime, and never plays
-> by default. OS mute is honored by the OS (the app does not detect it). At most
-> one sound is in-flight; a rapid second check cuts/restarts rather than layering.
+> **Opt-in sound palette (2026-06-04 single completion sound → 2026-06-13
+> widened to a palette).** The one sanctioned exception to the SFX ban: a small,
+> opt-in palette of soft, warm, **non-melodic** cues at a few _earned_ task-life
+> moments — creating a task, completing, and clearing completed. Each cue is a
+> single short organic texture (≤~400ms), chosen from 3–5 selectable timbres at a
+> user-set volume, **off by default and toggled per moment**. It is a quiet
+> companion's acknowledgment — never a gamified "level-up" chime, never a melodic
+> run, and never plays by default. OS mute is honored by the OS (the app does not
+> detect it). At most one cue plays at a time — a rapid second action cuts/restarts
+> rather than layering (scoped per window). High-frequency UI manipulation
+> (reorder, category-switch) is deliberately excluded to keep these moments feeling
+> earned.
 
 ## Voice & Microcopy
 
