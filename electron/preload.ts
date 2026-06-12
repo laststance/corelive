@@ -132,6 +132,7 @@ const ALLOWED_CHANNELS = {
   'app-update-available': true,
   'app-update-downloaded': true,
   'updater-message': true,
+  'updater-download-progress': true,
   'focus-task': true,
   'mark-task-complete': true,
   'shortcut-new-task': true,
@@ -1877,7 +1878,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('updater-get-status')
       } catch (error) {
         log.error('Failed to get update status:', error)
-        return { updateAvailable: false, updateDownloaded: false }
+        return {
+          updateAvailable: false,
+          updateDownloaded: false,
+          downloadProgress: null,
+        }
       }
     },
   },

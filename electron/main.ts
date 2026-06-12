@@ -2121,7 +2121,11 @@ function setupIPCHandlers(): void {
     if (autoUpdater) {
       return autoUpdater.getUpdateStatus()
     }
-    return { updateAvailable: false, updateDownloaded: false }
+    return {
+      updateAvailable: false,
+      updateDownloaded: false,
+      downloadProgress: null,
+    }
   })
 
   // Note: Quick todo operations removed - Floating Navigator uses oRPC via web app
