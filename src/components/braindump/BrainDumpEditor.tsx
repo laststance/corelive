@@ -143,10 +143,13 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   )
   const [noteText, setNoteText] = useState<string>('')
   const [isLoadingNote, setIsLoadingNote] = useState<boolean>(false)
+  const [spacesTrackingEnabled, setSpacesTrackingEnabled] =
+    useState<boolean>(false)
   const noteInputId = useId()
   const opacityInputId = useId()
   const syncInputId = useId()
   const categoryInputId = useId()
+  const spacesInputId = useId()
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
@@ -177,7 +180,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
     orpc.completed.delete.mutationOptions({}),
   )
 
-  // Initial pull of opacity + sync mode + last category from the main process.
+  // Initial pull of opacity + sync mode + Spaces tracking from the main process.
   useCycleEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment()) return
     let cancelled = false
@@ -187,12 +190,14 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
       api.window.getOpacity(),
       api.sync.getEnabled(),
       api.category.getLast(),
+      api.spaces?.getVisibleOnAllWorkspaces?.() ?? Promise.resolve(false),
     ])
-      .then(([opacityValue, enabled, lastCategoryId]) => {
+      .then(([opacityValue, enabled, lastCategoryId, followsSpaces]) => {
         if (cancelled) return
         setOpacity(opacityValue)
         setSyncEnabled(enabled)
         setLocalCategoryId(lastCategoryId)
+        setSpacesTrackingEnabled(followsSpaces)
       })
       .catch((error) => {
         // Failures here keep the safe defaults seeded by useState; surface
@@ -345,6 +350,32 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
       if (next !== undefined) handleOpacityChange(next)
     },
     [handleOpacityChange],
+  )
+
+  /**
+   * Applies the Mac Spaces tracking switch from the BrainDump header.
+   *
+   * @param enabled - true keeps both utility panels visible across Spaces.
+   * @returns Promise that settles after the main process confirms or rolls back.
+   * @example
+   * await handleSpacesTrackingChange(true)
+   */
+  const handleSpacesTrackingChange = useCallback(
+    async (enabled: boolean): Promise<void> => {
+      const previous = spacesTrackingEnabled
+      setSpacesTrackingEnabled(enabled)
+
+      try {
+        const applied =
+          await window.brainDumpAPI?.spaces?.setVisibleOnAllWorkspaces(enabled)
+        setSpacesTrackingEnabled(applied ?? enabled)
+      } catch (error) {
+        setSpacesTrackingEnabled(previous)
+        toast.error('Failed to update desktop tracking')
+        log.error('BrainDump Spaces tracking update failed', error)
+      }
+    },
+    [spacesTrackingEnabled],
   )
 
   /**
@@ -605,15 +636,22 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             BrainDump
           </span>
         </div>
-        <button
-          type="button"
-          onClick={closeWindow}
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          style={NO_DRAG_REGION_STYLE}
-          aria-label="Close BrainDump"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-2" style={NO_DRAG_REGION_STYLE}>
+          <Switch
+            id={spacesInputId}
+            checked={spacesTrackingEnabled}
+            onCheckedChange={handleSpacesTrackingChange}
+            aria-label="Show BrainDump on all Mac desktops"
+          />
+          <button
+            type="button"
+            onClick={closeWindow}
+            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close BrainDump"
+          >
+            ✕
+          </button>
+        </div>
       </header>
 
       <div

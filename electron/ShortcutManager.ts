@@ -28,10 +28,7 @@ interface ShortcutConfig {
   toggleAlwaysOnTop?: string
   focusFloatingNavigator?: string
   toggleFloatingNavigator?: string
-  /**
-   * Empty string disables the shortcut — BrainDump ships with no default
-   * accelerator (per BrainDump plan D2 — opt-in to avoid global-key conflicts).
-   */
+  /** BrainDump's global quick-open accelerator; empty string disables it. */
   toggleBrainDump?: string
   [key: string]: string | boolean | undefined
 }
@@ -129,7 +126,10 @@ export class ShortcutManager {
       'toggleAlwaysOnTop',
       'focusFloatingNavigator',
     ])
-    this._globalShortcuts = new Set(['toggleFloatingNavigator'])
+    this._globalShortcuts = new Set([
+      'toggleFloatingNavigator',
+      'toggleBrainDump',
+    ])
     this.focusListenersSetup = false
     this.focusHandlers = new Map()
 
@@ -168,16 +168,13 @@ export class ShortcutManager {
     // Electron will translate this to Cmd on macOS and Ctrl on Windows/Linux
     // Note: 'quit' is not included as macOS already handles Cmd+Q natively
     // and we don't have a custom quit handler
-    //
-    // toggleBrainDump defaults to '' so the user opts in via Settings —
-    // BrainDump is meant to be a personal hotkey, not a global default.
     return {
       newTask: 'CommandOrControl+N',
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       focusFloatingNavigator: 'CommandOrControl+Shift+N',
-      toggleFloatingNavigator: 'Alt+Space',
-      toggleBrainDump: '',
+      toggleFloatingNavigator: 'CommandOrControl+3',
+      toggleBrainDump: 'Alt+Space',
     }
   }
 
@@ -633,6 +630,7 @@ export class ShortcutManager {
       toggleAlwaysOnTop: ['T', 'Up', 'P'],
       focusFloatingNavigator: ['W', 'Space', 'F'],
       toggleFloatingNavigator: ['F12', 'Backquote', 'F'],
+      toggleBrainDump: ['B', 'F13', 'Backquote'],
     }
 
     return alternatives[id] || []
@@ -687,6 +685,7 @@ export class ShortcutManager {
       toggleAlwaysOnTop: 'Toggle Always On Top',
       focusFloatingNavigator: 'Focus Floating Navigator',
       toggleFloatingNavigator: 'Toggle Floating Navigator',
+      toggleBrainDump: 'Toggle BrainDump',
     }
 
     return displayNames[id] || id

@@ -7,6 +7,7 @@
  * - Window controls (close/minimize/opacity/bounds) for the frameless panel
  * - Per-category note text persistence (`braindump-note-*`)
  * - Local config (sync mode, shortcut, last-category) used by Settings UI
+ * - Shared Spaces tracking for BrainDump + Floating Navigator utility panels
  * - One inbound event (`braindump-category-changed`) to mirror FloatingNav
  *
  * Why a separate preload:
@@ -115,6 +116,7 @@ function sanitizeData<T>(data: T): T {
  * Renderer usage:
  * @example
  * await window.brainDumpAPI.window.setOpacity(0.85)
+ * const followsSpaces = await window.brainDumpAPI.spaces.getVisibleOnAllWorkspaces()
  * const text = await window.brainDumpAPI.note.get(42)
  * const cleanup = window.brainDumpAPI.on('braindump-category-changed', handler)
  */
@@ -260,6 +262,46 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
         await typedInvoke('braindump-config-set-last-category', categoryId)
       } catch (error) {
         log.error('BrainDump: Failed to set last category:', error)
+      }
+    },
+  },
+
+  spaces: {
+    /**
+     * Read whether utility panels stay visible while switching macOS Spaces.
+     *
+     * @returns True when BrainDump and Floating Navigator follow all Spaces.
+     * @example
+     * const enabled = await window.brainDumpAPI.spaces.getVisibleOnAllWorkspaces()
+     */
+    getVisibleOnAllWorkspaces: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke(
+          'floating-window-get-visible-on-all-workspaces',
+        )
+      } catch (error) {
+        log.error('BrainDump: Failed to get Spaces tracking:', error)
+        return false
+      }
+    },
+
+    /**
+     * Persist and apply whether utility panels follow macOS Spaces.
+     *
+     * @param enabled - true keeps BrainDump and Floating Navigator visible across Spaces.
+     * @returns The value confirmed by the main process.
+     * @example
+     * await window.brainDumpAPI.spaces.setVisibleOnAllWorkspaces(true)
+     */
+    setVisibleOnAllWorkspaces: async (enabled: boolean): Promise<boolean> => {
+      try {
+        return await typedInvoke(
+          'floating-window-set-visible-on-all-workspaces',
+          enabled,
+        )
+      } catch (error) {
+        log.error('BrainDump: Failed to set Spaces tracking:', error)
+        throw error
       }
     },
   },

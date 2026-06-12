@@ -331,7 +331,7 @@ export class MenuManager {
    * Creates the Window menu for window management.
    *
    * Adds a "BrainDump Note" entry that toggles the frameless panel via
-   * WindowManager (no accelerator by default — users opt-in via Settings).
+   * WindowManager; the global accelerator is owned by ShortcutManager.
    */
   createWindowMenu(): MenuItemConstructorOptions {
     const submenu: MenuItemConstructorOptions[] = [
@@ -612,6 +612,8 @@ Copyright © 2025 CoreLive`,
       'Ctrl/Cmd + Shift + A: Toggle Always on Top',
       'Ctrl/Cmd + Shift + T: Show Main Window',
       'Ctrl/Cmd + Shift + N: Focus Floating Navigator',
+      'Ctrl/Cmd + 3: Toggle Floating Navigator',
+      'Alt/Option + Space: Toggle BrainDump',
       'Ctrl/Cmd + Q: Quit Application',
       'Ctrl/Cmd + ,: Preferences',
       'Ctrl/Cmd + R: Reload',
@@ -622,7 +624,7 @@ Copyright © 2025 CoreLive`,
       'Ctrl/Cmd + W: Close Window',
       'F11 (Ctrl+Cmd+F on Mac): Toggle Fullscreen',
       '',
-      '* Search Tasks and Toggle Floating Navigator are available in View > Floating Navigator menu',
+      '* Shortcut defaults can be changed from Preferences > Keyboard Shortcuts',
     ]
 
     dialog.showMessageBox(this.mainWindow, {

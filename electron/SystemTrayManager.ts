@@ -486,7 +486,7 @@ export class SystemTrayManager {
         { type: 'separator' },
         {
           label: 'Toggle Floating Navigator',
-          accelerator: 'Alt+Space',
+          accelerator: 'CommandOrControl+3',
           click: () => {
             try {
               this.windowManager.toggleFloatingNavigator()

@@ -593,6 +593,7 @@ export interface FloatingNavigatorEnv {
  * - `note.*`   — per-category text persistence
  * - `sync.*`   — toggle for "follow FloatingNav category"
  * - `category.*` — last-active category id used to restore state
+ * - `spaces.*` — shared macOS Spaces tracking for utility panels
  * - `on(channel, cb)` — subscribe to whitelisted main-process events
  */
 export interface BrainDumpAPI {
@@ -639,6 +640,12 @@ export interface BrainDumpAPI {
     getLast: () => Promise<number | null>
     /** Persist the active category id. */
     setLast: (categoryId: number) => Promise<void>
+  }
+  spaces: {
+    /** Read whether BrainDump and Floating Navigator follow macOS Spaces. */
+    getVisibleOnAllWorkspaces: () => Promise<boolean>
+    /** Persist and apply whether both utility panels follow macOS Spaces. */
+    setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
   }
   /** Subscribe to a whitelisted event; returns a cleanup function. */
   on: (
