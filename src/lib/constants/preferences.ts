@@ -1,20 +1,23 @@
 /**
- * Default user preferences for the core web/Electron experience. BOTH default
- * OFF so existing users — and anyone whose pre-existing persisted Redux blob
- * lacks this slice — keep today's behavior: no completion sound, and completed
- * todos move to the Completed list rather than staying in place.
+ * Default user preferences — derived from the Zod schema SSoT (D2) via
+ * `PreferencesStateSchema.parse({})`, so the defaults can NEVER drift from the
+ * validated shape (one place to add a field). Every field defaults OFF/neutral,
+ * so existing users — and anyone whose pre-existing persisted Redux blob predates
+ * a field — keep today's behavior: a SILENT app, completed todos moving to the
+ * Completed list.
  *
  * Read preferences through the slice's defensive `?? DEFAULT` selectors: the
- * persistence middleware's default `shallowMerge` drops any field ADDED to this
- * slice in a future release for users who already persisted it, so a missing
- * field must coalesce to its default here (eng-review Finding 5).
+ * persistence middleware's `shallowMerge` replaces the WHOLE preferences slice
+ * with the persisted object, so any field ADDED in a later release is simply
+ * absent at runtime for users who already persisted — it must coalesce to its
+ * default here (eng-review Finding 5).
+ *
+ * @module lib/constants/preferences
  */
-export const DEFAULT_PREFERENCES = {
-  /** Play a soft sound on completion. Opt-in DESIGN.md exception, default OFF. */
-  completionSound: false,
-  /**
-   * 居残りモード — keep checked todos in the active list (checked + strikethrough)
-   * instead of moving them to the Completed list. Default OFF (today's behavior).
-   */
-  retainCompletedInList: false,
-}
+import { PreferencesStateSchema } from '@/lib/schemas/preferences'
+
+/**
+ * The full default preferences: completion sound OFF, 居残りモード OFF, every
+ * sound moment OFF, the default timbre, and the default master volume.
+ */
+export const DEFAULT_PREFERENCES = PreferencesStateSchema.parse({})
