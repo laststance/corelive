@@ -23,6 +23,7 @@ import {
   COMPLETION_SOUND_DURATION_MS,
   COMPLETION_SOUND_FREQUENCY_HZ,
   COMPLETION_SOUND_PEAK_GAIN,
+  COMPLETION_SOUND_RELEASE_TARGET_GAIN,
 } from '@/lib/constants/completionFeedback'
 import { SOUND_TIMBRES, type TimbreId } from '@/lib/constants/sound'
 
@@ -192,7 +193,10 @@ function playSynthFallback(
     startTime + COMPLETION_SOUND_ATTACK_MS / 1000,
   )
   // Decay toward (not to) zero — exponential ramps cannot target 0.
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, endTime)
+  gainNode.gain.exponentialRampToValueAtTime(
+    COMPLETION_SOUND_RELEASE_TARGET_GAIN,
+    endTime,
+  )
 
   oscillator.connect(gainNode).connect(audioContext.destination)
   oscillator.start(startTime)
