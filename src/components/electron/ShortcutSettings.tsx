@@ -1,14 +1,9 @@
 'use client'
 
 import { Keyboard, RotateCcw, Save, AlertCircle } from 'lucide-react'
-import {
-  memo,
-  useCallback,
-  useState,
-  type ChangeEvent,
-  type MouseEvent,
-} from 'react'
+import { memo, useCallback, useState, type MouseEvent } from 'react'
 
+import { KeybindingCaptureInput } from '@/components/electron/KeybindingCaptureInput'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
@@ -129,6 +123,13 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     setError(null)
   }, [])
 
+  /**
+   * Persist every pending shortcut edit to the main process in one batch, then
+   * surface success/failure. Sends the full id→accelerator record to update()
+   * (the preload bridge rejects a per-shortcut loop — see the body comment).
+   * @returns Resolves when the batch save settles; sets error state on any failure.
+   * @example saveShortcuts() // flushes pending edits, clears the unsaved-changes flag on success
+   */
   const saveShortcuts = useCallback(async () => {
     if (!isElectron) return
 
@@ -139,17 +140,10 @@ export const ShortcutSettings = memo(function ShortcutSettings({
       if (!window.electronAPI?.shortcuts) {
         throw new Error('Electron API not available')
       }
-      // Update each shortcut individually
-      let allSuccess = true
-      for (const [id, accelerator] of Object.entries(shortcuts)) {
-        const success = await window.electronAPI.shortcuts.update(
-          id,
-          accelerator,
-        )
-        if (!success) {
-          allSuccess = false
-        }
-      }
+      // Persist every shortcut in one batch — the preload bridge takes the full
+      // id→accelerator record. A per-shortcut loop calling update(id, accel)
+      // throws in preload, which expects a Record, not positional args.
+      const allSuccess = await window.electronAPI.shortcuts.update(shortcuts)
 
       if (allSuccess) {
         setHasChanges(false)
@@ -228,14 +222,6 @@ export const ShortcutSettings = memo(function ShortcutSettings({
       }
     },
     [isElectron, shortcuts],
-  )
-
-  const handleShortcutChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const shortcutId = event.currentTarget.dataset.shortcutId
-      if (shortcutId) updateShortcut(shortcutId, event.target.value)
-    },
-    [updateShortcut],
   )
 
   const handleTestShortcutClick = useCallback(
@@ -331,33 +317,18 @@ export const ShortcutSettings = memo(function ShortcutSettings({
               <div className="space-y-3">
                 {Object.entries(SHORTCUT_DESCRIPTIONS).map(
                   ([id, description]) => (
-                    <div key={id} className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <Label htmlFor={`shortcut-${id}`} className="text-sm">
-                          {description}
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id={`shortcut-${id}`}
-                          value={shortcuts[id] || ''}
-                          data-shortcut-id={id}
-                          onChange={handleShortcutChange}
-                          placeholder="e.g. Ctrl+N"
-                          className="w-32 text-sm"
-                          disabled={isSaving}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          data-shortcut-id={id}
-                          onClick={handleTestShortcutClick}
-                          disabled={isSaving || !shortcuts[id]}
-                        >
-                          Test
-                        </Button>
-                      </div>
-                    </div>
+                    <ShortcutRow
+                      key={id}
+                      id={id}
+                      description={description}
+                      value={shortcuts[id] || ''}
+                      platform={
+                        stats?.platform === 'darwin' ? 'darwin' : 'other'
+                      }
+                      disabled={isSaving}
+                      onChange={updateShortcut}
+                      onTest={handleTestShortcutClick}
+                    />
                   ),
                 )}
               </div>
@@ -369,12 +340,8 @@ export const ShortcutSettings = memo(function ShortcutSettings({
                 <p>Platform: {stats.platform}</p>
                 <p>Registered shortcuts: {stats.totalRegistered}</p>
                 <p className="mt-2">
-                  <strong>Tip:</strong> Use{' '}
-                  {stats.platform === 'darwin' ? 'Cmd' : 'Ctrl'} as the main
-                  modifier key. Examples:{' '}
-                  {stats.platform === 'darwin'
-                    ? 'Cmd+N, Cmd+Shift+F'
-                    : 'Ctrl+N, Ctrl+Shift+F'}
+                  <strong>Tip:</strong> Click a shortcut, then press the key
+                  combination you want — Esc cancels, Backspace clears it.
                 </p>
               </div>
             )}
@@ -404,5 +371,77 @@ export const ShortcutSettings = memo(function ShortcutSettings({
         )}
       </CardContent>
     </Card>
+  )
+})
+
+interface ShortcutRowProps {
+  /** Shortcut id (map key); also builds the stable `shortcut-${id}` control id. */
+  id: string
+  /** Human-readable shortcut name shown in the Label and as the box's aria-label. */
+  description: string
+  /** Bound accelerator string (`''` when unbound). */
+  value: string
+  /** Glyph platform forwarded to the capture box. */
+  platform: 'darwin' | 'other'
+  /** Whether a save is in flight — disables capture and the Test button. */
+  disabled: boolean
+  /** Buffers a captured accelerator into the parent's pending edits. */
+  onChange: (id: string, accelerator: string) => void
+  /** Fires the Test action; reads `data-shortcut-id` off the clicked button. */
+  onTest: (event: MouseEvent<HTMLButtonElement>) => void
+}
+
+/**
+ * One configurable shortcut line — label, VSCode-style capture box, and Test button.
+ * Extracted so each row owns a stable per-id onChange (useCallback): an inline
+ * `(accel) => onChange(id, accel)` in the parent's .map would allocate a fresh
+ * function every render and trip the prefer-usecallback lint.
+ * @param props - See {@link ShortcutRowProps}.
+ * @returns The shortcut's settings row.
+ * @example <ShortcutRow id="toggleBrainDump" description="Toggle BrainDump" value="Alt+Space" platform="darwin" disabled={false} onChange={updateShortcut} onTest={handleTestShortcutClick} />
+ */
+const ShortcutRow = memo(function ShortcutRow({
+  id,
+  description,
+  value,
+  platform,
+  disabled,
+  onChange,
+  onTest,
+}: ShortcutRowProps) {
+  // Bind the parent's (id, accelerator) handler to this row's id so the capture
+  // box receives a stable reference instead of a fresh inline closure each render.
+  const handleChange = useCallback(
+    (accelerator: string) => onChange(id, accelerator),
+    [id, onChange],
+  )
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex-1">
+        <Label htmlFor={`shortcut-${id}`} className="text-sm">
+          {description}
+        </Label>
+      </div>
+      <div className="flex items-center gap-2">
+        <KeybindingCaptureInput
+          id={`shortcut-${id}`}
+          value={value}
+          ariaLabel={description}
+          platform={platform}
+          disabled={disabled}
+          onChange={handleChange}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          data-shortcut-id={id}
+          onClick={onTest}
+          disabled={disabled || !value}
+        >
+          Test
+        </Button>
+      </div>
+    </div>
   )
 })

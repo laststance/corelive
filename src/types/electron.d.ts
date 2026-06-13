@@ -101,7 +101,7 @@ interface ElectronAPI {
   shortcuts?: {
     getRegistered: () => Promise<any>
     getDefaults: () => Promise<any>
-    update: (shortcuts: any) => Promise<any>
+    update: (shortcuts: Record<string, string>) => Promise<boolean>
     register: (accelerator: string, id: string) => Promise<boolean>
     unregister: (id: string) => Promise<boolean>
     isRegistered: (accelerator: string) => Promise<boolean>

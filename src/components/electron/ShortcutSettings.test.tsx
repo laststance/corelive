@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -69,7 +75,7 @@ describe('ShortcutSettings defaults', () => {
     installShortcutsBridge()
   })
 
-  it('resets Floating Navigator and BrainDump inputs to the new default accelerators', async () => {
+  it('shows the default accelerators as macOS glyphs after Reset to Defaults', async () => {
     // Arrange
     const user = userEvent.setup()
     render(<ShortcutSettings />)
@@ -80,12 +86,40 @@ describe('ShortcutSettings defaults', () => {
     // Act
     await user.click(resetButton)
 
-    // Assert
+    // Assert: the capture boxes render the bound chord as Apple glyphs (⌘3 /
+    // ⌥Space), not the raw "CommandOrControl+3" accelerator string.
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle floating navigator')).toHaveValue(
-        'CommandOrControl+3',
-      )
+      expect(
+        screen.getByLabelText('Toggle floating navigator'),
+      ).toHaveTextContent('⌘3')
     })
-    expect(screen.getByLabelText('Toggle BrainDump')).toHaveValue('Alt+Space')
+    expect(screen.getByLabelText('Toggle BrainDump')).toHaveTextContent(
+      '⌥Space',
+    )
+  })
+
+  it('enables a shortcut’s Test button once it is bound and disables it when cleared', async () => {
+    // Arrange: reset so BrainDump starts bound to its default accelerator.
+    const user = userEvent.setup()
+    render(<ShortcutSettings />)
+    const resetButton = await screen.findByRole('button', {
+      name: 'Reset to Defaults',
+    })
+    await user.click(resetButton)
+    const brainDumpBox = await screen.findByLabelText('Toggle BrainDump')
+    const controls = brainDumpBox.parentElement
+    if (!controls) throw new Error('expected the shortcut row controls wrapper')
+    const testButton = within(controls).getByRole('button', { name: 'Test' })
+
+    // Assert: a bound shortcut can be tested.
+    expect(testButton).toBeEnabled()
+
+    // Act: clear the binding by recording then pressing Delete.
+    fireEvent.click(brainDumpBox)
+    fireEvent.keyDown(brainDumpBox, { code: 'Delete' })
+
+    // Assert: with nothing bound there is nothing to test, so Test is disabled.
+    expect(brainDumpBox).toHaveTextContent('Click to set')
+    expect(testButton).toBeDisabled()
   })
 })

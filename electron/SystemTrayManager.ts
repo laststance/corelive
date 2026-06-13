@@ -61,6 +61,22 @@ export class SystemTrayManager {
   /** Whether tray notification has been shown */
   private hasShownTrayNotification: boolean
 
+  /**
+   * Live accelerator provider, injected after ShortcutManager loads (it is
+   * constructed AFTER this manager, so it cannot arrive via the constructor).
+   * Returns the current `{ shortcutId: accelerator }` map so the tray menu can
+   * DISPLAY each hotkey live — tray accelerators are display-only, they register
+   * no key binding.
+   */
+  private getShortcutAccelerators?: () => Record<string, string>
+
+  /**
+   * Last task list passed to updateTrayMenu, cached so a shortcut-triggered
+   * refreshTrayMenu() re-renders with current accelerators without wiping the
+   * recent-tasks section.
+   */
+  private lastTasks: TaskItem[]
+
   constructor(windowManager: WindowManager) {
     this.windowManager = windowManager
     this.tray = null
@@ -68,6 +84,7 @@ export class SystemTrayManager {
     this.isQuitting = false
     this.fallbackMode = false
     this.hasShownTrayNotification = false
+    this.lastTasks = []
   }
 
   /**
@@ -463,6 +480,28 @@ export class SystemTrayManager {
   }
 
   /**
+   * Inject the live accelerator provider. Called from main.ts after
+   * ShortcutManager loads (it is constructed after this manager), so the tray
+   * menu can display each shortcut's current hotkey. Display-only — registers
+   * no key binding.
+   *
+   * @param provider - Returns the current `{ shortcutId: accelerator }` map.
+   */
+  setShortcutAcceleratorProvider(provider: () => Record<string, string>): void {
+    this.getShortcutAccelerators = provider
+  }
+
+  /**
+   * Re-render the tray menu with the last tasks + current accelerators.
+   * Triggered after a shortcut rebind so a displayed hotkey never goes stale.
+   *
+   * @returns True when the menu was rebuilt, false when no tray is available.
+   */
+  refreshTrayMenu(): boolean {
+    return this.updateTrayMenu(this.lastTasks)
+  }
+
+  /**
    * Update tray context menu.
    */
   updateTrayMenu(tasks: TaskItem[] = []): boolean {
@@ -471,7 +510,17 @@ export class SystemTrayManager {
       return false
     }
 
+    // Cache so refreshTrayMenu() can re-render with live accelerators without
+    // losing the recent-tasks section.
+    this.lastTasks = tasks
+
     try {
+      // Live, display-only hotkeys; an empty/absent value omits the accelerator
+      // so a rebound or unset shortcut never shows a stale or orphan glyph.
+      const accelerators = this.getShortcutAccelerators?.() ?? {}
+      const floatingNavigatorAccelerator = accelerators.toggleFloatingNavigator
+      const brainDumpAccelerator = accelerators.toggleBrainDump
+
       const template: MenuItemConstructorOptions[] = [
         {
           label: 'Show TODO App',
@@ -486,7 +535,9 @@ export class SystemTrayManager {
         { type: 'separator' },
         {
           label: 'Toggle Floating Navigator',
-          accelerator: 'CommandOrControl+3',
+          ...(floatingNavigatorAccelerator
+            ? { accelerator: floatingNavigatorAccelerator }
+            : {}),
           click: () => {
             try {
               this.windowManager.toggleFloatingNavigator()
@@ -496,12 +547,15 @@ export class SystemTrayManager {
           },
         },
         {
-          label: 'Open BrainDump',
+          label: 'Toggle BrainDump',
+          ...(brainDumpAccelerator
+            ? { accelerator: brainDumpAccelerator }
+            : {}),
           click: () => {
             try {
-              this.windowManager.showBrainDump()
+              this.windowManager.toggleBrainDump()
             } catch (error) {
-              log.error('Failed to open BrainDump:', error)
+              log.error('Failed to toggle BrainDump:', error)
             }
           },
         },
