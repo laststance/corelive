@@ -4,12 +4,11 @@ import * as React from 'react'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { playTimbre } from '@/lib/audio/soundEngine'
 import preferencesReducer, {
   initialState,
 } from '@/lib/redux/slices/preferencesSlice'
-
-import { useCompletionFeedback } from './useCompletionFeedback'
 
 // The wrapper delegates all audio to the per-window sound engine; mock it so each
 // test asserts the delegation contract (the complete cue's timbre/volume, and

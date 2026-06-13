@@ -4,7 +4,7 @@ import {
   playTimbre,
   prewarmTimbre,
   resetSoundEngineForTest,
-} from './soundEngine'
+} from '@/lib/audio/soundEngine'
 
 /**
  * Records everything the engine drives on a fake AudioContext + fetch so a test

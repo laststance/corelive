@@ -1,7 +1,6 @@
-'use client'
-
 import { useCallback } from 'react'
 
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { playTimbre, prewarmTimbre } from '@/lib/audio/soundEngine'
 import type { SoundMomentId } from '@/lib/constants/sound'
 import { useAppSelector } from '@/lib/redux/hooks'
@@ -10,8 +9,6 @@ import {
   selectSoundTimbre,
   selectSoundVolume,
 } from '@/lib/redux/slices/preferencesSlice'
-
-import { useCycleEffect } from './use-cycle-effect'
 
 /**
  * Earned-beat sound seam for one task-life moment (`task-create` / `complete` /

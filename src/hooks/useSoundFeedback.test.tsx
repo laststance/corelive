@@ -4,14 +4,13 @@ import * as React from 'react'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { playTimbre, prewarmTimbre } from '@/lib/audio/soundEngine'
 import type { SoundMomentId } from '@/lib/constants/sound'
 import preferencesReducer, {
   initialState,
 } from '@/lib/redux/slices/preferencesSlice'
 import type { PreferencesState } from '@/lib/schemas/preferences'
-
-import { useSoundFeedback } from './useSoundFeedback'
 
 // Mock the per-window sound engine so these tests assert the hook's gate +
 // delegation (which moment fires, at which timbre/volume, and that the timbre is

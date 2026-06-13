@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { foldLegacyCompletionSoundIntoMoments } from './foldLegacyCompletionSoundIntoMoments'
+import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
 
 describe('foldLegacyCompletionSoundIntoMoments', () => {
   it('seeds complete:true from a legacy completion sound when the palette never set moments', () => {

@@ -32,6 +32,14 @@ import { SOUND_TIMBRES, type TimbreId } from '@/lib/constants/sound'
 /** The one AudioContext for this window, created lazily on first real use. */
 let sharedAudioContext: AudioContext | null = null
 
+/**
+ * Sticky flag set when the AudioContext constructor throws (no output device,
+ * hardware init failure). Once true, getAudioContext returns null without
+ * retrying — so a fire-and-forget `void prewarmTimbre(...)` can't surface an
+ * unhandled rejection on every cue when the device simply cannot play audio.
+ */
+let didAudioContextInitFail = false
+
 /** Decoded asset buffers, keyed by timbre — decoded once, replayed many times. */
 const decodedBuffers = new Map<TimbreId, AudioBuffer>()
 
@@ -63,7 +71,20 @@ function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined' || typeof AudioContext === 'undefined') {
     return null
   }
-  sharedAudioContext ??= new AudioContext()
+  // A prior construction already failed — don't retry (and don't throw into a
+  // fire-and-forget prewarm); the engine stays silently disabled this session.
+  if (didAudioContextInitFail) {
+    return null
+  }
+  if (sharedAudioContext === null) {
+    try {
+      sharedAudioContext = new AudioContext()
+    } catch {
+      // No output device / hardware init failure — disable audio for this window.
+      didAudioContextInitFail = true
+      return null
+    }
+  }
   return sharedAudioContext
 }
 
@@ -288,6 +309,7 @@ export async function previewTimbre(
  */
 export function resetSoundEngineForTest(): void {
   sharedAudioContext = null
+  didAudioContextInitFail = false
   sharedActiveSource = null
   decodedBuffers.clear()
   failedTimbres.clear()

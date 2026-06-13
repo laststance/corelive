@@ -1,6 +1,6 @@
 'use client'
 
-import { useSoundFeedback } from './useSoundFeedback'
+import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 
 /**
  * motion-safe gated amber fill for the checkbox (~200ms ease-out, `duration-200`

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { PreferencesStateSchema } from './preferences'
+import { PreferencesStateSchema } from '@/lib/schemas/preferences'
 
 describe('PreferencesStateSchema', () => {
   it('parses an empty object into the fully-silent default state (fresh install makes no sound)', () => {

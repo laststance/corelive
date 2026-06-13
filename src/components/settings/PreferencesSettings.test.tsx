@@ -4,13 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { PreferencesSettings } from '@/components/settings/PreferencesSettings'
 import { previewTimbre } from '@/lib/audio/soundEngine'
 import preferencesReducer, {
   initialState,
 } from '@/lib/redux/slices/preferencesSlice'
 import type { PreferencesState } from '@/lib/schemas/preferences'
-
-import { PreferencesSettings } from './PreferencesSettings'
 
 // The timbre picker auditions the chosen sound through the engine; mock it so the
 // test asserts the audition call (which timbre, at which volume) without real Web

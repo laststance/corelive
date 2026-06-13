@@ -103,7 +103,12 @@ export const preferencesSlice = createSlice({
      * @param action - Payload containing the new volume (0–1).
      */
     setSoundVolume: (state, action: PayloadAction<number>) => {
-      state.soundVolume = Math.min(1, Math.max(0, action.payload))
+      // Guard NaN/±Infinity (Math.min/max would let NaN slip through and
+      // poison the slider/gain); fall back to the default instead.
+      const requestedVolume = action.payload
+      state.soundVolume = Number.isFinite(requestedVolume)
+        ? Math.min(1, Math.max(0, requestedVolume))
+        : DEFAULT_PREFERENCES.soundVolume
     },
 
     /**

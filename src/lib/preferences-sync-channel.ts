@@ -1,5 +1,6 @@
 import type { Middleware } from '@reduxjs/toolkit'
 
+import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
 import { hydratePreferences } from '@/lib/redux/slices/preferencesSlice'
 import {
   type PreferencesState,
@@ -95,7 +96,19 @@ export const createPreferencesSyncMiddleware = (): Middleware => {
       // out-of-range, or partial data into Redux.
       const parsed = PreferencesStateSchema.safeParse(event.data.state)
       if (parsed.success) {
-        store.dispatch(hydratePreferences(parsed.data))
+        // A cross-version inbound payload (e.g. an old cached web tab on the
+        // same origin) may carry only the legacy `completionSound:true` with no
+        // `soundMoments`; the schema would default `complete` to false and drop
+        // that intent. Fold the legacy flag in first — mirrors the persisted
+        // migratePersistedState path so inbound and on-disk legacy agree.
+        const foldedMoments = foldLegacyCompletionSoundIntoMoments(
+          event.data.state,
+        )
+        const nextPreferences =
+          foldedMoments === undefined
+            ? parsed.data
+            : { ...parsed.data, soundMoments: foldedMoments }
+        store.dispatch(hydratePreferences(nextPreferences))
       }
     })
 

@@ -1,6 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import {
+  createPreferencesSyncMiddleware,
+  PREFERENCES_SYNC_CHANNEL_NAME,
+  PREFERENCES_SYNC_EVENT_TYPE,
+} from '@/lib/preferences-sync-channel'
 import preferencesReducer, {
   hydratePreferences,
   initialState,
@@ -8,12 +13,6 @@ import preferencesReducer, {
   setSoundTimbre,
   setSoundVolume,
 } from '@/lib/redux/slices/preferencesSlice'
-
-import {
-  createPreferencesSyncMiddleware,
-  PREFERENCES_SYNC_CHANNEL_NAME,
-  PREFERENCES_SYNC_EVENT_TYPE,
-} from './preferences-sync-channel'
 
 type ChannelListener = (event: MessageEvent) => void
 
@@ -136,6 +135,25 @@ describe('preferences cross-window sync', () => {
 
     // Assert — the receiver applies the CLAMPED value, never the raw 50.
     expect(windowB.getState().preferences.soundVolume).toBe(1)
+  })
+
+  it('folds a legacy-only inbound payload so the completion cue is not silently lost', () => {
+    // Arrange — a window plus a raw sender posting a pre-palette snapshot that
+    // carries ONLY the legacy completionSound flag (no soundMoments at all),
+    // exactly what an old cached web tab on the same origin would broadcast.
+    const windowB = makeWindowStore()
+    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
+
+    // Act — push the cross-version legacy payload.
+    sender.postMessage({
+      type: PREFERENCES_SYNC_EVENT_TYPE,
+      state: { completionSound: true },
+    })
+
+    // Assert — the legacy "completion sound ON" intent survives as complete:true
+    // instead of being defaulted to false by the schema (the fold mirrors the
+    // persisted migratePersistedState path).
+    expect(windowB.getState().preferences.soundMoments.complete).toBe(true)
   })
 
   it('ignores a malformed inbound payload, leaving the receiver state unchanged', () => {
