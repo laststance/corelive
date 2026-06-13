@@ -123,6 +123,13 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     setError(null)
   }, [])
 
+  /**
+   * Persist every pending shortcut edit to the main process in one batch, then
+   * surface success/failure. Sends the full id→accelerator record to update()
+   * (the preload bridge rejects a per-shortcut loop — see the body comment).
+   * @returns Resolves when the batch save settles; sets error state on any failure.
+   * @example saveShortcuts() // flushes pending edits, clears the unsaved-changes flag on success
+   */
   const saveShortcuts = useCallback(async () => {
     if (!isElectron) return
 

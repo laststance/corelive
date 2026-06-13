@@ -76,6 +76,14 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
     }
   }, [isElectron])
 
+  /**
+   * Batch-persist a full shortcut record via the preload bridge, refreshing local
+   * state on success. One update() call with the whole map — the bridge rejects
+   * positional (id, accelerator) args, so a per-shortcut loop would throw.
+   * @param newShortcuts - Full `{ shortcutId: accelerator }` map to persist (`''` unbinds).
+   * @returns Resolves to `true` when the batch persisted, `false` on failure or non-Electron.
+   * @example await updateShortcuts({ toggleBrainDump: 'Alt+Space' })
+   */
   const updateShortcuts = useCallback(
     async (newShortcuts: Record<string, string>) => {
       if (!isElectron || !window.electronAPI?.shortcuts) return false

@@ -181,6 +181,14 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
     [],
   )
 
+  /**
+   * Commit a captured BrainDump accelerator: apply optimistically, persist over
+   * IPC, then roll back to the last accepted value on conflict (`ok === false`)
+   * or error. Wired to the capture box's onChange (fires on key-press, not blur).
+   * @param nextAccelerator - Captured accelerator string, or `''` to unbind.
+   * @returns Resolves once the binding is persisted or rolled back.
+   * @example handleShortcutCapture('Alt+Space') // persists, or reverts + shows conflict copy if taken
+   */
   const handleShortcutCapture = useCallback(
     async (nextAccelerator: string): Promise<void> => {
       // The capture box commits immediately (no blur step), so the optimistic
