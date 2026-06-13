@@ -10,6 +10,7 @@ import React, {
   useState,
 } from 'react'
 
+import { KeybindingCaptureInput } from '@/components/electron/KeybindingCaptureInput'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -18,7 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
@@ -32,6 +32,7 @@ import {
   BRAINDUMP_OPACITY_MIN,
   BRAINDUMP_OPACITY_STEP,
 } from '@/lib/constants/braindump'
+import { KEYBINDING_CONFLICT_MESSAGE } from '@/lib/constants/keybinding'
 import { log } from '@/lib/logger'
 
 /**
@@ -180,22 +181,30 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
     [],
   )
 
-  const handleShortcutBlur = useCallback(async (): Promise<void> => {
-    setError(null)
-    try {
-      const ok = await window.electronAPI?.brainDump?.setShortcut(shortcut)
-      if (ok === false) {
-        setError('Shortcut could not be registered (it may already be in use).')
+  const handleShortcutCapture = useCallback(
+    async (nextAccelerator: string): Promise<void> => {
+      // The capture box commits immediately (no blur step), so the optimistic
+      // update + registration + rollback that used to live in onBlur run here.
+      setShortcut(nextAccelerator)
+      setError(null)
+      try {
+        const ok =
+          await window.electronAPI?.brainDump?.setShortcut(nextAccelerator)
+        if (ok === false) {
+          // Already registered elsewhere — revert to the last accepted value.
+          setError(KEYBINDING_CONFLICT_MESSAGE)
+          setShortcut(lastGoodShortcutRef.current)
+          return
+        }
+        lastGoodShortcutRef.current = nextAccelerator
+      } catch (err) {
+        log.error('Failed to update BrainDump shortcut:', err)
         setShortcut(lastGoodShortcutRef.current)
-        return
+        setError('Failed to update shortcut')
       }
-      lastGoodShortcutRef.current = shortcut
-    } catch (err) {
-      log.error('Failed to update BrainDump shortcut:', err)
-      setShortcut(lastGoodShortcutRef.current)
-      setError('Failed to update shortcut')
-    }
-  }, [shortcut])
+    },
+    [],
+  )
 
   const handleOpenBrainDump = useCallback(async (): Promise<void> => {
     try {
@@ -206,12 +215,6 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
     }
   }, [])
 
-  const handleShortcutChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setShortcut(event.target.value)
-    },
-    [],
-  )
   const opacityValue = useMemo(() => [opacity], [opacity])
 
   // Defer the non-Electron fallback until after hydration so server and
@@ -345,16 +348,15 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
             <Keyboard className="h-4 w-4" />
             Toggle shortcut
           </Label>
-          <Input
+          <KeybindingCaptureInput
             id={shortcutId}
             value={shortcut}
-            placeholder="e.g. CommandOrControl+Shift+B"
-            onChange={handleShortcutChange}
-            onBlur={handleShortcutBlur}
+            ariaLabel="Toggle shortcut"
+            onChange={handleShortcutCapture}
           />
           <p className="text-xs text-muted-foreground">
-            Leave empty to disable the global shortcut. Use Electron accelerator
-            syntax (e.g. <code>CommandOrControl+Shift+B</code>).
+            Click, then press the keys you want. Esc cancels; Backspace clears
+            it to disable the global shortcut.
           </p>
         </div>
 

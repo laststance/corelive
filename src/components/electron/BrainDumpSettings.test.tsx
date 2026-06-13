@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BrainDumpSettings } from './BrainDumpSettings'
@@ -105,12 +105,39 @@ describe('BrainDumpSettings', () => {
     // Assert: the ready UI renders; the old conditional useMemo crash would abort here.
     expect(await screen.findByText('Window opacity')).toBeInTheDocument()
     expect(screen.getByText('70%')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Alt+Space')).toBeInTheDocument()
+    // The capture box renders the bound chord as a macOS glyph, not the raw
+    // "Alt+Space" accelerator string.
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining(
         'React has detected a change in the order of Hooks',
       ),
     )
+  })
+
+  it('reverts the binding and explains why when the captured chord is already in use', async () => {
+    // Arrange: load with Alt+Space bound, then make the next register attempt fail.
+    installBrainDumpBridge({
+      syncMode: false,
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    render(<BrainDumpSettings />)
+    const box = await screen.findByLabelText('Toggle shortcut')
+    expect(box).toHaveTextContent('⌥Space')
+    // The main process rejects the next accelerator as already registered.
+    setShortcutMock.mockResolvedValueOnce(false)
+
+    // Act: record a new chord (⌘3) that gets refused.
+    fireEvent.click(box)
+    fireEvent.keyDown(box, { code: 'Digit3', metaKey: true })
+
+    // Assert: the conflict copy appears and the box rolls back to the last
+    // accepted binding rather than keeping the rejected ⌘3.
+    expect(
+      await screen.findByText("That combo's already in use — try another."),
+    ).toBeInTheDocument()
+    expect(box).toHaveTextContent('⌥Space')
   })
 
   it('degrades gracefully when an old preload exposes brainDump but not the settings getters', async () => {

@@ -120,8 +120,8 @@ export interface ElectronAPI {
     getRegistered: () => Promise<ShortcutDefinition[]>
     /** Get default shortcuts */
     getDefaults: () => Promise<ShortcutDefinition[]>
-    /** Update shortcut accelerator */
-    update: (id: string, accelerator: string) => Promise<boolean>
+    /** Update shortcut accelerators in one batch (id → accelerator; `''` unbinds). */
+    update: (shortcuts: Record<string, string>) => Promise<boolean>
     /** Register new shortcut */
     register: (shortcut: ShortcutDefinition) => Promise<boolean>
     /** Unregister shortcut */

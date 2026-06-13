@@ -841,6 +841,22 @@ async function loadSystemIntegrationStack(): Promise<void> {
   )
   log.info('✅ [DEFERRED] ShortcutManager loaded')
 
+  // Feed the tray live, display-only hotkeys for the two toggle items it shows.
+  // ShortcutManager is constructed AFTER SystemTrayManager, so this is a setter
+  // injection rather than a constructor argument. Only the two displayed keys
+  // are exposed, and only when they hold a real accelerator string.
+  systemTrayManager?.setShortcutAcceleratorProvider(() => {
+    const current = shortcutManager?.getCurrentShortcuts() ?? {}
+    const accelerators: Record<string, string> = {}
+    if (typeof current.toggleFloatingNavigator === 'string') {
+      accelerators.toggleFloatingNavigator = current.toggleFloatingNavigator
+    }
+    if (typeof current.toggleBrainDump === 'string') {
+      accelerators.toggleBrainDump = current.toggleBrainDump
+    }
+    return accelerators
+  })
+
   log.info('🔧 [DEFERRED] Wiring managers + initializing system integration...')
   systemIntegrationErrorHandler.setManagers(
     systemTrayManager,
@@ -1474,6 +1490,8 @@ function setupIPCHandlers(): void {
       }
     }
     configManager.set('braindump.shortcut', accelerator)
+    // Keep the tray's displayed BrainDump hotkey in sync with the rebind.
+    systemTrayManager?.refreshTrayMenu()
     return true
   })
 
@@ -1990,7 +2008,12 @@ function setupIPCHandlers(): void {
     if (!shortcutManager) {
       return false
     }
-    return shortcutManager.updateShortcuts(shortcuts)
+    const didUpdate = shortcutManager.updateShortcuts(shortcuts)
+    // Keep the tray's displayed hotkeys in sync with the rebind.
+    if (didUpdate) {
+      systemTrayManager?.refreshTrayMenu()
+    }
+    return didUpdate
   })
 
   typedHandle('shortcuts-register', (_event, definition) => {

@@ -81,17 +81,10 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       if (!isElectron || !window.electronAPI?.shortcuts) return false
 
       try {
-        // Update each shortcut individually
-        let allSuccess = true
-        for (const [id, accelerator] of Object.entries(newShortcuts)) {
-          const success = await window.electronAPI.shortcuts.update(
-            id,
-            accelerator,
-          )
-          if (!success) {
-            allSuccess = false
-          }
-        }
+        // Persist the whole record in one call — the preload bridge's update()
+        // expects a Record, not positional (id, accelerator) args (a loop throws).
+        const allSuccess =
+          await window.electronAPI.shortcuts.update(newShortcuts)
         if (allSuccess) {
           await loadShortcuts() // Refresh after update
         }
