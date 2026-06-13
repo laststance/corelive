@@ -35,6 +35,7 @@ import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
@@ -93,6 +94,13 @@ export const TodoList = memo(function TodoList() {
     reorderMutation,
     deleteCompletedWithUndo,
   } = useTodoMutations(selectedCategoryId, isRetaining)
+
+  // Earned-beat sound cues (opt-in, default OFF) fired on the create + clear
+  // gestures below. Each is a no-op unless its moment is enabled in Settings, so
+  // the seams call them unconditionally. The `complete` cue lives in TodoItem via
+  // useCompletionFeedback; D3 keeps at most one cue in-flight per window.
+  const fireCreate = useSoundFeedback('task-create')
+  const fireClear = useSoundFeedback('clear')
 
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
@@ -175,8 +183,11 @@ export const TodoList = memo(function TodoList() {
         notes,
         categoryId: selectedCategoryId,
       })
+      // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
+      // fired here, inside the user gesture, so the engine can resume audio.
+      fireCreate()
     },
-    [createMutation, selectedCategoryId],
+    [createMutation, fireCreate, selectedCategoryId],
   )
 
   /**
@@ -260,7 +271,11 @@ export const TodoList = memo(function TodoList() {
    */
   const deleteCompleted = useCallback(() => {
     clearCompletedMutation.mutate({})
-  }, [clearCompletedMutation])
+    // Earned-beat cue on the clear gesture (no-op unless the moment is enabled).
+    // Both clear paths route through here — the direct CompletedTodos "Clear" and
+    // the retain-mode confirm dialog — so one fire() covers both.
+    fireClear()
+  }, [clearCompletedMutation, fireClear])
 
   // Retain-mode Clear confirmation: Clear is the ONLY way to remove
   // completed-retained rows (D14 hides the per-row trash) and it archives the

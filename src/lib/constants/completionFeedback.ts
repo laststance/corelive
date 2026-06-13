@@ -22,3 +22,6 @@ export const COMPLETION_SOUND_PEAK_GAIN = 0.12
 export const COMPLETION_SOUND_ATTACK_MS = 6
 /** Total envelope length; ≤400ms per DESIGN.md's opt-in-sound exception. */
 export const COMPLETION_SOUND_DURATION_MS = 280
+/** Near-zero gain the decay ramp targets — Web Audio exponential ramps cannot
+ * reach exactly 0, so the release fades toward this tiny floor instead. */
+export const COMPLETION_SOUND_RELEASE_TARGET_GAIN = 0.0001

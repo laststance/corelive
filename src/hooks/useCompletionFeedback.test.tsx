@@ -4,22 +4,38 @@ import * as React from 'react'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import preferencesReducer from '@/lib/redux/slices/preferencesSlice'
+import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
+import { playTimbre } from '@/lib/audio/soundEngine'
+import preferencesReducer, {
+  initialState,
+} from '@/lib/redux/slices/preferencesSlice'
 
-import {
-  resetCompletionFeedbackAudioForTest,
-  useCompletionFeedback,
-} from './useCompletionFeedback'
+// The wrapper delegates all audio to the per-window sound engine; mock it so each
+// test asserts the delegation contract (the complete cue's timbre/volume, and
+// that an OFF moment never reaches the engine) without real Web Audio. The engine
+// itself — asset path, synth fallback, one-in-flight, shared context — is covered
+// by soundEngine.test.ts.
+vi.mock('@/lib/audio/soundEngine', () => ({
+  playTimbre: vi.fn(),
+  prewarmTimbre: vi.fn(),
+  previewTimbre: vi.fn(),
+  resetSoundEngineForTest: vi.fn(),
+}))
 
 /**
- * Renders useCompletionFeedback under a minimal Redux store with the given
- * completion-sound preference (the hook reads it app-level via useAppSelector).
+ * Renders useCompletionFeedback under a minimal Redux store with the `complete`
+ * earned-beat moment turned ON or OFF. The moment is set on `soundMoments`
+ * directly (not via the legacy completionSound flag): an explicit soundMoments
+ * value WINS over the legacy flag, so the cue only fires when complete is true.
  */
-function renderWithSound(completionSound: boolean) {
+function renderWithCompleteMoment(enabled: boolean) {
   const store = configureStore({
     reducer: { preferences: preferencesReducer },
     preloadedState: {
-      preferences: { completionSound, retainCompletedInList: false },
+      preferences: {
+        ...initialState,
+        soundMoments: { 'task-create': false, complete: enabled, clear: false },
+      },
     },
   })
   return renderHook(() => useCompletionFeedback(), {
@@ -29,113 +45,16 @@ function renderWithSound(completionSound: boolean) {
   })
 }
 
-/**
- * Records all oscillators a fake AudioContext creates so a test can assert the
- * "at most one sound in-flight" cut/restart behavior (an earlier oscillator gets
- * stop()ped when a new fire() starts a replacement).
- */
-interface FakeAudioState {
-  // How many times the AudioContext constructor ran — lets a test prove the
-  // module-level singleton builds ONE context across multiple hook instances.
-  constructCount: number
-  context: { state: AudioContextState; resumeCount: number; closed: boolean }
-  oscillators: Array<{
-    started: boolean
-    stopped: boolean
-    type: OscillatorType
-  }>
-}
-
-/**
- * Installs a minimal synchronous globalThis.AudioContext stub so fire() runs its
- * real sound path (createOscillator → resume → start/stop → in-flight cut)
- * instead of only the silent-degradation branch. Returns the recorded state plus
- * an uninstall fn to restore the original constructor.
- */
-function installFakeAudioContext(): {
-  state: FakeAudioState
-  uninstall: () => void
-} {
-  const state: FakeAudioState = {
-    constructCount: 0,
-    context: { state: 'suspended', resumeCount: 0, closed: false },
-    oscillators: [],
-  }
-  const gainNodeStub = {
-    gain: {
-      setValueAtTime: vi.fn(),
-      linearRampToValueAtTime: vi.fn(),
-      exponentialRampToValueAtTime: vi.fn(),
-    },
-    connect: vi.fn(() => audioDestinationStub),
-  }
-  const audioDestinationStub = {}
-
-  class FakeAudioContext {
-    currentTime = 0
-    constructor() {
-      state.constructCount += 1
-    }
-    get state(): AudioContextState {
-      return state.context.state
-    }
-    destination = audioDestinationStub
-    async resume(): Promise<void> {
-      state.context.resumeCount += 1
-      state.context.state = 'running'
-    }
-    async close(): Promise<void> {
-      state.context.closed = true
-    }
-    createGain() {
-      return gainNodeStub
-    }
-    createOscillator() {
-      const record = {
-        started: false,
-        stopped: false,
-        type: 'sine' as OscillatorType,
-      }
-      state.oscillators.push(record)
-      return {
-        set type(value: OscillatorType) {
-          record.type = value
-        },
-        frequency: { setValueAtTime: vi.fn() },
-        connect: vi.fn(() => gainNodeStub),
-        start: vi.fn(() => {
-          record.started = true
-        }),
-        stop: vi.fn(() => {
-          record.stopped = true
-        }),
-        addEventListener: vi.fn(),
-      }
-    }
-  }
-
-  const original = globalThis.AudioContext
-  // @ts-expect-error — assigning a test double over the DOM lib type.
-  globalThis.AudioContext = FakeAudioContext
-  return {
-    state,
-    uninstall: () => {
-      globalThis.AudioContext = original
-    },
-  }
-}
-
 describe('useCompletionFeedback', () => {
-  // The shared AudioContext + in-flight oscillator are module-level singletons
-  // (so "one sound in-flight" holds across row surfaces), so reset between tests
-  // or a stub installed in one case would leak into the next.
   afterEach(() => {
-    resetCompletionFeedbackAudioForTest()
+    // The engine spies accumulate calls across tests — clear so each case's
+    // delegation assertions see only its own fire().
+    vi.clearAllMocks()
   })
 
   it('returns the motion-safe, short-tier checkbox fill className (not celebration easing)', () => {
     // Act
-    const { result } = renderWithSound(false)
+    const { result } = renderWithCompleteMoment(false)
 
     // Assert — motion-safe gated, 200ms ease-out; NOT the heatmap celebration easing.
     expect(result.current.checkboxMotionClassName).toContain('motion-safe:')
@@ -144,87 +63,26 @@ describe('useCompletionFeedback', () => {
     expect(result.current.checkboxMotionClassName).not.toContain('cubic-bezier')
   })
 
-  it('fire() never throws when the completion sound is OFF (the default — a pure no-op)', () => {
-    // Arrange
-    const { result } = renderWithSound(false)
+  it('plays the complete cue at the selected timbre + master volume when the complete moment is ON', () => {
+    // Arrange — complete moment ON; the slice defaults are the 'felt' timbre at 0.6.
+    const { result } = renderWithCompleteMoment(true)
 
-    // Act / Assert — opt-in default OFF means no audio is created or played.
-    expect(() => result.current.fire()).not.toThrow()
+    // Act — a false→true completion fires the cue.
+    result.current.fire()
+
+    // Assert — delegated once to the engine with the selected timbre + volume.
+    expect(vi.mocked(playTimbre)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(playTimbre)).toHaveBeenCalledWith('felt', 0.6)
   })
 
-  it('fire() never throws even when sound is ON in a context without Web Audio (degrades silently)', () => {
-    // Arrange — enabling the preference must never let a missing/blocked
-    // AudioContext break the completion flow; it degrades to silence.
-    const { result } = renderWithSound(true)
+  it('stays silent — never reaches the sound engine — when the complete moment is OFF (the fresh-install default)', () => {
+    // Arrange — complete moment OFF (opt-in default).
+    const { result } = renderWithCompleteMoment(false)
 
-    // Act / Assert
-    expect(() => result.current.fire()).not.toThrow()
-  })
+    // Act
+    result.current.fire()
 
-  it('fire() plays a single sine tone (resumes a suspended context, then starts+stops the oscillator) when sound is ON', () => {
-    // Arrange — a real Web Audio context is available and the preference is ON.
-    const { state, uninstall } = installFakeAudioContext()
-    try {
-      const { result } = renderWithSound(true)
-
-      // Act
-      result.current.fire()
-
-      // Assert — the suspended context is resumed, and exactly one warm sine
-      // oscillator is created, started, and scheduled to stop.
-      expect(state.context.resumeCount).toBe(1)
-      expect(state.oscillators).toHaveLength(1)
-      const [onlyOscillator] = state.oscillators
-      expect(onlyOscillator?.type).toBe('sine')
-      expect(onlyOscillator?.started).toBe(true)
-      expect(onlyOscillator?.stopped).toBe(true)
-    } finally {
-      uninstall()
-    }
-  })
-
-  it('fire() keeps at most one sound in-flight — a rapid second completion cuts the first oscillator instead of layering', () => {
-    // Arrange — sound ON, with a stub that records every oscillator created.
-    const { state, uninstall } = installFakeAudioContext()
-    try {
-      const { result } = renderWithSound(true)
-
-      // Act — two completions in quick succession (e.g. two rows checked fast).
-      result.current.fire()
-      result.current.fire()
-
-      // Assert — the first oscillator is cut (stopped) when the second starts,
-      // so the two cues never layer into a cacophony.
-      expect(state.oscillators).toHaveLength(2)
-      const [firstOscillator, secondOscillator] = state.oscillators
-      expect(firstOscillator?.stopped).toBe(true)
-      expect(secondOscillator?.started).toBe(true)
-    } finally {
-      uninstall()
-    }
-  })
-
-  it('fire() reuses one shared AudioContext across separate hook instances (the per-row surfaces never each open their own)', () => {
-    // Arrange — two independently mounted hook instances stand in for two of the
-    // row surfaces (TodoItem + a Floating row) that mount the hook separately.
-    const { state, uninstall } = installFakeAudioContext()
-    try {
-      const first = renderWithSound(true)
-      const second = renderWithSound(true)
-
-      // Act — each instance fires once.
-      first.result.current.fire()
-      second.result.current.fire()
-
-      // Assert — exactly ONE AudioContext was constructed across both instances
-      // (the singleton is shared, not per-row), and the first instance's
-      // oscillator was cut when the second fired (one sound in-flight app-wide).
-      expect(state.constructCount).toBe(1)
-      expect(state.oscillators).toHaveLength(2)
-      const [firstSharedOscillator] = state.oscillators
-      expect(firstSharedOscillator?.stopped).toBe(true)
-    } finally {
-      uninstall()
-    }
+    // Assert — no cue is played; a default install makes no completion sound.
+    expect(vi.mocked(playTimbre)).not.toHaveBeenCalled()
   })
 })

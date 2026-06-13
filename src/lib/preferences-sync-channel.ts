@@ -1,12 +1,16 @@
 import type { Middleware } from '@reduxjs/toolkit'
 
+import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
+import { hydratePreferences } from '@/lib/redux/slices/preferencesSlice'
 import {
-  hydratePreferences,
   type PreferencesState,
-} from '@/lib/redux/slices/preferencesSlice'
+  PreferencesStateSchema,
+} from '@/lib/schemas/preferences'
 
-const PREFERENCES_SYNC_CHANNEL_NAME = 'corelive-preferences-sync'
-const PREFERENCES_SYNC_EVENT_TYPE = 'preferences-sync'
+// Exported so the cross-window sync tests can post raw wire-protocol payloads to
+// the exact channel/type the middleware listens on (no duplicated magic string).
+export const PREFERENCES_SYNC_CHANNEL_NAME = 'corelive-preferences-sync'
+export const PREFERENCES_SYNC_EVENT_TYPE = 'preferences-sync'
 
 type PreferencesSyncMessage = Readonly<{
   type: typeof PREFERENCES_SYNC_EVENT_TYPE
@@ -15,10 +19,15 @@ type PreferencesSyncMessage = Readonly<{
 
 // The local, user-initiated toggles that should propagate to other windows.
 // hydratePreferences is deliberately excluded so an applied broadcast never
-// re-broadcasts (the loop guard).
+// re-broadcasts (the loop guard). Keep in lockstep with the slice's set* reducers
+// — a NEW set* action is silent cross-window until it is added here (the Zod
+// schema validates payloads but does NOT decide which actions broadcast).
 const BROADCASTABLE_ACTION_TYPES = new Set<string>([
   'preferences/setCompletionSound',
   'preferences/setRetainCompletedInList',
+  'preferences/setSoundMoment',
+  'preferences/setSoundTimbre',
+  'preferences/setSoundVolume',
 ])
 
 /**
@@ -29,28 +38,23 @@ const isBrowserWithChannel = (): boolean =>
   typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
 
 /**
- * Narrows an unknown BroadcastChannel payload to a preferences-sync message.
+ * Narrows an unknown BroadcastChannel payload to a preferences-sync ENVELOPE
+ * (correct type tag + a `state` field); the inner state is validated separately
+ * by the Zod schema so this only confirms the wrapper, not the preference values.
  * @param data - The raw `event.data` from the channel.
- * @returns Whether `data` is a well-formed preferences-sync message.
+ * @returns Whether `data` is a preferences-sync envelope.
  * @example
- * isPreferencesSyncMessage({ type: 'preferences-sync', state: {...} }) // => true
+ * isPreferencesSyncEnvelope({ type: 'preferences-sync', state: {...} }) // => true
  */
-const isPreferencesSyncMessage = (
+const isPreferencesSyncEnvelope = (
   data: unknown,
-): data is PreferencesSyncMessage => {
-  if (typeof data !== 'object' || data === null) return false
-  const message = data as Partial<PreferencesSyncMessage>
-  if (message.type !== PREFERENCES_SYNC_EVENT_TYPE) return false
-  // Validate the inner preference fields, not just that `state` is an object: a
-  // malformed channel payload (e.g. `completionSound: 'yes'`) would otherwise be
-  // hydrated into Redux and persisted, since the selectors only coalesce
-  // null/undefined and would let non-boolean junk through unchanged.
-  const state = message.state as Partial<PreferencesState> | undefined
+): data is { type: typeof PREFERENCES_SYNC_EVENT_TYPE; state: unknown } => {
   return (
-    typeof state === 'object' &&
-    state !== null &&
-    typeof state.completionSound === 'boolean' &&
-    typeof state.retainCompletedInList === 'boolean'
+    typeof data === 'object' &&
+    data !== null &&
+    'type' in data &&
+    data.type === PREFERENCES_SYNC_EVENT_TYPE &&
+    'state' in data
   )
 }
 
@@ -64,7 +68,6 @@ const isPreferencesSyncMessage = (
  * set* toggles trigger an outgoing broadcast. No-ops on the server / where
  * BroadcastChannel is unavailable.
  *
- * @returns Redux middleware to concat into the store's middleware chain.
  * @returns
  * - In a browser: a middleware that broadcasts set* toggles and applies inbound snapshots
  * - On the server / unsupported runtime: a transparent pass-through middleware
@@ -85,8 +88,27 @@ export const createPreferencesSyncMiddleware = (): Middleware => {
     // Apply preferences pushed from another window. hydratePreferences is not a
     // broadcastable action, so this never bounces back out (no echo loop).
     channel.addEventListener('message', (event: MessageEvent) => {
-      if (isPreferencesSyncMessage(event.data)) {
-        store.dispatch(hydratePreferences(event.data.state))
+      if (!isPreferencesSyncEnvelope(event.data)) return
+      // Validate + coalesce the inbound state through the Zod SSoT: a legacy
+      // payload is accepted with new fields defaulted, an out-of-range
+      // soundVolume is CLAMPED, and malformed junk (wrong types) is rejected
+      // wholesale. Dispatch the PARSED snapshot so we never persist raw,
+      // out-of-range, or partial data into Redux.
+      const parsed = PreferencesStateSchema.safeParse(event.data.state)
+      if (parsed.success) {
+        // A cross-version inbound payload (e.g. an old cached web tab on the
+        // same origin) may carry only the legacy `completionSound:true` with no
+        // `soundMoments`; the schema would default `complete` to false and drop
+        // that intent. Fold the legacy flag in first — mirrors the persisted
+        // migratePersistedState path so inbound and on-disk legacy agree.
+        const foldedMoments = foldLegacyCompletionSoundIntoMoments(
+          event.data.state,
+        )
+        const nextPreferences =
+          foldedMoments === undefined
+            ? parsed.data
+            : { ...parsed.data, soundMoments: foldedMoments }
+        store.dispatch(hydratePreferences(nextPreferences))
       }
     })
 

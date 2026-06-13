@@ -16,6 +16,7 @@ import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
+import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
@@ -68,6 +69,12 @@ export const FloatingNavigatorContainer = React.memo(
       updateMutation,
       reorderMutation,
     } = useTodoMutations(selectedCategoryId, isRetaining)
+
+    // Earned-beat cue for the floating window's task-create gesture (opt-in,
+    // default OFF; no-op unless enabled). The complete cue is wired in
+    // FloatingNavigator via useCompletionFeedback. Per-window engine → D3 keeps at
+    // most one cue in-flight in this window independently of the main window.
+    const fireCreate = useSoundFeedback('task-create')
 
     // Category CRUD mutations with optimistic updates
     const {
@@ -157,8 +164,11 @@ export const FloatingNavigatorContainer = React.memo(
           text: title,
           categoryId: selectedCategoryId,
         })
+        // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
+        // fired inside the user gesture so the engine can resume audio.
+        fireCreate()
       },
-      [createMutation, selectedCategoryId],
+      [createMutation, fireCreate, selectedCategoryId],
     )
 
     /**
