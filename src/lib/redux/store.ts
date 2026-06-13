@@ -18,6 +18,10 @@ import { combineReducers, configureStore } from '@reduxjs/toolkit'
 
 import { createPreferencesSyncMiddleware } from '../preferences-sync-channel'
 
+import {
+  migratePersistedState,
+  STORAGE_SCHEMA_VERSION,
+} from './migratePersistedState'
 import electronSettingsReducer from './slices/electronSettingsSlice'
 import preferencesReducer from './slices/preferencesSlice'
 
@@ -50,6 +54,11 @@ const { middleware: storageMiddleware, reducer: hydratedReducer } =
     rootReducer,
     key: STORAGE_KEY,
     slices: ['electronSettings', 'preferences'], // Slices to persist to localStorage
+    // Seal the legacy completionSound → soundMoments fold at the hydration
+    // boundary. Bumping the version runs `migrate` once on the next rehydrate;
+    // it MUST stay total or the middleware wipes ALL persisted state.
+    version: STORAGE_SCHEMA_VERSION,
+    migrate: migratePersistedState,
   })
 
 /**
