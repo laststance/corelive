@@ -1,6 +1,8 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { test, expect, type Page } from '@playwright/test'
 
+import { STORAGE_SCHEMA_VERSION } from '@/lib/redux/migratePersistedState'
+
 import { resetDatabase } from './_helpers/db'
 
 /**
@@ -31,9 +33,10 @@ const STORAGE_KEY = 'corelive-redux-state'
  */
 function seedPreferences(completeMomentEnabled: boolean): string {
   return JSON.stringify({
-    // Matches STORAGE_SCHEMA_VERSION (migratePersistedState.ts): seeding the
-    // current version skips migration so soundMoments lands as written.
-    version: 1,
+    // Seed at the CURRENT schema version (imported, not hardcoded) so the
+    // hydration migration is a no-op and soundMoments lands as written — and so
+    // a future STORAGE_SCHEMA_VERSION bump can't silently desync this fixture.
+    version: STORAGE_SCHEMA_VERSION,
     state: {
       preferences: {
         completionSound: false,
