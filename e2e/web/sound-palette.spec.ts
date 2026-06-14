@@ -52,12 +52,14 @@ function seedPreferences(completeMomentEnabled: boolean): string {
 
 /**
  * Patches the Web Audio start seam BEFORE any app script runs, so every cue the
- * engine schedules increments `window.__soundCueFired`. Both the asset-buffer
- * path (`createBufferSource().start()`) and the synth fallback
- * (`createOscillator().start()`) inherit `AudioScheduledSourceNode.prototype.start`,
- * so wrapping that one base method counts both with no double-count. Decode-only
- * prewarm never calls `.start()`, so it can't false-positive. This is a SPY (it
- * calls the original), not a mock — the real engine still runs end to end.
+ * engine schedules increments `window.__soundCueFired`. Chromium defines `start()`
+ * on the CONCRETE scheduled-source interfaces (`AudioBufferSourceNode` for the
+ * decoded-asset path, `OscillatorNode` for the synth fallback), NOT reliably on
+ * the `AudioScheduledSourceNode` base prototype — so we wrap both concretes. They
+ * are distinct prototype objects, so a buffer-source play and an oscillator play
+ * each increment exactly once (no double-count). Decode-only prewarm never calls
+ * `.start()`, so it can't false-positive. This is a SPY (it calls the original),
+ * not a mock — the real engine still runs end to end.
  * @param page - Playwright page to install the init script on.
  * @returns A promise that resolves once the init script is registered.
  */
@@ -69,16 +71,25 @@ async function instrumentSoundEngine(page: Page): Promise<void> {
       window.__soundCueInstrumented = true
       window.__soundCueFired = 0
 
-      const sourceNodePrototype = window.AudioScheduledSourceNode?.prototype
-      if (typeof sourceNodePrototype?.start === 'function') {
-        const originalStart = sourceNodePrototype.start
-        sourceNodePrototype.start = function (
+      // Shadow `.start` on a concrete scheduled-source prototype with a counter.
+      const countStartCalls = (prototype: AudioScheduledSourceNode): void => {
+        const originalStart = prototype.start
+        prototype.start = function (
           this: AudioScheduledSourceNode,
           ...startArgs: Parameters<AudioScheduledSourceNode['start']>
         ) {
           window.__soundCueFired = (window.__soundCueFired ?? 0) + 1
           return originalStart.apply(this, startArgs)
         }
+      }
+
+      if (
+        typeof window.AudioBufferSourceNode?.prototype?.start === 'function'
+      ) {
+        countStartCalls(window.AudioBufferSourceNode.prototype)
+      }
+      if (typeof window.OscillatorNode?.prototype?.start === 'function') {
+        countStartCalls(window.OscillatorNode.prototype)
       }
     } catch {
       // Cross-origin / sandboxed frame (e.g. Clerk iframe) — no audio there.
@@ -120,7 +131,7 @@ test.describe('Sound palette — fire on gesture', () => {
 
   test('plays the completion cue when the complete moment is enabled', async ({
     page,
-  }) => {
+  }, testInfo) => {
     // Arrange — seed preferences with the complete cue ON, then boot the app.
     await page.addInitScript(
       ({ storageKey, blob }) => {
@@ -138,7 +149,12 @@ test.describe('Sound palette — fire on gesture', () => {
     expect(
       await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
     ).toContain('"complete":true')
-    const todoCheckbox = await addPendingTodo(page, 'Sound on completion test')
+    // Unique per retry: resetDatabase is beforeAll, so a retry's leftover todo
+    // would otherwise collide on the accessible name (strict-mode violation).
+    const todoCheckbox = await addPendingTodo(
+      page,
+      `Sound on completion test ${testInfo.retry}`,
+    )
 
     // Act — complete the todo (the user gesture that should fire the cue).
     await todoCheckbox.click()
@@ -151,7 +167,9 @@ test.describe('Sound palette — fire on gesture', () => {
       .toBeGreaterThanOrEqual(1)
   })
 
-  test('stays silent when the complete moment is off', async ({ page }) => {
+  test('stays silent when the complete moment is off', async ({
+    page,
+  }, testInfo) => {
     // Arrange — seed preferences with every cue OFF (explicit, not relying on the
     // default), then boot the app.
     await page.addInitScript(
@@ -166,15 +184,17 @@ test.describe('Sound palette — fire on gesture', () => {
     )
     await page.goto('/home')
     await page.waitForLoadState('networkidle')
-    const todoCheckbox = await addPendingTodo(page, 'Sound off completion test')
+    // Unique per retry (resetDatabase is beforeAll) — see the positive test.
+    const todoText = `Sound off completion test ${testInfo.retry}`
+    const todoCheckbox = await addPendingTodo(page, todoText)
 
     // Act — complete the todo. With the moment OFF, fire() is a no-op.
     await todoCheckbox.click()
 
     // Assert — completion is observable (proving the gesture ran)...
-    await expect(
-      page.getByRole('checkbox', { name: 'Sound off completion test' }),
-    ).toBeChecked({ timeout: 5000 })
+    await expect(page.getByRole('checkbox', { name: todoText })).toBeChecked({
+      timeout: 5000,
+    })
     // ...and no cue was ever scheduled.
     expect(await page.evaluate(() => window.__soundCueFired ?? 0)).toBe(0)
   })
