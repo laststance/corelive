@@ -1,0 +1,181 @@
+import { setupClerkTestingToken } from '@clerk/testing/playwright'
+import { test, expect, type Page } from '@playwright/test'
+
+import { resetDatabase } from './_helpers/db'
+
+/**
+ * Globals the browser-side instrumentation installs. `__soundCueFired` counts how
+ * many times the Web Audio engine actually scheduled a cue (`.start()`), so a
+ * headless CI run can prove the cue fired without listening to audio.
+ */
+declare global {
+  interface Window {
+    __soundCueFired?: number
+    __soundCueInstrumented?: boolean
+  }
+}
+
+/** localStorage key the Redux store persists preferences under (store.ts). */
+const STORAGE_KEY = 'corelive-redux-state'
+
+/**
+ * Builds the persisted Redux blob the app rehydrates on load, with the complete
+ * moment ON or OFF. Stored at the CURRENT schema version so the hydration
+ * migration is a no-op and the preferences land verbatim — exactly what a user
+ * who toggled the setting would have on disk.
+ * @param completeMomentEnabled - Whether the 'complete' cue should play.
+ * @returns The JSON string to write into localStorage before the app boots.
+ * @example
+ * seedPreferences(true)  // complete cue plays on completion
+ * seedPreferences(false) // app stays silent
+ */
+function seedPreferences(completeMomentEnabled: boolean): string {
+  return JSON.stringify({
+    // Matches STORAGE_SCHEMA_VERSION (migratePersistedState.ts): seeding the
+    // current version skips migration so soundMoments lands as written.
+    version: 1,
+    state: {
+      preferences: {
+        completionSound: false,
+        retainCompletedInList: false,
+        soundMoments: {
+          'task-create': false,
+          complete: completeMomentEnabled,
+          clear: false,
+        },
+        soundTimbre: 'felt',
+        soundVolume: 1,
+      },
+    },
+  })
+}
+
+/**
+ * Patches the Web Audio start seam BEFORE any app script runs, so every cue the
+ * engine schedules increments `window.__soundCueFired`. Both the asset-buffer
+ * path (`createBufferSource().start()`) and the synth fallback
+ * (`createOscillator().start()`) inherit `AudioScheduledSourceNode.prototype.start`,
+ * so wrapping that one base method counts both with no double-count. Decode-only
+ * prewarm never calls `.start()`, so it can't false-positive. This is a SPY (it
+ * calls the original), not a mock — the real engine still runs end to end.
+ * @param page - Playwright page to install the init script on.
+ * @returns A promise that resolves once the init script is registered.
+ */
+async function instrumentSoundEngine(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      // Install once per document; preserves the counter across re-entrant runs.
+      if (window.__soundCueInstrumented) return
+      window.__soundCueInstrumented = true
+      window.__soundCueFired = 0
+
+      const sourceNodePrototype = window.AudioScheduledSourceNode?.prototype
+      if (typeof sourceNodePrototype?.start === 'function') {
+        const originalStart = sourceNodePrototype.start
+        sourceNodePrototype.start = function (
+          this: AudioScheduledSourceNode,
+          ...startArgs: Parameters<AudioScheduledSourceNode['start']>
+        ) {
+          window.__soundCueFired = (window.__soundCueFired ?? 0) + 1
+          return originalStart.apply(this, startArgs)
+        }
+      }
+    } catch {
+      // Cross-origin / sandboxed frame (e.g. Clerk iframe) — no audio there.
+    }
+  })
+}
+
+/**
+ * Adds a pending todo and waits for the create mutation to settle with a positive
+ * server id, returning its checkbox. Optimistic create assigns a temporary
+ * negative id ("todo--<ts>"); clicking before the real id arrives targets a
+ * phantom row. Mirrors the positive-id guard in todo-app.spec.ts.
+ * @param page - Playwright page.
+ * @param todoText - The todo label (also the checkbox accessible name).
+ * @returns The pending todo's checkbox locator, server-confirmed.
+ */
+async function addPendingTodo(page: Page, todoText: string) {
+  await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+  await expect(todoCheckbox).toBeVisible()
+  await expect(todoCheckbox).not.toBeChecked()
+  await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
+    timeout: 5000,
+  })
+  return todoCheckbox
+}
+
+test.describe('Sound palette — fire on gesture', () => {
+  test.beforeAll(resetDatabase)
+
+  test.beforeEach(async ({ page }) => {
+    // Clerk testing token + auth state from e2e/.auth/user.json (same as todo-app).
+    await setupClerkTestingToken({ page })
+    // Instrument the audio engine before any navigation so the spy is in place
+    // before the app constructs a single AudioContext node.
+    await instrumentSoundEngine(page)
+  })
+
+  test('plays the completion cue when the complete moment is enabled', async ({
+    page,
+  }) => {
+    // Arrange — seed preferences with the complete cue ON, then boot the app.
+    await page.addInitScript(
+      ({ storageKey, blob }) => {
+        try {
+          localStorage.setItem(storageKey, blob)
+        } catch {
+          // Sandboxed frame without storage access — ignore; main frame seeds.
+        }
+      },
+      { storageKey: STORAGE_KEY, blob: seedPreferences(true) },
+    )
+    await page.goto('/home')
+    await page.waitForLoadState('networkidle')
+    // Confirm the seed actually landed, so a red run can't be blamed on the seed.
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+    ).toContain('"complete":true')
+    const todoCheckbox = await addPendingTodo(page, 'Sound on completion test')
+
+    // Act — complete the todo (the user gesture that should fire the cue).
+    await todoCheckbox.click()
+
+    // Assert — the engine scheduled at least one cue.
+    await expect
+      .poll(async () => page.evaluate(() => window.__soundCueFired ?? 0), {
+        timeout: 5000,
+      })
+      .toBeGreaterThanOrEqual(1)
+  })
+
+  test('stays silent when the complete moment is off', async ({ page }) => {
+    // Arrange — seed preferences with every cue OFF (explicit, not relying on the
+    // default), then boot the app.
+    await page.addInitScript(
+      ({ storageKey, blob }) => {
+        try {
+          localStorage.setItem(storageKey, blob)
+        } catch {
+          // Sandboxed frame without storage access — ignore; main frame seeds.
+        }
+      },
+      { storageKey: STORAGE_KEY, blob: seedPreferences(false) },
+    )
+    await page.goto('/home')
+    await page.waitForLoadState('networkidle')
+    const todoCheckbox = await addPendingTodo(page, 'Sound off completion test')
+
+    // Act — complete the todo. With the moment OFF, fire() is a no-op.
+    await todoCheckbox.click()
+
+    // Assert — completion is observable (proving the gesture ran)...
+    await expect(
+      page.getByRole('checkbox', { name: 'Sound off completion test' }),
+    ).toBeChecked({ timeout: 5000 })
+    // ...and no cue was ever scheduled.
+    expect(await page.evaluate(() => window.__soundCueFired ?? 0)).toBe(0)
+  })
+})
