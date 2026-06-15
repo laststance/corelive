@@ -9,6 +9,9 @@ import {
 import preferencesReducer, {
   hydratePreferences,
   initialState,
+  setBraindumpFontFamily,
+  setBraindumpFontSize,
+  setBraindumpTextColor,
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
@@ -122,6 +125,45 @@ describe('preferences cross-window sync', () => {
     expect(windowB.getState().preferences.soundVolume).toBe(0.25)
   })
 
+  it('propagates a BrainDump font-family change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — switch the editor face away from the default 'mono' in window A.
+    windowA.dispatch(setBraindumpFontFamily('serif'))
+
+    // Assert — window B reflects the chosen face without a reload (the action is
+    // in the broadcast allowlist).
+    expect(windowB.getState().preferences.braindumpFontFamily).toBe('serif')
+  })
+
+  it('propagates a BrainDump font-size change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — bump the editor size off the default 14px in window A.
+    windowA.dispatch(setBraindumpFontSize(20))
+
+    // Assert — window B reflects the new size without a reload.
+    expect(windowB.getState().preferences.braindumpFontSize).toBe(20)
+  })
+
+  it('propagates a BrainDump text-color change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — pick a non-default editor color in window A.
+    windowA.dispatch(setBraindumpTextColor('var(--primary)'))
+
+    // Assert — window B reflects the new color without a reload.
+    expect(windowB.getState().preferences.braindumpTextColor).toBe(
+      'var(--primary)',
+    )
+  })
+
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {
     // Arrange — a window plus a raw sender on the same wire protocol.
     const windowB = makeWindowStore()
@@ -135,6 +177,31 @@ describe('preferences cross-window sync', () => {
 
     // Assert — the receiver applies the CLAMPED value, never the raw 50.
     expect(windowB.getState().preferences.soundVolume).toBe(1)
+  })
+
+  it('clamps and heals out-of-range inbound BrainDump fields when applying a raw broadcast', () => {
+    // Arrange — a window plus a raw sender on the same wire protocol.
+    const windowB = makeWindowStore()
+    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
+
+    // Act — push a payload whose BrainDump fields are out of range / off-shape.
+    sender.postMessage({
+      type: PREFERENCES_SYNC_EVENT_TYPE,
+      state: {
+        braindumpFontFamily: 'comic-sans',
+        braindumpFontSize: 99,
+        braindumpTextColor: 'red',
+      },
+    })
+
+    // Assert — the receiver applies the HEALED family (the default 'mono'),
+    // CLAMPED size (24, the max), and HEALED color (the default token), never
+    // the raw 'comic-sans' / 99 / 'red'.
+    expect(windowB.getState().preferences.braindumpFontFamily).toBe('mono')
+    expect(windowB.getState().preferences.braindumpFontSize).toBe(24)
+    expect(windowB.getState().preferences.braindumpTextColor).toBe(
+      'var(--foreground)',
+    )
   })
 
   it('folds a legacy-only inbound payload so the completion cue is not silently lost', () => {

@@ -12,6 +12,15 @@
 import { z } from 'zod'
 
 import {
+  BRAINDUMP_FONT_FAMILY_IDS,
+  BRAINDUMP_FONT_SIZE_MAX_PX,
+  BRAINDUMP_FONT_SIZE_MIN_PX,
+  BRAINDUMP_TEXT_COLOR_PATTERN,
+  DEFAULT_BRAINDUMP_FONT_FAMILY,
+  DEFAULT_BRAINDUMP_FONT_SIZE_PX,
+  DEFAULT_BRAINDUMP_TEXT_COLOR,
+} from '@/lib/constants/braindump'
+import {
   DEFAULT_SOUND_VOLUME,
   DEFAULT_TIMBRE_ID,
   type SoundMomentId,
@@ -60,6 +69,30 @@ export const PreferencesStateSchema = z.object({
     .number()
     .transform((value) => Math.min(1, Math.max(0, value)))
     .default(DEFAULT_SOUND_VOLUME),
+  /** BrainDump editor font family. `.catch` (not `.default`) so a MISSING *or*
+   * unknown id self-heals to the default rather than rejecting the whole payload. */
+  braindumpFontFamily: z
+    .enum(BRAINDUMP_FONT_FAMILY_IDS)
+    .catch(DEFAULT_BRAINDUMP_FONT_FAMILY),
+  /** BrainDump editor font size (px). A finite number is clamped to the slider
+   * range; a non-finite or non-number (corrupt blob, bad sync) self-heals to the
+   * default via `.catch` instead of throwing the whole parse. */
+  braindumpFontSize: z
+    .number()
+    .finite()
+    .transform((value) =>
+      Math.min(
+        BRAINDUMP_FONT_SIZE_MAX_PX,
+        Math.max(BRAINDUMP_FONT_SIZE_MIN_PX, value),
+      ),
+    )
+    .catch(DEFAULT_BRAINDUMP_FONT_SIZE_PX),
+  /** BrainDump editor text color — a theme `var(--token)` (preset) or a `#hex`
+   * (custom). Anything outside those shapes self-heals to the default. */
+  braindumpTextColor: z
+    .string()
+    .regex(BRAINDUMP_TEXT_COLOR_PATTERN)
+    .catch(DEFAULT_BRAINDUMP_TEXT_COLOR),
 })
 
 /** The validated core user-preferences shape (inferred from the schema SSoT). */
