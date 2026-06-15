@@ -251,6 +251,32 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
     })
   }, [isMounted])
 
+  // Move keyboard focus into the note editor whenever the BrainDump window is
+  // shown, so a quick global-shortcut capture lands in the textarea instead of
+  // the first focusable control (the "Follow Spaces" switch). The window is
+  // hidden — not destroyed — between toggles, so the textarea can't lean on a
+  // mount-time autoFocus to refocus on re-show; we listen for the Page
+  // Visibility transition to 'visible' that BrowserWindow.show() drives, and
+  // also focus once on mount for the first open. focus() is a no-op while the
+  // textarea is disabled (no active category) — picking a category first is the
+  // expected flow there.
+  useCycleEffect(() => {
+    if (!isMounted || !isBrainDumpEnvironment()) return
+    const focusNoteEditor = () => {
+      textareaRef.current?.focus()
+    }
+    // First open: show() already fired before this effect subscribed, so the
+    // visibilitychange we would catch has passed — focus directly.
+    focusNoteEditor()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') focusNoteEditor()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [isMounted])
+
   // Whenever the active category flips, load that category's note text.
   useCycleEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null) {

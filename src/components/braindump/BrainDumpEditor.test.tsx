@@ -322,6 +322,62 @@ describe('BrainDumpEditor text styling preferences', () => {
   })
 })
 
+describe('BrainDumpEditor focus on window show', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('focuses the note editor when the BrainDump window first opens, so a quick capture can start typing right away', async () => {
+    // Arrange — open the editor with an active category, so the note field is enabled.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+
+    // Act — findByRole settles the mount effects (including the focus effect) under act().
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — keyboard focus lands in the editor, not on a header control.
+    expect(noteField).toHaveFocus()
+  })
+
+  it('returns focus to the note editor when the window is shown again, instead of leaving it on the Follow Spaces switch', async () => {
+    // Arrange — editor open with an active category; reproduce the reported bug's
+    // starting point by parking focus on the first focusable header control.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    const spacesSwitch = screen.getByRole('switch', {
+      name: 'Show BrainDump on all Mac desktops',
+    })
+    act(() => {
+      spacesSwitch.focus()
+    })
+    expect(spacesSwitch).toHaveFocus()
+
+    // Act — the window is shown again: BrowserWindow.show() drives a Page
+    // Visibility transition to 'visible' in the renderer.
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    })
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    // Assert — focus is back in the note editor, ready for the next capture.
+    expect(noteField).toHaveFocus()
+  })
+})
+
 /**
  * Types `value` into the note field, parks the caret at the end of the first
  * line, and fires the Cmd+Enter complete command. Shared mechanical setup so
