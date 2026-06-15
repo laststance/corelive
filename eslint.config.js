@@ -115,6 +115,9 @@ export default defineConfig([
             'peer-*',
             'data-*',
             'container',
+            // Grid column span — structural layout utility; `gridColumn` isn't in
+            // the token source (only `gridTemplateColumns` → `grid-cols-*` is).
+            'col-span-*',
             // Typography
             'antialiased',
             'subpixel-antialiased',
