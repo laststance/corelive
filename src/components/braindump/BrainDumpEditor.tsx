@@ -46,9 +46,11 @@ import {
   type BrainDumpCompletedTitle,
   type BrainDumpLineIndex,
   COMPLETED_TITLE_MAX_LENGTH,
+  markPlainLineCompleted,
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
+  replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './braindumpUtils'
 
@@ -405,15 +407,28 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   )
 
   /**
-   * Promote a `[ ]` line to `[x]`, create a Completed row, and arm the
-   * 5-second undo toast.
+   * Promote the caret line to `[x]`, create a Completed row, and arm the
+   * 5-second undo toast. Called by the complete command (Cmd/Ctrl+Enter) for
+   * both checkbox lines and — via `markPlainLineCompleted` — plain prose lines.
    *
-   * Failure mode: when the server rejects the create, we revert the textarea
-   * to the unchecked state and toast the error. The optimistic flip never
-   * leaves the local memory map.
+   * Failure mode: when the create rejects, we roll the textarea back, drift-aware
+   * via `noteTextRef` so the user's concurrent edits survive. A checkbox line
+   * reverts to `[ ]`; a plain line (when `rollbackPlainText` is supplied) is
+   * restored to its original prose instead of being left as a `- [ ] <title>`
+   * skeleton the user never typed.
+   *
+   * @param lineIndex - Zero-based index of the line being completed.
+   * @param title - Title to persist (uncapped; normalised for the DB here).
+   * @param rollbackPlainText - When set, the plain prose to restore on failure
+   *   (plain-line completions); omit for checkbox lines so they revert to `[ ]`.
+   * @returns Promise<void>; the created row id is tracked internally for undo.
    */
   const promoteLineToCompleted = useCallback(
-    async (lineIndex: BrainDumpLineIndex, title: BrainDumpCompletedTitle) => {
+    async (
+      lineIndex: BrainDumpLineIndex,
+      title: BrainDumpCompletedTitle,
+      rollbackPlainText?: BrainDumpCompletedTitle,
+    ) => {
       if (activeCategoryId === null) {
         toast.error('Pick a category before checking items')
         return
@@ -435,11 +450,30 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             // Re-resolve which line still holds the `[x]` for this title —
             // the original lineIndex may have drifted if the user inserted
             // text above before the create rejected.
-            const currentLine =
-              findCheckedLineIndexByTitle(noteTextRef.current, safeTitle) ??
-              lineIndex
+            const resolvedLine = findCheckedLineIndexByTitle(
+              noteTextRef.current,
+              safeTitle,
+            )
+            const currentLine = resolvedLine ?? lineIndex
+            // Plain-line completion: restore the original prose rather than
+            // leaving a `- [ ] <title>` skeleton the user never typed — but ONLY
+            // when the title search positively found the line. On a miss we fall
+            // back to the safe uncheck (a no-op on non-checkbox lines) so a
+            // drifted stale lineIndex never blind-overwrites an unrelated line
+            // the user edited while the create was in flight. Checkbox lines
+            // (no rollbackPlainText) always revert to `[ ]` as before.
             setNoteText(
-              setCheckboxStateAtLine(noteTextRef.current, currentLine, false),
+              rollbackPlainText !== undefined && resolvedLine !== null
+                ? replaceLineAtIndex(
+                    noteTextRef.current,
+                    resolvedLine,
+                    rollbackPlainText,
+                  )
+                : setCheckboxStateAtLine(
+                    noteTextRef.current,
+                    currentLine,
+                    false,
+                  ),
             )
             return null
           },
@@ -552,9 +586,11 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   )
 
   /**
-   * Toggle the checkbox on the line nearest the caret. Triggered by Cmd/Ctrl+
-   * Enter inside the textarea — the keyboard path is the deliberate UX,
-   * pointer-clicks would require a second editor mode.
+   * Complete the line nearest the caret: toggle an existing `- [ ]`/`- [x]`
+   * checkbox, or finish a plain prose line by wrapping it as `- [x]` and
+   * promoting it (so users don't have to pre-type `- [ ]` to log a win).
+   * Triggered by Cmd/Ctrl+Enter inside the textarea — the keyboard path is the
+   * deliberate UX; pointer-clicks would require a second editor mode.
    */
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
@@ -571,7 +607,19 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
     const line = lines[lineIndex]
     if (line === undefined) return
     const parsed = parseCheckboxLine(line, lineIndex)
-    if (!parsed) return
+    if (!parsed) {
+      // Not a checkbox line: let the complete command finish an ordinary prose
+      // line by wrapping it as `- [x] …` and promoting it, so users don't have
+      // to pre-type `- [ ]` markdown just to log a win. Blank lines and empty
+      // checkbox skeletons return null and fall through to a no-op.
+      const promoted = markPlainLineCompleted(text, lineIndex)
+      if (!promoted) return
+      setNoteText(promoted.text)
+      // Pass the plain prose as rollback text so a failed create restores the
+      // original line instead of leaving the optimistic `- [x]` skeleton.
+      void promoteLineToCompleted(lineIndex, promoted.title, promoted.title)
+      return
+    }
 
     const nextChecked = !parsed.checked
     const nextText = setCheckboxStateAtLine(text, lineIndex, nextChecked)
@@ -751,7 +799,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
         placeholder={
           activeCategoryId === null
             ? 'Pick a category to start writing'
-            : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter on a checkbox line to toggle.'
+            : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
         }
         disabled={activeCategoryId === null}
         maxLength={NOTE_MAX_LENGTH}

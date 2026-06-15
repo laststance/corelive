@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
@@ -13,12 +13,19 @@ import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { BrainDumpEditor } from './BrainDumpEditor'
 
+// Shared across create + delete mutations so the complete-command specs can
+// assert the create call. Resolves `{ id }` so promoteLineToCompleted's
+// `.then(created => created.id)` chain runs instead of throwing on undefined.
+const { completedMutateAsync } = vi.hoisted(() => ({
+  completedMutateAsync: vi.fn(),
+}))
+
 vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: completedMutateAsync,
   }),
   useQueryClient: () => ({
-    invalidateQueries: vi.fn(),
+    invalidateQueries: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 
@@ -311,5 +318,152 @@ describe('BrainDumpEditor text styling preferences', () => {
     // Assert — monospace at 14px, matching the removed `font-mono text-sm`.
     expect(noteField.style.fontFamily).toBe('var(--font-mono)')
     expect(noteField.style.fontSize).toBe('14px')
+  })
+})
+
+/**
+ * Types `value` into the note field, parks the caret at the end of the first
+ * line, and fires the Cmd+Enter complete command. Shared mechanical setup so
+ * each spec keeps its expected create args / textarea value hard-coded inline.
+ * @param noteField - The BrainDump textarea.
+ * @param value - Full note contents to type before completing.
+ * @returns Nothing; drives the editor via fireEvent.
+ * @example
+ * fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+ */
+function fireCompleteCommandOnFirstLine(
+  noteField: HTMLTextAreaElement,
+  value: string,
+) {
+  fireEvent.change(noteField, { target: { value } })
+  const caret = value.split('\n')[0]?.length ?? 0
+  noteField.selectionStart = caret
+  noteField.selectionEnd = caret
+  fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+}
+
+describe('BrainDumpEditor complete command', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    completedMutateAsync.mockResolvedValue({ id: 1 })
+  })
+
+  it('completes a plain prose line into a Completed row on Cmd+Enter', async () => {
+    // Arrange — an editor with a category, holding one ordinary (non-checkbox) line.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — fire the complete command on the plain line.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — a Completed row is created and the line is marked done.
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'buy milk',
+    })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk')
+    })
+  })
+
+  it('still toggles an existing checkbox line into a Completed row on Cmd+Enter', async () => {
+    // Arrange — an editor holding a pre-formatted unchecked checkbox line.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, '- [ ] write tests')
+
+    // Assert — the existing checkbox path is unchanged.
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'write tests',
+    })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] write tests')
+    })
+  })
+
+  it('restores the original plain prose when the completion create fails', async () => {
+    // Arrange — the create mutation rejects for this completion.
+    completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete a plain prose line whose create then fails.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — the line is restored to plain prose, not a `- [ ] buy milk` skeleton.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk')
+    })
+  })
+
+  it('leaves an unrelated line untouched when a failed completion can no longer find its line', async () => {
+    // Arrange — hold the create in flight so we can edit the note before it
+    // rejects (the create only settles when we call rejectCreate).
+    let rejectCreate: (reason: Error) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete 'buy milk', then (while the create is still pending) prepend
+    // an unrelated line and rename the completed one so the title search misses.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    fireEvent.change(noteField, {
+      target: { value: 'urgent\n- [x] buy milk and eggs' },
+    })
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+    })
+
+    // Assert — the rollback must not blind-overwrite line 0; 'urgent' survives
+    // instead of being clobbered with the stale 'buy milk' rollback text.
+    expect(noteField).toHaveValue('urgent\n- [x] buy milk and eggs')
+  })
+
+  it('does nothing when the caret line is blank', async () => {
+    // Arrange — an editor whose caret line is whitespace only.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, '   ')
+
+    // Assert — no Completed row is created for an empty line.
+    expect(completedMutateAsync).not.toHaveBeenCalled()
   })
 })

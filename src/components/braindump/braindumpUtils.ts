@@ -10,6 +10,10 @@
  * with the line text (sans prefix). Toggling back within the 5-second toast
  * window calls `Completed.delete` with the row id we cached.
  *
+ * The complete command also finishes a plain (non-checkbox) line:
+ * `markPlainLineCompleted` wraps it as `- [x] <text>` so an ordinary prose line
+ * can be logged without first typing the `- [ ]` markdown.
+ *
  * Why a separate utils file: parsing/serialization stays pure so the editor
  * component can stay focused on UI/IPC orchestration and is easy to unit-test.
  *
@@ -138,6 +142,94 @@ export function setCheckboxStateAtLine(
   const mark = checked ? 'x' : ' '
   lines[lineIndex] = `- [${mark}] ${parsed.title}`
   return lines.join('\n')
+}
+
+/**
+ * Replace the entire content of one line, leaving every other line verbatim.
+ * Used by the complete command's failure-rollback to restore an original plain
+ * prose line (e.g. `buy milk`) rather than leaving the optimistic
+ * `- [x] buy milk` skeleton when the Completed-create rejects. Returns the
+ * original text for out-of-range indices, mirroring `setCheckboxStateAtLine`.
+ *
+ * @param text - The full document text.
+ * @param lineIndex - Zero-based index of the line to overwrite.
+ * @param newLine - Replacement content for that line (no trailing newline).
+ * @returns The updated text, or the original when `lineIndex` is out of range.
+ * @example
+ * replaceLineAtIndex('- [x] buy milk\ndishes', 0, 'buy milk')
+ * // → 'buy milk\ndishes'
+ */
+export function replaceLineAtIndex(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+  newLine: string,
+): string {
+  const lines = text.split('\n')
+  if (lineIndex < 0 || lineIndex >= lines.length) return text
+  lines[lineIndex] = newLine
+  return lines.join('\n')
+}
+
+/**
+ * Matches an empty checkbox skeleton — a checkbox prefix with no title, e.g.
+ * `- [ ]`, `- [x]`, `- []` (optional trailing whitespace). These have nothing
+ * to record, so the complete command must skip them rather than logging a junk
+ * `- [ ]` title.
+ */
+const EMPTY_CHECKBOX_SKELETON_REGEX = /^- \[[ xX]?\]\s*$/
+
+/**
+ * Result of wrapping a plain line as a checked checkbox for the complete
+ * command. `text` is the full note with the caret line rewritten; `title` is
+ * the content to persist.
+ */
+export type PlainLineCompletion = Readonly<{
+  /** Full note text with the caret line rewritten as `- [x] <title>`. */
+  text: string
+  /** Trimmed line content to persist (uncapped; promote caps it for the DB). */
+  title: BrainDumpCompletedTitle
+}>
+
+/**
+ * Wrap a plain (non-checkbox) line as a checked checkbox so the complete
+ * command (Cmd/Ctrl+Enter) can finish an ordinary prose line, not only a
+ * pre-formatted `- [ ]` box. Called from `BrainDumpEditor.handleKeyDown` when
+ * `parseCheckboxLine` returns null for the caret line.
+ *
+ * @param text - The editor's full text contents.
+ * @param lineIndex - Zero-based index of the caret line to complete.
+ * @returns
+ * - `{ text, title }` when the caret line is plain and non-blank: `text` has
+ *   that line rewritten as `- [x] <trimmed content>`; `title` is the trimmed
+ *   content (uncapped, matching how the checkbox path passes `parsed.title`).
+ * - `null` when the line is missing, blank, an empty checkbox skeleton, or an
+ *   already well-formed checkbox line (the caller's toggle path owns that).
+ * @example
+ * markPlainLineCompleted('buy milk', 0)
+ * // → { text: '- [x] buy milk', title: 'buy milk' }
+ * markPlainLineCompleted('a\nb', 1) // → { text: 'a\n- [x] b', title: 'b' }
+ * markPlainLineCompleted('- [ ] todo', 0) // → null (already a checkbox)
+ * markPlainLineCompleted('   ', 0)         // → null (blank)
+ */
+export function markPlainLineCompleted(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+): PlainLineCompletion | null {
+  const lines = text.split('\n')
+  if (lineIndex < 0 || lineIndex >= lines.length) return null
+
+  const line = lines[lineIndex]
+  if (line === undefined) return null
+  // A well-formed checkbox line is owned by the toggle path, not this one.
+  if (parseCheckboxLine(line, lineIndex)) return null
+  // An empty checkbox skeleton has no content worth recording.
+  if (EMPTY_CHECKBOX_SKELETON_REGEX.test(line)) return null
+
+  const title = line.trim()
+  if (title.length === 0) return null
+
+  lines[lineIndex] = `- [x] ${title}`
+  return { text: lines.join('\n'), title }
 }
 
 /**
