@@ -1,11 +1,11 @@
 # Plan: Paste-to-import + AI auto-labeling (Issue #53)
 
-|            |                                                                                                            |
-| ---------- | ---------------------------------------------------------------------------------------------------------- |
-| **Status** | In review — PRs #54 (server) + #55 (UI); design + eng + devex cleared, implementation-ready                |
-| **Issue**  | [#53](https://github.com/laststance/corelive/issues/53)                                                    |
-| **Date**   | 2026-05-29 (office-hours + CEO review) · revised 2026-05-30 after an independent (cross-model) plan review |
-| **Origin** | office-hours design session → CEO strategy/scope review → Codex outside-voice review                       |
+|            |                                                                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status** | Shipped (Slice 1) — PRs #54 (server) + #55 (UI) merged. Slice 2 (AI auto-labeling) deferred → Issue [#53](https://github.com/laststance/corelive/issues/53) |
+| **Issue**  | [#53](https://github.com/laststance/corelive/issues/53)                                                                                                     |
+| **Date**   | 2026-05-29 (office-hours + CEO review) · revised 2026-05-30 after an independent (cross-model) plan review                                                  |
+| **Origin** | office-hours design session → CEO strategy/scope review → Codex outside-voice review                                                                        |
 
 ## Vision
 

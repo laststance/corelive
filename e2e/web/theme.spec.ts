@@ -1,6 +1,8 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
+import { THEME_CROSSFADE_DURATION_MS } from '@/lib/constants/theme'
+
 import { resetDatabase } from './_helpers/db'
 
 test.describe('Theme Visual Test', () => {
@@ -56,21 +58,9 @@ test.describe('Theme Visual Test', () => {
     })
     const lightBackground = await readBackgroundColor(page)
 
-    // Act — open the user menu and switch to dark theme
-    const sidebarHeader = page.locator('[data-sidebar="header"]').first()
-    await expect(sidebarHeader).toBeVisible({ timeout: 5000 })
-    const avatarButton = sidebarHeader.locator('button').first()
-    await expect(avatarButton).toBeVisible({ timeout: 5000 })
-    await avatarButton.click()
-    const changeThemeTrigger = page.getByText('Change Theme', { exact: false })
-    await expect(changeThemeTrigger).toBeVisible()
-    await changeThemeTrigger.click()
-    const darkThemeOption = page
-      .locator('[role="menuitem"]')
-      .filter({ hasText: 'Dark' })
-      .first()
-    await expect(darkThemeOption).toBeVisible()
-    await darkThemeOption.click()
+    // Act — switch to dark theme the way a user does (sidebar menu → Change
+    // Theme → Dark), via the shared helper so all theme switches share one path.
+    await switchToTheme(page, 'Dark')
 
     // Assert — `data-theme` flipped to dark, and the body background-color
     // (driven by the `--background` CSS variable in src/globals.css) actually
@@ -80,6 +70,64 @@ test.describe('Theme Visual Test', () => {
     await expect
       .poll(async () => readBackgroundColor(page), { timeout: 5000 })
       .not.toBe(lightBackground)
+  })
+
+  // Regression guard for the PR #71 theme crossfade (DESIGN.md Motion → "Theme
+  // toggle: crossfade, no flash"). How it LOOKS was verified once by recorded
+  // video frames at build time; these tests are the durable contract guard — the
+  // <ThemeTransition> machinery must arm the transient `theme-transition` class
+  // ONLY for the switch window and never leak it onto hover/focus. Assertions are
+  // pure DOM-class state (+ the frozen clock from beforeEach), so they stay
+  // deterministic on CI rather than sampling opacity mid-animation.
+  test('arms the crossfade class only during a theme switch, then drops it', async ({
+    page,
+  }) => {
+    // Arrange — the crossfade is keyed off a transient <html> class that must be
+    // absent at rest, so hover/focus repaints stay instant.
+    const html = page.locator('html')
+    await expect(html).toHaveAttribute('data-theme', 'light', { timeout: 5000 })
+    await expect(html).not.toHaveClass(/theme-transition/)
+
+    // Act — switch theme the way a user does (sidebar menu → Change Theme → Dark).
+    await switchToTheme(page, 'Dark')
+
+    // Assert — the switch arms the crossfade: <html> gains `theme-transition` so
+    // globals.css animates colors across the whole UI for this one window.
+    await expect(html).toHaveAttribute('data-theme', 'dark', { timeout: 5000 })
+    await expect(html).toHaveClass(/theme-transition/)
+
+    // Act — advance the frozen clock past the crossfade window.
+    await page.clock.fastForward(THEME_CROSSFADE_DURATION_MS + 50)
+
+    // Assert — the class is dropped once the fade completes, so later hover/focus
+    // repaint instantly with no lingering global transition.
+    await expect(html).not.toHaveClass(/theme-transition/)
+  })
+
+  test('does not arm the crossfade when hovering cards or the sidebar', async ({
+    page,
+  }) => {
+    // Arrange — at rest the crossfade class is absent and <html> carries no
+    // crossfade transition, so per-element hover color changes are instant. This
+    // guards the regression where the global color transition leaked onto every
+    // hover (making the whole UI feel laggy).
+    const html = page.locator('html')
+    await expect(html).not.toHaveClass(/theme-transition/)
+    expect(await readTransitionDuration(page)).toBe('0s')
+
+    // Act — hover real token-bearing surfaces (a card, then the sidebar).
+    const card = page.locator('[data-slot="card"]').first()
+    await expect(card).toBeVisible({ timeout: 10000 })
+    await card.hover()
+    const sidebar = page.locator('[data-sidebar="sidebar"]').first()
+    if (await sidebar.isVisible()) {
+      await sidebar.hover()
+    }
+
+    // Assert — hovering never arms the crossfade (it is gated to data-theme
+    // changes), so <html> stays class-free and transition-free.
+    await expect(html).not.toHaveClass(/theme-transition/)
+    expect(await readTransitionDuration(page)).toBe('0s')
   })
 })
 
@@ -99,4 +147,52 @@ async function readBackgroundColor(page: Page): Promise<string> {
   return page.evaluate(
     () => window.getComputedStyle(document.body).backgroundColor,
   )
+}
+
+/**
+ * Returns the computed `transition-duration` of the `<html>` element. The
+ * crossfade rule in globals.css targets `html.theme-transition`, so `<html>`
+ * (which carries no Tailwind transition utility of its own) reads `"0s"` at rest
+ * and the crossfade duration only while the transient class is present — letting
+ * the no-hover-leak test prove the transition is scoped, not global.
+ *
+ * @param page - The Playwright Page instance.
+ * @returns The `<html>` computed `transition-duration` (e.g. `"0s"`).
+ * @example
+ * expect(await readTransitionDuration(page)).toBe('0s') // at rest
+ */
+async function readTransitionDuration(page: Page): Promise<string> {
+  return page.evaluate(
+    () => window.getComputedStyle(document.documentElement).transitionDuration,
+  )
+}
+
+/**
+ * Switches the active theme the way a user does — opening the sidebar avatar
+ * menu, the "Change Theme" submenu, then picking an option. Used by the crossfade
+ * regression tests so they drive the real next-themes + ThemeTransition path
+ * instead of poking `data-theme` directly (which would bypass the machinery
+ * under test).
+ *
+ * @param page - The Playwright Page instance.
+ * @param optionLabel - The visible theme name to select (e.g. `"Dark"`).
+ * @returns Resolves once the theme option has been clicked.
+ * @example
+ * await switchToTheme(page, 'Dark')
+ */
+async function switchToTheme(page: Page, optionLabel: string): Promise<void> {
+  const sidebarHeader = page.locator('[data-sidebar="header"]').first()
+  await expect(sidebarHeader).toBeVisible({ timeout: 5000 })
+  const avatarButton = sidebarHeader.locator('button').first()
+  await expect(avatarButton).toBeVisible({ timeout: 5000 })
+  await avatarButton.click()
+  const changeThemeTrigger = page.getByText('Change Theme', { exact: false })
+  await expect(changeThemeTrigger).toBeVisible()
+  await changeThemeTrigger.click()
+  const themeOption = page
+    .locator('[role="menuitem"]')
+    .filter({ hasText: optionLabel })
+    .first()
+  await expect(themeOption).toBeVisible()
+  await themeOption.click()
 }

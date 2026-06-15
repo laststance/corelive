@@ -11,6 +11,7 @@ import React, {
 } from 'react'
 
 import { KeybindingCaptureInput } from '@/components/electron/KeybindingCaptureInput'
+import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -230,17 +231,12 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
   // true we keep rendering the "Loading" branch below.
   if (hasMounted && !window.electronAPI?.brainDump) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            BrainDump Note
-          </CardTitle>
-          <CardDescription>
-            BrainDump Note is only available in the desktop application.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Brain}
+        title="BrainDump Note"
+        description="BrainDump Note is only available in the desktop application."
+        className={className}
+      />
     )
   }
 
@@ -253,31 +249,23 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
       typeof window.electronAPI?.brainDump?.getShortcut !== 'function')
   ) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            BrainDump Note
-          </CardTitle>
-          <CardDescription>
-            Update CoreLive to the latest version to manage BrainDump Note.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Brain}
+        title="BrainDump Note"
+        description="Update CoreLive to the latest version to manage BrainDump Note."
+        className={className}
+      />
     )
   }
 
   if (!isReady) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            BrainDump Note
-          </CardTitle>
-          <CardDescription>Loading BrainDump settings…</CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Brain}
+        title="BrainDump Note"
+        description="Loading BrainDump settings…"
+        className={className}
+      />
     )
   }
 

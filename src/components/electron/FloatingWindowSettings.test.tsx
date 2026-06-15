@@ -105,7 +105,7 @@ describe('FloatingWindowSettings', () => {
 
     // Assert: the loading copy shows and no switch has rendered yet.
     expect(
-      await screen.findByText('Loading floating window settings...'),
+      await screen.findByText('Loading floating window settings…'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })

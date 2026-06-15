@@ -13,6 +13,7 @@ import { Monitor } from 'lucide-react'
 import { memo, useCallback, type ReactElement } from 'react'
 import { useId, useState } from 'react'
 
+import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
 import {
   Card,
   CardContent,
@@ -123,18 +124,12 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
 
   if (hasMounted && !window.electronAPI?.floatingPanels) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Monitor className="h-5 w-5" />
-            Floating windows
-          </CardTitle>
-          <CardDescription>
-            Floating window settings are only available in the desktop
-            application.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Monitor}
+        title="Floating windows"
+        description="Floating window settings are only available in the desktop application."
+        className={className}
+      />
     )
   }
 
@@ -146,31 +141,23 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
       'function'
   ) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Monitor className="h-5 w-5" />
-            Floating windows
-          </CardTitle>
-          <CardDescription>
-            Update CoreLive to the latest version to manage floating windows.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Monitor}
+        title="Floating windows"
+        description="Update CoreLive to the latest version to manage floating windows."
+        className={className}
+      />
     )
   }
 
   if (!isReady) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Monitor className="h-5 w-5" />
-            Floating windows
-          </CardTitle>
-          <CardDescription>Loading floating window settings...</CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Monitor}
+        title="Floating windows"
+        description="Loading floating window settings…"
+        className={className}
+      />
     )
   }
 
