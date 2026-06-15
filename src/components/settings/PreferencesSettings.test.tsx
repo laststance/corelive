@@ -88,8 +88,13 @@ describe('PreferencesSettings — sound palette', () => {
     // Arrange / Act — the default master volume is 0.6.
     renderPreferences()
 
-    // Assert — the single slider reflects the saved fraction directly (not 0–100).
-    const volumeSlider = screen.getByRole('slider')
+    // Assert — the volume slider reflects the saved fraction directly (not 0–100).
+    // Two sliders now exist (volume + BrainDump font size); the volume track is the
+    // one bounded to [0,1] (font size is [12,24]), so scope by its max.
+    const volumeSlider = screen
+      .getAllByRole('slider')
+      .find((slider) => slider.getAttribute('aria-valuemax') === '1')
+    expect(volumeSlider).toBeDefined()
     expect(volumeSlider).toHaveAttribute('aria-valuenow', '0.6')
     expect(volumeSlider).toHaveAttribute('aria-valuemin', '0')
     expect(volumeSlider).toHaveAttribute('aria-valuemax', '1')

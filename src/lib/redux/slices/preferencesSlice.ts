@@ -23,6 +23,11 @@
  */
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
+import {
+  BRAINDUMP_FONT_SIZE_MAX_PX,
+  BRAINDUMP_FONT_SIZE_MIN_PX,
+  type BrainDumpFontFamilyId,
+} from '@/lib/constants/braindump'
 import { DEFAULT_PREFERENCES } from '@/lib/constants/preferences'
 import { type SoundMomentId, type TimbreId } from '@/lib/constants/sound'
 import { type PreferencesState } from '@/lib/schemas/preferences'
@@ -112,6 +117,44 @@ export const preferencesSlice = createSlice({
     },
 
     /**
+     * Sets the BrainDump editor font family (one of the brand fonts).
+     * @param state - Current state
+     * @param action - Payload containing the new font-family id.
+     */
+    setBraindumpFontFamily: (
+      state,
+      action: PayloadAction<BrainDumpFontFamilyId>,
+    ) => {
+      state.braindumpFontFamily = action.payload
+    },
+
+    /**
+     * Sets the BrainDump editor font size (px), clamped to the slider range so a
+     * stray programmatic value can't exceed it; guards NaN/±Infinity to the
+     * default (mirrors setSoundVolume).
+     * @param state - Current state
+     * @param action - Payload containing the new font size in px.
+     */
+    setBraindumpFontSize: (state, action: PayloadAction<number>) => {
+      const requestedSize = action.payload
+      state.braindumpFontSize = Number.isFinite(requestedSize)
+        ? Math.min(
+            BRAINDUMP_FONT_SIZE_MAX_PX,
+            Math.max(BRAINDUMP_FONT_SIZE_MIN_PX, requestedSize),
+          )
+        : DEFAULT_PREFERENCES.braindumpFontSize
+    },
+
+    /**
+     * Sets the BrainDump editor text color (a theme `var(--token)` or a `#hex`).
+     * @param state - Current state
+     * @param action - Payload containing the new CSS color string.
+     */
+    setBraindumpTextColor: (state, action: PayloadAction<string>) => {
+      state.braindumpTextColor = action.payload
+    },
+
+    /**
      * Replaces the whole preferences state. Used by the cross-window sync to
      * apply preferences received from another window without re-broadcasting.
      * @param _state - Current state (unused, returns new state)
@@ -138,6 +181,9 @@ export const {
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
+  setBraindumpFontFamily,
+  setBraindumpFontSize,
+  setBraindumpTextColor,
   hydratePreferences,
   resetPreferences,
 } = preferencesSlice.actions
@@ -212,6 +258,33 @@ export const selectSoundVolume = (state: RootState): number =>
   state.preferences.soundVolume ?? DEFAULT_PREFERENCES.soundVolume
 
 /**
+ * Selects the BrainDump editor font family.
+ * @param state - Root state
+ * @returns The selected font-family id (default mono)
+ */
+export const selectBraindumpFontFamily = (
+  state: RootState,
+): BrainDumpFontFamilyId =>
+  state.preferences.braindumpFontFamily ??
+  DEFAULT_PREFERENCES.braindumpFontFamily
+
+/**
+ * Selects the BrainDump editor font size (px).
+ * @param state - Root state
+ * @returns The font size in px (default 14)
+ */
+export const selectBraindumpFontSize = (state: RootState): number =>
+  state.preferences.braindumpFontSize ?? DEFAULT_PREFERENCES.braindumpFontSize
+
+/**
+ * Selects the BrainDump editor text color (a theme var() token or a #hex).
+ * @param state - Root state
+ * @returns The CSS color string (default var(--foreground))
+ */
+export const selectBraindumpTextColor = (state: RootState): string =>
+  state.preferences.braindumpTextColor ?? DEFAULT_PREFERENCES.braindumpTextColor
+
+/**
  * Selects the full preferences state (every field coalesced/migrated to its
  * effective value) — the snapshot the cross-window sync broadcasts.
  * @param state - Root state
@@ -227,6 +300,9 @@ export const selectPreferences = (state: RootState): PreferencesState => ({
   },
   soundTimbre: selectSoundTimbre(state),
   soundVolume: selectSoundVolume(state),
+  braindumpFontFamily: selectBraindumpFontFamily(state),
+  braindumpFontSize: selectBraindumpFontSize(state),
+  braindumpTextColor: selectBraindumpTextColor(state),
 })
 
 export default preferencesSlice.reducer

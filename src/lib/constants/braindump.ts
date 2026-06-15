@@ -57,3 +57,101 @@ export type BrainDumpShortcut = string
  * const sync: BrainDumpSyncMode = true
  */
 export type BrainDumpSyncMode = boolean
+
+/* -------------------------------------------------------------------------- */
+/* BrainDump editor text presentation (font family / size / color)            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Selectable BrainDump editor font-family ids. `as const` so the union type AND
+ * `z.enum(BRAINDUMP_FONT_FAMILY_IDS)` both derive from this one tuple (no drift),
+ * mirroring the sound-palette `TIMBRE_IDS` pattern.
+ */
+export const BRAINDUMP_FONT_FAMILY_IDS = ['mono', 'sans', 'serif'] as const
+
+/** A selectable BrainDump editor font family. */
+export type BrainDumpFontFamilyId = (typeof BRAINDUMP_FONT_FAMILY_IDS)[number]
+
+/**
+ * id → CSS value (the globals.css font vars, which resolve to the brand 3-font
+ * stack on every route). The SINGLE source for the font CSS — read by both the
+ * Settings preview label and the editor's inline style — so the mapping can't
+ * drift between picker and surface.
+ */
+export const BRAINDUMP_FONT_FAMILY_CSS: Record<BrainDumpFontFamilyId, string> =
+  {
+    mono: 'var(--font-mono)',
+    sans: 'var(--font-sans)',
+    serif: 'var(--font-serif)',
+  }
+
+/** Settings-selector metadata for a font family (label only; CSS via the map). */
+export interface BrainDumpFontFamilyOption {
+  id: BrainDumpFontFamilyId
+  label: string
+}
+
+/** The ordered font-family options for the Settings selector. */
+export const BRAINDUMP_FONT_FAMILIES: readonly BrainDumpFontFamilyOption[] = [
+  { id: 'mono', label: 'Monospace' },
+  { id: 'sans', label: 'Sans-serif' },
+  { id: 'serif', label: 'Serif' },
+]
+
+/** Default editor font — monospace, preserving the prior `font-mono` look. */
+export const DEFAULT_BRAINDUMP_FONT_FAMILY: BrainDumpFontFamilyId = 'mono'
+
+/** Smallest selectable editor font size. */
+export const BRAINDUMP_FONT_SIZE_MIN_PX = 12
+
+/** Largest selectable editor font size. */
+export const BRAINDUMP_FONT_SIZE_MAX_PX = 24
+
+/** Font-size slider granularity (whole px — finer steps aren't worth the jitter). */
+export const BRAINDUMP_FONT_SIZE_STEP_PX = 1
+
+/** Default editor font size — 14px, preserving the prior `text-sm` (0.875rem). */
+export const DEFAULT_BRAINDUMP_FONT_SIZE_PX = 14
+
+/**
+ * Unitless line-height for the editor textarea. Unitless (not the old fixed
+ * `text-sm` 1.25rem) so line spacing scales WITH the chosen font size instead of
+ * staying glued to a single px height.
+ */
+export const BRAINDUMP_LINE_HEIGHT = 1.5
+
+/** Settings-swatch metadata for a text-color preset (label + themed CSS value). */
+export interface BrainDumpTextColorPreset {
+  id: string
+  label: string
+  /** A theme token via CSS var so the preset follows the active light/dark theme. */
+  cssValue: string
+}
+
+/**
+ * On-brand, theme-aware text-color presets — CSS vars (not fixed hex) so each
+ * follows the active theme. A custom hex (native color input) layers on top as
+ * the user-owned deviation (DESIGN.md "Presets First, Then Options").
+ */
+export const BRAINDUMP_TEXT_COLOR_PRESETS: readonly BrainDumpTextColorPreset[] =
+  [
+    { id: 'default', label: 'Default', cssValue: 'var(--foreground)' },
+    { id: 'muted', label: 'Muted', cssValue: 'var(--muted-foreground)' },
+    { id: 'amber', label: 'Amber', cssValue: 'var(--primary)' },
+  ]
+
+/** Default editor text color — the theme foreground (preserves the prior inherited color). */
+export const DEFAULT_BRAINDUMP_TEXT_COLOR = 'var(--foreground)'
+
+/**
+ * Accepted text-color shapes: a theme token `var(--name)` (the presets) or a
+ * `#hex` (3/6/8 digits, from the native color input). The schema's `.catch`
+ * self-heals anything else to {@link DEFAULT_BRAINDUMP_TEXT_COLOR}.
+ *
+ * @example
+ * BRAINDUMP_TEXT_COLOR_PATTERN.test('var(--primary)') // => true
+ * BRAINDUMP_TEXT_COLOR_PATTERN.test('#1a2b3c')        // => true
+ * BRAINDUMP_TEXT_COLOR_PATTERN.test('red')            // => false
+ */
+export const BRAINDUMP_TEXT_COLOR_PATTERN =
+  /^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\(--[a-z-]+\))$/

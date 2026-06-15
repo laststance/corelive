@@ -8,12 +8,18 @@ import reducer, {
   hydratePreferences,
   initialState,
   resetPreferences,
+  selectBraindumpFontFamily,
+  selectBraindumpFontSize,
+  selectBraindumpTextColor,
   selectCompletionSound,
   selectPreferences,
   selectRetainCompletedInList,
   selectSoundMoment,
   selectSoundTimbre,
   selectSoundVolume,
+  setBraindumpFontFamily,
+  setBraindumpFontSize,
+  setBraindumpTextColor,
   setCompletionSound,
   setRetainCompletedInList,
   setSoundMoment,
@@ -31,13 +37,17 @@ function stateWith(preferences: Partial<PreferencesState>): RootState {
 
 describe('preferencesSlice', () => {
   it('defaults every preference to silent/neutral so a fresh install makes no sound', () => {
-    // Assert — all sound moments OFF, default timbre + volume, both legacy flags OFF.
+    // Assert — all sound moments OFF, default timbre + volume, both legacy flags OFF,
+    // and the BrainDump editor at its prior look (mono / 14px / theme foreground).
     expect(initialState).toEqual({
       completionSound: false,
       retainCompletedInList: false,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
+      braindumpFontFamily: 'mono',
+      braindumpFontSize: 14,
+      braindumpTextColor: 'var(--foreground)',
     })
   })
 
@@ -126,6 +136,9 @@ describe('preferencesSlice', () => {
       soundMoments: { 'task-create': true, complete: true, clear: true },
       soundTimbre: 'paper',
       soundVolume: 0.8,
+      braindumpFontFamily: 'serif',
+      braindumpFontSize: 20,
+      braindumpTextColor: 'var(--primary)',
     }
 
     // Act
@@ -143,6 +156,9 @@ describe('preferencesSlice', () => {
       soundMoments: { 'task-create': true, complete: true, clear: true },
       soundTimbre: 'paper',
       soundVolume: 0.9,
+      braindumpFontFamily: 'serif',
+      braindumpFontSize: 24,
+      braindumpTextColor: '#abcdef',
     }
 
     // Act
@@ -155,6 +171,9 @@ describe('preferencesSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
+      braindumpFontFamily: 'mono',
+      braindumpFontSize: 14,
+      braindumpTextColor: 'var(--foreground)',
     })
   })
 
@@ -215,6 +234,55 @@ describe('preferencesSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
+      braindumpFontFamily: 'mono',
+      braindumpFontSize: 14,
+      braindumpTextColor: 'var(--foreground)',
     })
+  })
+
+  it('sets the BrainDump editor font family when setBraindumpFontFamily is dispatched', () => {
+    // Act
+    const next = reducer(initialState, setBraindumpFontFamily('serif'))
+
+    // Assert
+    expect(next.braindumpFontFamily).toBe('serif')
+  })
+
+  it('clamps an out-of-range BrainDump font size into the slider bounds [12,24]', () => {
+    // Act — above-range clamps to the ceiling, below-range to the floor, in-range passes.
+    const tooBig = reducer(initialState, setBraindumpFontSize(99))
+    const tooSmall = reducer(initialState, setBraindumpFontSize(2))
+    const inRange = reducer(initialState, setBraindumpFontSize(18))
+
+    // Assert
+    expect(tooBig.braindumpFontSize).toBe(24)
+    expect(tooSmall.braindumpFontSize).toBe(12)
+    expect(inRange.braindumpFontSize).toBe(18)
+  })
+
+  it('guards a NaN BrainDump font size to the default instead of poisoning the slider', () => {
+    // Act — a non-finite value (e.g. a stray empty slider event) must not stick.
+    const next = reducer(initialState, setBraindumpFontSize(Number.NaN))
+
+    // Assert
+    expect(next.braindumpFontSize).toBe(14)
+  })
+
+  it('stores a custom BrainDump text color when setBraindumpTextColor is dispatched', () => {
+    // Act — the native color picker emits a 6-digit hex.
+    const next = reducer(initialState, setBraindumpTextColor('#123abc'))
+
+    // Assert
+    expect(next.braindumpTextColor).toBe('#123abc')
+  })
+
+  it('falls back to the default font, size, and color for a slice that predates those fields', () => {
+    // Arrange — a persisted slice from before the BrainDump text-style fields existed.
+    const legacyState = stateWith({ completionSound: false })
+
+    // Act / Assert — every BrainDump selector coalesces to its default (Finding 5).
+    expect(selectBraindumpFontFamily(legacyState)).toBe('mono')
+    expect(selectBraindumpFontSize(legacyState)).toBe(14)
+    expect(selectBraindumpTextColor(legacyState)).toBe('var(--foreground)')
   })
 })

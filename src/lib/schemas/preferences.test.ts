@@ -7,13 +7,17 @@ describe('PreferencesStateSchema', () => {
     // Act
     const result = PreferencesStateSchema.parse({})
 
-    // Assert — every moment OFF, default timbre + volume, both legacy flags OFF.
+    // Assert — every moment OFF, default timbre + volume, both legacy flags OFF,
+    // and the BrainDump editor at its prior look (mono / 14px / theme foreground).
     expect(result).toEqual({
       completionSound: false,
       retainCompletedInList: false,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
+      braindumpFontFamily: 'mono',
+      braindumpFontSize: 14,
+      braindumpTextColor: 'var(--foreground)',
     })
   })
 
@@ -31,6 +35,9 @@ describe('PreferencesStateSchema', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
+      braindumpFontFamily: 'mono',
+      braindumpFontSize: 14,
+      braindumpTextColor: 'var(--foreground)',
     })
   })
 
@@ -73,5 +80,51 @@ describe('PreferencesStateSchema', () => {
       complete: true,
       clear: false,
     })
+  })
+
+  it('clamps an out-of-range BrainDump font size into the slider bounds [12,24]', () => {
+    // Act
+    const tooBig = PreferencesStateSchema.parse({ braindumpFontSize: 99 })
+    const tooSmall = PreferencesStateSchema.parse({ braindumpFontSize: 8 })
+
+    // Assert
+    expect(tooBig.braindumpFontSize).toBe(24)
+    expect(tooSmall.braindumpFontSize).toBe(12)
+  })
+
+  it('self-heals a non-finite BrainDump font size to the default (no poisoned hydrate)', () => {
+    // Act — a NaN that slipped into a persisted/synced blob must not survive.
+    const result = PreferencesStateSchema.parse({
+      braindumpFontSize: Number.NaN,
+    })
+
+    // Assert
+    expect(result.braindumpFontSize).toBe(14)
+  })
+
+  it('self-heals an unknown BrainDump font family to the default instead of rejecting', () => {
+    // Act
+    const result = PreferencesStateSchema.parse({
+      braindumpFontFamily: 'comic-sans',
+    })
+
+    // Assert
+    expect(result.braindumpFontFamily).toBe('mono')
+  })
+
+  it('keeps a valid BrainDump text color (theme token or hex) and self-heals anything else', () => {
+    // Act — a themed preset and a custom hex both pass; an unsupported shape heals.
+    const themed = PreferencesStateSchema.parse({
+      braindumpTextColor: 'var(--primary)',
+    })
+    const hex = PreferencesStateSchema.parse({ braindumpTextColor: '#1A2B3C' })
+    const bogus = PreferencesStateSchema.parse({
+      braindumpTextColor: 'rgba(0,0,0,0.5)',
+    })
+
+    // Assert
+    expect(themed.braindumpTextColor).toBe('var(--primary)')
+    expect(hex.braindumpTextColor).toBe('#1A2B3C')
+    expect(bogus.braindumpTextColor).toBe('var(--foreground)')
   })
 })

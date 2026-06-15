@@ -1,8 +1,14 @@
+import { configureStore } from '@reduxjs/toolkit'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Provider } from 'react-redux'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import preferencesReducer, {
+  initialState as preferencesInitialState,
+} from '@/lib/redux/slices/preferencesSlice'
+import type { PreferencesState } from '@/lib/schemas/preferences'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { BrainDumpEditor } from './BrainDumpEditor'
@@ -116,6 +122,29 @@ function installBrainDumpAPI(spaces: BrainDumpSpacesBridge): void {
   })
 }
 
+/**
+ * Renders the editor under a real preferences store (so its inline text styling
+ * reads the actual slice) with the given preference overrides spread over the
+ * slice defaults. Required now that BrainDumpEditor reads the preferences slice.
+ * @param preferenceOverrides - Fields to override on top of the slice defaults.
+ * @returns The Testing Library render result.
+ * @example
+ * renderEditor({ braindumpFontSize: 20 })
+ */
+function renderEditor(preferenceOverrides: Partial<PreferencesState> = {}) {
+  const store = configureStore({
+    reducer: { preferences: preferencesReducer },
+    preloadedState: {
+      preferences: { ...preferencesInitialState, ...preferenceOverrides },
+    },
+  })
+  return render(
+    <Provider store={store}>
+      <BrainDumpEditor categories={categories} />
+    </Provider>,
+  )
+}
+
 describe('BrainDumpEditor Spaces tracking switch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -131,7 +160,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     })
 
     // Act
-    render(<BrainDumpEditor categories={categories} />)
+    renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
       name: 'Show BrainDump on all Mac desktops',
     })
@@ -152,7 +181,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
       setVisibleOnAllWorkspaces,
     })
     const user = userEvent.setup()
-    render(<BrainDumpEditor categories={categories} />)
+    renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
       name: 'Show BrainDump on all Mac desktops',
     })
@@ -181,7 +210,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
       setVisibleOnAllWorkspaces,
     })
     const user = userEvent.setup()
-    render(<BrainDumpEditor categories={categories} />)
+    renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
       name: 'Show BrainDump on all Mac desktops',
     })
@@ -213,7 +242,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    render(<BrainDumpEditor categories={categories} />)
+    renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
       name: 'Show BrainDump on all Mac desktops',
     })
@@ -234,5 +263,53 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
       expect(spacesSwitch).toBeChecked()
     })
     expect(spacesSwitch).not.toBeDisabled()
+  })
+})
+
+describe('BrainDumpEditor text styling preferences', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders the note in the saved font family, size, and color', async () => {
+    // Arrange
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+
+    // Act — open the editor with serif / 20px / amber text saved in preferences.
+    // findByRole settles the editor's async mount effects under act() before asserting.
+    renderEditor({
+      braindumpFontFamily: 'serif',
+      braindumpFontSize: 20,
+      braindumpTextColor: 'var(--primary)',
+    })
+    const noteField = await screen.findByRole('textbox')
+
+    // Assert — the saved presentation is applied inline to the writing surface.
+    expect(noteField.style.fontFamily).toBe('var(--font-serif)')
+    expect(noteField.style.fontSize).toBe('20px')
+    expect(noteField.style.color).toBe('var(--primary)')
+  })
+
+  it('falls back to the default look (mono / 14px) when no preference is saved', async () => {
+    // Arrange
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+
+    // Act — a fresh install (slice defaults) preserves the prior textarea look.
+    renderEditor()
+    const noteField = await screen.findByRole('textbox')
+
+    // Assert — monospace at 14px, matching the removed `font-mono text-sm`.
+    expect(noteField.style.fontFamily).toBe('var(--font-mono)')
+    expect(noteField.style.fontSize).toBe('14px')
   })
 })

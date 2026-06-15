@@ -21,6 +21,8 @@ import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import {
+  BRAINDUMP_FONT_FAMILY_CSS,
+  BRAINDUMP_LINE_HEIGHT,
   BRAINDUMP_NOTE_LINES_PER_CAP,
   BRAINDUMP_OPACITY_MAX,
   BRAINDUMP_OPACITY_MIN,
@@ -28,6 +30,12 @@ import {
 } from '@/lib/constants/braindump'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
+import { useAppSelector } from '@/lib/redux/hooks'
+import {
+  selectBraindumpFontFamily,
+  selectBraindumpFontSize,
+  selectBraindumpTextColor,
+} from '@/lib/redux/slices/preferencesSlice'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
 import type { Completed } from '@/server/schemas/completed'
@@ -152,6 +160,13 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   const syncInputId = useId()
   const categoryInputId = useId()
   const spacesInputId = useId()
+
+  // BrainDump text-presentation preferences (shared via the preferences slice,
+  // hydrated from localStorage + live-synced across windows by the prefs sync
+  // middleware). Read here and applied inline to the editor surface.
+  const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
+  const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
+  const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
@@ -741,8 +756,18 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
         disabled={activeCategoryId === null}
         maxLength={NOTE_MAX_LENGTH}
         spellCheck
-        className="bg-background/60 flex-1 resize-none rounded-lg border p-3 font-mono text-sm shadow-sm focus:outline-none disabled:opacity-50"
-        style={NO_DRAG_REGION_STYLE}
+        className="bg-background/60 flex-1 resize-none rounded-lg border p-3 shadow-sm focus:outline-none disabled:opacity-50"
+        // Inline (not a useMemo) — a fresh style object on an intrinsic element is
+        // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
+        // textarea outside the frameless drag region), then layer the saved
+        // presentation. lineHeight is unitless so spacing scales with the size.
+        style={{
+          ...NO_DRAG_REGION_STYLE,
+          fontFamily: BRAINDUMP_FONT_FAMILY_CSS[braindumpFontFamily],
+          fontSize: `${braindumpFontSize}px`,
+          lineHeight: BRAINDUMP_LINE_HEIGHT,
+          color: braindumpTextColor,
+        }}
       />
     </div>
   )
