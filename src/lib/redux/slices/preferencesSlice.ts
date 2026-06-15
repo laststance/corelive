@@ -175,6 +175,16 @@ export const preferencesSlice = createSlice({
     },
 
     /**
+     * Toggles BrainDump clear-on-complete (drop a finished line once its undo
+     * window closes). Plain boolean, so no value-healing is needed.
+     * @param state - Current state
+     * @param action - Payload containing the new braindumpClearOnComplete value
+     */
+    setBraindumpClearOnComplete: (state, action: PayloadAction<boolean>) => {
+      state.braindumpClearOnComplete = action.payload
+    },
+
+    /**
      * Replaces the whole preferences state. Used by the cross-window sync to
      * apply preferences received from another window without re-broadcasting.
      * @param _state - Current state (unused, returns new state)
@@ -204,6 +214,7 @@ export const {
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
+  setBraindumpClearOnComplete,
   hydratePreferences,
   resetPreferences,
 } = preferencesSlice.actions
@@ -305,6 +316,15 @@ export const selectBraindumpTextColor = (state: RootState): string =>
   state.preferences.braindumpTextColor ?? DEFAULT_PREFERENCES.braindumpTextColor
 
 /**
+ * Selects the BrainDump clear-on-complete preference.
+ * @param state - Root state
+ * @returns Whether finished BrainDump lines clear after the undo window (default false)
+ */
+export const selectBraindumpClearOnComplete = (state: RootState): boolean =>
+  state.preferences.braindumpClearOnComplete ??
+  DEFAULT_PREFERENCES.braindumpClearOnComplete
+
+/**
  * Selects the full preferences state (every field coalesced/migrated to its
  * effective value) — the snapshot the cross-window sync broadcasts.
  * @param state - Root state
@@ -323,6 +343,7 @@ export const selectPreferences = (state: RootState): PreferencesState => ({
   braindumpFontFamily: selectBraindumpFontFamily(state),
   braindumpFontSize: selectBraindumpFontSize(state),
   braindumpTextColor: selectBraindumpTextColor(state),
+  braindumpClearOnComplete: selectBraindumpClearOnComplete(state),
 })
 
 export default preferencesSlice.reducer

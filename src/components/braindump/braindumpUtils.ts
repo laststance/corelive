@@ -171,6 +171,30 @@ export function replaceLineAtIndex(
 }
 
 /**
+ * Remove one line entirely, joining the surrounding lines. Used by the
+ * clear-on-complete preference: once a finished line's undo window closes, the
+ * `- [x] <title>` line is dropped so the BrainDump scratchpad stays clean.
+ * Returns the original text for out-of-range indices, mirroring
+ * `replaceLineAtIndex`.
+ *
+ * @param text - The full document text.
+ * @param lineIndex - Zero-based index of the line to delete.
+ * @returns The text with that line removed, or the original when out of range.
+ * @example
+ * removeLineAtIndex('- [x] buy milk\ndishes', 0) // → 'dishes'
+ * removeLineAtIndex('a\nb\nc', 1)                 // → 'a\nc'
+ */
+export function removeLineAtIndex(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+): string {
+  const lines = text.split('\n')
+  if (lineIndex < 0 || lineIndex >= lines.length) return text
+  lines.splice(lineIndex, 1)
+  return lines.join('\n')
+}
+
+/**
  * Matches an empty checkbox skeleton — a checkbox prefix with no title, e.g.
  * `- [ ]`, `- [x]`, `- []` (optional trailing whitespace). These have nothing
  * to record, so the complete command must skip them rather than logging a junk

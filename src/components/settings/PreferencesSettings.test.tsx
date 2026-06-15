@@ -183,4 +183,27 @@ describe('PreferencesSettings — BrainDump editor presentation', () => {
       '#000000',
     )
   })
+
+  it('keeps finished BrainDump lines in place by default — clear-on-complete starts off', () => {
+    // Arrange / Act — a fresh install keeps the on-concept behavior.
+    renderPreferences()
+
+    // Assert — the clear-on-complete switch is off (lines stay put by default).
+    expect(
+      screen.getByRole('switch', { name: 'Clear finished lines' }),
+    ).not.toBeChecked()
+  })
+
+  it('opts into clearing finished BrainDump lines when its switch is turned on', async () => {
+    // Arrange
+    const { store, user } = renderPreferences()
+
+    // Act — turn on "Clear finished lines".
+    await user.click(
+      screen.getByRole('switch', { name: 'Clear finished lines' }),
+    )
+
+    // Assert — the preference is now enabled in the slice.
+    expect(store.getState().preferences.braindumpClearOnComplete).toBe(true)
+  })
 })

@@ -32,6 +32,7 @@ import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
 import {
+  selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
@@ -50,6 +51,7 @@ import {
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
+  removeLineAtIndex,
   replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './braindumpUtils'
@@ -169,6 +171,9 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
   const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
   const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
+  // When ON, a finished line is dropped once its undo window closes (see the
+  // toast's onAutoClose in promoteLineToCompleted). Default OFF keeps every line.
+  const clearOnComplete = useAppSelector(selectBraindumpClearOnComplete)
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
@@ -517,9 +522,46 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             toast.dismiss(undoToastId)
           },
         },
+        // Clear-on-complete: when the toast auto-closes (the undo window elapsed
+        // without an Undo), drop the finished line so the scratchpad clears as
+        // you go. Sonner fires onAutoClose ONLY on the timeout — an Undo click
+        // dismisses (onDismiss) instead, so undone completions are never cleared.
+        onAutoClose: clearOnComplete
+          ? () => {
+              // Tie the clear to THIS completion via its completedId entry in
+              // checkedRowsRef. If the entry is gone, the completion was already
+              // reverted (toast Undo / manual uncheck both delete it) or the
+              // category was switched (which clears the whole map) — skip, so we
+              // never strip a same-title line belonging to a different
+              // completion or category.
+              let memoryKey: BrainDumpLineIndex | null = null
+              for (const [key, value] of checkedRowsRef.current.entries()) {
+                if (value.completedId === completedId) {
+                  memoryKey = key
+                  break
+                }
+              }
+              if (memoryKey === null) return
+              // Drop the now-defunct entry BEFORE mutating text so no stale
+              // {lineIndex → completedId} lingers: a leftover entry would let the
+              // uncheck path's index/title fallback later delete the WRONG
+              // Completed row (titles repeat by design — repetition is a feature).
+              checkedRowsRef.current.delete(memoryKey)
+
+              // Re-resolve by title against the freshest text (the index may have
+              // drifted) and remove ONLY a line that is STILL checked: a manual
+              // uncheck leaves it `- [ ]`, which won't match, so this self-suppresses.
+              const lineToClear = findCheckedLineIndexByTitle(
+                noteTextRef.current,
+                safeTitle,
+              )
+              if (lineToClear === null) return
+              setNoteText(removeLineAtIndex(noteTextRef.current, lineToClear))
+            }
+          : undefined,
       })
     },
-    [activeCategoryId, createCompletedMutation, queryClient],
+    [activeCategoryId, createCompletedMutation, queryClient, clearOnComplete],
   )
 
   /**

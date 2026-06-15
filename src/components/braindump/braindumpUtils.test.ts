@@ -16,6 +16,7 @@ import {
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
+  removeLineAtIndex,
   replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './braindumpUtils'
@@ -133,6 +134,39 @@ describe('replaceLineAtIndex', () => {
     // Act + Assert
     expect(replaceLineAtIndex(before, 5, 'a')).toBe(before)
     expect(replaceLineAtIndex(before, -1, 'a')).toBe(before)
+  })
+})
+
+describe('removeLineAtIndex', () => {
+  it('drops a finished checkbox line so clear-on-complete leaves the rest verbatim', () => {
+    // Arrange — clear-on-complete fires once the undo window closes on a finished line.
+    const before = '- [x] buy milk\ndishes'
+
+    // Act — drop the completed first line.
+    const result = removeLineAtIndex(before, 0)
+
+    // Assert
+    expect(result).toBe('dishes')
+  })
+
+  it('removes only the target line and joins the surrounding lines', () => {
+    // Arrange
+    const before = ['line 0', 'line 1', 'line 2'].join('\n')
+
+    // Act
+    const after = removeLineAtIndex(before, 1)
+
+    // Assert
+    expect(after).toBe(['line 0', 'line 2'].join('\n'))
+  })
+
+  it('returns the original text for out-of-range indices', () => {
+    // Arrange
+    const before = '- [x] a'
+
+    // Act + Assert
+    expect(removeLineAtIndex(before, 5)).toBe(before)
+    expect(removeLineAtIndex(before, -1)).toBe(before)
   })
 })
 

@@ -9,6 +9,7 @@ import {
 import preferencesReducer, {
   hydratePreferences,
   initialState,
+  setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
@@ -162,6 +163,19 @@ describe('preferences cross-window sync', () => {
     expect(windowB.getState().preferences.braindumpTextColor).toBe(
       'var(--primary)',
     )
+  })
+
+  it('propagates a BrainDump clear-on-complete toggle to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — opt into clearing finished lines in window A.
+    windowA.dispatch(setBraindumpClearOnComplete(true))
+
+    // Assert — window B reflects the toggle without a reload (the action is in
+    // the broadcast allowlist; a NEW set* action would stay silent until added).
+    expect(windowB.getState().preferences.braindumpClearOnComplete).toBe(true)
   })
 
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {
