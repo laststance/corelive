@@ -8,6 +8,7 @@ import reducer, {
   hydratePreferences,
   initialState,
   resetPreferences,
+  selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
@@ -17,6 +18,7 @@ import reducer, {
   selectSoundMoment,
   selectSoundTimbre,
   selectSoundVolume,
+  setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
@@ -48,6 +50,7 @@ describe('preferencesSlice', () => {
       braindumpFontFamily: 'mono',
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
+      braindumpClearOnComplete: false,
     })
   })
 
@@ -139,6 +142,7 @@ describe('preferencesSlice', () => {
       braindumpFontFamily: 'serif',
       braindumpFontSize: 20,
       braindumpTextColor: 'var(--primary)',
+      braindumpClearOnComplete: true,
     }
 
     // Act
@@ -159,6 +163,7 @@ describe('preferencesSlice', () => {
       braindumpFontFamily: 'serif',
       braindumpFontSize: 24,
       braindumpTextColor: '#abcdef',
+      braindumpClearOnComplete: true,
     }
 
     // Act
@@ -174,6 +179,7 @@ describe('preferencesSlice', () => {
       braindumpFontFamily: 'mono',
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
+      braindumpClearOnComplete: false,
     })
   })
 
@@ -237,6 +243,7 @@ describe('preferencesSlice', () => {
       braindumpFontFamily: 'mono',
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
+      braindumpClearOnComplete: false,
     })
   })
 
@@ -306,5 +313,21 @@ describe('preferencesSlice', () => {
     expect(selectBraindumpFontFamily(legacyState)).toBe('mono')
     expect(selectBraindumpFontSize(legacyState)).toBe(14)
     expect(selectBraindumpTextColor(legacyState)).toBe('var(--foreground)')
+  })
+
+  it('turns on BrainDump clear-on-complete when setBraindumpClearOnComplete(true) is dispatched', () => {
+    // Act
+    const next = reducer(initialState, setBraindumpClearOnComplete(true))
+
+    // Assert
+    expect(next.braindumpClearOnComplete).toBe(true)
+  })
+
+  it('falls back to clear-on-complete OFF for a slice that predates the field', () => {
+    // Arrange — a persisted slice from before clear-on-complete existed.
+    const legacyState = stateWith({ completionSound: false })
+
+    // Act / Assert — the selector coalesces to the default, never undefined (Finding 5).
+    expect(selectBraindumpClearOnComplete(legacyState)).toBe(false)
   })
 })

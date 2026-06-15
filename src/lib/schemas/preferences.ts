@@ -93,6 +93,11 @@ export const PreferencesStateSchema = z.object({
     .string()
     .regex(BRAINDUMP_TEXT_COLOR_PATTERN)
     .catch(DEFAULT_BRAINDUMP_TEXT_COLOR),
+  /** BrainDump clear-on-complete — when ON, a finished `- [x] <title>` line is
+   * dropped once its undo window closes so the scratchpad clears as you go.
+   * Default OFF keeps the on-concept behavior (every line stays in place); the
+   * clear is the opt-in deviation ("Presets First, Then Options"). */
+  braindumpClearOnComplete: z.boolean().default(false),
 })
 
 /** The validated core user-preferences shape (inferred from the schema SSoT). */

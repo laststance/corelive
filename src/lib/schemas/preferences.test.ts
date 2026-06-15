@@ -8,7 +8,8 @@ describe('PreferencesStateSchema', () => {
     const result = PreferencesStateSchema.parse({})
 
     // Assert — every moment OFF, default timbre + volume, both legacy flags OFF,
-    // and the BrainDump editor at its prior look (mono / 14px / theme foreground).
+    // the BrainDump editor at its prior look (mono / 14px / theme foreground),
+    // and clear-on-complete OFF (finished lines stay put by default).
     expect(result).toEqual({
       completionSound: false,
       retainCompletedInList: false,
@@ -18,6 +19,7 @@ describe('PreferencesStateSchema', () => {
       braindumpFontFamily: 'mono',
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
+      braindumpClearOnComplete: false,
     })
   })
 
@@ -38,7 +40,20 @@ describe('PreferencesStateSchema', () => {
       braindumpFontFamily: 'mono',
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
+      braindumpClearOnComplete: false,
     })
+  })
+
+  it('keeps an explicit BrainDump clear-on-complete opt-in and defaults it OFF when absent', () => {
+    // Act — an explicit true is preserved; a payload omitting it defaults to OFF.
+    const optedIn = PreferencesStateSchema.parse({
+      braindumpClearOnComplete: true,
+    })
+    const omitted = PreferencesStateSchema.parse({})
+
+    // Assert
+    expect(optedIn.braindumpClearOnComplete).toBe(true)
+    expect(omitted.braindumpClearOnComplete).toBe(false)
   })
 
   it('clamps an out-of-range master volume number into [0,1]', () => {
