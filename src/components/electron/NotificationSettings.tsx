@@ -238,7 +238,7 @@ export const NotificationSettings = memo(function NotificationSettings({
             <Bell className="h-5 w-5" />
             Notifications
           </CardTitle>
-          <CardDescription>Loading notification settings...</CardDescription>
+          <CardDescription>Loading notification preferences...</CardDescription>
         </CardHeader>
       </Card>
     )

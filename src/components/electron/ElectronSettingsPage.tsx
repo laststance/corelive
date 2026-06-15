@@ -191,7 +191,7 @@ export const ElectronSettingsPage = memo(
 
         <Card className="border-0 bg-transparent shadow-none">
           <CardHeader className="px-2 pb-2 pt-0">
-            <CardTitle className="text-lg">Settings</CardTitle>
+            <CardTitle className="text-lg">Application</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 px-2">
             {/* Hide App Icon */}
