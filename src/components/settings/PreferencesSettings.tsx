@@ -33,6 +33,7 @@ import {
   selectSoundMoment,
   selectSoundTimbre,
   selectSoundVolume,
+  setAllSoundMoments,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
@@ -147,6 +148,13 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
     clear: isClearSoundOn,
   }
 
+  // The master "All cues" toggle reflects the palette only when EVERY cue is on
+  // (read through the effective-state selectors, so a legacy completionSound user
+  // counts as having the complete cue on). From any partial/all-off state it reads
+  // OFF and one tap turns them all on; from all-on, one tap silences the palette.
+  const areAllSoundMomentsOn =
+    isTaskCreateSoundOn && isCompleteSoundOn && isClearSoundOn
+
   // Radix Slider wants a stable array; rebuild it only when the volume changes.
   const sliderValue = useMemo(() => [soundVolume], [soundVolume])
   // Same for the font-size slider — its own stable single-thumb array.
@@ -184,6 +192,13 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
   const handleMomentChange = useCallback(
     (momentId: SoundMomentId, enabled: boolean): void => {
       dispatch(setSoundMoment({ moment: momentId, enabled }))
+    },
+    [dispatch],
+  )
+
+  const handleAllSoundMomentsChange = useCallback(
+    (enabled: boolean): void => {
+      dispatch(setAllSoundMoments(enabled))
     },
     [dispatch],
   )
@@ -281,6 +296,25 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
                 Off by default. Pick where a soft, warm cue plays — a quiet
                 companion, never a chime.
               </p>
+            </div>
+
+            {/* Master toggle — flips all three cues together. Checked only when
+                every cue is on, so it never misrepresents a partial palette; a
+                quiet divider sets it above the cues it governs. */}
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="sound-all-cues" className="text-sm font-medium">
+                  All cues
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Turn every cue on or off at once.
+                </p>
+              </div>
+              <Switch
+                id="sound-all-cues"
+                checked={areAllSoundMomentsOn}
+                onCheckedChange={handleAllSoundMomentsChange}
+              />
             </div>
 
             {/* Per-moment toggles (SOUND_MOMENTS is the source of the copy). */}
