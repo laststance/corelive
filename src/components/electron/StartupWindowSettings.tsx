@@ -15,6 +15,7 @@
 import { Sunrise } from 'lucide-react'
 import { memo, useCallback, useId, useState, type ReactElement } from 'react'
 
+import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
 import {
   Card,
   CardContent,
@@ -164,18 +165,12 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
 
   if (hasMounted && !window.electronAPI?.settings) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sunrise className="h-5 w-5" />
-            On launch
-          </CardTitle>
-          <CardDescription>
-            Startup window settings are only available in the desktop
-            application.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Sunrise}
+        title="On launch"
+        description="Startup window settings are only available in the desktop application."
+        className={className}
+      />
     )
   }
 
@@ -187,32 +182,23 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
     typeof window.electronAPI?.settings?.getStartupConfig !== 'function'
   ) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sunrise className="h-5 w-5" />
-            On launch
-          </CardTitle>
-          <CardDescription>
-            Update CoreLive to the latest version to choose which windows greet
-            you at launch.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Sunrise}
+        title="On launch"
+        description="Update CoreLive to the latest version to choose which windows greet you at launch."
+        className={className}
+      />
     )
   }
 
   if (!isReady) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sunrise className="h-5 w-5" />
-            On launch
-          </CardTitle>
-          <CardDescription>Loading startup window settings...</CardDescription>
-        </CardHeader>
-      </Card>
+      <SettingsStateCard
+        icon={Sunrise}
+        title="On launch"
+        description="Loading startup window settings…"
+        className={className}
+      />
     )
   }
 

@@ -196,7 +196,7 @@ describe('StartupWindowSettings', () => {
 
     // Assert: the loading copy shows and no toggles have rendered yet.
     expect(
-      await screen.findByText('Loading startup window settings...'),
+      await screen.findByText('Loading startup window settings…'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
