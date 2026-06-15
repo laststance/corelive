@@ -58,21 +58,9 @@ test.describe('Theme Visual Test', () => {
     })
     const lightBackground = await readBackgroundColor(page)
 
-    // Act — open the user menu and switch to dark theme
-    const sidebarHeader = page.locator('[data-sidebar="header"]').first()
-    await expect(sidebarHeader).toBeVisible({ timeout: 5000 })
-    const avatarButton = sidebarHeader.locator('button').first()
-    await expect(avatarButton).toBeVisible({ timeout: 5000 })
-    await avatarButton.click()
-    const changeThemeTrigger = page.getByText('Change Theme', { exact: false })
-    await expect(changeThemeTrigger).toBeVisible()
-    await changeThemeTrigger.click()
-    const darkThemeOption = page
-      .locator('[role="menuitem"]')
-      .filter({ hasText: 'Dark' })
-      .first()
-    await expect(darkThemeOption).toBeVisible()
-    await darkThemeOption.click()
+    // Act — switch to dark theme the way a user does (sidebar menu → Change
+    // Theme → Dark), via the shared helper so all theme switches share one path.
+    await switchToTheme(page, 'Dark')
 
     // Assert — `data-theme` flipped to dark, and the body background-color
     // (driven by the `--background` CSS variable in src/globals.css) actually
