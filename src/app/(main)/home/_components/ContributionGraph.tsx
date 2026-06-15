@@ -467,7 +467,7 @@ type HeatmapLayout = {
  * calculateHeatmapLayout(720, 53) // => { rectSize: 11, width: 717 }
  * calculateHeatmapLayout(480, 53) // => { rectSize: 8, width: 558 }
  */
-function calculateHeatmapLayout(
+export function calculateHeatmapLayout(
   containerWidth: number | null,
   weekCount: number,
 ): HeatmapLayout {

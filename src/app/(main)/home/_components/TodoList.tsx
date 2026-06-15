@@ -494,6 +494,34 @@ export const TodoList = memo(function TodoList() {
 
   return (
     <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Activity Heatmap — promoted to span both columns so it gets the full
+          content-width DESIGN.md mandates for the centerpiece. At full width the
+          trailing-year grid fits the card, removing the horizontal scroll the
+          old half-width placement forced on desktop (sub-770px still scrolls via
+          ContributionGraph's own overflow-x-auto — unavoidable at the 12px floor). */}
+      <div className="lg:col-span-2">
+        {/* Suspense required because ContributionGraph + YearInReviewModal read URL params via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
+        <Suspense
+          fallback={
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  Activity
+                </CardTitle>
+                <CardDescription>Loading activity data...</CardDescription>
+              </CardHeader>
+            </Card>
+          }
+        >
+          <ContributionGraph />
+          <YearInReviewModal
+            dataByDate={heatmapByDate}
+            isLoading={heatmapLoading}
+            isRestoring={isRestoring}
+          />
+        </Suspense>
+      </div>
+
       {/* Pending Tasks Column */}
       <div className="space-y-6">
         <Card>
@@ -574,26 +602,6 @@ export const TodoList = memo(function TodoList() {
 
       {/* Completed Tasks Column */}
       <div className="space-y-6">
-        {/* Suspense required because ContributionGraph + YearInReviewModal read URL params via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
-        <Suspense
-          fallback={
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  Activity
-                </CardTitle>
-                <CardDescription>Loading activity data...</CardDescription>
-              </CardHeader>
-            </Card>
-          }
-        >
-          <ContributionGraph />
-          <YearInReviewModal
-            dataByDate={heatmapByDate}
-            isLoading={heatmapLoading}
-            isRestoring={isRestoring}
-          />
-        </Suspense>
         <WeeklySummaryCard
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
