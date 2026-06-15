@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   COMPLETED_TITLE_MAX_LENGTH,
+  markPlainLineCompleted,
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
@@ -98,6 +99,69 @@ describe('setCheckboxStateAtLine', () => {
     const before = '- [ ] a'
     expect(setCheckboxStateAtLine(before, 5, true)).toBe(before)
     expect(setCheckboxStateAtLine(before, -1, true)).toBe(before)
+  })
+})
+
+describe('markPlainLineCompleted', () => {
+  it('wraps a plain prose line as a checked checkbox so it can be completed', () => {
+    // Arrange
+    const text = 'buy milk'
+
+    // Act
+    const result = markPlainLineCompleted(text, 0)
+
+    // Assert
+    expect(result).toEqual({ text: '- [x] buy milk', title: 'buy milk' })
+  })
+
+  it('wraps only the caret line and leaves the rest of the document verbatim', () => {
+    // Arrange
+    const text = ['line 0', 'second thing', 'line 2'].join('\n')
+
+    // Act
+    const result = markPlainLineCompleted(text, 1)
+
+    // Assert
+    expect(result).toEqual({
+      text: ['line 0', '- [x] second thing', 'line 2'].join('\n'),
+      title: 'second thing',
+    })
+  })
+
+  it('trims surrounding whitespace into the title and the rewritten line', () => {
+    // Arrange
+    const text = '   spaced out   '
+
+    // Act
+    const result = markPlainLineCompleted(text, 0)
+
+    // Assert
+    expect(result).toEqual({ text: '- [x] spaced out', title: 'spaced out' })
+  })
+
+  it('returns null for an already well-formed checkbox line (toggle path owns it)', () => {
+    // Arrange + Act + Assert
+    expect(markPlainLineCompleted('- [ ] todo', 0)).toBeNull()
+    expect(markPlainLineCompleted('- [x] done', 0)).toBeNull()
+  })
+
+  it('returns null for an empty checkbox skeleton so no junk title is logged', () => {
+    // Arrange + Act + Assert
+    expect(markPlainLineCompleted('- [ ]', 0)).toBeNull()
+    expect(markPlainLineCompleted('- [ ] ', 0)).toBeNull()
+    expect(markPlainLineCompleted('- [x]', 0)).toBeNull()
+    expect(markPlainLineCompleted('- []', 0)).toBeNull()
+  })
+
+  it('returns null for a blank line', () => {
+    // Arrange + Act + Assert
+    expect(markPlainLineCompleted('a\n   \nb', 1)).toBeNull()
+  })
+
+  it('returns null for an out-of-range line index', () => {
+    // Arrange + Act + Assert
+    expect(markPlainLineCompleted('only line', 5)).toBeNull()
+    expect(markPlainLineCompleted('only line', -1)).toBeNull()
   })
 })
 

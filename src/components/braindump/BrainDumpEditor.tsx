@@ -46,6 +46,7 @@ import {
   type BrainDumpCompletedTitle,
   type BrainDumpLineIndex,
   COMPLETED_TITLE_MAX_LENGTH,
+  markPlainLineCompleted,
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
@@ -552,9 +553,11 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   )
 
   /**
-   * Toggle the checkbox on the line nearest the caret. Triggered by Cmd/Ctrl+
-   * Enter inside the textarea — the keyboard path is the deliberate UX,
-   * pointer-clicks would require a second editor mode.
+   * Complete the line nearest the caret: toggle an existing `- [ ]`/`- [x]`
+   * checkbox, or finish a plain prose line by wrapping it as `- [x]` and
+   * promoting it (so users don't have to pre-type `- [ ]` to log a win).
+   * Triggered by Cmd/Ctrl+Enter inside the textarea — the keyboard path is the
+   * deliberate UX; pointer-clicks would require a second editor mode.
    */
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
@@ -571,7 +574,17 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
     const line = lines[lineIndex]
     if (line === undefined) return
     const parsed = parseCheckboxLine(line, lineIndex)
-    if (!parsed) return
+    if (!parsed) {
+      // Not a checkbox line: let the complete command finish an ordinary prose
+      // line by wrapping it as `- [x] …` and promoting it, so users don't have
+      // to pre-type `- [ ]` markdown just to log a win. Blank lines and empty
+      // checkbox skeletons return null and fall through to a no-op.
+      const promoted = markPlainLineCompleted(text, lineIndex)
+      if (!promoted) return
+      setNoteText(promoted.text)
+      void promoteLineToCompleted(lineIndex, promoted.title)
+      return
+    }
 
     const nextChecked = !parsed.checked
     const nextText = setCheckboxStateAtLine(text, lineIndex, nextChecked)
@@ -751,7 +764,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
         placeholder={
           activeCategoryId === null
             ? 'Pick a category to start writing'
-            : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter on a checkbox line to toggle.'
+            : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
         }
         disabled={activeCategoryId === null}
         maxLength={NOTE_MAX_LENGTH}
