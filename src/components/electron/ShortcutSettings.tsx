@@ -256,7 +256,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
             <Keyboard className="h-5 w-5" />
             Keyboard Shortcuts
           </CardTitle>
-          <CardDescription>Loading shortcut settings...</CardDescription>
+          <CardDescription>Loading shortcut preferences...</CardDescription>
         </CardHeader>
       </Card>
     )

@@ -17,7 +17,7 @@ import { SettingsBackButton } from '@/components/settings/SettingsBackButton'
 import { ThemeSelector } from '@/components/ThemeSelector'
 
 export const metadata: Metadata = {
-  title: 'Settings',
+  title: 'Preferences',
   description: 'CoreLive preferences and desktop application settings',
 }
 
