@@ -32,6 +32,7 @@ import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
 import {
+  selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
@@ -50,6 +51,7 @@ import {
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
+  removeLineAtIndex,
   replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './braindumpUtils'
@@ -169,6 +171,9 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
   const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
   const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
+  // When ON, a finished line is dropped once its undo window closes (see the
+  // toast's onAutoClose in promoteLineToCompleted). Default OFF keeps every line.
+  const clearOnComplete = useAppSelector(selectBraindumpClearOnComplete)
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
@@ -517,9 +522,26 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             toast.dismiss(undoToastId)
           },
         },
+        // Clear-on-complete: when the toast auto-closes (the undo window elapsed
+        // without an Undo), drop the finished line so the scratchpad clears as
+        // you go. Sonner fires onAutoClose ONLY on the timeout — an Undo click
+        // dismisses (onDismiss) instead, so undone completions are never cleared.
+        // Re-resolve by title against the freshest text (the index may have
+        // drifted) and remove ONLY a line that is STILL checked: a manual uncheck
+        // leaves it `- [ ]`, which won't match, so the clear self-suppresses.
+        onAutoClose: clearOnComplete
+          ? () => {
+              const lineToClear = findCheckedLineIndexByTitle(
+                noteTextRef.current,
+                safeTitle,
+              )
+              if (lineToClear === null) return
+              setNoteText(removeLineAtIndex(noteTextRef.current, lineToClear))
+            }
+          : undefined,
       })
     },
-    [activeCategoryId, createCompletedMutation, queryClient],
+    [activeCategoryId, createCompletedMutation, queryClient, clearOnComplete],
   )
 
   /**

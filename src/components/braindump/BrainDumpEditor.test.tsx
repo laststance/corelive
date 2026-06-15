@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
+import type { ToastT } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import preferencesReducer, {
@@ -465,5 +466,104 @@ describe('BrainDumpEditor complete command', () => {
 
     // Assert — no Completed row is created for an empty line.
     expect(completedMutateAsync).not.toHaveBeenCalled()
+  })
+})
+
+describe('BrainDumpEditor clear-on-complete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    completedMutateAsync.mockResolvedValue({ id: 1 })
+  })
+
+  it('clears a finished line once its undo window closes when clear-on-complete is on', async () => {
+    // Arrange — the editor with clear-on-complete opted in.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete the line, then simulate the undo window elapsing with no
+    // Undo (Sonner fires the success toast's onAutoClose on the timeout).
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk')
+    })
+    const autoClose = vi
+      .mocked(toast.success)
+      .mock.calls.at(-1)?.[1]?.onAutoClose
+    // onAutoClose ignores its ToastT arg (it re-resolves the line from the ref),
+    // so an empty stub stands in for the unused parameter.
+    act(() => {
+      autoClose?.({} as ToastT)
+    })
+
+    // Assert — the finished line is dropped, leaving the scratchpad clean.
+    expect(noteField).toHaveValue('')
+  })
+
+  it('keeps a finished line that was undone before its window closed (clear self-suppresses)', async () => {
+    // Arrange — clear-on-complete on; complete a line, then manually uncheck it
+    // (Cmd+Enter on the `- [x]` line) before the undo window elapses.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk')
+    })
+
+    // Act — manually uncheck (re-fire Cmd+Enter on the checked line), then fire
+    // the original toast's onAutoClose as the window would.
+    noteField.selectionStart = 1
+    noteField.selectionEnd = 1
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [ ] buy milk')
+    })
+    const autoClose = vi
+      .mocked(toast.success)
+      .mock.calls.at(-1)?.[1]?.onAutoClose
+    act(() => {
+      autoClose?.({} as ToastT)
+    })
+
+    // Assert — the now-unchecked line is NOT a checked match, so it survives
+    // instead of being cleared out from under the user.
+    expect(noteField).toHaveValue('- [ ] buy milk')
+  })
+
+  it('keeps every finished line in place by default (no auto-close hook wired)', async () => {
+    // Arrange — a fresh install (clear-on-complete OFF) keeps the prior behavior.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete a plain line under the default preference.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk')
+    })
+
+    // Assert — the success toast carries NO onAutoClose hook, so the finished
+    // line stays put (the clear is strictly opt-in).
+    const autoClose = vi
+      .mocked(toast.success)
+      .mock.calls.at(-1)?.[1]?.onAutoClose
+    expect(autoClose).toBeUndefined()
+    expect(noteField).toHaveValue('- [x] buy milk')
   })
 })

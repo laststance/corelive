@@ -25,6 +25,7 @@ import {
 } from '@/lib/constants/sound'
 import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import {
+  selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
@@ -32,6 +33,7 @@ import {
   selectSoundMoment,
   selectSoundTimbre,
   selectSoundVolume,
+  setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
@@ -133,6 +135,9 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
   const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
   const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
   const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
+  const braindumpClearOnComplete = useAppSelector(
+    selectBraindumpClearOnComplete,
+  )
 
   // Lookup so the SOUND_MOMENTS render map (the single source of moment copy) can
   // index its checked state without per-item hook calls.
@@ -165,6 +170,13 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
   const handleRetainChange = useCallback(
     (checked: boolean): void => {
       dispatch(setRetainCompletedInList(checked))
+    },
+    [dispatch],
+  )
+
+  const handleBraindumpClearOnCompleteChange = useCallback(
+    (checked: boolean): void => {
+      dispatch(setBraindumpClearOnComplete(checked))
     },
     [dispatch],
   )
@@ -334,13 +346,34 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
             </div>
           </div>
 
-          {/* BrainDump editor text presentation (font, size, color). */}
+          {/* BrainDump editor behavior + text presentation (font, size, color). */}
           <div className="space-y-4">
             <div className="space-y-0.5">
               <p className="text-sm font-medium">BrainDump</p>
               <p className="text-xs text-muted-foreground">
-                How the text looks in the BrainDump editor.
+                How the BrainDump editor looks and behaves.
               </p>
+            </div>
+
+            {/* Clear-on-complete — tuck a finished line away after the undo window. */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="braindump-clear-on-complete"
+                  className="text-sm font-medium"
+                >
+                  Clear finished lines
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Once you finish a line, tuck it away after the undo moment —
+                  so the page clears as you go. Off keeps every line in place.
+                </p>
+              </div>
+              <Switch
+                id="braindump-clear-on-complete"
+                checked={braindumpClearOnComplete}
+                onCheckedChange={handleBraindumpClearOnCompleteChange}
+              />
             </div>
 
             {/* Font family — the three brand fonts; each label previews its face. */}
