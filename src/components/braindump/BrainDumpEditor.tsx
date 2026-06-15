@@ -642,11 +642,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
         className="flex items-center justify-between gap-2"
         style={DRAG_REGION_STYLE}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            BrainDump
-          </span>
-        </div>
+        <div className="flex items-center gap-2">{/* Header Text Zone*/}</div>
         <div className="flex items-center gap-2" style={NO_DRAG_REGION_STYLE}>
           <Switch
             id={spacesInputId}
