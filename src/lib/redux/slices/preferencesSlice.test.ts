@@ -25,6 +25,7 @@ import reducer, {
   setCompletionSound,
   setRetainCompletedInList,
   setSoundMoment,
+  setAllSoundMoments,
   setSoundTimbre,
   setSoundVolume,
   type PreferencesState,
@@ -104,6 +105,36 @@ describe('preferencesSlice', () => {
     // Assert — the object is rebuilt from defaults with only task-create flipped.
     expect(next.soundMoments).toEqual({
       'task-create': true,
+      complete: false,
+      clear: false,
+    })
+  })
+
+  it('turns on every sound moment at once when the master toggle is enabled', () => {
+    // Act — flip the master "All cues" switch on from a silent default.
+    const next = reducer(initialState, setAllSoundMoments(true))
+
+    // Assert — all three cues are now on.
+    expect(next.soundMoments).toEqual({
+      'task-create': true,
+      complete: true,
+      clear: true,
+    })
+  })
+
+  it('silences every sound moment at once when the master toggle is disabled', () => {
+    // Arrange — a palette with all three cues currently on.
+    const allCuesOnState: PreferencesState = {
+      ...initialState,
+      soundMoments: { 'task-create': true, complete: true, clear: true },
+    }
+
+    // Act — flip the master "All cues" switch off.
+    const next = reducer(allCuesOnState, setAllSoundMoments(false))
+
+    // Assert — every cue is now off (a silent palette).
+    expect(next.soundMoments).toEqual({
+      'task-create': false,
       complete: false,
       clear: false,
     })

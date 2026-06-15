@@ -9,6 +9,7 @@ import {
 import preferencesReducer, {
   hydratePreferences,
   initialState,
+  setAllSoundMoments,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
@@ -100,6 +101,22 @@ describe('preferences cross-window sync', () => {
 
     // Assert — window B sees the same toggle without a reload.
     expect(windowB.getState().preferences.soundMoments.clear).toBe(true)
+  })
+
+  it('propagates a master all-cues toggle to another window', () => {
+    // Arrange — two windows, each with its own store + sync middleware.
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — flip every cue ON via the master toggle in window A.
+    windowA.dispatch(setAllSoundMoments(true))
+
+    // Assert — window B sees all three cues enabled without a reload.
+    expect(windowB.getState().preferences.soundMoments).toEqual({
+      'task-create': true,
+      complete: true,
+      clear: true,
+    })
   })
 
   it('propagates a timbre change to another window', () => {

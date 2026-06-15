@@ -3,6 +3,7 @@ import type { Middleware } from '@reduxjs/toolkit'
 import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
 import {
   hydratePreferences,
+  setAllSoundMoments,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
@@ -40,6 +41,7 @@ const BROADCASTABLE_ACTION_TYPES = new Set<string>([
   setCompletionSound.type,
   setRetainCompletedInList.type,
   setSoundMoment.type,
+  setAllSoundMoments.type,
   setSoundTimbre.type,
   setSoundVolume.type,
   setBraindumpFontFamily.type,

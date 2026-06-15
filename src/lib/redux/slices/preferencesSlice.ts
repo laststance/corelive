@@ -95,6 +95,26 @@ export const preferencesSlice = createSlice({
     },
 
     /**
+     * Flips EVERY sound moment on or off in one write — the master "All cues"
+     * toggle. Writes the explicit literal (not a spread over the current object)
+     * so a stale/missing `soundMoments` can't leave a moment behind; the
+     * `satisfies Record<SoundMomentId, boolean>` mirrors the schema default and
+     * fails compilation if the moment set ever drifts from SOUND_MOMENT_IDS.
+     * @param state - Current state
+     * @param action - Payload: whether all cues should play.
+     * @example
+     * dispatch(setAllSoundMoments(true))  // every cue ON
+     * dispatch(setAllSoundMoments(false)) // every cue OFF (a silent palette)
+     */
+    setAllSoundMoments: (state, action: PayloadAction<boolean>) => {
+      state.soundMoments = {
+        'task-create': action.payload,
+        complete: action.payload,
+        clear: action.payload,
+      } satisfies Record<SoundMomentId, boolean>
+    },
+
+    /**
      * Selects the active timbre for every enabled moment.
      * @param state - Current state
      * @param action - Payload containing the new timbre id.
@@ -209,6 +229,7 @@ export const {
   setCompletionSound,
   setRetainCompletedInList,
   setSoundMoment,
+  setAllSoundMoments,
   setSoundTimbre,
   setSoundVolume,
   setBraindumpFontFamily,

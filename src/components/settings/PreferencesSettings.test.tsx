@@ -72,6 +72,58 @@ describe('PreferencesSettings — sound palette', () => {
     expect(store.getState().preferences.soundMoments['task-create']).toBe(true)
   })
 
+  it('shows the master All cues switch on when every moment cue is already enabled', () => {
+    // Arrange / Act — a palette with all three cues on.
+    renderPreferences({
+      soundMoments: { 'task-create': true, complete: true, clear: true },
+    })
+
+    // Assert — the master switch reads on (it mirrors an all-on palette).
+    expect(screen.getByRole('switch', { name: 'All cues' })).toBeChecked()
+  })
+
+  it('shows the master All cues switch off when only some moment cues are enabled', () => {
+    // Arrange / Act — a partial palette: task-create on, the other two off.
+    renderPreferences({
+      soundMoments: { 'task-create': true, complete: false, clear: false },
+    })
+
+    // Assert — the master switch reads off; it never claims a partial palette is "all".
+    expect(screen.getByRole('switch', { name: 'All cues' })).not.toBeChecked()
+  })
+
+  it('enables every moment cue when the master All cues switch is turned on', async () => {
+    // Arrange — a fresh, silent install (every cue off).
+    const { store, user } = renderPreferences()
+
+    // Act — turn on the master "All cues" switch.
+    await user.click(screen.getByRole('switch', { name: 'All cues' }))
+
+    // Assert — all three cues are now enabled in the preferences slice.
+    expect(store.getState().preferences.soundMoments).toEqual({
+      'task-create': true,
+      complete: true,
+      clear: true,
+    })
+  })
+
+  it('silences every moment cue when the master All cues switch is turned off', async () => {
+    // Arrange — a palette with all three cues currently on.
+    const { store, user } = renderPreferences({
+      soundMoments: { 'task-create': true, complete: true, clear: true },
+    })
+
+    // Act — turn off the master "All cues" switch.
+    await user.click(screen.getByRole('switch', { name: 'All cues' }))
+
+    // Assert — every cue is now off (a silent palette).
+    expect(store.getState().preferences.soundMoments).toEqual({
+      'task-create': false,
+      complete: false,
+      clear: false,
+    })
+  })
+
   it('saves and auditions the chosen timbre when a different one is picked', async () => {
     // Arrange — the defaults are the 'felt' timbre at 0.6 master volume.
     const { store, user } = renderPreferences()
