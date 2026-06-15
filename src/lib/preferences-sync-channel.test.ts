@@ -187,11 +187,17 @@ describe('preferences cross-window sync', () => {
     // Act — push a payload whose BrainDump fields are out of range / off-shape.
     sender.postMessage({
       type: PREFERENCES_SYNC_EVENT_TYPE,
-      state: { braindumpFontSize: 99, braindumpTextColor: 'red' },
+      state: {
+        braindumpFontFamily: 'comic-sans',
+        braindumpFontSize: 99,
+        braindumpTextColor: 'red',
+      },
     })
 
-    // Assert — the receiver applies the CLAMPED size (24, the max) and the HEALED
-    // color (the default token), never the raw 99 / 'red'.
+    // Assert — the receiver applies the HEALED family (the default 'mono'),
+    // CLAMPED size (24, the max), and HEALED color (the default token), never
+    // the raw 'comic-sans' / 99 / 'red'.
+    expect(windowB.getState().preferences.braindumpFontFamily).toBe('mono')
     expect(windowB.getState().preferences.braindumpFontSize).toBe(24)
     expect(windowB.getState().preferences.braindumpTextColor).toBe(
       'var(--foreground)',
