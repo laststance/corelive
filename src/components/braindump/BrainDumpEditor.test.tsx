@@ -566,4 +566,60 @@ describe('BrainDumpEditor clear-on-complete', () => {
     expect(autoClose).toBeUndefined()
     expect(noteField).toHaveValue('- [x] buy milk')
   })
+
+  it('still deletes the right Completed row after an earlier line was auto-cleared', async () => {
+    // Arrange — clear-on-complete on, with two finished lines whose Completed
+    // rows have distinct ids (titles repeat by design — repetition is a feature).
+    completedMutateAsync.mockReset()
+    completedMutateAsync
+      .mockResolvedValueOnce({ id: 1 }) // create: buy milk
+      .mockResolvedValueOnce({ id: 2 }) // create: wash car
+      .mockResolvedValue({ id: 99 }) // any later delete (return ignored)
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Complete the first line ('buy milk', id 1).
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nwash car')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk\nwash car')
+    })
+    // Complete the second line ('wash car', id 2) — caret at end of line 2.
+    noteField.selectionStart = noteField.value.length
+    noteField.selectionEnd = noteField.value.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk\n- [x] wash car')
+    })
+
+    // Act — the FIRST line's undo window elapses, auto-clearing 'buy milk' so
+    // 'wash car' shifts up to line 0 (its ref entry key now drifted). Then
+    // uncheck 'wash car'.
+    const autoCloseBuyMilk = vi
+      .mocked(toast.success)
+      .mock.calls.find(
+        (call) => call[0] === 'Completed: buy milk',
+      )?.[1]?.onAutoClose
+    act(() => {
+      autoCloseBuyMilk?.({} as ToastT)
+    })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] wash car')
+    })
+    noteField.selectionStart = 1
+    noteField.selectionEnd = 1
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Assert — the uncheck deletes 'wash car' (id 2), NOT the auto-cleared
+    // 'buy milk' (id 1) whose stale ref entry would otherwise be mis-targeted.
+    await waitFor(() => {
+      expect(completedMutateAsync).toHaveBeenCalledWith({ id: 2 })
+    })
+    expect(completedMutateAsync).not.toHaveBeenCalledWith({ id: 1 })
+  })
 })
