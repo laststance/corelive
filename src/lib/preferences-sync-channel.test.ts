@@ -9,6 +9,9 @@ import {
 import preferencesReducer, {
   hydratePreferences,
   initialState,
+  setBraindumpFontFamily,
+  setBraindumpFontSize,
+  setBraindumpTextColor,
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
@@ -120,6 +123,45 @@ describe('preferences cross-window sync', () => {
 
     // Assert
     expect(windowB.getState().preferences.soundVolume).toBe(0.25)
+  })
+
+  it('propagates a BrainDump font-family change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — switch the editor face away from the default 'mono' in window A.
+    windowA.dispatch(setBraindumpFontFamily('serif'))
+
+    // Assert — window B reflects the chosen face without a reload (the action is
+    // in the broadcast allowlist).
+    expect(windowB.getState().preferences.braindumpFontFamily).toBe('serif')
+  })
+
+  it('propagates a BrainDump font-size change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — bump the editor size off the default 14px in window A.
+    windowA.dispatch(setBraindumpFontSize(20))
+
+    // Assert — window B reflects the new size without a reload.
+    expect(windowB.getState().preferences.braindumpFontSize).toBe(20)
+  })
+
+  it('propagates a BrainDump text-color change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — pick a non-default editor color in window A.
+    windowA.dispatch(setBraindumpTextColor('var(--primary)'))
+
+    // Assert — window B reflects the new color without a reload.
+    expect(windowB.getState().preferences.braindumpTextColor).toBe(
+      'var(--primary)',
+    )
   })
 
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {
