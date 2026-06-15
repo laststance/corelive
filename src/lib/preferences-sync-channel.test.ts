@@ -179,6 +179,25 @@ describe('preferences cross-window sync', () => {
     expect(windowB.getState().preferences.soundVolume).toBe(1)
   })
 
+  it('clamps and heals out-of-range inbound BrainDump fields when applying a raw broadcast', () => {
+    // Arrange — a window plus a raw sender on the same wire protocol.
+    const windowB = makeWindowStore()
+    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
+
+    // Act — push a payload whose BrainDump fields are out of range / off-shape.
+    sender.postMessage({
+      type: PREFERENCES_SYNC_EVENT_TYPE,
+      state: { braindumpFontSize: 99, braindumpTextColor: 'red' },
+    })
+
+    // Assert — the receiver applies the CLAMPED size (24, the max) and the HEALED
+    // color (the default token), never the raw 99 / 'red'.
+    expect(windowB.getState().preferences.braindumpFontSize).toBe(24)
+    expect(windowB.getState().preferences.braindumpTextColor).toBe(
+      'var(--foreground)',
+    )
+  })
+
   it('folds a legacy-only inbound payload so the completion cue is not silently lost', () => {
     // Arrange — a window plus a raw sender posting a pre-palette snapshot that
     // carries ONLY the legacy completionSound flag (no soundMoments at all),

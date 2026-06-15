@@ -26,6 +26,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import {
   BRAINDUMP_FONT_SIZE_MAX_PX,
   BRAINDUMP_FONT_SIZE_MIN_PX,
+  BRAINDUMP_TEXT_COLOR_PATTERN,
   type BrainDumpFontFamilyId,
 } from '@/lib/constants/braindump'
 import { DEFAULT_PREFERENCES } from '@/lib/constants/preferences'
@@ -146,12 +147,21 @@ export const preferencesSlice = createSlice({
     },
 
     /**
-     * Sets the BrainDump editor text color (a theme `var(--token)` or a `#hex`).
+     * Sets the BrainDump editor text color (a theme `var(--token)` or a `#hex`),
+     * self-healing an off-shape value to the default so the reducer path shares
+     * the same validation boundary as the schema/cross-window path (mirrors the
+     * in-reducer guard on setBraindumpFontSize). The UI only ever emits valid
+     * values; this hardens against a stray programmatic/persisted string.
      * @param state - Current state
      * @param action - Payload containing the new CSS color string.
      */
     setBraindumpTextColor: (state, action: PayloadAction<string>) => {
-      state.braindumpTextColor = action.payload
+      const requestedColor = action.payload
+      state.braindumpTextColor = BRAINDUMP_TEXT_COLOR_PATTERN.test(
+        requestedColor,
+      )
+        ? requestedColor
+        : DEFAULT_PREFERENCES.braindumpTextColor
     },
 
     /**

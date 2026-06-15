@@ -127,4 +127,19 @@ describe('PreferencesStateSchema', () => {
     expect(hex.braindumpTextColor).toBe('#1A2B3C')
     expect(bogus.braindumpTextColor).toBe('var(--foreground)')
   })
+
+  it('accepts the 3-digit and 8-digit hex shapes the color pattern allows', () => {
+    // Act — the pattern admits #rgb (shorthand) and #rrggbbaa (with alpha), not
+    // only the 6-digit form the native picker emits.
+    const shorthand = PreferencesStateSchema.parse({
+      braindumpTextColor: '#abc',
+    })
+    const withAlpha = PreferencesStateSchema.parse({
+      braindumpTextColor: '#1A2B3C80',
+    })
+
+    // Assert — both are preserved verbatim, not healed away.
+    expect(shorthand.braindumpTextColor).toBe('#abc')
+    expect(withAlpha.braindumpTextColor).toBe('#1A2B3C80')
+  })
 })

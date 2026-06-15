@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -98,5 +98,89 @@ describe('PreferencesSettings — sound palette', () => {
     expect(volumeSlider).toHaveAttribute('aria-valuenow', '0.6')
     expect(volumeSlider).toHaveAttribute('aria-valuemin', '0')
     expect(volumeSlider).toHaveAttribute('aria-valuemax', '1')
+  })
+})
+
+describe('PreferencesSettings — BrainDump editor presentation', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('saves the chosen BrainDump font family when a face is picked', async () => {
+    // Arrange — the default editor face is monospace.
+    const { store, user } = renderPreferences()
+
+    // Act — pick the Serif face.
+    await user.click(screen.getByRole('radio', { name: 'Serif' }))
+
+    // Assert — the serif font is saved to preferences.
+    expect(store.getState().preferences.braindumpFontFamily).toBe('serif')
+  })
+
+  it('shows the BrainDump font-size slider at the saved size on its [12,24] track', () => {
+    // Arrange / Act — a non-default saved size.
+    renderPreferences({ braindumpFontSize: 20 })
+
+    // Assert — the font-size slider (the one bounded to [12,24], unlike the [0,1]
+    // volume track) reflects the saved px directly.
+    const fontSizeSlider = screen
+      .getAllByRole('slider')
+      .find((slider) => slider.getAttribute('aria-valuemax') === '24')
+    expect(fontSizeSlider).toBeDefined()
+    expect(fontSizeSlider).toHaveAttribute('aria-valuenow', '20')
+    expect(fontSizeSlider).toHaveAttribute('aria-valuemin', '12')
+  })
+
+  it('saves the chosen BrainDump text color when a preset is picked', async () => {
+    // Arrange — the default editor color is the theme foreground.
+    const { store, user } = renderPreferences()
+
+    // Act — pick the Amber preset.
+    await user.click(screen.getByRole('radio', { name: 'Amber' }))
+
+    // Assert — the amber theme token is saved.
+    expect(store.getState().preferences.braindumpTextColor).toBe(
+      'var(--primary)',
+    )
+  })
+
+  it('saves a custom BrainDump text color chosen from the native color picker', () => {
+    // Arrange
+    const { store } = renderPreferences()
+    const customColorInput = screen.getByLabelText(
+      'Custom BrainDump text color',
+    )
+
+    // Act — the native picker emits a 6-digit hex.
+    fireEvent.change(customColorInput, { target: { value: '#abcdef' } })
+
+    // Assert — the hex is stored verbatim as the custom color.
+    expect(store.getState().preferences.braindumpTextColor).toBe('#abcdef')
+  })
+
+  it('shows a saved custom hex in the BrainDump color picker', () => {
+    // Arrange / Act — a saved 6-digit hex should populate the native picker.
+    renderPreferences({ braindumpTextColor: '#123456' })
+
+    // Assert — the picker reflects the saved hex, not the fallback.
+    expect(screen.getByLabelText('Custom BrainDump text color')).toHaveValue(
+      '#123456',
+    )
+  })
+
+  it('falls the color picker back to #000000 with no preset selected for a non-hex custom color', () => {
+    // Arrange / Act — a theme token that is NOT one of the presets makes the
+    // selection "custom": no preset radio is active, and the native picker (which
+    // can only display a hex) cannot render a var() token so it shows #000000.
+    renderPreferences({ braindumpTextColor: 'var(--accent)' })
+
+    // Assert — every preset radio is unselected...
+    expect(screen.getByRole('radio', { name: 'Default' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Muted' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Amber' })).not.toBeChecked()
+    // ...and the custom picker shows the #000000 fallback for the var() token.
+    expect(screen.getByLabelText('Custom BrainDump text color')).toHaveValue(
+      '#000000',
+    )
   })
 })

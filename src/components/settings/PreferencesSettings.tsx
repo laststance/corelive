@@ -419,7 +419,7 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
                     />
                     <Label
                       htmlFor={`braindump-text-color-${preset.id}`}
-                      className="flex items-center gap-1.5 text-sm font-normal"
+                      className="flex items-center gap-2 text-sm font-normal"
                     >
                       <span
                         aria-hidden

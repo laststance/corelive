@@ -91,12 +91,30 @@ export interface BrainDumpFontFamilyOption {
   label: string
 }
 
-/** The ordered font-family options for the Settings selector. */
-export const BRAINDUMP_FONT_FAMILIES: readonly BrainDumpFontFamilyOption[] = [
-  { id: 'mono', label: 'Monospace' },
-  { id: 'sans', label: 'Sans-serif' },
-  { id: 'serif', label: 'Serif' },
-]
+/**
+ * id → human label. The label source of truth; the ordered options list below
+ * derives from the id tuple, so adding a font to {@link BRAINDUMP_FONT_FAMILY_IDS}
+ * can't silently miss the Settings selector (no drift — same guarantee the tuple
+ * docstring promises, mirroring `sound.ts`'s `SOUND_TIMBRE_LIST`).
+ */
+export const BRAINDUMP_FONT_FAMILY_LABELS: Record<
+  BrainDumpFontFamilyId,
+  string
+> = {
+  mono: 'Monospace',
+  sans: 'Sans-serif',
+  serif: 'Serif',
+}
+
+/**
+ * The ordered font-family options for the Settings selector, derived from the id
+ * tuple so ids and order live in exactly one place.
+ */
+export const BRAINDUMP_FONT_FAMILIES: readonly BrainDumpFontFamilyOption[] =
+  BRAINDUMP_FONT_FAMILY_IDS.map((id) => ({
+    id,
+    label: BRAINDUMP_FONT_FAMILY_LABELS[id],
+  }))
 
 /** Default editor font — monospace, preserving the prior `font-mono` look. */
 export const DEFAULT_BRAINDUMP_FONT_FAMILY: BrainDumpFontFamilyId = 'mono'

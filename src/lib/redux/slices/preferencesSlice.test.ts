@@ -276,6 +276,15 @@ describe('preferencesSlice', () => {
     expect(next.braindumpTextColor).toBe('#123abc')
   })
 
+  it('self-heals an off-shape BrainDump text color to the default instead of storing it', () => {
+    // Act — a value that is neither a theme token nor a hex (e.g. a corrupt
+    // persisted blob or stray programmatic call) must not reach the inline style.
+    const next = reducer(initialState, setBraindumpTextColor('not-a-color'))
+
+    // Assert — the reducer shares the schema's validation boundary and falls back.
+    expect(next.braindumpTextColor).toBe('var(--foreground)')
+  })
+
   it('falls back to the default font, size, and color for a slice that predates those fields', () => {
     // Arrange — a persisted slice from before the BrainDump text-style fields existed.
     const legacyState = stateWith({ completionSound: false })
