@@ -145,6 +145,32 @@ export function setCheckboxStateAtLine(
 }
 
 /**
+ * Replace the entire content of one line, leaving every other line verbatim.
+ * Used by the complete command's failure-rollback to restore an original plain
+ * prose line (e.g. `buy milk`) rather than leaving the optimistic
+ * `- [x] buy milk` skeleton when the Completed-create rejects. Returns the
+ * original text for out-of-range indices, mirroring `setCheckboxStateAtLine`.
+ *
+ * @param text - The full document text.
+ * @param lineIndex - Zero-based index of the line to overwrite.
+ * @param newLine - Replacement content for that line (no trailing newline).
+ * @returns The updated text, or the original when `lineIndex` is out of range.
+ * @example
+ * replaceLineAtIndex('- [x] buy milk\ndishes', 0, 'buy milk')
+ * // → 'buy milk\ndishes'
+ */
+export function replaceLineAtIndex(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+  newLine: string,
+): string {
+  const lines = text.split('\n')
+  if (lineIndex < 0 || lineIndex >= lines.length) return text
+  lines[lineIndex] = newLine
+  return lines.join('\n')
+}
+
+/**
  * Matches an empty checkbox skeleton — a checkbox prefix with no title, e.g.
  * `- [ ]`, `- [x]`, `- []` (optional trailing whitespace). These have nothing
  * to record, so the complete command must skip them rather than logging a junk

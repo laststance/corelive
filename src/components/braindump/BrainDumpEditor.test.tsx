@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
@@ -394,6 +394,59 @@ describe('BrainDumpEditor complete command', () => {
     await waitFor(() => {
       expect(noteField).toHaveValue('- [x] write tests')
     })
+  })
+
+  it('restores the original plain prose when the completion create fails', async () => {
+    // Arrange — the create mutation rejects for this completion.
+    completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete a plain prose line whose create then fails.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — the line is restored to plain prose, not a `- [ ] buy milk` skeleton.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk')
+    })
+  })
+
+  it('leaves an unrelated line untouched when a failed completion can no longer find its line', async () => {
+    // Arrange — hold the create in flight so we can edit the note before it
+    // rejects (the create only settles when we call rejectCreate).
+    let rejectCreate: (reason: Error) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete 'buy milk', then (while the create is still pending) prepend
+    // an unrelated line and rename the completed one so the title search misses.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    fireEvent.change(noteField, {
+      target: { value: 'urgent\n- [x] buy milk and eggs' },
+    })
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+    })
+
+    // Assert — the rollback must not blind-overwrite line 0; 'urgent' survives
+    // instead of being clobbered with the stale 'buy milk' rollback text.
+    expect(noteField).toHaveValue('urgent\n- [x] buy milk and eggs')
   })
 
   it('does nothing when the caret line is blank', async () => {

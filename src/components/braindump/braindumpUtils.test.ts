@@ -16,6 +16,7 @@ import {
   normalizeCompletedTitle,
   parseAllCheckboxes,
   parseCheckboxLine,
+  replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './braindumpUtils'
 
@@ -99,6 +100,39 @@ describe('setCheckboxStateAtLine', () => {
     const before = '- [ ] a'
     expect(setCheckboxStateAtLine(before, 5, true)).toBe(before)
     expect(setCheckboxStateAtLine(before, -1, true)).toBe(before)
+  })
+})
+
+describe('replaceLineAtIndex', () => {
+  it('restores a promoted checkbox line back to its original plain prose', () => {
+    // Arrange — the optimistic complete command turned 'buy milk' into a checkbox.
+    const promoted = '- [x] buy milk\ndishes'
+
+    // Act — roll the first line back to plain prose after a failed create.
+    const result = replaceLineAtIndex(promoted, 0, 'buy milk')
+
+    // Assert
+    expect(result).toBe('buy milk\ndishes')
+  })
+
+  it('replaces only the target line and leaves the rest verbatim', () => {
+    // Arrange
+    const before = ['line 0', '- [x] line 1', 'line 2'].join('\n')
+
+    // Act
+    const after = replaceLineAtIndex(before, 1, 'line 1')
+
+    // Assert
+    expect(after).toBe(['line 0', 'line 1', 'line 2'].join('\n'))
+  })
+
+  it('returns the original text for out-of-range indices', () => {
+    // Arrange
+    const before = '- [x] a'
+
+    // Act + Assert
+    expect(replaceLineAtIndex(before, 5, 'a')).toBe(before)
+    expect(replaceLineAtIndex(before, -1, 'a')).toBe(before)
   })
 })
 
