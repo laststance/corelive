@@ -248,6 +248,19 @@ describe('preferencesSlice', () => {
     expect(next.braindumpFontFamily).toBe('serif')
   })
 
+  it('self-heals an unknown BrainDump font family to the default instead of storing it', () => {
+    // Act — a payload outside the known ids (a corrupt blob or stray dispatch)
+    // must not poison the font-family key. A raw action bypasses the typed creator
+    // to exercise the reducer's runtime guard the way malformed input would.
+    const next = reducer(initialState, {
+      type: setBraindumpFontFamily.type,
+      payload: 'comic-sans',
+    })
+
+    // Assert — the reducer falls back to the default face.
+    expect(next.braindumpFontFamily).toBe('mono')
+  })
+
   it('clamps an out-of-range BrainDump font size into the slider bounds [12,24]', () => {
     // Act — above-range clamps to the ceiling, below-range to the floor, in-range passes.
     const tooBig = reducer(initialState, setBraindumpFontSize(99))

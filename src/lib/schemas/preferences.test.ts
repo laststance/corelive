@@ -117,6 +117,11 @@ describe('PreferencesStateSchema', () => {
     const themed = PreferencesStateSchema.parse({
       braindumpTextColor: 'var(--primary)',
     })
+    // A digit-bearing theme token (e.g. a future chart-color preset) must pass —
+    // the narrow [a-z-] charset would have silently healed it away.
+    const digitToken = PreferencesStateSchema.parse({
+      braindumpTextColor: 'var(--chart-1)',
+    })
     const hex = PreferencesStateSchema.parse({ braindumpTextColor: '#1A2B3C' })
     const bogus = PreferencesStateSchema.parse({
       braindumpTextColor: 'rgba(0,0,0,0.5)',
@@ -124,6 +129,7 @@ describe('PreferencesStateSchema', () => {
 
     // Assert
     expect(themed.braindumpTextColor).toBe('var(--primary)')
+    expect(digitToken.braindumpTextColor).toBe('var(--chart-1)')
     expect(hex.braindumpTextColor).toBe('#1A2B3C')
     expect(bogus.braindumpTextColor).toBe('var(--foreground)')
   })

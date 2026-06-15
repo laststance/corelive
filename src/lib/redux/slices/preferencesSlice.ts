@@ -24,6 +24,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 import {
+  BRAINDUMP_FONT_FAMILY_IDS,
   BRAINDUMP_FONT_SIZE_MAX_PX,
   BRAINDUMP_FONT_SIZE_MIN_PX,
   BRAINDUMP_TEXT_COLOR_PATTERN,
@@ -118,7 +119,11 @@ export const preferencesSlice = createSlice({
     },
 
     /**
-     * Sets the BrainDump editor font family (one of the brand fonts).
+     * Sets the BrainDump editor font family, self-healing an unknown id to the
+     * default face so the reducer shares the same validation boundary as the
+     * schema/cross-window path (mirrors the guards on the other BrainDump
+     * setters). The UI only ever emits valid ids; this hardens against a stray
+     * programmatic/persisted value.
      * @param state - Current state
      * @param action - Payload containing the new font-family id.
      */
@@ -126,7 +131,12 @@ export const preferencesSlice = createSlice({
       state,
       action: PayloadAction<BrainDumpFontFamilyId>,
     ) => {
-      state.braindumpFontFamily = action.payload
+      const requestedFamily = action.payload
+      state.braindumpFontFamily = BRAINDUMP_FONT_FAMILY_IDS.includes(
+        requestedFamily,
+      )
+        ? requestedFamily
+        : DEFAULT_PREFERENCES.braindumpFontFamily
     },
 
     /**

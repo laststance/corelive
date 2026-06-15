@@ -162,14 +162,16 @@ export const BRAINDUMP_TEXT_COLOR_PRESETS: readonly BrainDumpTextColorPreset[] =
 export const DEFAULT_BRAINDUMP_TEXT_COLOR = 'var(--foreground)'
 
 /**
- * Accepted text-color shapes: a theme token `var(--name)` (the presets) or a
- * `#hex` (3/6/8 digits, from the native color input). The schema's `.catch`
- * self-heals anything else to {@link DEFAULT_BRAINDUMP_TEXT_COLOR}.
+ * Accepted text-color shapes: a theme token `var(--name)` (the presets; the
+ * name may contain digits, e.g. the `--chart-1` family) or a `#hex` (3/6/8
+ * digits, from the native color input). The schema's `.catch` self-heals
+ * anything else to {@link DEFAULT_BRAINDUMP_TEXT_COLOR}.
  *
  * @example
  * BRAINDUMP_TEXT_COLOR_PATTERN.test('var(--primary)') // => true
+ * BRAINDUMP_TEXT_COLOR_PATTERN.test('var(--chart-1)') // => true
  * BRAINDUMP_TEXT_COLOR_PATTERN.test('#1a2b3c')        // => true
  * BRAINDUMP_TEXT_COLOR_PATTERN.test('red')            // => false
  */
 export const BRAINDUMP_TEXT_COLOR_PATTERN =
-  /^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\(--[a-z-]+\))$/
+  /^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\(--[a-z0-9-]+\))$/
