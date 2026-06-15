@@ -1,7 +1,14 @@
 import type { Middleware } from '@reduxjs/toolkit'
 
 import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
-import { hydratePreferences } from '@/lib/redux/slices/preferencesSlice'
+import {
+  hydratePreferences,
+  setCompletionSound,
+  setRetainCompletedInList,
+  setSoundMoment,
+  setSoundTimbre,
+  setSoundVolume,
+} from '@/lib/redux/slices/preferencesSlice'
 import {
   type PreferencesState,
   PreferencesStateSchema,
@@ -19,15 +26,18 @@ type PreferencesSyncMessage = Readonly<{
 
 // The local, user-initiated toggles that should propagate to other windows.
 // hydratePreferences is deliberately excluded so an applied broadcast never
-// re-broadcasts (the loop guard). Keep in lockstep with the slice's set* reducers
-// — a NEW set* action is silent cross-window until it is added here (the Zod
-// schema validates payloads but does NOT decide which actions broadcast).
+// re-broadcasts (the loop guard). Referenced via each action creator's `.type`
+// (RTK sets it to `'preferences/<name>'`) instead of hardcoded strings, so a
+// reducer rename can't silently desync this set. Still a MANUAL allowlist of
+// WHICH actions broadcast — a NEW set* action stays silent cross-window until
+// added here (the Zod schema validates payloads but does NOT decide which
+// actions broadcast).
 const BROADCASTABLE_ACTION_TYPES = new Set<string>([
-  'preferences/setCompletionSound',
-  'preferences/setRetainCompletedInList',
-  'preferences/setSoundMoment',
-  'preferences/setSoundTimbre',
-  'preferences/setSoundVolume',
+  setCompletionSound.type,
+  setRetainCompletedInList.type,
+  setSoundMoment.type,
+  setSoundTimbre.type,
+  setSoundVolume.type,
 ])
 
 /**
