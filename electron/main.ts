@@ -1266,6 +1266,30 @@ function setupIPCHandlers(): void {
     },
   )
 
+  // Always-on-top preference (persisted Settings toggles, per window). The
+  // floating setter writes config + window-state + the live window atomically
+  // inside WindowManager — so relaunch honors it — which is why these handlers
+  // only delegate and never touch WindowStateManager directly.
+  typedHandle('floating-window-get-always-on-top', () => {
+    if (!windowManager) return false
+    return windowManager.getFloatingNavigatorAlwaysOnTop()
+  })
+
+  typedHandle('floating-window-set-always-on-top', (_event, enabled) => {
+    if (!windowManager) return false
+    return windowManager.setFloatingNavigatorAlwaysOnTop(enabled)
+  })
+
+  typedHandle('braindump-window-get-always-on-top', () => {
+    if (!windowManager) return false
+    return windowManager.getBrainDumpAlwaysOnTop()
+  })
+
+  typedHandle('braindump-window-set-always-on-top', (_event, enabled) => {
+    if (!windowManager) return false
+    return windowManager.setBrainDumpAlwaysOnTop(enabled)
+  })
+
   // Floating window control IPC handlers (Zod-validated)
   typedHandle('floating-window-close', () => {
     try {

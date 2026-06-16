@@ -414,6 +414,55 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw error
       }
     },
+    /**
+     * Read FloatingNavigator's always-on-top preference (effective state: the
+     * live window when open, else the persisted relaunch value).
+     */
+    getFloatingNavigatorAlwaysOnTop: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke('floating-window-get-always-on-top')
+      } catch (error) {
+        log.error('Failed to get floating navigator always-on-top:', error)
+        // Floating defaults to pinned — fail to its config default.
+        return true
+      }
+    },
+    /** Persist and apply FloatingNavigator's always-on-top preference. */
+    setFloatingNavigatorAlwaysOnTop: async (
+      enabled: boolean,
+    ): Promise<boolean> => {
+      if (typeof enabled !== 'boolean') {
+        throw new Error('FloatingNavigator alwaysOnTop must be a boolean')
+      }
+      try {
+        return await typedInvoke('floating-window-set-always-on-top', enabled)
+      } catch (error) {
+        log.error('Failed to set floating navigator always-on-top:', error)
+        throw error
+      }
+    },
+    /** Read BrainDump's always-on-top preference (config-backed, default off). */
+    getBrainDumpAlwaysOnTop: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke('braindump-window-get-always-on-top')
+      } catch (error) {
+        log.error('Failed to get braindump always-on-top:', error)
+        // BrainDump defaults to unpinned.
+        return false
+      }
+    },
+    /** Persist and apply BrainDump's always-on-top preference. */
+    setBrainDumpAlwaysOnTop: async (enabled: boolean): Promise<boolean> => {
+      if (typeof enabled !== 'boolean') {
+        throw new Error('BrainDump alwaysOnTop must be a boolean')
+      }
+      try {
+        return await typedInvoke('braindump-window-set-always-on-top', enabled)
+      } catch (error) {
+        log.error('Failed to set braindump always-on-top:', error)
+        throw error
+      }
+    },
   },
 
   // System integration APIs

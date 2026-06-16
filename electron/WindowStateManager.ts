@@ -689,7 +689,13 @@ export class WindowStateManager {
         y: state.y,
         show: false,
         frame: false,
-        alwaysOnTop: true,
+        // Honor the BrainDump always-on-top preference (default off) instead of
+        // hardcoding true — pairs with the createBrainDumpWindow ctor read so the
+        // options path and the constructor agree.
+        alwaysOnTop: this.configManager.get<boolean>(
+          'braindump.alwaysOnTop',
+          false,
+        ),
         resizable: true,
         skipTaskbar: true,
       } satisfies WindowOptions

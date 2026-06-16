@@ -286,6 +286,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
     }),
   ]),
   'floating-window-is-always-on-top': z.tuple([]),
+  'floating-window-get-always-on-top': z.tuple([]),
+  'floating-window-set-always-on-top': z.tuple([z.boolean()]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Window State Management
@@ -343,6 +345,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // Opacity is clamped in main; we only validate the bounded range here.
   'braindump-window-set-opacity': z.tuple([z.number().min(0).max(1)]),
   'braindump-window-get-opacity': z.tuple([]),
+  'braindump-window-get-always-on-top': z.tuple([]),
+  'braindump-window-set-always-on-top': z.tuple([z.boolean()]),
   'braindump-window-get-bounds': z.tuple([]),
   'braindump-window-set-bounds': z.tuple([
     z.object({
