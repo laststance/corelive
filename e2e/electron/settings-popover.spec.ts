@@ -22,19 +22,19 @@ test.afterAll(async () => {
   await electronApp?.close()
 })
 
-test('setShowInMenuBar IPC round-trip reaches main process and returns a boolean', async () => {
-  // Arrange + Act: restore current value (false safe in test env — no real tray)
+test('hiding the menu bar icon setting reaches main process without error', async () => {
+  // Arrange + Act: pass false (hide) — safe, does not affect test session
   const result = await mainWindow.evaluate(async () => {
     const setFn = window.electronAPI?.settings?.setShowInMenuBar
     if (!setFn) throw new Error('setShowInMenuBar not in preload bridge')
     return setFn(false)
   })
 
-  // Assert: main process handler returns a boolean success flag
+  // Assert: IPC handler returns a boolean (true=applied, false=tray unavailable in test env)
   expect(typeof result).toBe('boolean')
 })
 
-test('getStartupConfig IPC returns a valid startup configuration', async () => {
+test('reading startup config exposes all three window flags', async () => {
   // Arrange + Act
   const config = await mainWindow.evaluate(async () => {
     const getFn = window.electronAPI?.settings?.getStartupConfig
@@ -48,7 +48,7 @@ test('getStartupConfig IPC returns a valid startup configuration', async () => {
   expect(typeof config.showFloating).toBe('boolean')
 })
 
-test('setStartupConfig IPC persists the config and returns success', async () => {
+test('updating all startup window flags persists successfully', async () => {
   // Arrange
   const newConfig = {
     showMain: true,
@@ -63,19 +63,18 @@ test('setStartupConfig IPC persists the config and returns success', async () =>
     return setFn(config)
   }, newConfig)
 
-  // Assert: IPC handler returns a truthy result (success)
-  expect(success).toBeTruthy()
+  // Assert: IPC handler returns true when config is written
+  expect(success).toBe(true)
 })
 
-test('setHideAppIcon IPC round-trip reaches main process and returns true', async () => {
-  // Arrange + Act: pass current value back to avoid side-effects
+test('toggling dock icon visibility reaches main process without error', async () => {
+  // Arrange + Act: pass false — "show dock icon" is the safe non-destructive state
   const result = await mainWindow.evaluate(async () => {
     const setFn = window.electronAPI?.settings?.setHideAppIcon
     if (!setFn) throw new Error('setHideAppIcon not in preload bridge')
-    // Toggle off (false) — safe non-destructive call in test env
     return setFn(false)
   })
 
-  // Assert: main process IPC handler returns boolean success
+  // Assert: IPC handler returns boolean success flag
   expect(typeof result).toBe('boolean')
 })

@@ -5,6 +5,11 @@
  * floating window, and that getAuxVisibility reflects the current state.
  * Native Cocoa chrome (always-on-top, vibrancy, space membership) is covered
  * by local macOS native QA; only DOM/IPC-layer behaviors are tested here.
+ *
+ * Note: tests in this file share one Electron app instance (beforeAll) and
+ * depend on execution order because each window toggle changes shared state.
+ * This is an intentional tradeoff — Electron app launch is expensive, and
+ * the toggle sequence (hidden → shown → hidden) is itself the feature path.
  */
 
 import { expect, test } from '@playwright/test'
@@ -23,7 +28,7 @@ test.afterAll(async () => {
   await electronApp?.close()
 })
 
-test('getAuxVisibility reports both auxiliary windows as hidden on fresh launch', async () => {
+test('auxiliary windows start hidden on a fresh app launch', async () => {
   // Arrange + Act: fresh app — no toggle has been called
   const visibility = await mainWindow.evaluate(async () => {
     const getFn = window.electronAPI?.window?.getAuxVisibility
@@ -36,7 +41,7 @@ test('getAuxVisibility reports both auxiliary windows as hidden on fresh launch'
   expect(visibility.braindump).toBe(false)
 })
 
-test('toggleFloatingNavigator IPC creates a new floating window', async () => {
+test('opening the floating navigator creates a new browser window', async () => {
   // Arrange: listen for a new window before calling toggle
   const newWindowPromise = electronApp.waitForEvent('window', {
     timeout: LOAD_TIMEOUT_MS,
@@ -57,7 +62,7 @@ test('toggleFloatingNavigator IPC creates a new floating window', async () => {
   expect(electronApp.windows().length).toBeGreaterThanOrEqual(2)
 })
 
-test('getAuxVisibility reflects floating window as visible after toggle', async () => {
+test('aux visibility reports the floating navigator as visible after opening', async () => {
   // Arrange: floating window was shown by the previous test (same electronApp instance)
   // Act
   const visibility = await mainWindow.evaluate(async () => {
@@ -70,11 +75,11 @@ test('getAuxVisibility reflects floating window as visible after toggle', async 
   expect(visibility.floating).toBe(true)
 })
 
-test('showFloatingNavigator IPC is a no-op when floating window is already visible', async () => {
+test('showing the floating navigator when already open does not create a duplicate window', async () => {
   // Arrange: floating is already visible (from previous test)
-  // Act — showFloatingNavigator should not create a second floating window
   const windowsBefore = electronApp.windows().length
 
+  // Act — showFloatingNavigator should not create a second floating window
   await mainWindow.evaluate(async () => {
     const showFn = window.electronAPI?.window?.showFloatingNavigator
     if (!showFn) throw new Error('showFloatingNavigator not in preload bridge')
@@ -85,7 +90,7 @@ test('showFloatingNavigator IPC is a no-op when floating window is already visib
   expect(electronApp.windows().length).toBe(windowsBefore)
 })
 
-test('hideFloatingNavigator IPC hides the floating window without destroying it', async () => {
+test('hiding the floating navigator makes aux visibility report it as hidden', async () => {
   // Arrange: floating is visible
   const windowCountBefore = electronApp.windows().length
 
@@ -96,7 +101,7 @@ test('hideFloatingNavigator IPC hides the floating window without destroying it'
     await hideFn()
   })
 
-  // Assert: aux visibility reports hidden; the window object may persist as hidden
+  // Assert: aux visibility reports hidden
   const visibility = await mainWindow.evaluate(async () => {
     if (!window.electronAPI?.window?.getAuxVisibility)
       throw new Error('getAuxVisibility not in preload bridge')

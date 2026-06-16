@@ -5,6 +5,10 @@
  * namespace correctly: window toggle/show, opacity read/write, sync mode,
  * and shortcut config. Native Cocoa behaviors (always-on-top, vibrancy) are
  * covered by local macOS native QA.
+ *
+ * Note: tests share one Electron app instance (beforeAll) and depend on
+ * execution order (toggle-open → then check visibility). This is an
+ * intentional tradeoff — Electron app launch is expensive per spec file.
  */
 
 import { expect, test } from '@playwright/test'
@@ -23,7 +27,7 @@ test.afterAll(async () => {
   await electronApp?.close()
 })
 
-test('brainDump.getOpacity returns a number in the valid 0.30–1.00 range', async () => {
+test('braindump opacity is within valid 0.30–1.00 bounds by default', async () => {
   // Arrange + Act
   const opacity = await mainWindow.evaluate(async () => {
     const getFn = window.electronAPI?.brainDump?.getOpacity
@@ -31,13 +35,12 @@ test('brainDump.getOpacity returns a number in the valid 0.30–1.00 range', asy
     return getFn()
   })
 
-  // Assert: default and any persisted value should be clamped in range
-  expect(typeof opacity).toBe('number')
+  // Assert: main process clamps opacity to 0.30–1.00 on read
   expect(opacity).toBeGreaterThanOrEqual(0.3)
   expect(opacity).toBeLessThanOrEqual(1.0)
 })
 
-test('brainDump.getSyncMode returns a boolean', async () => {
+test('braindump sync mode is readable after app start', async () => {
   // Arrange + Act
   const syncMode = await mainWindow.evaluate(async () => {
     const getFn = window.electronAPI?.brainDump?.getSyncMode
@@ -45,11 +48,11 @@ test('brainDump.getSyncMode returns a boolean', async () => {
     return getFn()
   })
 
-  // Assert
+  // Assert: sync mode is a boolean (on or off)
   expect(typeof syncMode).toBe('boolean')
 })
 
-test('brainDump.getShortcut returns a string (empty or accelerator)', async () => {
+test('braindump keyboard shortcut setting is readable after app start', async () => {
   // Arrange + Act
   const shortcut = await mainWindow.evaluate(async () => {
     const getFn = window.electronAPI?.brainDump?.getShortcut
@@ -57,11 +60,11 @@ test('brainDump.getShortcut returns a string (empty or accelerator)', async () =
     return getFn()
   })
 
-  // Assert: shortcut is a string (empty when not configured)
+  // Assert: shortcut is a string (empty string when no shortcut is configured)
   expect(typeof shortcut).toBe('string')
 })
 
-test('brainDump.toggle IPC creates a new braindump window', async () => {
+test('opening braindump creates a new browser window', async () => {
   // Arrange: watch for the new window before calling toggle
   const newWindowPromise = electronApp.waitForEvent('window', {
     timeout: LOAD_TIMEOUT_MS,
@@ -81,7 +84,7 @@ test('brainDump.toggle IPC creates a new braindump window', async () => {
   expect(electronApp.windows().length).toBeGreaterThanOrEqual(2)
 })
 
-test('getAuxVisibility reflects braindump window as visible after toggle', async () => {
+test('aux visibility reports the braindump as visible after opening', async () => {
   // Arrange: braindump was shown by the previous test
   // Act
   const visibility = await mainWindow.evaluate(async () => {
@@ -94,8 +97,8 @@ test('getAuxVisibility reflects braindump window as visible after toggle', async
   expect(visibility.braindump).toBe(true)
 })
 
-test('brainDump.setOpacity persists a new opacity and returns the clamped value', async () => {
-  // Arrange
+test('setting braindump opacity to 0.75 persists the exact value', async () => {
+  // Arrange: 0.75 is in the valid 0.30–1.00 range, so it must not be clamped
   const targetOpacity = 0.75
 
   // Act
@@ -105,20 +108,18 @@ test('brainDump.setOpacity persists a new opacity and returns the clamped value'
     return setFn(opacity)
   }, targetOpacity)
 
-  // Assert: returns a number in valid range (main process clamps 0.30–1.00)
-  expect(typeof appliedOpacity).toBe('number')
-  expect(appliedOpacity).toBeGreaterThanOrEqual(0.3)
-  expect(appliedOpacity).toBeLessThanOrEqual(1.0)
+  // Assert: main process returns the exact value when it is in range
+  expect(appliedOpacity).toBe(0.75)
 })
 
-test('brainDump.setSyncMode persists a boolean sync setting', async () => {
-  // Arrange + Act
+test('updating braindump sync mode persists without error', async () => {
+  // Arrange + Act: disable sync mode
   const result = await mainWindow.evaluate(async () => {
     const setFn = window.electronAPI?.brainDump?.setSyncMode
     if (!setFn) throw new Error('brainDump.setSyncMode not in preload bridge')
     return setFn(false)
   })
 
-  // Assert: IPC handler returns boolean success
-  expect(typeof result).toBe('boolean')
+  // Assert: IPC handler returns true on success
+  expect(result).toBe(true)
 })
