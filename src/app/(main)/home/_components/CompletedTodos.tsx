@@ -168,7 +168,7 @@ export const CompletedTodos = React.memo(function CompletedTodos({
             <CheckCircle2 className="h-12 w-12 opacity-50" />
             <p>No wins logged yet</p>
             {/* Day-one discoverability: surface the Import affordance inline. */}
-            <CompletedImportEntry variant="inline" />
+            <CompletedImportEntry />
             {/* Accurate now: finishing a task AND importing both land here. */}
             <p className="text-xs text-muted-foreground">
               Finish a task or import past wins — they&apos;ll appear here

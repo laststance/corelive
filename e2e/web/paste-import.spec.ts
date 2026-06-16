@@ -108,9 +108,11 @@ async function openTodoImportDialog(page: Page) {
 
 /**
  * Opens the Completed-zone import dialog and waits for it to be ready for input.
- * With the seed (zero completed todos) the Completed card shows its empty-state
- * entry, whose trigger is "Import past wins" — a stable, unique label that
- * stays mounted because Completed-table imports never create completed *todos*.
+ * The Completed import affordance is always labelled "Import past wins" —
+ * CompletedImportEntry renders that single label in BOTH the card's empty and
+ * populated states, so it stays reachable no matter how many wins earlier tests
+ * imported into the journal, and it never collides with the Todo toolbar's exact
+ * "Import".
  * @param page - Playwright page object.
  * @returns The dialog locator, ready for `.getByRole('textbox')`.
  */
