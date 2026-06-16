@@ -1412,6 +1412,14 @@ export class WindowManager {
       this.settingsWindow = null
     })
 
+    // Make the popover follow the active macOS Space so Preferences always opens
+    // on the CURRENT desktop. Without this, the window stays bound to the Space
+    // it was last shown on, and reopening it after switching desktops yanks the
+    // user over to that old Space (the reported "opens on another desktop" bug).
+    // Unlike the floating panels (opt-in via config), this is transient tray
+    // chrome that must ALWAYS follow the active Space, so `true` is hardcoded.
+    this.applyVisibleOnAllWorkspaces(this.settingsWindow, true)
+
     return this.settingsWindow
   }
 
