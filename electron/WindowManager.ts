@@ -585,6 +585,13 @@ export class WindowManager {
         ),
       },
       frame: floatingConfig.frame,
+      // Sole pin-source for users upgrading from a build that predates this
+      // preference: their saved window-state has no isAlwaysOnTop field, so
+      // applyWindowState's `typeof === 'boolean'` guard skips it and CANNOT
+      // re-pin. This line must stay AFTER the ...windowOptions spread (which
+      // carries getWindowOptions' `alwaysOnTop: undefined` on upgrade) and must
+      // NOT be folded into it — doing so hands the ctor `undefined` (unpinned).
+      // Locked by the upgrade test in WindowManager.always-on-top.test.ts.
       alwaysOnTop: floatingConfig.alwaysOnTop,
       skipTaskbar: true,
       resizable: floatingConfig.resizable,
