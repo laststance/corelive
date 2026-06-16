@@ -85,9 +85,16 @@ const SERVER_URL = 'https://corelive.app'
  * `get` round-trips, and both are observable spies.
  *
  * @param values - Initial config values keyed by dotted path.
+ * @param windowSection - What `getSection('window')` returns; pass
+ *   `{ floating: {...} }` for the `createFloatingNavigator` construction tests,
+ *   which read `getSection('window').floating`. Defaults to `{}` so the
+ *   non-construction callers stay unaffected.
  * @returns The stub plus its `get`/`set` spies for assertions.
  */
-function createConfigStub(values: Record<string, unknown> = {}): {
+function createConfigStub(
+  values: Record<string, unknown> = {},
+  windowSection: Record<string, unknown> = {},
+): {
   configManager: ConfigManager
   get: Spy
   set: Spy
@@ -102,32 +109,50 @@ function createConfigStub(values: Record<string, unknown> = {}): {
   const configManager = {
     get,
     set,
-    getSection: vi.fn(() => ({})),
+    getSection: vi.fn(() => windowSection),
   } as unknown as ConfigManager
   return { configManager, get, set }
 }
 
 /**
  * Builds a WindowStateManager stub whose `getWindowState('floating')` returns a
- * fixed state, with an observable `setWindowState` spy.
+ * fixed state, with observable spies. Also stubs `getWindowOptions` (spread into
+ * the BrowserWindow ctor) and `applyWindowState` so the `createFloatingNavigator`
+ * construction tests can build a window through this manager.
  *
  * @param floatingState - The persisted floating state, or null when none saved.
- * @returns The stub plus its `getWindowState`/`setWindowState` spies.
+ * @param windowOptions - What `getWindowOptions('floating')` returns; the
+ *   construction tests pass bounds with `alwaysOnTop: undefined` to model a
+ *   saved state that predates the always-on-top field (the upgrade path).
+ * @returns The stub plus its observable spies.
  */
 function createWindowStateStub(
   floatingState: { isAlwaysOnTop?: boolean } | null = null,
+  windowOptions: Record<string, unknown> = {},
 ): {
   windowStateManager: WindowStateManager
   getWindowState: Spy
   setWindowState: Spy
+  getWindowOptions: Spy
+  applyWindowState: Spy
 } {
   const getWindowState = vi.fn(() => floatingState)
   const setWindowState = vi.fn(() => true)
+  const getWindowOptions = vi.fn(() => windowOptions)
+  const applyWindowState = vi.fn(() => true)
   const windowStateManager = {
     getWindowState,
     setWindowState,
+    getWindowOptions,
+    applyWindowState,
   } as unknown as WindowStateManager
-  return { windowStateManager, getWindowState, setWindowState }
+  return {
+    windowStateManager,
+    getWindowState,
+    setWindowState,
+    getWindowOptions,
+    applyWindowState,
+  }
 }
 
 describe('WindowManager always-on-top', () => {
@@ -161,6 +186,56 @@ describe('WindowManager always-on-top', () => {
       expect(setWindowState).toHaveBeenCalledWith('floating', {
         isAlwaysOnTop: false,
       })
+    })
+
+    it('applies to the open floating window alongside the config and window-state writes', () => {
+      // Arrange: a floating window is open. getSection feeds the ctor a pinned
+      // floating config; getWindowOptions feeds matching bounds.
+      const { configManager, set } = createConfigStub(
+        {},
+        {
+          floating: {
+            frame: false,
+            alwaysOnTop: true,
+            resizable: true,
+            maxWidth: 400,
+          },
+        },
+      )
+      const { windowStateManager, setWindowState } = createWindowStateStub(
+        { isAlwaysOnTop: true },
+        {
+          width: 300,
+          height: 400,
+          maxWidth: 400,
+          frame: false,
+          alwaysOnTop: true,
+          resizable: true,
+          skipTaskbar: true,
+        },
+      )
+      const windowManager = new WindowManager(
+        SERVER_URL,
+        configManager,
+        windowStateManager,
+      )
+      windowManager.createFloatingNavigator()
+      const floatingWindow = createdWindows[0]
+      if (!floatingWindow) throw new Error('Expected a floating window')
+
+      // Act: the user turns OFF always-on-top while the window is open.
+      const applied = windowManager.setFloatingNavigatorAlwaysOnTop(false)
+
+      // Assert: all three layers update together — config, the load-bearing
+      // window-state, AND the live window — so the unpin is visible immediately,
+      // not only after the next relaunch. A setter that skipped the live window
+      // would leave the open panel pinned until restart.
+      expect(applied).toBe(false)
+      expect(set).toHaveBeenCalledWith('window.floating.alwaysOnTop', false)
+      expect(setWindowState).toHaveBeenCalledWith('floating', {
+        isAlwaysOnTop: false,
+      })
+      expect(floatingWindow.win.setAlwaysOnTop).toHaveBeenCalledWith(false)
     })
   })
 
@@ -240,6 +315,46 @@ describe('WindowManager always-on-top', () => {
       // Act + Assert: Floating Navigator defaults ON, matching its pre-feature behavior.
       expect(windowManager.getFloatingNavigatorAlwaysOnTop()).toBe(true)
     })
+
+    it('reads the live floating window over config and persisted state when it is open', () => {
+      // Arrange: an open floating window built UNPINNED (the floating section's
+      // alwaysOnTop is false), while BOTH the config value and the persisted
+      // window-state say pinned. Only the live-window branch can return false.
+      const { configManager } = createConfigStub(
+        { 'window.floating.alwaysOnTop': true },
+        {
+          floating: {
+            frame: false,
+            alwaysOnTop: false,
+            resizable: true,
+            maxWidth: 400,
+          },
+        },
+      )
+      const { windowStateManager } = createWindowStateStub(
+        { isAlwaysOnTop: true },
+        {
+          width: 300,
+          height: 400,
+          maxWidth: 400,
+          frame: false,
+          alwaysOnTop: false,
+          resizable: true,
+          skipTaskbar: true,
+        },
+      )
+      const windowManager = new WindowManager(
+        SERVER_URL,
+        configManager,
+        windowStateManager,
+      )
+      windowManager.createFloatingNavigator()
+
+      // Act + Assert: the live window (false) wins over config (true) and the
+      // persisted state (true) — the open-window branch short-circuits before
+      // either is consulted, so the Settings switch mirrors the real window.
+      expect(windowManager.getFloatingNavigatorAlwaysOnTop()).toBe(false)
+    })
   })
 
   describe('createBrainDumpWindow', () => {
@@ -271,6 +386,55 @@ describe('WindowManager always-on-top', () => {
       windowManager.createBrainDumpWindow()
 
       // Assert: the opt-in flows through to the constructed window.
+      expect(createdWindows).toHaveLength(1)
+      expect(createdWindows[0]?.options.alwaysOnTop).toBe(true)
+    })
+  })
+
+  describe('createFloatingNavigator', () => {
+    it('constructs the floating window PINNED on upgrade when the saved state predates always-on-top', () => {
+      // Arrange: an upgrading user. window-state.json has saved bounds but no
+      // `isAlwaysOnTop` (it predates this feature), so getWindowOptions yields
+      // `alwaysOnTop: undefined`; config still carries the default true.
+      const { configManager } = createConfigStub(
+        {},
+        {
+          floating: {
+            frame: false,
+            alwaysOnTop: true,
+            resizable: true,
+            maxWidth: 400,
+          },
+        },
+      )
+      const { windowStateManager } = createWindowStateStub(
+        {},
+        {
+          width: 300,
+          height: 400,
+          x: 100,
+          y: 100,
+          maxWidth: 400,
+          frame: false,
+          alwaysOnTop: undefined,
+          resizable: true,
+          skipTaskbar: true,
+        },
+      )
+      const windowManager = new WindowManager(
+        SERVER_URL,
+        configManager,
+        windowStateManager,
+      )
+
+      // Act
+      windowManager.createFloatingNavigator()
+
+      // Assert: built PINNED. The ctor spreads getWindowOptions (alwaysOnTop:
+      // undefined) FIRST, then sets `alwaysOnTop: floatingConfig.alwaysOnTop`
+      // (config default true) explicitly AFTER. A regression reordering the
+      // spread or dropping that explicit line silently unpins every upgrading
+      // user's floating window on first relaunch — this test fails if so.
       expect(createdWindows).toHaveLength(1)
       expect(createdWindows[0]?.options.alwaysOnTop).toBe(true)
     })

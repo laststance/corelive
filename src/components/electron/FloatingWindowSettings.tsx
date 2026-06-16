@@ -287,6 +287,7 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
             switchId={floatingPinId}
             optionKey="floatingAlwaysOnTop"
             label="Floating Navigator"
+            ariaLabel="Keep Floating Navigator on top"
             checked={values.floatingAlwaysOnTop}
             disabled={savingKeys.has('floatingAlwaysOnTop')}
             onToggleAction={applyPreference}
@@ -296,6 +297,7 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
             switchId={brainDumpPinId}
             optionKey="brainDumpAlwaysOnTop"
             label="BrainDump"
+            ariaLabel="Keep BrainDump on top"
             checked={values.brainDumpAlwaysOnTop}
             disabled={savingKeys.has('brainDumpAlwaysOnTop')}
             onToggleAction={applyPreference}
@@ -312,6 +314,15 @@ interface FloatingToggleRowProps {
   label: string
   /** Optional helper copy under the label; omitted for the compact pin rows. */
   description?: string
+  /**
+   * Optional self-describing accessible name for the Switch. The compact pin
+   * rows show a short visible label ("Floating Navigator") under a "Keep on
+   * top" group caption, but that caption isn't programmatically tied to the
+   * switch — so a screen reader would announce "Floating Navigator, switch, on"
+   * with no verb. Pass the full action here ("Keep Floating Navigator on top");
+   * the visible label stays a substring, satisfying WCAG 2.5.3 Label-in-Name.
+   */
+  ariaLabel?: string
   checked: boolean
   disabled?: boolean
   onToggleAction: (key: PreferenceKey, next: boolean) => Promise<void>
@@ -330,6 +341,7 @@ const FloatingToggleRow = memo(function FloatingToggleRow({
   optionKey,
   label,
   description,
+  ariaLabel,
   checked,
   disabled,
   onToggleAction,
@@ -355,6 +367,7 @@ const FloatingToggleRow = memo(function FloatingToggleRow({
       </div>
       <Switch
         id={switchId}
+        aria-label={ariaLabel}
         checked={checked}
         disabled={disabled}
         onCheckedChange={handleCheckedChange}

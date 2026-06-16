@@ -96,9 +96,11 @@ describe('FloatingWindowSettings', () => {
     // Assert: each pin switch reads its own saved value, independently — a
     // shared/leaked value would flip one of these.
     const floatingSwitch = await screen.findByRole('switch', {
-      name: 'Floating Navigator',
+      name: 'Keep Floating Navigator on top',
     })
-    const brainDumpSwitch = screen.getByRole('switch', { name: 'BrainDump' })
+    const brainDumpSwitch = screen.getByRole('switch', {
+      name: 'Keep BrainDump on top',
+    })
     expect(floatingSwitch).toBeChecked()
     expect(brainDumpSwitch).not.toBeChecked()
   })
@@ -218,7 +220,7 @@ describe('FloatingWindowSettings', () => {
     const user = userEvent.setup()
     render(<FloatingWindowSettings />)
     const brainDumpSwitch = await screen.findByRole('switch', {
-      name: 'BrainDump',
+      name: 'Keep BrainDump on top',
     })
     expect(brainDumpSwitch).not.toBeChecked()
 
@@ -228,7 +230,7 @@ describe('FloatingWindowSettings', () => {
     // Assert: the switch reverts to unpinned and an error surfaces.
     await waitFor(() => {
       expect(
-        screen.getByRole('switch', { name: 'BrainDump' }),
+        screen.getByRole('switch', { name: 'Keep BrainDump on top' }),
       ).not.toBeChecked()
     })
     expect(
