@@ -165,7 +165,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.maxHeight).toBe(900)
   })
 
-  it('reads persisted width and height from configManager', () => {
+  it("opens at the user's last-saved size", () => {
     // Arrange
     const { configManager, get } = createConfigStub({
       'settingsPopover.width': 500,
@@ -287,7 +287,7 @@ describe('createSettingsWindow — resize options', () => {
 })
 
 describe('createSettingsWindow — resize persistence (debounce)', () => {
-  it('does NOT call configManager.update before the 200 ms debounce fires', () => {
+  it('does not persist before the user stops dragging for 200 ms', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -303,7 +303,7 @@ describe('createSettingsWindow — resize persistence (debounce)', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('calls configManager.update with the current size after the 200 ms debounce', () => {
+  it('persists the resized dimensions 200 ms after the user stops dragging', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -326,7 +326,7 @@ describe('createSettingsWindow — resize persistence (debounce)', () => {
     })
   })
 
-  it('coalesces multiple rapid resize events into one configManager.update call', () => {
+  it('writes only one persist call when the user resizes rapidly', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -366,6 +366,26 @@ describe('createSettingsWindow — blur-during-resize guard', () => {
     expect(captured.win.hide).not.toHaveBeenCalled()
   })
 
+  it('hides on blur after 500 ms when the user clicked the handle without moving', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.createSettingsWindow()
+    const captured = capturedWindows[0]
+    if (!captured) throw new Error('Expected a settings window to be created')
+
+    // Act: user clicks the resize handle but releases without moving —
+    // will-resize fires but resize never does. The 500 ms failsafe must
+    // self-clear the guard so a later blur can still dismiss the window.
+    fireEvent(captured, 'will-resize')
+    vi.advanceTimersByTime(500) // failsafe fires → isResizing = false
+
+    // blur fires after the user clicks elsewhere
+    fireEvent(captured, 'blur')
+
+    // Assert: window hides now that the guard has cleared
+    expect(captured.win.hide).toHaveBeenCalledTimes(1)
+  })
+
   it('hides the window on blur once the resize debounce has settled', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
@@ -387,7 +407,7 @@ describe('createSettingsWindow — blur-during-resize guard', () => {
 })
 
 describe('createSettingsWindow — closed event cleanup', () => {
-  it('resets the resize debounce timer and resizing flag when window closes', () => {
+  it('cancels pending persist when the window is closed mid-resize', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -407,7 +427,7 @@ describe('createSettingsWindow — closed event cleanup', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('allows normal blur→hide after reopening the window (isResizing reset on close)', () => {
+  it('closes on blur normally after the window is reopened', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -433,7 +453,7 @@ describe('createSettingsWindow — closed event cleanup', () => {
 })
 
 describe('resetSettingsPopoverSize', () => {
-  it('resets config to default width and height', () => {
+  it('writes default dimensions to config', () => {
     // Arrange
     const { configManager, update } = createConfigStub({
       'settingsPopover.width': 700,
@@ -454,7 +474,7 @@ describe('resetSettingsPopoverSize', () => {
     )
   })
 
-  it('calls setBounds with default dimensions to re-anchor to the tray', () => {
+  it('repositions and resizes the window to 360×380 at the tray position', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.createSettingsWindow()
@@ -470,7 +490,7 @@ describe('resetSettingsPopoverSize', () => {
     )
   })
 
-  it('is a no-op when the settings window has been destroyed', () => {
+  it('still resets config but skips setBounds when the window is destroyed', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -489,7 +509,7 @@ describe('resetSettingsPopoverSize', () => {
     expect(captured.win.setBounds).not.toHaveBeenCalled()
   })
 
-  it('is a no-op (no throw) when no settings window has been created yet', () => {
+  it('does not throw when called before any settings window is created', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 

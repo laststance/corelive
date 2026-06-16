@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { memo, useCallback, useState } from 'react'
+import { memo, useCallback, useTransition } from 'react'
 
 /**
  * Electron Settings Page Component
@@ -60,7 +60,7 @@ export const ElectronSettingsPage = memo(
     const dispatch = useAppDispatch()
     const isElectron = useIsElectron() // SSR-safe via useSyncExternalStore
 
-    const [isResettingPopoverSize, setIsResettingPopoverSize] = useState(false)
+    const [isResettingPopoverSize, startResetSizeTransition] = useTransition()
 
     // Redux selectors
     const hideAppIcon = useAppSelector(selectHideAppIcon)
@@ -185,15 +185,13 @@ export const ElectronSettingsPage = memo(
      * Resets the Settings popover to 360×380 via IPC. Guards on method existence
      * so older preloads (version-skew) do not throw.
      */
-    const handleResetPopoverSize = useCallback(async (): Promise<void> => {
-      if (!window.electronAPI?.settings?.resetPopoverSize) return
-      setIsResettingPopoverSize(true)
-      try {
-        await window.electronAPI.settings.resetPopoverSize()
-      } finally {
-        setIsResettingPopoverSize(false)
-      }
-    }, [])
+    const handleResetPopoverSize = useCallback(() => {
+      const resetFn = window.electronAPI?.settings?.resetPopoverSize
+      if (!resetFn) return
+      startResetSizeTransition(async () => {
+        await resetFn()
+      })
+    }, [startResetSizeTransition])
 
     // Web users see the shared Preferences section (rendered by the settings
     // page); the Electron window-chrome settings below are desktop-only, so

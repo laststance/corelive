@@ -99,3 +99,28 @@ export const MIN_TCP_PORT = 1
 
 /** Highest valid TCP port (16-bit unsigned max) — upper bound for the debug port. */
 export const MAX_TCP_PORT = 65535
+
+// ============================================================================
+// Settings popover window
+// ============================================================================
+
+/** Default width of the Settings tray popover. */
+export const SETTINGS_POPOVER_DEFAULT_WIDTH_PX = 360
+
+/** Default height of the Settings tray popover. */
+export const SETTINGS_POPOVER_DEFAULT_HEIGHT_PX = 380
+
+/** Minimum width the user can drag the Settings popover to. */
+export const SETTINGS_POPOVER_MIN_WIDTH_PX = 320
+
+/** Minimum height the user can drag the Settings popover to. */
+export const SETTINGS_POPOVER_MIN_HEIGHT_PX = 300
+
+/** Maximum width the user can drag the Settings popover to. */
+export const SETTINGS_POPOVER_MAX_WIDTH_PX = 800
+
+/** Maximum height the user can drag the Settings popover to. */
+export const SETTINGS_POPOVER_MAX_HEIGHT_PX = 900
+
+/** Debounce delay (ms) before persisting Settings popover size after a resize drag. */
+export const SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS = 200

@@ -20,6 +20,10 @@ import path from 'path'
 
 import { app } from 'electron'
 
+import {
+  SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+  SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+} from './constants'
 import { log } from './logger'
 import {
   DEFAULT_STARTUP_WINDOW_CONFIG,
@@ -396,8 +400,8 @@ export class ConfigManager {
       },
 
       settingsPopover: {
-        width: 360,
-        height: 380,
+        width: SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+        height: SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
       },
     }
   }

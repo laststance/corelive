@@ -23,6 +23,13 @@ import type { ConfigManager } from './ConfigManager'
 import {
   AUTH_PATHNAMES,
   ERR_ABORTED,
+  SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+  SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+  SETTINGS_POPOVER_MAX_HEIGHT_PX,
+  SETTINGS_POPOVER_MAX_WIDTH_PX,
+  SETTINGS_POPOVER_MIN_HEIGHT_PX,
+  SETTINGS_POPOVER_MIN_WIDTH_PX,
+  SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS,
   STARTUP_PILL_GAP_MS,
   STARTUP_PILL_HEIGHT_PX,
   STARTUP_PILL_TIMEOUT_MS,
@@ -30,6 +37,7 @@ import {
 } from './constants'
 import { log } from './logger'
 import { buildStartupPillHtml } from './startup-pill-html'
+import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
 import type {
   WindowStateManager,
@@ -41,18 +49,6 @@ import type {
 // @ts-ignore - import.meta.url is valid at runtime (electron-vite handles this)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-
-// ============================================================================
-// Settings Popover Size Constants
-// ============================================================================
-
-const SETTINGS_POPOVER_DEFAULT_WIDTH_PX = 360
-const SETTINGS_POPOVER_DEFAULT_HEIGHT_PX = 380
-const SETTINGS_POPOVER_MIN_WIDTH_PX = 320
-const SETTINGS_POPOVER_MIN_HEIGHT_PX = 300
-const SETTINGS_POPOVER_MAX_WIDTH_PX = 800
-const SETTINGS_POPOVER_MAX_HEIGHT_PX = 900
-const SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS = 200
 
 // ============================================================================
 // Type Definitions
@@ -1366,17 +1362,6 @@ export class WindowManager {
     log.info('🔧 Creating settings popover window...')
 
     // Load persisted size, clamping out-of-range values (e.g. hand-edited config).
-    const clampDimension = (
-      value: unknown,
-      min: number,
-      max: number,
-      defaultValue: number,
-    ): number => {
-      const parsed = Number(value)
-      if (!Number.isFinite(parsed) || parsed <= 0) return defaultValue
-      return Math.min(Math.max(Math.round(parsed), min), max)
-    }
-
     const windowWidth = clampDimension(
       this.configManager?.get(
         'settingsPopover.width',
@@ -1458,8 +1443,18 @@ export class WindowManager {
     // Track when the user starts manually dragging a resize handle so the blur
     // handler below does not close the window mid-drag. `will-resize` fires
     // only for manual (user-initiated) resizes, NOT for programmatic setSize().
+    // Failsafe: if no `resize` event follows within 500 ms (e.g. the user
+    // clicked the handle but released without moving), the flag self-clears so
+    // the window can still be blur-closed in that session.
     this.settingsWindow.on('will-resize', () => {
       this.settingsWindowIsResizing = true
+      if (this.settingsResizeDebounceTimer) {
+        clearTimeout(this.settingsResizeDebounceTimer)
+      }
+      this.settingsResizeDebounceTimer = setTimeout(() => {
+        this.settingsWindowIsResizing = false
+        this.settingsResizeDebounceTimer = null
+      }, 500)
     })
 
     // Debounce-persist the new size and clear the resizing flag.
