@@ -109,6 +109,6 @@ test('hiding the floating navigator makes aux visibility report it as hidden', a
   })
   expect(visibility.floating).toBe(false)
 
-  // Window count should not increase (window is hidden, not re-created)
-  expect(electronApp.windows().length).toBeLessThanOrEqual(windowCountBefore)
+  // Window count must stay exactly the same (hidden, not destroyed or re-created)
+  expect(electronApp.windows().length).toBe(windowCountBefore)
 })
