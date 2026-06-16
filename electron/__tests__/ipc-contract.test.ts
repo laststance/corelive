@@ -133,6 +133,25 @@ describe('IPC contract', () => {
       expect(() => setVisibleOnAllWorkspaces.parse([])).toThrow(ZodError)
     })
 
+    it('requires boolean for floating-window-set-always-on-top', () => {
+      const setAlwaysOnTop =
+        IPC_ARG_SCHEMAS['floating-window-set-always-on-top']
+      expect(() => setAlwaysOnTop.parse([true])).not.toThrow()
+      expect(() => setAlwaysOnTop.parse([false])).not.toThrow()
+      // A malicious renderer cannot smuggle a non-boolean past the trust boundary.
+      expect(() => setAlwaysOnTop.parse(['true'])).toThrow(ZodError)
+      expect(() => setAlwaysOnTop.parse([])).toThrow(ZodError)
+    })
+
+    it('requires boolean for braindump-window-set-always-on-top', () => {
+      const setAlwaysOnTop =
+        IPC_ARG_SCHEMAS['braindump-window-set-always-on-top']
+      expect(() => setAlwaysOnTop.parse([true])).not.toThrow()
+      expect(() => setAlwaysOnTop.parse([false])).not.toThrow()
+      expect(() => setAlwaysOnTop.parse(['true'])).toThrow(ZodError)
+      expect(() => setAlwaysOnTop.parse([])).toThrow(ZodError)
+    })
+
     it('accepts enum-constrained window state channel names', () => {
       const windowStateGet = IPC_ARG_SCHEMAS['window-state-get']
       expect(() => windowStateGet.parse(['main'])).not.toThrow()

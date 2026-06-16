@@ -83,6 +83,8 @@ export interface BrainDumpConfig {
   height: number
   /** Keep the BrainDump panel visible while macOS Spaces change. */
   visibleOnAllWorkspaces: boolean
+  /** Keep the BrainDump panel pinned above other windows (default off). */
+  alwaysOnTop: boolean
   /** Window opacity, clamped 0.30–1.00 to keep the window discoverable. */
   opacity: number
   /** When true, BrainDump mirrors FloatingNavigator's selected category. */
@@ -377,6 +379,8 @@ export class ConfigManager {
         width: 480,
         height: 640,
         visibleOnAllWorkspaces: false,
+        // Default OFF: BrainDump stays unpinned unless the user opts in.
+        alwaysOnTop: false,
         opacity: 0.95,
         syncMode: true,
         shortcut: 'Alt+Space',

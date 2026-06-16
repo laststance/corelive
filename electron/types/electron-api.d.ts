@@ -303,6 +303,14 @@ export interface ElectronAPI {
     getVisibleOnAllWorkspaces: () => Promise<boolean>
     /** Persist and apply whether both panels follow macOS Spaces. */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
+    /** Read FloatingNavigator's always-on-top preference (effective state). */
+    getFloatingNavigatorAlwaysOnTop: () => Promise<boolean>
+    /** Persist and apply FloatingNavigator's always-on-top preference. */
+    setFloatingNavigatorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
+    /** Read BrainDump's always-on-top preference (config-backed, default off). */
+    getBrainDumpAlwaysOnTop: () => Promise<boolean>
+    /** Persist and apply BrainDump's always-on-top preference. */
+    setBrainDumpAlwaysOnTop: (enabled: boolean) => Promise<boolean>
   }
 
   /**

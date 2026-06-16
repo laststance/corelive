@@ -196,6 +196,22 @@ export class WindowManager {
   }
 
   /**
+   * Applies the always-on-top flag to a live panel window (no-op when the window
+   * is absent or destroyed). Sibling of {@link applyVisibleOnAllWorkspaces}.
+   * @param browserWindow - Target panel window, or null when not open.
+   * @param enabled - true pins the window above others; false unpins it.
+   */
+  private applyAlwaysOnTop(
+    browserWindow: BrowserWindow | null,
+    enabled: boolean,
+  ): void {
+    if (!browserWindow || browserWindow.isDestroyed()) return
+    // setAlwaysOnTop defaults to the 'floating' window level when enabled —
+    // the correct level for these utility panels.
+    browserWindow.setAlwaysOnTop(enabled)
+  }
+
+  /**
    * Reads whether both floating panels should follow macOS Spaces.
    *
    * The Settings UI presents this as a single switch, while the config stores
@@ -243,6 +259,71 @@ export class WindowManager {
     this.applyVisibleOnAllWorkspaces(this.floatingNavigator, enabled)
     this.applyVisibleOnAllWorkspaces(this.brainDumpWindow, enabled)
 
+    return enabled
+  }
+
+  /**
+   * Reads BrainDump's always-on-top preference (config-backed, default off).
+   * BrainDump has no in-window pin control, so config is the single source of truth.
+   * @returns true when the BrainDump panel is pinned above other windows.
+   */
+  getBrainDumpAlwaysOnTop(): boolean {
+    return (
+      this.configManager?.get<boolean>('braindump.alwaysOnTop', false) ?? false
+    )
+  }
+
+  /**
+   * Persists + applies BrainDump's always-on-top preference.
+   * @param enabled - true pins BrainDump above other windows; false unpins it.
+   * @returns The applied value (echoed for optimistic-UI confirmation).
+   */
+  setBrainDumpAlwaysOnTop(enabled: boolean): boolean {
+    if (this.configManager) {
+      this.configManager.set('braindump.alwaysOnTop', enabled)
+    }
+    this.applyAlwaysOnTop(this.brainDumpWindow, enabled)
+    return enabled
+  }
+
+  /**
+   * Reads FloatingNavigator's effective always-on-top state.
+   * @returns
+   * - the live window's `isAlwaysOnTop()` when the panel is open
+   * - else the persisted WindowStateManager value (what relaunch will re-apply)
+   * - else the config default (true)
+   */
+  getFloatingNavigatorAlwaysOnTop(): boolean {
+    if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
+      return this.floatingNavigator.isAlwaysOnTop()
+    }
+    const persisted =
+      this.windowStateManager?.getWindowState('floating')?.isAlwaysOnTop
+    if (typeof persisted === 'boolean') return persisted
+    return (
+      this.configManager?.get<boolean>('window.floating.alwaysOnTop', true) ??
+      true
+    )
+  }
+
+  /**
+   * Persists + applies FloatingNavigator's always-on-top preference across all
+   * three layers that decide its relaunch state — config seed, window-state.json,
+   * and the live window. The window-state write is load-bearing: `getWindowOptions`
+   * reads `state.isAlwaysOnTop` at create and main re-applies it post-create, so a
+   * config-only write would be silently overridden after the first launch.
+   * @param enabled - true pins FloatingNavigator above others; false unpins it.
+   * @returns The applied value (echoed for optimistic-UI confirmation).
+   */
+  setFloatingNavigatorAlwaysOnTop(enabled: boolean): boolean {
+    if (this.configManager) {
+      this.configManager.set('window.floating.alwaysOnTop', enabled)
+    }
+    // Load-bearing — without this, relaunch re-pins from the persisted state.
+    this.windowStateManager?.setWindowState('floating', {
+      isAlwaysOnTop: enabled,
+    })
+    this.applyAlwaysOnTop(this.floatingNavigator, enabled)
     return enabled
   }
 
@@ -504,6 +585,13 @@ export class WindowManager {
         ),
       },
       frame: floatingConfig.frame,
+      // Sole pin-source for users upgrading from a build that predates this
+      // preference: their saved window-state has no isAlwaysOnTop field, so
+      // applyWindowState's `typeof === 'boolean'` guard skips it and CANNOT
+      // re-pin. This line must stay AFTER the ...windowOptions spread (which
+      // carries getWindowOptions' `alwaysOnTop: undefined` on upgrade) and must
+      // NOT be folded into it — doing so hands the ctor `undefined` (unpinned).
+      // Locked by the upgrade test in WindowManager.always-on-top.test.ts.
       alwaysOnTop: floatingConfig.alwaysOnTop,
       skipTaskbar: true,
       resizable: floatingConfig.resizable,
@@ -602,7 +690,7 @@ export class WindowManager {
           minHeight: 320,
           maxWidth: 1200,
           frame: false,
-          alwaysOnTop: true,
+          alwaysOnTop: this.getBrainDumpAlwaysOnTop(),
           resizable: true,
           skipTaskbar: true,
         }
@@ -638,7 +726,7 @@ export class WindowManager {
         ),
       },
       frame: false,
-      alwaysOnTop: true,
+      alwaysOnTop: this.getBrainDumpAlwaysOnTop(),
       skipTaskbar: true,
       resizable: true,
       show: false,

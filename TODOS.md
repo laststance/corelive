@@ -233,6 +233,22 @@ function that will pull it off the deferred list.
       gap), unlike the proven-live `getStartupConfig` crash. A web deploy protects old
       apps once live; users still must update the app to USE the startup settings.
 
+## Electron floating windows
+
+- [ ] **Cross-window live sync for the Keep-on-top toggles.** (deferred — feat/keep-on-top-preference)
+      Surfaced by `/ship` adversarial review (F1). When BOTH the Settings "Keep on
+      top" card AND a floating panel's in-window pin button are open at the same
+      time, toggling one does NOT live-update the other's displayed state (the
+      Settings switch / the pin glyph) until that surface is reopened. PERSISTENCE
+      is always correct — all three layers (config, WindowStateManager.isAlwaysOnTop,
+      live window) are written synchronously on every toggle; only the OTHER open
+      surface's LABEL is stale. Accepted as T2-minimal (plan-approved): the realistic
+      flow opens one surface at a time, and a cross-window broadcast is disproportionate
+      to a label refresh. Full fix: echo each pin write over the existing preferences
+      BroadcastChannel (or a main→renderer push) so every open surface re-reads.
+      Forcing function: a user report of a stale toggle, or the next feature needing
+      main→all-renderers preference mirroring. Effort: ~1-2h CC + a multi-window E2E.
+
 - [x] **error.tsx / global-error.tsx design sign-off + reset() escape hatch.** ✅ 2026-06-11 (feat/deferred-a11y-polish-and-tz)
       The two error boundaries shipped with placeholder copy/styling and only a
       `reset()` affordance, which DEAD-ENDS on a deterministic error (e.g. the

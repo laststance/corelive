@@ -1266,6 +1266,30 @@ function setupIPCHandlers(): void {
     },
   )
 
+  // Always-on-top preference (persisted Settings toggles, per window). The
+  // floating setter writes config + window-state + the live window atomically
+  // inside WindowManager — so relaunch honors it — which is why these handlers
+  // only delegate and never touch WindowStateManager directly.
+  typedHandle('floating-window-get-always-on-top', () => {
+    if (!windowManager) return false
+    return windowManager.getFloatingNavigatorAlwaysOnTop()
+  })
+
+  typedHandle('floating-window-set-always-on-top', (_event, enabled) => {
+    if (!windowManager) return false
+    return windowManager.setFloatingNavigatorAlwaysOnTop(enabled)
+  })
+
+  typedHandle('braindump-window-get-always-on-top', () => {
+    if (!windowManager) return false
+    return windowManager.getBrainDumpAlwaysOnTop()
+  })
+
+  typedHandle('braindump-window-set-always-on-top', (_event, enabled) => {
+    if (!windowManager) return false
+    return windowManager.setBrainDumpAlwaysOnTop(enabled)
+  })
+
   // Floating window control IPC handlers (Zod-validated)
   typedHandle('floating-window-close', () => {
     try {
@@ -1300,12 +1324,13 @@ function setupIPCHandlers(): void {
   typedHandle('floating-window-toggle-always-on-top', () => {
     try {
       if (windowManager && windowManager.hasFloatingNavigator()) {
-        const floatingWindow = windowManager.getFloatingNavigator()
-        if (floatingWindow && !floatingWindow.isDestroyed()) {
-          const isAlwaysOnTop = floatingWindow.isAlwaysOnTop()
-          floatingWindow.setAlwaysOnTop(!isAlwaysOnTop)
-          return !isAlwaysOnTop
-        }
+        // Toggle through the persisting setter (not a bare live-window flip) so
+        // the in-window pin button writes config + window-state + the live
+        // window, exactly like the Settings toggle. Floating isn't saved on
+        // close (only on move/resize), so a bare flip here would be lost on the
+        // next relaunch — contradicting the "survives relaunch" guarantee.
+        const next = !windowManager.getFloatingNavigatorAlwaysOnTop()
+        return windowManager.setFloatingNavigatorAlwaysOnTop(next)
       }
       return false
     } catch (error) {

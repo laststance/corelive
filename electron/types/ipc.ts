@@ -432,6 +432,20 @@ export interface IPCChannels {
     request: void
     response: boolean
   }
+  /**
+   * Persisted Settings preference for FloatingNavigator's always-on-top state —
+   * distinct from the live `is`/`toggle` pair above. `get` returns the effective
+   * value (live window when open, else the persisted relaunch state); `set`
+   * persists across config + window-state + the live window so relaunch honors it.
+   */
+  'floating-window-get-always-on-top': {
+    request: void
+    response: boolean
+  }
+  'floating-window-set-always-on-top': {
+    request: boolean
+    response: boolean
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // BrainDump Window
@@ -457,6 +471,15 @@ export interface IPCChannels {
   'braindump-window-get-opacity': {
     request: void
     response: number
+  }
+  /** Persisted Settings preference: keep BrainDump pinned above other windows. */
+  'braindump-window-get-always-on-top': {
+    request: void
+    response: boolean
+  }
+  'braindump-window-set-always-on-top': {
+    request: boolean
+    response: boolean
   }
   'braindump-window-get-bounds': {
     request: void
