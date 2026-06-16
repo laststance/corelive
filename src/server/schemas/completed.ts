@@ -232,6 +232,14 @@ export const DayDetailTaskSchema = z.object({
 })
 
 /**
+ * Inferred type of a single completed-task entry. Shared source of truth for
+ * both the day-detail dialog row and the permanent journal row (they render the
+ * same `{ source, id, title, completedAt, category }` shape), so renderer code
+ * imports this instead of re-declaring the shape.
+ */
+export type DayDetailTask = z.infer<typeof DayDetailTaskSchema>
+
+/**
  * Response schema for the day-detail endpoint.
  * @example
  * { date: "2026-05-10", count: 3, tasks: [...], categories: [...] }
@@ -242,3 +250,43 @@ export const DayDetailResponseSchema = z.object({
   tasks: z.array(DayDetailTaskSchema),
   categories: z.array(HeatmapCategorySchema),
 })
+
+/**
+ * Input schema for the permanent completion journal (`completed.journal`).
+ * Offset pagination, mirroring `todo.list`'s shape so the home Completed Tasks
+ * list can stay an infinite query. The capped page size keeps each DB round-trip
+ * bounded (the journal is unbounded in total size — see the procedure JSDoc).
+ * @example
+ * { limit: 20, offset: 0 } // newest 20 completions
+ */
+export const CompletedJournalInputSchema = z.object({
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).default(0),
+})
+
+/**
+ * Response schema for `completed.journal` — one newest-first page of the merged
+ * `Todo(completed:true) ∪ Completed(archived:false)` stream. Each entry reuses
+ * {@link DayDetailTaskSchema} (`{ source, id, title, completedAt, category }`)
+ * because the journal row and the day-detail row are the same shape; `source`
+ * lets the renderer route per-row affordances (todo-source keeps the uncomplete
+ * checkbox; completed-source is display-only).
+ *
+ * @example
+ * { entries: [{ source: 'todo', id: 12, title: 'ship release', completedAt: Date, category: { id: 1, name: 'Work', color: 'green' } }], total: 462, hasMore: true, nextOffset: 20 }
+ */
+export const CompletedJournalResponseSchema = z.object({
+  entries: z.array(DayDetailTaskSchema),
+  total: z.number().int().min(0),
+  hasMore: z.boolean(),
+  nextOffset: z.number().int().min(0).optional(),
+})
+
+/**
+ * Inferred type of one `completed.journal` page. Shared so the optimistic
+ * toggle in `useTodoMutations` can type its `setQueriesData` cache writes
+ * against the exact response shape instead of re-declaring it.
+ */
+export type CompletedJournalResponse = z.infer<
+  typeof CompletedJournalResponseSchema
+>

@@ -17,6 +17,7 @@ import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
 import { exportDayAsImage } from '@/lib/export-day-as-image'
+import { formatClockTime } from '@/lib/formatClockTime'
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import {
   getHeatmapIntensityFromCount,
@@ -124,21 +125,6 @@ function formatDate(isoDate: string): string {
     day: 'numeric',
     year: 'numeric',
     timeZone: 'UTC',
-  })
-}
-
-/**
- * Formats a Date into a 24-hour HH:MM string for completion timestamps.
- * @param when - Timestamp the task was marked done
- * @returns 24-hour clock string like "18:47"
- * @example
- * formatTime(new Date("2026-05-10T18:47:00")) // => "18:47"
- */
-function formatTime(when: Date): string {
-  return when.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
   })
 }
 
@@ -360,7 +346,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
                       {task.title}
                     </span>
                     <span className="ml-auto font-mono text-xs text-muted-foreground">
-                      {formatTime(task.completedAt)}
+                      {formatClockTime(task.completedAt)}
                     </span>
                   </li>
                 ))}
@@ -373,7 +359,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
                   aria-hidden
                   className="inline-block size-1.5 rounded-full bg-primary motion-safe:animate-pulse"
                 />
-                still going · {formatTime(new Date())}
+                still going · {formatClockTime(new Date())}
               </p>
             )}
           </>

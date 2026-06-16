@@ -1,19 +1,8 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { CheckCircle2, Trash2 } from 'lucide-react'
-import React, { useCallback, useRef, useState } from 'react'
+import { CheckCircle2 } from 'lucide-react'
+import React, { useRef } from 'react'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -24,42 +13,47 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { orpc } from '@/lib/orpc/client-query'
+import type { DayDetailTask } from '@/server/schemas/completed'
 
 import { CompletedImportEntry } from './CompletedImportEntry'
-import { TodoItem } from './TodoItem'
-import type { Todo } from './TodoItem'
+import { CompletedJournalRow } from './CompletedJournalRow'
 
 interface CompletedTodosProps {
-  onDelete: (id: string) => void
-  onClearCompleted: () => void
+  /**
+   * Uncomplete handler for `todo`-source journal rows (the reversal path that
+   * replaces per-item delete). Forwarded to every {@link CompletedJournalRow};
+   * `completed`-source rows ignore it (they are a permanent record).
+   */
   onToggleComplete: (id: string) => void
 }
 
-interface GroupedTodos {
-  [date: string]: Todo[]
+interface GroupedEntries {
+  [date: string]: DayDetailTask[]
 }
 
 const ITEMS_PER_PAGE = 10
 
+/**
+ * Permanent completion journal — the home "Completed Tasks" panel. Reads the
+ * unified `completed.journal` feed (`Todo(completed) ∪ Completed(archived:false)`,
+ * newest-first) so wins from ALL four completion routes (Main, Import, Floating,
+ * BrainDump) surface in one place, grouped by the day they were completed.
+ *
+ * It is an append-only record: there is no per-item delete and no Clear-all —
+ * a mistaken `todo`-source completion is corrected by un-checking its row, and
+ * imported/braindump wins are immutable once their undo window closes.
+ *
+ * @param onToggleComplete - Reverses a `todo`-source completion when its row is un-checked.
+ * @returns The Completed Tasks card (loading / error / empty / populated).
+ * @example
+ * <CompletedTodos onToggleComplete={toggleComplete} />
+ */
 export const CompletedTodos = React.memo(function CompletedTodos({
-  onDelete,
-  onClearCompleted,
   onToggleComplete,
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
-  const [clearDialogOpen, setClearDialogOpen] = useState(false)
-  const handleClearClick = useCallback(() => {
-    setClearDialogOpen(true)
-  }, [])
-  const handleClearDialogOpenChange = useCallback((open: boolean) => {
-    setClearDialogOpen(open)
-  }, [])
-  const handleConfirmClearCompleted = useCallback(() => {
-    onClearCompleted()
-    setClearDialogOpen(false)
-  }, [onClearCompleted])
 
-  // Infinite scroll query
+  // Infinite scroll over the merged journal feed.
   const {
     data,
     fetchNextPage,
@@ -68,9 +62,8 @@ export const CompletedTodos = React.memo(function CompletedTodos({
     isLoading,
     isError,
   } = useInfiniteQuery(
-    orpc.todo.list.infiniteOptions({
+    orpc.completed.journal.infiniteOptions({
       input: (pageParam) => ({
-        completed: true,
         limit: ITEMS_PER_PAGE,
         offset: pageParam ?? 0,
       }),
@@ -79,25 +72,15 @@ export const CompletedTodos = React.memo(function CompletedTodos({
     }),
   )
 
-  // Flatten todos across all pages
-  const allTodos: Todo[] =
-    data?.pages.flatMap((page) => {
-      if (!page || !Array.isArray(page.todos)) {
-        return []
-      }
+  // Flatten journal entries across all loaded pages (already newest-first).
+  const allEntries: DayDetailTask[] =
+    data?.pages.flatMap((page) =>
+      !page || !Array.isArray(page.entries) ? [] : page.entries,
+    ) ?? []
 
-      return page.todos.map((todo) => ({
-        id: todo.id.toString(),
-        text: todo.text,
-        completed: todo.completed,
-        createdAt: new Date(todo.createdAt),
-        notes: todo.notes,
-      }))
-    }) ?? []
-
-  // Group by date
-  const groupedTodos: GroupedTodos = allTodos.reduce((groups, todo) => {
-    const dateKey = todo.createdAt.toLocaleDateString('en-US', {
+  // Group by the local calendar day the win was completed on.
+  const groupedEntries: GroupedEntries = allEntries.reduce((groups, entry) => {
+    const dateKey = entry.completedAt.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -106,18 +89,19 @@ export const CompletedTodos = React.memo(function CompletedTodos({
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }
-    groups[dateKey].push(todo)
+    groups[dateKey].push(entry)
     return groups
-  }, {} as GroupedTodos)
+  }, {} as GroupedEntries)
 
-  // Sort by date (newest first)
-  const sortedDates = Object.keys(groupedTodos).sort((a, b) => {
-    const dateA = groupedTodos[a]?.[0]?.createdAt.getTime() ?? 0
-    const dateB = groupedTodos[b]?.[0]?.createdAt.getTime() ?? 0
+  // Sort day groups newest-first. Entries arrive newest-first, so each group's
+  // first entry is its newest — order groups by that timestamp.
+  const sortedDates = Object.keys(groupedEntries).sort((a, b) => {
+    const dateA = groupedEntries[a]?.[0]?.completedAt.getTime() ?? 0
+    const dateB = groupedEntries[b]?.[0]?.completedAt.getTime() ?? 0
     return dateB - dateA
   })
 
-  // Intersection Observer for infinite scroll
+  // Intersection Observer for infinite scroll.
   useCycleEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -169,7 +153,7 @@ export const CompletedTodos = React.memo(function CompletedTodos({
     )
   }
 
-  if (allTodos.length === 0) {
+  if (allEntries.length === 0) {
     return (
       <Card className="h-full">
         <CardHeader>
@@ -177,17 +161,17 @@ export const CompletedTodos = React.memo(function CompletedTodos({
             <CheckCircle2 className="h-5 w-5" />
             Completed Tasks
           </CardTitle>
-          <CardDescription>Completed tasks will appear here</CardDescription>
+          <CardDescription>Your wins gather here, newest first</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-1 items-center justify-center p-8">
           <div className="flex flex-col items-center gap-4 text-center text-muted-foreground">
             <CheckCircle2 className="h-12 w-12 opacity-50" />
-            <p>No completed tasks yet</p>
+            <p>No wins logged yet</p>
             {/* Day-one discoverability: surface the Import affordance inline. */}
             <CompletedImportEntry variant="inline" />
-            {/* Quiet hint: completed imports write to the heatmap, not this list. */}
+            {/* Accurate now: finishing a task AND importing both land here. */}
             <p className="text-xs text-muted-foreground">
-              Imported wins appear on your heatmap ↑
+              Finish a task or import past wins — they&apos;ll appear here
             </p>
           </div>
         </CardContent>
@@ -196,104 +180,63 @@ export const CompletedTodos = React.memo(function CompletedTodos({
   }
 
   return (
-    <>
-      <Card className="flex h-full flex-col">
-        <CardHeader className="shrink-0">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5" />
-              Completed Tasks
-            </div>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              {data?.pages[0]?.total ?? 0} completed
-            </Badge>
-          </CardTitle>
-          <CardDescription>Recently completed tasks</CardDescription>
-          {allTodos.length > 0 && (
-            <div className="flex items-center justify-end gap-2 pt-2">
-              {/* Completed-zone Import entry (D4) — next to Clear all. */}
-              <CompletedImportEntry />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleClearClick}
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Clear all
-              </Button>
+    <Card className="flex h-full flex-col">
+      <CardHeader className="shrink-0">
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5" />
+            Completed Tasks
+          </div>
+          <Badge variant="secondary" className="flex items-center gap-1">
+            {data?.pages[0]?.total ?? 0} completed
+          </Badge>
+        </CardTitle>
+        <CardDescription>Your wins, newest first</CardDescription>
+        <div className="flex items-center justify-end gap-2 pt-2">
+          {/* Completed-zone Import entry (D4) — the journal's only action. */}
+          <CompletedImportEntry />
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex-1 overflow-hidden">
+        <div className="-mr-2 h-full space-y-4 overflow-y-auto pr-2">
+          {sortedDates.map((date, dateIndex) => {
+            const entriesForDate = groupedEntries[date]
+            return (
+              <div key={`date-${date}`}>
+                {dateIndex > 0 && <Separator className="mb-3" />}
+                <h3 className="mb-3 text-sm font-medium text-muted-foreground">
+                  {date}
+                </h3>
+                <div className="space-y-3">
+                  {entriesForDate?.map((entry) => (
+                    <CompletedJournalRow
+                      key={`${entry.source}-${entry.id}`}
+                      entry={entry}
+                      onUncomplete={onToggleComplete}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          {isFetchingNextPage && (
+            <div className="flex justify-center p-4">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
             </div>
           )}
-        </CardHeader>
 
-        <CardContent className="flex-1 overflow-hidden">
-          <div className="-mr-2 h-full space-y-4 overflow-y-auto pr-2">
-            {sortedDates.map((date, dateIndex) => {
-              const todosForDate = groupedTodos[date]
-              return (
-                <div key={`date-${date}`}>
-                  {dateIndex > 0 && <Separator className="mb-3" />}
-                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-                    {date}
-                  </h3>
-                  <div className="space-y-3">
-                    {todosForDate?.map((todo) => (
-                      <TodoItem
-                        key={todo.id}
-                        todo={todo}
-                        onToggleComplete={onToggleComplete}
-                        onDelete={onDelete}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+          {/* Intersection observer target */}
+          {hasNextPage && <div ref={observerRef} className="h-1"></div>}
 
-            {isFetchingNextPage && (
-              <div className="flex justify-center p-4">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-              </div>
-            )}
-
-            {/* Intersection observer target */}
-            {hasNextPage && <div ref={observerRef} className="h-1"></div>}
-
-            {!hasNextPage && allTodos.length > ITEMS_PER_PAGE && (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                All completed tasks loaded
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <AlertDialog
-        open={clearDialogOpen}
-        onOpenChange={handleClearDialogOpenChange}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Clear all completed tasks?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This clears {data?.pages[0]?.total ?? allTodos.length} completed
-              task
-              {(data?.pages[0]?.total ?? allTodos.length) !== 1 ? 's' : ''} from
-              this list. They stay counted on your heatmap — clearing only
-              tidies the list, it doesn&apos;t erase the record.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmClearCompleted}
-              className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- shadcn destructive tokens
-            >
-              Clear all
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+          {!hasNextPage && allEntries.length > ITEMS_PER_PAGE && (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              All wins loaded
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 })

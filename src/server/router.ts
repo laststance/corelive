@@ -11,6 +11,7 @@ import {
   deleteManyCompleted,
   getDayDetail,
   getHeatmap,
+  getJournal,
 } from './procedures/completed'
 import {
   getElectronSettings,
@@ -55,6 +56,7 @@ export const router = {
   completed: {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
+    journal: getJournal,
     create: createCompleted,
     createMany: createManyCompleted,
     delete: deleteCompleted,
