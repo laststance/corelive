@@ -82,7 +82,7 @@ describe('FloatingWindowSettings', () => {
 
   it('reflects saved always-on-top preferences: Floating pinned, BrainDump unpinned', async () => {
     // Arrange: the persisted choice pins Floating Navigator but not BrainDump —
-    // the exact 「固定しない」 default this preference ships for BrainDump.
+    // the exact "off by default" behavior this preference ships for BrainDump.
     installElectronAPI({
       floatingPanels: createBridge({
         getFloatingNavigatorAlwaysOnTop: vi.fn().mockResolvedValue(true),

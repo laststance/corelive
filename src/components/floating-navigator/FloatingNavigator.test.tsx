@@ -99,4 +99,37 @@ describe('FloatingNavigator pin button', () => {
     expect(pinButton).toHaveAttribute('aria-pressed', 'true')
     expect(isAlwaysOnTopMock).toHaveBeenCalledTimes(1)
   })
+
+  it('does not crash when the preload predates the pin-state method', async () => {
+    // Arrange: preload skew — the floatingNavigatorAPI namespace is present (an
+    // installed app) but its `window` bridge predates `isAlwaysOnTop` (this
+    // preference added it). isFloatingNavigatorEnvironment() only checks the
+    // namespace, so the mount-init effect must method-guard before calling it.
+    Object.defineProperty(window, 'floatingNavigatorAPI', {
+      configurable: true,
+      writable: true,
+      value: {
+        window: {
+          // isAlwaysOnTop intentionally absent — the older preload lacks it.
+          toggleAlwaysOnTop: vi.fn(),
+          minimize: vi.fn(),
+          close: vi.fn(),
+          focusMainWindow: vi.fn(),
+        },
+        brainDump: { toggle: vi.fn() },
+      },
+    })
+
+    // Act: mounting must NOT throw a TypeError from invoking undefined() in the
+    // mount-init effect (which would bubble to the error boundary and blank the
+    // floating window).
+    render(<FloatingNavigator {...noopTaskProps} />)
+
+    // Assert: the pin button still renders, falling back to the default pinned
+    // state instead of crashing.
+    const pinButton = await screen.findByRole('button', {
+      name: 'Disable always on top',
+    })
+    expect(pinButton).toHaveAttribute('aria-pressed', 'true')
+  })
 })

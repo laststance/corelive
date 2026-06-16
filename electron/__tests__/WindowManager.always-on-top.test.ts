@@ -277,7 +277,7 @@ describe('WindowManager always-on-top', () => {
       const { configManager } = createConfigStub()
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
 
-      // Act + Assert: the false default serves the 「固定しない」 behavior.
+      // Act + Assert: the false default serves the "unpinned by default" behavior.
       expect(windowManager.getBrainDumpAlwaysOnTop()).toBe(false)
     })
   })

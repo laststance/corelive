@@ -525,9 +525,15 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
   // that. T2-minimal — initialize only; no live main→renderer event sync.
   useInitialEffect(() => {
     if (!isFloatingNavigatorEnvironment()) return
+    // Guard the METHOD, not just the namespace: a frozen older preload can expose
+    // `floatingNavigatorAPI` yet predate `isAlwaysOnTop` (preload skew — installed
+    // app vs newer remote web bundle). Calling an absent method would throw
+    // synchronously here and break the floating UI, so degrade to the default.
+    const windowApi = window.floatingNavigatorAPI?.window
+    if (typeof windowApi?.isAlwaysOnTop !== 'function') return
     let cancelled = false
-    void window
-      .floatingNavigatorAPI!.window.isAlwaysOnTop()
+    void windowApi
+      .isAlwaysOnTop()
       .then((current) => {
         if (!cancelled) setIsAlwaysOnTop(current)
       })

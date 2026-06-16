@@ -3,8 +3,8 @@
  *
  * Locks the contract that BrainDump ships UNPINNED (`alwaysOnTop=false`) and that
  * a pre-feature `config.json` lacking the key migrates to false — never
- * resurrects a stale `true`. Guards the 「固定しない」 default this preference exists
- * to deliver.
+ * resurrects a stale `true`. Guards the "off by default" (unpinned) behavior
+ * this preference exists to deliver.
  *
  * Triggered when: `pnpm test:electron` (Vitest).
  *
