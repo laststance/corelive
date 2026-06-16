@@ -10,6 +10,9 @@ import { PrismaClient } from '@prisma/client'
 // singleton + logger + auth middleware and would throw inside a tsx script.
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../src/app/(main)/skill-tree/lib/template'
 
+// Shared seeded-user identity (single source of truth with prisma/seed.ts).
+import { SEED_USER_CLERK_ID, SEED_USER_EMAIL } from './seedUser'
+
 const adapter = new PrismaPg({
   connectionString: process.env.POSTGRES_PRISMA_URL!,
 })
@@ -82,9 +85,6 @@ function assertLocalDatabase(connectionString: string | undefined): void {
 
 /** Deterministic PRNG seed — fixed so re-runs on the same day are identical. */
 const RANDOM_SEED = 0x5eed_c0de
-
-/** Clerk identity of the seeded user. MUST match `prisma/seed.ts` exactly. */
-const SEED_USER_CLERK_ID = 'user_32MtPR8Z8ywubMj2jwG9DdSbzPq'
 
 /** Size of the activity window the heatmap/journal render (oRPC default = 365). */
 const HISTORY_DAYS = 365
@@ -438,7 +438,7 @@ async function seedDev(): Promise<void> {
     update: {},
     create: {
       clerkId: SEED_USER_CLERK_ID,
-      email: 'test@test.com',
+      email: SEED_USER_EMAIL,
       name: 'test01',
       bio: 'Test account for development and E2E testing',
     },

@@ -191,15 +191,18 @@ export function useTodoMutations(
           if (!old) return old
           return {
             ...old,
-            todos: old.todos.map((todoRow) =>
-              todoRow.id === id
-                ? {
-                    ...todoRow,
-                    completed: !todoRow.completed,
-                    updatedAt: new Date(),
-                  }
-                : todoRow,
-            ),
+            todos: old.todos.map((todoRow) => {
+              if (todoRow.id !== id) return todoRow
+              // Keep completedAt consistent with the flip so no cache consumer
+              // ever sees the impossible completed:true/completedAt:null pair.
+              const nextCompleted = !todoRow.completed
+              return {
+                ...todoRow,
+                completed: nextCompleted,
+                completedAt: nextCompleted ? new Date() : null,
+                updatedAt: new Date(),
+              }
+            }),
           }
         })
         return {
@@ -242,6 +245,9 @@ export function useTodoMutations(
         const toggledTodo = {
           ...todoInPending,
           completed: true,
+          // Stamp completedAt alongside the flip — a completed todo with a null
+          // completedAt is an impossible state any timestamp consumer can misread.
+          completedAt: new Date(),
           updatedAt: new Date(),
         }
         queryClient.setQueriesData<InfiniteData<TodoResponse>>(
@@ -358,6 +364,9 @@ export function useTodoMutations(
             const toggledTodoToPending = {
               ...todoInCompleted!,
               completed: false,
+              // Clear completedAt on un-complete so the row doesn't carry a
+              // stale completion timestamp while marked incomplete.
+              completedAt: null,
               updatedAt: new Date(),
             }
             return {
