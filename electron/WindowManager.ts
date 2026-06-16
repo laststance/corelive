@@ -137,8 +137,11 @@ export class WindowManager {
   /** Timer that force-dismisses the pill + surfaces main on a wedged boot. */
   private startupPillTimeoutTimer: ReturnType<typeof setTimeout> | null
 
-  /** Debounce timer for persisting Settings popover size on resize. */
+  /** 500 ms blur-guard timer set by `will-resize` to keep the window open during drag. */
   private settingsResizeDebounceTimer: ReturnType<typeof setTimeout> | null
+
+  /** 200 ms debounce timer for persisting the Settings popover size after `resize`. */
+  private settingsPersistDebounceTimer: ReturnType<typeof setTimeout> | null
 
   /**
    * True while the user is manually dragging the Settings popover edge.
@@ -173,6 +176,7 @@ export class WindowManager {
     this.startupPillGapTimer = null
     this.startupPillTimeoutTimer = null
     this.settingsResizeDebounceTimer = null
+    this.settingsPersistDebounceTimer = null
     this.settingsWindowIsResizing = false
   }
 
@@ -1459,13 +1463,13 @@ export class WindowManager {
 
     // Debounce-persist the new size and clear the resizing flag.
     this.settingsWindow.on('resize', () => {
-      if (this.settingsResizeDebounceTimer) {
-        clearTimeout(this.settingsResizeDebounceTimer)
+      if (this.settingsPersistDebounceTimer) {
+        clearTimeout(this.settingsPersistDebounceTimer)
       }
       const capturedWindow = this.settingsWindow
-      this.settingsResizeDebounceTimer = setTimeout(() => {
+      this.settingsPersistDebounceTimer = setTimeout(() => {
         this.settingsWindowIsResizing = false
-        this.settingsResizeDebounceTimer = null
+        this.settingsPersistDebounceTimer = null
         if (!capturedWindow || capturedWindow.isDestroyed()) return
         const [width, height] = capturedWindow.getSize()
         this.configManager?.update({
@@ -1487,10 +1491,14 @@ export class WindowManager {
     // Cleanup on close
     this.settingsWindow.on('closed', () => {
       log.debug('🔧 Settings popover closed')
-      // Cancel any pending debounce and reset resize state.
+      // Cancel any pending timers and reset resize state.
       if (this.settingsResizeDebounceTimer) {
         clearTimeout(this.settingsResizeDebounceTimer)
         this.settingsResizeDebounceTimer = null
+      }
+      if (this.settingsPersistDebounceTimer) {
+        clearTimeout(this.settingsPersistDebounceTimer)
+        this.settingsPersistDebounceTimer = null
       }
       this.settingsWindowIsResizing = false
       this.settingsWindow = null

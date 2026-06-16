@@ -189,7 +189,14 @@ export const ElectronSettingsPage = memo(
       const resetFn = window.electronAPI?.settings?.resetPopoverSize
       if (!resetFn) return
       startResetSizeTransition(async () => {
-        await resetFn()
+        const success = await resetFn()
+        if (!success) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error(
+              'Failed to reset Settings popover size: IPC returned false',
+            )
+          }
+        }
       })
     }, [startResetSizeTransition])
 
