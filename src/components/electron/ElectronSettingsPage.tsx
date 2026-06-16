@@ -310,7 +310,6 @@ export const ElectronSettingsPage = memo(
             backgroundImage:
               'radial-gradient(circle, currentColor 1px, transparent 1px)',
             backgroundSize: '3px 3px',
-            cursor: 'se-resize',
           }}
         />
       </div>
