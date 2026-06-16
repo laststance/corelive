@@ -1924,6 +1924,24 @@ function setupIPCHandlers(): void {
     return configManager.getSection('behavior').startup
   })
 
+  // Reset the Settings popover to default size and re-anchor to the tray.
+  typedHandle('settings:resetPopoverSize', () => {
+    try {
+      if (windowManager) {
+        windowManager.resetSettingsPopoverSize()
+        return true
+      }
+      log.warn('settings:resetPopoverSize - windowManager not available')
+      return false
+    } catch (error) {
+      log.error(
+        'settings:resetPopoverSize - Failed to reset popover size:',
+        error,
+      )
+      return false
+    }
+  })
+
   // OAuth IPC handlers for browser-based OAuth flows
   // OAuth IPC handlers (Zod-validated)
   // Used when WebView OAuth is blocked (e.g., Google OAuth)

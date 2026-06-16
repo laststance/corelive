@@ -1711,6 +1711,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return { ...DEFAULT_STARTUP_WINDOW_CONFIG }
       }
     },
+
+    /**
+     * Resets the Settings popover window to default size (360×380) and
+     * re-anchors it to the tray icon. Returns false on IPC failure.
+     * @returns true on success, false on failure.
+     * @example
+     * await window.electronAPI.settings.resetPopoverSize()
+     */
+    resetPopoverSize: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke('settings:resetPopoverSize')
+      } catch (error) {
+        log.error('Failed to reset settings popover size:', error)
+        return false
+      }
+    },
   },
 
   /**

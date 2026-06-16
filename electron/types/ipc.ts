@@ -804,6 +804,15 @@ export interface IPCChannels {
     request: void
     response: StartupWindowConfig
   }
+  /**
+   * Reset the Settings popover window to its default size (360×380) and
+   * re-anchor it to the tray icon. Called from the "Restore default size"
+   * button in ElectronSettingsPage. Takes no arguments; returns true on success.
+   */
+  'settings:resetPopoverSize': {
+    request: void
+    response: boolean
+  }
 }
 
 // ============================================================================

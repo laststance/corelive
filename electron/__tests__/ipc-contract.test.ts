@@ -124,6 +124,17 @@ describe('IPC contract', () => {
       )
     })
 
+    it('takes no arguments for settings:resetPopoverSize', () => {
+      // Arrange
+      const resetPopoverSize = IPC_ARG_SCHEMAS['settings:resetPopoverSize']
+
+      // Act + Assert: reset is a void call — an empty tuple must pass.
+      expect(() => resetPopoverSize.parse([])).not.toThrow()
+      // Any argument is rejected; the renderer has nothing meaningful to send.
+      expect(() => resetPopoverSize.parse([true])).toThrow(ZodError)
+      expect(() => resetPopoverSize.parse([360])).toThrow(ZodError)
+    })
+
     it('requires boolean for floating panel desktop tracking', () => {
       const setVisibleOnAllWorkspaces =
         IPC_ARG_SCHEMAS['floating-window-set-visible-on-all-workspaces']

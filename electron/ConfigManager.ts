@@ -20,6 +20,10 @@ import path from 'path'
 
 import { app } from 'electron'
 
+import {
+  SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+  SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+} from './constants'
 import { log } from './logger'
 import {
   DEFAULT_STARTUP_WINDOW_CONFIG,
@@ -173,6 +177,12 @@ interface AdvancedConfig {
   experimentalFeatures: boolean
 }
 
+/** Persisted size of the Settings popover window (user-resizable). */
+export interface SettingsPopoverConfig {
+  width: number
+  height: number
+}
+
 /** Complete application configuration */
 export interface AppConfig {
   version: string
@@ -184,6 +194,7 @@ export interface AppConfig {
   behavior: BehaviorConfig
   advanced: AdvancedConfig
   braindump: BrainDumpConfig
+  settingsPopover: SettingsPopoverConfig
   [key: string]: unknown
 }
 
@@ -386,6 +397,11 @@ export class ConfigManager {
         shortcut: 'Alt+Space',
         lastCategoryId: null,
         notes: {},
+      },
+
+      settingsPopover: {
+        width: SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+        height: SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
       },
     }
   }
