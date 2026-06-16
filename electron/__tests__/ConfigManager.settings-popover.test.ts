@@ -97,4 +97,20 @@ describe('ConfigManager settingsPopover defaults', () => {
     expect(configManager.get('settingsPopover.width')).toBe(500)
     expect(configManager.get('settingsPopover.height')).toBe(600)
   })
+
+  it('backfills missing height when only width is present in config.json (partial-key migration)', () => {
+    // Arrange: hypothetical config.json that has only width (e.g. written by an
+    // older in-dev build before height was added to the schema).
+    writeConfigFile({
+      version: '1.0.0',
+      settingsPopover: { width: 500 },
+    })
+
+    // Act
+    const configManager = new ConfigManager()
+
+    // Assert — width preserved; missing height filled to default 380
+    expect(configManager.get('settingsPopover.width')).toBe(500)
+    expect(configManager.get('settingsPopover.height')).toBe(380)
+  })
 })
