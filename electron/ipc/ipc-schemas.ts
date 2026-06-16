@@ -256,6 +256,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // The read side of the startup-window pair takes no arguments; the response
   // shape (three booleans) is enforced by the typed IPC contract, not here.
   'settings:getStartupConfig': z.tuple([]),
+  // Reset Settings popover to default size + re-anchor to tray; no arguments.
+  'settings:resetPopoverSize': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Window Management (all void-arg)

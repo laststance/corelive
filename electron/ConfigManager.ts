@@ -173,6 +173,12 @@ interface AdvancedConfig {
   experimentalFeatures: boolean
 }
 
+/** Persisted size of the Settings popover window (user-resizable). */
+export interface SettingsPopoverConfig {
+  width: number
+  height: number
+}
+
 /** Complete application configuration */
 export interface AppConfig {
   version: string
@@ -184,6 +190,7 @@ export interface AppConfig {
   behavior: BehaviorConfig
   advanced: AdvancedConfig
   braindump: BrainDumpConfig
+  settingsPopover: SettingsPopoverConfig
   [key: string]: unknown
 }
 
@@ -386,6 +393,11 @@ export class ConfigManager {
         shortcut: 'Alt+Space',
         lastCategoryId: null,
         notes: {},
+      },
+
+      settingsPopover: {
+        width: 360,
+        height: 380,
       },
     }
   }

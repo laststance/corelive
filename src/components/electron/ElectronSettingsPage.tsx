@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useState } from 'react'
 
 /**
  * Electron Settings Page Component
@@ -25,6 +25,7 @@ import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
 import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
 import { FloatingWindowSettings } from '@/components/electron/FloatingWindowSettings'
 import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -58,6 +59,8 @@ export const ElectronSettingsPage = memo(
   function ElectronSettingsPage(): React.ReactElement | null {
     const dispatch = useAppDispatch()
     const isElectron = useIsElectron() // SSR-safe via useSyncExternalStore
+
+    const [isResettingPopoverSize, setIsResettingPopoverSize] = useState(false)
 
     // Redux selectors
     const hideAppIcon = useAppSelector(selectHideAppIcon)
@@ -178,6 +181,20 @@ export const ElectronSettingsPage = memo(
       [dispatch],
     )
 
+    /**
+     * Resets the Settings popover to 360×380 via IPC. Guards on method existence
+     * so older preloads (version-skew) do not throw.
+     */
+    const handleResetPopoverSize = useCallback(async (): Promise<void> => {
+      if (!window.electronAPI?.settings?.resetPopoverSize) return
+      setIsResettingPopoverSize(true)
+      try {
+        await window.electronAPI.settings.resetPopoverSize()
+      } finally {
+        setIsResettingPopoverSize(false)
+      }
+    }, [])
+
     // Web users see the shared Preferences section (rendered by the settings
     // page); the Electron window-chrome settings below are desktop-only, so
     // render nothing here off-Electron (D15 — one settings home, prefs for all).
@@ -259,6 +276,43 @@ export const ElectronSettingsPage = memo(
         <StartupWindowSettings />
         <FloatingWindowSettings />
         <BrainDumpSettings />
+
+        {/* Settings Window size */}
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardHeader className="px-2 pb-2 pt-0">
+            <CardTitle className="text-lg">Settings Window</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 px-2">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Window size</Label>
+                <p className="text-xs text-muted-foreground">
+                  Drag the window edge to resize. Default: 360×380.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isResettingPopoverSize}
+                onClick={handleResetPopoverSize}
+              >
+                Restore default size
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Visible resize grip — pointer-events:none so native edge resize still works */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed bottom-1 right-1 h-4 w-4 opacity-40"
+          style={{
+            backgroundImage:
+              'radial-gradient(circle, currentColor 1px, transparent 1px)',
+            backgroundSize: '3px 3px',
+            cursor: 'se-resize',
+          }}
+        />
       </div>
     )
   },

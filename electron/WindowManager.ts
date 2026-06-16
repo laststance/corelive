@@ -43,6 +43,18 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // ============================================================================
+// Settings Popover Size Constants
+// ============================================================================
+
+const SETTINGS_POPOVER_DEFAULT_WIDTH_PX = 360
+const SETTINGS_POPOVER_DEFAULT_HEIGHT_PX = 380
+const SETTINGS_POPOVER_MIN_WIDTH_PX = 320
+const SETTINGS_POPOVER_MIN_HEIGHT_PX = 300
+const SETTINGS_POPOVER_MAX_WIDTH_PX = 800
+const SETTINGS_POPOVER_MAX_HEIGHT_PX = 900
+const SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS = 200
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -129,6 +141,15 @@ export class WindowManager {
   /** Timer that force-dismisses the pill + surfaces main on a wedged boot. */
   private startupPillTimeoutTimer: ReturnType<typeof setTimeout> | null
 
+  /** Debounce timer for persisting Settings popover size on resize. */
+  private settingsResizeDebounceTimer: ReturnType<typeof setTimeout> | null
+
+  /**
+   * True while the user is manually dragging the Settings popover edge.
+   * Prevents the blur→hide handler from closing the window mid-resize.
+   */
+  private settingsWindowIsResizing: boolean
+
   /**
    * Creates a new WindowManager instance.
    *
@@ -155,6 +176,8 @@ export class WindowManager {
     this.startupPill = null
     this.startupPillGapTimer = null
     this.startupPillTimeoutTimer = null
+    this.settingsResizeDebounceTimer = null
+    this.settingsWindowIsResizing = false
   }
 
   /**
@@ -1342,8 +1365,37 @@ export class WindowManager {
 
     log.info('🔧 Creating settings popover window...')
 
-    const windowWidth = 360
-    const windowHeight = 380
+    // Load persisted size, clamping out-of-range values (e.g. hand-edited config).
+    const clampDimension = (
+      value: unknown,
+      min: number,
+      max: number,
+      defaultValue: number,
+    ): number => {
+      const parsed = Number(value)
+      if (!Number.isFinite(parsed) || parsed <= 0) return defaultValue
+      return Math.min(Math.max(Math.round(parsed), min), max)
+    }
+
+    const windowWidth = clampDimension(
+      this.configManager?.get(
+        'settingsPopover.width',
+        SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+      ),
+      SETTINGS_POPOVER_MIN_WIDTH_PX,
+      SETTINGS_POPOVER_MAX_WIDTH_PX,
+      SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+    )
+    const windowHeight = clampDimension(
+      this.configManager?.get(
+        'settingsPopover.height',
+        SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+      ),
+      SETTINGS_POPOVER_MIN_HEIGHT_PX,
+      SETTINGS_POPOVER_MAX_HEIGHT_PX,
+      SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+    )
+
     const { x, y } = this.calculateSettingsPopoverPosition(
       windowWidth,
       windowHeight,
@@ -1358,7 +1410,11 @@ export class WindowManager {
       height: windowHeight,
       x,
       y,
-      resizable: false,
+      resizable: true,
+      minWidth: SETTINGS_POPOVER_MIN_WIDTH_PX,
+      minHeight: SETTINGS_POPOVER_MIN_HEIGHT_PX,
+      maxWidth: SETTINGS_POPOVER_MAX_WIDTH_PX,
+      maxHeight: SETTINGS_POPOVER_MAX_HEIGHT_PX,
       movable: false,
       minimizable: false,
       maximizable: false,
@@ -1399,8 +1455,35 @@ export class WindowManager {
       this.settingsWindow?.show()
     })
 
-    // Auto-hide on blur (popover behavior)
+    // Track when the user starts manually dragging a resize handle so the blur
+    // handler below does not close the window mid-drag. `will-resize` fires
+    // only for manual (user-initiated) resizes, NOT for programmatic setSize().
+    this.settingsWindow.on('will-resize', () => {
+      this.settingsWindowIsResizing = true
+    })
+
+    // Debounce-persist the new size and clear the resizing flag.
+    this.settingsWindow.on('resize', () => {
+      if (this.settingsResizeDebounceTimer) {
+        clearTimeout(this.settingsResizeDebounceTimer)
+      }
+      const capturedWindow = this.settingsWindow
+      this.settingsResizeDebounceTimer = setTimeout(() => {
+        this.settingsWindowIsResizing = false
+        this.settingsResizeDebounceTimer = null
+        if (!capturedWindow || capturedWindow.isDestroyed()) return
+        const [width, height] = capturedWindow.getSize()
+        this.configManager?.update({
+          'settingsPopover.width': width,
+          'settingsPopover.height': height,
+        })
+      }, SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS)
+    })
+
+    // Auto-hide on blur (popover behavior). Skip while the user is dragging a
+    // resize handle — the window losing focus mid-resize should not close it.
     this.settingsWindow.on('blur', () => {
+      if (this.settingsWindowIsResizing) return
       if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
         this.settingsWindow.hide()
       }
@@ -1409,6 +1492,12 @@ export class WindowManager {
     // Cleanup on close
     this.settingsWindow.on('closed', () => {
       log.debug('🔧 Settings popover closed')
+      // Cancel any pending debounce and reset resize state.
+      if (this.settingsResizeDebounceTimer) {
+        clearTimeout(this.settingsResizeDebounceTimer)
+        this.settingsResizeDebounceTimer = null
+      }
+      this.settingsWindowIsResizing = false
       this.settingsWindow = null
     })
 
@@ -1464,6 +1553,32 @@ export class WindowManager {
    */
   hasSettingsWindow(): boolean {
     return this.settingsWindow !== null && !this.settingsWindow.isDestroyed()
+  }
+
+  /**
+   * Resets the Settings popover to default size and re-anchors it to the tray.
+   * Called by the "Restore default size" IPC handler. Persists the reset so the
+   * next open also uses default dimensions.
+   */
+  resetSettingsPopoverSize(): void {
+    this.configManager?.update({
+      'settingsPopover.width': SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+      'settingsPopover.height': SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+    })
+
+    const win = this.settingsWindow
+    if (!win || win.isDestroyed()) return
+
+    const { x, y } = this.calculateSettingsPopoverPosition(
+      SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+      SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+    )
+    win.setBounds({
+      x,
+      y,
+      width: SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+      height: SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+    })
   }
 
   /**

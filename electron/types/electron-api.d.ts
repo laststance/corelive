@@ -485,6 +485,12 @@ export interface ElectronAPI {
      * @returns Promise resolving to the saved config (showMain-only default on failure).
      */
     getStartupConfig: () => Promise<StartupWindowConfig>
+    /**
+     * Resets the Settings popover window to default size (360×380) and
+     * re-anchors it to the tray icon.
+     * @returns Promise resolving to true on success, false on IPC failure.
+     */
+    resetPopoverSize: () => Promise<boolean>
   }
 
   /**
