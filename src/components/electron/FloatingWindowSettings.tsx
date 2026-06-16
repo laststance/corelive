@@ -3,9 +3,10 @@
 /**
  * @fileoverview Floating utility window settings for the Electron Settings page.
  *
- * Surfaces cross-window behavior shared by Floating Navigator and BrainDump.
- * The main process owns the actual BrowserWindow calls so this component only
- * reads and writes the typed preload API.
+ * Surfaces cross-window behavior shared by Floating Navigator and BrainDump:
+ * whether they follow macOS Spaces, and whether each one stays pinned above
+ * other windows. The main process owns the actual BrowserWindow calls so this
+ * component only reads and writes the typed preload API.
  *
  * @module components/electron/FloatingWindowSettings
  */
@@ -31,11 +32,56 @@ interface FloatingWindowSettingsProps {
   className?: string
 }
 
+/** The preload bridge this card drives (reused from the electron-api source of truth). */
+type FloatingPanelsBridge = NonNullable<
+  NonNullable<Window['electronAPI']>['floatingPanels']
+>
+
+/** The three independent preferences this card persists. */
+type PreferenceKey =
+  | 'visibleOnAllWorkspaces'
+  | 'floatingAlwaysOnTop'
+  | 'brainDumpAlwaysOnTop'
+
+/** Persists + applies each preference through the matching preload method. */
+const PREFERENCE_SETTERS: Record<
+  PreferenceKey,
+  (api: FloatingPanelsBridge, next: boolean) => Promise<boolean>
+> = {
+  visibleOnAllWorkspaces: async (api, next) =>
+    api.setVisibleOnAllWorkspaces(next),
+  floatingAlwaysOnTop: async (api, next) =>
+    api.setFloatingNavigatorAlwaysOnTop(next),
+  brainDumpAlwaysOnTop: async (api, next) => api.setBrainDumpAlwaysOnTop(next),
+}
+
+/**
+ * True only when the preload exposes the COMPLETE floating-panels surface this
+ * card needs (the desktop-Spaces pair AND both always-on-top pairs). An outdated
+ * desktop preload that has `floatingPanels` but predates always-on-top degrades
+ * to the update-prompt card instead of throwing inside the load.
+ * @param api - The floatingPanels bridge, or undefined on web / an old preload.
+ * @returns true when every method this card calls is present.
+ */
+function hasCompleteFloatingPanelsApi(
+  api: FloatingPanelsBridge | undefined,
+): api is FloatingPanelsBridge {
+  return (
+    typeof api?.getVisibleOnAllWorkspaces === 'function' &&
+    typeof api?.setVisibleOnAllWorkspaces === 'function' &&
+    typeof api?.getFloatingNavigatorAlwaysOnTop === 'function' &&
+    typeof api?.setFloatingNavigatorAlwaysOnTop === 'function' &&
+    typeof api?.getBrainDumpAlwaysOnTop === 'function' &&
+    typeof api?.setBrainDumpAlwaysOnTop === 'function'
+  )
+}
+
 /**
  * Settings card for Floating Navigator + BrainDump desktop behavior.
  *
- * Loads the persisted macOS Spaces preference from Electron on mount. Toggling
- * the switch persists the value and applies it to any already-open panels.
+ * Loads the persisted Spaces + always-on-top preferences from Electron on mount.
+ * Toggling any switch optimistically updates, persists the value, and rolls back
+ * if the main process rejects the change.
  *
  * @param props - Component props
  * @param props.className - Optional className forwarded to the Card
@@ -47,32 +93,56 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
   className,
 }: FloatingWindowSettingsProps): ReactElement {
   const desktopTrackingId = useId()
+  const floatingPinId = useId()
+  const brainDumpPinId = useId()
   const hasMounted = useMounted()
   const [isReady, setIsReady] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [visibleOnAllWorkspaces, setVisibleOnAllWorkspaces] = useState(false)
+  // Which preferences have an in-flight save — drives per-row disabled state so
+  // one toggle never freezes the others.
+  const [savingKeys, setSavingKeys] = useState<ReadonlySet<PreferenceKey>>(
+    () => new Set(),
+  )
+  // Defaults mirror the config defaults (floating pinned, BrainDump not) but are
+  // only shown after the mount load resolves real values.
+  const [values, setValues] = useState<Record<PreferenceKey, boolean>>({
+    visibleOnAllWorkspaces: false,
+    floatingAlwaysOnTop: true,
+    brainDumpAlwaysOnTop: false,
+  })
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch once from the preload bridge after mount; the fallback branch below
-  // handles non-Electron renderers without needing a separate effect path.
+  // Fetch all three preferences once after mount; the fallback branches below
+  // handle non-Electron and outdated-preload renderers without a second path.
   useCycleEffect(() => {
     const api =
       typeof window === 'undefined'
         ? undefined
         : window.electronAPI?.floatingPanels
-    // Guard on the METHOD, not just the namespace, so an outdated desktop
-    // preload that exposes `floatingPanels` without getVisibleOnAllWorkspaces
-    // degrades to the fallback card instead of throwing inside this effect.
-    if (typeof api?.getVisibleOnAllWorkspaces !== 'function') return
+    // Guard on the full method set, not just the namespace, so an outdated
+    // desktop preload degrades to the fallback card instead of throwing.
+    if (!hasCompleteFloatingPanelsApi(api)) return
 
     let cancelled = false
 
-    void api
-      .getVisibleOnAllWorkspaces()
-      .then((enabled) => {
-        if (cancelled) return
-        setVisibleOnAllWorkspaces(enabled)
-      })
+    void Promise.all([
+      api.getVisibleOnAllWorkspaces(),
+      api.getFloatingNavigatorAlwaysOnTop(),
+      api.getBrainDumpAlwaysOnTop(),
+    ])
+      .then(
+        ([
+          visibleOnAllWorkspaces,
+          floatingAlwaysOnTop,
+          brainDumpAlwaysOnTop,
+        ]) => {
+          if (cancelled) return
+          setValues({
+            visibleOnAllWorkspaces,
+            floatingAlwaysOnTop,
+            brainDumpAlwaysOnTop,
+          })
+        },
+      )
       .catch((loadError: unknown) => {
         log.error('Failed to load floating window settings:', loadError)
         if (!cancelled) {
@@ -89,37 +159,41 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
   }, [])
 
   /**
-   * Persists and applies the desktop-following switch.
+   * Optimistically toggles one preference, persists it, and rolls back on error.
    *
-   * @param next - true keeps floating panels visible across macOS desktops
-   * @returns Promise that resolves once the main process confirms the change
+   * @param key - Which preference the switch controls
+   * @param next - The requested value
+   * @returns Promise that resolves once the main process confirms or rejects
    */
-  const handleVisibleOnAllWorkspacesChange = useCallback(
-    async (next: boolean): Promise<void> => {
-      const previous = visibleOnAllWorkspaces
-      setVisibleOnAllWorkspaces(next)
-      setIsSaving(true)
+  const applyPreference = useCallback(
+    async (key: PreferenceKey, next: boolean): Promise<void> => {
+      const api = window.electronAPI?.floatingPanels
+      // If the preload bridge disappears, do nothing rather than show an
+      // un-persisted value.
+      if (!api) return
+
+      const previous = values[key]
+      setValues((current) => ({ ...current, [key]: next }))
+      setSavingKeys((current) => new Set(current).add(key))
       setError(null)
 
       try {
-        const api = window.electronAPI?.floatingPanels
-        // If the preload bridge disappears, rollback instead of showing a saved
-        // value that the main process never applied.
-        if (!api) {
-          throw new Error('Electron floating panels API is not available')
-        }
-
-        const applied = await api.setVisibleOnAllWorkspaces(next)
-        setVisibleOnAllWorkspaces(applied)
+        const applied = await PREFERENCE_SETTERS[key](api, next)
+        setValues((current) => ({ ...current, [key]: applied }))
       } catch (saveError: unknown) {
         log.error('Failed to update floating window settings:', saveError)
-        setVisibleOnAllWorkspaces(previous)
+        // Roll back to the value before the optimistic flip.
+        setValues((current) => ({ ...current, [key]: previous }))
         setError('Failed to update floating window settings')
       } finally {
-        setIsSaving(false)
+        setSavingKeys((current) => {
+          const updated = new Set(current)
+          updated.delete(key)
+          return updated
+        })
       }
     },
-    [visibleOnAllWorkspaces],
+    [values],
   )
 
   if (hasMounted && !window.electronAPI?.floatingPanels) {
@@ -133,12 +207,11 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
     )
   }
 
-  // Outdated desktop app: the floatingPanels bridge exists but predates
-  // getVisibleOnAllWorkspaces. Invite an update instead of crashing the page.
+  // Outdated desktop app: the floatingPanels bridge exists but predates one of
+  // the methods this card needs. Invite an update instead of crashing the page.
   if (
     hasMounted &&
-    typeof window.electronAPI?.floatingPanels?.getVisibleOnAllWorkspaces !==
-      'function'
+    !hasCompleteFloatingPanelsApi(window.electronAPI?.floatingPanels)
   ) {
     return (
       <SettingsStateCard
@@ -183,31 +256,110 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <Label htmlFor={desktopTrackingId} className="text-sm font-medium">
-              Show on all Mac desktops
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Keep both panels visible while switching Spaces, including
-              fullscreen Spaces.
-            </p>
-          </div>
-          <Switch
-            id={desktopTrackingId}
-            checked={visibleOnAllWorkspaces}
-            disabled={!isMac || isSaving}
-            onCheckedChange={handleVisibleOnAllWorkspacesChange}
-          />
-        </div>
+        <FloatingToggleRow
+          switchId={desktopTrackingId}
+          optionKey="visibleOnAllWorkspaces"
+          label="Show on all Mac desktops"
+          description="Keep both panels visible while switching Spaces, including fullscreen Spaces."
+          checked={values.visibleOnAllWorkspaces}
+          disabled={!isMac || savingKeys.has('visibleOnAllWorkspaces')}
+          onToggleAction={applyPreference}
+        />
 
         {!isMac && (
           <p className="text-xs text-muted-foreground">
             This option only applies on macOS.
           </p>
         )}
+
+        {/* Keep-on-top group: per-window pinning, default on for Floating only. */}
+        <div className="space-y-3 border-t pt-4">
+          <div className="space-y-0.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Keep on top
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Pin a panel above your other windows so it stays visible.
+            </p>
+          </div>
+
+          <FloatingToggleRow
+            switchId={floatingPinId}
+            optionKey="floatingAlwaysOnTop"
+            label="Floating Navigator"
+            checked={values.floatingAlwaysOnTop}
+            disabled={savingKeys.has('floatingAlwaysOnTop')}
+            onToggleAction={applyPreference}
+          />
+
+          <FloatingToggleRow
+            switchId={brainDumpPinId}
+            optionKey="brainDumpAlwaysOnTop"
+            label="BrainDump"
+            checked={values.brainDumpAlwaysOnTop}
+            disabled={savingKeys.has('brainDumpAlwaysOnTop')}
+            onToggleAction={applyPreference}
+          />
+        </div>
       </CardContent>
     </Card>
+  )
+})
+
+interface FloatingToggleRowProps {
+  switchId: string
+  optionKey: PreferenceKey
+  label: string
+  /** Optional helper copy under the label; omitted for the compact pin rows. */
+  description?: string
+  checked: boolean
+  disabled?: boolean
+  onToggleAction: (key: PreferenceKey, next: boolean) => Promise<void>
+}
+
+/**
+ * One labeled toggle row in the floating-windows card. Extracted so its
+ * `onCheckedChange` can be a stable `useCallback` keyed by `optionKey` — an
+ * inline arrow in the parent would allocate a fresh handler every render.
+ *
+ * @param props - Row props (ids, copy, current state, and the keyed parent handler)
+ * @returns A label/description paired with its toggle switch
+ */
+const FloatingToggleRow = memo(function FloatingToggleRow({
+  switchId,
+  optionKey,
+  label,
+  description,
+  checked,
+  disabled,
+  onToggleAction,
+}: FloatingToggleRowProps): ReactElement {
+  // Bridge Radix's (checked) callback to the keyed parent handler; `void`
+  // discards the returned promise so this stays a plain void event handler.
+  const handleCheckedChange = useCallback(
+    (next: boolean): void => {
+      void onToggleAction(optionKey, next)
+    },
+    [onToggleAction, optionKey],
+  )
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="space-y-0.5">
+        <Label htmlFor={switchId} className="text-sm font-medium">
+          {label}
+        </Label>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <Switch
+        id={switchId}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={handleCheckedChange}
+      />
+    </div>
   )
 })
 

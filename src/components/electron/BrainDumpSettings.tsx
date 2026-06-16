@@ -279,8 +279,8 @@ export const BrainDumpSettings = memo(function BrainDumpSettings({
           BrainDump Note
         </CardTitle>
         <CardDescription>
-          A frameless, always-on-top scratchpad for the active category. Checked
-          items become Completed entries with a 5-second undo window.
+          A frameless scratchpad for the active category. Checked items become
+          Completed entries with a 5-second undo window.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

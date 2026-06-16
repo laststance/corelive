@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { isFloatingNavigatorEnvironment } from '@/electron/utils/electron-client'
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { COLOR_DOT_CLASSES } from '@/lib/category-colors'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
@@ -517,6 +518,26 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
       }
     }
   }, [])
+
+  // Seed the pin button from the window's real state on mount. The button no
+  // longer assumes the window launched pinned: the always-on-top preference now
+  // survives relaunch, so a user who turned it off must see the button reflect
+  // that. T2-minimal — initialize only; no live main→renderer event sync.
+  useInitialEffect(() => {
+    if (!isFloatingNavigatorEnvironment()) return
+    let cancelled = false
+    void window
+      .floatingNavigatorAPI!.window.isAlwaysOnTop()
+      .then((current) => {
+        if (!cancelled) setIsAlwaysOnTop(current)
+      })
+      .catch((error: unknown) => {
+        log.error('Failed to read always-on-top state:', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  })
 
   const handleFocusMainWindow = useCallback(async () => {
     if (isFloatingNavigatorEnvironment()) {
