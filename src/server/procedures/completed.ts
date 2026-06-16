@@ -11,6 +11,8 @@ import { toLocalDayKey } from '@/lib/toLocalDayKey'
 import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
 import {
+  CompletedJournalInputSchema,
+  CompletedJournalResponseSchema,
   CompletedSchema,
   CreateCompletedSchema,
   CreateManyCompletedResponseSchema,
@@ -236,6 +238,142 @@ export const getDayDetail = authMiddleware
       log.error('Error in getDayDetail:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch day detail',
+        cause: error,
+      })
+    }
+  })
+
+/**
+ * Returns one newest-first page of the permanent completion journal — the union
+ * of completed Todos and `archived:false` Completed rows for the user, the same
+ * stream the heatmap aggregates but flattened to individual rows with DB-level
+ * pagination. Powers the home "Completed Tasks" list (CompletedTodos), now a
+ * permanent win journal spanning all four completion routes (main app, floating
+ * window, paste-import, braindump).
+ *
+ * Pagination is done in SQL (`UNION ALL` + `ORDER BY completed_at DESC` +
+ * `LIMIT/OFFSET`) rather than fetching the whole history and slicing in JS: the
+ * journal is unbounded (no date range, unlike the heatmap's window), so a
+ * multi-year user would otherwise transfer their entire completion history on
+ * every page fetch and every refetch (TanStack refetches all loaded pages on
+ * invalidation). Each request is O(limit). The UNION's filter/coalesce
+ * semantics mirror {@link fetchCompletedEntries} (Todo → `completed=true`,
+ * `completedAt ?? updatedAt`; Completed → `archived=false`, `completedAt ??
+ * createdAt`); a unit test asserts the two agree so the journal and the heatmap
+ * can never disagree about what counts as a completion. `COUNT(*)` is cast
+ * `::int` so it returns a JS number, not the pg driver adapter's native bigint.
+ *
+ * @param input.limit - Page size (1-100, default 20)
+ * @param input.offset - Rows to skip (default 0)
+ * @returns `{ entries, total, hasMore, nextOffset }` — entries newest-first,
+ *   each tagged with its `source` ('todo' | 'completed')
+ * @example
+ * journal({ limit: 20, offset: 0 })
+ * // => { entries: [{ source: 'todo', id: 12, title: 'ship', completedAt: Date, category: {…} }], total: 462, hasMore: true, nextOffset: 20 }
+ */
+export const getJournal = authMiddleware
+  .input(CompletedJournalInputSchema)
+  .output(CompletedJournalResponseSchema)
+  .handler(async ({ input, context }) => {
+    try {
+      const { limit, offset } = input
+      const { user } = context
+
+      // Raw UNION row shape. Int4 columns (id, category_id) arrive as numbers
+      // and the timestamp as a Date; the COUNT is cast `::int` in SQL so it is a
+      // number, not the driver adapter's native bigint.
+      type JournalRow = {
+        source: 'todo' | 'completed'
+        id: number
+        title: string
+        completed_at: Date
+        category_id: number | null
+        category_name: string | null
+        category_color: string | null
+      }
+
+      // Two reads in parallel: the page, and the total over the same UNION.
+      // `${user.id}` is auto-parameterized by the tagged template (no injection).
+      const [rows, countRows] = await Promise.all([
+        prisma.$queryRaw<JournalRow[]>`
+          SELECT
+            m.source,
+            m.id,
+            m.title,
+            m.completed_at,
+            c.id AS category_id,
+            c.name AS category_name,
+            c.color AS category_color
+          FROM (
+            SELECT
+              'todo'::text AS source,
+              t.id,
+              t.text AS title,
+              COALESCE(t."completedAt", t."updatedAt") AS completed_at,
+              t."categoryId" AS category_id
+            FROM "Todo" t
+            WHERE t."userId" = ${user.id} AND t.completed = true
+            UNION ALL
+            SELECT
+              'completed'::text AS source,
+              cp.id,
+              cp.title,
+              COALESCE(cp."completedAt", cp."createdAt") AS completed_at,
+              cp."categoryId" AS category_id
+            FROM "Completed" cp
+            WHERE cp."userId" = ${user.id} AND cp.archived = false
+          ) m
+          LEFT JOIN "Category" c ON c.id = m.category_id
+          ORDER BY m.completed_at DESC, m.source ASC, m.id ASC
+          LIMIT ${limit} OFFSET ${offset}
+        `,
+        prisma.$queryRaw<{ total: number }[]>`
+          SELECT COUNT(*)::int AS total
+          FROM (
+            SELECT t.id
+            FROM "Todo" t
+            WHERE t."userId" = ${user.id} AND t.completed = true
+            UNION ALL
+            SELECT cp.id
+            FROM "Completed" cp
+            WHERE cp."userId" = ${user.id} AND cp.archived = false
+          ) m
+        `,
+      ])
+
+      const total = countRows[0]?.total ?? 0
+
+      // Coalesce the joined category columns back into the nested shape the
+      // entry schema (DayDetailTaskSchema) expects. categoryId is a required FK
+      // on both tables, so a non-null category_id always joins a row — the null
+      // branch is defensive (the schema permits a null category).
+      const entries = rows.map((row) => ({
+        source: row.source,
+        id: row.id,
+        title: row.title,
+        completedAt: row.completed_at,
+        category:
+          row.category_id !== null
+            ? {
+                id: row.category_id,
+                name: row.category_name ?? '',
+                color: row.category_color ?? 'blue',
+              }
+            : null,
+      }))
+
+      const hasMore = offset + entries.length < total
+
+      return {
+        entries,
+        total,
+        hasMore,
+        nextOffset: hasMore ? offset + limit : undefined,
+      }
+    } catch (error) {
+      log.error('Error in getJournal:', error)
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to fetch completion journal',
         cause: error,
       })
     }

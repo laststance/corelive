@@ -1,15 +1,18 @@
 'use client'
 
-import type { InfiniteData } from '@tanstack/react-query'
+import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback } from 'react'
 import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { clearedAffirmation } from '@/lib/clearedAffirmation'
-import { TODO_DELETE_UNDO_WINDOW_MS } from '@/lib/constants/todo'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
+import type { CategoryWithCount } from '@/server/schemas/category'
+import type {
+  CompletedJournalResponse,
+  DayDetailTask,
+} from '@/server/schemas/completed'
 
 /**
  * Todo item structure from server.
@@ -23,6 +26,8 @@ interface Todo {
   userId: number
   createdAt: Date
   updatedAt: Date
+  // Mirrors TodoSchema.completedAt — null while the todo is still pending.
+  completedAt: Date | null
 }
 
 /**
@@ -33,6 +38,35 @@ interface TodoResponse {
   total: number
   hasMore: boolean
   nextOffset?: number
+}
+
+/**
+ * Resolves a category's display fields from the cached `category.list` so an
+ * optimistic journal entry can render its color dot before the server round-trip.
+ * Exists because the cached Todo carries only `categoryId`, not name/color.
+ * Best-effort: returns null when the category isn't cached yet (the dot renders
+ * neutral until the onSettled refetch fills the real category in).
+ *
+ * @param queryClient - The active react-query client whose cache is read.
+ * @param categoryId - The completed todo's category id to resolve.
+ * @returns The `{ id, name, color }` triple, or null when not cached.
+ * @example
+ * resolveCategoryFromCache(queryClient, 3) // => { id: 3, name: 'Health', color: 'green' }
+ * resolveCategoryFromCache(queryClient, 99) // => null (not in cache)
+ */
+function resolveCategoryFromCache(
+  queryClient: QueryClient,
+  categoryId: number,
+): DayDetailTask['category'] {
+  // Partial-match every cached category.list query (input varies by caller).
+  const categoryQueries = queryClient.getQueriesData<{
+    categories: CategoryWithCount[]
+  }>({ queryKey: orpc.category.list.key() })
+  for (const [, data] of categoryQueries) {
+    const found = data?.categories.find((c) => c.id === categoryId)
+    if (found) return { id: found.id, name: found.name, color: found.color }
+  }
+  return null
 }
 
 /**
@@ -81,6 +115,11 @@ export function useTodoMutations(
     },
   }).queryKey
   const completedBaseKey = orpc.todo.list.key({ input: { completed: true } })
+  // journalBaseKey: partial match for the permanent completion journal
+  // (useInfiniteQuery in CompletedTodos). The toggle writes optimistically here
+  // too so a Main-window completion lands in the Completed Tasks list instantly —
+  // CompletedTodos reads completed.journal, NOT the completed todo.list above.
+  const journalBaseKey = orpc.completed.journal.key()
   // ============================================
   // CREATE MUTATION - Optimistic add to pending
   // ============================================
@@ -103,6 +142,7 @@ export function useTodoMutations(
         userId: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
+        completedAt: null, // Newly created todos are pending.
       }
 
       queryClient.setQueryData<TodoResponse>(pendingKey, (old) => {
@@ -151,31 +191,41 @@ export function useTodoMutations(
           if (!old) return old
           return {
             ...old,
-            todos: old.todos.map((todoRow) =>
-              todoRow.id === id
-                ? {
-                    ...todoRow,
-                    completed: !todoRow.completed,
-                    updatedAt: new Date(),
-                  }
-                : todoRow,
-            ),
+            todos: old.todos.map((todoRow) => {
+              if (todoRow.id !== id) return todoRow
+              // Keep completedAt consistent with the flip so no cache consumer
+              // ever sees the impossible completed:true/completedAt:null pair.
+              const nextCompleted = !todoRow.completed
+              return {
+                ...todoRow,
+                completed: nextCompleted,
+                completedAt: nextCompleted ? new Date() : null,
+                updatedAt: new Date(),
+              }
+            }),
           }
         })
         return {
           previousActive,
           previousPending: undefined,
           previousCompletedQueries: undefined,
+          previousJournalQueries: undefined,
         }
       }
 
       await queryClient.cancelQueries({ queryKey: completedBaseKey })
+      await queryClient.cancelQueries({ queryKey: journalBaseKey })
 
       const previousPending = queryClient.getQueryData<TodoResponse>(pendingKey)
       // Get all completed queries (partial match) for snapshot
       const previousCompletedQueries = queryClient.getQueriesData<
         InfiniteData<TodoResponse>
       >({ queryKey: completedBaseKey })
+      // Snapshot the journal queries too so onError rolls back the optimistic
+      // win insert/remove below.
+      const previousJournalQueries = queryClient.getQueriesData<
+        InfiniteData<CompletedJournalResponse>
+      >({ queryKey: journalBaseKey })
 
       // Find todo in pending list
       const todoInPending = previousPending?.todos.find((t) => t.id === id)
@@ -195,6 +245,9 @@ export function useTodoMutations(
         const toggledTodo = {
           ...todoInPending,
           completed: true,
+          // Stamp completedAt alongside the flip — a completed todo with a null
+          // completedAt is an impossible state any timestamp consumer can misread.
+          completedAt: new Date(),
           updatedAt: new Date(),
         }
         queryClient.setQueriesData<InfiniteData<TodoResponse>>(
@@ -214,7 +267,66 @@ export function useTodoMutations(
             }
           },
         )
+
+        // Mirror the win into the permanent journal so it appears in the
+        // Completed Tasks list instantly (Main renders completed.journal, not the
+        // completed todo.list above). source:'todo' + the real id so the
+        // onSettled refetch reconciles to the same row instead of duplicating it.
+        const optimisticJournalEntry: DayDetailTask = {
+          source: 'todo',
+          id,
+          title: todoInPending.text,
+          completedAt: new Date(),
+          category: resolveCategoryFromCache(
+            queryClient,
+            todoInPending.categoryId,
+          ),
+        }
+        queryClient.setQueriesData<InfiniteData<CompletedJournalResponse>>(
+          { queryKey: journalBaseKey },
+          (old) => {
+            if (!old || !old.pages[0]) return old
+            return {
+              ...old,
+              pages: [
+                {
+                  ...old.pages[0],
+                  entries: [optimisticJournalEntry, ...old.pages[0].entries],
+                  total: old.pages[0].total + 1,
+                },
+                ...old.pages.slice(1),
+              ],
+            }
+          },
+        )
       } else {
+        // Un-completing removes the win from the permanent journal. This runs
+        // regardless of whether the completed todo.list cache is populated in
+        // this window — the Main window renders ONLY the journal, so we cannot
+        // rely on todoInCompleted below. Presence-guarded so a miss is a no-op.
+        queryClient.setQueriesData<InfiniteData<CompletedJournalResponse>>(
+          { queryKey: journalBaseKey },
+          (old) => {
+            if (!old) return old
+            return {
+              ...old,
+              pages: old.pages.map((page) => {
+                const hadEntry = page.entries.some(
+                  (entry) => entry.source === 'todo' && entry.id === id,
+                )
+                if (!hadEntry) return page
+                return {
+                  ...page,
+                  entries: page.entries.filter(
+                    (entry) => !(entry.source === 'todo' && entry.id === id),
+                  ),
+                  total: page.total - 1,
+                }
+              }),
+            }
+          },
+        )
+
         // Moving: completed → pending (find in any completed query)
         let todoInCompleted: Todo | undefined
         for (const [, data] of previousCompletedQueries) {
@@ -252,6 +364,9 @@ export function useTodoMutations(
             const toggledTodoToPending = {
               ...todoInCompleted!,
               completed: false,
+              // Clear completedAt on un-complete so the row doesn't carry a
+              // stale completion timestamp while marked incomplete.
+              completedAt: null,
               updatedAt: new Date(),
             }
             return {
@@ -267,6 +382,7 @@ export function useTodoMutations(
         previousActive: undefined,
         previousPending,
         previousCompletedQueries,
+        previousJournalQueries,
       }
     },
     onError: (_err, _input, context) => {
@@ -288,10 +404,19 @@ export function useTodoMutations(
           }
         }
       }
+      // Restore the journal queries from snapshot (rolls back the win insert/remove).
+      if (context?.previousJournalQueries) {
+        for (const [queryKey, data] of context.previousJournalQueries) {
+          if (data) {
+            queryClient.setQueryData(queryKey, data)
+          }
+        }
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      queryClient.invalidateQueries({ queryKey: journalBaseKey })
       // Refresh category counts (todo moved between pending/completed)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       // Toggling completed↔incomplete changes what's in the skill tree
@@ -376,6 +501,10 @@ export function useTodoMutations(
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // Deleting a completed todo archives it into Completed (archived:false)
+      // before removing the Todo row, so the journal entry migrates from
+      // todo-source to completed-source — refetch to reflect the swap.
+      queryClient.invalidateQueries({ queryKey: journalBaseKey })
       // Refresh category counts (todo was deleted from a category)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       // Deleting a todo removes it from the skill tree pool and orphans
@@ -457,6 +586,8 @@ export function useTodoMutations(
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // A completed todo's edited text/category must refresh its journal row.
+      queryClient.invalidateQueries({ queryKey: journalBaseKey })
       // Refresh category counts (todo may have changed category)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       // Updating the text of a completed todo changes its label in the
@@ -535,6 +666,10 @@ export function useTodoMutations(
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: pendingKey })
       queryClient.invalidateQueries({ queryKey: completedBaseKey })
+      // Clear archives each completion into Completed (archived:false) before
+      // removing the Todo, so the journal keeps the wins as completed-source
+      // rows (permanent journal, D3) — refetch to reflect the migration.
+      queryClient.invalidateQueries({ queryKey: journalBaseKey })
       // Refresh category counts (completed todos were cleared)
       queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
       // clearCompleted wipes every completed todo, which empties the pool
@@ -607,67 +742,6 @@ export function useTodoMutations(
     },
   })
 
-  // ============================================
-  // DELETE-COMPLETED-WITH-UNDO - Deferred-commit per-item delete
-  // ============================================
-  // Used by the Completed section's per-row trash (D3). Optimistically removes
-  // the row at once, shows a Sonner Undo toast, and only commits the real
-  // archive-then-delete (via deleteMutation → the server archives the
-  // completion, so the heatmap day survives) when the undo window closes. Undo
-  // is a pure client-side restore — no server call is made. Separate from
-  // deleteMutation, which is used directly for PENDING rows (no undo needed,
-  // no heatmap day to lose).
-  const deleteCompletedWithUndo = useCallback(
-    (id: number) => {
-      // Snapshot every completed query so Undo can restore the exact prior state.
-      const completedSnapshot = queryClient.getQueriesData<
-        InfiniteData<TodoResponse>
-      >({ queryKey: completedBaseKey })
-
-      // Optimistically remove the row from all completed queries immediately.
-      queryClient.setQueriesData<InfiniteData<TodoResponse>>(
-        { queryKey: completedBaseKey },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              todos: page.todos.filter((t) => t.id !== id),
-              total: page.total - 1,
-            })),
-          }
-        },
-      )
-
-      // Commit the server-side archive+delete only when the window closes; Undo
-      // flips this guard so the scheduled commit (and its timer) become a no-op.
-      let isCancelled = false
-      const commit = () => {
-        if (isCancelled) return
-        isCancelled = true
-        deleteMutation.mutate({ id })
-      }
-      const undoTimer = setTimeout(commit, TODO_DELETE_UNDO_WINDOW_MS)
-
-      toast('Removed from completed', {
-        duration: TODO_DELETE_UNDO_WINDOW_MS,
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            clearTimeout(undoTimer)
-            isCancelled = true
-            // Restore the snapshot: the completed row reappears in place.
-            for (const [queryKey, data] of completedSnapshot) {
-              if (data) queryClient.setQueryData(queryKey, data)
-            }
-          },
-        },
-      })
-    },
-    [queryClient, completedBaseKey, deleteMutation],
-  )
-
   return {
     createMutation,
     toggleMutation,
@@ -675,6 +749,5 @@ export function useTodoMutations(
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
-    deleteCompletedWithUndo,
   }
 }

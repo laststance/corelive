@@ -19,6 +19,16 @@ export const TodoSchema = z.object({
   updatedAt: z
     .union([z.date(), z.string()])
     .transform((val) => (typeof val === 'string' ? new Date(val) : val)),
+  // Semantic completion day (Prisma `Todo.completedAt`, nullable). Stamped by
+  // `toggleTodo` on each false→true transition; null while a todo is pending or
+  // for any pre-backfill row. Surfaced here so the active list (retain mode) and
+  // the optimistic completion path can read the real completion day instead of
+  // the edit-drifting `updatedAt`. `.nullable()` short-circuits null before the
+  // date/string transform runs.
+  completedAt: z
+    .union([z.date(), z.string()])
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+    .nullable(),
 })
 
 export const CreateTodoSchema = TodoSchema.pick({

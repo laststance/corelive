@@ -3,6 +3,9 @@ import 'dotenv/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 
+// Shared seeded-user identity (single source of truth with prisma/seed.dev.ts).
+import { SEED_USER_CLERK_ID, SEED_USER_EMAIL } from './seedUser'
+
 const adapter = new PrismaPg({
   connectionString: process.env.POSTGRES_PRISMA_URL!,
 })
@@ -21,11 +24,11 @@ const prisma = new PrismaClient({ adapter })
  */
 async function main(): Promise<void> {
   const user = await prisma.user.upsert({
-    where: { clerkId: 'user_32MtPR8Z8ywubMj2jwG9DdSbzPq' },
+    where: { clerkId: SEED_USER_CLERK_ID },
     update: {},
     create: {
-      clerkId: 'user_32MtPR8Z8ywubMj2jwG9DdSbzPq',
-      email: 'test@test.com',
+      clerkId: SEED_USER_CLERK_ID,
+      email: SEED_USER_EMAIL,
       name: 'test01',
       bio: 'Test account for development and E2E testing',
     },

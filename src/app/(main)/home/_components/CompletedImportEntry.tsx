@@ -21,19 +21,16 @@ import { broadcastTodoSync } from '@/lib/todo-sync-channel'
  * Subscribes to the cross-window open-intent so the Floating Navigator's Import
  * (D7) can open this dialog after focusing the main window.
  *
- * @param props.variant - `'button'` for the toolbar affordance (default),
- *   `'inline'` for the empty-state discoverability surface.
- * @returns The Completed Import button + dialog + undo banner.
+ * Its trigger is always labelled "Import past wins" — a name unique on /home so
+ * it never collides with the pending column's "Import" toolbar button (two
+ * buttons sharing the exact accessible name "Import" is an a11y ambiguity), and
+ * stable across the Completed card's empty AND populated states.
+ *
+ * @returns The Completed Import button ("Import past wins") + dialog + undo banner.
  * @example
  * <CompletedImportEntry />
- * @example
- * <CompletedImportEntry variant="inline" />
  */
-export const CompletedImportEntry = memo(function CompletedImportEntry({
-  variant = 'button',
-}: {
-  variant?: 'button' | 'inline'
-}) {
+export const CompletedImportEntry = memo(function CompletedImportEntry() {
   const queryClient = useQueryClient()
   const isClerkQueryReady = useClerkQueryReady()
   const [open, setOpen] = useState(false)
@@ -62,11 +59,15 @@ export const CompletedImportEntry = memo(function CompletedImportEntry({
   }, [])
 
   // Invalidate everything the Completed import touches: heatmap (fill), the
-  // day-detail dialog cache, and the todo/completed lists; broadcast so the
-  // floating navigator + braindump windows stay in lockstep.
+  // day-detail dialog cache, the journal (the Completed Tasks list — imports
+  // write the Completed table it reads), and the todo list; broadcast so the
+  // floating navigator + braindump windows stay in lockstep. The journal key is
+  // invalidated DIRECTLY here, not via broadcast, because the importing window
+  // never receives its own BroadcastChannel message.
   const invalidateCompleted = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
     queryClient.invalidateQueries({ queryKey: orpc.completed.dayDetail.key() })
+    queryClient.invalidateQueries({ queryKey: orpc.completed.journal.key() })
     queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
     broadcastTodoSync()
   }, [queryClient])
@@ -80,18 +81,12 @@ export const CompletedImportEntry = memo(function CompletedImportEntry({
     [invalidateCompleted],
   )
 
-  const trigger =
-    variant === 'inline' ? (
-      <Button type="button" variant="outline" size="sm">
-        <ClipboardPaste className="size-4" aria-hidden="true" />
-        Import past wins
-      </Button>
-    ) : (
-      <Button type="button" variant="outline" size="sm">
-        <ClipboardPaste className="size-4" aria-hidden="true" />
-        Import
-      </Button>
-    )
+  const trigger = (
+    <Button type="button" variant="outline" size="sm">
+      <ClipboardPaste className="size-4" aria-hidden="true" />
+      Import past wins
+    </Button>
+  )
 
   return (
     <div className="flex flex-col gap-2">

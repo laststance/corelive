@@ -92,7 +92,6 @@ export const TodoList = memo(function TodoList() {
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
-    deleteCompletedWithUndo,
   } = useTodoMutations(selectedCategoryId, isRetaining)
 
   // Earned-beat sound cues (opt-in, default OFF) fired on the create + clear
@@ -224,23 +223,6 @@ export const TodoList = memo(function TodoList() {
       }
     },
     [deleteMutation],
-  )
-
-  /**
-   * Deletes a COMPLETED todo with a 5s Undo toast (D3). The row is removed
-   * optimistically; the server archive-then-delete commits only when the undo
-   * window closes, so the heatmap day is preserved and Undo fully restores it.
-   * @param id - Todo identifier as a string.
-   * @example deleteCompletedTodo('42')
-   */
-  const deleteCompletedTodo = useCallback(
-    (id: string) => {
-      const todoId = parseInt(id, DECIMAL_RADIX)
-      if (!isNaN(todoId)) {
-        deleteCompletedWithUndo(todoId)
-      }
-    },
-    [deleteCompletedWithUndo],
   )
 
   /**
@@ -470,14 +452,19 @@ export const TodoList = memo(function TodoList() {
   useCycleEffect(() => {
     // Cross-window sync: BrainDump / Floating Navigator completions broadcast
     // via the BroadcastChannel and also write to the Completed table, so the
-    // Home heatmap + day-detail caches need invalidation alongside the todo
-    // list. Without these two extra keys, completing a task in BrainDump
-    // leaves the main heatmap stale until reload (Codex review HIGH).
+    // Home heatmap + day-detail + journal caches need invalidation alongside the
+    // todo list. The journal key is what surfaces a cross-window completion in
+    // the Completed Tasks list (only the main window renders it, and a window
+    // never receives its own broadcast). Without these keys, completing a task
+    // in BrainDump leaves the main heatmap + journal stale until reload.
     return subscribeToTodoSync(() => {
       queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
       queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
       queryClient.invalidateQueries({
         queryKey: orpc.completed.dayDetail.key(),
+      })
+      queryClient.invalidateQueries({
+        queryKey: orpc.completed.journal.key(),
       })
     })
   }, [queryClient])
@@ -616,13 +603,7 @@ export const TodoList = memo(function TodoList() {
         />
         {/* In 居残りモード completed todos live in the active list above, so the
             separate Completed section is suppressed (no double display). */}
-        {!isRetaining && (
-          <CompletedTodos
-            onDelete={deleteCompletedTodo}
-            onClearCompleted={deleteCompleted}
-            onToggleComplete={toggleComplete}
-          />
-        )}
+        {!isRetaining && <CompletedTodos onToggleComplete={toggleComplete} />}
       </div>
 
       {/* Retain-mode Clear confirmation — Clear is the only path to remove

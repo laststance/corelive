@@ -89,81 +89,11 @@ test.describe('QA Fixes Verification', () => {
     })
   })
 
-  test.describe('P2: Clear All confirmation dialog', () => {
-    test('should show confirmation dialog before clearing completed todos', async ({
-      page,
-    }) => {
-      // Arrange — seed and complete a todo so "Clear all" has something to act on
-      const todoText = 'Clear dialog test todo'
-      const input = page.getByPlaceholder('Enter a new todo...')
-      await input.fill(todoText)
-      await input.press('Enter')
-      const todoCheckbox = page.getByRole('checkbox', { name: todoText })
-      await expect(todoCheckbox).toBeVisible()
-      await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
-        timeout: 5000,
-      })
-      await todoCheckbox.click()
-      await expect(page.getByRole('checkbox', { name: todoText })).toBeChecked({
-        timeout: 5000,
-      })
-
-      // Act — click "Clear all"
-      const clearButton = page.getByRole('button', { name: 'Clear all' })
-      await expect(clearButton).toBeVisible()
-      await clearButton.click()
-
-      // Assert — confirmation dialog appears with the right copy. Clearing now
-      // ARCHIVES (the heatmap day survives), so the dialog reassures rather than
-      // warning "cannot be undone" — assert the on-brand "stays counted on your
-      // heatmap" reassurance instead. (Substring match avoids the dynamic count
-      // clause and the curly/straight apostrophe in "doesn't erase the record".)
-      const dialog = page.getByRole('alertdialog')
-      await expect(dialog).toBeVisible()
-      await expect(dialog.getByText('Clear all completed tasks?')).toBeVisible()
-      await expect(
-        dialog.getByText('They stay counted on your heatmap', {
-          exact: false,
-        }),
-      ).toBeVisible()
-
-      // Act 2 — cancel the dialog
-      await dialog.getByRole('button', { name: 'Cancel' }).click()
-
-      // Assert 2 — dialog closes and the completed todo is preserved
-      await expect(dialog).not.toBeVisible()
-      await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible()
-    })
-
-    test('should delete completed todos when confirmed', async ({ page }) => {
-      // Arrange — seed and complete a todo
-      const todoText = 'Confirm clear test todo'
-      const input = page.getByPlaceholder('Enter a new todo...')
-      await input.fill(todoText)
-      await input.press('Enter')
-      const todoCheckbox = page.getByRole('checkbox', { name: todoText })
-      await expect(todoCheckbox).toBeVisible()
-      await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
-        timeout: 5000,
-      })
-      await todoCheckbox.click()
-      await expect(page.getByRole('checkbox', { name: todoText })).toBeChecked({
-        timeout: 5000,
-      })
-
-      // Act — open Clear All dialog and confirm
-      await page.getByRole('button', { name: 'Clear all' }).click()
-      const dialog = page.getByRole('alertdialog')
-      await expect(dialog).toBeVisible()
-      await dialog.getByRole('button', { name: 'Clear all' }).click()
-
-      // Assert — dialog closes and the completed todo is gone
-      await expect(dialog).not.toBeVisible()
-      await expect(
-        page.getByRole('checkbox', { name: todoText }),
-      ).not.toBeVisible({ timeout: 5000 })
-    })
-  })
+  // NOTE: The "Clear All confirmation dialog" suite was removed when the
+  // Completed Tasks list became a permanent win journal (D3): the per-list
+  // Clear-all and per-item delete affordances were retired, so there is no
+  // longer a "Clear all" button on the completed list to confirm. The retain-
+  // mode (居残りモード) bulk-clear is a separate flow with its own dialog.
 
   test.describe('P2: Toaster is mounted', () => {
     test('should have toaster container in the DOM', async ({ page }) => {
