@@ -39,6 +39,9 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
       return { isLoading: false, error: null }
     case 'ERROR':
       return { isLoading: false, error: action.error }
+    // Intentionally unwired in Phase 1 (nothing dispatches RESET yet) — kept as
+    // the recovery scaffold; see the success branch in handleGoogleClick for the
+    // abandonment limitation it will eventually resolve (T20 UX decision).
     case 'RESET':
       return { isLoading: false, error: null }
     default:
@@ -125,6 +128,15 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
         }
         // On success the system browser opens; the onSuccess/onError events (and
         // the in-place Clerk re-render) take over from here.
+        //
+        // KNOWN Phase-1 limitation: if the user ABANDONS the browser flow (closes
+        // the tab / picks no account), no event fires and the CTA stays disabled
+        // at "Opening browser…" until the window is reopened. Non-regressive — the
+        // Electron main window is still a working sign-in path during Phase 1's
+        // strangler-fig, so this is not a dead-ended user. The recovery mechanism
+        // (dispatch RESET on focus-regain vs. a timeout) is a UX decision to settle
+        // during the T20 packaged native-OAuth QA, where the real deep-link timing
+        // can be observed — it must not be guessed at here.
       } catch {
         dispatch({ type: 'ERROR', error: 'Failed to start authentication' })
       }

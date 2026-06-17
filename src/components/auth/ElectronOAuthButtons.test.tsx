@@ -71,18 +71,27 @@ describe('ElectronOAuthButtons', () => {
     )
 
     // Assert: it starts the native Google flow and reflects the in-flight state
-    // (so the user sees the browser is opening, and can't double-fire it).
+    // (so the user sees the browser is opening).
     expect(start).toHaveBeenCalledWith('google')
-    expect(
-      await screen.findByRole('button', { name: /opening browser/i }),
-    ).toBeDisabled()
+    const openingButton = await screen.findByRole('button', {
+      name: /opening browser/i,
+    })
+    expect(openingButton).toBeDisabled()
+
+    // And it can't be double-fired: a second press on the now-disabled button
+    // starts no second flow (one browser tab, not two).
+    fireEvent.click(openingButton)
+    expect(start).toHaveBeenCalledTimes(1)
   })
 
   it('surfaces a calm error when the native flow fails to start', async () => {
-    // Arrange: the main process reports it could not start the flow.
+    // Arrange: the main process reports it could not start the flow, with a
+    // specific reason. Using a distinct message (not the generic fallback) pins
+    // that we surface the SERVER's reason verbatim — proving this is the
+    // `result.success === false` branch, not the catch-path's hardcoded string.
     plantOAuthBridge({
       success: false,
-      error: 'Failed to start authentication',
+      error: 'No supported browser found',
     })
     render(<ElectronOAuthButtons />)
 
@@ -93,9 +102,7 @@ describe('ElectronOAuthButtons', () => {
 
     // Assert: the failure is announced (role=alert) rather than swallowed, and
     // the button returns to its idle, re-pressable state.
-    const errorMessage = await screen.findByText(
-      /failed to start authentication/i,
-    )
+    const errorMessage = await screen.findByText(/no supported browser found/i)
     expect(errorMessage).toHaveAttribute('role', 'alert')
     expect(
       screen.getByRole('button', { name: /sign in with google/i }),
