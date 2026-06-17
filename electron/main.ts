@@ -1980,9 +1980,11 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  typedHandle('oauth-get-pending-token', () => {
+  typedHandle('oauth-get-pending-token', (event) => {
     const oauth = ensureOAuthManager()
-    return oauth ? oauth.getPendingSignInToken() : null
+    // Pass the requesting window so the PULL releases the one-time ticket only
+    // to the window that STARTED the flow (scoped in getPendingSignInToken).
+    return oauth ? oauth.getPendingSignInToken(event.sender) : null
   })
 
   typedHandle('oauth-clear-pending-token', () => {

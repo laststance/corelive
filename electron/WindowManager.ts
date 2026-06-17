@@ -97,11 +97,11 @@ export class WindowManager {
   // native dialog) instead of leaving a dead window. Reset per fresh window in
   // `createFloatingNavigator`.
   /** Retry count for the current never-succeeded Floating load. */
-  private floatingLoadFailAttempts = 0
+  private floatingLoadFailAttempts: number = 0
   /** True while a retry timer is queued or the recovery dialog is open. */
-  private floatingLoadRecoveryPending = false
+  private floatingLoadRecoveryPending: boolean = false
   /** Latched on the first successful Floating load; after it the renderer owns errors. */
-  private floatingHasLoadedOnce = false
+  private floatingHasLoadedOnce: boolean = false
 
   /** Frameless transparent BrainDump Note panel */
   private brainDumpWindow: BrowserWindow | null
@@ -751,12 +751,19 @@ export class WindowManager {
       this.floatingLoadRecoveryPending = true
       const backoffMs =
         FLOATING_LOAD_RETRY_BASE_MS * this.floatingLoadFailAttempts
+      // Bind the retry to the window that ACTUALLY failed. If it closes and a
+      // fresh Floating window replaces it during the backoff, this stale timer
+      // must not reload (and corrupt the recovery state of) the new window.
+      const retryTarget = target
       setTimeout(() => {
-        this.floatingLoadRecoveryPending = false
-        const retryTarget = this.floatingNavigator
-        if (retryTarget && !retryTarget.isDestroyed()) {
-          retryTarget.webContents.loadURL(this.getPanelUrl('floating'))
+        if (
+          this.floatingNavigator !== retryTarget ||
+          retryTarget.isDestroyed()
+        ) {
+          return
         }
+        this.floatingLoadRecoveryPending = false
+        retryTarget.webContents.loadURL(this.getPanelUrl('floating'))
       }, backoffMs)
       return
     }
@@ -766,6 +773,10 @@ export class WindowManager {
     // macOS, which would itself be the dead window this recovery exists to kill.
     this.floatingLoadRecoveryPending = true
     target.show()
+    // Cancel the armed startup-pill timeout before the dialog: once recovery
+    // commits, the pill's fallback (restoreFromTray → surface main) must not
+    // fire and pop the main window over the Floating recovery.
+    this.dismissStartupPill()
     void this.promptFloatingLoadFailure(target)
   }
 

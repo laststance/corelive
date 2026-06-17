@@ -495,6 +495,56 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(floating.win.close).toHaveBeenCalledTimes(1)
     })
 
+    it('binds the retry timer to the window that failed, not its replacement', () => {
+      // Arrange: a Floating window fails once, scheduling a backed-off reload.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const firstFloating = getWindow(0)
+      fireFloatingLoadFailure(firstFloating)
+
+      // The window closes and a fresh Floating window replaces it before the
+      // backoff fires. createFloatingNavigator() bails while the old reference
+      // is still set, and the harness doesn't replay the window-level `closed`
+      // event, so null the reference (what the real `closed` handler does) and
+      // then create the replacement.
+      ;(
+        windowManager as unknown as { floatingNavigator: unknown }
+      ).floatingNavigator = null
+      windowManager.createFloatingNavigator()
+      const secondFloating = getWindow(1)
+
+      // Act: the stale timer from the FIRST window fires.
+      vi.runOnlyPendingTimers()
+
+      // Assert: it does not reload the replacement — a stale retry must never
+      // corrupt the recovery state of a window that never failed.
+      expect(secondFloating.win.webContents.loadURL).not.toHaveBeenCalled()
+    })
+
+    it('dismisses the armed startup pill when it gives up and shows the recovery dialog', async () => {
+      // Arrange: a Floating window whose load keeps failing.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const floating = getWindow(0)
+      const dismissStartupPill = vi.spyOn(windowManager, 'dismissStartupPill')
+
+      // Act: exhaust the retries (3) so the 4th failure opens the dialog.
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+      dismissStartupPill.mockClear() // isolate the exhaustion-path call
+      fireFloatingLoadFailure(floating)
+      await vi.runOnlyPendingTimersAsync()
+
+      // Assert: the pill's timeout is cancelled when recovery commits, so it
+      // can't later fire restoreFromTray() and pop the main window over the
+      // Floating recovery dialog.
+      expect(dismissStartupPill).toHaveBeenCalledTimes(1)
+    })
+
     it('reloads the panel after a single failure instead of giving up immediately', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)

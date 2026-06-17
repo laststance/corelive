@@ -49,6 +49,13 @@ interface PendingSignInToken {
   token: string
   provider: string
   createdAt: number
+  /**
+   * `webContents.id` of the window that STARTED this flow. The PULL fallback
+   * (`getPendingSignInToken`) releases the one-time ticket only to this window,
+   * so a non-initiating renderer can't consume it first. Undefined when the
+   * flow had no identifiable initiator (legacy / main-window push) → unscoped.
+   */
+  initiatorId?: number
 }
 
 /** OAuth flow result */
@@ -266,7 +273,16 @@ export class OAuthManager {
 
       if (error) {
         log.error('OAuth error:', { error, errorDescription })
-        this.sendOAuthError(errorDescription || error)
+        // Route the failure to the window that STARTED the flow (Phase 1: falls
+        // back to the main renderer) so a floating-initiated sign-in can't hang
+        // forever on "Opening browser…" after a provider denial/error.
+        const initiator = state
+          ? this.pendingStates.get(state)?.initiator
+          : undefined
+        if (state) {
+          this.pendingStates.delete(state)
+        }
+        this.sendOAuthError(errorDescription || error, initiator)
         return { success: false, error: errorDescription || error }
       }
 
@@ -278,8 +294,12 @@ export class OAuthManager {
 
       if (!token) {
         log.error('Missing token in OAuth callback')
+        // `state` is present here (checked above); route to its initiator.
+        const initiator = this.pendingStates.get(state)?.initiator
+        this.pendingStates.delete(state)
         this.sendOAuthError(
           'Invalid OAuth callback: missing authentication token',
+          initiator,
         )
         return { success: false, error: 'Missing token' }
       }
@@ -293,8 +313,12 @@ export class OAuthManager {
 
       if (Date.now() - pendingFlow.createdAt > this.stateTTL) {
         log.error('OAuth state expired')
+        const { initiator } = pendingFlow
         this.pendingStates.delete(state)
-        this.sendOAuthError('OAuth session expired. Please try again.')
+        this.sendOAuthError(
+          'OAuth session expired. Please try again.',
+          initiator,
+        )
         return { success: false, error: 'State expired' }
       }
 
@@ -362,11 +386,15 @@ export class OAuthManager {
       ),
     })
 
-    // PULL store — durable fallback for any window that missed the push.
+    // PULL store — durable fallback for any window that missed the push, scoped
+    // to the initiator so a non-initiating window can't pull the one-time ticket
+    // first (the PUSH below targets the initiator; the PULL must match it).
     this.pendingSignInToken = {
       token,
       provider,
       createdAt: Date.now(),
+      initiatorId:
+        initiator && !initiator.isDestroyed() ? initiator.id : undefined,
     }
     log.debug('[OAuth] Stored pending sign-in token for retrieval')
 
@@ -381,13 +409,33 @@ export class OAuthManager {
   }
 
   /**
-   * Retrieves and clears the pending sign-in token.
+   * Retrieves and clears the pending sign-in token, scoped to the initiator.
    *
-   * @returns The pending token or null
+   * @param requester - The window asking for the ticket. When the stored ticket
+   *   is bound to an initiator, only that window receives it (others get null,
+   *   leaving the ticket intact); an unbound ticket is returned to any caller.
+   * @returns The pending token, or null when absent, expired, or claimed by a
+   *   non-initiator window.
    */
-  getPendingSignInToken(): { token: string; provider: string } | null {
+  getPendingSignInToken(
+    requester?: WebContents,
+  ): { token: string; provider: string } | null {
     if (!this.pendingSignInToken) {
       log.debug('[OAuth] No pending sign-in token')
+      return null
+    }
+
+    // Scope the PULL to the initiator: a ticket bound to a specific window is
+    // released only to that window. A non-initiator pull returns null and
+    // leaves the ticket for the rightful initiator. An unbound ticket
+    // (initiatorId undefined) stays window-agnostic — preserves the Phase-1
+    // main-window flow and any legacy push.
+    const { initiatorId } = this.pendingSignInToken
+    if (
+      initiatorId !== undefined &&
+      (!requester || requester.isDestroyed() || requester.id !== initiatorId)
+    ) {
+      log.debug('[OAuth] Pending sign-in token requested by non-initiator')
       return null
     }
 
@@ -459,11 +507,22 @@ export class OAuthManager {
   }
 
   /**
-   * Sends OAuth error event to renderer.
+   * Sends OAuth error event to the renderer that started the flow.
+   *
+   * Mirrors `sendSignInToken`'s initiator-targeting: routes the failure to the
+   * initiating window when known (so a floating-initiated flow surfaces its own
+   * error instead of hanging), and falls back to the main renderer otherwise
+   * (Phase 1, or callbacks with no identifiable initiator).
    *
    * @param error - Error message
+   * @param initiator - The renderer that started the flow; receives the error
+   *   when present and alive. Omit to broadcast to the main renderer.
    */
-  sendOAuthError(error: string): void {
+  sendOAuthError(error: string, initiator?: WebContents): void {
+    if (initiator && !initiator.isDestroyed()) {
+      typedSend(initiator, 'oauth-error', { error })
+      return
+    }
     this.sendToRenderer('oauth-error', { error })
   }
 
