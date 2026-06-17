@@ -11,6 +11,9 @@
  * @example
  *   pnpm test:electron -- WindowManager.startup-panel
  */
+// The mocked electron `dialog`, asserted on by the DT7 recovery tests (the
+// `vi.mock('electron')` factory below is hoisted above this import by Vitest).
+import { dialog } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
@@ -29,6 +32,7 @@ interface MockBrowserWindow {
   getOpacity: Spy
   setVisibleOnAllWorkspaces: Spy
   loadURL: Spy
+  close: Spy
   on: Spy
   once: Spy
   webContents: {
@@ -74,6 +78,7 @@ vi.mock('electron', () => ({
       loadURL: vi.fn((url: string) => {
         currentUrl = url
       }),
+      close: vi.fn(),
       on: vi.fn(),
       once: vi.fn(),
       webContents: {
@@ -120,6 +125,11 @@ vi.mock('electron', () => ({
     getDisplayNearestPoint: vi.fn(() => ({
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     })),
+  },
+  // DT7 recovery dialog. Defaults to "Close" (response 1) so the exhaustion
+  // path never loops back into a reload unless a test opts into "Retry".
+  dialog: {
+    showMessageBox: vi.fn(async () => ({ response: 1 })),
   },
 }))
 
@@ -242,11 +252,12 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
-  it('surfaces the main window when the panel fails to load (offline/5xx)', () => {
-    // Arrange
+  it('surfaces the main window when a braindump panel fails to load (offline/5xx)', () => {
+    // Arrange: braindump still defers to the main window in Phase 1 (only the
+    // Floating window owns its own load-failure recovery via DT7).
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.createMainWindow(false)
-    windowManager.openStartupPanel('floating')
+    windowManager.openStartupPanel('braindump')
     const mainWindow = getWindow(0)
     const panelWindow = getWindow(1)
 
@@ -256,14 +267,14 @@ describe('WindowManager startup panel nav-watch', () => {
       {},
       -105,
       'ERR_NAME_NOT_RESOLVED',
-      `${SERVER_URL}/floating-navigator`,
+      `${SERVER_URL}/braindump`,
       true,
     )
 
     // Assert: failed panel stays hidden, main is surfaced, fallback recorded.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
     expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
+    expect(windowManager.getStartupAuthFallbacks().has('braindump')).toBe(true)
   })
 
   it('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
@@ -424,5 +435,146 @@ describe('WindowManager startup panel nav-watch', () => {
 
     // Assert: the re-show bails on the destroyed panel instead of reloading it.
     expect(panelWindow.win.webContents.loadURL).not.toHaveBeenCalled()
+  })
+
+  // DT7: the Floating window is the signed-out front door, so a never-loaded
+  // window must self-heal (retry, then a native recovery dialog) instead of
+  // stranding the user on a blank panel. These exercise the recovery machine in
+  // `createFloatingNavigator` plus the asymmetry vs. braindump's surface-main.
+  describe('Floating load-failure recovery (DT7)', () => {
+    // Fake timers so the backoff reload retries can be driven deterministically;
+    // clear any pending timer between cases so a scheduled retry never leaks.
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    })
+
+    /** Fire a real main-frame load failure (net::ERR_NAME_NOT_RESOLVED). */
+    function fireFloatingLoadFailure(panel: CapturedMockWindow): void {
+      panel.fireWebContents(
+        'did-fail-load',
+        {},
+        -105,
+        'ERR_NAME_NOT_RESOLVED',
+        `${SERVER_URL}/floating-navigator`,
+        true,
+      )
+    }
+
+    it('retries the failed load and surfaces a native recovery dialog once retries are exhausted', async () => {
+      // Arrange: a Floating window whose load keeps failing (offline).
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const floating = getWindow(0)
+
+      // Act: each failure schedules one backed-off reload; flush it, then fail
+      // again. FLOATING_LOAD_MAX_RETRIES = 3, so the 4th failure exhausts them.
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers() // retry 1
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers() // retry 2
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers() // retry 3
+      fireFloatingLoadFailure(floating) // exhausted → recovery dialog
+      await vi.runOnlyPendingTimersAsync() // settle the awaited dialog promise
+
+      // Assert: it actively retried 3× (positive recovery, not a dead window),
+      // and on exhaustion it SHOWED the window before opening the native dialog
+      // (a sheet on a hidden window may never render on macOS). The default
+      // "Close" choice then dismisses the window without quitting the app.
+      expect(floating.win.webContents.loadURL).toHaveBeenCalledTimes(3)
+      expect(floating.win.webContents.loadURL).toHaveBeenLastCalledWith(
+        `${SERVER_URL}/floating-navigator`,
+      )
+      expect(floating.win.show).toHaveBeenCalledTimes(1)
+      expect(dialog.showMessageBox).toHaveBeenCalledTimes(1)
+      expect(floating.win.close).toHaveBeenCalledTimes(1)
+    })
+
+    it('reloads the panel after a single failure instead of giving up immediately', () => {
+      // Arrange
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const floating = getWindow(0)
+
+      // Act: one failure, then let the backoff timer fire.
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+
+      // Assert: it reloaded the panel route and did NOT jump straight to the
+      // recovery dialog.
+      expect(floating.win.webContents.loadURL).toHaveBeenCalledWith(
+        `${SERVER_URL}/floating-navigator`,
+      )
+      expect(dialog.showMessageBox).not.toHaveBeenCalled()
+    })
+
+    it('stops main-process retries once the floating window has loaded successfully', () => {
+      // Arrange: the panel loaded once, so its renderer is alive.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const floating = getWindow(0)
+      floating.fireWebContents('did-finish-load')
+
+      // Act: a later transient main-frame failure arrives.
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+
+      // Assert: no main-process retry and no dialog — a live renderer owns its
+      // own error states (this also guards against a stale did-fail-load for an
+      // already-settled load triggering a spurious reload).
+      expect(floating.win.webContents.loadURL).not.toHaveBeenCalled()
+      expect(dialog.showMessageBox).not.toHaveBeenCalled()
+    })
+
+    it('does not surface the main window when a startup floating panel fails to load', () => {
+      // Arrange: panel-only cold boot opens the Floating startup panel.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createMainWindow(false)
+      windowManager.openStartupPanel('floating')
+      const mainWindow = getWindow(0)
+      const panelWindow = getWindow(1)
+
+      // Act: the floating panel's first load fails.
+      fireFloatingLoadFailure(panelWindow)
+
+      // Assert: unlike braindump, the floating startup gate defers to DT7 — it
+      // neither surfaces the main window nor records an auth fallback; recovery
+      // is the Floating window's own job.
+      expect(mainWindow.win.show).not.toHaveBeenCalled()
+      expect(panelWindow.win.show).not.toHaveBeenCalled()
+      expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(
+        false,
+      )
+    })
+
+    it('restarts the recovery cycle when the user picks Retry in the dialog', async () => {
+      // Arrange: the dialog will return "Retry" (response 0) this time.
+      vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({
+        response: 0,
+        checkboxChecked: false,
+      })
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const floating = getWindow(0)
+
+      // Act: exhaust the retries to open the dialog, then let the Retry handler run.
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+      fireFloatingLoadFailure(floating)
+      vi.runOnlyPendingTimers()
+      fireFloatingLoadFailure(floating) // exhausted → dialog opens
+      await vi.runOnlyPendingTimersAsync() // flush the awaited dialog promise
+
+      // Assert: Retry reloaded the panel a 4th time (3 backoff retries + the
+      // explicit user retry), restarting the recovery from a clean slate.
+      expect(floating.win.webContents.loadURL).toHaveBeenCalledTimes(4)
+    })
   })
 })
