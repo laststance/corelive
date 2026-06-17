@@ -805,6 +805,8 @@ export class WindowManager {
 
     // Close (button 1): keep the Phase-1 main window alive; the tray re-opens
     // Floating later.
+    // PHASE 2 (main window deleted): Close here would leave zero windows + tray
+    // only — revisit whether to keep the window on a recoverable blank instead.
     target.close()
   }
 
