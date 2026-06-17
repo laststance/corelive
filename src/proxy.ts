@@ -8,10 +8,14 @@ const isProtectedRoute = createRouteMatcher([
   // /settings is web-reachable (D15) but still requires auth like the rest of
   // the app — the preferences it edits belong to a signed-in user's experience.
   '/settings(.*)',
-  // Floating Navigator must redirect to /login like the other panels so the
-  // Electron main-process nav-watch can detect an unauthenticated cold boot
-  // and surface the main window instead of an empty panel.
-  '/floating-navigator(.*)',
+  // NOTE: /floating-navigator is intentionally NOT protected. The Electron
+  // companion renders a signed-out "front door" card on this route so the
+  // Floating window stays visible + interactive while signed out, and Clerk
+  // re-renders it in place after a native OAuth sign-in — there is no main
+  // window to surface and no /login redirect to detect. A signed-out web
+  // visitor reaching /floating-navigator (a browser tab, not the Electron
+  // panel) just sees the existing "desktop app only" notice — the card is
+  // Electron-only.
 ])
 
 const middleware = clerkMiddleware(async (auth, req) => {

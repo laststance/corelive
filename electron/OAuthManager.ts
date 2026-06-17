@@ -9,7 +9,8 @@
 
 import crypto from 'crypto'
 
-import { shell } from 'electron'
+import { BrowserWindow, shell } from 'electron'
+import type { WebContents } from 'electron'
 
 import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
@@ -20,9 +21,6 @@ import type { WindowManager } from './WindowManager'
 // ============================================================================
 // Type Definitions
 // ============================================================================
-
-/** Production web app origin used as a safe fallback. */
-const DEFAULT_APP_ORIGIN = 'https://corelive.app'
 
 /** Route that starts the browser-side OAuth flow. */
 const OAUTH_START_PATH = '/oauth/start'
@@ -38,6 +36,12 @@ interface PendingStateData {
   provider: string
   createdAt: number
   verifier?: string
+  /**
+   * The renderer that started this flow. The one-time sign-in ticket is pushed
+   * back to THIS webContents only (single recipient → no cross-window
+   * double-consumption); undefined when the flow had no identifiable initiator.
+   */
+  initiator?: WebContents
 }
 
 /** Pending sign-in token */
@@ -176,28 +180,25 @@ export class OAuthManager {
    * // => 'https://corelive.app'
    */
   private getWebAppOrigin(): string {
-    const mainWindow = this.windowManager.getMainWindow()
-    const currentUrl = mainWindow?.webContents.getURL()
-
-    if (!currentUrl) {
-      return DEFAULT_APP_ORIGIN
-    }
-
-    try {
-      return new URL(currentUrl).origin
-    } catch (error) {
-      log.error('Failed to parse BrowserWindow URL for OAuth origin:', error)
-      return DEFAULT_APP_ORIGIN
-    }
+    // Origin is window-agnostic — delegate to WindowManager, which derives it
+    // from the configured server URL. The main window was retired, so reading a
+    // live window URL is no longer viable (and during a cold OAuth callback a
+    // panel may not even exist yet).
+    return this.windowManager.getWebAppOrigin()
   }
 
   /**
    * Starts the OAuth flow by opening system browser.
    *
    * @param provider - OAuth provider (e.g., 'google', 'github')
+   * @param initiator - The renderer that started the flow; the resulting sign-in
+   *   ticket is pushed back to it (single recipient). Omit when unknown.
    * @returns Result with state for tracking
    */
-  async startOAuthFlow(provider: string): Promise<OAuthFlowResult> {
+  async startOAuthFlow(
+    provider: string,
+    initiator?: WebContents,
+  ): Promise<OAuthFlowResult> {
     try {
       log.info(`Starting OAuth flow for provider: ${provider}`)
 
@@ -206,6 +207,7 @@ export class OAuthManager {
       this.pendingStates.set(state, {
         provider,
         createdAt: Date.now(),
+        initiator,
       })
 
       const oauthUrl = this.buildOAuthURL(provider, state)
@@ -300,13 +302,21 @@ export class OAuthManager {
 
       log.info('OAuth state validated, sending sign-in token to WebView')
 
-      if (this.windowManager && this.windowManager.hasMainWindow()) {
+      // Bring the window that STARTED sign-in back to the front so the in-place
+      // re-render is visible. Fall back to the main window while it still exists
+      // (Phase 1); the initiator is the durable target once main is retired.
+      const { initiator } = pendingFlow
+      if (initiator && !initiator.isDestroyed()) {
+        const initiatorWindow = BrowserWindow.fromWebContents(initiator)
+        initiatorWindow?.show()
+        initiatorWindow?.focus()
+      } else if (this.windowManager && this.windowManager.hasMainWindow()) {
         const mainWindow = this.windowManager.getMainWindow()
         mainWindow?.show()
         mainWindow?.focus()
       }
 
-      this.sendSignInToken(token, pendingFlow.provider)
+      this.sendSignInToken(token, pendingFlow.provider, initiator)
 
       if (this.notificationManager) {
         this.notificationManager.showNotification(
@@ -329,18 +339,30 @@ export class OAuthManager {
   /**
    * Sends the sign-in token to the WebView for session creation.
    *
+   * Stores the token for PULL retrieval (window-agnostic, serialized → atomic)
+   * AND pushes it to a SINGLE recipient — the initiating window — so two windows
+   * never race to consume the one-time ticket. Falls back to the main window
+   * while it still exists (Phase 1).
+   *
    * @param token - Clerk sign-in token
    * @param provider - OAuth provider
+   * @param initiator - The renderer that started the flow; receives the push.
    */
-  sendSignInToken(token: string, provider: string): void {
+  sendSignInToken(
+    token: string,
+    provider: string,
+    initiator?: WebContents,
+  ): void {
     log.info('[OAuth] Sending sign-in token to WebView', {
       provider,
       tokenPrefix: token.slice(0, 10) + '...',
+      hasInitiator: !!(initiator && !initiator.isDestroyed()),
       hasMainWindow: !!(
         this.windowManager && this.windowManager.hasMainWindow()
       ),
     })
 
+    // PULL store — durable fallback for any window that missed the push.
     this.pendingSignInToken = {
       token,
       provider,
@@ -348,7 +370,13 @@ export class OAuthManager {
     }
     log.debug('[OAuth] Stored pending sign-in token for retrieval')
 
-    this.sendToRenderer('clerk-sign-in-token', { token, provider })
+    // PUSH to the single initiating window; fall back to the main window so the
+    // existing main-window flow keeps working through Phase 1.
+    if (initiator && !initiator.isDestroyed()) {
+      typedSend(initiator, 'clerk-sign-in-token', { token, provider })
+    } else {
+      this.sendToRenderer('clerk-sign-in-token', { token, provider })
+    }
     log.debug('[OAuth] Sign-in token sent via IPC')
   }
 

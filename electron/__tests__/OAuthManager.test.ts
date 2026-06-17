@@ -9,31 +9,29 @@ vi.mock('electron', () => ({
 }))
 
 /**
- * Creates a minimal WindowManager mock for OAuth URL tests.
+ * Creates a minimal WindowManager mock for OAuth URL tests. OAuthManager now
+ * sources the OAuth origin from `WindowManager.getWebAppOrigin()` (window-
+ * agnostic, so it survives main-window retirement) rather than reading a live
+ * BrowserWindow URL — the mock just returns the resolved origin.
  *
- * @param currentUrl - URL currently loaded in the main BrowserWindow.
+ * @param origin - Web-app origin WindowManager resolves from its server URL
+ *   (localhost in dev, corelive.app in prod).
  * @returns WindowManager-compatible mock object.
  * @example
- * createWindowManagerMock('http://localhost:4991/login')
+ * createWindowManagerMock('http://localhost:4991')
  */
-function createWindowManagerMock(currentUrl?: string) {
+function createWindowManagerMock(origin = 'https://corelive.app') {
   return {
-    getMainWindow: () =>
-      currentUrl
-        ? {
-            webContents: {
-              getURL: () => currentUrl,
-            },
-          }
-        : null,
-    hasMainWindow: () => Boolean(currentUrl),
+    getWebAppOrigin: () => origin,
+    getMainWindow: () => null,
+    hasMainWindow: () => false,
   }
 }
 
 describe('OAuthManager', () => {
-  it('builds the OAuth start URL from the current BrowserWindow origin in development', () => {
+  it('builds the OAuth start URL from the dev web-app origin', () => {
     const oauthManager = new OAuthManager(
-      createWindowManagerMock('http://localhost:4991/login') as never,
+      createWindowManagerMock('http://localhost:4991') as never,
       null,
     )
 
@@ -42,9 +40,9 @@ describe('OAuthManager', () => {
     )
   })
 
-  it('falls back to the production origin when no BrowserWindow URL is available', () => {
+  it('builds the OAuth start URL from the production web-app origin', () => {
     const oauthManager = new OAuthManager(
-      createWindowManagerMock() as never,
+      createWindowManagerMock('https://corelive.app') as never,
       null,
     )
 

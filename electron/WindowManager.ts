@@ -1047,6 +1047,27 @@ export class WindowManager {
   }
 
   /**
+   * Resolve the web-app origin the renderers point at, independent of any one
+   * window. OAuth URL building uses this so the system-browser flow targets the
+   * correct origin (localhost in dev, corelive.app in prod) even with no main
+   * window — the retired main window can no longer be read for its URL.
+   *
+   * @returns The origin (scheme + host + port) of the configured server URL, or
+   * the production origin when `serverUrl` is unset/unparseable.
+   * @example
+   * windowManager.getWebAppOrigin() // => 'http://localhost:4991' (dev)
+   * windowManager.getWebAppOrigin() // => 'https://corelive.app'    (prod)
+   */
+  getWebAppOrigin(): string {
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    try {
+      return new URL(baseUrl).origin
+    } catch {
+      return 'https://corelive.app'
+    }
+  }
+
+  /**
    * Whether a navigated URL is a Clerk auth page, i.e. the user is not yet
    * authenticated. A startup panel that lands here was redirected by proxy.ts.
    *

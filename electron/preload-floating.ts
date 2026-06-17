@@ -19,6 +19,10 @@ import type { IpcRendererEvent } from 'electron'
 
 import { typedInvoke } from './ipc/typedInvoke'
 import { log } from './logger'
+import {
+  createAuthBridge,
+  createOAuthBridge,
+} from './preload-shared/auth-oauth-bridge'
 import type { WindowBounds as IPCWindowBounds } from './types/ipc'
 
 // ============================================================================
@@ -286,6 +290,26 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
       `Floating Navigator: removeListener is deprecated. Use the cleanup function returned by on() instead. Channel: ${channel}`,
     )
   },
+})
+
+/**
+ * Expose the auth + OAuth slice of `electronAPI` so the signed-out Floating
+ * window is a self-contained native-OAuth "front door".
+ *
+ * `ElectronAuthProvider` (root layout, runs in every panel) gates on
+ * `window.electronAPI` via `isElectronEnvironment()`, so exposing it HERE is
+ * what activates the provider in this window — and the full `oauth` surface lets
+ * the panel both START a browser flow and RECEIVE its sign-in ticket with no
+ * main window in the loop.
+ *
+ * Deliberately SCOPED to { auth, oauth }: omitting `settings`/`menu`/etc. keeps
+ * `ElectronStartupSync`'s method guards a clean no-op here (it only touches
+ * `electronAPI.settings`), so activating the provider has zero native side
+ * effects in the floating window.
+ */
+contextBridge.exposeInMainWorld('electronAPI', {
+  auth: createAuthBridge(sanitizeData),
+  oauth: createOAuthBridge(sanitizeData),
 })
 
 /**
