@@ -80,4 +80,19 @@ describe('SignedOutFloatingCard', () => {
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
     expect(screen.getByText(/web app/i)).toBeInTheDocument()
   })
+
+  it('greets the signed-out user with the north-star invitation, not a sign-in demand', () => {
+    // Arrange: the signed-out front door with the oauth bridge present.
+    exposeOAuthBridge()
+
+    // Act
+    render(<SignedOutFloatingCard />)
+
+    // Assert: the warm editorial headline is the panel's voice — an invitation
+    // ("your year is waiting"), rendered as a real heading for a11y, never a
+    // KPI/streak gate. This is the north-star contract for the front door.
+    expect(
+      screen.getByRole('heading', { name: /your year is waiting/i }),
+    ).toBeInTheDocument()
+  })
 })
