@@ -10,9 +10,9 @@
 import { BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
+import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -759,14 +759,18 @@ export class ShortcutManager {
    */
   handleNewTaskShortcut(): void {
     try {
+      // Surface the Floating quick-navigator, then open the new-task flow in the
+      // browser — the full task app is web-only now, and restoreFromTray surfaces
+      // Floating (not the hidden main) so a `shortcut-new-task` IPC to main would
+      // land in an unsurfaced window. Mirrors the deep-link create-task route
+      // (/home?create=true). The renderer listener still lives in
+      // useElectronShortcuts but loses its only sender here — orphaned channel
+      // tracked for T18/T19 cleanup.
       this.windowManager.restoreFromTray()
-
-      if (this.windowManager.hasMainWindow()) {
-        const mainWindow = this.windowManager.getMainWindow()
-        if (mainWindow) {
-          typedSend(mainWindow.webContents, 'shortcut-new-task')
-        }
-      }
+      openWebAppInBrowser(
+        this.windowManager.getWebAppOrigin(),
+        '/home?create=true',
+      )
 
       if (this.notificationManager) {
         this.notificationManager.showNotification(
