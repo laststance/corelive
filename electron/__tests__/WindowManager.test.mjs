@@ -264,14 +264,21 @@ const createWindowManagerMock = () => {
       }
     }
 
+    // T6: native-chrome callers surface the Floating navigator (create if
+    // absent), not the retiring main window. Mirrors the real WindowManager;
+    // the mock has no startup pill, so the pill teardown is omitted here.
     restoreFromTray() {
-      if (this.mainWindow) {
-        if (this.mainWindow.isMinimized()) {
-          this.mainWindow.restore()
-        }
-        this.mainWindow.show()
-        this.mainWindow.focus()
+      if (!this.floatingNavigator) {
+        this.createFloatingNavigator()
       }
+      if (this.floatingNavigator) {
+        if (this.floatingNavigator.isMinimized()) {
+          this.floatingNavigator.restore()
+        }
+        this.floatingNavigator.show()
+        this.floatingNavigator.focus()
+      }
+      this.saveWindowState()
     }
 
     minimizeToTray() {
@@ -568,30 +575,51 @@ describe('WindowManager', () => {
   })
 
   describe('restoreFromTray', () => {
-    it('should restore and focus main window', () => {
-      const mainWindow = windowManager.createMainWindow()
-      mainWindow.isMinimized.mockReturnValue(true)
+    // T6: native-chrome callers (tray/dock/notification/shortcut/deep-link) now
+    // surface the Floating navigator — the surviving companion window — instead
+    // of the retiring main window.
+    it('restores and focuses the floating navigator when it was minimized', () => {
+      const floatingWindow = windowManager.createFloatingNavigator()
+      floatingWindow.isMinimized.mockReturnValue(true)
 
       windowManager.restoreFromTray()
 
-      expect(mainWindow.restore).toHaveBeenCalled()
-      expect(mainWindow.show).toHaveBeenCalled()
-      expect(mainWindow.focus).toHaveBeenCalled()
+      expect(floatingWindow.restore).toHaveBeenCalled()
+      expect(floatingWindow.show).toHaveBeenCalled()
+      expect(floatingWindow.focus).toHaveBeenCalled()
     })
 
-    it('should show and focus main window if not minimized', () => {
-      const mainWindow = windowManager.createMainWindow()
-      mainWindow.isMinimized.mockReturnValue(false)
+    it('shows and focuses the floating navigator without restoring when not minimized', () => {
+      const floatingWindow = windowManager.createFloatingNavigator()
+      floatingWindow.isMinimized.mockReturnValue(false)
 
       windowManager.restoreFromTray()
 
-      expect(mainWindow.restore).not.toHaveBeenCalled()
-      expect(mainWindow.show).toHaveBeenCalled()
-      expect(mainWindow.focus).toHaveBeenCalled()
+      expect(floatingWindow.restore).not.toHaveBeenCalled()
+      expect(floatingWindow.show).toHaveBeenCalled()
+      expect(floatingWindow.focus).toHaveBeenCalled()
     })
 
-    it('should not throw error if main window does not exist', () => {
-      expect(() => windowManager.restoreFromTray()).not.toThrow()
+    it('creates the floating navigator if none exists so the tray never no-ops', () => {
+      // Cold tray-resident boot: no window has been created yet.
+      windowManager.restoreFromTray()
+
+      const floatingWindow = windowManager.getFloatingNavigator()
+      expect(floatingWindow).not.toBeNull()
+      expect(floatingWindow.show).toHaveBeenCalled()
+      expect(floatingWindow.focus).toHaveBeenCalled()
+    })
+
+    it('does not surface the retiring main window', () => {
+      const mainWindow = windowManager.createMainWindow()
+      // Ignore any show/focus from window creation; only the tray action counts.
+      mainWindow.show.mockClear()
+      mainWindow.focus.mockClear()
+
+      windowManager.restoreFromTray()
+
+      expect(mainWindow.show).not.toHaveBeenCalled()
+      expect(mainWindow.focus).not.toHaveBeenCalled()
     })
   })
 

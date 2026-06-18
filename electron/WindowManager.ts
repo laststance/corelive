@@ -795,7 +795,7 @@ export class WindowManager {
     this.floatingLoadRecoveryPending = true
     target.show()
     // Cancel the armed startup-pill timeout before the dialog: once recovery
-    // commits, the pill's fallback (restoreFromTray → surface main) must not
+    // commits, the pill's fallback (surfaceMainBackstop → surface main) must not
     // fire and pop the main window over the Floating recovery.
     this.dismissStartupPill()
     void this.promptFloatingLoadFailure(target)
@@ -1108,11 +1108,43 @@ export class WindowManager {
   }
 
   /**
-   * Restore main window from tray.
+   * Surface the Floating Navigator from the tray / dock / notification click /
+   * shortcut / deep-link — the primary companion window now that the main
+   * window is being retired (T6). Shared chokepoint for every native-chrome
+   * caller that used to "restore the app"; creates Floating if absent so these
+   * paths always land on a real window, never a no-op on a tray-resident boot.
+   *
+   * @example
+   * // tray "Focus Floating" / dock activate / notification click all call:
+   * windowManager.restoreFromTray()
    */
   restoreFromTray(): void {
-    // Any path that surfaces the main window retires the cold-boot pill: the
-    // user can now see a real window, so the "Opening…" reassurance is done.
+    // Any path that surfaces a real window retires the cold-boot pill: the user
+    // can now see a window, so the "Opening…" reassurance is done.
+    this.dismissStartupPill()
+    if (!this.floatingNavigator) {
+      this.createFloatingNavigator()
+    }
+    if (this.floatingNavigator) {
+      if (this.floatingNavigator.isMinimized()) {
+        this.floatingNavigator.restore()
+      }
+      this.floatingNavigator.show()
+      this.floatingNavigator.focus()
+    }
+    this.saveWindowState()
+  }
+
+  /**
+   * Surface the main window as the signed-out login surface / wedged-boot
+   * backstop during a panel-only cold boot. Phase-1 holdover: the startup
+   * orchestration still defers to main when a startup panel can't show
+   * (braindump signed-out) or the boot wedges at the hard timeout; Phase 2
+   * (T18) deletes this together with the main window. Not for native-chrome
+   * callers — they use `restoreFromTray` (→ Floating).
+   */
+  private surfaceMainBackstop(): void {
+    // The teardown + surface the old `restoreFromTray` did for main, verbatim.
     this.dismissStartupPill()
     if (this.mainWindow) {
       if (this.mainWindow.isMinimized()) {
@@ -1319,9 +1351,9 @@ export class WindowManager {
       // Signed out or load failed: keep the panel hidden, surface the main
       // window so the user can sign in / see the error, record the fallback,
       // and arm a one-shot re-show for when sign-in completes.
-      // `restoreFromTray` also dismisses the cold-boot pill.
+      // `surfaceMainBackstop` also dismisses the cold-boot pill.
       this.startupAuthFallbacks.add(kind)
-      this.restoreFromTray()
+      this.surfaceMainBackstop()
       this.armPostLoginReshow(panel, kind)
     }
 
@@ -1473,7 +1505,7 @@ export class WindowManager {
 
     // Hard timeout: a boot still showing the pill this late is wedged (offline /
     // timeout / 5xx). Surface the main window as a backstop so the user is never
-    // stranded on an empty desktop; `restoreFromTray` also dismisses the pill.
+    // stranded on an empty desktop; `surfaceMainBackstop` also dismisses the pill.
     //
     // Race note: if a panel's auth load resolves AFTER this fires (sign-in
     // completes 9s into a slow boot), `finish(true)` still shows that panel, so
@@ -1482,7 +1514,7 @@ export class WindowManager {
     // suppress the panel after the timeout.
     this.startupPillTimeoutTimer = setTimeout(() => {
       this.startupPillTimeoutTimer = null
-      this.restoreFromTray()
+      this.surfaceMainBackstop()
     }, STARTUP_PILL_TIMEOUT_MS)
   }
 
