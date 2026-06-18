@@ -7,13 +7,14 @@
  * @module electron/MenuManager
  */
 
-import { app, dialog, Menu, shell } from 'electron'
-import type { BrowserWindow, MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
 import type { ConfigManager } from './ConfigManager'
 import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
+import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -62,12 +63,15 @@ export class MenuManager {
   /**
    * Initializes the menu manager with required dependencies.
    *
-   * @param mainWindow - The main application window
+   * @param mainWindow - The main application window, or `null` when none exists
+   *   (post-main-retirement / signed-out launch). The menu still builds: View &
+   *   Window items are Electron roles that target the focused window, and New Task
+   *   opens the browser, so a `null` main window leaves no dead menu items.
    * @param windowManager - For window-related menu actions
    * @param configManager - For preference-related actions
    */
   initialize(
-    mainWindow: BrowserWindow,
+    mainWindow: BrowserWindow | null,
     windowManager: WindowManager,
     configManager: ConfigManager,
   ): void {
@@ -231,70 +235,26 @@ export class MenuManager {
    * Create View menu.
    */
   createViewMenu(): MenuItemConstructorOptions {
+    // Standard view chrome uses Electron roles so each item targets whatever
+    // window is focused (main, Floating, BrainDump or Settings) — no main-window
+    // reference needed, so these stay correct after main retirement. Explicit
+    // accelerators are kept so the bindings don't shift from the previous build.
     const submenu: MenuItemConstructorOptions[] = [
-      {
-        label: 'Reload',
-        accelerator: 'CmdOrCtrl+R',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.reload()
-          }
-        },
-      },
+      { label: 'Reload', accelerator: 'CmdOrCtrl+R', role: 'reload' },
       {
         label: 'Force Reload',
         accelerator: 'CmdOrCtrl+Shift+R',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.webContents.reloadIgnoringCache()
-          }
-        },
+        role: 'forceReload',
       },
       {
         label: 'Toggle Developer Tools',
         accelerator: this.isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.webContents.toggleDevTools()
-          }
-        },
+        role: 'toggleDevTools',
       },
       { type: 'separator' },
-      {
-        label: 'Actual Size',
-        accelerator: 'CmdOrCtrl+0',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.webContents.zoomLevel = 0
-          }
-        },
-      },
-      {
-        label: 'Zoom In',
-        accelerator: 'CmdOrCtrl+Plus',
-        click: () => {
-          if (this.mainWindow) {
-            const currentZoom = this.mainWindow.webContents.zoomLevel
-            this.mainWindow.webContents.zoomLevel = Math.min(
-              currentZoom + 0.5,
-              3,
-            )
-          }
-        },
-      },
-      {
-        label: 'Zoom Out',
-        accelerator: 'CmdOrCtrl+-',
-        click: () => {
-          if (this.mainWindow) {
-            const currentZoom = this.mainWindow.webContents.zoomLevel
-            this.mainWindow.webContents.zoomLevel = Math.max(
-              currentZoom - 0.5,
-              -3,
-            )
-          }
-        },
-      },
+      { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', role: 'resetZoom' },
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', role: 'zoomIn' },
+      { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', role: 'zoomOut' },
       { type: 'separator' },
       {
         label: 'Floating Navigator',
@@ -313,11 +273,7 @@ export class MenuManager {
       {
         label: 'Toggle Fullscreen',
         accelerator: this.isMac ? 'Ctrl+Command+F' : 'F11',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.setFullScreen(!this.mainWindow.isFullScreen())
-          }
-        },
+        role: 'togglefullscreen',
       },
     ]
 
@@ -334,25 +290,11 @@ export class MenuManager {
    * WindowManager; the global accelerator is owned by ShortcutManager.
    */
   createWindowMenu(): MenuItemConstructorOptions {
+    // Minimize/Close are Electron roles so they act on the focused window — they
+    // work for Floating/BrainDump/Settings, not just a main window that may not exist.
     const submenu: MenuItemConstructorOptions[] = [
-      {
-        label: 'Minimize',
-        accelerator: 'CmdOrCtrl+M',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.minimize()
-          }
-        },
-      },
-      {
-        label: 'Close',
-        accelerator: 'CmdOrCtrl+W',
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.close()
-          }
-        },
-      },
+      { label: 'Minimize', accelerator: 'CmdOrCtrl+M', role: 'minimize' },
+      { label: 'Close', accelerator: 'CmdOrCtrl+W', role: 'close' },
       { type: 'separator' },
       {
         label: 'BrainDump Note',
@@ -415,14 +357,36 @@ export class MenuManager {
 
   // Menu action handlers
 
+  /**
+   * Opens the full web app's new-task flow in the browser — the File ▸ New Task
+   * item, post-main-retirement. No `restoreFromTray` (unlike the global new-task
+   * shortcut in ShortcutManager): a menu click already comes from a focused
+   * window, so there's no tray-resident state to surface.
+   *
+   * The `menu-action` channel stays live — focus-search / import / export still
+   * send it — so only its `'new-task'` variant is now unused (left in place, not
+   * pruned, so the handler/types stay symmetric for the T18/T19 cleanup).
+   * @returns Nothing; logs and no-ops if the WindowManager (origin source) is absent.
+   * @example
+   * this.createNewTask() // opens https://corelive.app/home?create=true
+   */
   createNewTask(): void {
-    if (this.mainWindow && this.mainWindow.webContents) {
-      typedSend(this.mainWindow.webContents, 'menu-action', {
-        action: 'new-task',
-      })
+    if (!this.windowManager) {
+      log.warn('[MenuManager] windowManager unavailable; cannot open New Task')
+      return
     }
+    openWebAppInBrowser(
+      this.windowManager.getWebAppOrigin(),
+      '/home?create=true',
+    )
   }
 
+  // FOLLOW-UP (T14/T18): Find / Import Tasks / Export Tasks still drive the main
+  // renderer over `menu-action`, so they no-op when no main window exists. Their
+  // delete-vs-reroute is unresolved — there's no companion URL for "focus the
+  // search box" and the design names no browser target for menu-driven task
+  // import/export (unlike T14's Floating Import → dashboard). Kept main-optional
+  // for Phase 1 (main still exists for QA); revisit when main is retired.
   focusSearch(): void {
     if (this.mainWindow && this.mainWindow.webContents) {
       typedSend(this.mainWindow.webContents, 'menu-action', {
@@ -517,17 +481,15 @@ export class MenuManager {
     } catch (error) {
       log.error('Failed to check for updates:', error)
 
-      if (this.mainWindow) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Please try again later.'
-        dialog.showMessageBox(this.mainWindow, {
-          type: 'error',
-          title: 'Update Check Failed',
-          message: 'Failed to check for updates.',
-          detail: errorMessage,
-          buttons: ['OK'],
-        })
-      }
+      const errorMessage =
+        error instanceof Error ? error.message : 'Please try again later.'
+      this.showMenuMessageBox({
+        type: 'error',
+        title: 'Update Check Failed',
+        message: 'Failed to check for updates.',
+        detail: errorMessage,
+        buttons: ['OK'],
+      })
     }
   }
 
@@ -579,14 +541,30 @@ export class MenuManager {
     }
   }
 
-  showAboutDialog(): void {
-    if (!this.mainWindow) return
+  /**
+   * Shows a menu-triggered message box anchored to the focused window, or
+   * parentless when none is up — companion-mode menu dialogs (About, Keyboard
+   * Shortcuts, update-check failure) must surface even with no main window.
+   * @param options - Electron message-box options (type/title/message/detail/buttons).
+   * @returns Nothing; fire-and-forget — the dismissed-button result is unused.
+   * @example
+   * this.showMenuMessageBox({ type: 'info', message: 'About', buttons: ['OK'] })
+   */
+  private showMenuMessageBox(options: MessageBoxOptions): void {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    if (focusedWindow) {
+      dialog.showMessageBox(focusedWindow, options)
+    } else {
+      dialog.showMessageBox(options)
+    }
+  }
 
+  showAboutDialog(): void {
     const version = app.getVersion()
     const electronVersion = process.versions.electron
     const nodeVersion = process.versions.node
 
-    dialog.showMessageBox(this.mainWindow, {
+    this.showMenuMessageBox({
       type: 'info',
       title: `About ${app.getName()}`,
       message: `${app.getName()} ${version}`,
@@ -604,13 +582,10 @@ Copyright © 2025 CoreLive`,
   }
 
   showKeyboardShortcuts(): void {
-    if (!this.mainWindow) return
-
     const shortcuts = [
       'Ctrl/Cmd + N: New Task',
       'Ctrl/Cmd + M: Minimize Window',
       'Ctrl/Cmd + Shift + A: Toggle Always on Top',
-      'Ctrl/Cmd + Shift + T: Show Main Window',
       'Ctrl/Cmd + Shift + N: Focus Floating Navigator',
       'Ctrl/Cmd + 3: Toggle Floating Navigator',
       'Alt/Option + Space: Toggle BrainDump',
@@ -627,7 +602,7 @@ Copyright © 2025 CoreLive`,
       '* Shortcut defaults can be changed from Preferences > Keyboard Shortcuts',
     ]
 
-    dialog.showMessageBox(this.mainWindow, {
+    this.showMenuMessageBox({
       type: 'info',
       title: 'Keyboard Shortcuts',
       message: 'Available Keyboard Shortcuts',

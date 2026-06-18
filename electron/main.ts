@@ -987,7 +987,12 @@ async function createWindow(): Promise<BrowserWindow> {
         !!mainWindowRef,
       )
 
-      if (menuManager && mainWindowRef) {
+      // Menu initializes even when no main window exists. Post-main-retirement the
+      // menu bar is companion chrome (View/Window roles target whatever window is
+      // focused; New Task opens the browser), so gating on mainWindowRef would leave
+      // a dead menu at a main-less / signed-out launch. mainWindowRef passes through
+      // nullable — MenuManager.initialize accepts `BrowserWindow | null`.
+      if (menuManager) {
         menuManager.initialize(mainWindowRef, windowManager, configManager)
       }
       log.info('✅ [DEFERRED] MenuManager loaded')
