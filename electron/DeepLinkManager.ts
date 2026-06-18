@@ -19,6 +19,7 @@ import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { OAuthManager } from './OAuthManager'
 import type { IPCEventChannel, IPCEventChannels } from './types/ipc'
+import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -40,14 +41,6 @@ interface ParsedDeepLink {
   originalUrl: string
 }
 
-/** Task data for creation */
-interface TaskData {
-  title: string
-  description?: string
-  priority?: string
-  dueDate?: Date
-}
-
 /** Example URLs structure */
 interface ExampleUrls {
   openTask: string
@@ -67,7 +60,16 @@ export class DeepLinkManager {
   /** Window manager reference */
   private windowManager: WindowManager
 
-  /** API bridge for task operations */
+  /**
+   * API bridge for task operations.
+   *
+   * VESTIGIAL after T15: main.ts already constructs this manager with `null`
+   * (WebView architecture has no in-process task store), and T15 dropped the
+   * last `getTodoById`/`createTodo` reads, so this field is now written-only.
+   * Kept (with the `APIBridge` interface + constructor param) so T18 can delete
+   * the whole apiBridge plumbing in one Phase-2 sweep without touching the
+   * constructor call here first.
+   */
   private apiBridge: APIBridge | null
 
   /** Notification manager reference */
@@ -398,43 +400,11 @@ export class DeepLinkManager {
       return
     }
 
-    try {
-      const task = await this.apiBridge?.getTodoById(taskId)
-
-      if (!task) {
-        log.warn(`Task not found: ${taskId}`)
-        if (this.notificationManager) {
-          this.notificationManager.showNotification(
-            'Task Not Found',
-            `Could not find task with ID: ${taskId}`,
-            { type: 'warning' },
-          )
-        }
-        return
-      }
-
-      this.sendToRenderer('deep-link-focus-task', {
-        task: task as { id: string; title: string; [extra: string]: unknown },
-        params,
-      })
-
-      if (this.notificationManager) {
-        this.notificationManager.showNotification(
-          'Task Opened',
-          `Opened task: ${(task as { title: string }).title}`,
-          { type: 'info' },
-        )
-      }
-    } catch (error) {
-      log.error('Failed to handle task action:', error)
-      if (this.notificationManager) {
-        this.notificationManager.showNotification(
-          'Error',
-          'Failed to open task. Please try again.',
-          { type: 'error' },
-        )
-      }
-    }
+    // Open the task in the browser — mirrors the renderer's default
+    // `deep-link-focus-task` route (`/home?focus=<id>`). `taskId` is
+    // percent-encoded because it arrives from the (untrusted) deep-link path,
+    // unlike the renderer's trusted DB id.
+    this.openInBrowser(`/home?focus=${encodeURIComponent(taskId)}`)
   }
 
   /**
@@ -443,57 +413,21 @@ export class DeepLinkManager {
    * @param params - URL parameters
    */
   async handleCreateAction(params: Record<string, string>): Promise<void> {
+    // Open the create form in the browser, pre-filled from the deep link —
+    // mirrors the renderer's default `deep-link-create-task` route
+    // (`/home?create=true&<prefill>`). NO task is created here (the user
+    // confirms in the browser), so this stays a navigation, not a mutation;
+    // `apiBridge.createTodo` was already a null no-op before T15. `params` are
+    // pre-decoded by `parseDeepLinkUrl`, and `URLSearchParams` re-encodes them.
     const { title, description, priority, dueDate } = params
 
-    if (!title) {
-      log.warn('Create action requires title parameter')
-      this.sendToRenderer('deep-link-create-task', {})
-      return
-    }
+    const search = new URLSearchParams({ create: 'true' })
+    if (title) search.set('title', title)
+    if (description) search.set('description', description)
+    if (priority) search.set('priority', priority)
+    if (dueDate) search.set('dueDate', dueDate)
 
-    try {
-      const taskData: TaskData = {
-        title: decodeURIComponent(title),
-        ...(description && { description: decodeURIComponent(description) }),
-        ...(priority && { priority }),
-        ...(dueDate && { dueDate: new Date(dueDate) }),
-      }
-
-      const newTask = await this.apiBridge?.createTodo(taskData)
-
-      this.sendToRenderer('deep-link-task-created', {
-        task: newTask as {
-          id: string
-          title: string
-          [extra: string]: unknown
-        },
-      })
-
-      if (this.notificationManager && newTask) {
-        this.notificationManager.showNotification(
-          'Task Created',
-          `Created task: ${(newTask as { title: string }).title}`,
-          { type: 'success' },
-        )
-      }
-    } catch (error) {
-      log.error('Failed to create task from deep link:', error)
-
-      this.sendToRenderer('deep-link-create-task', {
-        title: title ? decodeURIComponent(title) : '',
-        description: description ? decodeURIComponent(description) : '',
-        priority,
-        dueDate,
-      })
-
-      if (this.notificationManager) {
-        this.notificationManager.showNotification(
-          'Create Task',
-          'Opening task creation dialog...',
-          { type: 'info' },
-        )
-      }
-    }
+    this.openInBrowser(`/home?${search.toString()}`)
   }
 
   /**
@@ -506,17 +440,13 @@ export class DeepLinkManager {
     path: string,
     params: Record<string, string>,
   ): Promise<void> {
+    // Open the view in the browser — mirrors the renderer's default
+    // `deep-link-navigate` route (`/<view>?<params>`). The leading slash keeps
+    // the URL on-origin even for an attacker-crafted `view` segment.
     const view = path.replace('/', '') || params.view || 'home'
+    const query = new URLSearchParams(params).toString()
 
-    this.sendToRenderer('deep-link-navigate', { view, params })
-
-    if (this.notificationManager) {
-      this.notificationManager.showNotification(
-        'View Opened',
-        `Navigated to: ${view}`,
-        { type: 'info' },
-      )
-    }
+    this.openInBrowser(`/${view}${query ? `?${query}` : ''}`)
   }
 
   /**
@@ -525,20 +455,32 @@ export class DeepLinkManager {
    * @param params - URL parameters
    */
   async handleSearchAction(params: Record<string, string>): Promise<void> {
+    // Open search results in the browser — mirrors the renderer's default
+    // `deep-link-search` route (`/home?search=<q>&filter=<f>`). `params` are
+    // pre-decoded by `parseDeepLinkUrl`; `URLSearchParams` re-encodes them.
     const { query, filter } = params
 
-    this.sendToRenderer('deep-link-search', {
-      query: query ? decodeURIComponent(query) : '',
-      filter,
-    })
+    const search = new URLSearchParams()
+    if (query) search.set('search', query)
+    if (filter) search.set('filter', filter)
 
-    if (this.notificationManager && query) {
-      this.notificationManager.showNotification(
-        'Search',
-        `Searching for: ${decodeURIComponent(query)}`,
-        { type: 'info' },
-      )
-    }
+    this.openInBrowser(`/home?${search.toString()}`)
+  }
+
+  /**
+   * Open a task-app path in the user's browser (T15). Deep links now route to
+   * the web app — the full task UI is web-only after main retirement, so a
+   * `corelive://` link surfaces the task / create / view / search there instead
+   * of pushing IPC at a main renderer that no longer exists.
+   * @param appPath - Leading-slash task-app path; the leading slash plus the
+   *   fixed origin in `openWebAppInBrowser` keep the URL on-origin, so an
+   *   attacker-crafted deep link cannot redirect off corelive.app.
+   * @returns Nothing; `openWebAppInBrowser` logs and swallows browser failures.
+   * @example
+   * this.openInBrowser('/home?focus=42') // opens https://corelive.app/home?focus=42
+   */
+  private openInBrowser(appPath: string): void {
+    openWebAppInBrowser(this.windowManager.getWebAppOrigin(), appPath)
   }
 
   /**
@@ -567,16 +509,14 @@ export class DeepLinkManager {
   }
 
   /**
-   * Send event to renderer process.
-   *
-   * @param event - Event name
-   * @param data - Event data
-   */
-  /**
    * Dispatch a typed event to the main renderer window.
    *
-   * Triggered when: deep-link handlers resolve (e.g., `corelive://open/task/1`).
-   * Called by: the `handleDeepLink*` methods above.
+   * ORPHANED after T15: every deep-link handler now opens the browser
+   * (`openInBrowser`) instead of sending to a renderer, so this method has no
+   * callers. It is kept — together with its `deep-link-*` channel definitions
+   * in `types/ipc` and the (already-unmounted) `useElectronDeepLink` renderer
+   * hook — so T18/T19 can delete the whole main-renderer deep-link bridge in
+   * one Phase-2 sweep rather than half-removing it here.
    *
    * @example
    *   this.sendToRenderer('deep-link-focus-task', { task, params })
