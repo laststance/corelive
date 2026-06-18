@@ -7,6 +7,7 @@
  */
 
 import { BrowserWindow, dialog, screen } from 'electron'
+import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { ProgressInfo, UpdateInfo } from 'electron-updater'
 
@@ -261,14 +262,35 @@ export class AutoUpdater {
   }
 
   /**
+   * Anchors an updater dialog to the main window when one is up, else shows it
+   * parentless — companion-mode update prompts (available / downloaded) must
+   * surface even with no main window (post-T18 the main window is gone).
+   * Mirrors `MenuManager.showMenuMessageBox`'s parent-or-parentless dispatch but
+   * returns the result so the caller can act on the clicked button.
+   * @param options - Electron message-box options (type/title/message/detail/buttons).
+   * @returns The dismissed-button result (`response` is the clicked button index).
+   * @example
+   * const { response } = await this.showUpdaterMessageBox({ type: 'info', message: 'Update Ready', buttons: ['Restart Now', 'Later'] })
+   */
+  private async showUpdaterMessageBox(
+    options: MessageBoxOptions,
+  ): Promise<MessageBoxReturnValue> {
+    const mainWindow = this.mainWindow
+    // Anchor to the main window only while it is genuinely alive; otherwise the
+    // app-modal (parentless) overload keeps update prompts reachable.
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      return dialog.showMessageBox(mainWindow, options)
+    }
+    return dialog.showMessageBox(options)
+  }
+
+  /**
    * Shows dialog when update is available.
    *
    * @param info - Update information including version
    */
   async showUpdateAvailableDialog(info: UpdateInfo): Promise<void> {
-    if (!this.mainWindow) return
-
-    const result = await dialog.showMessageBox(this.mainWindow, {
+    const result = await this.showUpdaterMessageBox({
       type: 'info',
       title: 'Update Available',
       message: `A new version (${info.version}) is available!`,
@@ -299,9 +321,7 @@ export class AutoUpdater {
    * Shows dialog when update has been downloaded.
    */
   async showUpdateDownloadedDialog(): Promise<void> {
-    if (!this.mainWindow) return
-
-    const result = await dialog.showMessageBox(this.mainWindow, {
+    const result = await this.showUpdaterMessageBox({
       type: 'info',
       title: 'Update Ready',
       message: 'Update downloaded successfully!',
@@ -317,9 +337,24 @@ export class AutoUpdater {
   }
 
   /**
-   * Sends status message to window.
+   * Logs the updater status and pushes it as transient TEXT to the main
+   * window's renderer (`AppUpdateSettings` in-card status line).
    *
-   * @param text - Status message
+   * BREADCRUMB (T18, Electron main-retirement): this send is main-window-bound
+   * and already no-ops when no main window is up (`log.info` still records it);
+   * after T18 deletes the main window it becomes a permanent no-op, so the
+   * transient "Update not available" / "Error" TEXT loses its only renderer.
+   * That is an ACCEPTED A3 tradeoff, not a regression — the ACTIONABLE states
+   * surface without a main window: `update-available` / `update-downloaded` show
+   * as the parentless dialogs (`showUpdaterMessageBox`) and download progress
+   * shows in the native progress window. The Settings popover is deliberately
+   * NOT retargeted (blur-to-hide, rejected as a status host), and these sends
+   * target the main renderer's webContents — a different webContents from the
+   * popover — so they never reached it anyway. T18/T19 can drop the
+   * `updater-message` channel (+ its preload allowlist entry and the
+   * `AppUpdateSettings` listener) once the main window is gone.
+   *
+   * @param text - Status message (always logged; rendered only while a main window lives).
    */
   sendStatusToWindow(text: string): void {
     log.info(text)
@@ -337,6 +372,10 @@ export class AutoUpdater {
    */
   private sendDownloadProgress(progress: UpdaterDownloadProgress): void {
     this.downloadProgress = progress
+    // Native progress window is the primary, main-optional UI (above). The
+    // renderer mirror below is secondary; like `sendStatusToWindow` it is
+    // main-window-bound and becomes a permanent no-op after T18 — kept until
+    // then so the in-app Settings view still mirrors progress while main lives.
     this.showUpdateProgressWindow(progress)
 
     if (this.mainWindow && this.mainWindow.webContents) {

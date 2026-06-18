@@ -275,3 +275,75 @@ describe('AutoUpdater download progress', () => {
     ).toHaveBeenCalledWith('download-progress')
   })
 })
+
+describe('AutoUpdater update dialogs', () => {
+  beforeEach(() => {
+    electronMocks.createdWindows.length = 0
+    electronMocks.mockShowMessageBox.mockClear()
+    electronMocks.mockShowMessageBox.mockResolvedValue({ response: 1 })
+    electronMocks.mockAutoUpdater.removeAllListeners()
+    electronMocks.mockAutoUpdater.removeAllListeners.mockClear()
+    electronMocks.mockAutoUpdater.downloadUpdate.mockClear()
+    electronMocks.mockAutoUpdater.quitAndInstall.mockClear()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  })
+
+  it('anchors the update-available prompt to the main window while one is open', () => {
+    // Arrange
+    const updater = new AutoUpdater()
+    const mainWindow = createMainWindowStub()
+    updater.setMainWindow(mainWindow)
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('update-available', { version: '1.2.4' })
+
+    // Assert: anchored overload — the window is the dialog's first argument.
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledWith(
+      mainWindow,
+      expect.objectContaining({ title: 'Update Available' }),
+    )
+
+    updater.cleanup()
+  })
+
+  it('surfaces the update-available prompt even when no main window is open', () => {
+    // Arrange: companion mode — the updater is never handed a main window.
+    const updater = new AutoUpdater()
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('update-available', { version: '1.2.4' })
+
+    // Assert: parentless overload (options-only call) keeps the prompt reachable
+    // after the main window is retired (T18).
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Update Available' }),
+    )
+
+    updater.cleanup()
+  })
+
+  it('surfaces the restart prompt even when no main window is open', () => {
+    // Arrange: companion mode — no main window hosts the downloaded-update dialog.
+    const updater = new AutoUpdater()
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('update-downloaded', {
+      version: '1.2.4',
+    })
+
+    // Assert: parentless overload keeps the "Restart Now" prompt reachable.
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Update Ready' }),
+    )
+
+    updater.cleanup()
+  })
+})
