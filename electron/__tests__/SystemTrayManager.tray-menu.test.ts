@@ -1,4 +1,4 @@
-import { Menu } from 'electron'
+import { Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions, Tray } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -20,6 +20,7 @@ vi.mock('electron', () => ({
     createFromBuffer: vi.fn(),
   },
   Notification: vi.fn(),
+  shell: { openExternal: vi.fn(async () => {}) },
   Tray: vi.fn(),
 }))
 
@@ -52,6 +53,7 @@ function createManager(): {
     openSettings: vi.fn(),
     toggleBrainDump,
     toggleFloatingNavigator,
+    getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
   const manager = new SystemTrayManager(stubWindowManager)
   // Mirror createTray's side effect so updateTrayMenu's `if (this.tray)` guard
@@ -98,6 +100,27 @@ describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () =
     expect(brainDumpItem).toBeDefined()
     expect(findItem(lastBuiltTemplate(), 'Open BrainDump')).toBeUndefined()
     expect(toggleBrainDump).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the full app in the browser — never a native window — from its tray item', () => {
+    // Arrange
+    const { manager } = createManager()
+
+    // Act
+    manager.updateTrayMenu([])
+    const browserItem = findItem(
+      lastBuiltTemplate(),
+      'Open full app in browser ↗',
+    )
+    ;(browserItem?.click as () => void)?.()
+
+    // Assert: the retired main window has no tray entry; the full app is the
+    // web app, opened externally at corelive.app/home.
+    expect(browserItem).toBeDefined()
+    expect(findItem(lastBuiltTemplate(), 'Show TODO App')).toBeUndefined()
+    expect(vi.mocked(shell.openExternal)).toHaveBeenCalledWith(
+      'https://corelive.app/home',
+    )
   })
 
   it('shows each toggle item’s live hotkey supplied by the accelerator provider', () => {

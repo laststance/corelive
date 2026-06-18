@@ -9,7 +9,7 @@
 import fs from 'fs'
 import path from 'path'
 
-import { app, Menu, nativeImage, Notification, Tray } from 'electron'
+import { app, Menu, nativeImage, Notification, shell, Tray } from 'electron'
 import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 
 import { log } from './logger'
@@ -523,13 +523,16 @@ export class SystemTrayManager {
 
       const template: MenuItemConstructorOptions[] = [
         {
-          label: 'Show TODO App',
+          label: 'Open full app in browser ↗',
           click: () => {
-            try {
-              this.windowManager.restoreFromTray()
-            } catch (error) {
-              log.error('Failed to restore window from tray:', error)
-            }
+            // The full task app is web-only now that the main window is retired:
+            // open corelive.app in the user's browser (↗ = leaves the app),
+            // never a native main window. (T9 / user: no item restores main.)
+            shell
+              .openExternal(`${this.windowManager.getWebAppOrigin()}/home`)
+              .catch((error) => {
+                log.error('Failed to open the full app in the browser:', error)
+              })
           },
         },
         { type: 'separator' },
@@ -611,13 +614,14 @@ export class SystemTrayManager {
     try {
       const fallbackMenu = Menu.buildFromTemplate([
         {
-          label: 'Show App',
+          label: 'Open full app in browser ↗',
           click: () => {
-            try {
-              this.windowManager.restoreFromTray()
-            } catch (error) {
-              log.error('Failed to restore window:', error)
-            }
+            // Degraded menu still never restores a native main window.
+            shell
+              .openExternal(`${this.windowManager.getWebAppOrigin()}/home`)
+              .catch((error) => {
+                log.error('Failed to open the full app in the browser:', error)
+              })
           },
         },
         {
