@@ -2288,12 +2288,13 @@ if (!gotTheLock) {
           return
         }
         // Windows exist but no *real* one is visible — e.g. a panel-only startup
-        // whose panel was later closed, or the main window minimized to the tray.
+        // whose panel was later closed, or every panel hidden to the tray.
         // The startup pill is excluded: it is shown via `showInactive()` so
         // `isVisible()` reports true, but it carries no surface the user can act
         // on, so counting it would wrongly suppress the dock-click reveal. A dock
-        // click must always surface something, so reveal the always-created main
-        // window (restoreFromTray restores + shows + focuses it).
+        // click must always surface something, so surface the Floating navigator —
+        // the surviving companion window — via restoreFromTray (T6 retargeted it
+        // off the retired main; it creates Floating if absent, then shows + focuses).
         //
         // The `windowManager?.` optional chain is intentional: if the manager is
         // somehow absent, `!undefined` is true so the pill (if any) counts as a
@@ -2329,14 +2330,17 @@ if (!gotTheLock) {
 /**
  * Window close behavior for macOS.
  *
- * macOS convention: Close all windows = app stays in dock
- * Users can fully quit via Cmd+Q or the app menu.
+ * macOS convention: closing all windows keeps the app alive. With the main
+ * window retired, CoreLive is a tray-resident companion (BrainDump / Floating /
+ * Settings) — closing every panel leaves it running in the menu bar; the user
+ * quits explicitly via Cmd+Q, the app menu, or the tray's Quit. (T10 / design
+ * Open Question #6: stay tray-resident, never quit on the last panel close.)
  *
- * This handler is intentionally empty to follow macOS platform guidelines.
+ * This handler is intentionally empty to follow that guideline.
  */
 app.on('window-all-closed', () => {
-  // macOS: App stays running when all windows are closed (platform convention)
-  // No action needed - this is the default Electron behavior on macOS
+  // Stay tray-resident: no app.quit() here. Quitting is always explicit
+  // (Cmd+Q / app menu / tray Quit), never an implicit last-panel-close side effect.
 })
 
 /**
