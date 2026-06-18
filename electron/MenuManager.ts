@@ -183,9 +183,26 @@ export class MenuManager {
   }
 
   /**
+   * Whether a live main window currently hosts the main-renderer-only menu
+   * actions (File ▸ Import/Export, Edit ▸ Find). They `typedSend` to the main
+   * renderer, so they silently no-op without one — gate their `enabled` on this
+   * so a null/destroyed main (signed-out launch, and post-T18 when main is gone)
+   * shows them disabled rather than as dead-clickable items.
+   * @returns true when `mainWindow` exists and is not destroyed.
+   * @example
+   * { label: 'Find', enabled: this.hasUsableMainWindow(), click: () => this.focusSearch() }
+   */
+  private hasUsableMainWindow(): boolean {
+    return Boolean(this.mainWindow && !this.mainWindow.isDestroyed())
+  }
+
+  /**
    * Create File menu.
    */
   createFileMenu(): MenuItemConstructorOptions {
+    // Import/Export drive the main renderer over `menu-action`, so disable them
+    // when no main window can receive it (see hasUsableMainWindow).
+    const canUseMainRenderer = this.hasUsableMainWindow()
     const submenu: MenuItemConstructorOptions[] = [
       {
         label: 'New Task',
@@ -194,10 +211,12 @@ export class MenuManager {
       { type: 'separator' },
       {
         label: 'Import Tasks...',
+        enabled: canUseMainRenderer,
         click: async () => this.importTasks(),
       },
       {
         label: 'Export Tasks...',
+        enabled: canUseMainRenderer,
         click: async () => this.exportTasks(),
       },
     ]
@@ -224,7 +243,10 @@ export class MenuManager {
         { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
         { type: 'separator' },
         {
+          // Find drives the main renderer's search box over `menu-action`;
+          // disable it when no main window can receive that (see createFileMenu).
           label: 'Find',
+          enabled: this.hasUsableMainWindow(),
           click: () => this.focusSearch(),
         },
       ],

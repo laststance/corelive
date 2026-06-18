@@ -64,6 +64,33 @@ function collectLabels(items: MenuItemConstructorOptions[]): string[] {
 }
 
 /**
+ * Finds the first menu item with the given label anywhere in the submenu tree,
+ * so a test can assert a nested item's `enabled` state.
+ * @param items - A menu template (or a nested submenu) array.
+ * @param label - The visible label to search for.
+ * @returns The matching item, or undefined if none is found.
+ * @example
+ * findItemByLabel(template, 'Find')?.enabled // => false when no main window
+ */
+function findItemByLabel(
+  items: MenuItemConstructorOptions[],
+  label: string,
+): MenuItemConstructorOptions | undefined {
+  for (const item of items) {
+    if (item.label === label) {
+      return item
+    }
+    if (Array.isArray(item.submenu)) {
+      const found = findItemByLabel(item.submenu, label)
+      if (found) {
+        return found
+      }
+    }
+  }
+  return undefined
+}
+
+/**
  * Builds a WindowManager stub exposing only what the menu's click handlers read
  * (none of which run during a build) — the menu builds purely from static items,
  * so the stub just satisfies the `initialize` parameter type.
@@ -109,5 +136,12 @@ describe('MenuManager builds the application menu without a main window', () => 
 
     // ...and no resurrected "Show Main Window" item the retired main left behind.
     expect(collectLabels(template)).not.toContain('Show Main Window')
+
+    // ...and the main-renderer-only actions (Import/Export/Find drive the main
+    // renderer over `menu-action`) are DISABLED, not dead-clickable, since no
+    // main window can receive that IPC.
+    expect(findItemByLabel(template, 'Import Tasks...')?.enabled).toBe(false)
+    expect(findItemByLabel(template, 'Export Tasks...')?.enabled).toBe(false)
+    expect(findItemByLabel(template, 'Find')?.enabled).toBe(false)
   })
 })
