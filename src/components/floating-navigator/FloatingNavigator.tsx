@@ -555,18 +555,30 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
     }
   }, [])
 
-  // D7: the floating window is too narrow for the import dialog, so Import
-  // broadcasts an open-intent (the main window's Completed entry subscribes)
-  // and surfaces the main window. Broadcast first so the subscriber fires even
-  // if focusing the window is what brings the main renderer to the foreground.
+  // T14: the full task app is web-only, so Import opens the Completed import
+  // surface (/home) in the user's browser instead of broadcasting an open-intent
+  // to the main window's dialog. Preferred path = the new `openCompletedImport`
+  // bridge. Preload skew: an older installed app freezes a preload that predates
+  // this method while still loading this (newer) web bundle, so method-guard and
+  // fall back to the legacy cross-window intent — broadcast to the main window's
+  // Completed dialog + surface it (that older app still has a main window).
   const handleOpenImport = useCallback(async () => {
-    requestOpenCompletedImport()
-    if (isFloatingNavigatorEnvironment()) {
+    if (!isFloatingNavigatorEnvironment()) return
+    const floatingApi = window.floatingNavigatorAPI
+    if (typeof floatingApi?.openCompletedImport === 'function') {
       try {
-        await window.floatingNavigatorAPI!.window.focusMainWindow()
+        await floatingApi.openCompletedImport()
       } catch (error) {
-        log.error('Failed to focus main window for import:', error)
+        log.error('Failed to open import in browser:', error)
       }
+      return
+    }
+    // Preload skew: degrade to the legacy main-window dialog intent.
+    requestOpenCompletedImport()
+    try {
+      await floatingApi?.window.focusMainWindow()
+    } catch (error) {
+      log.error('Failed to focus main window for import:', error)
     }
   }, [])
 
@@ -693,7 +705,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
               variant="ghost"
               onClick={handleOpenImport}
               className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              aria-label="Import to Completed in main window"
+              aria-label="Import to Completed"
               title="Import to Completed"
             >
               <Suspense fallback={<IconFallback />}>

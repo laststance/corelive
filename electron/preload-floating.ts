@@ -244,6 +244,20 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     },
   },
 
+  /**
+   * Open the task app's Completed paste-import surface (`/home`) in the user's
+   * browser (T14). The full task app is web-only, so importing happens in the
+   * browser rather than a main-window dialog. Mirrors the tray/menu/shortcut
+   * browser reroutes; the destination path is fixed in the main handler.
+   */
+  openCompletedImport: async (): Promise<void> => {
+    try {
+      await typedInvoke('floating-open-import')
+    } catch (error) {
+      log.error('Floating Navigator: Failed to open import in browser:', error)
+    }
+  },
+
   // Secure event listener management (restricted set for floating navigator)
   on: (
     channel: string,
