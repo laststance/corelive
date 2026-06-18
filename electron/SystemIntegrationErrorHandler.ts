@@ -7,7 +7,6 @@
  */
 
 import type { ConfigManager } from './ConfigManager'
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { ShortcutManager } from './ShortcutManager'
@@ -465,32 +464,13 @@ export class SystemIntegrationErrorHandler {
       this.systemTrayManager.setTrayTooltip(`${title}: ${message}`)
     }
 
-    if (this.windowManager && this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow) {
-        const originalTitle = mainWindow.getTitle()
-        mainWindow.setTitle(`${title} - ${originalTitle}`)
-
-        setTimeout(() => {
-          if (!mainWindow.isDestroyed()) {
-            mainWindow.setTitle(originalTitle)
-          }
-        }, 5000)
-      }
-    }
-
-    if (this.windowManager && this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow) {
-        typedSend(mainWindow.webContents, 'system-integration-status', {
-          status: this.overallStatus,
-          title,
-          message,
-          issues: this.issues,
-          integrationStatus: this.integrationStatus,
-        })
-      }
-    }
+    // The retired main window was the last fallback surface here (a title flash
+    // + a `system-integration-status` IPC). The title flash is gone with the
+    // window, and that status channel had no renderer listener anywhere — dead
+    // even pre-cut — so it's dropped rather than re-pointed at Floating (a
+    // minimal navigator, not a diagnostics host). The tray tooltip above is the
+    // surviving non-notification surface. Orphaned type def + preload allowlist
+    // entry tracked for T18/T19 cleanup.
   }
 
   /**
