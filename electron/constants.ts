@@ -65,6 +65,25 @@ export const STARTUP_PILL_WIDTH_PX = 260
 export const STARTUP_PILL_HEIGHT_PX = 76
 
 // ============================================================================
+// Floating window load-failure recovery (DT7)
+// ============================================================================
+
+/**
+ * How many times the Floating window silently retries a failed main-frame load
+ * before surfacing the native recovery dialog. The Floating panel is the
+ * signed-out front door now, so a never-loaded ("dead") window must self-heal
+ * across a brief offline/DNS/5xx blip rather than stranding the user.
+ */
+export const FLOATING_LOAD_MAX_RETRIES: number = 3
+
+/**
+ * Base backoff before a Floating reload retry; the delay scales linearly with
+ * the attempt number (800 → 1600 → 2400 ms). Quick enough to ride out a brief
+ * blip, backed off enough not to hammer a still-unreachable origin.
+ */
+export const FLOATING_LOAD_RETRY_BASE_MS: number = 800
+
+// ============================================================================
 // Auto-update download progress window
 // ============================================================================
 

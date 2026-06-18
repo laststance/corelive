@@ -1,18 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { log } from '../../src/lib/logger.ts'
+import { sanitizeData } from '../preload-floating.ts'
 
-// Mock Electron modules
-const mockIpcRenderer = {
-  invoke: vi.fn(),
-  on: vi.fn(),
-  removeListener: vi.fn(),
-  removeAllListeners: vi.fn(),
-}
-
-const mockContextBridge = {
-  exposeInMainWorld: vi.fn(),
-}
+// Mock Electron modules. Defined via vi.hoisted so the (hoisted) vi.mock factory
+// can reference them without a TDZ error — needed now that a real preload module
+// (preload-floating) is imported through this mock for the sanitizer test.
+const { mockIpcRenderer, mockContextBridge } = vi.hoisted(() => ({
+  mockIpcRenderer: {
+    invoke: vi.fn(),
+    on: vi.fn(),
+    removeListener: vi.fn(),
+    removeAllListeners: vi.fn(),
+  },
+  mockContextBridge: {
+    exposeInMainWorld: vi.fn(),
+  },
+}))
 
 vi.mock('electron', () => ({
   contextBridge: mockContextBridge,
@@ -223,6 +227,26 @@ describe('Preload Script Security Tests', () => {
           },
         },
       })
+    })
+  })
+
+  describe('Prototype pollution hardening (floating preload)', () => {
+    it('strips __proto__/constructor/prototype and returns a null-prototype object', () => {
+      // Arrange: a payload carrying an own __proto__ key, as JSON.parse yields —
+      // the attacker shape a naive sanitizer would copy into the result.
+      const malicious = JSON.parse(
+        '{"__proto__":{"polluted":true},"title":"  Plan the week  "}',
+      )
+
+      // Act: the REAL floating-preload sanitizer (now mirrors the main preload).
+      const sanitized = sanitizeData(malicious)
+
+      // Assert: forbidden keys are dropped, the result has a null prototype, the
+      // global Object.prototype is untouched, and ordinary fields still trim.
+      expect(Object.getPrototypeOf(sanitized)).toBeNull()
+      expect('polluted' in sanitized).toBe(false)
+      expect({}.polluted).toBeUndefined()
+      expect(sanitized.title).toBe('Plan the week')
     })
   })
 

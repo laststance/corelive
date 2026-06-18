@@ -63,6 +63,47 @@ If local QA genuinely cannot run yet (e.g. a native multi-window path with no lo
 harness), **do not silently defer it and ship anyway, and do not present unverified
 work as shipped**. Say so plainly and get the user's explicit OK before merging.
 
+## Autonomy — self-complete the work (自分で完結させる / NON-NEGOTIABLE)
+
+**Default: complete every task end-to-end yourself — including driving the app and
+doing QA.** You have Computer Use, Playwright/CDP, the CLI, Electron, and MCP
+servers. Use them. "I can plan and write code, but you click the buttons / sign in
+/ press Cmd+3" is **not acceptable** — if a tool can do it, you do it.
+
+**The ONLY things you may hand back to the user:**
+
+1. **Payment / money movement** — purchases, transfers, anything that spends.
+2. **Credential entry** — passwords, card / bank / government IDs (safety-prohibited;
+   the user types these, never you).
+3. A surface that is **genuinely un-automatable after you've tried the autonomous
+   workaround below** — and then you say so plainly and ask, you don't just offload.
+
+**Native macOS QA → drive the PACKAGED app, never make the user click.**
+Computer Use **cannot see or click the `electron:dev` app** (it runs from
+`node_modules` as "Electron" / `com.corelive.app.dev`, is not LaunchServices-
+installed, and is filtered out of every screenshot — see the dev-vs-prod table
+below). That is **not** a reason to offload the click to the user — it is the reason
+to **build and drive the packaged app yourself**:
+
+```bash
+pnpm electron:build:dir && open dist/mac/CoreLive.app
+```
+
+then `mcp__computer-use__request_access` for **CoreLive** (full tier) and drive the
+menu bar / tray / dock / **native dialogs** / traffic-lights / `Cmd+3` floating
+yourself. The packaged main bundle is built from the current branch, so a
+main-process fix (e.g. DT7) IS in it; trigger the failure path (offline / blocked
+host) and exercise the dialog with Computer Use — no human needed.
+
+**OAuth / browser redirects → drive them yourself** via the browser MCP /
+Computer Use. The user's Chrome is already signed into Google, so the redirect leg
+is yours to complete; the only gate is the per-action consent click, allowed once
+the user has authorized the flow.
+
+> When you catch yourself about to type "press Cmd+3" / "click Retry" / "sign in for
+> me", **stop** and route it through the packaged app + Computer Use (or the browser
+> MCP) instead. Asking the user to operate the app is a last resort, not the default.
+
 ## Services
 
 | Service    | Environment   | URL/Identifier                                                                                             |

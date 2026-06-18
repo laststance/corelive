@@ -17,12 +17,14 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { BrowserWindow, screen } from 'electron'
+import { BrowserWindow, dialog, screen } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import {
   AUTH_PATHNAMES,
   ERR_ABORTED,
+  FLOATING_LOAD_MAX_RETRIES,
+  FLOATING_LOAD_RETRY_BASE_MS,
   SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
   SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
   SETTINGS_POPOVER_MAX_HEIGHT_PX,
@@ -89,6 +91,24 @@ export class WindowManager {
 
   /** Always-on-top utility window */
   private floatingNavigator: BrowserWindow | null
+
+  // DT7 Floating load-failure recovery state. The Floating window is the
+  // signed-out front door, so a main-frame load failure must self-heal (retry +
+  // native dialog) instead of leaving a dead window. Reset per fresh window in
+  // `createFloatingNavigator`.
+  /** Retry count for the current never-succeeded Floating load. */
+  private floatingLoadFailAttempts: number = 0
+  /** True while a retry timer is queued or the recovery dialog is open. */
+  private floatingLoadRecoveryPending: boolean = false
+  /** Latched on the first successful Floating load; after it the renderer owns errors. */
+  private floatingHasLoadedOnce: boolean = false
+  /**
+   * True between a real main-frame `did-fail-load` and the `did-finish-load`
+   * Chromium then fires for the error page it commits. Lets the finish handler
+   * tell an error-page settle (which must NOT latch `floatingHasLoadedOnce`, or
+   * it silences DT7 recovery and strands a blank window) from a genuine app load.
+   */
+  private floatingLoadFailedPendingFinish: boolean = false
 
   /** Frameless transparent BrainDump Note panel */
   private brainDumpWindow: BrowserWindow | null
@@ -626,6 +646,13 @@ export class WindowManager {
       trafficLightPosition: { x: -100, y: -100 },
     })
 
+    // DT7: fresh window → reset the load-failure recovery machine so a prior
+    // window's exhausted retries don't carry over.
+    this.floatingLoadFailAttempts = 0
+    this.floatingLoadRecoveryPending = false
+    this.floatingHasLoadedOnce = false
+    this.floatingLoadFailedPendingFinish = false
+
     const floatingUrl = this.getPanelUrl('floating')
 
     log.debug('Loading floating navigator URL:', floatingUrl)
@@ -660,8 +687,44 @@ export class WindowManager {
     })
 
     this.floatingNavigator.webContents.on('did-finish-load', () => {
+      // DT7: Chromium fires did-finish-load for the ERROR PAGE too (chrome-error://…)
+      // after a failed load, not only for a real app load. If the most recent
+      // main-frame load failed, THIS finish is that error page settling: consume
+      // the marker and do NOT latch, so recovery keeps retrying instead of being
+      // silenced into a permanently blank window (the bug T20 native QA caught).
+      if (this.floatingLoadFailedPendingFinish) {
+        this.floatingLoadFailedPendingFinish = false
+        return
+      }
       log.debug('Floating navigator content loaded')
+      // DT7: the renderer is alive now and owns its own error states, so stop
+      // the main-process load-failure recovery from firing on later transient
+      // events (e.g. a stale did-fail-load for the settled load).
+      this.floatingHasLoadedOnce = true
+      this.floatingLoadRecoveryPending = false
     })
+
+    // DT7: recover a never-loaded Floating window from a main-frame load
+    // failure (offline/DNS/5xx). Without this the signed-out front door can
+    // boot into a permanently blank window. See `recoverFloatingFromLoadFailure`.
+    this.floatingNavigator.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
+        // Sub-resource failures and intentional cancellations (ERR_ABORTED
+        // fires during a normal redirect chain) are not real document failures.
+        if (!isMainFrame || errorCode === ERR_ABORTED) return
+        // A real main-frame failure: Chromium will now commit an error page and
+        // fire did-finish-load for IT. Mark it so that finish doesn't mistake the
+        // error page for a live app render and latch `floatingHasLoadedOnce`.
+        this.floatingLoadFailedPendingFinish = true
+        // Once the panel has loaded once, its live renderer owns its error UI —
+        // main-process retry is only for a never-loaded (dead) window.
+        if (this.floatingHasLoadedOnce) return
+        // A retry timer or dialog is already in flight — don't stack them.
+        if (this.floatingLoadRecoveryPending) return
+        this.recoverFloatingFromLoadFailure()
+      },
+    )
 
     this.floatingNavigator.webContents.on(
       'render-process-gone',
@@ -685,6 +748,98 @@ export class WindowManager {
     )
 
     return this.floatingNavigator
+  }
+
+  /**
+   * Drive the Floating window back to life after a main-frame load failure:
+   * silently retry with linear backoff, then — once retries are exhausted —
+   * surface a NATIVE recovery dialog. Main-process owned because a never-loaded
+   * renderer can't render its own error page; the dialog is native (not bundled
+   * HTML) because electron-builder can drop asar leaf deps. Wired from the
+   * Floating `did-fail-load` handler in `createFloatingNavigator`.
+   *
+   * @returns nothing — schedules a retry or opens the recovery dialog as a side effect.
+   * @example
+   * // on a real offline boot: retries 3× (800/1600/2400 ms) then shows the dialog
+   */
+  private recoverFloatingFromLoadFailure(): void {
+    const target = this.floatingNavigator
+    if (!target || target.isDestroyed()) return
+
+    // Still within the silent-retry budget: schedule a backed-off reload.
+    if (this.floatingLoadFailAttempts < FLOATING_LOAD_MAX_RETRIES) {
+      this.floatingLoadFailAttempts += 1
+      this.floatingLoadRecoveryPending = true
+      const backoffMs =
+        FLOATING_LOAD_RETRY_BASE_MS * this.floatingLoadFailAttempts
+      // Bind the retry to the window that ACTUALLY failed. If it closes and a
+      // fresh Floating window replaces it during the backoff, this stale timer
+      // must not reload (and corrupt the recovery state of) the new window.
+      const retryTarget = target
+      setTimeout(() => {
+        if (
+          this.floatingNavigator !== retryTarget ||
+          retryTarget.isDestroyed()
+        ) {
+          return
+        }
+        this.floatingLoadRecoveryPending = false
+        retryTarget.webContents.loadURL(this.getPanelUrl('floating'))
+      }, backoffMs)
+      return
+    }
+
+    // Retries exhausted. Show the (until now hidden) startup panel FIRST: a
+    // window-modal sheet attached to a non-visible window may never render on
+    // macOS, which would itself be the dead window this recovery exists to kill.
+    this.floatingLoadRecoveryPending = true
+    target.show()
+    // Cancel the armed startup-pill timeout before the dialog: once recovery
+    // commits, the pill's fallback (restoreFromTray → surface main) must not
+    // fire and pop the main window over the Floating recovery.
+    this.dismissStartupPill()
+    void this.promptFloatingLoadFailure(target)
+  }
+
+  /**
+   * Native "couldn't reach corelive.app" recovery dialog shown when the Floating
+   * window exhausts its silent reload retries. Retry restarts a fresh recovery
+   * cycle; Close dismisses the window (re-openable from the tray). Deliberately
+   * Close, not Quit: in Phase 1 the main window is still alive and `app.quit()`
+   * would take it down over a companion-window network blip.
+   *
+   * @param target - The Floating window to attach the dialog to and recover.
+   * @returns a promise that settles once the user picks Retry or Close.
+   * @example
+   * void this.promptFloatingLoadFailure(this.floatingNavigator)
+   */
+  private async promptFloatingLoadFailure(
+    target: BrowserWindow,
+  ): Promise<void> {
+    const { response } = await dialog.showMessageBox(target, {
+      type: 'warning',
+      message: "Couldn't reach corelive.app",
+      detail: 'Check your internet connection, then try again.',
+      buttons: ['Retry', 'Close'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+
+    if (target.isDestroyed()) return
+
+    // Retry (button 0): restart the backoff sequence from a clean slate.
+    if (response === 0) {
+      this.floatingLoadFailAttempts = 0
+      this.floatingLoadRecoveryPending = false
+      target.webContents.loadURL(this.getPanelUrl('floating'))
+      return
+    }
+
+    // Close (button 1): keep the Phase-1 main window alive; the tray re-opens
+    // Floating later.
+    // PHASE 2 (main window deleted): Close here would leave zero windows + tray
+    // only — revisit whether to keep the window on a recoverable blank instead.
+    target.close()
   }
 
   /**
@@ -1047,6 +1202,27 @@ export class WindowManager {
   }
 
   /**
+   * Resolve the web-app origin the renderers point at, independent of any one
+   * window. OAuth URL building uses this so the system-browser flow targets the
+   * correct origin (localhost in dev, corelive.app in prod) even with no main
+   * window — the retired main window can no longer be read for its URL.
+   *
+   * @returns The origin (scheme + host + port) of the configured server URL, or
+   * the production origin when `serverUrl` is unset/unparseable.
+   * @example
+   * windowManager.getWebAppOrigin() // => 'http://localhost:4991' (dev)
+   * windowManager.getWebAppOrigin() // => 'https://corelive.app'    (prod)
+   */
+  getWebAppOrigin(): string {
+    const baseUrl = this.serverUrl || 'https://corelive.app'
+    try {
+      return new URL(baseUrl).origin
+    } catch {
+      return 'https://corelive.app'
+    }
+  }
+
+  /**
    * Whether a navigated URL is a Clerk auth page, i.e. the user is not yet
    * authenticated. A startup panel that lands here was redirected by proxy.ts.
    *
@@ -1175,6 +1351,11 @@ export class WindowManager {
       // Subresource failures and intentional cancellations (ERR_ABORTED fires
       // during the normal panel -> /login redirect chain) are not real errors.
       if (!isMainFrame || errorCode === ERR_ABORTED) return
+      // Phase 1 / DT7: the Floating window owns its own load-failure recovery
+      // (retry + native dialog in `createFloatingNavigator`), so the startup
+      // gate must NOT suppress it and surface main on a network blip. Braindump
+      // is still main-deferred in Phase 1, so it keeps the surface-main path.
+      if (kind === 'floating') return
       finish(false)
     }
 

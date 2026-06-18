@@ -81,16 +81,19 @@ export const ElectronAuthProvider = memo(function ElectronAuthProvider({
         })
 
         await setActive({
-          navigate: ({ session, decorateUrl }) => {
+          // Electron companion: after a native OAuth sign-in we deliberately do
+          // NOT navigate. Clerk's reactive hooks (useUser/useAuth) re-render the
+          // current route in place — the signed-out Floating card swaps to the
+          // live navigator with no reload — and no Electron window wants the web
+          // `/home` dashboard (it was retired with the main window). The only
+          // exception is a multi-step task (e.g. MFA) that can't be completed
+          // inside a companion panel, surfaced here as an error.
+          navigate: ({ session }) => {
             if (session?.currentTask) {
               dispatchOAuthError(
                 'Additional sign-in steps are required. Please complete sign-in in the browser.',
               )
-              return
             }
-
-            const url = decorateUrl('/home')
-            window.location.href = url
           },
           session: createdSessionId,
         })

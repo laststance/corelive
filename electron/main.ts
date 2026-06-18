@@ -1945,7 +1945,7 @@ function setupIPCHandlers(): void {
   // OAuth IPC handlers for browser-based OAuth flows
   // OAuth IPC handlers (Zod-validated)
   // Used when WebView OAuth is blocked (e.g., Google OAuth)
-  typedHandle('oauth-start', async (_event, provider) => {
+  typedHandle('oauth-start', async (event, provider) => {
     try {
       const oauth = ensureOAuthManager()
       if (!oauth) {
@@ -1954,7 +1954,9 @@ function setupIPCHandlers(): void {
       if (!oauth.isProviderSupported(provider)) {
         throw new Error(`Unsupported OAuth provider: ${provider}`)
       }
-      return await oauth.startOAuthFlow(provider)
+      // Pass the initiating renderer so the resulting one-time sign-in ticket is
+      // pushed back to THIS window only (single recipient → no double-consume).
+      return await oauth.startOAuthFlow(provider, event.sender)
     } catch (error) {
       log.error('Failed to start OAuth flow:', error)
       return {
@@ -1978,9 +1980,11 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  typedHandle('oauth-get-pending-token', () => {
+  typedHandle('oauth-get-pending-token', (event) => {
     const oauth = ensureOAuthManager()
-    return oauth ? oauth.getPendingSignInToken() : null
+    // Pass the requesting window so the PULL releases the one-time ticket only
+    // to the window that STARTED the flow (scoped in getPendingSignInToken).
+    return oauth ? oauth.getPendingSignInToken(event.sender) : null
   })
 
   typedHandle('oauth-clear-pending-token', () => {

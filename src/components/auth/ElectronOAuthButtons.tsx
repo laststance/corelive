@@ -1,6 +1,7 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
+import { Loader2 } from 'lucide-react'
 import { memo, useCallback, useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -8,58 +9,78 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useReducerState } from '@/hooks/useReducerState'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
+
 type OAuthState = {
-  isLoading: string | null
+  isLoading: boolean
   error: string | null
 }
 
 type OAuthAction =
-  | { type: 'START_LOADING'; provider: string }
+  | { type: 'START_LOADING' }
   | { type: 'SUCCESS' }
   | { type: 'ERROR'; error: string }
   | { type: 'RESET' }
 
+/**
+ * Reduces the native-OAuth start gesture's transient UI state (one provider:
+ * Google). START_LOADING on click, SUCCESS/ERROR from the main-process events.
+ * @param state - Current loading/error state.
+ * @param action - Lifecycle event for the in-flight sign-in.
+ * @returns The next state.
+ * @example
+ * oauthReducer({ isLoading: false, error: null }, { type: 'START_LOADING' })
+ * // => { isLoading: true, error: null }
+ */
 function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
   switch (action.type) {
     case 'START_LOADING':
-      return { isLoading: action.provider, error: null }
+      return { isLoading: true, error: null }
     case 'SUCCESS':
-      return { isLoading: null, error: null }
+      return { isLoading: false, error: null }
     case 'ERROR':
-      return { isLoading: null, error: action.error }
+      return { isLoading: false, error: action.error }
+    // Intentionally unwired in Phase 1 (nothing dispatches RESET yet) — kept as
+    // the recovery scaffold; see the success branch in handleGoogleClick for the
+    // abandonment limitation it will eventually resolve (T20 UX decision).
     case 'RESET':
-      return { isLoading: null, error: null }
+      return { isLoading: false, error: null }
     default:
       return state
   }
 }
 
 /**
- * OAuth buttons for Electron environment.
+ * The signed-out Floating front door's sign-in CTA — a single amber "Sign in
+ * with Google" button that launches the system-browser OAuth flow.
  *
- * Google OAuth blocks WebView authentication, so in Electron we need to:
- * 1. Open system browser for OAuth
- * 2. Receive callback via deep link
- * 3. Complete authentication in Electron
+ * Why Google-only: Google blocks OAuth inside a WebView, so Electron opens the
+ * system browser, receives the `corelive://` deep-link callback, and completes
+ * the sign-in in-process (Clerk re-renders the panel in place — no navigation).
+ * The Electron login forms are already Google-only, so this matches that
+ * convention and the approved single-CTA design. It is the ONLY consumer of
+ * this module; the capability hook below decides whether to render it at all.
  *
- * This component provides buttons that trigger the browser-based OAuth flow.
+ * @returns The amber sign-in button plus a calm trust/error line beneath it.
+ * @example
+ * <ElectronOAuthButtons />
  */
 export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
   const [state, dispatch] = useReducerState(oauthReducer, {
-    isLoading: null,
+    isLoading: false,
     error: null,
   })
   const { user } = useUser()
 
-  // When user becomes signed in (from Clerk), reset loading state
-  // This handles successful sign-in via the token exchange
-  const isLoading = user ? null : state.isLoading
+  // Clear transient state the instant Clerk reports a signed-in user (the token
+  // exchange completed) — the card is about to swap to the live navigator.
+  const isLoading = user ? false : state.isLoading
   const error = user ? null : state.error
 
   useCycleEffect(() => {
     if (!isElectronEnvironment()) return
 
-    // Register OAuth event listeners
+    // Main-process OAuth outcome events (success/error) drive the button back
+    // out of its loading state.
     const unsubscribeSuccess = window.electronAPI?.oauth?.onSuccess?.(() => {
       dispatch({ type: 'SUCCESS' })
     })
@@ -68,7 +89,8 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
       dispatch({ type: 'ERROR', error: data.error || 'Authentication failed' })
     })
 
-    // Listen for custom error event from ElectronAuthProvider
+    // The renderer-side provider re-dispatches token-exchange failures through
+    // this custom event (D2's second error source).
     const handleCustomError = (event: Event) => {
       const customEvent = event as CustomEvent<string>
       dispatch({
@@ -85,111 +107,99 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
     }
   }, [])
 
-  const handleOAuthClick = useCallback(
-    async (provider: 'google' | 'github' | 'apple') => {
+  // Sync, stable click handler (the Button needs a stable useCallback ref) that
+  // fires the async native-OAuth start as fire-and-forget.
+  const handleGoogleClick = useCallback(() => {
+    void (async () => {
       if (!window.electronAPI?.oauth) {
         dispatch({ type: 'ERROR', error: 'OAuth not available' })
         return
       }
 
-      dispatch({ type: 'START_LOADING', provider })
+      dispatch({ type: 'START_LOADING' })
 
       try {
-        const result = await window.electronAPI.oauth.start(provider)
+        const result = await window.electronAPI.oauth.start('google')
         if (!result.success) {
           dispatch({
             type: 'ERROR',
             error: result.error || 'Failed to start authentication',
           })
         }
-        // If successful, browser will open and user will complete OAuth there
-        // The success/error callbacks will handle the result
+        // On success the system browser opens; the onSuccess/onError events (and
+        // the in-place Clerk re-render) take over from here.
+        //
+        // KNOWN Phase-1 limitation: if the user ABANDONS the browser flow (closes
+        // the tab / picks no account), no event fires and the CTA stays disabled
+        // at "Opening browser…" until the window is reopened. Non-regressive — the
+        // Electron main window is still a working sign-in path during Phase 1's
+        // strangler-fig, so this is not a dead-ended user. The recovery mechanism
+        // (dispatch RESET on focus-regain vs. a timeout) is a UX decision to settle
+        // during the T20 packaged native-OAuth QA, where the real deep-link timing
+        // can be observed — it must not be guessed at here.
       } catch {
         dispatch({ type: 'ERROR', error: 'Failed to start authentication' })
       }
-    },
-    [],
-  )
-
-  const handleGoogleClick = useCallback(() => {
-    void handleOAuthClick('google')
-  }, [handleOAuthClick])
-
-  const handleGithubClick = useCallback(() => {
-    void handleOAuthClick('github')
-  }, [handleOAuthClick])
+    })()
+  }, [])
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-center text-sm text-gray-500">
-        Sign in with your preferred provider
-      </p>
-
+    <div className="flex w-full flex-col gap-2">
       <Button
-        variant="outline"
-        className="flex w-full items-center justify-center gap-2"
+        className="w-full gap-2"
         onClick={handleGoogleClick}
-        disabled={isLoading !== null}
+        disabled={isLoading}
+        aria-busy={isLoading}
       >
-        {isLoading === 'google' ? (
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
-          <svg className="h-5 w-5" viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="currentColor"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="currentColor"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-            />
-            <path
-              fill="currentColor"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-            />
-          </svg>
+          <GoogleMark />
         )}
-        <span>
-          {isLoading === 'google'
-            ? 'Opening browser...'
-            : 'Continue with Google'}
-        </span>
+        <span>{isLoading ? 'Opening browser…' : 'Sign in with Google'}</span>
       </Button>
 
-      <Button
-        variant="outline"
-        className="flex w-full items-center justify-center gap-2"
-        onClick={handleGithubClick}
-        disabled={isLoading !== null}
-      >
-        {isLoading === 'github' ? (
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-        ) : (
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-          </svg>
-        )}
-        <span>
-          {isLoading === 'github'
-            ? 'Opening browser...'
-            : 'Continue with GitHub'}
-        </span>
-      </Button>
-
-      {error && (
-        <div className="rounded-md bg-red-50 p-3 text-center text-sm text-red-600">
+      {error ? (
+        <p role="alert" className="text-center text-xs text-destructive">
           {error}
-        </div>
+        </p>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">
+          Opens securely in your browser.
+        </p>
       )}
-
-      <p className="mt-2 text-center text-xs text-gray-400">
-        Authentication will open in your browser for security.
-      </p>
     </div>
+  )
+})
+
+/**
+ * Google "G" glyph as a single-color mark (inherits `currentColor`, so it reads
+ * as paper-white on the amber button instead of clashing Google brand colors
+ * against Warm Cathedral).
+ * @returns A 16px monochrome Google logo SVG, hidden from the a11y tree.
+ * @example
+ * <GoogleMark />
+ */
+const GoogleMark = memo(function GoogleMark() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="currentColor"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="currentColor"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      />
+      <path
+        fill="currentColor"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
+    </svg>
   )
 })
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { useUser } from '@clerk/nextjs'
 import { arrayMove } from '@dnd-kit/helpers'
 import {
   keepPreviousData,
@@ -29,6 +30,7 @@ import type {
 } from '@/server/schemas/category'
 
 import { FloatingNavigator, type FloatingTodo } from './FloatingNavigator'
+import { SignedOutFloatingCard } from './SignedOutFloatingCard'
 
 const TODO_QUERY_LIMIT = 100
 const TODO_QUERY_OFFSET = 0
@@ -54,6 +56,8 @@ export const FloatingNavigatorContainer = React.memo(
   function FloatingNavigatorContainer() {
     const queryClient = useQueryClient()
     const isClerkQueryReady = useClerkQueryReady()
+    // Clerk auth gate: drives the signed-out front door vs the live navigator.
+    const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
 
     // Category filter state (shared with main app via localStorage)
     const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
@@ -353,6 +357,21 @@ export const FloatingNavigatorContainer = React.memo(
           </p>
         </div>
       )
+    }
+
+    // Auth gate: hold a calm loading state until Clerk resolves, then show the
+    // signed-out front door (this window is the sign-in surface now that the
+    // main window is gone) or fall through to the live navigator. A native OAuth
+    // sign-in re-renders this in place — no reload.
+    if (!isAuthLoaded) {
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-background">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      )
+    }
+    if (!isSignedIn) {
+      return <SignedOutFloatingCard />
     }
 
     // Show loading state
