@@ -626,5 +626,40 @@ describe('WindowManager startup panel nav-watch', () => {
       // explicit user retry), restarting the recovery from a clean slate.
       expect(floating.win.webContents.loadURL).toHaveBeenCalledTimes(4)
     })
+
+    it('keeps retrying when Chromium commits an error page (did-finish-load) after each failure', async () => {
+      // Arrange: a Floating window whose load keeps failing (offline). Unlike the
+      // other DT7 cases, the REAL Electron runtime commits a chrome-error page
+      // after every main-frame failure and fires did-finish-load for THAT page.
+      // The error page is not the app, so it must NOT latch floatingHasLoadedOnce
+      // (which would early-return every later did-fail-load and silence recovery,
+      // stranding a permanently blank signed-out front door). Regression for the
+      // bug T20 native QA surfaced: 2 failures then a dead window, no dialog.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createFloatingNavigator()
+      const floating = getWindow(0)
+
+      // Act: interleave the error-page did-finish-load the runtime emits after
+      // each failure with the backoff retries. 3 retries, then the 4th failure
+      // exhausts the budget and opens the native dialog.
+      fireFloatingLoadFailure(floating)
+      floating.fireWebContents('did-finish-load') // chrome-error page settles
+      vi.runOnlyPendingTimers() // retry 1
+      fireFloatingLoadFailure(floating)
+      floating.fireWebContents('did-finish-load')
+      vi.runOnlyPendingTimers() // retry 2
+      fireFloatingLoadFailure(floating)
+      floating.fireWebContents('did-finish-load')
+      vi.runOnlyPendingTimers() // retry 3
+      fireFloatingLoadFailure(floating) // exhausted → recovery dialog
+      floating.fireWebContents('did-finish-load')
+      await vi.runOnlyPendingTimersAsync() // settle the awaited dialog promise
+
+      // Assert: recovery survived the interleaved error-page finishes — it still
+      // retried 3× and surfaced the native dialog, identical to the no-finish run.
+      expect(floating.win.webContents.loadURL).toHaveBeenCalledTimes(3)
+      expect(floating.win.show).toHaveBeenCalledTimes(1)
+      expect(dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    })
   })
 })

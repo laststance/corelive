@@ -102,6 +102,13 @@ export class WindowManager {
   private floatingLoadRecoveryPending: boolean = false
   /** Latched on the first successful Floating load; after it the renderer owns errors. */
   private floatingHasLoadedOnce: boolean = false
+  /**
+   * True between a real main-frame `did-fail-load` and the `did-finish-load`
+   * Chromium then fires for the error page it commits. Lets the finish handler
+   * tell an error-page settle (which must NOT latch `floatingHasLoadedOnce`, or
+   * it silences DT7 recovery and strands a blank window) from a genuine app load.
+   */
+  private floatingLoadFailedPendingFinish: boolean = false
 
   /** Frameless transparent BrainDump Note panel */
   private brainDumpWindow: BrowserWindow | null
@@ -644,6 +651,7 @@ export class WindowManager {
     this.floatingLoadFailAttempts = 0
     this.floatingLoadRecoveryPending = false
     this.floatingHasLoadedOnce = false
+    this.floatingLoadFailedPendingFinish = false
 
     const floatingUrl = this.getPanelUrl('floating')
 
@@ -679,6 +687,15 @@ export class WindowManager {
     })
 
     this.floatingNavigator.webContents.on('did-finish-load', () => {
+      // DT7: Chromium fires did-finish-load for the ERROR PAGE too (chrome-error://…)
+      // after a failed load, not only for a real app load. If the most recent
+      // main-frame load failed, THIS finish is that error page settling: consume
+      // the marker and do NOT latch, so recovery keeps retrying instead of being
+      // silenced into a permanently blank window (the bug T20 native QA caught).
+      if (this.floatingLoadFailedPendingFinish) {
+        this.floatingLoadFailedPendingFinish = false
+        return
+      }
       log.debug('Floating navigator content loaded')
       // DT7: the renderer is alive now and owns its own error states, so stop
       // the main-process load-failure recovery from firing on later transient
@@ -696,6 +713,10 @@ export class WindowManager {
         // Sub-resource failures and intentional cancellations (ERR_ABORTED
         // fires during a normal redirect chain) are not real document failures.
         if (!isMainFrame || errorCode === ERR_ABORTED) return
+        // A real main-frame failure: Chromium will now commit an error page and
+        // fire did-finish-load for IT. Mark it so that finish doesn't mistake the
+        // error page for a live app render and latch `floatingHasLoadedOnce`.
+        this.floatingLoadFailedPendingFinish = true
         // Once the panel has loaded once, its live renderer owns its error UI —
         // main-process retry is only for a never-loaded (dead) window.
         if (this.floatingHasLoadedOnce) return
