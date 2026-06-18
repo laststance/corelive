@@ -9,10 +9,11 @@
 import fs from 'fs'
 import path from 'path'
 
-import { app, Menu, nativeImage, Notification, shell, Tray } from 'electron'
+import { app, Menu, nativeImage, Notification, Tray } from 'electron'
 import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 
 import { log } from './logger'
+import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -528,11 +529,7 @@ export class SystemTrayManager {
             // The full task app is web-only now that the main window is retired:
             // open corelive.app in the user's browser (↗ = leaves the app),
             // never a native main window. (T9 / user: no item restores main.)
-            shell
-              .openExternal(`${this.windowManager.getWebAppOrigin()}/home`)
-              .catch((error) => {
-                log.error('Failed to open the full app in the browser:', error)
-              })
+            openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
           },
         },
         { type: 'separator' },
@@ -617,11 +614,7 @@ export class SystemTrayManager {
           label: 'Open full app in browser ↗',
           click: () => {
             // Degraded menu still never restores a native main window.
-            shell
-              .openExternal(`${this.windowManager.getWebAppOrigin()}/home`)
-              .catch((error) => {
-                log.error('Failed to open the full app in the browser:', error)
-              })
+            openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
           },
         },
         {
