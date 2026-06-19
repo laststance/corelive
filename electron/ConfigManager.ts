@@ -373,7 +373,8 @@ export class ConfigManager {
         autoSaveInterval: 30000,
         confirmOnDelete: true,
         confirmOnQuit: false,
-        // Default: only the main window opens at launch (showMain=true).
+        // Default: the Floating Navigator opens at launch — the front door
+        // after main-window retirement (T18); showFloating=true.
         startup: { ...DEFAULT_STARTUP_WINDOW_CONFIG },
       },
 
@@ -586,7 +587,7 @@ export class ConfigManager {
       const behavior = isPlainObject(raw.behavior)
         ? (raw.behavior as BehaviorConfig)
         : ({} as BehaviorConfig)
-      // Partial startup is fine here — mergeWithDefaults fills showMain/showBraindump.
+      // Partial startup is fine here — mergeWithDefaults fills showBraindump.
       behavior.startup = {
         ...(startup ?? {}),
         showFloating: true,
@@ -606,17 +607,21 @@ export class ConfigManager {
    * Repairs a non-object `behavior`/`startup` (corrupt/hand-edited JSON) back to
    * defaults instead of bailing — `main.ts` reads `getSection('behavior').startup`
    * synchronously at boot, so a non-object here would otherwise throw or boot a
-   * blank desktop. Then coerces all three fields to real booleans and falls back
-   * to showMain. In-memory only; the corrupt file self-heals on the next config
-   * write (set/update/import all call this then saveConfig).
+   * blank desktop. Drops the retired `showMain` key (T18), coerces both surviving
+   * fields to real booleans, and falls back to showFloating — the front door
+   * after main-window retirement. In-memory only; the corrupt file self-heals on
+   * the next config write (set/update/import all call this then saveConfig).
    *
    * @returns void — mutates `this.config.behavior(.startup)` in place.
    * @example
-   * // this.config.behavior.startup = { showMain: false, showBraindump: false, showFloating: false }
-   * ensureAtLeastOneStartupWindow() // => showMain becomes true
+   * // this.config.behavior.startup = { showBraindump: false, showFloating: false }
+   * ensureAtLeastOneStartupWindow() // => showFloating becomes true
+   * @example
+   * // this.config.behavior.startup = { showMain: true }  (legacy persisted config)
+   * ensureAtLeastOneStartupWindow() // => showMain key dropped, showFloating becomes true
    * @example
    * // this.config.behavior = 'corrupt'  (hand-edited config.json)
-   * ensureAtLeastOneStartupWindow() // => behavior reset to defaults (showMain: true)
+   * ensureAtLeastOneStartupWindow() // => behavior reset to defaults (showFloating: true)
    */
   private ensureAtLeastOneStartupWindow(): void {
     const behavior = this.config.behavior
@@ -645,16 +650,25 @@ export class ConfigManager {
       return
     }
 
+    // Drop the retired `showMain` key (T18). mergeWithDefaults copies unknown
+    // persisted keys verbatim, so a config.json written before main-window
+    // retirement still carries `showMain`; delete it here — the one chokepoint
+    // every write path (construct/set/update/import) flows through — so the dead
+    // key never lingers in the saved file.
+    delete (startup as Record<string, unknown>).showMain
+
     // Coerce to strict booleans. A hand-edited config.json can carry a string
     // like "false", and `Boolean("false") === true` would wrongly arm a window.
     // `=== true` accepts only a real boolean true; any other value (string,
     // number, undefined) becomes false and is caught by the >=1 invariant below.
-    startup.showMain = startup.showMain === true
     startup.showBraindump = startup.showBraindump === true
     startup.showFloating = startup.showFloating === true
 
-    if (!startup.showMain && !startup.showBraindump && !startup.showFloating) {
-      startup.showMain = true
+    // Fall back to the Floating Navigator — the front door after main-window
+    // retirement (T18) — when nothing is enabled, so a launch always surfaces a
+    // window rather than a blank desktop.
+    if (!startup.showBraindump && !startup.showFloating) {
+      startup.showFloating = true
     }
   }
 

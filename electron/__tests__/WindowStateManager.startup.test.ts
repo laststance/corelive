@@ -65,7 +65,7 @@ function createConfigManager(showFloating: boolean): ConfigManager {
     },
     braindump: { width: 480, height: 640 },
     behavior: {
-      startup: { showMain: true, showBraindump: false, showFloating },
+      startup: { showBraindump: false, showFloating },
     },
   }
   const configManager = {

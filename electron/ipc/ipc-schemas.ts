@@ -245,10 +245,9 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'settings:setStartAtLogin': z.tuple([z.boolean()]),
   'settings:getLoginItemSettings': z.tuple([]),
   // The >=1-true invariant is enforced in ConfigManager, not here; this schema
-  // only guarantees the shape (three booleans) crossing the IPC boundary.
+  // only guarantees the shape (two booleans) crossing the IPC boundary.
   'settings:setStartupConfig': z.tuple([
     z.object({
-      showMain: z.boolean(),
       showBraindump: z.boolean(),
       showFloating: z.boolean(),
     }),

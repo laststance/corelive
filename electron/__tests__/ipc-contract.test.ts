@@ -80,32 +80,26 @@ describe('IPC contract', () => {
       expect(() => setHide.parse([])).toThrow(ZodError)
     })
 
-    it('requires three startup-window booleans for settings:setStartupConfig', () => {
+    it('requires both startup-window booleans for settings:setStartupConfig', () => {
       // Arrange
       const setStartupConfig = IPC_ARG_SCHEMAS['settings:setStartupConfig']
 
-      // Act + Assert: a complete three-boolean object passes the shape check.
+      // Act + Assert: a complete two-boolean object passes the shape check.
       expect(() =>
-        setStartupConfig.parse([
-          { showMain: true, showBraindump: false, showFloating: false },
-        ]),
+        setStartupConfig.parse([{ showBraindump: true, showFloating: false }]),
       ).not.toThrow()
       // An all-false object still passes the *schema* — the >=1-true invariant
       // is enforced in ConfigManager, not at the IPC boundary.
       expect(() =>
-        setStartupConfig.parse([
-          { showMain: false, showBraindump: false, showFloating: false },
-        ]),
+        setStartupConfig.parse([{ showBraindump: false, showFloating: false }]),
       ).not.toThrow()
       // A missing flag is rejected (renderer cannot send a partial config).
-      expect(() =>
-        setStartupConfig.parse([{ showMain: true, showBraindump: false }]),
-      ).toThrow(ZodError)
+      expect(() => setStartupConfig.parse([{ showBraindump: false }])).toThrow(
+        ZodError,
+      )
       // A non-boolean flag is rejected.
       expect(() =>
-        setStartupConfig.parse([
-          { showMain: 'yes', showBraindump: false, showFloating: false },
-        ]),
+        setStartupConfig.parse([{ showBraindump: false, showFloating: 'yes' }]),
       ).toThrow(ZodError)
       // An empty tuple is rejected.
       expect(() => setStartupConfig.parse([])).toThrow(ZodError)
@@ -118,7 +112,7 @@ describe('IPC contract', () => {
       // Act + Assert: the read side is a pure getter — an empty tuple passes.
       expect(() => getStartupConfig.parse([])).not.toThrow()
       // Any argument is rejected (the getter reads, it does not accept input).
-      expect(() => getStartupConfig.parse([{ showMain: true }])).toThrow(
+      expect(() => getStartupConfig.parse([{ showFloating: true }])).toThrow(
         ZodError,
       )
     })

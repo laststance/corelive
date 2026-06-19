@@ -1831,7 +1831,7 @@ function setupIPCHandlers(): void {
 
   // Persist which window(s) open at Electron launch. Writes through
   // ConfigManager.update() (flat dot-paths) so the >=1-true invariant runs:
-  // a renderer cannot persist a boot-nothing config — all-false snaps showMain
+  // a renderer cannot persist a boot-nothing config — all-false snaps showFloating
   // back on before saving.
   typedHandle('settings:setStartupConfig', (_event, startup) => {
     try {
@@ -1840,7 +1840,6 @@ function setupIPCHandlers(): void {
         return false
       }
       const didSave = configManager.update({
-        'behavior.startup.showMain': startup.showMain,
         'behavior.startup.showBraindump': startup.showBraindump,
         'behavior.startup.showFloating': startup.showFloating,
       })
@@ -1860,7 +1859,7 @@ function setupIPCHandlers(): void {
 
   // Read side of the startup-window pair — lets the settings UI show the saved
   // choice without consuming the untyped `config.getSection` surface. Falls back
-  // to the showMain-only default (which satisfies the >=1-true invariant) when
+  // to the Floating-only default (which satisfies the >=1-true invariant) when
   // ConfigManager is somehow unavailable, so the UI never renders an all-off state.
   typedHandle('settings:getStartupConfig', () => {
     if (!configManager) {

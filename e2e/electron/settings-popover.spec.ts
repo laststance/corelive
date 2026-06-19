@@ -34,7 +34,7 @@ test('hiding the menu bar icon setting reaches main process without error', asyn
   expect(typeof result).toBe('boolean')
 })
 
-test('reading startup config exposes all three window flags', async () => {
+test('reading startup config exposes both window flags', async () => {
   // Arrange + Act
   const config = await mainWindow.evaluate(async () => {
     const getFn = window.electronAPI?.settings?.getStartupConfig
@@ -42,18 +42,16 @@ test('reading startup config exposes all three window flags', async () => {
     return getFn()
   })
 
-  // Assert: all three boolean fields are present
-  expect(typeof config.showMain).toBe('boolean')
+  // Assert: both boolean fields are present
   expect(typeof config.showBraindump).toBe('boolean')
   expect(typeof config.showFloating).toBe('boolean')
 })
 
-test('updating all startup window flags persists successfully', async () => {
+test('updating the startup window flags persists successfully', async () => {
   // Arrange
   const newConfig = {
-    showMain: true,
     showBraindump: false,
-    showFloating: false,
+    showFloating: true,
   }
 
   // Act
