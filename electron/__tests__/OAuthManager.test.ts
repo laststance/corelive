@@ -124,18 +124,63 @@ describe('OAuthManager initiator targeting', () => {
     })
   })
 
-  it('keeps an unbound ticket window-agnostic so the main-window pull still works', () => {
-    // Arrange: a push with no initiator (Phase-1 main-window / legacy path).
+  it('pushes the sign-in ticket to the initiating window with no main-window fallback', () => {
+    // Arrange: a Floating-initiated flow (id 11); no main window exists (T18).
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
       null,
     )
-    oauthManager.sendSignInToken('tok_main', 'google')
+    const floatingRenderer = fakeRenderer(11)
 
-    // Act + Assert: any window may claim an unbound ticket — no regression to
-    // the existing main-window flow that pulls without an initiator id.
+    // Act
+    oauthManager.sendSignInToken('tok_floating', 'google', floatingRenderer)
+
+    // Assert: delivered to the initiator exactly once via the per-window send —
+    // the retired main window gets no second, racing delivery of the one-time
+    // ticket. This pins that deleting `sendToRenderer` removed only a redundant
+    // path, not the live one.
+    expect(typedSend).toHaveBeenCalledTimes(1)
+    expect(typedSend).toHaveBeenCalledWith(
+      floatingRenderer,
+      'clerk-sign-in-token',
+      { token: 'tok_floating', provider: 'google' },
+    )
+  })
+
+  it('leaves an initiator-less ticket in the PULL store with no push, so a surviving panel claims it on mount', () => {
+    // Arrange: a cold-boot OAuth callback arrives before any panel painted, so
+    // there is no live initiator to push to and the main window is retired (T18).
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+
+    // Act
+    oauthManager.sendSignInToken('tok_coldboot', 'google')
+
+    // Assert: nothing is pushed (no renderer, and no main fallback to broadcast
+    // to), so the only delivery is the pull — proving the no-main path neither
+    // loses the sign-in nor double-delivers the one-time ticket.
+    expect(typedSend).not.toHaveBeenCalled()
+    expect(oauthManager.getPendingSignInToken(fakeRenderer(7))).toEqual({
+      token: 'tok_coldboot',
+      provider: 'google',
+    })
+  })
+
+  it('keeps an unbound ticket window-agnostic so a cold-boot panel can pull it', () => {
+    // Arrange: a push with no initiator (a cold-boot callback before any panel
+    // painted), the durable path now that the main window is retired.
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+    oauthManager.sendSignInToken('tok_coldboot', 'google')
+
+    // Act + Assert: any surviving panel may claim the unbound ticket, so a flow
+    // whose initiator was gone by callback time still completes its sign-in.
     expect(oauthManager.getPendingSignInToken(fakeRenderer(99))).toEqual({
-      token: 'tok_main',
+      token: 'tok_coldboot',
       provider: 'google',
     })
   })
