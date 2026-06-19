@@ -794,10 +794,6 @@ export class WindowManager {
     // macOS, which would itself be the dead window this recovery exists to kill.
     this.floatingLoadRecoveryPending = true
     target.show()
-    // Cancel the armed startup-pill timeout before the dialog: once recovery
-    // commits, the pill's fallback (surfaceMainBackstop → surface main) must not
-    // fire and pop the main window over the Floating recovery.
-    this.dismissStartupPill()
     void this.promptFloatingLoadFailure(target)
   }
 
@@ -1119,9 +1115,6 @@ export class WindowManager {
    * windowManager.restoreFromTray()
    */
   restoreFromTray(): void {
-    // Any path that surfaces a real window retires the cold-boot pill: the user
-    // can now see a window, so the "Opening…" reassurance is done.
-    this.dismissStartupPill()
     if (!this.floatingNavigator) {
       this.createFloatingNavigator()
     }
@@ -1340,21 +1333,19 @@ export class WindowManager {
       removeListeners.forEach((remove) => remove())
 
       if (authenticated) {
-        // Authed: reveal the panel the user asked to start with. A visible panel
-        // makes the cold-boot pill obsolete (this is the one show-path that does
-        // not go through `restoreFromTray`, so dismiss explicitly).
+        // Authed: reveal the panel the user asked to start with.
         panel.show()
-        this.dismissStartupPill()
         return
       }
 
-      // Signed out or load failed: keep the panel hidden, surface the main
-      // window so the user can sign in / see the error, record the fallback,
-      // and arm a one-shot re-show for when sign-in completes.
-      // `surfaceMainBackstop` also dismisses the cold-boot pill.
+      // Signed out or load failed: keep this panel hidden. With the main window
+      // retired (T18), surface the Floating navigator instead — it is public
+      // (`/floating-navigator`) and renders the signed-out OAuth front door, so a
+      // signed-out launch always leaves one visible, interactive window to sign in
+      // from. The suppressed panel reopens from the tray after sign-in; main's
+      // post-login auto-reshow is retired with the window.
       this.startupAuthFallbacks.add(kind)
-      this.surfaceMainBackstop()
-      this.armPostLoginReshow(panel, kind)
+      this.restoreFromTray()
     }
 
     const onDidNavigate = (_event: Electron.Event, url: string): void => {

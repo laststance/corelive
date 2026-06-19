@@ -897,7 +897,7 @@ async function loadDeepLinkStack(): Promise<void> {
   }, 1000)
 }
 
-async function createWindow(): Promise<BrowserWindow> {
+async function createWindow(): Promise<void> {
   // Start performance monitoring early to track startup metrics
   if (config.enableMemoryMonitoring) {
     memoryProfiler.startMonitoring()
@@ -908,7 +908,6 @@ async function createWindow(): Promise<BrowserWindow> {
    * Order matters here due to dependencies between managers.
    */
   const criticalInit = async (): Promise<{
-    mainWindow: BrowserWindow
     serverUrl: string
   }> => {
     // Initialize IPC error handler first
@@ -942,15 +941,13 @@ async function createWindow(): Promise<BrowserWindow> {
       windowStateManager,
     )
 
-    // Create main window immediately for better perceived performance.
-    // Panel-only startup configs (showMain === false) still create the window —
-    // just hidden — so it can be revealed later from the tray or `activate`.
+    // The Electron main window is retired (T18). CoreLive is now a thin native
+    // companion: the full task app runs browser-only at corelive.app, and
+    // Electron opens only the auxiliary panels the user chose at launch. Each
+    // panel is created hidden and surfaces once it resolves — a signed-out panel
+    // shows the OAuth front door (WindowManager nav-watch), a load-failed one
+    // self-heals via the DT7 recovery dialog.
     const startupConfig = configManager.getSection('behavior').startup
-    const mainWindow = windowManager.createMainWindow(startupConfig.showMain)
-
-    // Open the auxiliary panels the user chose to start with. Each is created
-    // hidden and revealed only once it authenticates (WindowManager's
-    // nav-watch); a signed-out or failed panel surfaces the main window instead.
     if (startupConfig.showFloating) {
       windowManager.openStartupPanel('floating')
     }
@@ -958,18 +955,9 @@ async function createWindow(): Promise<BrowserWindow> {
       windowManager.openStartupPanel('braindump')
     }
 
-    // Panel-only launches (showMain === false) can leave NOTHING on screen for a
-    // moment while each panel resolves its auth-gated load. Arm a tiny floating
-    // "Opening CoreLive…" pill so the boot reads as "waking up", never "is it
-    // broken?". Gated off under test/E2E (NODE_ENV === 'test') so the extra
-    // window never perturbs window-count assertions.
-    if (!startupConfig.showMain && !isTestEnvironment) {
-      windowManager.armStartupPill()
-    }
-
     performanceOptimizer.startupMetrics.windowsCreated++
 
-    return { mainWindow, serverUrl }
+    return { serverUrl }
   }
 
   // Deferred initialization - happens after main window is shown
@@ -1050,8 +1038,10 @@ async function createWindow(): Promise<BrowserWindow> {
     }
   }
 
-  // Run critical initialization directly
-  const criticalResult = await criticalInit()
+  // Run critical initialization directly. Its return value (serverUrl) is no
+  // longer consumed here now that the Electron main window is retired (T18);
+  // criticalInit still wires up the renderer origin internally.
+  await criticalInit()
 
   // Run deferred initialization
   setImmediate(async () => {
@@ -1068,12 +1058,8 @@ async function createWindow(): Promise<BrowserWindow> {
     }
   })
 
-  const { mainWindow } = criticalResult
-
   // Set up IPC handlers immediately (they handle lazy loading internally)
   setupIPCHandlers()
-
-  return mainWindow
 }
 
 // ============================================================================
@@ -2264,8 +2250,8 @@ if (!gotTheLock) {
       // Setup security policies before any window creation
       setupSecurity()
 
-      // Create the main application window
-      const mainWindow = await createWindow()
+      // Boot the Electron companion (auxiliary panels only; main is retired).
+      await createWindow()
 
       /**
        * Test environment special handling.
@@ -2276,16 +2262,8 @@ if (!gotTheLock) {
        */
       if (isTestEnvironment) {
         new Notification({ title: 'Electron is Testing' }).show()
-        // Show window without stealing focus for better test stability — but only
-        // when the startup config asks for the main window. A panel-only startup
-        // (showMain === false) must stay hidden here too, otherwise E2E would
-        // silently reveal a window the user opted out of.
-        if (configManager.getSection('behavior').startup.showMain) {
-          mainWindow.showInactive()
-        }
-        // Note: These are commented out but can be enabled if needed:
-        // app.hide() - Hide entire app
-        // app.setActivationPolicy('accessory') - Remove from dock (macOS)
+        // The main window is retired (T18); there is nothing to reveal here. The
+        // panels the user opted into surface themselves once they resolve.
       }
 
       /**
