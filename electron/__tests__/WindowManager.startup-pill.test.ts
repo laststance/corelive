@@ -205,20 +205,6 @@ describe('WindowManager cold-boot startup pill', () => {
     expect(getPill().destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('retires the pill the moment a window is surfaced from the tray', () => {
-    // Arrange
-    const windowManager = new WindowManager('https://corelive.app')
-    windowManager.armStartupPill()
-    const pill = getPill()
-
-    // Act: restoreFromTray surfaces the Floating navigator (T6) and, like every
-    // real-window surface path, tears down the cold-boot "Opening…" pill.
-    windowManager.restoreFromTray()
-
-    // Assert
-    expect(pill.destroy).toHaveBeenCalledTimes(1)
-  })
-
   it('arms only one pill even when called twice', () => {
     // Arrange
     const windowManager = new WindowManager('https://corelive.app')

@@ -165,12 +165,17 @@ describe('WindowManager startup panel nav-watch', () => {
     vi.clearAllMocks()
   })
 
-  it('keeps a signed-out floating panel hidden and surfaces the main window', () => {
+  it('keeps a signed-out floating panel hidden and surfaces the Floating front door', () => {
     // Arrange: panel-only cold boot (main created hidden), then open the panel.
     const windowManager = new WindowManager(SERVER_URL)
+    // With the main window retired (T18), the signed-out gate surfaces the
+    // Floating navigator (the public OAuth front door) via restoreFromTray.
+    // Stub it so this unit asserts the delegation, not restoreFromTray's own job.
+    const restoreFromTray = vi
+      .spyOn(windowManager, 'restoreFromTray')
+      .mockImplementation(() => {})
     windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
     const panelWindow = getWindow(1)
 
     // Act: proxy.ts redirected the unauthenticated panel load to /login.
@@ -180,18 +185,21 @@ describe('WindowManager startup panel nav-watch', () => {
       `${SERVER_URL}/login?redirect_url=/floating-navigator`,
     )
 
-    // Assert: panel stays hidden, main is surfaced, fallback is recorded.
+    // Assert: panel stays hidden, the Floating front door is surfaced, fallback recorded.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(restoreFromTray).toHaveBeenCalledTimes(1)
     expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
   })
 
   it('waits for the panel load to settle so auth redirects can win', () => {
     // Arrange: panel-only cold boot starts at the requested panel route.
     const windowManager = new WindowManager(SERVER_URL)
+    // T18: signed-out → Floating front door via restoreFromTray (stubbed).
+    const restoreFromTray = vi
+      .spyOn(windowManager, 'restoreFromTray')
+      .mockImplementation(() => {})
     windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
     const panelWindow = getWindow(1)
 
     // Act: Chromium first reports the requested URL, then proxy.ts redirects
@@ -207,18 +215,22 @@ describe('WindowManager startup panel nav-watch', () => {
       `${SERVER_URL}/login?redirect_url=/floating-navigator`,
     )
 
-    // Assert: the panel was never revealed from the transient panel URL.
+    // Assert: the panel was never revealed from the transient panel URL; the
+    // Floating front door is surfaced instead of main.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(restoreFromTray).toHaveBeenCalledTimes(1)
     expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
   })
 
-  it('treats a /sign-up landing as unauthenticated and surfaces the main window', () => {
+  it('treats a /sign-up landing as unauthenticated and surfaces the Floating front door', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
+    // T18: signed-out → Floating front door via restoreFromTray (stubbed).
+    const restoreFromTray = vi
+      .spyOn(windowManager, 'restoreFromTray')
+      .mockImplementation(() => {})
     windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
     const panelWindow = getWindow(1)
 
     // Act: the panel ended up on the sign-up page.
@@ -226,7 +238,7 @@ describe('WindowManager startup panel nav-watch', () => {
 
     // Assert
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(restoreFromTray).toHaveBeenCalledTimes(1)
     expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(true)
   })
 
@@ -252,13 +264,16 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
-  it('surfaces the main window when a braindump panel fails to load (offline/5xx)', () => {
-    // Arrange: braindump still defers to the main window in Phase 1 (only the
-    // Floating window owns its own load-failure recovery via DT7).
+  it('surfaces the Floating front door when a braindump panel fails to load (offline/5xx)', () => {
+    // Arrange: braindump has no load-failure recovery of its own, so a failed
+    // load falls back to the Floating front door (the Floating window owns DT7).
     const windowManager = new WindowManager(SERVER_URL)
+    // T18: signed-out / load-fail → Floating front door via restoreFromTray (stubbed).
+    const restoreFromTray = vi
+      .spyOn(windowManager, 'restoreFromTray')
+      .mockImplementation(() => {})
     windowManager.createMainWindow(false)
     windowManager.openStartupPanel('braindump')
-    const mainWindow = getWindow(0)
     const panelWindow = getWindow(1)
 
     // Act: main-frame load failure, e.g. net::ERR_NAME_NOT_RESOLVED (-105).
@@ -271,9 +286,9 @@ describe('WindowManager startup panel nav-watch', () => {
       true,
     )
 
-    // Assert: failed panel stays hidden, main is surfaced, fallback recorded.
+    // Assert: failed panel stays hidden, the Floating front door is surfaced, fallback recorded.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(mainWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(restoreFromTray).toHaveBeenCalledTimes(1)
     expect(windowManager.getStartupAuthFallbacks().has('braindump')).toBe(true)
   })
 
@@ -325,49 +340,6 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
-  it('re-shows the suppressed panel after the user signs in on the main window', () => {
-    // Arrange: panel redirected to /login, so main was surfaced and re-show armed.
-    const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
-    windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
-    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
-
-    // Act: the user signs in — main navigates to an authenticated route, then
-    // the reloaded panel lands on its real route.
-    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
-    panelWindow.fireWebContents(
-      'did-navigate',
-      {},
-      `${SERVER_URL}/floating-navigator`,
-    )
-    panelWindow.fireWebContents('did-finish-load')
-
-    // Assert: the panel was reloaded to its route and then revealed.
-    expect(panelWindow.win.webContents.loadURL).toHaveBeenCalledWith(
-      `${SERVER_URL}/floating-navigator`,
-    )
-    expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
-  })
-
-  it('reloads the panel only once even if the main window navigates again', () => {
-    // Arrange: suppressed panel with re-show armed on the main window.
-    const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
-    windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
-    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
-
-    // Act: main reaches an authed route once, then navigates again in-app.
-    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
-    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/skill-tree`)
-
-    // Assert: the one-shot re-show fired exactly once.
-    expect(panelWindow.win.webContents.loadURL).toHaveBeenCalledTimes(1)
-  })
-
   it('opens the brain dump panel at its own route when requested', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
@@ -416,25 +388,6 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
     expect(mainWindow.win.show).not.toHaveBeenCalled()
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
-  })
-
-  it('does not reload a startup panel that was closed before sign-in completes', () => {
-    // Arrange: panel redirected to /login, so main was surfaced + re-show armed.
-    const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
-    windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
-    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/login`)
-
-    // The user closes the suppressed panel before signing in.
-    panelWindow.win.isDestroyed.mockReturnValue(true)
-
-    // Act: the user signs in — main navigates to an authenticated route.
-    mainWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/home`)
-
-    // Assert: the re-show bails on the destroyed panel instead of reloading it.
-    expect(panelWindow.win.webContents.loadURL).not.toHaveBeenCalled()
   })
 
   // DT7: the Floating window is the signed-out front door, so a never-loaded
@@ -519,30 +472,6 @@ describe('WindowManager startup panel nav-watch', () => {
       // Assert: it does not reload the replacement — a stale retry must never
       // corrupt the recovery state of a window that never failed.
       expect(secondFloating.win.webContents.loadURL).not.toHaveBeenCalled()
-    })
-
-    it('dismisses the armed startup pill when it gives up and shows the recovery dialog', async () => {
-      // Arrange: a Floating window whose load keeps failing.
-      const windowManager = new WindowManager(SERVER_URL)
-      windowManager.createFloatingNavigator()
-      const floating = getWindow(0)
-      const dismissStartupPill = vi.spyOn(windowManager, 'dismissStartupPill')
-
-      // Act: exhaust the retries (3) so the 4th failure opens the dialog.
-      fireFloatingLoadFailure(floating)
-      vi.runOnlyPendingTimers()
-      fireFloatingLoadFailure(floating)
-      vi.runOnlyPendingTimers()
-      fireFloatingLoadFailure(floating)
-      vi.runOnlyPendingTimers()
-      dismissStartupPill.mockClear() // isolate the exhaustion-path call
-      fireFloatingLoadFailure(floating)
-      await vi.runOnlyPendingTimersAsync()
-
-      // Assert: the pill's timeout is cancelled when recovery commits, so it
-      // can't later fire restoreFromTray() and pop the main window over the
-      // Floating recovery dialog.
-      expect(dismissStartupPill).toHaveBeenCalledTimes(1)
     })
 
     it('reloads the panel after a single failure instead of giving up immediately', () => {
