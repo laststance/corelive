@@ -1,8 +1,8 @@
 /**
- * Asserts the integrated startup path: the main process boots, opens a
- * `BrowserWindow`, and loads the local Next.js renderer (proving the
- * `ELECTRON_RENDERER_URL` patch in `electron/main.ts` and the test-env
- * URL guard both work end-to-end).
+ * Asserts the integrated startup path after main-window retirement: the main
+ * process boots and opens the Floating navigator front door, loading the local
+ * Next.js renderer (proving the `ELECTRON_RENDERER_URL` patch in
+ * `electron/main.ts` and the test-env URL guard both work end-to-end).
  */
 
 import { expect, test } from '@playwright/test'
@@ -20,22 +20,22 @@ test.afterAll(async () => {
   await electronApp?.close()
 })
 
-test('main window opens and loads the local Next.js renderer', async () => {
-  const mainWindow = await electronApp.firstWindow()
+test('the floating navigator front door opens and loads the local renderer', async () => {
+  // On a fresh launch the only window is the Floating navigator front door
+  // (showFloating default), so `firstWindow()` resolves to it.
+  const floatingWindow = await electronApp.firstWindow()
 
   // Wait for the renderer to actually load — `firstWindow()` resolves
   // before navigation completes, so URL/title checks would race.
-  await mainWindow.waitForLoadState('domcontentloaded')
+  await floatingWindow.waitForLoadState('domcontentloaded')
 
-  // The Clerk redirect chain may briefly show `/` before settling on
-  // `/login`. Assert with `waitForURL` so we tolerate the intermediate.
-  await mainWindow.waitForURL(/(login|home|sign-in)/, {
+  await floatingWindow.waitForURL(/floating-navigator/, {
     timeout: LOAD_TIMEOUT_MS,
   })
 
-  const url = mainWindow.url()
+  const url = floatingWindow.url()
   expect(url).toContain('localhost:4991')
-  expect(url).toMatch(/(login|home|sign-in)/)
+  expect(url).toContain('/floating-navigator')
 })
 
 test('app reports the expected name from the main process', async () => {
@@ -48,9 +48,9 @@ test('app reports the expected name from the main process', async () => {
 })
 
 test('renderer window.open requests do not create unmanaged BrowserWindows', async () => {
-  const mainWindow = await electronApp.firstWindow()
-  await mainWindow.waitForLoadState('domcontentloaded')
-  await mainWindow.waitForURL(/(login|home|sign-in)/, {
+  const floatingWindow = await electronApp.firstWindow()
+  await floatingWindow.waitForLoadState('domcontentloaded')
+  await floatingWindow.waitForURL(/floating-navigator/, {
     timeout: LOAD_TIMEOUT_MS,
   })
 
@@ -62,7 +62,7 @@ test('renderer window.open requests do not create unmanaged BrowserWindows', asy
     .then(() => true)
     .catch(() => false)
 
-  const popupResult = await mainWindow.evaluate(() => {
+  const popupResult = await floatingWindow.evaluate(() => {
     const popup = window.open('https://example.com/qa-popup', '_blank')
     return popup === null ? 'blocked' : 'opened'
   })

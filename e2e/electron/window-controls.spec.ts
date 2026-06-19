@@ -4,40 +4,41 @@
  * tolerance, and `setSize` is idempotent. Asserts on `getBounds()` via
  * `electronApp.evaluate` (not `window.electronAPI.window`) so a preload
  * regression cannot silently mask a window-control failure.
+ *
+ * After main-window retirement these target the Floating navigator — the
+ * always-present front door — instead of a main window. Bounds stay within
+ * the Floating window's 250–400px width / 300px-min height constraints so the
+ * round-trips are not clamped.
  */
 
 import { expect, test } from '@playwright/test'
 import type { ElectronApplication } from 'playwright'
 
-import { setupElectronTest } from './_helpers/launch'
+import { launchElectronForTest, waitForFloatingWindow } from './_helpers/launch'
 
 /** Tolerance (px) for window bounds/size round-trips under xvfb DPI scaling. */
 const DPI_TOLERANCE_PX = 1
-const MAIN_WINDOW_URL_PATTERN = /\/(home|login|sign-in)(?:\?|$|\/)/
+const FLOATING_WINDOW_URL_PATTERN = /\/floating-navigator/
 
 let electronApp: ElectronApplication
 
 test.beforeAll(async () => {
-  // `setupElectronTest` includes the `domcontentloaded` wait — necessary
-  // because the main-process inspector context can be torn down mid-evaluate
-  // while Electron is still creating the BrowserWindow and loading the URL.
-  // Playwright surfaces that as
-  // `Execution context was destroyed, most likely because of a navigation`
-  // (the "navigation" wording is misleading; the destruction happens in
-  // the Node-side execution context, not the renderer).
-  ;({ electronApp } = await setupElectronTest('window-controls'))
+  // Generic window-control smoke needs ANY real window. After main-window
+  // retirement the always-present surface is the Floating front door, so
+  // target it directly — `getBounds`/`setBounds` go through `electronApp`
+  // (main process), so no preload bridge / Settings window is needed here.
+  electronApp = await launchElectronForTest('window-controls')
+  await waitForFloatingWindow(electronApp)
 })
 
 test.afterAll(async () => {
   await electronApp?.close()
 })
 
-test('main window has non-zero bounds after creation', async () => {
+test('floating window has non-zero bounds after creation', async () => {
   const bounds = await electronApp.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows().find((candidate) => {
-      return /\/(home|login|sign-in)(?:\?|$|\/)/.test(
-        candidate.webContents.getURL(),
-      )
+      return /\/floating-navigator/.test(candidate.webContents.getURL())
     })
     return window?.getBounds() ?? null
   })
@@ -48,13 +49,15 @@ test('main window has non-zero bounds after creation', async () => {
 })
 
 test('setBounds round-trips with DPI tolerance', async () => {
-  const targetBounds = { x: 50, y: 50, width: 1024, height: 768 }
+  // Width 380 stays inside the Floating window's 250–400px range and height
+  // 600 clears its 300px minimum, so the values are not clamped.
+  const targetBounds = { x: 50, y: 50, width: 380, height: 600 }
 
   const actualBounds = await electronApp.evaluate(
     ({ BrowserWindow }, { patternSource, target }) => {
-      const mainWindowPattern = new RegExp(patternSource)
+      const floatingWindowPattern = new RegExp(patternSource)
       const window = BrowserWindow.getAllWindows().find((candidate) => {
-        return mainWindowPattern.test(candidate.webContents.getURL())
+        return floatingWindowPattern.test(candidate.webContents.getURL())
       })
       if (!window) {
         throw new Error('No BrowserWindow available')
@@ -62,7 +65,7 @@ test('setBounds round-trips with DPI tolerance', async () => {
       window.setBounds(target)
       return window.getBounds()
     },
-    { patternSource: MAIN_WINDOW_URL_PATTERN.source, target: targetBounds },
+    { patternSource: FLOATING_WINDOW_URL_PATTERN.source, target: targetBounds },
   )
 
   // ±1px tolerance: xvfb at non-1.0 DPI scales rounds the size — see
@@ -83,15 +86,14 @@ test('setBounds round-trips with DPI tolerance', async () => {
 })
 
 test('setSize is idempotent', async () => {
-  const targetSize = { width: 900, height: 700 }
+  // 360×500 also stays within the Floating window's size constraints.
+  const targetSize = { width: 360, height: 500 }
 
   // Read via `getBounds()` (Rectangle object) instead of `getSize()`
   // (number[] tuple) so strict-index typing doesn't surface noise here.
   const sizes = await electronApp.evaluate(({ BrowserWindow }, target) => {
     const window = BrowserWindow.getAllWindows().find((candidate) => {
-      return /\/(home|login|sign-in)(?:\?|$|\/)/.test(
-        candidate.webContents.getURL(),
-      )
+      return /\/floating-navigator/.test(candidate.webContents.getURL())
     })
     if (!window) {
       throw new Error('No BrowserWindow available')

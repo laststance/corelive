@@ -3,6 +3,9 @@
  * documented namespaces are exposed, `electronEnv.isElectron` is true,
  * and a read-only IPC round-trip (`app.getVersion()`) reaches the main
  * process and returns a string.
+ *
+ * After main-window retirement this full bridge is loaded only by the Settings
+ * window, so the suite opens it (`setupElectronTest`) and probes that renderer.
  */
 
 import { expect, test } from '@playwright/test'
@@ -11,10 +14,10 @@ import type { ElectronApplication, Page } from 'playwright'
 import { setupElectronTest } from './_helpers/launch'
 
 let electronApp: ElectronApplication
-let mainWindow: Page
+let settingsWindow: Page
 
 test.beforeAll(async () => {
-  ;({ electronApp, mainWindow } = await setupElectronTest('preload'))
+  ;({ electronApp, settingsWindow } = await setupElectronTest('preload'))
 })
 
 test.afterAll(async () => {
@@ -22,7 +25,7 @@ test.afterAll(async () => {
 })
 
 test('window.electronAPI exposes the documented namespaces', async () => {
-  const exposedKeys = await mainWindow.evaluate(() => {
+  const exposedKeys = await settingsWindow.evaluate(() => {
     return window.electronAPI ? Object.keys(window.electronAPI).sort() : []
   })
 
@@ -34,7 +37,7 @@ test('window.electronAPI exposes the documented namespaces', async () => {
 })
 
 test('window.electronEnv reports running inside Electron', async () => {
-  const env = await mainWindow.evaluate(() => window.electronEnv)
+  const env = await settingsWindow.evaluate(() => window.electronEnv)
 
   expect(env?.isElectron).toBe(true)
   expect(typeof env?.platform).toBe('string')
@@ -42,7 +45,7 @@ test('window.electronEnv reports running inside Electron', async () => {
 })
 
 test('preload IPC round-trip reaches the main process', async () => {
-  const version = await mainWindow.evaluate(async () => {
+  const version = await settingsWindow.evaluate(async () => {
     const getVersion = window.electronAPI?.app?.getVersion
     if (!getVersion) {
       throw new Error('window.electronAPI.app.getVersion is not exposed')
@@ -55,7 +58,7 @@ test('preload IPC round-trip reaches the main process', async () => {
 })
 
 test('settings login item getter reaches the main process', async () => {
-  const loginItemSettings = await mainWindow.evaluate(async () => {
+  const loginItemSettings = await settingsWindow.evaluate(async () => {
     const getLoginItemSettings =
       window.electronAPI?.settings?.getLoginItemSettings
     if (!getLoginItemSettings) {

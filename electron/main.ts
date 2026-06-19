@@ -936,6 +936,23 @@ async function createWindow(): Promise<void> {
       windowStateManager,
     )
 
+    // E2E-only: expose a hook so the Playwright Electron suite can open the
+    // Settings window — the only renderer that still carries the full
+    // `electronAPI` bridge after main-window retirement (T18). The app menu's
+    // "Preferences…" item lives in the macOS-only app menu, but the Electron
+    // E2E suite runs on Linux+xvfb where that menu is never built, so specs
+    // cannot drive Settings open through the menu. Gated on `isTestEnvironment`
+    // (NODE_ENV==='test'), so it is absent from every production build.
+    if (isTestEnvironment) {
+      ;(
+        globalThis as typeof globalThis & {
+          __coreliveTestOpenSettings?: () => void
+        }
+      ).__coreliveTestOpenSettings = () => {
+        windowManager.openSettings()
+      }
+    }
+
     // The Electron main window is retired (T18). CoreLive is now a thin native
     // companion: the full task app runs browser-only at corelive.app, and
     // Electron opens only the auxiliary panels the user chose at launch. Each
