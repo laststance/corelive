@@ -138,7 +138,8 @@ if (remoteDebuggingPort) {
  * protocol must be `http:`. We parse with `URL` (instead of `startsWith`)
  * so that subdomain tricks like `http://localhost.attacker.com` cannot
  * slip past the guard. This is defense-in-depth before the value reaches
- * `WindowManager.createMainWindow`.
+ * the WindowManager panel builders (`createFloatingNavigator` /
+ * `createSettingsWindow`).
  */
 if (process.env.ELECTRON_RENDERER_URL) {
   let parsedRendererUrl: URL
@@ -520,13 +521,7 @@ function getBrowserWindowForType(
       : null
   }
 
-  // Only return the main window for an explicit 'main' request — falling back
-  // here for unknown types lets a stray 'braindump' (or future addition)
-  // silently mutate main-window state.
-  if (windowType === 'main') {
-    return windowManager.getMainWindow ? windowManager.getMainWindow() : null
-  }
-
+  // The main window is retired (T18); a 'main' request resolves to nothing.
   return null
 }
 
@@ -970,19 +965,12 @@ async function createWindow(): Promise<void> {
       )) as new (...args: unknown[]) => MenuManagerType
       menuManager = new MenuManagerCls()
 
-      const mainWindowRef = windowManager.getMainWindow()
-      log.debug(
-        '🔧 [DEFERRED] Retrieved mainWindow from windowManager:',
-        !!mainWindowRef,
-      )
-
-      // Menu initializes even when no main window exists. Post-main-retirement the
-      // menu bar is companion chrome (View/Window roles target whatever window is
-      // focused; New Task opens the browser), so gating on mainWindowRef would leave
-      // a dead menu at a main-less / signed-out launch. mainWindowRef passes through
-      // nullable — MenuManager.initialize accepts `BrowserWindow | null`.
+      // The menu bar is companion chrome after main-window retirement (T18):
+      // View/Window roles target whatever window is focused; New Task opens the
+      // browser. MenuManager.initialize accepts `BrowserWindow | null`, so the
+      // (now permanently absent) main window passes through as null.
       if (menuManager) {
-        menuManager.initialize(mainWindowRef, windowManager, configManager)
+        menuManager.initialize(null, windowManager, configManager)
       }
       log.info('✅ [DEFERRED] MenuManager loaded')
 
@@ -1008,10 +996,8 @@ async function createWindow(): Promise<void> {
             'AutoUpdater',
           )) as new (...args: unknown[]) => AutoUpdaterType
           autoUpdater = new AutoUpdaterCls()
-          const mainWin = windowManager.getMainWindow()
-          if (mainWin) {
-            autoUpdater.setMainWindow(mainWin)
-          }
+          // No main window to bind dialogs to after T18; the updater surfaces
+          // through its own notifications.
         } catch (autoUpdaterError) {
           log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
         }
@@ -1023,15 +1009,8 @@ async function createWindow(): Promise<void> {
         await loadDeepLinkStack()
       }
 
-      // Set up window close behavior after tray manager is loaded
-      const mainWindow = windowManager.getMainWindow()
-      if (mainWindow) {
-        mainWindow.on('close', (event: ElectronEvent) => {
-          if (systemTrayManager) {
-            systemTrayManager.handleWindowClose(event)
-          }
-        })
-      }
+      // No main-window close-to-tray wiring after T18 — the surviving panels own
+      // their own close behavior (Floating/BrainDump via floating-window-* IPC).
     } catch (error) {
       log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
@@ -1130,29 +1109,9 @@ function setupIPCHandlers(): void {
 
   // Note: Todo IPC handlers removed - Floating Navigator uses oRPC via web app
 
-  // Window management IPC handlers (Zod-validated)
-  typedHandle('window-minimize', () => {
-    if (!windowManager) {
-      throw new Error('Window manager not initialized')
-    }
-    if (!windowManager.hasMainWindow()) {
-      throw new Error('Main window not available')
-    }
-    windowManager.minimizeToTray()
-    return true
-  })
-
-  typedHandle('window-close', () => {
-    if (!windowManager) {
-      throw new Error('Window manager not initialized')
-    }
-    if (!windowManager.hasMainWindow()) {
-      throw new Error('Main window not available')
-    }
-    windowManager.minimizeToTray()
-    return true
-  })
-
+  // Window management IPC handlers (Zod-validated). The retired main window's
+  // minimize/close handlers were removed with T18; the surviving panels use the
+  // floating-window-* channels below.
   typedHandle('window-toggle-floating-navigator', () => {
     if (!windowManager) {
       throw new Error('Window manager not initialized')
@@ -1680,15 +1639,13 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return false
     }
-    const mainWindow = windowManager.getMainWindow()
-    const result = await dialog.showSaveDialog(
-      mainWindow ?? (undefined as unknown as BrowserWindow),
-      {
-        title: 'Export configuration',
-        defaultPath: 'corelive-config.json',
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      },
-    )
+    // No main window to parent the dialog to after T18; an unparented save
+    // dialog is the behavior the previous `?? undefined` fallback already took.
+    const result = await dialog.showSaveDialog({
+      title: 'Export configuration',
+      defaultPath: 'corelive-config.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
     if (result.canceled || !result.filePath) {
       return false
     }
@@ -1699,15 +1656,12 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return false
     }
-    const mainWindow = windowManager.getMainWindow()
-    const result = await dialog.showOpenDialog(
-      mainWindow ?? (undefined as unknown as BrowserWindow),
-      {
-        title: 'Import configuration',
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        properties: ['openFile'],
-      },
-    )
+    // Unparented open dialog after T18 (see config-export above).
+    const result = await dialog.showOpenDialog({
+      title: 'Import configuration',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
     const filePath = result.filePaths[0]
     if (result.canceled || !filePath) {
       return false
@@ -2291,13 +2245,10 @@ if (!gotTheLock) {
         // the surviving companion window — via restoreFromTray (T6 retargeted it
         // off the retired main; it creates Floating if absent, then shows + focuses).
         //
-        // The `windowManager?.` optional chain is intentional: if the manager is
-        // somehow absent, `!undefined` is true so the pill (if any) counts as a
-        // real window — the safe status-quo, since restoreFromTray would be a
-        // no-op there anyway.
-        const isAnyRealWindowVisible = allWindows.some(
-          (window) =>
-            window.isVisible() && !windowManager?.isStartupPill(window),
+        // The startup pill is retired with the main window (T18), so any visible
+        // window now counts as a real one.
+        const isAnyRealWindowVisible = allWindows.some((window) =>
+          window.isVisible(),
         )
         if (!isAnyRealWindowVisible) {
           windowManager?.restoreFromTray()

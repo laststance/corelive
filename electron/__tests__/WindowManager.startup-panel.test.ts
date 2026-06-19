@@ -3,8 +3,9 @@
  *
  * Exercises `WindowManager.openStartupPanel` — the auth gate that decides, from
  * a panel's first navigation, whether to reveal the panel or suppress it and
- * surface the main window so the user can sign in. Covers the redirect-to-auth,
- * load-failure, and post-login re-show paths flagged as failure modes F3/F4.
+ * surface the Floating front door so the user can sign in. Covers the
+ * redirect-to-auth, load-failure, and post-login re-show paths flagged as
+ * failure modes F3/F4.
  *
  * Triggered when: `pnpm test:electron` (Vitest).
  *
@@ -146,7 +147,8 @@ const SERVER_URL = 'https://corelive.app'
  * Returns the Nth created window, failing the test if none exists. Narrows away
  * the `| undefined` that `noUncheckedIndexedAccess` adds to array indexing.
  *
- * @param index - Zero-based creation order ([0] = main, [1] = the startup panel).
+ * @param index - Zero-based creation order. With the main window retired (T18),
+ * [0] = the startup panel the gate opens (the floating / braindump window).
  */
 function getWindow(index: number): CapturedMockWindow {
   const capturedWindow = createdWindows[index]
@@ -166,7 +168,7 @@ describe('WindowManager startup panel nav-watch', () => {
   })
 
   it('keeps a signed-out floating panel hidden and surfaces the Floating front door', () => {
-    // Arrange: panel-only cold boot (main created hidden), then open the panel.
+    // Arrange: panel-only cold boot, then open the panel.
     const windowManager = new WindowManager(SERVER_URL)
     // With the main window retired (T18), the signed-out gate surfaces the
     // Floating navigator (the public OAuth front door) via restoreFromTray.
@@ -174,9 +176,8 @@ describe('WindowManager startup panel nav-watch', () => {
     const restoreFromTray = vi
       .spyOn(windowManager, 'restoreFromTray')
       .mockImplementation(() => {})
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: proxy.ts redirected the unauthenticated panel load to /login.
     panelWindow.fireWebContents(
@@ -198,9 +199,8 @@ describe('WindowManager startup panel nav-watch', () => {
     const restoreFromTray = vi
       .spyOn(windowManager, 'restoreFromTray')
       .mockImplementation(() => {})
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: Chromium first reports the requested URL, then proxy.ts redirects
     // to /login before the load settles.
@@ -229,9 +229,8 @@ describe('WindowManager startup panel nav-watch', () => {
     const restoreFromTray = vi
       .spyOn(windowManager, 'restoreFromTray')
       .mockImplementation(() => {})
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: the panel ended up on the sign-up page.
     panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/sign-up`)
@@ -245,10 +244,8 @@ describe('WindowManager startup panel nav-watch', () => {
   it('shows the floating panel when its load lands on the panel route', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: authenticated load renders the real panel.
     panelWindow.fireWebContents(
@@ -258,9 +255,8 @@ describe('WindowManager startup panel nav-watch', () => {
     )
     panelWindow.fireWebContents('did-finish-load')
 
-    // Assert: panel revealed, main untouched, no fallback recorded.
+    // Assert: panel revealed, no fallback recorded.
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(mainWindow.win.show).not.toHaveBeenCalled()
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
@@ -272,9 +268,8 @@ describe('WindowManager startup panel nav-watch', () => {
     const restoreFromTray = vi
       .spyOn(windowManager, 'restoreFromTray')
       .mockImplementation(() => {})
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('braindump')
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: main-frame load failure, e.g. net::ERR_NAME_NOT_RESOLVED (-105).
     panelWindow.fireWebContents(
@@ -295,10 +290,8 @@ describe('WindowManager startup panel nav-watch', () => {
   it('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: ERR_ABORTED (-3) fires when a navigation is intentionally cancelled.
     panelWindow.fireWebContents(
@@ -310,19 +303,16 @@ describe('WindowManager startup panel nav-watch', () => {
       true,
     )
 
-    // Assert: no decision made — neither panel nor main shown, no fallback.
+    // Assert: no decision made — the panel was not shown, no fallback recorded.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(mainWindow.win.show).not.toHaveBeenCalled()
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
   it('ignores subresource load failures (isMainFrame false)', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: a sub-frame/asset failed, not the document itself.
     panelWindow.fireWebContents(
@@ -334,20 +324,18 @@ describe('WindowManager startup panel nav-watch', () => {
       false,
     )
 
-    // Assert: the panel's fate is undecided; nothing shown, no fallback.
+    // Assert: the panel's fate is undecided; it was not shown, no fallback.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(mainWindow.win.show).not.toHaveBeenCalled()
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
   it('opens the brain dump panel at its own route when requested', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
 
     // Act: dispatch by kind creates the brain dump window and watches its load.
     windowManager.openStartupPanel('braindump')
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
     panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/braindump`)
     panelWindow.fireWebContents('did-finish-load')
 
@@ -361,10 +349,8 @@ describe('WindowManager startup panel nav-watch', () => {
   it('locks in the first navigation decision and ignores a later load failure', () => {
     // Arrange: a panel-only cold boot.
     const windowManager = new WindowManager(SERVER_URL)
-    windowManager.createMainWindow(false)
     windowManager.openStartupPanel('floating')
-    const mainWindow = getWindow(0)
-    const panelWindow = getWindow(1)
+    const panelWindow = getWindow(0)
 
     // Act: the panel lands on its real route (authed → shown), then a late
     // did-fail-load arrives for the same panel load.
@@ -383,17 +369,16 @@ describe('WindowManager startup panel nav-watch', () => {
       true,
     )
 
-    // Assert: the first decision stands — panel shown once, main never
-    // surfaced, no fallback recorded by the stale second event.
+    // Assert: the first decision stands — the panel was shown once and no
+    // fallback was recorded by the stale second event.
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(mainWindow.win.show).not.toHaveBeenCalled()
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
   // DT7: the Floating window is the signed-out front door, so a never-loaded
   // window must self-heal (retry, then a native recovery dialog) instead of
   // stranding the user on a blank panel. These exercise the recovery machine in
-  // `createFloatingNavigator` plus the asymmetry vs. braindump's surface-main.
+  // `createFloatingNavigator` plus the asymmetry vs. braindump's fallback.
   describe('Floating load-failure recovery (DT7)', () => {
     // Fake timers so the backoff reload retries can be driven deterministically;
     // clear any pending timer between cases so a scheduled retry never leaks.
@@ -510,21 +495,18 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
-    it('does not surface the main window when a startup floating panel fails to load', () => {
+    it('defers to DT7 when a startup floating panel fails to load (no auth fallback)', () => {
       // Arrange: panel-only cold boot opens the Floating startup panel.
       const windowManager = new WindowManager(SERVER_URL)
-      windowManager.createMainWindow(false)
       windowManager.openStartupPanel('floating')
-      const mainWindow = getWindow(0)
-      const panelWindow = getWindow(1)
+      const panelWindow = getWindow(0)
 
       // Act: the floating panel's first load fails.
       fireFloatingLoadFailure(panelWindow)
 
       // Assert: unlike braindump, the floating startup gate defers to DT7 — it
-      // neither surfaces the main window nor records an auth fallback; recovery
-      // is the Floating window's own job.
-      expect(mainWindow.win.show).not.toHaveBeenCalled()
+      // does not force the panel open or record an auth fallback; recovery is
+      // the Floating window's own job (retry, then native dialog).
       expect(panelWindow.win.show).not.toHaveBeenCalled()
       expect(windowManager.getStartupAuthFallbacks().has('floating')).toBe(
         false,

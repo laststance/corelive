@@ -42,10 +42,6 @@ export interface ElectronAPI {
    * Window control operations.
    */
   window: {
-    /** Minimize window to system tray */
-    minimize: () => Promise<void>
-    /** Close window (minimizes to tray, doesn't quit) */
-    close: () => Promise<void>
     /** Toggle floating navigator visibility */
     toggleFloatingNavigator: () => Promise<boolean | undefined>
     /** Show floating navigator */

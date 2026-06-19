@@ -44,8 +44,6 @@ interface ElectronAPI {
 
   // Window operations
   window?: {
-    minimize: () => Promise<void>
-    close: () => Promise<void>
     toggleFloatingNavigator: () => Promise<void>
     showFloatingNavigator: () => Promise<void>
     hideFloatingNavigator: () => Promise<void>

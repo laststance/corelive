@@ -234,30 +234,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * the same oRPC client used by the browser version.
    */
 
-  // Window control APIs
+  // Window control APIs. The retired main window's minimize/close (T18) are
+  // gone; what remains here drives the floating navigator + window bounds.
   window: {
-    /**
-     * Minimize window to tray.
-     */
-    minimize: async () => {
-      try {
-        return await typedInvoke('window-minimize')
-      } catch (error) {
-        log.error('Failed to minimize window:', error)
-      }
-    },
-
-    /**
-     * Close window (minimize to tray).
-     */
-    close: async () => {
-      try {
-        return await typedInvoke('window-close')
-      } catch (error) {
-        log.error('Failed to close window:', error)
-      }
-    },
-
     /**
      * Toggle floating navigator visibility.
      */

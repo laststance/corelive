@@ -59,9 +59,6 @@ export class SystemTrayManager {
   /** Fallback mode flag */
   private fallbackMode: boolean
 
-  /** Whether tray notification has been shown */
-  private hasShownTrayNotification: boolean
-
   /**
    * Live accelerator provider, injected after ShortcutManager loads (it is
    * constructed AFTER this manager, so it cannot arrive via the constructor).
@@ -84,7 +81,6 @@ export class SystemTrayManager {
     this.trayCreationPromise = null
     this.isQuitting = false
     this.fallbackMode = false
-    this.hasShownTrayNotification = false
     this.lastTasks = []
   }
 
@@ -716,25 +712,6 @@ export class SystemTrayManager {
   setTrayTooltip(text: string): void {
     if (this.tray && !this.tray.isDestroyed()) {
       this.tray.setToolTip(text)
-    }
-  }
-
-  /**
-   * Handle window close event - minimize to tray instead of closing.
-   */
-  handleWindowClose(event: Electron.Event): void {
-    if (!this.isQuitting) {
-      event.preventDefault()
-      this.windowManager.minimizeToTray()
-
-      if (!this.hasShownTrayNotification) {
-        this.showNotification(
-          'TODO App',
-          'App was minimized to tray. Click the tray icon to restore.',
-          { silent: true },
-        )
-        this.hasShownTrayNotification = true
-      }
     }
   }
 

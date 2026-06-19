@@ -321,21 +321,9 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should ensure window is visible', () => {
-      const mockWindow = mockWindowManager.getMainWindow()
-      mockWindow.isMinimized.mockReturnValue(true)
-      mockWindow.isVisible.mockReturnValue(false)
-
-      deepLinkManager.ensureWindowVisible()
-
-      expect(mockWindow.restore).toHaveBeenCalled()
-      expect(mockWindow.show).toHaveBeenCalled()
-      expect(mockWindow.focus).toHaveBeenCalled()
-    })
-
-    it('should restore from tray when no main window', () => {
-      mockWindowManager.hasMainWindow.mockReturnValue(false)
-
+    it('surfaces the Floating front door (restoreFromTray) when a deep link arrives', () => {
+      // T18: the main window is retired, so every deep-link "show the app" path
+      // delegates to restoreFromTray — the Floating navigator is the front door.
       deepLinkManager.ensureWindowVisible()
 
       expect(mockWindowManager.restoreFromTray).toHaveBeenCalled()

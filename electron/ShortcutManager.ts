@@ -238,39 +238,9 @@ export class ShortcutManager {
     }
 
     try {
-      const mainWindow = this.windowManager.getMainWindow()
+      // Main window retired (T18): contextual shortcuts now hang off the
+      // Floating navigator's focus/blur only.
       const floatingWindow = this.windowManager.getFloatingNavigator()
-
-      if (mainWindow) {
-        // Create named handlers for cleanup
-        const focusHandler = (): void => {
-          log.debug(
-            '[ShortcutManager] Main window focused - registering contextual shortcuts',
-          )
-          this.registerContextualShortcuts()
-        }
-
-        const blurHandler = (): void => {
-          log.debug(
-            '[ShortcutManager] Main window blurred - unregistering contextual shortcuts',
-          )
-          this.unregisterContextualShortcuts()
-        }
-
-        mainWindow.on('focus', focusHandler)
-        mainWindow.on('blur', blurHandler)
-
-        // Store handlers for cleanup
-        this.focusHandlers.set(mainWindow.id, {
-          focus: focusHandler,
-          blur: blurHandler,
-          window: mainWindow,
-        })
-
-        if (mainWindow.isFocused()) {
-          this.registerContextualShortcuts()
-        }
-      }
 
       if (floatingWindow) {
         // Create named handlers for cleanup
@@ -791,14 +761,12 @@ export class ShortcutManager {
     try {
       const focusedWindow = BrowserWindow.getFocusedWindow()
 
-      if (focusedWindow) {
-        if (focusedWindow === this.windowManager.getMainWindow()) {
-          this.windowManager.minimizeToTray()
-        } else if (
-          focusedWindow === this.windowManager.getFloatingNavigator()
-        ) {
-          focusedWindow.minimize()
-        }
+      // Main window retired (T18): only the Floating navigator self-minimizes.
+      if (
+        focusedWindow &&
+        focusedWindow === this.windowManager.getFloatingNavigator()
+      ) {
+        focusedWindow.minimize()
       }
     } catch (error) {
       log.error('Error handling minimize window shortcut:', error)
@@ -1012,14 +980,13 @@ export class ShortcutManager {
     // Setup focus listeners (handles contextual shortcuts on focus/blur)
     this.setupFocusListeners()
 
-    // Only register contextual shortcuts if a window is currently focused
-    const mainWindow = this.windowManager.getMainWindow()
+    // Only register contextual shortcuts if a window is currently focused.
+    // Main window retired (T18): the Floating navigator is the only surface.
     const floatingWindow = this.windowManager.getFloatingNavigator()
     const isWindowFocused =
-      (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) ||
-      (floatingWindow &&
-        !floatingWindow.isDestroyed() &&
-        floatingWindow.isFocused())
+      floatingWindow &&
+      !floatingWindow.isDestroyed() &&
+      floatingWindow.isFocused()
 
     if (isWindowFocused) {
       this.registerContextualShortcuts()

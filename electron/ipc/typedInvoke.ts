@@ -21,8 +21,8 @@ import type { ArgsOf } from './types'
  * @example
  *   // Inside electron/preload.ts contextBridge namespace:
  *   window: {
- *     minimize: () => typedInvoke('window-minimize'),
- *     close: () => typedInvoke('window-close'),
+ *     toggleFloatingNavigator: () =>
+ *       typedInvoke('window-toggle-floating-navigator'),
  *   },
  *   auth: {
  *     syncFromWeb: (user: AuthUserPayload) =>

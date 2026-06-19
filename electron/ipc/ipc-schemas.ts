@@ -262,8 +262,6 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // Window Management (all void-arg)
   // ──────────────────────────────────────────────────────────────────────────
-  'window-minimize': z.tuple([]),
-  'window-close': z.tuple([]),
   'window-toggle-floating-navigator': z.tuple([]),
   'window-show-floating-navigator': z.tuple([]),
   'window-hide-floating-navigator': z.tuple([]),

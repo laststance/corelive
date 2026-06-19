@@ -43,7 +43,6 @@ describe('IPC contract', () => {
         'app-quit',
         'performance-get-metrics',
         'performance-trigger-cleanup',
-        'window-minimize',
         'window-get-aux-visibility',
         'auth-get-user',
         'auth-logout',

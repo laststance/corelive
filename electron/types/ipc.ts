@@ -306,14 +306,6 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   // Window Operations
   // ──────────────────────────────────────────────────────────────────────────
-  'window-minimize': {
-    request: void
-    response: boolean
-  }
-  'window-close': {
-    request: void
-    response: boolean
-  }
   'window-toggle-floating-navigator': {
     request: void
     response: boolean
