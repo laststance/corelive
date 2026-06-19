@@ -46,6 +46,7 @@ function installFloatingNavigatorAPI(
         focusMainWindow: vi.fn(),
       },
       brainDump: { toggle: vi.fn() },
+      openCompletedImport: vi.fn(),
     },
   })
 }

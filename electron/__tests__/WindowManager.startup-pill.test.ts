@@ -64,6 +64,14 @@ vi.mock('electron', () => ({
       focus: vi.fn(),
       restore: vi.fn(),
       minimize: vi.fn(),
+      // Floating-panel chrome createFloatingNavigator drives (T6 restoreFromTray
+      // now creates Floating if absent, so the pill harness must support it).
+      setVisibleOnAllWorkspaces: vi.fn(),
+      setAlwaysOnTop: vi.fn(),
+      isAlwaysOnTop: vi.fn(() => false),
+      isVisible: vi.fn(() => true),
+      getBounds: vi.fn(() => ({ x: 0, y: 0, width: 320, height: 480 })),
+      setBounds: vi.fn(),
       destroy: vi.fn(() => {
         destroyed = true
       }),
@@ -197,13 +205,14 @@ describe('WindowManager cold-boot startup pill', () => {
     expect(getPill().destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('retires the pill the moment the main window is surfaced from the tray', () => {
+  it('retires the pill the moment a window is surfaced from the tray', () => {
     // Arrange
     const windowManager = new WindowManager('https://corelive.app')
     windowManager.armStartupPill()
     const pill = getPill()
 
-    // Act
+    // Act: restoreFromTray surfaces the Floating navigator (T6) and, like every
+    // real-window surface path, tears down the cold-boot "Opening…" pill.
     windowManager.restoreFromTray()
 
     // Assert

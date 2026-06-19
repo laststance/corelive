@@ -416,6 +416,16 @@ export interface IPCChannels {
     request: void
     response: boolean
   }
+  /**
+   * Floating Navigator → open the task app's Completed import surface (`/home`)
+   * in the user's browser (T14). The full task app is web-only, so importing
+   * happens in the browser, not a main-window dialog. No request payload: the
+   * path is hard-coded in the main handler so the renderer cannot drive the URL.
+   */
+  'floating-open-import': {
+    request: void
+    response: void
+  }
   'floating-window-toggle-always-on-top': {
     request: void
     response: boolean

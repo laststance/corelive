@@ -277,6 +277,9 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'floating-window-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
   'floating-window-close': z.tuple([]),
   'floating-window-minimize': z.tuple([]),
+  // Floating Navigator → open the task app's import surface in the browser (T14).
+  // No args: the path is hard-coded main-side so a renderer can't drive the URL.
+  'floating-open-import': z.tuple([]),
   'floating-window-toggle-always-on-top': z.tuple([]),
   'floating-window-get-bounds': z.tuple([]),
   'floating-window-set-bounds': z.tuple([

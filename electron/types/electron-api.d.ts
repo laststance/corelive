@@ -578,6 +578,15 @@ export interface FloatingNavigatorAPI {
     /** Toggle BrainDump window visibility. */
     toggle: () => Promise<void>
   }
+  /**
+   * Open the task app's Completed paste-import surface (`/home`) in the user's
+   * browser (T14). Added after the original window/brainDump surface, so a
+   * renderer must method-guard before calling it (older installed preloads
+   * predate it — see the preload-skew fallback in FloatingNavigator). Optional
+   * because an older installed preload may not expose it: callers MUST
+   * method-guard (`typeof api.openCompletedImport === 'function'`) before calling.
+   */
+  openCompletedImport?: () => Promise<void>
   /** Subscribe to IPC events */
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void
   /** @deprecated Use the cleanup function returned by `on()` instead */

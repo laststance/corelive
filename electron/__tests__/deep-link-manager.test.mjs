@@ -25,7 +25,8 @@ const mockApp = {
 }
 
 const mockShell = {
-  openExternal: vi.fn(),
+  // openWebAppInBrowser awaits `.catch` on the result, so the mock must be thenable.
+  openExternal: vi.fn(async () => Promise.resolve()),
 }
 
 // Mock modules using vi.doMock for better CommonJS support
@@ -67,6 +68,8 @@ describe('DeepLinkManager', () => {
       hasMainWindow: vi.fn(() => true),
       getMainWindow: vi.fn(() => mockWindow), // Return the same instance every time
       restoreFromTray: vi.fn(),
+      // Post-retirement deep links open the web app in the browser (T15).
+      getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
     }
 
     mockApiBridge = {
@@ -167,53 +170,38 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should handle task focus action', async () => {
-      const mockTask = {
-        id: '123',
-        title: 'Test Task',
-        completed: false,
-      }
+    it('opens the task in the browser at /home?focus=<id>', async () => {
+      // Arrange: a `corelive://task/123` deep link (path `/123`, no params).
 
-      mockApiBridge.getTodoById.mockResolvedValue(mockTask)
-
+      // Act
       await deepLinkManager.handleTaskAction('/123', {})
 
-      expect(mockApiBridge.getTodoById).toHaveBeenCalledWith('123')
-      expect(
-        mockWindowManager.getMainWindow().webContents.send,
-      ).toHaveBeenCalledWith('deep-link-focus-task', {
-        task: mockTask,
-        params: {},
-      })
-      expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-        'Task Opened',
-        'Opened task: Test Task',
-        { type: 'info' },
+      // Assert: the task surfaces in the web app, not a (now-gone) main renderer.
+      expect(mockShell.openExternal).toHaveBeenCalledWith(
+        'https://corelive.app/home?focus=123',
       )
     })
 
-    it('should handle task not found', async () => {
-      mockApiBridge.getTodoById.mockResolvedValue(null)
+    it('percent-encodes an untrusted task id before opening the browser', async () => {
+      // Arrange: a deep-link path id carrying URL-significant characters.
 
-      await deepLinkManager.handleTaskAction('/123', {})
+      // Act
+      await deepLinkManager.handleTaskAction('/a b&c', {})
 
-      expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-        'Task Not Found',
-        'Could not find task with ID: 123',
-        { type: 'warning' },
+      // Assert: the id is encoded so it cannot break out of the query value.
+      expect(mockShell.openExternal).toHaveBeenCalledWith(
+        'https://corelive.app/home?focus=a%20b%26c',
       )
     })
 
-    it('should handle API errors gracefully', async () => {
-      mockApiBridge.getTodoById.mockRejectedValue(new Error('API Error'))
+    it('does nothing when the deep link carries no task id', async () => {
+      // Arrange: empty path and no `id` param.
 
-      await deepLinkManager.handleTaskAction('/123', {})
+      // Act
+      await deepLinkManager.handleTaskAction('/', {})
 
-      expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-        'Error',
-        'Failed to open task. Please try again.',
-        { type: 'error' },
-      )
+      // Assert: no browser is opened for an unaddressable task link.
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
     })
   })
 
@@ -222,59 +210,35 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should create task from deep link', async () => {
-      const mockTask = {
-        id: '456',
-        title: 'New Task',
-        description: 'Task description',
-        completed: false,
-      }
+    it('opens the create form in the browser pre-filled from the deep link', async () => {
+      // Arrange: a `corelive://create?title=...&description=...` deep link.
 
-      mockApiBridge.createTodo.mockResolvedValue(mockTask)
-
+      // Act
       await deepLinkManager.handleCreateAction({
         title: 'New Task',
         description: 'Task description',
       })
 
-      expect(mockApiBridge.createTodo).toHaveBeenCalledWith({
-        title: 'New Task',
-        description: 'Task description',
-      })
-      expect(
-        mockWindowManager.getMainWindow().webContents.send,
-      ).toHaveBeenCalledWith('deep-link-task-created', { task: mockTask })
-      expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-        'Task Created',
-        'Created task: New Task',
-        { type: 'success' },
+      // Assert: the create form opens in the web app, pre-filled. No task is
+      // created here — the user confirms in the browser — so a deep link never
+      // mutates the database.
+      expect(mockShell.openExternal).toHaveBeenCalledWith(
+        'https://corelive.app/home?create=true&title=New+Task&description=Task+description',
       )
-    })
-
-    it('should handle create without title', async () => {
-      await deepLinkManager.handleCreateAction({})
-
-      expect(
-        mockWindowManager.getMainWindow().webContents.send,
-      ).toHaveBeenCalledWith('deep-link-create-task', {})
       expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
 
-    it('should fallback to create dialog on API error', async () => {
-      mockApiBridge.createTodo.mockRejectedValue(new Error('API Error'))
+    it('opens the empty create form in the browser when no fields are provided', async () => {
+      // Arrange: a bare `corelive://create` deep link (no params).
 
-      await deepLinkManager.handleCreateAction({
-        title: 'New Task',
-      })
+      // Act
+      await deepLinkManager.handleCreateAction({})
 
-      expect(
-        mockWindowManager.getMainWindow().webContents.send,
-      ).toHaveBeenCalledWith('deep-link-create-task', {
-        title: 'New Task',
-        description: '',
-        priority: undefined,
-        dueDate: undefined,
-      })
+      // Assert: still opens the create form, just without pre-fill.
+      expect(mockShell.openExternal).toHaveBeenCalledWith(
+        'https://corelive.app/home?create=true',
+      )
+      expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
   })
 
@@ -283,19 +247,15 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should handle view navigation', async () => {
+    it('opens the view in the browser at /<view> with its params', async () => {
+      // Arrange: a `corelive://view/completed?filter=recent` deep link.
+
+      // Act
       await deepLinkManager.handleViewAction('/completed', { filter: 'recent' })
 
-      expect(
-        mockWindowManager.getMainWindow().webContents.send,
-      ).toHaveBeenCalledWith('deep-link-navigate', {
-        view: 'completed',
-        params: { filter: 'recent' },
-      })
-      expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-        'View Opened',
-        'Navigated to: completed',
-        { type: 'info' },
+      // Assert: the view opens in the web app at the matching route.
+      expect(mockShell.openExternal).toHaveBeenCalledWith(
+        'https://corelive.app/completed?filter=recent',
       )
     })
   })
@@ -305,22 +265,18 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should handle search action', async () => {
+    it('opens search results in the browser at /home?search=<query>', async () => {
+      // Arrange: a `corelive://search?query=important&filter=pending` deep link.
+
+      // Act
       await deepLinkManager.handleSearchAction({
         query: 'important',
         filter: 'pending',
       })
 
-      expect(
-        mockWindowManager.getMainWindow().webContents.send,
-      ).toHaveBeenCalledWith('deep-link-search', {
-        query: 'important',
-        filter: 'pending',
-      })
-      expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-        'Search',
-        'Searching for: important',
-        { type: 'info' },
+      // Assert: search runs in the web app, not a (now-gone) main renderer.
+      expect(mockShell.openExternal).toHaveBeenCalledWith(
+        'https://corelive.app/home?search=important&filter=pending',
       )
     })
   })

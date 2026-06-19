@@ -13,10 +13,11 @@ import { Notification, nativeImage, type NativeImage } from 'electron'
 import type { ConfigManager } from './ConfigManager'
 import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
+import type { NotificationOptions, NotificationPreferences } from './types/ipc'
+import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 // NotificationPreferences and NotificationOptions are the canonical contract
 // types from ./types/ipc.ts — imported here so the manager stays aligned with
 // the IPC boundary contract (single source of truth).
-import type { NotificationOptions, NotificationPreferences } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -25,8 +26,12 @@ import type { NotificationOptions, NotificationPreferences } from './types/ipc'
 /** Window manager interface (minimal) */
 interface WindowManager {
   restoreFromTray(): void
-  hasMainWindow(): boolean
-  getMainWindow(): Electron.BrowserWindow
+  // Nullable to match the real WindowManager (returns null with no main window),
+  // so every deref below is null-guarded ahead of the Phase-2 main-window cut.
+  getMainWindow(): Electron.BrowserWindow | null
+  // Origin of the full web app (dev localhost / prod corelive.app) for routing
+  // notification click-through to the browser task view.
+  getWebAppOrigin(): string
 }
 
 /** System tray manager interface (minimal) */
@@ -322,8 +327,10 @@ export class NotificationManager {
       )
     }
 
-    if (this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
+    // With no main window the tray tooltip above is the only surface for this
+    // guidance — don't escalate a permissions nag to the browser.
+    const mainWindow = this.windowManager.getMainWindow()
+    if (mainWindow) {
       typedSend(mainWindow.webContents, 'notification-permission-denied', {
         reason: _reason,
         guidance: this.getPermissionGuidanceForPlatform(),
@@ -367,11 +374,11 @@ export class NotificationManager {
         this.systemTrayManager.setTrayTooltip(`${title}: ${body}`)
       }
 
-      if (
-        this.fallbackMethods.windowTitle &&
-        this.windowManager.hasMainWindow()
-      ) {
-        const mainWindow = this.windowManager.getMainWindow()
+      // The window-title flash and in-app banner both need a live main window;
+      // with it gone the tray tooltip above is the surviving fallback surface.
+      const mainWindow = this.windowManager.getMainWindow()
+
+      if (this.fallbackMethods.windowTitle && mainWindow) {
         const originalTitle = mainWindow.getTitle()
         mainWindow.setTitle(`${title} - ${originalTitle}`)
 
@@ -382,11 +389,7 @@ export class NotificationManager {
         }, 3000)
       }
 
-      if (
-        this.fallbackMethods.inAppBanner &&
-        this.windowManager.hasMainWindow()
-      ) {
-        const mainWindow = this.windowManager.getMainWindow()
+      if (this.fallbackMethods.inAppBanner && mainWindow) {
         typedSend(mainWindow.webContents, 'show-fallback-notification', {
           title,
           body,
@@ -552,14 +555,15 @@ export class NotificationManager {
   /**
    * Handle task notification click.
    */
-  private async handleTaskNotificationClick(taskId: string): Promise<void> {
+  private async handleTaskNotificationClick(_taskId: string): Promise<void> {
     try {
+      // Surface the Floating quick-navigator, then route to the full task view in
+      // the browser — the task UI lives at corelive.app now, not an Electron
+      // window. The old `focus-task` IPC had no renderer listener even before the
+      // cut; its type def (types/ipc.ts) + preload allowlist are orphaned, slated
+      // for T18/T19 removal. No per-task web route exists, so we open `/home`.
       this.windowManager.restoreFromTray()
-
-      if (this.windowManager.hasMainWindow()) {
-        const mainWindow = this.windowManager.getMainWindow()
-        typedSend(mainWindow.webContents, 'focus-task', { taskId })
-      }
+      openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
     } catch (error) {
       log.error('Failed to handle task notification click:', error)
     }
@@ -618,8 +622,13 @@ export class NotificationManager {
    */
   private async markTaskComplete(taskId: string): Promise<void> {
     try {
-      if (this.windowManager.hasMainWindow()) {
-        const mainWindow = this.windowManager.getMainWindow()
+      // NOTE: this `mark-task-complete` channel had no renderer listener even
+      // before main retirement, so the action was already inert — the main-window
+      // cut doesn't regress it. Kept main-optional (guarded) rather than routed to
+      // the browser: completing a task via URL has no web contract and a mutation
+      // shouldn't be re-implemented here. Removal tracked with T18/T19.
+      const mainWindow = this.windowManager.getMainWindow()
+      if (mainWindow) {
         typedSend(mainWindow.webContents, 'mark-task-complete', { taskId })
       }
     } catch (error) {
