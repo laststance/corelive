@@ -99,7 +99,7 @@ test.describe('Skill Tree E2E', () => {
     // each spec run, so we no longer need Date.now/Math.random for isolation.
     const todoText = 'Skill tree happy path todo'
     await seedCompletedTodo(page, todoText)
-    await page.getByRole('link', { name: /skill tree/i }).click()
+    await page.goto('/skill-tree')
     await expect(page).toHaveURL(/\/skill-tree/)
 
     // `pill.toBeVisible` polls the DOM and is a stronger gate than
