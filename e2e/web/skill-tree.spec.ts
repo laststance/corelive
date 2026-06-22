@@ -317,6 +317,11 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
     timeout: 5000,
   })
+  const pendingTodoId = await todoCheckbox.getAttribute('id')
+  if (!pendingTodoId) {
+    throw new Error('seedCompletedTodo: pending todo checkbox has no id')
+  }
+  const serverTodoId = pendingTodoId.replace(/^todo-/, '')
 
   // Arm the toggle POST waiter BEFORE clicking so we reliably catch the
   // request/response pair. The `line-through` assertion below only verifies
@@ -337,11 +342,15 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   const toggleResponse = await togglePromise
   expect(toggleResponse.status()).toBe(200)
 
-  // Completed todo surfaces in the journal by default, or stays checked in the
-  // active list when 居残りモード is on — either way one checked checkbox is enough.
+  // Pin the seeded row by server id so Playwright retries (which re-run the
+  // test body but not `beforeAll(resetDatabase)`) cannot strict-match stale
+  // journal rows from earlier attempts with the same title.
+  const completedJournalCheckbox = page.locator(`#journal-todo-${serverTodoId}`)
+  const completedPendingCheckbox = page.locator(`#${pendingTodoId}`)
+
   await expect(
-    page.getByRole('checkbox', { name: todoText, checked: true }),
-  ).toBeVisible({ timeout: 10000 })
+    completedJournalCheckbox.or(completedPendingCheckbox),
+  ).toBeChecked({ timeout: 10000 })
 }
 
 /**
