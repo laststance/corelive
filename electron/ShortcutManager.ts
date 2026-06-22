@@ -182,7 +182,6 @@ export class ShortcutManager {
       newTask: 'CommandOrControl+N',
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
-      focusFloatingNavigator: 'CommandOrControl+Shift+N',
       toggleFloatingNavigator: 'CommandOrControl+3',
       toggleBrainDump: 'Alt+Space',
     }
