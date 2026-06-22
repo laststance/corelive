@@ -93,9 +93,6 @@ export class ShortcutManager {
   // @ts-ignore - Intentionally unused, stored for future features
   private _globalShortcuts: Set<string>
 
-  /** Whether focus listeners are setup */
-  private focusListenersSetup: boolean
-
   /** Whether shortcuts are enabled */
   private isEnabled: boolean
 
@@ -130,7 +127,6 @@ export class ShortcutManager {
       'toggleFloatingNavigator',
       'toggleBrainDump',
     ])
-    this.focusListenersSetup = false
     this.focusHandlers = new Map()
 
     // Rebind contextual-shortcut focus/blur listeners to EVERY Floating window
@@ -263,7 +259,6 @@ export class ShortcutManager {
         log.debug(
           '[ShortcutManager] Focus listeners already bound for current floating window',
         )
-        this.focusListenersSetup = true
         return
       }
 
@@ -297,10 +292,6 @@ export class ShortcutManager {
       // Floating is recreated on Cmd+3 / tray after a close.)
       floatingWindow.once('closed', () => {
         this.focusHandlers.delete(floatingWindowId)
-        // When no Floating remains, the contextual listeners are gone with it.
-        if (this.focusHandlers.size === 0) {
-          this.focusListenersSetup = false
-        }
       })
 
       // The window may already be focused (created → shown → focused before this
@@ -309,7 +300,6 @@ export class ShortcutManager {
         this.registerContextualShortcuts()
       }
 
-      this.focusListenersSetup = true
       log.info(
         '[ShortcutManager] Focus listeners setup for the floating window',
       )
@@ -1099,7 +1089,6 @@ export class ShortcutManager {
       }
     }
     this.focusHandlers.clear()
-    this.focusListenersSetup = false
   }
 }
 
