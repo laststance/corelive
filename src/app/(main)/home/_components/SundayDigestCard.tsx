@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { memo, useCallback, useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -179,7 +179,7 @@ function localSundayIso(now: Date): string {
  * @example
  * <SundayDigestCard dataByDate={dataByDate} isLoading={isLoading} />
  */
-export const SundayDigestCard = memo(function SundayDigestCard({
+export const SundayDigestCard = function SundayDigestCard({
   dataByDate,
   isLoading,
   now,
@@ -208,16 +208,13 @@ export const SundayDigestCard = memo(function SundayDigestCard({
   // visibility window (local Sunday) and the data window stay in lockstep, so
   // a JST Sunday-morning recap includes Sunday's data instead of mis-bucketing
   // it as the prior UTC (Saturday) day.
-  const summary = useMemo(() => {
-    const weekStats = aggregateLastSevenDays(dataByDate, sundayIso)
-    const bestDay = pickBestDay(dataByDate, sundayIso)
-    return { weekStats, bestDay }
-  }, [dataByDate, sundayIso])
+  const weekStats = aggregateLastSevenDays(dataByDate, sundayIso)
+  const bestDay = pickBestDay(dataByDate, sundayIso)
 
-  const handleDismiss = useCallback(() => {
+  const handleDismiss = () => {
     writeDismissed(weekKey)
     setDismissedAt(weekKey)
-  }, [weekKey])
+  }
 
   if (!isMounted) return null
   if (isLoading) return null
@@ -227,8 +224,6 @@ export const SundayDigestCard = memo(function SundayDigestCard({
   // quiet week is exactly the case the "the room was quiet this week —
   // that is fine too." copy was added for (DESIGN.md north star:
   // self-affirmation, never failure framing).
-
-  const { weekStats, bestDay } = summary
 
   return (
     <Card aria-label="A quiet Sunday recap">
@@ -284,6 +279,7 @@ export const SundayDigestCard = memo(function SundayDigestCard({
                     getColorDotClass(category.color),
                   )}
                 />
+
                 <span className="text-foreground">{category.name}</span>
                 <span className="font-mono tabular-nums text-muted-foreground">
                   {category.count}
@@ -295,4 +291,4 @@ export const SundayDigestCard = memo(function SundayDigestCard({
       </CardContent>
     </Card>
   )
-})
+}

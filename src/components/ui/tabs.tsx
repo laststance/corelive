@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Tabs = React.memo(function Tabs({
+function Tabs({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
@@ -16,9 +16,9 @@ const Tabs = React.memo(function Tabs({
       {...props}
     />
   )
-})
+}
 
-const TabsList = React.memo(function TabsList({
+function TabsList({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
@@ -32,9 +32,9 @@ const TabsList = React.memo(function TabsList({
       {...props}
     />
   )
-})
+}
 
-const TabsTrigger = React.memo(function TabsTrigger({
+function TabsTrigger({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
@@ -48,9 +48,9 @@ const TabsTrigger = React.memo(function TabsTrigger({
       {...props}
     />
   )
-})
+}
 
-const TabsContent = React.memo(function TabsContent({
+function TabsContent({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Content>) {
@@ -61,6 +61,6 @@ const TabsContent = React.memo(function TabsContent({
       {...props}
     />
   )
-})
+}
 
 export { Tabs, TabsList, TabsTrigger, TabsContent }

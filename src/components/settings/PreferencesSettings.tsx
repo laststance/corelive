@@ -1,7 +1,5 @@
 'use client'
 
-import { memo, useCallback, useMemo } from 'react'
-
 import { Box } from '@/components/box'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -67,7 +65,7 @@ const BRAINDUMP_CUSTOM_COLOR_FALLBACK = '#000000'
  * @example
  * <SoundMomentRow moment={SOUND_MOMENTS[0]} checked onToggle={handleMomentChange} />
  */
-const SoundMomentRow = memo(function SoundMomentRow({
+const SoundMomentRow = function SoundMomentRow({
   moment,
   checked,
   onToggle,
@@ -76,12 +74,9 @@ const SoundMomentRow = memo(function SoundMomentRow({
   checked: boolean
   onToggle: (momentId: SoundMomentId, enabled: boolean) => void
 }) {
-  const handleChange = useCallback(
-    (nextEnabled: boolean): void => {
-      onToggle(moment.id, nextEnabled)
-    },
-    [moment.id, onToggle],
-  )
+  const handleChange = (nextEnabled: boolean): void => {
+    onToggle(moment.id, nextEnabled)
+  }
 
   return (
     <div className="flex items-center justify-between">
@@ -101,7 +96,7 @@ const SoundMomentRow = memo(function SoundMomentRow({
       />
     </div>
   )
-})
+}
 
 /**
  * Web-common user preferences section (shown to everyone, web + Electron). Houses
@@ -116,7 +111,7 @@ const SoundMomentRow = memo(function SoundMomentRow({
  * @example
  * <PreferencesSettings />
  */
-export const PreferencesSettings = memo(function PreferencesSettings() {
+export const PreferencesSettings = function PreferencesSettings() {
   const dispatch = useAppDispatch()
   const retainCompletedInList = useAppSelector(selectRetainCompletedInList)
   // Each moment toggle is read as its own primitive boolean (not a fresh object)
@@ -156,12 +151,10 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
     isTaskCreateSoundOn && isCompleteSoundOn && isClearSoundOn
 
   // Radix Slider wants a stable array; rebuild it only when the volume changes.
-  const sliderValue = useMemo(() => [soundVolume], [soundVolume])
+  const sliderValue = [soundVolume]
   // Same for the font-size slider — its own stable single-thumb array.
-  const fontSizeSliderValue = useMemo(
-    () => [braindumpFontSize],
-    [braindumpFontSize],
-  )
+  const fontSizeSliderValue = [braindumpFontSize]
+
   // The active color is "custom" when it matches none of the themed presets — then
   // no preset radio is selected and the native picker owns the choice.
   const isCustomBraindumpColor = !BRAINDUMP_TEXT_COLOR_PRESETS.some(
@@ -175,90 +168,66 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
     ? braindumpTextColor
     : BRAINDUMP_CUSTOM_COLOR_FALLBACK
 
-  const handleRetainChange = useCallback(
-    (checked: boolean): void => {
-      dispatch(setRetainCompletedInList(checked))
-    },
-    [dispatch],
-  )
+  const handleRetainChange = (checked: boolean): void => {
+    dispatch(setRetainCompletedInList(checked))
+  }
 
-  const handleBraindumpClearOnCompleteChange = useCallback(
-    (checked: boolean): void => {
-      dispatch(setBraindumpClearOnComplete(checked))
-    },
-    [dispatch],
-  )
+  const handleBraindumpClearOnCompleteChange = (checked: boolean): void => {
+    dispatch(setBraindumpClearOnComplete(checked))
+  }
 
-  const handleMomentChange = useCallback(
-    (momentId: SoundMomentId, enabled: boolean): void => {
-      dispatch(setSoundMoment({ moment: momentId, enabled }))
-    },
-    [dispatch],
-  )
+  const handleMomentChange = (
+    momentId: SoundMomentId,
+    enabled: boolean,
+  ): void => {
+    dispatch(setSoundMoment({ moment: momentId, enabled }))
+  }
 
-  const handleAllSoundMomentsChange = useCallback(
-    (enabled: boolean): void => {
-      dispatch(setAllSoundMoments(enabled))
-    },
-    [dispatch],
-  )
+  const handleAllSoundMomentsChange = (enabled: boolean): void => {
+    dispatch(setAllSoundMoments(enabled))
+  }
 
-  const handleTimbreChange = useCallback(
-    (value: string): void => {
-      // RadioGroup yields a bare string; resolve it against the timbre registry so
-      // the id narrows to a TimbreId without an unsafe cast, then audition it.
-      const timbre = SOUND_TIMBRE_LIST.find((entry) => entry.id === value)
-      if (!timbre) return
-      dispatch(setSoundTimbre(timbre.id))
-      // Audition the pick once at the current master volume. This deliberately
-      // bypasses the per-moment gate — choosing a timbre IS the user gesture, so
-      // it plays even while every moment is still OFF.
-      void previewTimbre(timbre.id, soundVolume)
-    },
-    [dispatch, soundVolume],
-  )
+  const handleTimbreChange = (value: string): void => {
+    // RadioGroup yields a bare string; resolve it against the timbre registry so
+    // the id narrows to a TimbreId without an unsafe cast, then audition it.
+    const timbre = SOUND_TIMBRE_LIST.find((entry) => entry.id === value)
+    if (!timbre) return
+    dispatch(setSoundTimbre(timbre.id))
+    // Audition the pick once at the current master volume. This deliberately
+    // bypasses the per-moment gate — choosing a timbre IS the user gesture, so
+    // it plays even while every moment is still OFF.
+    void previewTimbre(timbre.id, soundVolume)
+  }
 
-  const handleVolumeChange = useCallback(
-    (values: number[]): void => {
-      // Radix reports an array (one thumb here); guard the first value before
-      // dispatching so a stray empty event never writes undefined.
-      const nextVolume = values[0]
-      if (typeof nextVolume === 'number') {
-        dispatch(setSoundVolume(nextVolume))
-      }
-    },
-    [dispatch],
-  )
+  const handleVolumeChange = (values: number[]): void => {
+    // Radix reports an array (one thumb here); guard the first value before
+    // dispatching so a stray empty event never writes undefined.
+    const nextVolume = values[0]
+    if (typeof nextVolume === 'number') {
+      dispatch(setSoundVolume(nextVolume))
+    }
+  }
 
-  const handleBraindumpFontFamilyChange = useCallback(
-    (value: string): void => {
-      // RadioGroup yields a bare string; resolve it against the registry so the id
-      // narrows to a BrainDumpFontFamilyId without an unsafe cast.
-      const family = BRAINDUMP_FONT_FAMILIES.find((entry) => entry.id === value)
-      if (!family) return
-      dispatch(setBraindumpFontFamily(family.id))
-    },
-    [dispatch],
-  )
+  const handleBraindumpFontFamilyChange = (value: string): void => {
+    // RadioGroup yields a bare string; resolve it against the registry so the id
+    // narrows to a BrainDumpFontFamilyId without an unsafe cast.
+    const family = BRAINDUMP_FONT_FAMILIES.find((entry) => entry.id === value)
+    if (!family) return
+    dispatch(setBraindumpFontFamily(family.id))
+  }
 
-  const handleBraindumpFontSizeChange = useCallback(
-    (values: number[]): void => {
-      // Guard the first thumb value (same as the volume slider) before dispatching.
-      const nextSize = values[0]
-      if (typeof nextSize === 'number') {
-        dispatch(setBraindumpFontSize(nextSize))
-      }
-    },
-    [dispatch],
-  )
+  const handleBraindumpFontSizeChange = (values: number[]): void => {
+    // Guard the first thumb value (same as the volume slider) before dispatching.
+    const nextSize = values[0]
+    if (typeof nextSize === 'number') {
+      dispatch(setBraindumpFontSize(nextSize))
+    }
+  }
 
-  const handleBraindumpTextColorPresetChange = useCallback(
-    (value: string): void => {
-      // RadioGroup values ARE the preset cssValue strings, stored verbatim.
-      dispatch(setBraindumpTextColor(value))
-    },
-    [dispatch],
-  )
+  const handleBraindumpTextColorPresetChange = (value: string): void => {
+    // RadioGroup values ARE the preset cssValue strings, stored verbatim.
+    dispatch(setBraindumpTextColor(value))
+  }
 
   return (
     <Box className="space-y-4 p-4">
@@ -299,8 +268,8 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
             </div>
 
             {/* Master toggle — flips all three cues together. Checked only when
-                every cue is on, so it never misrepresents a partial palette; a
-                quiet divider sets it above the cues it governs. */}
+                 every cue is on, so it never misrepresents a partial palette; a
+                 quiet divider sets it above the cues it governs. */}
             <div className="flex items-center justify-between border-b pb-4">
               <div className="space-y-0.5">
                 <Label htmlFor="sound-all-cues" className="text-sm font-medium">
@@ -347,6 +316,7 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
                       id={`sound-timbre-${timbre.id}`}
                       value={timbre.id}
                     />
+
                     <Label
                       htmlFor={`sound-timbre-${timbre.id}`}
                       className="text-sm font-normal"
@@ -425,13 +395,14 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
                       id={`braindump-font-${family.id}`}
                       value={family.id}
                     />
+
                     <Label
                       htmlFor={`braindump-font-${family.id}`}
                       className="text-sm font-normal"
                     >
                       {/* Preview each option in its own face. Inline style sits on
-                          this intrinsic span (not the Label component) — a fresh
-                          object on a DOM element is free and needs no useMemo. */}
+                         this intrinsic span (not the Label component) — a fresh
+                         object on a DOM element is free and needs no useMemo. */}
                       <span
                         style={{
                           fontFamily: BRAINDUMP_FONT_FAMILY_CSS[family.id],
@@ -484,6 +455,7 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
                       id={`braindump-text-color-${preset.id}`}
                       value={preset.cssValue}
                     />
+
                     <Label
                       htmlFor={`braindump-text-color-${preset.id}`}
                       className="flex items-center gap-2 text-sm font-normal"
@@ -493,6 +465,7 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
                         className="inline-block h-3 w-3 rounded-full border"
                         style={{ backgroundColor: preset.cssValue }}
                       />
+
                       {preset.label}
                     </Label>
                   </div>
@@ -526,6 +499,6 @@ export const PreferencesSettings = memo(function PreferencesSettings() {
       </Card>
     </Box>
   )
-})
+}
 
 export default PreferencesSettings

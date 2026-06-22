@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useState } from 'react'
+import React, { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -105,17 +105,14 @@ interface ResetWindowButtonProps {
  * @example
  * <WindowDisplaySelect windowType="main" displays={displays} onMove={moveWindowToDisplay} />
  */
-const WindowDisplaySelect = React.memo(function WindowDisplaySelect({
+const WindowDisplaySelect = function WindowDisplaySelect({
   windowType,
   displays,
   onMove,
 }: WindowDisplaySelectProps): React.ReactNode {
-  const handleValueChange = useCallback(
-    async (value: string) => {
-      await onMove(windowType, parseInt(value, 10))
-    },
-    [onMove, windowType],
-  )
+  const handleValueChange = async (value: string) => {
+    await onMove(windowType, parseInt(value, 10))
+  }
 
   return (
     <Select onValueChange={handleValueChange}>
@@ -131,7 +128,7 @@ const WindowDisplaySelect = React.memo(function WindowDisplaySelect({
       </SelectContent>
     </Select>
   )
-})
+}
 
 /**
  * Snaps a window to a fixed edge without inline JSX handlers.
@@ -141,22 +138,22 @@ const WindowDisplaySelect = React.memo(function WindowDisplaySelect({
  * @example
  * <SnapWindowButton windowType="main" edge="left" label="Left" onSnap={snapWindowToEdge} />
  */
-const SnapWindowButton = React.memo(function SnapWindowButton({
+const SnapWindowButton = function SnapWindowButton({
   windowType,
   edge,
   label,
   onSnap,
 }: SnapWindowButtonProps): React.ReactNode {
-  const handleClick = useCallback(async () => {
+  const handleClick = async () => {
     await onSnap(windowType, edge)
-  }, [edge, onSnap, windowType])
+  }
 
   return (
     <Button variant="outline" size="sm" onClick={handleClick}>
       {label}
     </Button>
   )
-})
+}
 
 /**
  * Resets one window state without inline JSX handlers.
@@ -166,23 +163,23 @@ const SnapWindowButton = React.memo(function SnapWindowButton({
  * @example
  * <ResetWindowButton windowType="main" label="Reset Main Window" onReset={resetWindowState} />
  */
-const ResetWindowButton = React.memo(function ResetWindowButton({
+const ResetWindowButton = function ResetWindowButton({
   windowType,
   label,
   onReset,
 }: ResetWindowButtonProps): React.ReactNode {
-  const handleClick = useCallback(async () => {
+  const handleClick = async () => {
     await onReset(windowType)
-  }, [onReset, windowType])
+  }
 
   return (
     <Button variant="outline" onClick={handleClick} size="sm">
       {label}
     </Button>
   )
-})
+}
 
-export const WindowStateSettings = React.memo(function WindowStateSettings() {
+export const WindowStateSettings = function WindowStateSettings() {
   const [stats, setStats] = useState<WindowStateStats | null>(null)
   const [displays, setDisplays] = useState<Display[]>([])
   const [loading, setLoading] = useState(true)
@@ -190,7 +187,7 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  const loadWindowStateData = useCallback(async () => {
+  const loadWindowStateData = async () => {
     try {
       setLoading(true)
 
@@ -255,72 +252,66 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
-  const moveWindowToDisplay = useCallback(
-    async (windowType: WindowType, displayId: number) => {
-      try {
-        if (!window.electronAPI?.windowState) {
-          throw new Error('Electron API not available')
-        }
-        const success = await window.electronAPI.windowState.moveToDisplay(
-          windowType,
-          displayId,
-        )
-        if (success) {
-          toast.success(`${windowType} window moved to display ${displayId}`)
-          await loadWindowStateData() // Refresh data
-        } else {
-          toast.error(`Failed to move ${windowType} window`)
-        }
-      } catch (error) {
-        log.error('Failed to move window:', error)
+  const moveWindowToDisplay = async (
+    windowType: WindowType,
+    displayId: number,
+  ) => {
+    try {
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
+      }
+      const success = await window.electronAPI.windowState.moveToDisplay(
+        windowType,
+        displayId,
+      )
+      if (success) {
+        toast.success(`${windowType} window moved to display ${displayId}`)
+        await loadWindowStateData() // Refresh data
+      } else {
         toast.error(`Failed to move ${windowType} window`)
       }
-    },
-    [loadWindowStateData],
-  )
+    } catch (error) {
+      log.error('Failed to move window:', error)
+      toast.error(`Failed to move ${windowType} window`)
+    }
+  }
 
-  const snapWindowToEdge = useCallback(
-    async (windowType: WindowType, edge: SnapEdge) => {
-      try {
-        if (!window.electronAPI?.windowState) {
-          throw new Error('Electron API not available')
-        }
-        const success = await window.electronAPI.windowState.snapToEdge(
-          windowType,
-          edge,
-        )
-        if (success) {
-          toast.success(`${windowType} window snapped to ${edge}`)
-          await loadWindowStateData() // Refresh data
-        } else {
-          toast.error(`Failed to snap ${windowType} window`)
-        }
-      } catch (error) {
-        log.error('Failed to snap window:', error)
+  const snapWindowToEdge = async (windowType: WindowType, edge: SnapEdge) => {
+    try {
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
+      }
+      const success = await window.electronAPI.windowState.snapToEdge(
+        windowType,
+        edge,
+      )
+      if (success) {
+        toast.success(`${windowType} window snapped to ${edge}`)
+        await loadWindowStateData() // Refresh data
+      } else {
         toast.error(`Failed to snap ${windowType} window`)
       }
-    },
-    [loadWindowStateData],
-  )
+    } catch (error) {
+      log.error('Failed to snap window:', error)
+      toast.error(`Failed to snap ${windowType} window`)
+    }
+  }
 
-  const resetWindowState = useCallback(
-    async (windowType: WindowType) => {
-      try {
-        if (!window.electronAPI?.windowState) {
-          throw new Error('Electron API not available')
-        }
-        await window.electronAPI.windowState.reset(windowType)
-        toast.success(`${windowType} window state reset to defaults`)
-        await loadWindowStateData() // Refresh data
-      } catch (error) {
-        log.error('Failed to reset window state:', error)
-        toast.error(`Failed to reset ${windowType} window state`)
+  const resetWindowState = async (windowType: WindowType) => {
+    try {
+      if (!window.electronAPI?.windowState) {
+        throw new Error('Electron API not available')
       }
-    },
-    [loadWindowStateData],
-  )
+      await window.electronAPI.windowState.reset(windowType)
+      toast.success(`${windowType} window state reset to defaults`)
+      await loadWindowStateData() // Refresh data
+    } catch (error) {
+      log.error('Failed to reset window state:', error)
+      toast.error(`Failed to reset ${windowType} window state`)
+    }
+  }
 
   useCycleEffect(() => {
     if (isElectron) {
@@ -494,48 +485,56 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
                     label="Left"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="top"
                     label="Top"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="right"
                     label="Right"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="top-left"
                     label="Top Left"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="maximize"
                     label="Maximize"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="top-right"
                     label="Top Right"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="bottom-left"
                     label="Bottom Left"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="bottom"
                     label="Bottom"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="main"
                     edge="bottom-right"
@@ -617,18 +616,21 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
                     label="Top Left"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="floating"
                     edge="top-right"
                     label="Top Right"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="floating"
                     edge="bottom-left"
                     label="Bottom Left"
                     onSnap={snapWindowToEdge}
                   />
+
                   <SnapWindowButton
                     windowType="floating"
                     edge="bottom-right"
@@ -677,4 +679,4 @@ export const WindowStateSettings = React.memo(function WindowStateSettings() {
       </Card>
     </div>
   )
-})
+}

@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
-import { memo, useCallback, useState } from 'react'
+import { useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Button } from '@/components/ui/button'
@@ -174,7 +174,7 @@ function getTopCategoryName<T extends { category?: { name: string } | null }>(
  * @example
  * <DayDetailDialog date={selectedDate} onOpenChange={(open) => !open && setSelectedDate(null)} />
  */
-export const DayDetailDialog = memo(function DayDetailDialog({
+export const DayDetailDialog = function DayDetailDialog({
   date,
   onOpenChange,
   onNavigate,
@@ -210,7 +210,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
    * is in flight so a double-click doesn't spawn parallel toPng calls
    * (each of which would append its own off-screen card).
    */
-  const handleShare = useCallback(async () => {
+  const handleShare = async () => {
     if (!date || dayCount === 0 || isSaving) return
     setIsSaving(true)
     try {
@@ -233,15 +233,15 @@ export const DayDetailDialog = memo(function DayDetailDialog({
     } finally {
       setIsSaving(false)
     }
-  }, [data?.tasks, date, dayCount, isSaving])
+  }
 
-  const handlePreviousDay = useCallback(() => {
+  const handlePreviousDay = () => {
     onNavigate?.(-1)
-  }, [onNavigate])
+  }
 
-  const handleNextDay = useCallback(() => {
+  const handleNextDay = () => {
     onNavigate?.(1)
-  }, [onNavigate])
+  }
 
   // j/k keyboard nav reuses the same `onNavigate` contract as the `< >`
   // buttons, so the dialog has a single source of truth for day-stepping.
@@ -266,6 +266,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
                   className="size-9 rounded-md border border-border"
                   style={{ backgroundColor: state.bandToken }}
                 />
+
                 <div className="flex flex-col items-start gap-0.5">
                   <DialogTitle className="font-serif text-2xl italic text-foreground">
                     {state.name}
@@ -342,6 +343,7 @@ export const DayDetailDialog = memo(function DayDetailDialog({
                         getColorDotClass(task.category?.color),
                       )}
                     />
+
                     <span className="text-sm text-foreground">
                       {task.title}
                     </span>
@@ -367,4 +369,4 @@ export const DayDetailDialog = memo(function DayDetailDialog({
       </DialogContent>
     </Dialog>
   )
-})
+}

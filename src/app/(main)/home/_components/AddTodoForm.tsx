@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, StickyNote, ChevronDown, ChevronRight } from 'lucide-react'
-import React, { useCallback, useState } from 'react'
-import { type ControllerRenderProps, useForm } from 'react-hook-form'
+import React, { useState } from 'react'
+import { type ControllerRenderProps, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -35,14 +35,14 @@ interface AddTodoFormProps {
   disabled?: boolean
 }
 
-export const AddTodoForm = React.memo(function AddTodoForm({
+export const AddTodoForm = function AddTodoForm({
   onAddTodo,
   disabled,
 }: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
-  const handleNotesOpenChange = useCallback((open: boolean) => {
+  const handleNotesOpenChange = (open: boolean) => {
     setIsNotesOpen(open)
-  }, [])
+  }
 
   const form = useForm<TodoFormValues>({
     resolver: zodResolver(todoFormSchema),
@@ -52,44 +52,43 @@ export const AddTodoForm = React.memo(function AddTodoForm({
     },
   })
 
-  const handleSubmit = useCallback(
-    (values: TodoFormValues) => {
-      onAddTodo(values.text, values.notes || undefined)
-      form.reset()
-      setIsNotesOpen(false)
-    },
-    [form, onAddTodo],
+  const handleSubmit = (values: TodoFormValues) => {
+    onAddTodo(values.text, values.notes || undefined)
+    form.reset()
+    setIsNotesOpen(false)
+  }
+
+  const renderTextField = ({
+    field,
+  }: {
+    field: ControllerRenderProps<TodoFormValues, 'text'>
+  }) => (
+    <FormItem className="flex-1">
+      <FormControl>
+        <Input placeholder="Enter a new todo..." {...field} />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
   )
 
-  const renderTextField = useCallback(
-    ({ field }: { field: ControllerRenderProps<TodoFormValues, 'text'> }) => (
-      <FormItem className="flex-1">
-        <FormControl>
-          <Input placeholder="Enter a new todo..." {...field} />
-        </FormControl>
-        <FormMessage />
-      </FormItem>
-    ),
-    [],
+  const renderNotesField = ({
+    field,
+  }: {
+    field: ControllerRenderProps<TodoFormValues, 'notes'>
+  }) => (
+    <FormItem>
+      <FormControl>
+        <Textarea
+          placeholder="Add notes (optional)..."
+          className="min-h-20 resize-none"
+          {...field}
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
   )
 
-  const renderNotesField = useCallback(
-    ({ field }: { field: ControllerRenderProps<TodoFormValues, 'notes'> }) => (
-      <FormItem>
-        <FormControl>
-          <Textarea
-            placeholder="Add notes (optional)..."
-            className="min-h-20 resize-none"
-            {...field}
-          />
-        </FormControl>
-        <FormMessage />
-      </FormItem>
-    ),
-    [],
-  )
-
-  const notesValue = form.watch('notes')
+  const notesValue = useWatch({ control: form.control, name: 'notes' })
 
   return (
     <Card>
@@ -105,6 +104,7 @@ export const AddTodoForm = React.memo(function AddTodoForm({
                 name="text"
                 render={renderTextField}
               />
+
               <Collapsible
                 open={isNotesOpen}
                 onOpenChange={handleNotesOpenChange}
@@ -155,4 +155,4 @@ export const AddTodoForm = React.memo(function AddTodoForm({
       </CardContent>
     </Card>
   )
-})
+}

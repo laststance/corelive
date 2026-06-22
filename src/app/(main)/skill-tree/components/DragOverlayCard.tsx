@@ -1,6 +1,5 @@
 'use client'
 
-import { memo } from 'react'
 /**
  * A non-interactive floating preview of a task card, rendered inside
  * `<DragOverlay>` while a drag is in progress.
@@ -15,7 +14,7 @@ import { memo } from 'react'
  *   {activeTodo ? <DragOverlayCard text={activeTodo.text} /> : null}
  * </DragOverlay>
  */
-export const DragOverlayCard = memo(function DragOverlayCard({
+export const DragOverlayCard = function DragOverlayCard({
   text,
 }: {
   text: string
@@ -29,4 +28,4 @@ export const DragOverlayCard = memo(function DragOverlayCard({
       {text}
     </div>
   )
-})
+}

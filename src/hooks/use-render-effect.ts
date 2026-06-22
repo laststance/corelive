@@ -60,6 +60,7 @@ export function useRenderEffect(
   effect: EffectCallback,
   deps?: DependencyList,
 ): void {
-  // Pass deps through so consumers get exact useEffect semantics for each branch.
+  // Passthrough wrapper — caller owns the dependency list semantics.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- forwarded deps
   useEffect(effect, deps)
 }

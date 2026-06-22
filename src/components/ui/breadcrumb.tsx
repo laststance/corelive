@@ -4,16 +4,11 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Breadcrumb = React.memo(function Breadcrumb({
-  ...props
-}: React.ComponentProps<'nav'>) {
+function Breadcrumb({ ...props }: React.ComponentProps<'nav'>) {
   return <nav aria-label="breadcrumb" data-slot="breadcrumb" {...props} />
-})
+}
 
-const BreadcrumbList = React.memo(function BreadcrumbList({
-  className,
-  ...props
-}: React.ComponentProps<'ol'>) {
+function BreadcrumbList({ className, ...props }: React.ComponentProps<'ol'>) {
   return (
     <ol
       data-slot="breadcrumb-list"
@@ -24,12 +19,9 @@ const BreadcrumbList = React.memo(function BreadcrumbList({
       {...props}
     />
   )
-})
+}
 
-const BreadcrumbItem = React.memo(function BreadcrumbItem({
-  className,
-  ...props
-}: React.ComponentProps<'li'>) {
+function BreadcrumbItem({ className, ...props }: React.ComponentProps<'li'>) {
   return (
     <li
       data-slot="breadcrumb-item"
@@ -37,9 +29,9 @@ const BreadcrumbItem = React.memo(function BreadcrumbItem({
       {...props}
     />
   )
-})
+}
 
-const BreadcrumbLink = React.memo(function BreadcrumbLink({
+function BreadcrumbLink({
   asChild,
   className,
   ...props
@@ -55,12 +47,9 @@ const BreadcrumbLink = React.memo(function BreadcrumbLink({
       {...props}
     />
   )
-})
+}
 
-const BreadcrumbPage = React.memo(function BreadcrumbPage({
-  className,
-  ...props
-}: React.ComponentProps<'span'>) {
+function BreadcrumbPage({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       data-slot="breadcrumb-page"
@@ -71,9 +60,9 @@ const BreadcrumbPage = React.memo(function BreadcrumbPage({
       {...props}
     />
   )
-})
+}
 
-const BreadcrumbSeparator = React.memo(function BreadcrumbSeparator({
+function BreadcrumbSeparator({
   children,
   className,
   ...props
@@ -89,9 +78,9 @@ const BreadcrumbSeparator = React.memo(function BreadcrumbSeparator({
       {children ?? <ChevronRight />}
     </li>
   )
-})
+}
 
-const BreadcrumbEllipsis = React.memo(function BreadcrumbEllipsis({
+function BreadcrumbEllipsis({
   className,
   ...props
 }: React.ComponentProps<'span'>) {
@@ -107,7 +96,7 @@ const BreadcrumbEllipsis = React.memo(function BreadcrumbEllipsis({
       <span className="sr-only">More</span>
     </span>
   )
-})
+}
 
 export {
   Breadcrumb,

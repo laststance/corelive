@@ -9,10 +9,7 @@ import type { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-const Pagination = React.memo(function Pagination({
-  className,
-  ...props
-}: React.ComponentProps<'nav'>) {
+function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
   return (
     <nav
       role="navigation"
@@ -22,9 +19,9 @@ const Pagination = React.memo(function Pagination({
       {...props}
     />
   )
-})
+}
 
-const PaginationContent = React.memo(function PaginationContent({
+function PaginationContent({
   className,
   ...props
 }: React.ComponentProps<'ul'>) {
@@ -35,20 +32,18 @@ const PaginationContent = React.memo(function PaginationContent({
       {...props}
     />
   )
-})
+}
 
-const PaginationItem = React.memo(function PaginationItem({
-  ...props
-}: React.ComponentProps<'li'>) {
+function PaginationItem({ ...props }: React.ComponentProps<'li'>) {
   return <li data-slot="pagination-item" {...props} />
-})
+}
 
 type PaginationLinkProps = {
   isActive?: boolean
 } & Pick<React.ComponentProps<typeof Button>, 'size'> &
   React.ComponentProps<'a'>
 
-const PaginationLink = React.memo(function PaginationLink({
+function PaginationLink({
   className,
   isActive,
   size = 'icon',
@@ -69,9 +64,9 @@ const PaginationLink = React.memo(function PaginationLink({
       {...props}
     />
   )
-})
+}
 
-const PaginationPrevious = React.memo(function PaginationPrevious({
+function PaginationPrevious({
   className,
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
@@ -86,9 +81,9 @@ const PaginationPrevious = React.memo(function PaginationPrevious({
       <span className="hidden sm:block">Previous</span>
     </PaginationLink>
   )
-})
+}
 
-const PaginationNext = React.memo(function PaginationNext({
+function PaginationNext({
   className,
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
@@ -103,9 +98,9 @@ const PaginationNext = React.memo(function PaginationNext({
       <ChevronRightIcon />
     </PaginationLink>
   )
-})
+}
 
-const PaginationEllipsis = React.memo(function PaginationEllipsis({
+function PaginationEllipsis({
   className,
   ...props
 }: React.ComponentProps<'span'>) {
@@ -120,7 +115,7 @@ const PaginationEllipsis = React.memo(function PaginationEllipsis({
       <span className="sr-only">More pages</span>
     </span>
   )
-})
+}
 
 export {
   Pagination,

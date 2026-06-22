@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Slider = React.memo(function Slider({
+function Slider({
   className,
   defaultValue,
   value,
@@ -13,15 +13,11 @@ const Slider = React.memo(function Slider({
   max = 100,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
-  const _values = React.useMemo(
-    () =>
-      Array.isArray(value)
-        ? value
-        : Array.isArray(defaultValue)
-          ? defaultValue
-          : [min, max],
-    [value, defaultValue, min, max],
-  )
+  const _values = Array.isArray(value)
+    ? value
+    : Array.isArray(defaultValue)
+      ? defaultValue
+      : [min, max]
 
   return (
     <SliderPrimitive.Root
@@ -58,6 +54,6 @@ const Slider = React.memo(function Slider({
       ))}
     </SliderPrimitive.Root>
   )
-})
+}
 
 export { Slider }

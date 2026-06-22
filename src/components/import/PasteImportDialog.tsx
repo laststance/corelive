@@ -2,7 +2,7 @@
 
 import { Loader2, X } from 'lucide-react'
 import * as React from 'react'
-import { useCallback, useDeferredValue, useId, useMemo, useState } from 'react'
+import { useDeferredValue, useId, useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Badge } from '@/components/ui/badge'
@@ -112,7 +112,7 @@ export interface PasteImportDialogProps {
  *   open={open} onOpenChange={setOpen} isSubmitting={false} error={null}
  *   onConfirm={(items) => console.log(items)} trigger={<Button>Import</Button>} />
  */
-export const PasteImportDialog = React.memo(function PasteImportDialog({
+export const PasteImportDialog = function PasteImportDialog({
   zone,
   categories,
   defaultCategoryId,
@@ -147,87 +147,70 @@ export const PasteImportDialog = React.memo(function PasteImportDialog({
 
   // Visible count is instant; the SR announcement is debounced via the
   // deferred text so a screen reader is not spammed on every keystroke.
-  const preview = useMemo(() => computePasteImportPreview(text), [text])
+  const preview = computePasteImportPreview(text)
   const deferredText = useDeferredValue(text)
-  const deferredPreview = useMemo(
-    () => computePasteImportPreview(deferredText),
-    [deferredText],
-  )
+  const deferredPreview = computePasteImportPreview(deferredText)
 
-  const categoryName = useCallback(
-    (id: number | null): string => {
-      if (id === null) return 'Uncategorized'
-      return (
-        categories.find((category) => category.id === id)?.name ?? 'Category'
-      )
-    },
-    [categories],
-  )
+  const categoryName = (id: number | null): string => {
+    if (id === null) return 'Uncategorized'
+    return categories.find((category) => category.id === id)?.name ?? 'Category'
+  }
 
   // Reset all transient state when the dialog closes so a reopen is fresh.
-  const resetState = useCallback(() => {
+  const resetState = () => {
     setText(initialText)
     setSharedCategoryId(initialSharedCategory)
     setRowOverrides(new Map())
     setActiveOverrideRow(null)
-  }, [initialSharedCategory, initialText])
+  }
 
-  const handleOpenChange = useCallback(
-    (next: boolean) => {
-      // Block close while submitting so an in-flight import is never abandoned.
-      if (!next && isSubmitting) return
-      if (!next) resetState()
-      onOpenChange(next)
-    },
-    [isSubmitting, onOpenChange, resetState],
-  )
+  const handleOpenChange = (next: boolean) => {
+    // Block close while submitting so an in-flight import is never abandoned.
+    if (!next && isSubmitting) return
+    if (!next) resetState()
+    onOpenChange(next)
+  }
 
-  const handleTextChange = useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setText(event.target.value)
-      // Parse changed → drop overrides + any open override Select.
-      setRowOverrides((current) => (current.size === 0 ? current : new Map()))
-      setActiveOverrideRow(null)
-    },
-    [],
-  )
+  const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(event.target.value)
+    // Parse changed → drop overrides + any open override Select.
+    setRowOverrides((current) => (current.size === 0 ? current : new Map()))
+    setActiveOverrideRow(null)
+  }
 
-  const handleSharedCategoryChange = useCallback((value: string) => {
+  const handleSharedCategoryChange = (value: string) => {
     setSharedCategoryId(Number(value))
-  }, [])
+  }
 
-  const handleRowOverrideChange = useCallback(
-    (rowIndex: number, value: string) => {
-      setRowOverrides((current) => {
-        const next = new Map(current)
-        next.set(rowIndex, Number(value))
-        return next
-      })
-      setActiveOverrideRow(null)
-    },
-    [],
-  )
+  const handleRowOverrideChange = (rowIndex: number, value: string) => {
+    setRowOverrides((current) => {
+      const next = new Map(current)
+      next.set(rowIndex, Number(value))
+      return next
+    })
+    setActiveOverrideRow(null)
+  }
 
-  const clearRowOverride = useCallback((rowIndex: number) => {
+  const clearRowOverride = (rowIndex: number) => {
     setRowOverrides((current) => {
       if (!current.has(rowIndex)) return current
       const next = new Map(current)
       next.delete(rowIndex)
       return next
     })
-  }, [])
+  }
 
   // Semantic reveal handlers (instead of passing the raw setter down) — keeps
   // the per-row override Select hidden at rest, revealed on hover/focus/tap.
-  const revealRowOverride = useCallback((rowIndex: number) => {
+  const revealRowOverride = (rowIndex: number) => {
     setActiveOverrideRow(rowIndex)
-  }, [])
+  }
 
-  const hideRowOverride = useCallback(() => {
+  const hideRowOverride = () => {
     setActiveOverrideRow(null)
-  }, [])
+  }
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = () => {
     if (preview.total === 0 || isSubmitting) return
     const items: PasteImportItem[] = preview.rows.map((row, index) => {
       const override = rowOverrides.get(index)
@@ -239,27 +222,17 @@ export const PasteImportDialog = React.memo(function PasteImportDialog({
         : { title: row.title, categoryId }
     })
     void onConfirm(items)
-  }, [
-    isSubmitting,
-    onConfirm,
-    preview.rows,
-    preview.total,
-    rowOverrides,
-    sharedCategoryId,
-  ])
+  }
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = () => {
     handleOpenChange(false)
-  }, [handleOpenChange])
+  }
 
   // Block dismissal (outside-click / ESC) while a submit is in flight so an
   // in-progress import is never abandoned mid-request.
-  const preventDismissWhileSubmitting = useCallback(
-    (event: Event) => {
-      if (isSubmitting) event.preventDefault()
-    },
-    [isSubmitting],
-  )
+  const preventDismissWhileSubmitting = (event: Event) => {
+    if (isSubmitting) event.preventDefault()
+  }
 
   const copy = ZONE_COPY[zone]
   const hasCategories = categories.length > 0
@@ -281,8 +254,8 @@ export const PasteImportDialog = React.memo(function PasteImportDialog({
             {copy.title}
           </DialogTitle>
           {/* SR-only description satisfies Radix's aria-describedby contract
-              without adding visible chrome (the spec's read order is title →
-              textarea, no visible subtitle). */}
+               without adding visible chrome (the spec's read order is title →
+               textarea, no visible subtitle). */}
           <DialogDescription className="sr-only">
             Paste one task per line, then review and confirm to import them.
           </DialogDescription>
@@ -349,7 +322,7 @@ export const PasteImportDialog = React.memo(function PasteImportDialog({
         />
 
         {/* Todo-only expectation note — set the "no heatmap fill" expectation
-            at preview, not only on success. */}
+             at preview, not only on success. */}
         {copy.note && preview.total > 0 ? (
           <p className="text-sm text-muted-foreground">{copy.note}</p>
         ) : null}
@@ -390,7 +363,7 @@ export const PasteImportDialog = React.memo(function PasteImportDialog({
       </DialogContent>
     </Dialog>
   )
-})
+}
 
 /**
  * The Geist-Mono tabular count line: `N tasks`, ` · M skipped` when lines were
@@ -402,7 +375,7 @@ export const PasteImportDialog = React.memo(function PasteImportDialog({
  * @example
  * <PasteImportCount preview={{ total: 12, skipped: 2, ... }} /> // "12 tasks · 2 skipped"
  */
-const PasteImportCount = React.memo(function PasteImportCount({
+const PasteImportCount = function PasteImportCount({
   preview,
 }: {
   preview: ReturnType<typeof computePasteImportPreview>
@@ -425,7 +398,7 @@ const PasteImportCount = React.memo(function PasteImportCount({
       ) : null}
     </div>
   )
-})
+}
 
 /**
  * The quiet dense preview list. Renders one compact row per parsed line with an
@@ -436,7 +409,7 @@ const PasteImportCount = React.memo(function PasteImportCount({
  * @param props - Preview data, category lookups, override state, and handlers.
  * @returns The preview list or the empty hint.
  */
-const PasteImportPreviewList = React.memo(function PasteImportPreviewList({
+const PasteImportPreviewList = function PasteImportPreviewList({
   preview,
   categories,
   sharedCategoryId,
@@ -497,7 +470,7 @@ const PasteImportPreviewList = React.memo(function PasteImportPreviewList({
       })}
     </ul>
   )
-})
+}
 
 /**
  * One preview row: the title plus the category affordance. At rest it shows the
@@ -509,7 +482,7 @@ const PasteImportPreviewList = React.memo(function PasteImportPreviewList({
  * @param props - The row's title, resolved category, reveal/override state, and handlers.
  * @returns A single `<li>` preview row.
  */
-const PasteImportPreviewRow = React.memo(function PasteImportPreviewRow({
+const PasteImportPreviewRow = function PasteImportPreviewRow({
   rowIndex,
   title,
   effectiveCategoryId,
@@ -541,14 +514,9 @@ const PasteImportPreviewRow = React.memo(function PasteImportPreviewRow({
   // Stable callbacks for the MEMOIZED Select/SelectTrigger (the lint rule wants
   // useCallback for memoized-component props but plain inline functions for
   // intrinsic elements like <li>/<button> — hence the split below).
-  const changeOverride = useCallback(
-    (value: string) => onOverrideChange(rowIndex, value),
-    [onOverrideChange, rowIndex],
-  )
-  const revealOnFocus = useCallback(
-    () => onRevealOverride(rowIndex),
-    [onRevealOverride, rowIndex],
-  )
+  const changeOverride = (value: string) => onOverrideChange(rowIndex, value)
+
+  const revealOnFocus = () => onRevealOverride(rowIndex)
 
   return (
     <li
@@ -618,4 +586,4 @@ const PasteImportPreviewRow = React.memo(function PasteImportPreviewRow({
       ) : null}
     </li>
   )
-})
+}

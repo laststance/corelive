@@ -3,8 +3,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Settings } from 'lucide-react'
 import {
-  memo,
-  useCallback,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
@@ -56,7 +54,7 @@ import {
  * @example
  * <Category onOpenManageAction={() => setManageOpen(true)} />
  */
-export const Category = memo(function Category({
+export const Category = function Category({
   onOpenManageAction,
 }: {
   onOpenManageAction: () => void
@@ -99,20 +97,17 @@ export const Category = memo(function Category({
    * Handles selecting a category and closing mobile sidebar.
    * @param categoryId - Category ID to select.
    */
-  const handleSelect = useCallback(
-    (categoryId: number) => {
-      setSelectedCategoryId(categoryId)
-      if (isMobile) {
-        setOpenMobile(false)
-      }
-    },
-    [isMobile, setOpenMobile, setSelectedCategoryId],
-  )
+  const handleSelect = (categoryId: number) => {
+    setSelectedCategoryId(categoryId)
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   /**
    * Handles creating a new category from the popover form.
    */
-  const handleCreateCategory = useCallback(() => {
+  const handleCreateCategory = () => {
     const trimmedName = newName.trim()
     if (!trimmedName || createMutation.isPending) return
 
@@ -126,35 +121,26 @@ export const Category = memo(function Category({
         },
       },
     )
-  }, [createMutation, newColor, newName])
+  }
 
-  const handleAddOpenChange = useCallback((open: boolean) => {
+  const handleAddOpenChange = (open: boolean) => {
     setAddOpen(open)
-  }, [])
+  }
 
-  const handleNewNameChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      setNewName(event.target.value)
-    },
-    [],
-  )
+  const handleNewNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setNewName(event.target.value)
+  }
 
-  const handleNewNameKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') handleCreateCategory()
-    },
-    [handleCreateCategory],
-  )
+  const handleNewNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') handleCreateCategory()
+  }
 
-  const handleCategoryClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      const categoryId = Number(event.currentTarget.dataset.categoryId)
-      if (Number.isInteger(categoryId)) {
-        handleSelect(categoryId)
-      }
-    },
-    [handleSelect],
-  )
+  const handleCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const categoryId = Number(event.currentTarget.dataset.categoryId)
+    if (Number.isInteger(categoryId)) {
+      handleSelect(categoryId)
+    }
+  }
 
   return (
     <SidebarGroup>
@@ -220,6 +206,7 @@ export const Category = memo(function Category({
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${getColorDotClass(category.color)}`}
                 />
+
                 <span className="truncate">{category.name}</span>
               </SidebarMenuButton>
               {category._count.todos > 0 && (
@@ -244,4 +231,4 @@ export const Category = memo(function Category({
       </SidebarGroupContent>
     </SidebarGroup>
   )
-})
+}

@@ -2,14 +2,7 @@
 
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
-import React, {
-  useState,
-  useRef,
-  lazy,
-  Suspense,
-  useCallback,
-  useMemo,
-} from 'react'
+import React, { useState, useRef, lazy, Suspense } from 'react'
 
 import { useFloatingNavigatorMenuActions } from '@/components/floating-navigator/useFloatingNavigatorMenuActions'
 import { Button } from '@/components/ui/button'
@@ -73,9 +66,10 @@ const ClipboardPaste = lazy(async () =>
 )
 
 // Icon fallback component for loading state
-const IconFallback = React.memo(() => (
+const IconFallback = () => (
   <div className="h-3 w-3 animate-pulse rounded bg-muted" />
-))
+)
+
 IconFallback.displayName = 'IconFallback'
 
 export interface FloatingTodo {
@@ -141,7 +135,7 @@ interface CompletedFloatingTodoRowProps {
  * @example
  * <PendingFloatingTodoRow todo={todo} isEditing={false} editText="" editInputRef={editInputRef} onToggle={toggle} onDelete={remove} onStartEditing={startEditing} onEditTextChange={changeEditText} onEditKeyDown={handleKey} onSaveEdit={saveEdit} onCancelEdit={cancelEdit} />
  */
-const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
+const PendingFloatingTodoRow = function PendingFloatingTodoRow({
   todo,
   isDragging = false,
   dragHandleRef,
@@ -157,20 +151,20 @@ const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
   onCancelEdit,
 }: PendingFloatingTodoRowProps): React.ReactNode {
   const { checkboxMotionClassName, fire } = useCompletionFeedback()
-  const handleToggle = useCallback(() => {
+  const handleToggle = () => {
     // Fire the opt-in sound only on a real completion (false→true); the CSS
     // checkbox fill plays on the state change. Un-completing is quiet.
     if (!todo.completed) {
       fire()
     }
     onToggle(todo.id)
-  }, [fire, onToggle, todo.completed, todo.id])
-  const handleDelete = useCallback(() => {
+  }
+  const handleDelete = () => {
     onDelete(todo.id)
-  }, [onDelete, todo.id])
-  const handleEditButtonClick = useCallback(() => {
+  }
+  const handleEditButtonClick = () => {
     onStartEditing(todo)
-  }, [onStartEditing, todo])
+  }
 
   return (
     <div
@@ -210,6 +204,7 @@ const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
             aria-label="Edit task title"
             aria-describedby={`edit-help-${todo.id}`}
           />
+
           <div id={`edit-help-${todo.id}`} className="sr-only">
             Press Enter to save, Escape to cancel
           </div>
@@ -283,7 +278,7 @@ const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
       )}
     </div>
   )
-})
+}
 
 /**
  * Renders one completed floating todo row with stable custom component handlers.
@@ -293,18 +288,18 @@ const PendingFloatingTodoRow = React.memo(function PendingFloatingTodoRow({
  * @example
  * <CompletedFloatingTodoRow todo={todo} onToggle={toggle} onDelete={remove} />
  */
-const CompletedFloatingTodoRow = React.memo(function CompletedFloatingTodoRow({
+const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
   todo,
   onToggle,
   onDelete,
 }: CompletedFloatingTodoRowProps): React.ReactNode {
   const { checkboxMotionClassName } = useCompletionFeedback()
-  const handleToggle = useCallback(() => {
+  const handleToggle = () => {
     onToggle(todo.id)
-  }, [onToggle, todo.id])
-  const handleDelete = useCallback(() => {
+  }
+  const handleDelete = () => {
     onDelete(todo.id)
-  }, [onDelete, todo.id])
+  }
 
   return (
     <div
@@ -318,6 +313,7 @@ const CompletedFloatingTodoRow = React.memo(function CompletedFloatingTodoRow({
         className={`tap-target-24 h-4 w-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${checkboxMotionClassName}`}
         aria-label={`Mark completed task "${todo.text}" as incomplete`}
       />
+
       <span
         className="flex-1 truncate text-xs line-through"
         title={todo.text}
@@ -339,9 +335,9 @@ const CompletedFloatingTodoRow = React.memo(function CompletedFloatingTodoRow({
       </Button>
     </div>
   )
-})
+}
 
-export const FloatingNavigator = React.memo(function FloatingNavigator({
+export const FloatingNavigator = function FloatingNavigator({
   todos,
   onTaskToggle,
   onTaskCreate,
@@ -368,17 +364,13 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
   const taskListRef = useRef<HTMLDivElement>(null)
 
   // Separate todos by completion status
-  const pendingTodos = useMemo(
-    () => todos.filter((todo) => !todo.completed),
-    [todos],
-  )
-  const completedTodos = useMemo(
-    () => todos.filter((todo) => todo.completed),
-    [todos],
-  )
+  const pendingTodos = todos.filter((todo) => !todo.completed)
+
+  const completedTodos = todos.filter((todo) => todo.completed)
+
   const canReorderTasks = onTaskReorder !== undefined
 
-  const startEditing = useCallback((todo: FloatingTodo) => {
+  const startEditing = (todo: FloatingTodo) => {
     setEditingId(todo.id)
     setEditText(todo.text)
     // Focus and select input after DOM update
@@ -388,7 +380,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         editInputRef.current.select()
       }
     }, 0)
-  }, [])
+  }
 
   useFloatingNavigatorMenuActions({
     inputRef,
@@ -403,91 +395,78 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
    * @example
    * handleDragEnd(event)
    */
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      if (!canReorderTasks || event.canceled) {
-        return
-      }
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (!canReorderTasks || event.canceled) {
+      return
+    }
 
-      const { source } = event.operation
+    const { source } = event.operation
 
-      if (!isSortable(source) || source.initialIndex === source.index) {
-        return
-      }
+    if (!isSortable(source) || source.initialIndex === source.index) {
+      return
+    }
 
-      const destinationTodo = pendingTodos[source.index]
+    const destinationTodo = pendingTodos[source.index]
 
-      if (destinationTodo) {
-        onTaskReorder?.(String(source.id), destinationTodo.id)
-      }
-    },
-    [canReorderTasks, onTaskReorder, pendingTodos],
-  )
+    if (destinationTodo) {
+      onTaskReorder?.(String(source.id), destinationTodo.id)
+    }
+  }
 
-  const handleCreateTask = useCallback(() => {
+  const handleCreateTask = () => {
     if (newTaskText.trim()) {
       onTaskCreate(newTaskText.trim())
       setNewTaskText('')
     }
-  }, [newTaskText, onTaskCreate])
+  }
 
-  const handleKeyPress = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (isEnterKeyPress(e)) {
-        handleCreateTask()
-      }
-    },
-    [handleCreateTask],
-  )
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (isEnterKeyPress(e)) {
+      handleCreateTask()
+    }
+  }
 
-  const saveEdit = useCallback(() => {
+  const saveEdit = () => {
     if (editingId && editText.trim()) {
       onTaskEdit(editingId, editText.trim())
     }
     setEditingId(null)
     setEditText('')
-  }, [editText, editingId, onTaskEdit])
+  }
 
-  const cancelEdit = useCallback(() => {
+  const cancelEdit = () => {
     setEditingId(null)
     setEditText('')
-  }, [])
+  }
 
-  const handleEditKeyPress = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (isEnterKeyPress(e)) {
-        saveEdit()
-      } else if (e.key === 'Escape') {
-        cancelEdit()
-      }
-    },
-    [cancelEdit, saveEdit],
-  )
+  const handleEditKeyPress = (e: React.KeyboardEvent) => {
+    if (isEnterKeyPress(e)) {
+      saveEdit()
+    } else if (e.key === 'Escape') {
+      cancelEdit()
+    }
+  }
 
-  const handleEditTextChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setEditText(event.target.value)
-    },
-    [],
-  )
+  const handleEditTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setEditText(event.target.value)
+  }
 
-  const handleNewTaskTextChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setNewTaskText(event.target.value)
-    },
-    [],
-  )
+  const handleNewTaskTextChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    setNewTaskText(event.target.value)
+  }
 
-  const openManagePanel = useCallback(() => {
+  const openManagePanel = () => {
     setShowManagePanel(true)
-  }, [])
+  }
 
-  const closeManagePanel = useCallback(() => {
+  const closeManagePanel = () => {
     setShowManagePanel(false)
-  }, [])
+  }
 
   // Window control functions
-  const handleMinimize = useCallback(async () => {
+  const handleMinimize = async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.minimize()
@@ -495,9 +474,9 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to minimize window:', error)
       }
     }
-  }, [])
+  }
 
-  const handleClose = useCallback(async () => {
+  const handleClose = async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.close()
@@ -505,9 +484,9 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to close window:', error)
       }
     }
-  }, [])
+  }
 
-  const handleToggleAlwaysOnTop = useCallback(async () => {
+  const handleToggleAlwaysOnTop = async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         const newState =
@@ -517,7 +496,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to toggle always on top:', error)
       }
     }
-  }, [])
+  }
 
   // Seed the pin button from the window's real state on mount. The button no
   // longer assumes the window launched pinned: the always-on-top preference now
@@ -545,7 +524,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
     }
   })
 
-  const handleFocusMainWindow = useCallback(async () => {
+  const handleFocusMainWindow = async () => {
     if (isFloatingNavigatorEnvironment()) {
       try {
         await window.floatingNavigatorAPI!.window.focusMainWindow()
@@ -553,7 +532,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
         log.error('Failed to focus main window:', error)
       }
     }
-  }, [])
+  }
 
   // T14: the full task app is web-only, so Import opens the Completed import
   // surface (/home) in the user's browser instead of broadcasting an open-intent
@@ -562,7 +541,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
   // this method while still loading this (newer) web bundle, so method-guard and
   // fall back to the legacy cross-window intent — broadcast to the main window's
   // Completed dialog + surface it (that older app still has a main window).
-  const handleOpenImport = useCallback(async () => {
+  const handleOpenImport = async () => {
     if (!isFloatingNavigatorEnvironment()) return
     const floatingApi = window.floatingNavigatorAPI
     if (typeof floatingApi?.openCompletedImport === 'function') {
@@ -580,39 +559,33 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
     } catch (error) {
       log.error('Failed to focus main window for import:', error)
     }
-  }, [])
+  }
 
   // Toggle the BrainDump Note window via the floating navigator preload bridge.
-  const handleToggleBrainDump = useCallback(async () => {
+  const handleToggleBrainDump = async () => {
     if (!isFloatingNavigatorEnvironment()) return
     try {
       await window.floatingNavigatorAPI?.brainDump.toggle()
     } catch (error) {
       log.error('Failed to toggle BrainDump:', error)
     }
-  }, [])
+  }
 
   // Handle task toggle
-  const handleTaskToggle = useCallback(
-    (id: string) => {
-      const task = todos.find((t) => t.id === id)
-      if (task) {
-        onTaskToggle(id)
-      }
-    },
-    [onTaskToggle, todos],
-  )
+  const handleTaskToggle = (id: string) => {
+    const task = todos.find((t) => t.id === id)
+    if (task) {
+      onTaskToggle(id)
+    }
+  }
 
   // Handle task deletion
-  const handleTaskDelete = useCallback(
-    (id: string) => {
-      const task = todos.find((t) => t.id === id)
-      if (task) {
-        onTaskDelete(id)
-      }
-    },
-    [onTaskDelete, todos],
-  )
+  const handleTaskDelete = (id: string) => {
+    const task = todos.find((t) => t.id === id)
+    if (task) {
+      onTaskDelete(id)
+    }
+  }
 
   const pendingTaskList = (
     <div
@@ -813,6 +786,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${COLOR_DOT_CLASSES[cat.color] ?? 'bg-muted-foreground'}`}
                     />
+
                     {cat.name}
                   </button>
                 ))}
@@ -851,6 +825,7 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
                 aria-label="New task title"
                 aria-describedby="task-input-help"
               />
+
               <div id="task-input-help" className="sr-only">
                 Type a task title and press Enter or click the add button to
                 create a new task
@@ -943,4 +918,4 @@ export const FloatingNavigator = React.memo(function FloatingNavigator({
       )}
     </div>
   )
-})
+}

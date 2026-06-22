@@ -13,7 +13,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { cn } from '@/lib/utils'
 
-const Calendar = React.memo(function Calendar({
+function Calendar({
   className,
   classNames,
   showOutsideDays = true,
@@ -172,7 +172,7 @@ const Calendar = React.memo(function Calendar({
       {...props}
     />
   )
-})
+}
 
 function CalendarDayButtonBase({
   className,
@@ -212,8 +212,6 @@ function CalendarDayButtonBase({
   )
 }
 
-const CalendarDayButton = React.memo(
-  CalendarDayButtonBase,
-) as typeof CalendarDayButtonBase
+const CalendarDayButton = CalendarDayButtonBase
 
 export { Calendar, CalendarDayButton }

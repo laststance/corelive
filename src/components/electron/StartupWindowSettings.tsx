@@ -13,7 +13,7 @@
  * @module components/electron/StartupWindowSettings
  */
 import { Sunrise } from 'lucide-react'
-import { memo, useCallback, useId, useState, type ReactElement } from 'react'
+import { useId, useState, type ReactElement } from 'react'
 
 import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
 import {
@@ -72,7 +72,7 @@ const STARTUP_WINDOW_OPTIONS: ReadonlyArray<{
  * @example
  * <StartupWindowSettings />
  */
-export const StartupWindowSettings = memo(function StartupWindowSettings({
+export const StartupWindowSettings = function StartupWindowSettings({
   className,
 }: StartupWindowSettingsProps): ReactElement {
   const baseId = useId()
@@ -127,36 +127,36 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
    * @param next - true to open that window at launch, false to skip it
    * @returns Promise that resolves once the save settles (success or rollback)
    */
-  const handleToggle = useCallback(
-    async (key: keyof StartupWindowConfig, next: boolean): Promise<void> => {
-      const previous = startup
-      const optimistic: StartupWindowConfig = { ...startup, [key]: next }
-      setStartup(optimistic)
-      setIsSaving(true)
-      setError(null)
+  const handleToggle = async (
+    key: keyof StartupWindowConfig,
+    next: boolean,
+  ): Promise<void> => {
+    const previous = startup
+    const optimistic: StartupWindowConfig = { ...startup, [key]: next }
+    setStartup(optimistic)
+    setIsSaving(true)
+    setError(null)
 
-      try {
-        const api = window.electronAPI?.settings
-        // If the preload bridge disappears, rollback instead of showing a saved
-        // value the main process never persisted.
-        if (!api) {
-          throw new Error('Electron settings API is not available')
-        }
-
-        const didSave = await api.setStartupConfig(optimistic)
-        if (!didSave) {
-          throw new Error('Main process did not persist the startup config')
-        }
-      } catch (saveError: unknown) {
-        log.error('Failed to update startup window settings:', saveError)
-        setStartup(previous)
-        setError('Failed to update startup window settings')
-      } finally {
-        setIsSaving(false)
+    try {
+      const api = window.electronAPI?.settings
+      // If the preload bridge disappears, rollback instead of showing a saved
+      // value the main process never persisted.
+      if (!api) {
+        throw new Error('Electron settings API is not available')
       }
-    },
-    [startup],
-  )
+
+      const didSave = await api.setStartupConfig(optimistic)
+      if (!didSave) {
+        throw new Error('Main process did not persist the startup config')
+      }
+    } catch (saveError: unknown) {
+      log.error('Failed to update startup window settings:', saveError)
+      setStartup(previous)
+      setError('Failed to update startup window settings')
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   if (hasMounted && !window.electronAPI?.settings) {
     return (
@@ -248,7 +248,7 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
       </CardContent>
     </Card>
   )
-})
+}
 
 interface StartupWindowToggleRowProps {
   /** DOM id shared by the Label and Switch for accessible association. */
@@ -278,7 +278,7 @@ interface StartupWindowToggleRowProps {
  * @param props - Row props (id, copy, current state, and the keyed parent handler)
  * @returns A label/description paired with its toggle switch
  */
-const StartupWindowToggleRow = memo(function StartupWindowToggleRow({
+const StartupWindowToggleRow = function StartupWindowToggleRow({
   switchId,
   optionKey,
   label,
@@ -289,12 +289,9 @@ const StartupWindowToggleRow = memo(function StartupWindowToggleRow({
 }: StartupWindowToggleRowProps): ReactElement {
   // Bridge Radix's (checked) callback to the keyed parent handler; `void`
   // discards the returned promise so this stays a plain void event handler.
-  const handleCheckedChange = useCallback(
-    (next: boolean): void => {
-      void onToggleAction(optionKey, next)
-    },
-    [onToggleAction, optionKey],
-  )
+  const handleCheckedChange = (next: boolean): void => {
+    void onToggleAction(optionKey, next)
+  }
 
   return (
     <div className="flex items-center justify-between gap-4">
@@ -312,6 +309,6 @@ const StartupWindowToggleRow = memo(function StartupWindowToggleRow({
       />
     </div>
   )
-})
+}
 
 export default StartupWindowSettings

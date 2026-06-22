@@ -1,5 +1,5 @@
 import { useRouter } from 'next/navigation'
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { log } from '../lib/logger'
 
@@ -45,22 +45,21 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
     optionsRef.current = options
   }, [options])
 
-  // Handle task focus event
-  const handleTaskFocus = useCallback(
-    (data: DeepLinkEventData) => {
+  // Set up event listeners
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI) {
+      return
+    }
+
+    const handleTaskFocus = (data: DeepLinkEventData) => {
       if (data.task && optionsRef.current.onTaskFocus) {
         optionsRef.current.onTaskFocus(data.task, data.params)
       } else if (data.task) {
-        // Default behavior: navigate to task
         router.push(`/home?focus=${data.task.id}`)
       }
-    },
-    [router],
-  )
+    }
 
-  // Handle task creation event
-  const handleTaskCreate = useCallback(
-    (data: DeepLinkEventData) => {
+    const handleTaskCreate = (data: DeepLinkEventData) => {
       if (optionsRef.current.onTaskCreate) {
         optionsRef.current.onTaskCreate({
           title: data.title,
@@ -69,7 +68,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
           dueDate: data.dueDate,
         })
       } else {
-        // Default behavior: navigate to create task with pre-filled data
         const params = new URLSearchParams()
         if (data.title) params.set('title', data.title)
         if (data.description) params.set('description', data.description)
@@ -78,63 +76,39 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
 
         router.push(`/home?create=true&${params.toString()}`)
       }
-    },
-    [router],
-  )
+    }
 
-  // Handle task created event
-  const handleTaskCreated = useCallback(
-    (data: DeepLinkEventData) => {
+    const handleTaskCreated = (data: DeepLinkEventData) => {
       if (data.task && optionsRef.current.onTaskCreated) {
         optionsRef.current.onTaskCreated(data.task)
       } else if (data.task) {
-        // Default behavior: navigate to the created task
         router.push(`/home?focus=${data.task.id}`)
       }
-    },
-    [router],
-  )
+    }
 
-  // Handle navigation event
-  const handleNavigate = useCallback(
-    (data: DeepLinkEventData) => {
+    const handleNavigate = (data: DeepLinkEventData) => {
       if (data.view && optionsRef.current.onNavigate) {
         optionsRef.current.onNavigate(data.view, data.params)
       } else if (data.view) {
-        // Default behavior: navigate to view
         const params = data.params
           ? `?${new URLSearchParams(data.params).toString()}`
           : ''
         router.push(`/${data.view}${params}`)
       }
-    },
-    [router],
-  )
+    }
 
-  // Handle search event
-  const handleSearch = useCallback(
-    (data: DeepLinkEventData) => {
+    const handleSearch = (data: DeepLinkEventData) => {
       if (optionsRef.current.onSearch) {
         optionsRef.current.onSearch(data.query || '', data.filter)
       } else {
-        // Default behavior: navigate to home with search
         const params = new URLSearchParams()
         if (data.query) params.set('search', data.query)
         if (data.filter) params.set('filter', data.filter)
 
         router.push(`/home?${params.toString()}`)
       }
-    },
-    [router],
-  )
-
-  // Set up event listeners
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.electronAPI) {
-      return
     }
 
-    // Register event listeners
     const cleanupFunctions = [
       window.electronAPI.on('deep-link-focus-task', handleTaskFocus),
       window.electronAPI.on('deep-link-create-task', handleTaskCreate),
@@ -143,7 +117,6 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
       window.electronAPI.on('deep-link-search', handleSearch),
     ].filter(Boolean)
 
-    // Cleanup function
     return () => {
       cleanupFunctions.forEach((cleanup) => {
         if (typeof cleanup === 'function') {
@@ -151,33 +124,27 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
         }
       })
     }
-  }, [
-    handleTaskFocus,
-    handleTaskCreate,
-    handleTaskCreated,
-    handleNavigate,
-    handleSearch,
-  ])
+  }, [router])
 
   // Generate deep link URL
-  const generateDeepLink = useCallback(
-    async (action: string, params: Record<string, any> = {}) => {
-      if (typeof window === 'undefined' || !window.electronAPI?.deepLink) {
-        return null
-      }
+  const generateDeepLink = async (
+    action: string,
+    params: Record<string, any> = {},
+  ) => {
+    if (typeof window === 'undefined' || !window.electronAPI?.deepLink) {
+      return null
+    }
 
-      try {
-        return await window.electronAPI.deepLink.generateUrl(action, params)
-      } catch (error) {
-        log.error('Failed to generate deep link:', error)
-        return null
-      }
-    },
-    [],
-  )
+    try {
+      return await window.electronAPI.deepLink.generateUrl(action, params)
+    } catch (error) {
+      log.error('Failed to generate deep link:', error)
+      return null
+    }
+  }
 
   // Get example deep link URLs
-  const getExampleUrls = useCallback(async () => {
+  const getExampleUrls = async () => {
     if (typeof window === 'undefined' || !window.electronAPI?.deepLink) {
       return {}
     }
@@ -188,10 +155,10 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
       log.error('Failed to get deep link examples:', error)
       return {}
     }
-  }, [])
+  }
 
   // Handle deep link URL manually
-  const handleDeepLinkUrl = useCallback(async (url: string) => {
+  const handleDeepLinkUrl = async (url: string) => {
     if (typeof window === 'undefined' || !window.electronAPI?.deepLink) {
       return false
     }
@@ -202,7 +169,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
       log.error('Failed to handle deep link URL:', error)
       return false
     }
-  }, [])
+  }
 
   // Check if running in Electron
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI

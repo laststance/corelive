@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useState } from 'react'
 
 /**
  * Keeps reducer-style local state without calling React.useReducer directly.
@@ -17,12 +17,10 @@ export function useReducerState<State, Action>(
   initialState: State,
 ): readonly [State, (action: Action) => void] {
   const [state, setState] = useState(initialState)
-  const reducerRef = useRef(reducer)
-  reducerRef.current = reducer
 
-  const dispatch = useCallback((action: Action) => {
-    setState((currentState) => reducerRef.current(currentState, action))
-  }, [])
+  const dispatch = (action: Action) => {
+    setState((currentState) => reducer(currentState, action))
+  }
 
   return [state, dispatch] as const
 }

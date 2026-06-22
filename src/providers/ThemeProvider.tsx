@@ -47,11 +47,11 @@ interface ThemeProviderProps extends Omit<NextThemesProviderProps, 'themes'> {
  * @param children - Child components
  * @returns Provider component
  */
-export const ThemeProvider = React.memo(function ThemeProvider({
+export const ThemeProvider = function ThemeProvider({
   children,
   ...props
 }: ThemeProviderProps) {
-  const themes = React.useMemo(() => [...THEMES], [])
+  const themes = [...THEMES]
 
   return (
     <NextThemesProvider
@@ -65,12 +65,12 @@ export const ThemeProvider = React.memo(function ThemeProvider({
       {...props}
     >
       {/* Self-heals a stale/tampered persisted theme back to the default
-          (next-themes does not validate its own localStorage value). */}
+           (next-themes does not validate its own localStorage value). */}
       <ThemeAllowlistGuard />
       {/* Crossfades the whole UI during a theme switch by toggling a transient
-          class on <html>, without animating every hover/focus interaction. */}
+           class on <html>, without animating every hover/focus interaction. */}
       <ThemeTransition />
       {children}
     </NextThemesProvider>
   )
-})
+}

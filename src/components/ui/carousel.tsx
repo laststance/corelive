@@ -42,7 +42,7 @@ function useCarousel() {
   return context
 }
 
-const Carousel = React.memo(function Carousel({
+function Carousel({
   orientation = 'horizontal',
   opts,
   setApi,
@@ -58,35 +58,49 @@ const Carousel = React.memo(function Carousel({
     },
     plugins,
   )
-  const [canScrollPrev, setCanScrollPrev] = React.useState(false)
-  const [canScrollNext, setCanScrollNext] = React.useState(false)
+  const subscribeToScrollState = (onStoreChange: () => void) => {
+    if (!api) {
+      return () => {}
+    }
 
-  const onSelect = React.useCallback((api: CarouselApi) => {
-    if (!api) return
-    setCanScrollPrev(api.canScrollPrev())
-    setCanScrollNext(api.canScrollNext())
-  }, [])
+    api.on('reInit', onStoreChange)
+    api.on('select', onStoreChange)
 
-  const scrollPrev = React.useCallback(() => {
-    api?.scrollPrev()
-  }, [api])
+    return () => {
+      api.off('reInit', onStoreChange)
+      api.off('select', onStoreChange)
+    }
+  }
 
-  const scrollNext = React.useCallback(() => {
-    api?.scrollNext()
-  }, [api])
-
-  const handleKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        scrollPrev()
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault()
-        scrollNext()
-      }
-    },
-    [scrollPrev, scrollNext],
+  const canScrollPrev = React.useSyncExternalStore(
+    subscribeToScrollState,
+    () => api?.canScrollPrev() ?? false,
+    () => false,
   )
+
+  const canScrollNext = React.useSyncExternalStore(
+    subscribeToScrollState,
+    () => api?.canScrollNext() ?? false,
+    () => false,
+  )
+
+  const scrollPrev = () => {
+    api?.scrollPrev()
+  }
+
+  const scrollNext = () => {
+    api?.scrollNext()
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      scrollPrev()
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      scrollNext()
+    }
+  }
 
   React.useLayoutEffect(() => {
     if (!api) return
@@ -95,15 +109,7 @@ const Carousel = React.memo(function Carousel({
     if (setApi) {
       setApi(api)
     }
-
-    onSelect(api)
-    api.on('reInit', onSelect)
-    api.on('select', onSelect)
-
-    return () => {
-      api?.off('select', onSelect)
-    }
-  }, [api, onSelect, setApi])
+  }, [api, setApi])
 
   return (
     <CarouselContext
@@ -131,12 +137,9 @@ const Carousel = React.memo(function Carousel({
       </div>
     </CarouselContext>
   )
-})
+}
 
-const CarouselContent = React.memo(function CarouselContent({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function CarouselContent({ className, ...props }: React.ComponentProps<'div'>) {
   const { carouselRef, orientation } = useCarousel()
 
   return (
@@ -155,12 +158,9 @@ const CarouselContent = React.memo(function CarouselContent({
       />
     </div>
   )
-})
+}
 
-const CarouselItem = React.memo(function CarouselItem({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function CarouselItem({ className, ...props }: React.ComponentProps<'div'>) {
   const { orientation } = useCarousel()
 
   return (
@@ -176,9 +176,9 @@ const CarouselItem = React.memo(function CarouselItem({
       {...props}
     />
   )
-})
+}
 
-const CarouselPrevious = React.memo(function CarouselPrevious({
+function CarouselPrevious({
   className,
   variant = 'outline',
   size = 'icon',
@@ -206,9 +206,9 @@ const CarouselPrevious = React.memo(function CarouselPrevious({
       <span className="sr-only">Previous slide</span>
     </Button>
   )
-})
+}
 
-const CarouselNext = React.memo(function CarouselNext({
+function CarouselNext({
   className,
   variant = 'outline',
   size = 'icon',
@@ -236,7 +236,7 @@ const CarouselNext = React.memo(function CarouselNext({
       <span className="sr-only">Next slide</span>
     </Button>
   )
-})
+}
 
 export {
   type CarouselApi,

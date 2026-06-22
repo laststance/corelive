@@ -6,21 +6,21 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const DropdownMenu = React.memo(function DropdownMenu({
+function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
-})
+}
 
-const DropdownMenuPortal = React.memo(function DropdownMenuPortal({
+function DropdownMenuPortal({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
   return (
     <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
   )
-})
+}
 
-const DropdownMenuTrigger = React.memo(function DropdownMenuTrigger({
+function DropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
   return (
@@ -29,9 +29,9 @@ const DropdownMenuTrigger = React.memo(function DropdownMenuTrigger({
       {...props}
     />
   )
-})
+}
 
-const DropdownMenuContent = React.memo(function DropdownMenuContent({
+function DropdownMenuContent({
   className,
   sideOffset = 4,
   ...props
@@ -49,17 +49,17 @@ const DropdownMenuContent = React.memo(function DropdownMenuContent({
       />
     </DropdownMenuPrimitive.Portal>
   )
-})
+}
 
-const DropdownMenuGroup = React.memo(function DropdownMenuGroup({
+function DropdownMenuGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
   return (
     <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
   )
-})
+}
 
-const DropdownMenuItem = React.memo(function DropdownMenuItem({
+function DropdownMenuItem({
   className,
   inset,
   variant = 'default',
@@ -80,9 +80,9 @@ const DropdownMenuItem = React.memo(function DropdownMenuItem({
       {...props}
     />
   )
-})
+}
 
-const DropdownMenuCheckboxItem = React.memo(function DropdownMenuCheckboxItem({
+function DropdownMenuCheckboxItem({
   className,
   children,
   checked,
@@ -106,9 +106,9 @@ const DropdownMenuCheckboxItem = React.memo(function DropdownMenuCheckboxItem({
       {children}
     </DropdownMenuPrimitive.CheckboxItem>
   )
-})
+}
 
-const DropdownMenuRadioGroup = React.memo(function DropdownMenuRadioGroup({
+function DropdownMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
   return (
@@ -117,9 +117,9 @@ const DropdownMenuRadioGroup = React.memo(function DropdownMenuRadioGroup({
       {...props}
     />
   )
-})
+}
 
-const DropdownMenuRadioItem = React.memo(function DropdownMenuRadioItem({
+function DropdownMenuRadioItem({
   className,
   children,
   ...props
@@ -141,9 +141,9 @@ const DropdownMenuRadioItem = React.memo(function DropdownMenuRadioItem({
       {children}
     </DropdownMenuPrimitive.RadioItem>
   )
-})
+}
 
-const DropdownMenuLabel = React.memo(function DropdownMenuLabel({
+function DropdownMenuLabel({
   className,
   inset,
   ...props
@@ -161,9 +161,9 @@ const DropdownMenuLabel = React.memo(function DropdownMenuLabel({
       {...props}
     />
   )
-})
+}
 
-const DropdownMenuSeparator = React.memo(function DropdownMenuSeparator({
+function DropdownMenuSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
@@ -174,9 +174,9 @@ const DropdownMenuSeparator = React.memo(function DropdownMenuSeparator({
       {...props}
     />
   )
-})
+}
 
-const DropdownMenuShortcut = React.memo(function DropdownMenuShortcut({
+function DropdownMenuShortcut({
   className,
   ...props
 }: React.ComponentProps<'span'>) {
@@ -190,15 +190,15 @@ const DropdownMenuShortcut = React.memo(function DropdownMenuShortcut({
       {...props}
     />
   )
-})
+}
 
-const DropdownMenuSub = React.memo(function DropdownMenuSub({
+function DropdownMenuSub({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />
-})
+}
 
-const DropdownMenuSubTrigger = React.memo(function DropdownMenuSubTrigger({
+function DropdownMenuSubTrigger({
   className,
   inset,
   children,
@@ -220,9 +220,9 @@ const DropdownMenuSubTrigger = React.memo(function DropdownMenuSubTrigger({
       <ChevronRightIcon className="ml-auto size-4" />
     </DropdownMenuPrimitive.SubTrigger>
   )
-})
+}
 
-const DropdownMenuSubContent = React.memo(function DropdownMenuSubContent({
+function DropdownMenuSubContent({
   className,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
@@ -236,7 +236,7 @@ const DropdownMenuSubContent = React.memo(function DropdownMenuSubContent({
       {...props}
     />
   )
-})
+}
 
 export {
   DropdownMenu,

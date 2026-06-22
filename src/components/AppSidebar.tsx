@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { memo, useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { Category } from '@/app/(main)/home/_components/Category'
 import { CategoryManageDialog } from '@/app/(main)/home/_components/CategoryManageDialog'
@@ -56,7 +56,7 @@ const GITHUB_REPO = 'laststance/corelive'
  * Renders user profile, navigation links, categories, and bottom actions.
  * Uses `usePathname()` to highlight the active route.
  */
-export const AppSidebar = memo(function AppSidebar() {
+export const AppSidebar = function AppSidebar() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const router = useRouter()
@@ -70,15 +70,15 @@ export const AppSidebar = memo(function AppSidebar() {
     : `CoreLive-${version}.dmg`
   const macDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${filename}`
 
-  const handleOpenSettings = useCallback(() => {
+  const handleOpenSettings = () => {
     router.push('/settings')
-  }, [router])
-  const handleOpenCategoryManager = useCallback(() => {
+  }
+  const handleOpenCategoryManager = () => {
     setManageDialogOpen(true)
-  }, [])
-  const handleCategoryManagerOpenChange = useCallback((open: boolean) => {
+  }
+  const handleCategoryManagerOpenChange = (open: boolean) => {
     setManageDialogOpen(open)
-  }, [])
+  }
 
   return (
     <>
@@ -221,8 +221,8 @@ export const AppSidebar = memo(function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {/* Preferences is web-reachable (D15): the shared Preferences
-                    section is shown to everyone; Electron window-chrome settings
-                    self-gate to the desktop app. */}
+                     section is shown to everyone; Electron window-chrome settings
+                     self-gate to the desktop app. */}
                 <SidebarMenuItem>
                   <SidebarMenuButton onClick={handleOpenSettings}>
                     <Settings className="h-4 w-4" />
@@ -275,4 +275,4 @@ export const AppSidebar = memo(function AppSidebar() {
       />
     </>
   )
-})
+}

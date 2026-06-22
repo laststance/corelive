@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import * as React from 'react'
-import { memo, useCallback, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { serializer } from '@/lib/orpc/serializer'
@@ -116,7 +116,7 @@ function PersisterSignOutGuard({
  *
  * @param children - React child components
  */
-export const QueryClientProvider = memo(function QueryClientProvider({
+export const QueryClientProvider = function QueryClientProvider({
   children,
 }: {
   children: React.ReactNode
@@ -125,7 +125,7 @@ export const QueryClientProvider = memo(function QueryClientProvider({
   const [queryClient, setQueryClient] = useState(createQueryClient)
   const [persister, setPersister] = useState(createPersister)
 
-  const handleSessionReset = useCallback(() => {
+  const handleSessionReset = () => {
     // 1. Wipe the persisted localStorage entry first so the hydrate pass
     //    on the next mount cannot momentarily flash user A's data.
     persister?.removeClient()
@@ -140,11 +140,8 @@ export const QueryClientProvider = memo(function QueryClientProvider({
     setQueryClient(createQueryClient())
     setPersister(createPersister())
     setResetKey((k) => k + 1)
-  }, [persister, queryClient])
-  const persistOptions = React.useMemo(
-    () => (persister ? { persister } : null),
-    [persister],
-  )
+  }
+  const persistOptions = persister ? { persister } : null
 
   if (!persister) {
     // SSR fallback: render without persistence
@@ -169,4 +166,4 @@ export const QueryClientProvider = memo(function QueryClientProvider({
       {children}
     </PersistQueryClientProvider>
   )
-})
+}

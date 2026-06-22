@@ -9,7 +9,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { memo, Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 
 import {
   AlertDialog,
@@ -72,7 +72,7 @@ const DECIMAL_RADIX = 10
  * @example
  * <TodoList />
  */
-export const TodoList = memo(function TodoList() {
+export const TodoList = function TodoList() {
   const queryClient = useQueryClient()
   // Track if persister is still restoring cached data - prevents hydration mismatch
   const isRestoring = useIsRestoring()
@@ -109,12 +109,8 @@ export const TodoList = memo(function TodoList() {
     ...orpc.category.list.queryOptions({}),
     enabled: isClerkQueryReady,
   })
-  const categoryMap = useMemo(
-    () =>
-      new Map<number, CategoryWithCount>(
-        (categoryData?.categories ?? []).map((c) => [c.id, c]),
-      ),
-    [categoryData],
+  const categoryMap = new Map<number, CategoryWithCount>(
+    (categoryData?.categories ?? []).map((c) => [c.id, c]),
   )
 
   // Fetch pending todos (filtered by selected category)
@@ -174,20 +170,17 @@ export const TodoList = memo(function TodoList() {
    * @example
    * addTodo('Buy milk')
    */
-  const addTodo = useCallback(
-    (text: string, notes?: string) => {
-      if (selectedCategoryId === null) return
-      createMutation.mutate({
-        text,
-        notes,
-        categoryId: selectedCategoryId,
-      })
-      // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
-      // fired here, inside the user gesture, so the engine can resume audio.
-      fireCreate()
-    },
-    [createMutation, fireCreate, selectedCategoryId],
-  )
+  const addTodo = (text: string, notes?: string) => {
+    if (selectedCategoryId === null) return
+    createMutation.mutate({
+      text,
+      notes,
+      categoryId: selectedCategoryId,
+    })
+    // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
+    // fired here, inside the user gesture, so the engine can resume audio.
+    fireCreate()
+  }
 
   /**
    * Toggles completion status for the given todo.
@@ -197,15 +190,12 @@ export const TodoList = memo(function TodoList() {
    * @example
    * toggleComplete('42')
    */
-  const toggleComplete = useCallback(
-    (id: string) => {
-      const todoId = parseInt(id, DECIMAL_RADIX)
-      if (!isNaN(todoId)) {
-        toggleMutation.mutate({ id: todoId })
-      }
-    },
-    [toggleMutation],
-  )
+  const toggleComplete = (id: string) => {
+    const todoId = parseInt(id, DECIMAL_RADIX)
+    if (!isNaN(todoId)) {
+      toggleMutation.mutate({ id: todoId })
+    }
+  }
 
   /**
    * Deletes the specified todo item.
@@ -215,15 +205,12 @@ export const TodoList = memo(function TodoList() {
    * @example
    * deleteTodo('42')
    */
-  const deleteTodo = useCallback(
-    (id: string) => {
-      const todoId = parseInt(id, DECIMAL_RADIX)
-      if (!isNaN(todoId)) {
-        deleteMutation.mutate({ id: todoId })
-      }
-    },
-    [deleteMutation],
-  )
+  const deleteTodo = (id: string) => {
+    const todoId = parseInt(id, DECIMAL_RADIX)
+    if (!isNaN(todoId)) {
+      deleteMutation.mutate({ id: todoId })
+    }
+  }
 
   /**
    * Updates the notes for a specific todo item.
@@ -234,15 +221,12 @@ export const TodoList = memo(function TodoList() {
    * @example
    * updateNotes('42', 'Call supplier')
    */
-  const updateNotes = useCallback(
-    (id: string, notes: string) => {
-      const todoId = parseInt(id, DECIMAL_RADIX)
-      if (!isNaN(todoId)) {
-        updateMutation.mutate({ id: todoId, data: { notes } })
-      }
-    },
-    [updateMutation],
-  )
+  const updateNotes = (id: string, notes: string) => {
+    const todoId = parseInt(id, DECIMAL_RADIX)
+    if (!isNaN(todoId)) {
+      updateMutation.mutate({ id: todoId, data: { notes } })
+    }
+  }
 
   /**
    * Clears all completed todos via the bulk delete mutation.
@@ -251,29 +235,29 @@ export const TodoList = memo(function TodoList() {
    * @example
    * deleteCompleted()
    */
-  const deleteCompleted = useCallback(() => {
+  const deleteCompleted = () => {
     clearCompletedMutation.mutate({})
     // Earned-beat cue on the clear gesture (no-op unless the moment is enabled).
     // Both clear paths route through here — the direct CompletedTodos "Clear" and
     // the retain-mode confirm dialog — so one fire() covers both.
     fireClear()
-  }, [clearCompletedMutation, fireClear])
+  }
 
   // Retain-mode Clear confirmation: Clear is the ONLY way to remove
   // completed-retained rows (D14 hides the per-row trash) and it archives the
   // whole done-list in one click, so it confirms first — matching the safety of
   // CompletedTodos' clear and the per-item Undo toast (advisor).
   const [retainClearDialogOpen, setRetainClearDialogOpen] = useState(false)
-  const handleRetainClearClick = useCallback(() => {
+  const handleRetainClearClick = () => {
     setRetainClearDialogOpen(true)
-  }, [])
-  const handleRetainClearDialogOpenChange = useCallback((open: boolean) => {
+  }
+  const handleRetainClearDialogOpenChange = (open: boolean) => {
     setRetainClearDialogOpen(open)
-  }, [])
-  const handleConfirmRetainClear = useCallback(() => {
+  }
+  const handleConfirmRetainClear = () => {
     deleteCompleted()
     setRetainClearDialogOpen(false)
-  }, [deleteCompleted])
+  }
 
   // Transform data into Todo component format
   /**
@@ -306,10 +290,7 @@ export const TodoList = memo(function TodoList() {
     })
   }
 
-  const pendingTodosFromQuery = useMemo(
-    () => mapTodos(pendingData?.todos),
-    [pendingData?.todos, categoryMap],
-  )
+  const pendingTodosFromQuery = mapTodos(pendingData?.todos)
 
   // Sync local state with query data when it changes
   useCycleEffect(() => {
@@ -409,45 +390,42 @@ export const TodoList = memo(function TodoList() {
    * @example
    * handleDragEnd(event)
    */
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      if (event.canceled) {
-        return
-      }
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (event.canceled) {
+      return
+    }
 
-      const { source } = event.operation
+    const { source } = event.operation
 
-      if (!isSortable(source) || source.initialIndex === source.index) {
-        return
-      }
+    if (!isSortable(source) || source.initialIndex === source.index) {
+      return
+    }
 
-      const oldIndex = source.initialIndex
-      const newIndex = source.index
+    const oldIndex = source.initialIndex
+    const newIndex = source.index
 
-      if (
-        oldIndex < 0 ||
-        newIndex < 0 ||
-        oldIndex >= pendingTodos.length ||
-        newIndex >= pendingTodos.length
-      ) {
-        return
-      }
+    if (
+      oldIndex < 0 ||
+      newIndex < 0 ||
+      oldIndex >= pendingTodos.length ||
+      newIndex >= pendingTodos.length
+    ) {
+      return
+    }
 
-      // Optimistically update local state
-      const reorderedTodos = arrayMove(pendingTodos, oldIndex, newIndex)
-      setLocalPendingTodos(reorderedTodos)
+    // Optimistically update local state
+    const reorderedTodos = arrayMove(pendingTodos, oldIndex, newIndex)
+    setLocalPendingTodos(reorderedTodos)
 
-      // Build reorder items with new order values
-      const items = reorderedTodos.map((todo, index) => ({
-        id: parseInt(todo.id, DECIMAL_RADIX),
-        order: index,
-      }))
+    // Build reorder items with new order values
+    const items = reorderedTodos.map((todo, index) => ({
+      id: parseInt(todo.id, DECIMAL_RADIX),
+      order: index,
+    }))
 
-      // Call reorder mutation
-      reorderMutation.mutate({ items })
-    },
-    [pendingTodos, reorderMutation],
-  )
+    // Call reorder mutation
+    reorderMutation.mutate({ items })
+  }
 
   useCycleEffect(() => {
     // Cross-window sync: BrainDump / Floating Navigator completions broadcast
@@ -482,10 +460,10 @@ export const TodoList = memo(function TodoList() {
   return (
     <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-2">
       {/* Activity Heatmap — promoted to span both columns so it gets the full
-          content-width DESIGN.md mandates for the centerpiece. At full width the
-          trailing-year grid fits the card, removing the horizontal scroll the
-          old half-width placement forced on desktop (sub-770px still scrolls via
-          ContributionGraph's own overflow-x-auto — unavoidable at the 12px floor). */}
+           content-width DESIGN.md mandates for the centerpiece. At full width the
+           trailing-year grid fits the card, removing the horizontal scroll the
+           old half-width placement forced on desktop (sub-770px still scrolls via
+           ContributionGraph's own overflow-x-auto — unavoidable at the 12px floor). */}
       <div className="lg:col-span-2">
         {/* Suspense required because ContributionGraph + YearInReviewModal read URL params via Next.js 16's useSearchParams — fallback matches its own isLoading skeleton so the prerender phase is shape-identical. */}
         <Suspense
@@ -522,8 +500,8 @@ export const TodoList = memo(function TodoList() {
             </CardTitle>
             <CardDescription>Manage your tasks efficiently</CardDescription>
             {/* 居残りモード — quiet "N done" count + Clear (archives completed,
-                keeping them on the heatmap). Hidden entirely when nothing is
-                done (D6); the count is ambient, not an assertive live region. */}
+                 keeping them on the heatmap). Hidden entirely when nothing is
+                 done (D6); the count is ambient, not an assertive live region. */}
             {isRetaining && completedInListCount > 0 && (
               <div className="flex items-center justify-between pt-2">
                 <span className="font-mono text-sm tabular-nums text-muted-foreground">
@@ -545,6 +523,7 @@ export const TodoList = memo(function TodoList() {
               onAddTodo={addTodo}
               disabled={selectedCategoryId === null}
             />
+
             {/* Active-Todo-zone Import entry (D4) — next to the Add form. */}
             <div className="flex justify-end">
               <TodoImportEntry />
@@ -593,24 +572,27 @@ export const TodoList = memo(function TodoList() {
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
+
         <CategoryFilterChips
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
+
         <SundayDigestCard
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
+
         {/* In 居残りモード completed todos live in the active list above, so the
-            separate Completed section is suppressed (no double display). */}
+             separate Completed section is suppressed (no double display). */}
         {!isRetaining && <CompletedTodos onToggleComplete={toggleComplete} />}
       </div>
 
       {/* Retain-mode Clear confirmation — Clear is the only path to remove
-          completed-retained rows (D14 hides the per-row trash) and it archives
-          the whole done-list at once, so it confirms first (mirrors the
-          CompletedTodos clear dialog). Archiving keeps every completion on the
-          heatmap. */}
+           completed-retained rows (D14 hides the per-row trash) and it archives
+           the whole done-list at once, so it confirms first (mirrors the
+           CompletedTodos clear dialog). Archiving keeps every completion on the
+           heatmap. */}
       <AlertDialog
         open={retainClearDialogOpen}
         onOpenChange={handleRetainClearDialogOpenChange}
@@ -635,4 +617,4 @@ export const TodoList = memo(function TodoList() {
       </AlertDialog>
     </div>
   )
-})
+}

@@ -10,7 +10,7 @@ interface ResizablePanelGroupProps extends React.ComponentProps<typeof Group> {
   direction?: 'horizontal' | 'vertical'
 }
 
-const ResizablePanelGroup = React.memo(function ResizablePanelGroup({
+function ResizablePanelGroup({
   className,
   ...props
 }: ResizablePanelGroupProps) {
@@ -24,15 +24,13 @@ const ResizablePanelGroup = React.memo(function ResizablePanelGroup({
       {...props}
     />
   )
-})
+}
 
-const ResizablePanel = React.memo(function ResizablePanel({
-  ...props
-}: React.ComponentProps<typeof Panel>) {
+function ResizablePanel({ ...props }: React.ComponentProps<typeof Panel>) {
   return <Panel data-slot="resizable-panel" {...props} />
-})
+}
 
-const ResizableHandle = React.memo(function ResizableHandle({
+function ResizableHandle({
   withHandle,
   className,
   ...props
@@ -55,6 +53,6 @@ const ResizableHandle = React.memo(function ResizableHandle({
       )}
     </Separator>
   )
-})
+}
 
 export { ResizablePanelGroup, ResizablePanel, ResizableHandle }

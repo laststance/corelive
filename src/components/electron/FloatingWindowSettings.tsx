@@ -11,7 +11,7 @@
  * @module components/electron/FloatingWindowSettings
  */
 import { Monitor } from 'lucide-react'
-import { memo, useCallback, type ReactElement } from 'react'
+import { type ReactElement } from 'react'
 import { useId, useState } from 'react'
 
 import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
@@ -89,7 +89,7 @@ function hasCompleteFloatingPanelsApi(
  * @example
  * <FloatingWindowSettings />
  */
-export const FloatingWindowSettings = memo(function FloatingWindowSettings({
+export const FloatingWindowSettings = function FloatingWindowSettings({
   className,
 }: FloatingWindowSettingsProps): ReactElement {
   const desktopTrackingId = useId()
@@ -165,36 +165,36 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
    * @param next - The requested value
    * @returns Promise that resolves once the main process confirms or rejects
    */
-  const applyPreference = useCallback(
-    async (key: PreferenceKey, next: boolean): Promise<void> => {
-      const api = window.electronAPI?.floatingPanels
-      // If the preload bridge disappears, do nothing rather than show an
-      // un-persisted value.
-      if (!api) return
+  const applyPreference = async (
+    key: PreferenceKey,
+    next: boolean,
+  ): Promise<void> => {
+    const api = window.electronAPI?.floatingPanels
+    // If the preload bridge disappears, do nothing rather than show an
+    // un-persisted value.
+    if (!api) return
 
-      const previous = values[key]
-      setValues((current) => ({ ...current, [key]: next }))
-      setSavingKeys((current) => new Set(current).add(key))
-      setError(null)
+    const previous = values[key]
+    setValues((current) => ({ ...current, [key]: next }))
+    setSavingKeys((current) => new Set(current).add(key))
+    setError(null)
 
-      try {
-        const applied = await PREFERENCE_SETTERS[key](api, next)
-        setValues((current) => ({ ...current, [key]: applied }))
-      } catch (saveError: unknown) {
-        log.error('Failed to update floating window settings:', saveError)
-        // Roll back to the value before the optimistic flip.
-        setValues((current) => ({ ...current, [key]: previous }))
-        setError('Failed to update floating window settings')
-      } finally {
-        setSavingKeys((current) => {
-          const updated = new Set(current)
-          updated.delete(key)
-          return updated
-        })
-      }
-    },
-    [values],
-  )
+    try {
+      const applied = await PREFERENCE_SETTERS[key](api, next)
+      setValues((current) => ({ ...current, [key]: applied }))
+    } catch (saveError: unknown) {
+      log.error('Failed to update floating window settings:', saveError)
+      // Roll back to the value before the optimistic flip.
+      setValues((current) => ({ ...current, [key]: previous }))
+      setError('Failed to update floating window settings')
+    } finally {
+      setSavingKeys((current) => {
+        const updated = new Set(current)
+        updated.delete(key)
+        return updated
+      })
+    }
+  }
 
   if (hasMounted && !window.electronAPI?.floatingPanels) {
     return (
@@ -306,7 +306,7 @@ export const FloatingWindowSettings = memo(function FloatingWindowSettings({
       </CardContent>
     </Card>
   )
-})
+}
 
 interface FloatingToggleRowProps {
   switchId: string
@@ -336,7 +336,7 @@ interface FloatingToggleRowProps {
  * @param props - Row props (ids, copy, current state, and the keyed parent handler)
  * @returns A label/description paired with its toggle switch
  */
-const FloatingToggleRow = memo(function FloatingToggleRow({
+const FloatingToggleRow = function FloatingToggleRow({
   switchId,
   optionKey,
   label,
@@ -348,12 +348,9 @@ const FloatingToggleRow = memo(function FloatingToggleRow({
 }: FloatingToggleRowProps): ReactElement {
   // Bridge Radix's (checked) callback to the keyed parent handler; `void`
   // discards the returned promise so this stays a plain void event handler.
-  const handleCheckedChange = useCallback(
-    (next: boolean): void => {
-      void onToggleAction(optionKey, next)
-    },
-    [onToggleAction, optionKey],
-  )
+  const handleCheckedChange = (next: boolean): void => {
+    void onToggleAction(optionKey, next)
+  }
 
   return (
     <div className="flex items-center justify-between gap-4">
@@ -374,6 +371,6 @@ const FloatingToggleRow = memo(function FloatingToggleRow({
       />
     </div>
   )
-})
+}
 
 export default FloatingWindowSettings

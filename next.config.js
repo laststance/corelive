@@ -34,6 +34,8 @@ function createCodeInspectorOptions(bundler) {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Stable in Next.js 16 — auto-memoizes components via babel-plugin-react-compiler.
+  reactCompiler: true,
   // Electron configuration - keep images unoptimized for better compatibility
   images: {
     unoptimized: true,

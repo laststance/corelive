@@ -17,5 +17,6 @@ import { useEffect, type EffectCallback } from 'react'
  */
 export const useInitialEffect = (effect: EffectCallback): void => {
   // Mount-only work intentionally maps to React's empty dependency list.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only alias
   useEffect(effect, [])
 }

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import * as React from 'react'
-import { memo } from 'react'
 
 /**
  * Settings Page
@@ -29,17 +28,17 @@ export const metadata: Metadata = {
  *
  * @returns Settings page
  */
-const SettingsPage = memo(function SettingsPage(): React.ReactNode {
+const SettingsPage = function SettingsPage(): React.ReactNode {
   return (
     <div className="mx-auto h-full max-w-2xl">
       {/* Standalone /settings has no sidebar; this is the only way back
-          (essential in Electron, which has no browser chrome). */}
+           (essential in Electron, which has no browser chrome). */}
       <SettingsBackButton />
       <PreferencesSettings />
       <ThemeSelector />
       <ElectronSettingsPage />
     </div>
   )
-})
+}
 
 export default SettingsPage

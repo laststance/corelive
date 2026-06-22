@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { log } from '../lib/logger'
 
@@ -19,16 +19,26 @@ interface UseElectronMenuOptions {
  * Hook to handle Electron menu actions
  */
 export function useElectronMenu(options: UseElectronMenuOptions = {}) {
-  const {
-    onNewTask,
-    onFocusSearch,
-    onOpenPreferences,
-    onImportTasks,
-    onExportTasks,
-  } = options
+  const optionsRef = useRef(options)
 
-  const handleMenuAction = useCallback(
-    (menuAction: MenuAction) => {
+  useEffect(() => {
+    optionsRef.current = options
+  }, [options])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI) {
+      return
+    }
+
+    const handleMenuAction = (menuAction: MenuAction) => {
+      const {
+        onNewTask,
+        onFocusSearch,
+        onOpenPreferences,
+        onImportTasks,
+        onExportTasks,
+      } = optionsRef.current
+
       switch (menuAction.action) {
         case 'new-task':
           onNewTask?.()
@@ -52,22 +62,14 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
         default:
           log.warn('Unhandled menu action:', menuAction.action)
       }
-    },
-    [onNewTask, onFocusSearch, onOpenPreferences, onImportTasks, onExportTasks],
-  )
-
-  useEffect(() => {
-    // Check if we're in Electron environment
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      // Listen for menu actions
-      const cleanup = window.electronAPI.on('menu-action', handleMenuAction)
-
-      return cleanup
     }
-  }, [handleMenuAction])
 
-  // Utility functions to trigger menu actions programmatically
-  const triggerMenuAction = useCallback(async (action: string) => {
+    const cleanup = window.electronAPI.on('menu-action', handleMenuAction)
+
+    return cleanup
+  }, [])
+
+  const triggerMenuAction = async (action: string) => {
     if (typeof window !== 'undefined' && window.electronAPI?.menu) {
       try {
         await window.electronAPI.menu.triggerAction(action)
@@ -75,7 +77,7 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
         log.error('Failed to trigger menu action:', error)
       }
     }
-  }, [])
+  }
 
   return {
     triggerMenuAction,

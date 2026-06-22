@@ -2,7 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { memo, useCallback, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 
 import { Button } from '@/components/ui/button'
 
@@ -63,7 +63,7 @@ function getServerSnapshot(): boolean {
  * // Top of the settings page, above the settings sections:
  * <SettingsBackButton />
  */
-export const SettingsBackButton = memo(function SettingsBackButton() {
+export const SettingsBackButton = function SettingsBackButton() {
   const router = useRouter()
   const hasBackTarget = useSyncExternalStore(
     subscribeToHistory,
@@ -71,9 +71,9 @@ export const SettingsBackButton = memo(function SettingsBackButton() {
     getServerSnapshot,
   )
 
-  const handleBack = useCallback((): void => {
+  const handleBack = (): void => {
     router.back()
-  }, [router])
+  }
 
   // Nothing to return to (tray popover / deep-link): `back()` would no-op, so
   // render nothing rather than a dead button.
@@ -92,6 +92,6 @@ export const SettingsBackButton = memo(function SettingsBackButton() {
       </Button>
     </div>
   )
-})
+}
 
 export default SettingsBackButton

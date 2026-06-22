@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { memo } from 'react'
 
 import { Button } from '@/components/ui/button'
 
@@ -12,7 +11,7 @@ export const metadata: Metadata = {
   description: 'Personal Todo navigator for you.',
 }
 
-const Home = memo(function Home() {
+const Home = function Home() {
   return (
     <div className="container mx-auto min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center">
@@ -27,6 +26,6 @@ const Home = memo(function Home() {
       </div>
     </div>
   )
-})
+}
 
 export default Home

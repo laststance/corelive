@@ -29,7 +29,7 @@
  *   )
  * }
  */
-import { memo, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { Provider } from 'react-redux'
 
 import { store } from './store'
@@ -59,8 +59,8 @@ interface ReduxProviderProps {
  *   <HomePage />
  * </ReduxProvider>
  */
-export const ReduxProvider = memo(function ReduxProvider({
+export const ReduxProvider = function ReduxProvider({
   children,
 }: ReduxProviderProps): ReactNode {
   return <Provider store={store}>{children}</Provider>
-})
+}

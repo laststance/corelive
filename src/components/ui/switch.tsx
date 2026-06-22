@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Switch = React.memo(function Switch({
+function Switch({
   className,
   ...props
 }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
@@ -26,6 +26,6 @@ const Switch = React.memo(function Switch({
       />
     </SwitchPrimitive.Root>
   )
-})
+}
 
 export { Switch }

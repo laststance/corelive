@@ -12,7 +12,7 @@
  * @module app/error
  */
 import { House, RotateCcw } from 'lucide-react'
-import { memo, useCallback, type ReactElement } from 'react'
+import { type ReactElement } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -47,7 +47,7 @@ interface RouteErrorProps {
  * @example
  * // Rendered automatically by Next.js when a page subtree throws.
  */
-const RouteError = memo(function RouteError({
+const RouteError = function RouteError({
   error,
   reset,
 }: RouteErrorProps): ReactElement {
@@ -57,9 +57,9 @@ const RouteError = memo(function RouteError({
   }, [error])
 
   // Hard nav to home — stable ref so the memo'd Button never re-renders for it.
-  const goHome = useCallback(() => {
+  const goHome = () => {
     window.location.assign('/')
-  }, [])
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
@@ -77,9 +77,9 @@ const RouteError = memo(function RouteError({
             Try again
           </Button>
           {/* Secondary escape: reset() re-renders the SAME crashed segment, so a
-              deterministic throw just re-throws. A hard nav to "/" leaves the
-              broken route entirely and reloads a fresh bundle (fixes a stale
-              Electron preload that reset() never could). */}
+               deterministic throw just re-throws. A hard nav to "/" leaves the
+               broken route entirely and reloads a fresh bundle (fixes a stale
+               Electron preload that reset() never could). */}
           <Button variant="outline" onClick={goHome} className="gap-2">
             <House className="h-4 w-4" />
             Back to home
@@ -88,6 +88,6 @@ const RouteError = memo(function RouteError({
       </Card>
     </div>
   )
-})
+}
 
 export default RouteError

@@ -49,7 +49,8 @@ export function useUpdateEffect(
 
     // Once mounted, mirror standard useEffect cleanup semantics.
     return onUpdate()
-    // This wrapper intentionally forwards the caller-provided dependency list.
+    // Forwarded dependency list — validated at the call site, not here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- forwarded deps
   }, deps)
 }
 

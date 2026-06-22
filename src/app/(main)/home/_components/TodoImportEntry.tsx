@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardPaste } from 'lucide-react'
-import { memo, useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { ImportUndoBanner } from '@/components/import/ImportUndoBanner'
 import { PasteImport, type LastImport } from '@/components/import/PasteImport'
@@ -26,7 +26,7 @@ import { broadcastTodoSync } from '@/lib/todo-sync-channel'
  * @example
  * <TodoImportEntry />
  */
-export const TodoImportEntry = memo(function TodoImportEntry({
+export const TodoImportEntry = function TodoImportEntry({
   variant = 'button',
 }: {
   variant?: 'button' | 'inline'
@@ -44,30 +44,27 @@ export const TodoImportEntry = memo(function TodoImportEntry({
 
   // Todo import touches the todo list + category counts. Move-to-Completed also
   // touches the heatmap, so invalidate it too (cheap; covers the recovery path).
-  const invalidateTodo = useCallback(() => {
+  const invalidateTodo = () => {
     queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
     queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
     queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
     broadcastTodoSync()
     broadcastCategorySync()
-  }, [queryClient])
+  }
 
   // Semantic open handler (instead of passing the raw setOpen setter down).
-  const handleOpenChange = useCallback((next: boolean) => {
+  const handleOpenChange = (next: boolean) => {
     setOpen(next)
-  }, [])
+  }
 
-  const dismissBanner = useCallback(() => {
+  const dismissBanner = () => {
     setLastImport(null)
-  }, [])
+  }
 
-  const handleImported = useCallback(
-    (result: LastImport) => {
-      invalidateTodo()
-      setLastImport(result.count === 0 ? null : result)
-    },
-    [invalidateTodo],
-  )
+  const handleImported = (result: LastImport) => {
+    invalidateTodo()
+    setLastImport(result.count === 0 ? null : result)
+  }
 
   const trigger =
     variant === 'inline' ? (
@@ -92,6 +89,7 @@ export const TodoImportEntry = memo(function TodoImportEntry({
         onOpenChange={handleOpenChange}
         onImported={handleImported}
       />
+
       <ImportUndoBanner
         lastImport={lastImport}
         onDismiss={dismissBanner}
@@ -99,4 +97,4 @@ export const TodoImportEntry = memo(function TodoImportEntry({
       />
     </div>
   )
-})
+}

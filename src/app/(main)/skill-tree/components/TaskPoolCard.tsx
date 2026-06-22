@@ -1,7 +1,6 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/react'
-import { memo } from 'react'
 
 import type { TodoId, TodoText } from '../lib/domain-types'
 
@@ -24,7 +23,7 @@ export interface TaskPoolCardProps {
   text: TodoText
 }
 
-export const TaskPoolCard = memo(function TaskPoolCard({
+export const TaskPoolCard = function TaskPoolCard({
   id,
   text,
 }: TaskPoolCardProps) {
@@ -50,4 +49,4 @@ export const TaskPoolCard = memo(function TaskPoolCard({
       {text}
     </button>
   )
-})
+}

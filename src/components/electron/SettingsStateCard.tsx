@@ -13,7 +13,7 @@
  * @module components/electron/SettingsStateCard
  */
 import type { LucideIcon } from 'lucide-react'
-import { memo, type ReactElement } from 'react'
+import { type ReactElement } from 'react'
 
 import {
   Card,
@@ -45,7 +45,7 @@ interface SettingsStateCardProps {
  * @example
  * <SettingsStateCard icon={Sunrise} title="On launch" description="Loading startup window settings…" />
  */
-export const SettingsStateCard = memo(function SettingsStateCard({
+export const SettingsStateCard = function SettingsStateCard({
   icon: Icon,
   title,
   description,
@@ -62,6 +62,6 @@ export const SettingsStateCard = memo(function SettingsStateCard({
       </CardHeader>
     </Card>
   )
-})
+}
 
 export default SettingsStateCard

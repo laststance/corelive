@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useState, type KeyboardEvent } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -74,7 +74,7 @@ function getCaptureLabel(
  * @example
  * <KeybindingCaptureInput value="Alt+Space" ariaLabel="Toggle BrainDump" onChange={setAccel} />
  */
-export const KeybindingCaptureInput = memo(function KeybindingCaptureInput({
+export const KeybindingCaptureInput = function KeybindingCaptureInput({
   value,
   onChange,
   ariaLabel,
@@ -89,61 +89,58 @@ export const KeybindingCaptureInput = memo(function KeybindingCaptureInput({
   // both of which fire the button's onClick. Deliberately NOT on focus: auto-
   // recording on focus would trap keyboard users, because a recording box
   // preventDefaults Tab (Escape is the only keyboard exit).
-  const startRecording = useCallback(() => {
+  const startRecording = () => {
     if (disabled) return
     setIsRecording(true)
-  }, [disabled])
+  }
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = () => {
     setIsRecording(false)
-  }, [])
+  }
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLButtonElement>) => {
-      const nativeEvent = event.nativeEvent
-      // Mirror useKeyboardNav: never swallow a key while an IME is composing —
-      // the JP voice-input flow needs the composition to reach the OS.
-      if (
-        nativeEvent.isComposing ||
-        nativeEvent.keyCode === IME_COMPOSITION_KEYCODE
-      ) {
-        return
-      }
-      // Not recording yet: let the native button handle Enter/Space so it can
-      // fire onClick → startRecording. This is the keypress that ENTERS
-      // recording, so it must never be captured as the binding itself.
-      if (!isRecording) return
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const nativeEvent = event.nativeEvent
+    // Mirror useKeyboardNav: never swallow a key while an IME is composing —
+    // the JP voice-input flow needs the composition to reach the OS.
+    if (
+      nativeEvent.isComposing ||
+      nativeEvent.keyCode === IME_COMPOSITION_KEYCODE
+    ) {
+      return
+    }
+    // Not recording yet: let the native button handle Enter/Space so it can
+    // fire onClick → startRecording. This is the keypress that ENTERS
+    // recording, so it must never be captured as the binding itself.
+    if (!isRecording) return
 
-      // Recording: trap every key — including Tab — so the chord is captured and
-      // focus cannot escape mid-recording. Escape is the deliberate exit.
-      event.preventDefault()
-      event.stopPropagation()
+    // Recording: trap every key — including Tab — so the chord is captured and
+    // focus cannot escape mid-recording. Escape is the deliberate exit.
+    event.preventDefault()
+    event.stopPropagation()
 
-      // OS auto-repeat is a held key, not a fresh chord.
-      if (event.repeat) return
+    // OS auto-repeat is a held key, not a fresh chord.
+    if (event.repeat) return
 
-      // Escape cancels without changing the binding; focus stays so Tab resumes.
-      if (event.code === 'Escape') {
-        stopRecording()
-        return
-      }
-      // Backspace/Delete clears the binding (unbinds the shortcut).
-      if (event.code === 'Backspace' || event.code === 'Delete') {
-        onChange('')
-        stopRecording()
-        return
-      }
+    // Escape cancels without changing the binding; focus stays so Tab resumes.
+    if (event.code === 'Escape') {
+      stopRecording()
+      return
+    }
+    // Backspace/Delete clears the binding (unbinds the shortcut).
+    if (event.code === 'Backspace' || event.code === 'Delete') {
+      onChange('')
+      stopRecording()
+      return
+    }
 
-      // A complete chord commits and ends recording; an incomplete one (a bare
-      // modifier, or an unmapped key) returns null and keeps the box recording.
-      const accelerator = keyboardEventToAccelerator(nativeEvent)
-      if (accelerator) {
-        onChange(accelerator)
-        stopRecording()
-      }
-    },
-    [isRecording, onChange, stopRecording],
-  )
+    // A complete chord commits and ends recording; an incomplete one (a bare
+    // modifier, or an unmapped key) returns null and keeps the box recording.
+    const accelerator = keyboardEventToAccelerator(nativeEvent)
+    if (accelerator) {
+      onChange(accelerator)
+      stopRecording()
+    }
+  }
 
   return (
     <Button
@@ -168,4 +165,4 @@ export const KeybindingCaptureInput = memo(function KeybindingCaptureInput({
       {getCaptureLabel(isRecording, value, platform)}
     </Button>
   )
-})
+}

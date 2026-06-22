@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { log } from '../lib/logger'
 
@@ -19,112 +19,90 @@ export function useElectronTrayIcon() {
   /**
    * Set tray icon state
    */
-  const setIconState = useCallback(
-    async (state: TrayIconState): Promise<boolean> => {
-      if (!isAvailable) {
-        log.warn('Tray icon API not available')
-        return false
-      }
+  const setIconState = async (state: TrayIconState): Promise<boolean> => {
+    if (!isAvailable) {
+      log.warn('Tray icon API not available')
+      return false
+    }
 
-      try {
-        const success =
-          await window.electronAPI!.system!.setTrayIconState(state)
-        if (success) {
-          setCurrentState(state)
-        }
-        return success
-      } catch (error) {
-        log.error('Failed to set tray icon state:', error)
-        return false
+    try {
+      const success = await window.electronAPI!.system!.setTrayIconState(state)
+      if (success) {
+        setCurrentState(state)
       }
-    },
-    [isAvailable],
-  )
+      return success
+    } catch (error) {
+      log.error('Failed to set tray icon state:', error)
+      return false
+    }
+  }
 
   /**
    * Set tray icon to active state
    */
-  const setActive = useCallback(
-    async () => setIconState('active'),
-    [setIconState],
-  )
+  const setActive = async () => setIconState('active')
 
   /**
    * Set tray icon to notification state
    */
-  const setNotification = useCallback(
-    async () => setIconState('notification'),
-    [setIconState],
-  )
+  const setNotification = async () => setIconState('notification')
 
   /**
    * Set tray icon to disabled state
    */
-  const setDisabled = useCallback(
-    async () => setIconState('disabled'),
-    [setIconState],
-  )
+  const setDisabled = async () => setIconState('disabled')
 
   /**
    * Reset tray icon to default state
    */
-  const resetToDefault = useCallback(
-    async () => setIconState('default'),
-    [setIconState],
-  )
+  const resetToDefault = async () => setIconState('default')
 
   /**
    * Set tray tooltip
    */
-  const setTooltip = useCallback(
-    async (text: string): Promise<void> => {
-      if (!isAvailable) {
-        log.warn('Tray tooltip API not available')
-        return
-      }
+  const setTooltip = async (text: string): Promise<void> => {
+    if (!isAvailable) {
+      log.warn('Tray tooltip API not available')
+      return
+    }
 
-      try {
-        await window.electronAPI!.system!.setTrayTooltip(text)
-      } catch (error) {
-        log.error('Failed to set tray tooltip:', error)
-      }
-    },
-    [isAvailable],
-  )
+    try {
+      await window.electronAPI!.system!.setTrayTooltip(text)
+    } catch (error) {
+      log.error('Failed to set tray tooltip:', error)
+    }
+  }
 
   /**
    * Update tray icon based on application state
    */
-  const updateBasedOnState = useCallback(
-    async (appState: {
-      hasNotifications?: boolean
-      isActive?: boolean
-      isDisabled?: boolean
-      taskCount?: number
-    }) => {
-      let newState: TrayIconState = 'default'
-      let tooltip = 'CoreLive TODO'
+  const updateBasedOnState = async (appState: {
+    hasNotifications?: boolean
+    isActive?: boolean
+    isDisabled?: boolean
+    taskCount?: number
+  }) => {
+    let newState: TrayIconState = 'default'
+    let tooltip = 'CoreLive TODO'
 
-      if (appState.isDisabled) {
-        newState = 'disabled'
-        tooltip = 'CoreLive TODO (Disabled)'
-      } else if (appState.hasNotifications) {
-        newState = 'notification'
-        tooltip = 'CoreLive TODO (New notifications)'
-      } else if (appState.isActive) {
-        newState = 'active'
-        tooltip = 'CoreLive TODO (Active)'
-      }
+    if (appState.isDisabled) {
+      newState = 'disabled'
+      tooltip = 'CoreLive TODO (Disabled)'
+    } else if (appState.hasNotifications) {
+      newState = 'notification'
+      tooltip = 'CoreLive TODO (New notifications)'
+    } else if (appState.isActive) {
+      newState = 'active'
+      tooltip = 'CoreLive TODO (Active)'
+    }
 
-      // Add task count to tooltip if provided
-      if (typeof appState.taskCount === 'number') {
-        tooltip += ` - ${appState.taskCount} tasks`
-      }
+    // Add task count to tooltip if provided
+    if (typeof appState.taskCount === 'number') {
+      tooltip += ` - ${appState.taskCount} tasks`
+    }
 
-      await Promise.all([setIconState(newState), setTooltip(tooltip)])
-    },
-    [setIconState, setTooltip],
-  )
+    await Promise.all([setIconState(newState), setTooltip(tooltip)])
+  }
 
   return {
     // State

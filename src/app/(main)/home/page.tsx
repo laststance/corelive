@@ -1,7 +1,5 @@
 'use client'
 
-import { memo } from 'react'
-
 import { SidebarTrigger } from '@/components/ui/sidebar'
 
 import { TodoList } from './_components/TodoList'
@@ -11,7 +9,7 @@ import './page.css'
 /**
  * Home page content. The sidebar is provided by `(main)/layout.tsx`.
  */
-const Home = memo(function Home() {
+const Home = function Home() {
   return (
     <>
       <header className="window-drag-region flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -25,6 +23,6 @@ const Home = memo(function Home() {
       </div>
     </>
   )
-})
+}
 
 export default Home

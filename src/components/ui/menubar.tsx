@@ -6,7 +6,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Menubar = React.memo(function Menubar({
+function Menubar({
   className,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Root>) {
@@ -20,35 +20,35 @@ const Menubar = React.memo(function Menubar({
       {...props}
     />
   )
-})
+}
 
-const MenubarMenu = React.memo(function MenubarMenu({
+function MenubarMenu({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Menu>) {
   return <MenubarPrimitive.Menu data-slot="menubar-menu" {...props} />
-})
+}
 
-const MenubarGroup = React.memo(function MenubarGroup({
+function MenubarGroup({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Group>) {
   return <MenubarPrimitive.Group data-slot="menubar-group" {...props} />
-})
+}
 
-const MenubarPortal = React.memo(function MenubarPortal({
+function MenubarPortal({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Portal>) {
   return <MenubarPrimitive.Portal data-slot="menubar-portal" {...props} />
-})
+}
 
-const MenubarRadioGroup = React.memo(function MenubarRadioGroup({
+function MenubarRadioGroup({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.RadioGroup>) {
   return (
     <MenubarPrimitive.RadioGroup data-slot="menubar-radio-group" {...props} />
   )
-})
+}
 
-const MenubarTrigger = React.memo(function MenubarTrigger({
+function MenubarTrigger({
   className,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Trigger>) {
@@ -62,9 +62,9 @@ const MenubarTrigger = React.memo(function MenubarTrigger({
       {...props}
     />
   )
-})
+}
 
-const MenubarContent = React.memo(function MenubarContent({
+function MenubarContent({
   className,
   align = 'start',
   alignOffset = -4,
@@ -86,9 +86,9 @@ const MenubarContent = React.memo(function MenubarContent({
       />
     </MenubarPortal>
   )
-})
+}
 
-const MenubarItem = React.memo(function MenubarItem({
+function MenubarItem({
   className,
   inset,
   variant = 'default',
@@ -109,9 +109,9 @@ const MenubarItem = React.memo(function MenubarItem({
       {...props}
     />
   )
-})
+}
 
-const MenubarCheckboxItem = React.memo(function MenubarCheckboxItem({
+function MenubarCheckboxItem({
   className,
   children,
   checked,
@@ -135,9 +135,9 @@ const MenubarCheckboxItem = React.memo(function MenubarCheckboxItem({
       {children}
     </MenubarPrimitive.CheckboxItem>
   )
-})
+}
 
-const MenubarRadioItem = React.memo(function MenubarRadioItem({
+function MenubarRadioItem({
   className,
   children,
   ...props
@@ -159,9 +159,9 @@ const MenubarRadioItem = React.memo(function MenubarRadioItem({
       {children}
     </MenubarPrimitive.RadioItem>
   )
-})
+}
 
-const MenubarLabel = React.memo(function MenubarLabel({
+function MenubarLabel({
   className,
   inset,
   ...props
@@ -179,9 +179,9 @@ const MenubarLabel = React.memo(function MenubarLabel({
       {...props}
     />
   )
-})
+}
 
-const MenubarSeparator = React.memo(function MenubarSeparator({
+function MenubarSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Separator>) {
@@ -192,9 +192,9 @@ const MenubarSeparator = React.memo(function MenubarSeparator({
       {...props}
     />
   )
-})
+}
 
-const MenubarShortcut = React.memo(function MenubarShortcut({
+function MenubarShortcut({
   className,
   ...props
 }: React.ComponentProps<'span'>) {
@@ -208,15 +208,15 @@ const MenubarShortcut = React.memo(function MenubarShortcut({
       {...props}
     />
   )
-})
+}
 
-const MenubarSub = React.memo(function MenubarSub({
+function MenubarSub({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Sub>) {
   return <MenubarPrimitive.Sub data-slot="menubar-sub" {...props} />
-})
+}
 
-const MenubarSubTrigger = React.memo(function MenubarSubTrigger({
+function MenubarSubTrigger({
   className,
   inset,
   children,
@@ -238,9 +238,9 @@ const MenubarSubTrigger = React.memo(function MenubarSubTrigger({
       <ChevronRightIcon className="ml-auto h-4 w-4" />
     </MenubarPrimitive.SubTrigger>
   )
-})
+}
 
-const MenubarSubContent = React.memo(function MenubarSubContent({
+function MenubarSubContent({
   className,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.SubContent>) {
@@ -254,7 +254,7 @@ const MenubarSubContent = React.memo(function MenubarSubContent({
       {...props}
     />
   )
-})
+}
 
 export {
   Menubar,

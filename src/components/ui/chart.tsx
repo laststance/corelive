@@ -87,7 +87,7 @@ function useChart() {
   return context
 }
 
-const ChartContainer = React.memo(function ChartContainer({
+function ChartContainer({
   id,
   className,
   children,
@@ -101,7 +101,7 @@ const ChartContainer = React.memo(function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, '')}`
-  const chartContextValue = React.useMemo(() => ({ config }), [config])
+  const chartContextValue = { config }
 
   return (
     <ChartContext value={chartContextValue}>
@@ -121,26 +121,25 @@ const ChartContainer = React.memo(function ChartContainer({
       </div>
     </ChartContext>
   )
-})
+}
 
-const ChartStyle = React.memo(
-  ({ id, config }: { id: string; config: ChartConfig }) => {
-    const colorConfig = Object.entries(config).filter(
-      ([, config]) => config.theme || config.color,
-    )
-    const chartSelectorId = escapeCssString(id)
+function ChartStyle({ id, config }: { id: string; config: ChartConfig }) {
+  const colorConfig = Object.entries(config).filter(
+    ([, config]) => config.theme || config.color,
+  )
+  const chartSelectorId = escapeCssString(id)
 
-    if (!colorConfig.length) {
-      return null
-    }
+  if (!colorConfig.length) {
+    return null
+  }
 
-    return (
-      <style
-        dangerouslySetInnerHTML={{
-          __html: (Object.keys(THEME_SELECTORS) as ThemeMode[])
-            .map((mode) => {
-              const prefix = THEME_SELECTORS[mode]
-              return `
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: (Object.keys(THEME_SELECTORS) as ThemeMode[])
+          .map((mode) => {
+            const prefix = THEME_SELECTORS[mode]
+            return `
 ${prefix ? `${prefix} ` : ''}[data-chart="${chartSelectorId}"] {
 ${colorConfig
   .map(([key, itemConfig]) => {
@@ -154,17 +153,16 @@ ${colorConfig
   .join('\n')}
 }
 `
-            })
-            .join('\n'),
-        }}
-      />
-    )
-  },
-)
+          })
+          .join('\n'),
+      }}
+    />
+  )
+}
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
-const ChartTooltipContent = React.memo(function ChartTooltipContent({
+function ChartTooltipContent({
   active,
   payload,
   className,
@@ -203,7 +201,7 @@ const ChartTooltipContent = React.memo(function ChartTooltipContent({
 }) {
   const { config } = useChart()
 
-  const tooltipLabel = React.useMemo(() => {
+  const getTooltipLabel = () => {
     if (hideLabel || !payload?.length) {
       return null
     }
@@ -229,15 +227,9 @@ const ChartTooltipContent = React.memo(function ChartTooltipContent({
     }
 
     return <div className={cn('font-medium', labelClassName)}>{value}</div>
-  }, [
-    label,
-    labelFormatter,
-    payload,
-    hideLabel,
-    labelClassName,
-    config,
-    labelKey,
-  ])
+  }
+
+  const tooltipLabel = getTooltipLabel()
 
   if (!active || !payload || payload.length === 0) {
     return null
@@ -321,11 +313,11 @@ const ChartTooltipContent = React.memo(function ChartTooltipContent({
       </div>
     </div>
   )
-})
+}
 
 const ChartLegend = RechartsPrimitive.Legend
 
-const ChartLegendContent = React.memo(function ChartLegendContent({
+function ChartLegendContent({
   className,
   hideIcon = false,
   payload,
@@ -378,7 +370,7 @@ const ChartLegendContent = React.memo(function ChartLegendContent({
       })}
     </div>
   )
-})
+}
 
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(

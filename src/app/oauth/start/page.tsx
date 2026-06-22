@@ -3,7 +3,7 @@
 import { useClerk, useUser } from '@clerk/nextjs'
 import type { OAuthStrategy } from '@clerk/shared/types'
 import { useSearchParams } from 'next/navigation'
-import { memo, Suspense, useRef, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
@@ -36,7 +36,7 @@ const OAUTH_CALLBACK_ROUTE = '/oauth/sso-callback'
 /** Final route that creates the one-time Electron sign-in token. */
 const OAUTH_COMPLETE_ROUTE = '/oauth/callback'
 
-const OAuthStartContent = memo(function OAuthStartContent() {
+const OAuthStartContent = function OAuthStartContent() {
   const searchParams = useSearchParams()
   const { client } = useClerk()
   const { isLoaded: isUserLoaded, user } = useUser()
@@ -174,7 +174,7 @@ const OAuthStartContent = memo(function OAuthStartContent() {
       </p>
     </div>
   )
-})
+}
 
 /**
  * Extracts a human-readable OAuth start error from Clerk failures.
@@ -247,7 +247,7 @@ function buildOAuthCompleteUrl(state: string): string {
  *
  * useSearchParams() requires Suspense boundary in Next.js App Router.
  */
-const OAuthStartPage = memo(function OAuthStartPage() {
+const OAuthStartPage = function OAuthStartPage() {
   return (
     <Suspense
       fallback={
@@ -259,6 +259,6 @@ const OAuthStartPage = memo(function OAuthStartPage() {
       <OAuthStartContent />
     </Suspense>
   )
-})
+}
 
 export default OAuthStartPage

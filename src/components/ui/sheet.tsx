@@ -6,31 +6,29 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Sheet = React.memo(function Sheet({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Root>) {
+function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
-})
+}
 
-const SheetTrigger = React.memo(function SheetTrigger({
+function SheetTrigger({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
   return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />
-})
+}
 
-const SheetClose = React.memo(function SheetClose({
+function SheetClose({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Close>) {
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />
-})
+}
 
-const SheetPortal = React.memo(function SheetPortal({
+function SheetPortal({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
-})
+}
 
-const SheetOverlay = React.memo(function SheetOverlay({
+function SheetOverlay({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
@@ -44,9 +42,9 @@ const SheetOverlay = React.memo(function SheetOverlay({
       {...props}
     />
   )
-})
+}
 
-const SheetContent = React.memo(function SheetContent({
+function SheetContent({
   className,
   children,
   side = 'right',
@@ -81,12 +79,9 @@ const SheetContent = React.memo(function SheetContent({
       </SheetPrimitive.Content>
     </SheetPortal>
   )
-})
+}
 
-const SheetHeader = React.memo(function SheetHeader({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sheet-header"
@@ -94,12 +89,9 @@ const SheetHeader = React.memo(function SheetHeader({
       {...props}
     />
   )
-})
+}
 
-const SheetFooter = React.memo(function SheetFooter({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sheet-footer"
@@ -107,9 +99,9 @@ const SheetFooter = React.memo(function SheetFooter({
       {...props}
     />
   )
-})
+}
 
-const SheetTitle = React.memo(function SheetTitle({
+function SheetTitle({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Title>) {
@@ -120,9 +112,9 @@ const SheetTitle = React.memo(function SheetTitle({
       {...props}
     />
   )
-})
+}
 
-const SheetDescription = React.memo(function SheetDescription({
+function SheetDescription({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Description>) {
@@ -133,7 +125,7 @@ const SheetDescription = React.memo(function SheetDescription({
       {...props}
     />
   )
-})
+}
 
 export {
   Sheet,

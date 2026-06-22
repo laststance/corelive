@@ -5,7 +5,7 @@ import {
   ChevronRight,
   GripVertical,
 } from 'lucide-react'
-import React, { useCallback, useState } from 'react'
+import React, { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -47,7 +47,7 @@ interface TodoItemProps {
   isDragging?: boolean
 }
 
-export const TodoItem = React.memo(function TodoItem({
+export const TodoItem = function TodoItem({
   todo,
   onToggleComplete,
   onDelete,
@@ -57,9 +57,9 @@ export const TodoItem = React.memo(function TodoItem({
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const [notes, setNotes] = useState(todo.notes ?? '')
-  const handleNotesOpenChange = useCallback((open: boolean) => {
+  const handleNotesOpenChange = (open: boolean) => {
     setIsNotesOpen(open)
-  }, [])
+  }
 
   const { checkboxMotionClassName, fire } = useCompletionFeedback()
 
@@ -70,35 +70,31 @@ export const TodoItem = React.memo(function TodoItem({
   const isRetaining = useAppSelector(selectRetainCompletedInList)
   const showDeleteButton = !todo.completed || !isRetaining
 
-  const handleToggleComplete = useCallback(() => {
+  const handleToggleComplete = () => {
     // Fire the opt-in sound only on a real completion (false→true); the CSS
     // checkbox fill plays on the state change itself. Un-completing is quiet.
     if (!todo.completed) {
       fire()
     }
     onToggleComplete(todo.id)
-  }, [fire, onToggleComplete, todo.completed, todo.id])
+  }
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = () => {
     onDelete(todo.id)
-  }, [onDelete, todo.id])
+  }
 
-  const handleNotesChange = useCallback(
-    (value: string) => {
-      setNotes(value)
-      if (onUpdateNotes) {
-        onUpdateNotes(todo.id, value)
-      }
-    },
-    [onUpdateNotes, todo.id],
-  )
+  const handleNotesChange = (value: string) => {
+    setNotes(value)
+    if (onUpdateNotes) {
+      onUpdateNotes(todo.id, value)
+    }
+  }
 
-  const handleNotesTextareaChange = useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      handleNotesChange(event.target.value)
-    },
-    [handleNotesChange],
-  )
+  const handleNotesTextareaChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    handleNotesChange(event.target.value)
+  }
 
   return (
     <div
@@ -118,7 +114,7 @@ export const TodoItem = React.memo(function TodoItem({
           </button>
         )}
         {/* Expand the 16px checkbox to a ≥24px hit target (WCAG 2.5.8 AA) with a
-            transparent ::before, without resizing the global Checkbox (D12). */}
+             transparent ::before, without resizing the global Checkbox (D12). */}
         <Checkbox
           checked={todo.completed}
           onCheckedChange={handleToggleComplete}
@@ -126,6 +122,7 @@ export const TodoItem = React.memo(function TodoItem({
           aria-label={todo.text}
           className={`${checkboxMotionClassName} tap-target-24`}
         />
+
         <div className="min-w-0 flex-1">
           <div
             className={`block break-words ${
@@ -145,6 +142,7 @@ export const TodoItem = React.memo(function TodoItem({
                 <span
                   className={`inline-block h-1.5 w-1.5 rounded-full ${getColorDotClass(todo.categoryColor)}`}
                 />
+
                 {todo.categoryName}
               </span>
             )}
@@ -202,4 +200,4 @@ export const TodoItem = React.memo(function TodoItem({
       )}
     </div>
   )
-})
+}

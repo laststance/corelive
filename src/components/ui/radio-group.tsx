@@ -6,7 +6,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const RadioGroup = React.memo(function RadioGroup({
+function RadioGroup({
   className,
   ...props
 }: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
@@ -17,9 +17,9 @@ const RadioGroup = React.memo(function RadioGroup({
       {...props}
     />
   )
-})
+}
 
-const RadioGroupItem = React.memo(function RadioGroupItem({
+function RadioGroupItem({
   className,
   ...props
 }: React.ComponentProps<typeof RadioGroupPrimitive.Item>) {
@@ -40,6 +40,6 @@ const RadioGroupItem = React.memo(function RadioGroupItem({
       </RadioGroupPrimitive.Indicator>
     </RadioGroupPrimitive.Item>
   )
-})
+}
 
 export { RadioGroup, RadioGroupItem }

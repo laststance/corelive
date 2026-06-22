@@ -1,6 +1,5 @@
 'use client'
 
-import { memo } from 'react'
 import { match } from 'ts-pattern'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -74,7 +73,7 @@ function trendLabel(trend: WeeklyTrend): string {
  * @example
  * <WeeklySummaryCard dataByDate={dataByDate} isLoading={isLoading} />
  */
-export const WeeklySummaryCard = memo(function WeeklySummaryCard({
+export const WeeklySummaryCard = function WeeklySummaryCard({
   dataByDate,
   isLoading,
 }: WeeklySummaryCardProps) {
@@ -125,6 +124,7 @@ export const WeeklySummaryCard = memo(function WeeklySummaryCard({
                     getColorDotClass(category.color),
                   )}
                 />
+
                 <span className="text-foreground">{category.name}</span>
                 <span className="font-mono tabular-nums text-muted-foreground">
                   {category.count}
@@ -136,4 +136,4 @@ export const WeeklySummaryCard = memo(function WeeklySummaryCard({
       </CardContent>
     </Card>
   )
-})
+}

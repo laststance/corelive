@@ -31,6 +31,7 @@ export const useCycleEffect = (
   effect: EffectCallback,
   deps?: DependencyList,
 ): void => {
-  // Pass deps straight through so consumers get the exact useEffect semantics.
+  // Passthrough wrapper — caller owns the dependency list semantics.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- forwarded deps
   useEffect(effect, deps)
 }

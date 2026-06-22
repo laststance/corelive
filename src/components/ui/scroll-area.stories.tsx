@@ -16,7 +16,7 @@ export const Default: Story = {
   render: () => (
     <ScrollArea className="h-72 w-48 rounded-md border p-4">
       <div>
-        <h4 className="mb-4 text-sm leading-none font-medium">Tags</h4>
+        <h4 className="mb-4 text-sm font-medium leading-none">Tags</h4>
         {Array.from({ length: 50 }).map((_, i) => (
           <div key={i} className="mb-2 text-sm">
             Tag {i + 1}
@@ -29,7 +29,7 @@ export const Default: Story = {
 
 export const Horizontal: Story = {
   render: () => (
-    <ScrollArea className="h-20 w-96 rounded-md border whitespace-nowrap">
+    <ScrollArea className="h-20 w-96 whitespace-nowrap rounded-md border">
       <div className="flex w-max p-4">
         {Array.from({ length: 50 }).map((_, i) => (
           <div key={i} className="w-40 border-r p-4">

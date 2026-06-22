@@ -2,7 +2,7 @@
 
 import { useClerk, useSignIn, useUser } from '@clerk/nextjs'
 import * as React from 'react'
-import { memo, useRef } from 'react'
+import { useRef } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
@@ -20,7 +20,7 @@ import { log } from '../logger'
  * OAuth in the system browser, a sign-in token is passed back via deep link
  * and this component uses it to create a Clerk session in the WebView.
  */
-export const ElectronAuthProvider = memo(function ElectronAuthProvider({
+export const ElectronAuthProvider = function ElectronAuthProvider({
   children,
 }: {
   children: React.ReactNode
@@ -316,7 +316,7 @@ export const ElectronAuthProvider = memo(function ElectronAuthProvider({
   }, [user, isLoaded])
 
   return <>{children}</>
-})
+}
 
 /**
  * Hook to check if running in Electron and get Electron-specific auth state

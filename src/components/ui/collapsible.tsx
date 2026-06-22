@@ -2,15 +2,14 @@
 
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
 import * as React from 'react'
-import { memo } from 'react'
 
-const Collapsible = memo(function Collapsible({
+function Collapsible({
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.Root>) {
   return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
-})
+}
 
-const CollapsibleTrigger = memo(function CollapsibleTrigger({
+function CollapsibleTrigger({
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger>) {
   return (
@@ -19,9 +18,9 @@ const CollapsibleTrigger = memo(function CollapsibleTrigger({
       {...props}
     />
   )
-})
+}
 
-const CollapsibleContent = memo(function CollapsibleContent({
+function CollapsibleContent({
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent>) {
   return (
@@ -30,6 +29,6 @@ const CollapsibleContent = memo(function CollapsibleContent({
       {...props}
     />
   )
-})
+}
 
 export { Collapsible, CollapsibleTrigger, CollapsibleContent }

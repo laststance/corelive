@@ -11,7 +11,7 @@
  * @module components/electron/AppUpdateSettings
  */
 import { Download, RefreshCw } from 'lucide-react'
-import { memo, useCallback, useState, type ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -109,7 +109,7 @@ function formatUpdaterDownloadProgress(
  * @example
  * <AppUpdateSettings />
  */
-export const AppUpdateSettings = memo(function AppUpdateSettings({
+export const AppUpdateSettings = function AppUpdateSettings({
   className,
 }: AppUpdateSettingsProps): ReactElement {
   const hasMounted = useMounted()
@@ -217,7 +217,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
   /**
    * Triggers a manual update check through the main-process AutoUpdater.
    */
-  const handleCheckForUpdates = useCallback(async (): Promise<void> => {
+  const handleCheckForUpdates = async (): Promise<void> => {
     const updaterApi = window.electronAPI?.updater
     if (!updaterApi) return
 
@@ -233,12 +233,12 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
       setIsChecking(false)
       setDownloadProgress(null)
     }
-  }, [])
+  }
 
   /**
    * Restarts the app to apply a downloaded update package.
    */
-  const handleRestartToUpdate = useCallback(async (): Promise<void> => {
+  const handleRestartToUpdate = async (): Promise<void> => {
     const updaterApi = window.electronAPI?.updater
     if (!updaterApi) return
 
@@ -249,7 +249,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
       setStatusMessage(formatUpdaterStatus('Failed to download update'))
       setDownloadProgress(null)
     }
-  }, [])
+  }
 
   if (hasMounted && !window.electronAPI?.updater) {
     return (
@@ -294,6 +294,7 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
               className={`mr-2 h-4 w-4 ${isChecking ? 'animate-spin' : ''}`}
               aria-hidden
             />
+
             {isChecking ? 'Checking…' : 'Check for Updates'}
           </Button>
 
@@ -333,6 +334,6 @@ export const AppUpdateSettings = memo(function AppUpdateSettings({
       </CardContent>
     </Card>
   )
-})
+}
 
 export default AppUpdateSettings

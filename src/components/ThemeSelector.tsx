@@ -2,7 +2,6 @@
 
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { memo, useCallback } from 'react'
 
 import { ThemePreviewSwatch } from '@/components/ThemePreviewSwatch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,7 +34,7 @@ export const MODE_META: Record<
  * @example
  * <ThemeSelector />
  */
-export const ThemeSelector = memo(function ThemeSelector() {
+export const ThemeSelector = function ThemeSelector() {
   const {
     family,
     mode,
@@ -47,23 +46,17 @@ export const ThemeSelector = memo(function ThemeSelector() {
     mounted,
   } = useThemeAxis()
 
-  const handleModeChange = useCallback(
-    (value: string): void => {
-      // ToggleGroup emits '' when the active item is re-clicked; ignore that so a
-      // mode stays selected, and only react to a mode the active family offers.
-      const next = availableModes.find((modeChoice) => modeChoice === value)
-      if (next) setMode(next)
-    },
-    [availableModes, setMode],
-  )
+  const handleModeChange = (value: string): void => {
+    // ToggleGroup emits '' when the active item is re-clicked; ignore that so a
+    // mode stays selected, and only react to a mode the active family offers.
+    const next = availableModes.find((modeChoice) => modeChoice === value)
+    if (next) setMode(next)
+  }
 
-  const handleFamilyChange = useCallback(
-    (value: string): void => {
-      const next = families.find((option) => option.family === value)
-      if (next) setFamily(next.family)
-    },
-    [families, setFamily],
-  )
+  const handleFamilyChange = (value: string): void => {
+    const next = families.find((option) => option.family === value)
+    if (next) setFamily(next.family)
+  }
 
   return (
     <div className="space-y-4 p-4">
@@ -73,7 +66,7 @@ export const ThemeSelector = memo(function ThemeSelector() {
         </CardHeader>
         <CardContent className="space-y-4 px-2">
           {/* Hold a same-height placeholder until next-themes hydrates, so the
-              selected state never flashes from the default to the stored theme. */}
+               selected state never flashes from the default to the stored theme. */}
           {!mounted ? (
             <div
               aria-hidden
@@ -128,13 +121,14 @@ export const ThemeSelector = memo(function ThemeSelector() {
                         className="relative cursor-pointer"
                       >
                         {/* sr-only radio is the `peer`; the card below shows its
-                            keyboard focus via peer-focus-visible (standard variant,
-                            so it stays token-only / dslint-clean). */}
+                           keyboard focus via peer-focus-visible (standard variant,
+                           so it stays token-only / dslint-clean). */}
                         <RadioGroupItem
                           id={`theme-family-${familyId}`}
                           value={familyId}
                           className="peer sr-only"
                         />
+
                         <div
                           className={cn(
                             'hover:bg-accent/50 flex flex-col gap-2 rounded-lg border p-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2',
@@ -145,6 +139,7 @@ export const ThemeSelector = memo(function ThemeSelector() {
                             preview={getThemePreview(previewId)}
                             className="h-12 w-full"
                           />
+
                           <span className="flex items-center justify-between text-sm font-medium">
                             {label}
                             {isActive && (
@@ -163,4 +158,4 @@ export const ThemeSelector = memo(function ThemeSelector() {
       </Card>
     </div>
   )
-})
+}

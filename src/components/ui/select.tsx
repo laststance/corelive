@@ -6,25 +6,25 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Select = React.memo(function Select({
+function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />
-})
+}
 
-const SelectGroup = React.memo(function SelectGroup({
+function SelectGroup({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Group>) {
   return <SelectPrimitive.Group data-slot="select-group" {...props} />
-})
+}
 
-const SelectValue = React.memo(function SelectValue({
+function SelectValue({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
-})
+}
 
-const SelectTrigger = React.memo(function SelectTrigger({
+function SelectTrigger({
   className,
   size = 'default',
   children,
@@ -48,9 +48,9 @@ const SelectTrigger = React.memo(function SelectTrigger({
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
-})
+}
 
-const SelectContent = React.memo(function SelectContent({
+function SelectContent({
   className,
   children,
   position = 'popper',
@@ -83,9 +83,9 @@ const SelectContent = React.memo(function SelectContent({
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   )
-})
+}
 
-const SelectLabel = React.memo(function SelectLabel({
+function SelectLabel({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Label>) {
@@ -96,9 +96,9 @@ const SelectLabel = React.memo(function SelectLabel({
       {...props}
     />
   )
-})
+}
 
-const SelectItem = React.memo(function SelectItem({
+function SelectItem({
   className,
   children,
   ...props
@@ -120,9 +120,9 @@ const SelectItem = React.memo(function SelectItem({
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   )
-})
+}
 
-const SelectSeparator = React.memo(function SelectSeparator({
+function SelectSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Separator>) {
@@ -133,9 +133,9 @@ const SelectSeparator = React.memo(function SelectSeparator({
       {...props}
     />
   )
-})
+}
 
-const SelectScrollUpButton = React.memo(function SelectScrollUpButton({
+function SelectScrollUpButton({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
@@ -151,9 +151,9 @@ const SelectScrollUpButton = React.memo(function SelectScrollUpButton({
       <ChevronUpIcon className="size-4" />
     </SelectPrimitive.ScrollUpButton>
   )
-})
+}
 
-const SelectScrollDownButton = React.memo(function SelectScrollDownButton({
+function SelectScrollDownButton({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>) {
@@ -169,7 +169,7 @@ const SelectScrollDownButton = React.memo(function SelectScrollDownButton({
       <ChevronDownIcon className="size-4" />
     </SelectPrimitive.ScrollDownButton>
   )
-})
+}
 
 export {
   Select,

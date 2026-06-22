@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Label = React.memo(function Label({
+function Label({
   className,
   ...props
 }: React.ComponentProps<typeof LabelPrimitive.Root>) {
@@ -19,6 +19,6 @@ const Label = React.memo(function Label({
       {...props}
     />
   )
-})
+}
 
 export { Label }

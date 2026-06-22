@@ -1,5 +1,3 @@
-import { useCallback } from 'react'
-
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { playTimbre, prewarmTimbre } from '@/lib/audio/soundEngine'
 import type { SoundMomentId } from '@/lib/constants/sound'
@@ -43,12 +41,12 @@ export function useSoundFeedback(moment: SoundMomentId): () => void {
     if (isMomentEnabled) void prewarmTimbre(timbre)
   }, [isMomentEnabled, timbre])
 
-  return useCallback(() => {
+  return () => {
     // Gate on the per-moment toggle: a disabled moment stays silent and the
     // engine is never even touched. Enabled → delegate to the per-window engine,
     // which resumes the AudioContext inside this gesture, keeps at most one cue
     // in-flight, and never throws.
     if (!isMomentEnabled) return
     void playTimbre(timbre, volume)
-  }, [isMomentEnabled, timbre, volume])
+  }
 }

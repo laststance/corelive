@@ -55,7 +55,7 @@ function useSidebar() {
   return context
 }
 
-const SidebarProvider = React.memo(function SidebarProvider({
+function SidebarProvider({
   defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
@@ -75,25 +75,22 @@ const SidebarProvider = React.memo(function SidebarProvider({
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
-  const setOpen = React.useCallback(
-    (value: boolean | ((value: boolean) => boolean)) => {
-      const openState = typeof value === 'function' ? value(open) : value
-      if (setOpenProp) {
-        setOpenProp(openState)
-      } else {
-        _setOpen(openState)
-      }
+  const setOpen = (value: boolean | ((value: boolean) => boolean)) => {
+    const openState = typeof value === 'function' ? value(open) : value
+    if (setOpenProp) {
+      setOpenProp(openState)
+    } else {
+      _setOpen(openState)
+    }
 
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
-    },
-    [setOpenProp, open],
-  )
+    // This sets the cookie to keep the sidebar state.
+    document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+  }
 
   // Helper to toggle the sidebar.
-  const toggleSidebar = React.useCallback(() => {
+  const toggleSidebar = () => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
-  }, [isMobile, setOpen, setOpenMobile])
+  }
 
   // Adds a keyboard shortcut to toggle the sidebar.
   useCycleEffect(() => {
@@ -115,18 +112,15 @@ const SidebarProvider = React.memo(function SidebarProvider({
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? 'expanded' : 'collapsed'
 
-  const contextValue = React.useMemo<SidebarContextProps>(
-    () => ({
-      state,
-      open,
-      setOpen,
-      isMobile,
-      openMobile,
-      setOpenMobile,
-      toggleSidebar,
-    }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
-  )
+  const contextValue: SidebarContextProps = {
+    state,
+    open,
+    setOpen,
+    isMobile,
+    openMobile,
+    setOpenMobile,
+    toggleSidebar,
+  }
 
   return (
     <SidebarContext value={contextValue}>
@@ -151,9 +145,9 @@ const SidebarProvider = React.memo(function SidebarProvider({
       </TooltipProvider>
     </SidebarContext>
   )
-})
+}
 
-const Sidebar = React.memo(function Sidebar({
+function Sidebar({
   side = 'left',
   variant = 'sidebar',
   collapsible = 'offcanvas',
@@ -253,9 +247,9 @@ const Sidebar = React.memo(function Sidebar({
       </div>
     </div>
   )
-})
+}
 
-const SidebarTrigger = React.memo(function SidebarTrigger({
+function SidebarTrigger({
   className,
   onClick,
   ...props
@@ -279,12 +273,9 @@ const SidebarTrigger = React.memo(function SidebarTrigger({
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
-})
+}
 
-const SidebarRail = React.memo(function SidebarRail({
-  className,
-  ...props
-}: React.ComponentProps<'button'>) {
+function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -307,12 +298,9 @@ const SidebarRail = React.memo(function SidebarRail({
       {...props}
     />
   )
-})
+}
 
-const SidebarInset = React.memo(function SidebarInset({
-  className,
-  ...props
-}: React.ComponentProps<'main'>) {
+function SidebarInset({ className, ...props }: React.ComponentProps<'main'>) {
   return (
     <main
       data-slot="sidebar-inset"
@@ -324,9 +312,9 @@ const SidebarInset = React.memo(function SidebarInset({
       {...props}
     />
   )
-})
+}
 
-const SidebarInput = React.memo(function SidebarInput({
+function SidebarInput({
   className,
   ...props
 }: React.ComponentProps<typeof Input>) {
@@ -338,12 +326,9 @@ const SidebarInput = React.memo(function SidebarInput({
       {...props}
     />
   )
-})
+}
 
-const SidebarHeader = React.memo(function SidebarHeader({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SidebarHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sidebar-header"
@@ -352,12 +337,9 @@ const SidebarHeader = React.memo(function SidebarHeader({
       {...props}
     />
   )
-})
+}
 
-const SidebarFooter = React.memo(function SidebarFooter({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SidebarFooter({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sidebar-footer"
@@ -366,9 +348,9 @@ const SidebarFooter = React.memo(function SidebarFooter({
       {...props}
     />
   )
-})
+}
 
-const SidebarSeparator = React.memo(function SidebarSeparator({
+function SidebarSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof Separator>) {
@@ -380,12 +362,9 @@ const SidebarSeparator = React.memo(function SidebarSeparator({
       {...props}
     />
   )
-})
+}
 
-const SidebarContent = React.memo(function SidebarContent({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SidebarContent({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sidebar-content"
@@ -397,12 +376,9 @@ const SidebarContent = React.memo(function SidebarContent({
       {...props}
     />
   )
-})
+}
 
-const SidebarGroup = React.memo(function SidebarGroup({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function SidebarGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sidebar-group"
@@ -411,9 +387,9 @@ const SidebarGroup = React.memo(function SidebarGroup({
       {...props}
     />
   )
-})
+}
 
-const SidebarGroupLabel = React.memo(function SidebarGroupLabel({
+function SidebarGroupLabel({
   className,
   asChild = false,
   ...props
@@ -432,9 +408,9 @@ const SidebarGroupLabel = React.memo(function SidebarGroupLabel({
       {...props}
     />
   )
-})
+}
 
-const SidebarGroupAction = React.memo(function SidebarGroupAction({
+function SidebarGroupAction({
   className,
   asChild = false,
   ...props
@@ -455,9 +431,9 @@ const SidebarGroupAction = React.memo(function SidebarGroupAction({
       {...props}
     />
   )
-})
+}
 
-const SidebarGroupContent = React.memo(function SidebarGroupContent({
+function SidebarGroupContent({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
@@ -469,12 +445,9 @@ const SidebarGroupContent = React.memo(function SidebarGroupContent({
       {...props}
     />
   )
-})
+}
 
-const SidebarMenu = React.memo(function SidebarMenu({
-  className,
-  ...props
-}: React.ComponentProps<'ul'>) {
+function SidebarMenu({ className, ...props }: React.ComponentProps<'ul'>) {
   return (
     <ul
       data-slot="sidebar-menu"
@@ -483,12 +456,9 @@ const SidebarMenu = React.memo(function SidebarMenu({
       {...props}
     />
   )
-})
+}
 
-const SidebarMenuItem = React.memo(function SidebarMenuItem({
-  className,
-  ...props
-}: React.ComponentProps<'li'>) {
+function SidebarMenuItem({ className, ...props }: React.ComponentProps<'li'>) {
   return (
     <li
       data-slot="sidebar-menu-item"
@@ -497,7 +467,7 @@ const SidebarMenuItem = React.memo(function SidebarMenuItem({
       {...props}
     />
   )
-})
+}
 
 const sidebarMenuButtonVariants = cva(
   'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
@@ -521,7 +491,7 @@ const sidebarMenuButtonVariants = cva(
   },
 )
 
-const SidebarMenuButton = React.memo(function SidebarMenuButton({
+function SidebarMenuButton({
   asChild = false,
   isActive = false,
   variant = 'default',
@@ -569,9 +539,9 @@ const SidebarMenuButton = React.memo(function SidebarMenuButton({
       />
     </Tooltip>
   )
-})
+}
 
-const SidebarMenuAction = React.memo(function SidebarMenuAction({
+function SidebarMenuAction({
   className,
   asChild = false,
   showOnHover = false,
@@ -601,9 +571,9 @@ const SidebarMenuAction = React.memo(function SidebarMenuAction({
       {...props}
     />
   )
-})
+}
 
-const SidebarMenuBadge = React.memo(function SidebarMenuBadge({
+function SidebarMenuBadge({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
@@ -623,19 +593,19 @@ const SidebarMenuBadge = React.memo(function SidebarMenuBadge({
       {...props}
     />
   )
-})
+}
 
-const SidebarMenuSkeleton = React.memo(function SidebarMenuSkeleton({
+function SidebarMenuSkeleton({
   className,
   showIcon = false,
   ...props
 }: React.ComponentProps<'div'> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
-  const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  }, [])
+  // Random width between 50 to 90% — lazy init runs once per skeleton instance.
+  const [width] = React.useState(
+    () => `${Math.floor(Math.random() * 40) + 50}%`,
+  )
 
   return (
     <div
@@ -661,12 +631,9 @@ const SidebarMenuSkeleton = React.memo(function SidebarMenuSkeleton({
       />
     </div>
   )
-})
+}
 
-const SidebarMenuSub = React.memo(function SidebarMenuSub({
-  className,
-  ...props
-}: React.ComponentProps<'ul'>) {
+function SidebarMenuSub({ className, ...props }: React.ComponentProps<'ul'>) {
   return (
     <ul
       data-slot="sidebar-menu-sub"
@@ -679,9 +646,9 @@ const SidebarMenuSub = React.memo(function SidebarMenuSub({
       {...props}
     />
   )
-})
+}
 
-const SidebarMenuSubItem = React.memo(function SidebarMenuSubItem({
+function SidebarMenuSubItem({
   className,
   ...props
 }: React.ComponentProps<'li'>) {
@@ -693,9 +660,9 @@ const SidebarMenuSubItem = React.memo(function SidebarMenuSubItem({
       {...props}
     />
   )
-})
+}
 
-const SidebarMenuSubButton = React.memo(function SidebarMenuSubButton({
+function SidebarMenuSubButton({
   asChild = false,
   size = 'md',
   isActive = false,
@@ -725,7 +692,7 @@ const SidebarMenuSubButton = React.memo(function SidebarMenuSubButton({
       {...props}
     />
   )
-})
+}
 
 export {
   Sidebar,
