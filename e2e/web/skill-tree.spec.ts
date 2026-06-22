@@ -304,7 +304,13 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   await page.getByPlaceholder('Enter a new todo...').fill(todoText)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
 
-  const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+  // Pending-list checkbox only — the same aria-label can appear on optimistic
+  // placeholders (`todo--<ts>`), the settled server row (`todo-<id>`), and
+  // completed journal rows (`journal-todo-<id>`). Scope to the active list row
+  // whose id has a single dash after the `todo-` prefix.
+  const todoCheckbox = page
+    .getByRole('checkbox', { name: todoText })
+    .and(page.locator('[id^="todo-"]:not([id^="todo--"])'))
   await expect(todoCheckbox).toBeVisible()
   // Wait for the create mutation to settle with a positive server ID
   // (optimistic negative IDs would yield "todo--<ts>" — double dash).
@@ -327,9 +333,7 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   )
 
   await todoCheckbox.click()
-  await expect(page.getByText(todoText)).toHaveClass(/line-through/, {
-    timeout: 5000,
-  })
+  await expect(todoCheckbox).toBeChecked({ timeout: 5000 })
 
   // Block until the toggle POST completes with 200. Now the DB state is
   // guaranteed: this todo is `completed: true` and will appear in
