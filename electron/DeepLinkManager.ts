@@ -14,11 +14,9 @@ import { URL } from 'url'
 import type { App } from 'electron'
 import { app as electronApp } from 'electron'
 
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { OAuthManager } from './OAuthManager'
-import type { IPCEventChannel, IPCEventChannels } from './types/ipc'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
@@ -203,16 +201,9 @@ export class DeepLinkManager {
    * Handle second instance launch.
    */
   handleSecondInstance(commandLine: string[], _workingDirectory: string): void {
-    if (this.windowManager && this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow?.isMinimized()) {
-        mainWindow.restore()
-      }
-      mainWindow?.focus()
-    } else {
-      if (this.windowManager) {
-        this.windowManager.restoreFromTray()
-      }
+    // Main window retired (T18): a second instance surfaces the Floating front door.
+    if (this.windowManager) {
+      this.windowManager.restoreFromTray()
     }
 
     const urlArg = commandLine.find((arg) =>
@@ -491,46 +482,8 @@ export class DeepLinkManager {
       return
     }
 
-    if (this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
-
-      if (mainWindow?.isMinimized()) {
-        mainWindow.restore()
-      }
-
-      if (mainWindow && !mainWindow.isVisible()) {
-        mainWindow.show()
-      }
-
-      mainWindow?.focus()
-    } else {
-      this.windowManager.restoreFromTray()
-    }
-  }
-
-  /**
-   * Dispatch a typed event to the main renderer window.
-   *
-   * ORPHANED after T15: every deep-link handler now opens the browser
-   * (`openInBrowser`) instead of sending to a renderer, so this method has no
-   * callers. It is kept — together with its `deep-link-*` channel definitions
-   * in `types/ipc` and the (already-unmounted) `useElectronDeepLink` renderer
-   * hook — so T18/T19 can delete the whole main-renderer deep-link bridge in
-   * one Phase-2 sweep rather than half-removing it here.
-   *
-   * @example
-   *   this.sendToRenderer('deep-link-focus-task', { task, params })
-   */
-  sendToRenderer<C extends IPCEventChannel>(
-    channel: C,
-    ...payload: IPCEventChannels[C] extends void ? [] : [IPCEventChannels[C]]
-  ): void {
-    if (this.windowManager && this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow) {
-        typedSend(mainWindow.webContents, channel, ...payload)
-      }
-    }
+    // Main window retired (T18): always surface the Floating front door.
+    this.windowManager.restoreFromTray()
   }
 
   /**

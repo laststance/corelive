@@ -11,7 +11,6 @@ import path from 'path'
 import { Notification, nativeImage, type NativeImage } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationOptions, NotificationPreferences } from './types/ipc'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
@@ -26,9 +25,6 @@ import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 /** Window manager interface (minimal) */
 interface WindowManager {
   restoreFromTray(): void
-  // Nullable to match the real WindowManager (returns null with no main window),
-  // so every deref below is null-guarded ahead of the Phase-2 main-window cut.
-  getMainWindow(): Electron.BrowserWindow | null
   // Origin of the full web app (dev localhost / prod corelive.app) for routing
   // notification click-through to the browser task view.
   getWebAppOrigin(): string
@@ -327,22 +323,8 @@ export class NotificationManager {
       )
     }
 
-    // With no main window the tray tooltip above is the only surface for this
-    // guidance — don't escalate a permissions nag to the browser.
-    const mainWindow = this.windowManager.getMainWindow()
-    if (mainWindow) {
-      typedSend(mainWindow.webContents, 'notification-permission-denied', {
-        reason: _reason,
-        guidance: this.getPermissionGuidanceForPlatform(),
-      })
-    }
-  }
-
-  /**
-   * Get platform-specific guidance.
-   */
-  private getPermissionGuidanceForPlatform(): string {
-    return 'Enable notifications in System Preferences > Notifications > TODO App'
+    // Main window retired (T18): the tray tooltip above is the only surface for
+    // this guidance — don't escalate a permissions nag to the browser.
   }
 
   /**
@@ -362,7 +344,7 @@ export class NotificationManager {
   private showFallbackNotification(
     title: string,
     body: string,
-    options: NotificationOptions = {},
+    _options: NotificationOptions = {},
   ): void {
     if (!this.fallbackMethods) return
 
@@ -374,28 +356,8 @@ export class NotificationManager {
         this.systemTrayManager.setTrayTooltip(`${title}: ${body}`)
       }
 
-      // The window-title flash and in-app banner both need a live main window;
-      // with it gone the tray tooltip above is the surviving fallback surface.
-      const mainWindow = this.windowManager.getMainWindow()
-
-      if (this.fallbackMethods.windowTitle && mainWindow) {
-        const originalTitle = mainWindow.getTitle()
-        mainWindow.setTitle(`${title} - ${originalTitle}`)
-
-        setTimeout(() => {
-          if (!mainWindow.isDestroyed()) {
-            mainWindow.setTitle(originalTitle)
-          }
-        }, 3000)
-      }
-
-      if (this.fallbackMethods.inAppBanner && mainWindow) {
-        typedSend(mainWindow.webContents, 'show-fallback-notification', {
-          title,
-          body,
-          options,
-        })
-      }
+      // The window-title flash and in-app banner both needed a live main window;
+      // with it retired (T18) the tray tooltip above is the surviving fallback.
     } catch (error) {
       log.warn('Fallback notification methods failed:', error)
     }
@@ -620,20 +582,12 @@ export class NotificationManager {
   /**
    * Mark task as complete via IPC.
    */
-  private async markTaskComplete(taskId: string): Promise<void> {
-    try {
-      // NOTE: this `mark-task-complete` channel had no renderer listener even
-      // before main retirement, so the action was already inert — the main-window
-      // cut doesn't regress it. Kept main-optional (guarded) rather than routed to
-      // the browser: completing a task via URL has no web contract and a mutation
-      // shouldn't be re-implemented here. Removal tracked with T18/T19.
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow) {
-        typedSend(mainWindow.webContents, 'mark-task-complete', { taskId })
-      }
-    } catch (error) {
-      log.error('Failed to mark task complete:', error)
-    }
+  private async markTaskComplete(_taskId: string): Promise<void> {
+    // Inert by design: the `mark-task-complete` channel never had a renderer
+    // listener, and with the main window retired (T18) there is no surface to
+    // route it to. Completing a task from a notification has no web contract, so
+    // this stays a deliberate no-op rather than a re-implemented mutation. The
+    // notification action is kept so its UX is unchanged.
   }
 
   /**

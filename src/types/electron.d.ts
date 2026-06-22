@@ -44,8 +44,6 @@ interface ElectronAPI {
 
   // Window operations
   window?: {
-    minimize: () => Promise<void>
-    close: () => Promise<void>
     toggleFloatingNavigator: () => Promise<void>
     showFloatingNavigator: () => Promise<void>
     hideFloatingNavigator: () => Promise<void>
@@ -258,14 +256,14 @@ interface ElectronAPI {
       IPCResponse<'settings:getLoginItemSettings'>
     >
     /**
-     * Persist which window(s) open at Electron launch (main / brain dump /
-     * floating navigator). The >=1-true invariant is enforced in the main
-     * process; resolves true even when an all-false request is repaired.
+     * Persist which window(s) open at Electron launch (brain dump / floating
+     * navigator). The >=1-true invariant is enforced in the main process;
+     * resolves true even when an all-false request is repaired.
      */
     setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
     /**
      * Read the persisted startup-window config so the settings UI can show the
-     * saved choice. Returns the showMain-only default on failure, never all-off.
+     * saved choice. Returns the Floating-only default on failure, never all-off.
      */
     getStartupConfig: () => Promise<StartupWindowConfig>
   }

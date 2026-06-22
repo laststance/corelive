@@ -234,30 +234,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * the same oRPC client used by the browser version.
    */
 
-  // Window control APIs
+  // Window control APIs. The retired main window's minimize/close (T18) are
+  // gone; what remains here drives the floating navigator + window bounds.
   window: {
-    /**
-     * Minimize window to tray.
-     */
-    minimize: async () => {
-      try {
-        return await typedInvoke('window-minimize')
-      } catch (error) {
-        log.error('Failed to minimize window:', error)
-      }
-    },
-
-    /**
-     * Close window (minimize to tray).
-     */
-    close: async () => {
-      try {
-        return await typedInvoke('window-close')
-      } catch (error) {
-        log.error('Failed to close window:', error)
-      }
-    },
-
     /**
      * Toggle floating navigator visibility.
      */
@@ -1383,30 +1362,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     /**
-     * Persist which window(s) open at Electron launch (main / brain dump /
-     * floating navigator). The >=1-true invariant is enforced in the main
-     * process, so an all-false request is repaired (showMain forced back on)
-     * before saving — this call still resolves true in that case.
-     * @param config - The three startup-window booleans.
+     * Persist which window(s) open at Electron launch (brain dump / floating
+     * navigator). The >=1-true invariant is enforced in the main process, so an
+     * all-false request is repaired (showFloating forced back on) before
+     * saving — this call still resolves true in that case.
+     * @param config - The two startup-window booleans.
      * @returns true when persisted; false on IPC/validation failure.
      * @example
-     * await window.electronAPI.settings.setStartupConfig({ showMain: false, showBraindump: true, showFloating: false })
+     * await window.electronAPI.settings.setStartupConfig({ showBraindump: true, showFloating: false })
      */
     setStartupConfig: async (config: StartupWindowConfig): Promise<boolean> => {
       try {
-        // Defense-in-depth: strip forbidden keys / trim strings, then assert all
-        // three flags are real booleans before crossing the IPC boundary, so a
+        // Defense-in-depth: strip forbidden keys / trim strings, then assert both
+        // flags are real booleans before crossing the IPC boundary, so a
         // malformed renderer payload can never poison the persisted config.
         const sanitized = sanitizeData(config) as Partial<StartupWindowConfig>
         if (
-          typeof sanitized.showMain !== 'boolean' ||
           typeof sanitized.showBraindump !== 'boolean' ||
           typeof sanitized.showFloating !== 'boolean'
         ) {
           throw new Error('Startup config flags must be booleans')
         }
         return await typedInvoke('settings:setStartupConfig', {
-          showMain: sanitized.showMain,
           showBraindump: sanitized.showBraindump,
           showFloating: sanitized.showFloating,
         })
@@ -1418,11 +1395,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /**
      * Read the persisted startup-window config so the settings UI can show the
-     * saved choice. On IPC failure it returns the showMain-only default (which
+     * saved choice. On IPC failure it returns the Floating-only default (which
      * satisfies the >=1-true invariant), so the UI never renders an all-off state.
-     * @returns The saved startup-window config, or the showMain-only default on failure.
+     * @returns The saved startup-window config, or the Floating-only default on failure.
      * @example
-     * const startup = await window.electronAPI.settings.getStartupConfig() // => { showMain: true, ... }
+     * const startup = await window.electronAPI.settings.getStartupConfig() // => { showBraindump: false, showFloating: true }
      */
     getStartupConfig: async (): Promise<StartupWindowConfig> => {
       try {

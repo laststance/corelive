@@ -25,6 +25,7 @@ function createWindowManagerStub(): WindowManager {
     getMainWindow: vi.fn(() => null),
     toggleBrainDump: vi.fn(() => true),
     toggleFloatingNavigator: vi.fn(),
+    setOnFloatingNavigatorCreated: vi.fn(),
   } as unknown as WindowManager
 }
 

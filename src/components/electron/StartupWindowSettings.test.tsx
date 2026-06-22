@@ -50,7 +50,6 @@ describe('StartupWindowSettings', () => {
   it('reflects the saved startup config once the main process responds', async () => {
     // Arrange: brain-dump-only is the persisted choice.
     installSettingsWithConfig({
-      showMain: false,
       showBraindump: true,
       showFloating: false,
     })
@@ -58,44 +57,39 @@ describe('StartupWindowSettings', () => {
     // Act
     render(<StartupWindowSettings />)
 
-    // Assert: the Brain Dump toggle reads on; the other two read off.
+    // Assert: the Brain Dump toggle reads on; Floating reads off.
     const brainDumpSwitch = await screen.findByRole('switch', {
       name: 'Brain Dump',
     })
     expect(brainDumpSwitch).toBeChecked()
-    expect(
-      screen.getByRole('switch', { name: 'Main window' }),
-    ).not.toBeChecked()
     expect(
       screen.getByRole('switch', { name: 'Floating Navigator' }),
     ).not.toBeChecked()
   })
 
   it('locks the only enabled window so a launch never opens nothing', async () => {
-    // Arrange: the main window is the sole enabled startup window.
+    // Arrange: the Floating Navigator is the sole enabled startup window.
     installSettingsWithConfig({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
 
     // Act
     render(<StartupWindowSettings />)
 
-    // Assert: the lone enabled toggle is locked; the disabled ones stay toggleable.
-    const mainSwitch = await screen.findByRole('switch', {
-      name: 'Main window',
+    // Assert: the lone enabled toggle is locked; the disabled one stays toggleable.
+    const floatingSwitch = await screen.findByRole('switch', {
+      name: 'Floating Navigator',
     })
-    expect(mainSwitch).toBeDisabled()
+    expect(floatingSwitch).toBeDisabled()
     expect(screen.getByRole('switch', { name: 'Brain Dump' })).toBeEnabled()
   })
 
   it('persists the new config when a window is toggled on', async () => {
-    // Arrange: only the main window opens at launch.
+    // Arrange: only the Floating Navigator opens at launch.
     installSettingsWithConfig({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
     const user = userEvent.setup()
     render(<StartupWindowSettings />)
@@ -106,21 +100,19 @@ describe('StartupWindowSettings', () => {
     // Act: also open Brain Dump at launch.
     await user.click(brainDumpSwitch)
 
-    // Assert: the full config (main + brain dump) is sent to the main process.
+    // Assert: the full config (floating + brain dump) is sent to the main process.
     await waitFor(() => {
       expect(setStartupConfigMock).toHaveBeenCalledWith({
-        showMain: true,
         showBraindump: true,
-        showFloating: false,
+        showFloating: true,
       })
     })
     expect(screen.getByRole('switch', { name: 'Brain Dump' })).toBeChecked()
   })
 
   it('rolls the toggle back when the main process fails to persist it', async () => {
-    // Arrange: two windows enabled (so Floating is interactive, not locked).
+    // Arrange: Brain Dump enabled (so Floating is interactive, not locked).
     installSettingsWithConfig({
-      showMain: true,
       showBraindump: true,
       showFloating: false,
     })

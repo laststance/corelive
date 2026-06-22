@@ -6,6 +6,9 @@
  * and shortcut config. Native Cocoa behaviors (always-on-top, vibrancy) are
  * covered by local macOS native QA.
  *
+ * The brainDump IPC is driven from the Settings window — the only renderer that
+ * carries the full `electronAPI` bridge after main-window retirement.
+ *
  * Note: tests share one Electron app instance (beforeAll) and depend on
  * execution order (toggle-open → then check visibility). This is an
  * intentional tradeoff — Electron app launch is expensive per spec file.
@@ -17,10 +20,11 @@ import type { ElectronApplication, Page } from 'playwright'
 import { LOAD_TIMEOUT_MS, setupElectronTest } from './_helpers/launch'
 
 let electronApp: ElectronApplication
-let mainWindow: Page
+let settingsWindow: Page
 
 test.beforeAll(async () => {
-  ;({ electronApp, mainWindow } = await setupElectronTest('braindump-window'))
+  ;({ electronApp, settingsWindow } =
+    await setupElectronTest('braindump-window'))
 })
 
 test.afterAll(async () => {
@@ -29,7 +33,7 @@ test.afterAll(async () => {
 
 test('braindump opacity is within valid 0.30–1.00 bounds by default', async () => {
   // Arrange + Act
-  const opacity = await mainWindow.evaluate(async () => {
+  const opacity = await settingsWindow.evaluate(async () => {
     const getFn = window.electronAPI?.brainDump?.getOpacity
     if (!getFn) throw new Error('brainDump.getOpacity not in preload bridge')
     return getFn()
@@ -42,7 +46,7 @@ test('braindump opacity is within valid 0.30–1.00 bounds by default', async ()
 
 test('braindump sync mode is readable after app start', async () => {
   // Arrange + Act
-  const syncMode = await mainWindow.evaluate(async () => {
+  const syncMode = await settingsWindow.evaluate(async () => {
     const getFn = window.electronAPI?.brainDump?.getSyncMode
     if (!getFn) throw new Error('brainDump.getSyncMode not in preload bridge')
     return getFn()
@@ -54,7 +58,7 @@ test('braindump sync mode is readable after app start', async () => {
 
 test('braindump keyboard shortcut setting is readable after app start', async () => {
   // Arrange + Act
-  const shortcut = await mainWindow.evaluate(async () => {
+  const shortcut = await settingsWindow.evaluate(async () => {
     const getFn = window.electronAPI?.brainDump?.getShortcut
     if (!getFn) throw new Error('brainDump.getShortcut not in preload bridge')
     return getFn()
@@ -65,13 +69,15 @@ test('braindump keyboard shortcut setting is readable after app start', async ()
 })
 
 test('opening braindump creates a new browser window', async () => {
-  // Arrange: watch for the new window before calling toggle
+  // Arrange: Settings + Floating are already open; toggling braindump must add
+  // exactly one more window. Watch for the new window before calling toggle.
+  const windowCountBefore = electronApp.windows().length
   const newWindowPromise = electronApp.waitForEvent('window', {
     timeout: LOAD_TIMEOUT_MS,
   })
 
   // Act
-  await mainWindow.evaluate(async () => {
+  await settingsWindow.evaluate(async () => {
     const toggleFn = window.electronAPI?.brainDump?.toggle
     if (!toggleFn) throw new Error('brainDump.toggle not in preload bridge')
     await toggleFn()
@@ -79,15 +85,15 @@ test('opening braindump creates a new browser window', async () => {
 
   const braindumpWindow = await newWindowPromise
 
-  // Assert: a second window was opened
+  // Assert: exactly one new window was opened
   expect(braindumpWindow).toBeTruthy()
-  expect(electronApp.windows().length).toBeGreaterThanOrEqual(2)
+  expect(electronApp.windows().length).toBe(windowCountBefore + 1)
 })
 
 test('aux visibility reports the braindump as visible after opening', async () => {
   // Arrange: braindump was shown by the previous test
   // Act
-  const visibility = await mainWindow.evaluate(async () => {
+  const visibility = await settingsWindow.evaluate(async () => {
     const getFn = window.electronAPI?.window?.getAuxVisibility
     if (!getFn) throw new Error('getAuxVisibility not in preload bridge')
     return getFn()
@@ -102,7 +108,7 @@ test('setting braindump opacity to 0.75 persists the exact value', async () => {
   const targetOpacity = 0.75
 
   // Act
-  const appliedOpacity = await mainWindow.evaluate(async (opacity) => {
+  const appliedOpacity = await settingsWindow.evaluate(async (opacity) => {
     const setFn = window.electronAPI?.brainDump?.setOpacity
     if (!setFn) throw new Error('brainDump.setOpacity not in preload bridge')
     return setFn(opacity)
@@ -114,7 +120,7 @@ test('setting braindump opacity to 0.75 persists the exact value', async () => {
 
 test('updating braindump sync mode persists without error', async () => {
   // Arrange + Act: disable sync mode
-  const result = await mainWindow.evaluate(async () => {
+  const result = await settingsWindow.evaluate(async () => {
     const setFn = window.electronAPI?.brainDump?.setSyncMode
     if (!setFn) throw new Error('brainDump.setSyncMode not in preload bridge')
     return setFn(false)

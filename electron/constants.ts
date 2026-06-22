@@ -40,31 +40,6 @@ export const AUTH_PATHNAMES: readonly string[] = [
 export const ERR_ABORTED = -3
 
 // ============================================================================
-// Cold-boot startup pill (panel-only launch)
-// ============================================================================
-
-/**
- * Grace period before the cold-boot pill appears. If a real window paints
- * within this window, the pill is dismissed and never shown — avoids a flash on
- * a fast boot. Sits just above a typical `ready-to-show` so only genuinely slow
- * panel-only boots ever surface it.
- */
-export const STARTUP_PILL_GAP_MS = 400
-
-/**
- * Hard cap on how long the pill stays up. If neither the main window nor a panel
- * has surfaced by now the boot is wedged (offline / timeout / 5xx), so the pill
- * is dismissed and the main window is surfaced as a backstop.
- */
-export const STARTUP_PILL_TIMEOUT_MS = 8000
-
-/** Startup-pill window width (transparent; the visible pill is centered). */
-export const STARTUP_PILL_WIDTH_PX = 260
-
-/** Startup-pill window height (transparent; the visible pill is centered). */
-export const STARTUP_PILL_HEIGHT_PX = 76
-
-// ============================================================================
 // Floating window load-failure recovery (DT7)
 // ============================================================================
 

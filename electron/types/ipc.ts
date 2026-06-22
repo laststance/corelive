@@ -78,8 +78,6 @@ export interface WindowState extends WindowBounds {
  * never the IPC handler, so generic config writes can't break it).
  */
 export interface StartupWindowConfig {
-  /** Show the main `/home` window. Main is always created, hidden when false. */
-  showMain: boolean
   /** Open the Brain Dump panel (`/braindump`) at launch. */
   showBraindump: boolean
   /** Open the Floating Navigator (`/floating-navigator`) at launch. */
@@ -87,19 +85,19 @@ export interface StartupWindowConfig {
 }
 
 /**
- * Boot-safe startup default — only the main window opens. The single source of
- * truth shared by ConfigManager (factory default), both preload bridges, and
- * the settings UI so the "what opens at launch" default can never drift between
- * surfaces. Always satisfies the ≥1-true invariant. Spread it (`{ ...DEFAULT }`)
- * at call sites that need a mutable copy.
+ * Boot-safe startup default — the Floating Navigator opens (the front door
+ * after the main window's retirement, T18). The single source of truth shared
+ * by ConfigManager (factory default), both preload bridges, and the settings UI
+ * so the "what opens at launch" default can never drift between surfaces. Always
+ * satisfies the ≥1-true invariant. Spread it (`{ ...DEFAULT }`) at call sites
+ * that need a mutable copy.
  *
  * @example
- * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showMain: true, showBraindump: false, showFloating: false }
+ * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showBraindump: false, showFloating: true }
  */
 export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
-  showMain: true,
   showBraindump: false,
-  showFloating: false,
+  showFloating: true,
 }
 
 /**
@@ -306,14 +304,6 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   // Window Operations
   // ──────────────────────────────────────────────────────────────────────────
-  'window-minimize': {
-    request: void
-    response: boolean
-  }
-  'window-close': {
-    request: void
-    response: boolean
-  }
   'window-toggle-floating-navigator': {
     request: void
     response: boolean

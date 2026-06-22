@@ -42,10 +42,6 @@ export interface ElectronAPI {
    * Window control operations.
    */
   window: {
-    /** Minimize window to system tray */
-    minimize: () => Promise<void>
-    /** Close window (minimizes to tray, doesn't quit) */
-    close: () => Promise<void>
     /** Toggle floating navigator visibility */
     toggleFloatingNavigator: () => Promise<boolean | undefined>
     /** Show floating navigator */
@@ -475,14 +471,14 @@ export interface ElectronAPI {
      * Persist which window(s) open at Electron launch. The >=1-true invariant is
      * enforced in the main process, so an all-false request is repaired before
      * saving and this still resolves true.
-     * @param config - The three startup-window booleans (main / brain dump / floating).
+     * @param config - The two startup-window booleans (brain dump / floating).
      * @returns Promise resolving to success status
      */
     setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
     /**
      * Read the persisted startup-window config so the settings UI can show the
      * saved choice without consuming the untyped `config.getSection` surface.
-     * @returns Promise resolving to the saved config (showMain-only default on failure).
+     * @returns Promise resolving to the saved config (Floating-only default on failure).
      */
     getStartupConfig: () => Promise<StartupWindowConfig>
     /**

@@ -32,13 +32,8 @@ import {
   SETTINGS_POPOVER_MIN_HEIGHT_PX,
   SETTINGS_POPOVER_MIN_WIDTH_PX,
   SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS,
-  STARTUP_PILL_GAP_MS,
-  STARTUP_PILL_HEIGHT_PX,
-  STARTUP_PILL_TIMEOUT_MS,
-  STARTUP_PILL_WIDTH_PX,
 } from './constants'
 import { log } from './logger'
-import { buildStartupPillHtml } from './startup-pill-html'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
 import type {
@@ -86,9 +81,6 @@ type StartupPanelKind = Exclude<WindowType, 'main'>
  * - Handles platform-specific window behaviors
  */
 export class WindowManager {
-  /** Primary application window */
-  private mainWindow: BrowserWindow | null
-
   /** Always-on-top utility window */
   private floatingNavigator: BrowserWindow | null
 
@@ -135,6 +127,19 @@ export class WindowManager {
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
   /**
+   * Notified right after a Floating navigator window is (re)created, so
+   * dependents can rebind to the fresh BrowserWindow. ShortcutManager uses it to
+   * re-attach its focus/blur contextual-shortcut listeners: T18 retired the main
+   * window and moved those listeners onto Floating, but Floating can be absent at
+   * setup (BrainDump-only startup) or replaced (closed then reopened via Cmd+3 /
+   * tray / restoreFromTray with a NEW window id). Without this hook such a
+   * later-created Floating would carry no listeners and its contextual shortcuts
+   * would never fire. `createFloatingNavigator` is their single chokepoint, so
+   * firing here covers every creation path at once.
+   */
+  private onFloatingNavigatorCreated: (() => void) | null
+
+  /**
    * Panels that were redirected to an auth page (or failed to load) at startup,
    * so the main window was surfaced in their place. Exposed only through
    * `getStartupAuthFallbacks()` as test-observable evidence of the
@@ -144,18 +149,6 @@ export class WindowManager {
    * about this boot.
    */
   private startupAuthFallbacks: Set<StartupPanelKind>
-
-  /**
-   * The cold-boot reassurance pill shown during a panel-only launch. Null until
-   * armed and after dismissal. See `armStartupPill` / `dismissStartupPill`.
-   */
-  private startupPill: BrowserWindow | null
-
-  /** Timer that reveals the pill once the no-window grace period elapses. */
-  private startupPillGapTimer: ReturnType<typeof setTimeout> | null
-
-  /** Timer that force-dismisses the pill + surfaces main on a wedged boot. */
-  private startupPillTimeoutTimer: ReturnType<typeof setTimeout> | null
 
   /** 500 ms blur-guard timer set by `will-resize` to keep the window open during drag. */
   private settingsResizeDebounceTimer: ReturnType<typeof setTimeout> | null
@@ -181,7 +174,6 @@ export class WindowManager {
     configManager: ConfigManager | null = null,
     windowStateManager: WindowStateManager | null = null,
   ) {
-    this.mainWindow = null
     this.floatingNavigator = null
     this.brainDumpWindow = null
     this.settingsWindow = null
@@ -191,10 +183,8 @@ export class WindowManager {
     this.windowStateManager = windowStateManager
     this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
+    this.onFloatingNavigatorCreated = null
     this.startupAuthFallbacks = new Set()
-    this.startupPill = null
-    this.startupPillGapTimer = null
-    this.startupPillTimeoutTimer = null
     this.settingsResizeDebounceTimer = null
     this.settingsPersistDebounceTimer = null
     this.settingsWindowIsResizing = false
@@ -209,6 +199,21 @@ export class WindowManager {
    */
   setTrayBoundsProvider(provider: () => Electron.Rectangle | null): void {
     this.getTrayBoundsProvider = provider
+  }
+
+  /**
+   * Registers a callback fired right after each Floating navigator (re)creation,
+   * letting dependents rebind to the new BrowserWindow — e.g. ShortcutManager
+   * re-attaching its contextual-shortcut focus/blur listeners. Setter injection
+   * (not a constructor arg) because ShortcutManager is built after WindowManager
+   * in `deferredInit`.
+   *
+   * @param handler - Invoked after `createFloatingNavigator` fully wires the window, or null to clear.
+   * @example
+   * windowManager.setOnFloatingNavigatorCreated(() => shortcutManager.setupFocusListeners())
+   */
+  setOnFloatingNavigatorCreated(handler: (() => void) | null): void {
+    this.onFloatingNavigatorCreated = handler
   }
 
   /**
@@ -431,9 +436,6 @@ export class WindowManager {
    */
   saveWindowState(): void {
     if (this.windowStateManager) {
-      if (this.mainWindow) {
-        this.windowStateManager.updateWindowState('main', this.mainWindow)
-      }
       if (this.floatingNavigator) {
         this.windowStateManager.updateWindowState(
           'floating',
@@ -447,132 +449,6 @@ export class WindowManager {
         )
       }
     }
-  }
-
-  /**
-   * Creates the main application window with security-first configuration.
-   *
-   * The window is always *created* (so it can be revealed later from the tray,
-   * `app.activate`, or a settings change) but is only auto-shown on
-   * `ready-to-show` when `showOnReady` is true. Panel-only startup configs
-   * (`behavior.startup.showMain === false`) pass `false` to keep main hidden.
-   *
-   * @param showOnReady - Auto-show the window once its content is ready. Defaults
-   *   to `true` so existing no-arg callers (and tests) preserve prior behavior.
-   * @returns The created main window
-   * @example
-   * windowManager.createMainWindow() // visible on launch (default)
-   * windowManager.createMainWindow(false) // created hidden for panel-only startup
-   */
-  createMainWindow(showOnReady: boolean = true): BrowserWindow {
-    const windowOptions: WindowOptions = this.windowStateManager
-      ? this.windowStateManager.getWindowOptions('main')
-      : { width: 1200, height: 800, minWidth: 800, minHeight: 600 }
-
-    // Resolve preload script path (built by electron-vite).
-    //
-    // IMPORTANT:
-    // - `dist-electron/preload/*` is packaged inside `app.asar` by electron-builder
-    //   (it is included via `files: ["dist-electron/**/*", ...]`).
-    // - Therefore, using `process.resourcesPath/preload/*` will fail in production
-    //   unless we explicitly copy preload scripts to `extraResources`.
-    //
-    // This relative-to-__dirname path works in both dev and packaged builds because:
-    // - Dev: __dirname = dist-electron/main
-    // - Prod: __dirname = .../resources/app.asar/dist-electron/main
-    const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
-
-    this.mainWindow = new BrowserWindow({
-      ...windowOptions,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: preloadPath,
-        webSecurity: true,
-        allowRunningInsecureContent: false,
-        sandbox: false,
-        spellcheck: false,
-        // Secure-by-default (#61): DevTools is unavailable in a packaged build
-        // unless opted in via the advanced.enableDevTools config or the
-        // CORELIVE_DEBUG launch flag. Previously this was an unconditional
-        // `true`, so the prod main window was always inspectable.
-        devTools: isDevToolsEnabled(
-          this.isDev,
-          this.configManager?.get('advanced.enableDevTools', false) ?? false,
-          process.env,
-        ),
-      },
-      icon: path.join(__dirname, '../build/icons/icon.icns'),
-      show: false,
-      titleBarStyle: 'hiddenInset',
-      backgroundColor: '#ffffff',
-    })
-
-    if (this.windowStateManager) {
-      this.windowStateManager.applyWindowState('main', this.mainWindow)
-    }
-
-    // Load /home directly so already-authenticated users skip the public
-    // landing page (`/`) and Clerk's proxy.ts redirects unauthenticated users
-    // to /login. Without this path, Electron always opened `/`, which has no
-    // auth check and made signed-in users see the Login button.
-    const startUrl = `${this.serverUrl || 'https://corelive.app'}/home`
-    this.mainWindow.loadURL(startUrl)
-
-    this.mainWindow.once('ready-to-show', () => {
-      // Panel-only startup configs create main hidden; skip the auto-show so
-      // the user only sees the windows they asked for at launch.
-      if (showOnReady) {
-        this.mainWindow?.show()
-      }
-    })
-
-    // Track window state changes with debouncing
-    this.mainWindow.on('resize', () => {
-      if (this.windowStateManager && this.mainWindow) {
-        this.windowStateManager.updateWindowStateDebounced(
-          'main',
-          this.mainWindow,
-        )
-      }
-    })
-
-    this.mainWindow.on('move', () => {
-      if (this.windowStateManager && this.mainWindow) {
-        this.windowStateManager.updateWindowStateDebounced(
-          'main',
-          this.mainWindow,
-        )
-      }
-    })
-
-    this.mainWindow.on('maximize', () => {
-      if (this.windowStateManager && this.mainWindow) {
-        this.windowStateManager.updateWindowStateDebounced(
-          'main',
-          this.mainWindow,
-        )
-      }
-    })
-
-    this.mainWindow.on('unmaximize', () => {
-      if (this.windowStateManager && this.mainWindow) {
-        this.windowStateManager.updateWindowStateDebounced(
-          'main',
-          this.mainWindow,
-        )
-      }
-    })
-
-    this.mainWindow.on('close', () => {
-      this.saveWindowState()
-    })
-
-    this.mainWindow.on('closed', () => {
-      this.mainWindow = null
-    })
-
-    return this.mainWindow
   }
 
   /**
@@ -603,8 +479,9 @@ export class WindowManager {
       isDev: this.isDev,
     })
 
-    // Resolve floating preload script path (built by electron-vite).
-    // See `createMainWindow()` for why we avoid `process.resourcesPath` here.
+    // Resolve floating preload script path (built by electron-vite). It is
+    // packaged inside `app.asar`, so resolve it relative to `__dirname`;
+    // `process.resourcesPath` would miss it in production.
     const floatingPreloadPath = path.join(
       __dirname,
       '..',
@@ -747,6 +624,12 @@ export class WindowManager {
       Boolean(floatingConfig.visibleOnAllWorkspaces),
     )
 
+    // Notify dependents that a fresh Floating window exists so they can rebind to
+    // it (ShortcutManager re-attaches contextual-shortcut focus/blur listeners).
+    // Fired here — after the window is fully wired but before the caller shows it
+    // — so listeners are in place by the time it first gains focus.
+    this.onFloatingNavigatorCreated?.()
+
     return this.floatingNavigator
   }
 
@@ -794,10 +677,6 @@ export class WindowManager {
     // macOS, which would itself be the dead window this recovery exists to kill.
     this.floatingLoadRecoveryPending = true
     target.show()
-    // Cancel the armed startup-pill timeout before the dialog: once recovery
-    // commits, the pill's fallback (surfaceMainBackstop → surface main) must not
-    // fire and pop the main window over the Floating recovery.
-    this.dismissStartupPill()
     void this.promptFloatingLoadFailure(target)
   }
 
@@ -1119,9 +998,6 @@ export class WindowManager {
    * windowManager.restoreFromTray()
    */
   restoreFromTray(): void {
-    // Any path that surfaces a real window retires the cold-boot pill: the user
-    // can now see a window, so the "Opening…" reassurance is done.
-    this.dismissStartupPill()
     if (!this.floatingNavigator) {
       this.createFloatingNavigator()
     }
@@ -1133,39 +1009,6 @@ export class WindowManager {
       this.floatingNavigator.focus()
     }
     this.saveWindowState()
-  }
-
-  /**
-   * Surface the main window as the signed-out login surface / wedged-boot
-   * backstop during a panel-only cold boot. Phase-1 holdover: the startup
-   * orchestration still defers to main when a startup panel can't show
-   * (braindump signed-out) or the boot wedges at the hard timeout; Phase 2
-   * (T18) deletes this together with the main window. Not for native-chrome
-   * callers — they use `restoreFromTray` (→ Floating).
-   */
-  private surfaceMainBackstop(): void {
-    // The teardown + surface the old `restoreFromTray` did for main, verbatim.
-    this.dismissStartupPill()
-    if (this.mainWindow) {
-      if (this.mainWindow.isMinimized()) {
-        this.mainWindow.restore()
-      }
-      this.mainWindow.show()
-      this.mainWindow.focus()
-    }
-  }
-
-  /**
-   * Minimize main window to tray (or minimize normally in fallback mode).
-   */
-  minimizeToTray(): void {
-    if (this.mainWindow) {
-      if (this.trayFallbackMode) {
-        this.mainWindow.minimize()
-      } else {
-        this.mainWindow.hide()
-      }
-    }
   }
 
   /**
@@ -1183,24 +1026,10 @@ export class WindowManager {
   }
 
   /**
-   * Get main window instance.
-   */
-  getMainWindow(): BrowserWindow | null {
-    return this.mainWindow
-  }
-
-  /**
    * Get floating navigator instance.
    */
   getFloatingNavigator(): BrowserWindow | null {
     return this.floatingNavigator
-  }
-
-  /**
-   * Check if main window exists and is not destroyed.
-   */
-  hasMainWindow(): boolean {
-    return this.mainWindow !== null && !this.mainWindow.isDestroyed()
   }
 
   /**
@@ -1340,21 +1169,19 @@ export class WindowManager {
       removeListeners.forEach((remove) => remove())
 
       if (authenticated) {
-        // Authed: reveal the panel the user asked to start with. A visible panel
-        // makes the cold-boot pill obsolete (this is the one show-path that does
-        // not go through `restoreFromTray`, so dismiss explicitly).
+        // Authed: reveal the panel the user asked to start with.
         panel.show()
-        this.dismissStartupPill()
         return
       }
 
-      // Signed out or load failed: keep the panel hidden, surface the main
-      // window so the user can sign in / see the error, record the fallback,
-      // and arm a one-shot re-show for when sign-in completes.
-      // `surfaceMainBackstop` also dismisses the cold-boot pill.
+      // Signed out or load failed: keep this panel hidden. With the main window
+      // retired (T18), surface the Floating navigator instead — it is public
+      // (`/floating-navigator`) and renders the signed-out OAuth front door, so a
+      // signed-out launch always leaves one visible, interactive window to sign in
+      // from. The suppressed panel reopens from the tray after sign-in; main's
+      // post-login auto-reshow is retired with the window.
       this.startupAuthFallbacks.add(kind)
-      this.surfaceMainBackstop()
-      this.armPostLoginReshow(panel, kind)
+      this.restoreFromTray()
     }
 
     const onDidNavigate = (_event: Electron.Event, url: string): void => {
@@ -1402,170 +1229,6 @@ export class WindowManager {
   }
 
   /**
-   * After surfacing main for a signed-out startup panel, wait for the user to
-   * authenticate (main navigates away from the auth pages) and then reload +
-   * reveal the originally-requested panel.
-   *
-   * Uses a one-shot main-window listener that self-removes and re-arms a fresh
-   * load-watch on the panel, so ordinary in-app navigation never triggers a
-   * spurious panel reload.
-   *
-   * @param panel - The suppressed panel to re-show once authenticated.
-   * @param kind - Which startup panel, used to rebuild its URL + re-arm.
-   */
-  private armPostLoginReshow(
-    panel: BrowserWindow,
-    kind: StartupPanelKind,
-  ): void {
-    const mainWindow = this.mainWindow
-    if (!mainWindow) return
-
-    const onMainNavigate = (_event: Electron.Event, url: string): void => {
-      // Still on an auth page (e.g. /login -> /sign-up) — keep waiting.
-      if (this.isAuthPathname(url)) return
-      mainWindow.webContents.removeListener('did-navigate', onMainNavigate)
-      if (panel.isDestroyed()) return
-
-      // Re-arm a fresh decision watch, then reload the real panel route; the
-      // fresh watch shows the panel once the now-authed load lands.
-      this.watchStartupPanelLoad(panel, kind)
-      panel.webContents.loadURL(this.getPanelUrl(kind))
-    }
-
-    mainWindow.webContents.on('did-navigate', onMainNavigate)
-  }
-
-  /**
-   * Arm the cold-boot startup pill for a panel-only launch: a tiny frameless,
-   * click-through, always-on-top "Opening CoreLive…" window, revealed only if no
-   * real window paints within the grace period and force-cleared (surfacing
-   * main) if the boot is still wedged at the hard timeout. Called once from
-   * `main.ts` during criticalInit when `behavior.startup.showMain` is false (and
-   * not under test/E2E).
-   *
-   * @example
-   * if (!startup.showMain && !isTestEnvironment) windowManager.armStartupPill()
-   */
-  armStartupPill(): void {
-    // Deviation (DD3): the spec framed the pill as "armed every boot, shown only
-    // if no window painted within the grace period". We arm it ONLY on a
-    // panel-only boot — on a show-main boot the main window hits `ready-to-show`
-    // well inside the grace period, so the gap timer would never reveal a pill
-    // there anyway. Same observable behavior, less machinery.
-
-    // Idempotent: never stack two pills if armed more than once.
-    if (this.startupPill) return
-
-    const { workArea } = screen.getPrimaryDisplay()
-    const pill = new BrowserWindow({
-      width: STARTUP_PILL_WIDTH_PX,
-      height: STARTUP_PILL_HEIGHT_PX,
-      x: Math.round(workArea.x + (workArea.width - STARTUP_PILL_WIDTH_PX) / 2),
-      y: Math.round(
-        workArea.y + (workArea.height - STARTUP_PILL_HEIGHT_PX) / 2,
-      ),
-      show: false,
-      frame: false,
-      transparent: true,
-      hasShadow: false,
-      resizable: false,
-      movable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      focusable: false,
-      alwaysOnTop: true,
-      acceptFirstMouse: false,
-      backgroundColor: '#00000000',
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        devTools: false,
-      },
-    })
-    this.startupPill = pill
-
-    // Fully passive: never intercept clicks/drags meant for the desktop.
-    pill.setIgnoreMouseEvents(true)
-
-    // Paint from memory via a data URL — see startup-pill-html for why the
-    // markup is inlined rather than loaded from a packaged .html file.
-    const html = buildStartupPillHtml()
-    pill.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
-
-    // Grace period: only reveal the pill if no real window has appeared yet, so
-    // a fast boot never flashes it. `showInactive` keeps focus off the pill.
-    this.startupPillGapTimer = setTimeout(() => {
-      this.startupPillGapTimer = null
-      if (this.startupPill && !this.startupPill.isDestroyed()) {
-        this.startupPill.showInactive()
-      }
-    }, STARTUP_PILL_GAP_MS)
-
-    // Hard timeout: a boot still showing the pill this late is wedged (offline /
-    // timeout / 5xx). Surface the main window as a backstop so the user is never
-    // stranded on an empty desktop; `surfaceMainBackstop` also dismisses the pill.
-    //
-    // Race note: if a panel's auth load resolves AFTER this fires (sign-in
-    // completes 9s into a slow boot), `finish(true)` still shows that panel, so
-    // the user ends up with BOTH main and the panel. That is correct — they
-    // asked for the panel and main is a harmless backstop. Do NOT add logic to
-    // suppress the panel after the timeout.
-    this.startupPillTimeoutTimer = setTimeout(() => {
-      this.startupPillTimeoutTimer = null
-      this.surfaceMainBackstop()
-    }, STARTUP_PILL_TIMEOUT_MS)
-  }
-
-  /**
-   * Tear down the startup pill and its timers. Idempotent, so it is safe to call
-   * from every racing site that makes a real window visible (`restoreFromTray`,
-   * a panel showing after auth) plus the hard timeout — whichever happens first
-   * wins and the rest are no-ops.
-   *
-   * @example
-   * this.dismissStartupPill() // safe to call repeatedly; clears everything once
-   */
-  dismissStartupPill(): void {
-    if (this.startupPillGapTimer) {
-      clearTimeout(this.startupPillGapTimer)
-      this.startupPillGapTimer = null
-    }
-    if (this.startupPillTimeoutTimer) {
-      clearTimeout(this.startupPillTimeoutTimer)
-      this.startupPillTimeoutTimer = null
-    }
-    if (!this.startupPill) return
-    if (!this.startupPill.isDestroyed()) {
-      this.startupPill.destroy()
-    }
-    this.startupPill = null
-  }
-
-  /**
-   * Whether `window` is the live cold-boot startup pill. Lets callers (the macOS
-   * `activate` handler) exclude the passive pill when deciding if any *real*
-   * window is visible — the pill is shown via `showInactive()`, so `isVisible()`
-   * alone would wrongly count it and suppress the dock-click that should surface
-   * the main window.
-   *
-   * @param window - A window from `BrowserWindow.getAllWindows()`.
-   * @returns
-   * - true: `window` is the current, not-yet-destroyed startup pill
-   * - false: no pill armed, the pill was dismissed/destroyed, or a different window
-   * @example
-   * allWindows.some((w) => w.isVisible() && !windowManager.isStartupPill(w))
-   */
-  isStartupPill(window: BrowserWindow): boolean {
-    return (
-      this.startupPill !== null &&
-      !this.startupPill.isDestroyed() &&
-      window === this.startupPill
-    )
-  }
-
-  /**
    * Creates the settings window with security-first configuration.
    *
    * @returns The created settings window
@@ -1603,8 +1266,9 @@ export class WindowManager {
       windowHeight,
     )
 
-    // Resolve preload script path (built by electron-vite).
-    // See `createMainWindow()` for why we avoid `process.resourcesPath` here.
+    // Resolve preload script path (built by electron-vite). It is packaged
+    // inside `app.asar`, so resolve it relative to `__dirname`;
+    // `process.resourcesPath` would miss it in production.
     const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
 
     this.settingsWindow = new BrowserWindow({
@@ -1813,10 +1477,6 @@ export class WindowManager {
 
     if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
       this.floatingNavigator.close()
-    }
-
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.close()
     }
   }
 }

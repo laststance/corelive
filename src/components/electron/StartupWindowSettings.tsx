@@ -3,12 +3,12 @@
 /**
  * @fileoverview Startup-window settings for the Electron Settings page.
  *
- * Lets the user choose which window(s) CoreLive opens on launch — the main
- * window, Brain Dump, and/or the Floating Navigator. The persisted choice lives
- * in the main-process config.json (read synchronously at boot, before auth/DB),
- * so this component reads and writes it through the typed `settings` preload API
- * rather than Redux. At least one window must always open, so the sole remaining
- * enabled toggle is disabled to keep the boot from landing on a blank desktop.
+ * Lets the user choose which window(s) CoreLive opens on launch — Brain Dump
+ * and/or the Floating Navigator. The persisted choice lives in the main-process
+ * config.json (read synchronously at boot, before auth/DB), so this component
+ * reads and writes it through the typed `settings` preload API rather than
+ * Redux. At least one window must always open, so the sole remaining enabled
+ * toggle is disabled to keep the boot from landing on a blank desktop.
  *
  * @module components/electron/StartupWindowSettings
  */
@@ -38,7 +38,7 @@ interface StartupWindowSettingsProps {
 }
 
 /**
- * The three startup-window choices, in the order they appear in the card. Kept
+ * The startup-window choices, in the order they appear in the card. Kept
  * module-level (not rebuilt per render) since the labels/descriptions are
  * static; the live checked/disabled state is derived per row at render time.
  */
@@ -47,11 +47,6 @@ const STARTUP_WINDOW_OPTIONS: ReadonlyArray<{
   label: string
   description: string
 }> = [
-  {
-    key: 'showMain',
-    label: 'Main window',
-    description: "Your home base with today's todos.",
-  },
   {
     key: 'showBraindump',
     label: 'Brain Dump',
@@ -128,7 +123,7 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
    * Persists a single startup-window toggle, applying it optimistically and
    * rolling back if the main process fails to save.
    *
-   * @param key - Which window's flag is changing (showMain / showBraindump / showFloating)
+   * @param key - Which window's flag is changing (showBraindump / showFloating)
    * @param next - true to open that window at launch, false to skip it
    * @returns Promise that resolves once the save settles (success or rollback)
    */
@@ -205,11 +200,9 @@ export const StartupWindowSettings = memo(function StartupWindowSettings({
   // The >=1-true invariant is enforced in the main process, but we mirror it
   // here so the last enabled toggle is visibly locked rather than silently
   // re-checked after a save (which would read as a glitch).
-  const enabledCount = [
-    startup.showMain,
-    startup.showBraindump,
-    startup.showFloating,
-  ].filter(Boolean).length
+  const enabledCount = [startup.showBraindump, startup.showFloating].filter(
+    Boolean,
+  ).length
 
   return (
     <Card className={className}>

@@ -101,10 +101,10 @@ describe('WindowManager tray restore surfaces the Floating window', () => {
     expect(floatingWindow.show).toHaveBeenCalledTimes(1)
     expect(floatingWindow.focus).toHaveBeenCalledTimes(1)
 
-    // ...and never resurrected the retired main window. This is the Phase-1
-    // guarantee T18 leans on: every native-chrome "restore the app" path lands
-    // on Floating, so exactly one window — the Floating panel — was created.
-    expect(windowManager.getMainWindow()).toBeNull()
+    // ...and never resurrected a retired main window. This is the guarantee T18
+    // bakes in: every native-chrome "restore the app" path lands on Floating, so
+    // exactly one window — the Floating panel — was created. With the main-window
+    // accessor removed, the createdWindows length is now the sole proof.
     expect(createdWindows).toHaveLength(1)
   })
 })

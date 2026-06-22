@@ -138,7 +138,8 @@ if (remoteDebuggingPort) {
  * protocol must be `http:`. We parse with `URL` (instead of `startsWith`)
  * so that subdomain tricks like `http://localhost.attacker.com` cannot
  * slip past the guard. This is defense-in-depth before the value reaches
- * `WindowManager.createMainWindow`.
+ * the WindowManager panel builders (`createFloatingNavigator` /
+ * `createSettingsWindow`).
  */
 if (process.env.ELECTRON_RENDERER_URL) {
   let parsedRendererUrl: URL
@@ -520,13 +521,7 @@ function getBrowserWindowForType(
       : null
   }
 
-  // Only return the main window for an explicit 'main' request — falling back
-  // here for unknown types lets a stray 'braindump' (or future addition)
-  // silently mutate main-window state.
-  if (windowType === 'main') {
-    return windowManager.getMainWindow ? windowManager.getMainWindow() : null
-  }
-
+  // The main window is retired (T18); a 'main' request resolves to nothing.
   return null
 }
 
@@ -897,7 +892,7 @@ async function loadDeepLinkStack(): Promise<void> {
   }, 1000)
 }
 
-async function createWindow(): Promise<BrowserWindow> {
+async function createWindow(): Promise<void> {
   // Start performance monitoring early to track startup metrics
   if (config.enableMemoryMonitoring) {
     memoryProfiler.startMonitoring()
@@ -908,7 +903,6 @@ async function createWindow(): Promise<BrowserWindow> {
    * Order matters here due to dependencies between managers.
    */
   const criticalInit = async (): Promise<{
-    mainWindow: BrowserWindow
     serverUrl: string
   }> => {
     // Initialize IPC error handler first
@@ -942,34 +936,46 @@ async function createWindow(): Promise<BrowserWindow> {
       windowStateManager,
     )
 
-    // Create main window immediately for better perceived performance.
-    // Panel-only startup configs (showMain === false) still create the window —
-    // just hidden — so it can be revealed later from the tray or `activate`.
-    const startupConfig = configManager.getSection('behavior').startup
-    const mainWindow = windowManager.createMainWindow(startupConfig.showMain)
+    // E2E-only: expose a hook so the Playwright Electron suite can open the
+    // Settings window — the only renderer that still carries the full
+    // `electronAPI` bridge after main-window retirement (T18). The app menu's
+    // "Preferences…" item lives in the macOS-only app menu, but the Electron
+    // E2E suite runs on Linux+xvfb where that menu is never built, so specs
+    // cannot drive Settings open through the menu. Gated on `isTestEnvironment`
+    // (NODE_ENV==='test'), so it is absent from every production build.
+    if (isTestEnvironment) {
+      ;(
+        globalThis as typeof globalThis & {
+          __coreliveTestOpenSettings?: () => void
+        }
+      ).__coreliveTestOpenSettings = () => {
+        windowManager.openSettings()
+      }
+    }
 
-    // Open the auxiliary panels the user chose to start with. Each is created
-    // hidden and revealed only once it authenticates (WindowManager's
-    // nav-watch); a signed-out or failed panel surfaces the main window instead.
+    // The Electron main window is retired (T18). CoreLive is now a thin native
+    // companion: the full task app runs browser-only at corelive.app, and
+    // Electron opens only the auxiliary panels the user chose at launch. Each
+    // panel is created hidden and surfaces once it resolves — a signed-out panel
+    // shows the OAuth front door (WindowManager nav-watch), a load-failed one
+    // self-heals via the DT7 recovery dialog.
+    const startupConfig = configManager.getSection('behavior').startup
+    // Count the panels actually opened so the metric reflects the real 0/1/2,
+    // not a flat +1: a bare `++` under-reported the both-panels case and
+    // over-reported the none-open case (both toggles can be off mid-session).
+    let startupPanelsOpened = 0
     if (startupConfig.showFloating) {
       windowManager.openStartupPanel('floating')
+      startupPanelsOpened += 1
     }
     if (startupConfig.showBraindump) {
       windowManager.openStartupPanel('braindump')
+      startupPanelsOpened += 1
     }
 
-    // Panel-only launches (showMain === false) can leave NOTHING on screen for a
-    // moment while each panel resolves its auth-gated load. Arm a tiny floating
-    // "Opening CoreLive…" pill so the boot reads as "waking up", never "is it
-    // broken?". Gated off under test/E2E (NODE_ENV === 'test') so the extra
-    // window never perturbs window-count assertions.
-    if (!startupConfig.showMain && !isTestEnvironment) {
-      windowManager.armStartupPill()
-    }
+    performanceOptimizer.startupMetrics.windowsCreated += startupPanelsOpened
 
-    performanceOptimizer.startupMetrics.windowsCreated++
-
-    return { mainWindow, serverUrl }
+    return { serverUrl }
   }
 
   // Deferred initialization - happens after main window is shown
@@ -982,19 +988,12 @@ async function createWindow(): Promise<BrowserWindow> {
       )) as new (...args: unknown[]) => MenuManagerType
       menuManager = new MenuManagerCls()
 
-      const mainWindowRef = windowManager.getMainWindow()
-      log.debug(
-        '🔧 [DEFERRED] Retrieved mainWindow from windowManager:',
-        !!mainWindowRef,
-      )
-
-      // Menu initializes even when no main window exists. Post-main-retirement the
-      // menu bar is companion chrome (View/Window roles target whatever window is
-      // focused; New Task opens the browser), so gating on mainWindowRef would leave
-      // a dead menu at a main-less / signed-out launch. mainWindowRef passes through
-      // nullable — MenuManager.initialize accepts `BrowserWindow | null`.
+      // The menu bar is companion chrome after main-window retirement (T18):
+      // View/Window roles target whatever window is focused; New Task opens the
+      // browser. MenuManager.initialize accepts `BrowserWindow | null`, so the
+      // (now permanently absent) main window passes through as null.
       if (menuManager) {
-        menuManager.initialize(mainWindowRef, windowManager, configManager)
+        menuManager.initialize(null, windowManager, configManager)
       }
       log.info('✅ [DEFERRED] MenuManager loaded')
 
@@ -1020,10 +1019,8 @@ async function createWindow(): Promise<BrowserWindow> {
             'AutoUpdater',
           )) as new (...args: unknown[]) => AutoUpdaterType
           autoUpdater = new AutoUpdaterCls()
-          const mainWin = windowManager.getMainWindow()
-          if (mainWin) {
-            autoUpdater.setMainWindow(mainWin)
-          }
+          // No main window to bind dialogs to after T18; the updater surfaces
+          // through its own notifications.
         } catch (autoUpdaterError) {
           log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
         }
@@ -1035,23 +1032,18 @@ async function createWindow(): Promise<BrowserWindow> {
         await loadDeepLinkStack()
       }
 
-      // Set up window close behavior after tray manager is loaded
-      const mainWindow = windowManager.getMainWindow()
-      if (mainWindow) {
-        mainWindow.on('close', (event: ElectronEvent) => {
-          if (systemTrayManager) {
-            systemTrayManager.handleWindowClose(event)
-          }
-        })
-      }
+      // No main-window close-to-tray wiring after T18 — the surviving panels own
+      // their own close behavior (Floating/BrainDump via floating-window-* IPC).
     } catch (error) {
       log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
     }
   }
 
-  // Run critical initialization directly
-  const criticalResult = await criticalInit()
+  // Run critical initialization directly. Its return value (serverUrl) is no
+  // longer consumed here now that the Electron main window is retired (T18);
+  // criticalInit still wires up the renderer origin internally.
+  await criticalInit()
 
   // Run deferred initialization
   setImmediate(async () => {
@@ -1068,12 +1060,8 @@ async function createWindow(): Promise<BrowserWindow> {
     }
   })
 
-  const { mainWindow } = criticalResult
-
   // Set up IPC handlers immediately (they handle lazy loading internally)
   setupIPCHandlers()
-
-  return mainWindow
 }
 
 // ============================================================================
@@ -1144,29 +1132,9 @@ function setupIPCHandlers(): void {
 
   // Note: Todo IPC handlers removed - Floating Navigator uses oRPC via web app
 
-  // Window management IPC handlers (Zod-validated)
-  typedHandle('window-minimize', () => {
-    if (!windowManager) {
-      throw new Error('Window manager not initialized')
-    }
-    if (!windowManager.hasMainWindow()) {
-      throw new Error('Main window not available')
-    }
-    windowManager.minimizeToTray()
-    return true
-  })
-
-  typedHandle('window-close', () => {
-    if (!windowManager) {
-      throw new Error('Window manager not initialized')
-    }
-    if (!windowManager.hasMainWindow()) {
-      throw new Error('Main window not available')
-    }
-    windowManager.minimizeToTray()
-    return true
-  })
-
+  // Window management IPC handlers (Zod-validated). The retired main window's
+  // minimize/close handlers were removed with T18; the surviving panels use the
+  // floating-window-* channels below.
   typedHandle('window-toggle-floating-navigator', () => {
     if (!windowManager) {
       throw new Error('Window manager not initialized')
@@ -1694,15 +1662,13 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return false
     }
-    const mainWindow = windowManager.getMainWindow()
-    const result = await dialog.showSaveDialog(
-      mainWindow ?? (undefined as unknown as BrowserWindow),
-      {
-        title: 'Export configuration',
-        defaultPath: 'corelive-config.json',
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      },
-    )
+    // No main window to parent the dialog to after T18; an unparented save
+    // dialog is the behavior the previous `?? undefined` fallback already took.
+    const result = await dialog.showSaveDialog({
+      title: 'Export configuration',
+      defaultPath: 'corelive-config.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
     if (result.canceled || !result.filePath) {
       return false
     }
@@ -1713,15 +1679,12 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return false
     }
-    const mainWindow = windowManager.getMainWindow()
-    const result = await dialog.showOpenDialog(
-      mainWindow ?? (undefined as unknown as BrowserWindow),
-      {
-        title: 'Import configuration',
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        properties: ['openFile'],
-      },
-    )
+    // Unparented open dialog after T18 (see config-export above).
+    const result = await dialog.showOpenDialog({
+      title: 'Import configuration',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
     const filePath = result.filePaths[0]
     if (result.canceled || !filePath) {
       return false
@@ -1891,7 +1854,7 @@ function setupIPCHandlers(): void {
 
   // Persist which window(s) open at Electron launch. Writes through
   // ConfigManager.update() (flat dot-paths) so the >=1-true invariant runs:
-  // a renderer cannot persist a boot-nothing config — all-false snaps showMain
+  // a renderer cannot persist a boot-nothing config — all-false snaps showFloating
   // back on before saving.
   typedHandle('settings:setStartupConfig', (_event, startup) => {
     try {
@@ -1900,7 +1863,6 @@ function setupIPCHandlers(): void {
         return false
       }
       const didSave = configManager.update({
-        'behavior.startup.showMain': startup.showMain,
         'behavior.startup.showBraindump': startup.showBraindump,
         'behavior.startup.showFloating': startup.showFloating,
       })
@@ -1920,7 +1882,7 @@ function setupIPCHandlers(): void {
 
   // Read side of the startup-window pair — lets the settings UI show the saved
   // choice without consuming the untyped `config.getSection` surface. Falls back
-  // to the showMain-only default (which satisfies the >=1-true invariant) when
+  // to the Floating-only default (which satisfies the >=1-true invariant) when
   // ConfigManager is somehow unavailable, so the UI never renders an all-off state.
   typedHandle('settings:getStartupConfig', () => {
     if (!configManager) {
@@ -2264,8 +2226,8 @@ if (!gotTheLock) {
       // Setup security policies before any window creation
       setupSecurity()
 
-      // Create the main application window
-      const mainWindow = await createWindow()
+      // Boot the Electron companion (auxiliary panels only; main is retired).
+      await createWindow()
 
       /**
        * Test environment special handling.
@@ -2276,16 +2238,8 @@ if (!gotTheLock) {
        */
       if (isTestEnvironment) {
         new Notification({ title: 'Electron is Testing' }).show()
-        // Show window without stealing focus for better test stability — but only
-        // when the startup config asks for the main window. A panel-only startup
-        // (showMain === false) must stay hidden here too, otherwise E2E would
-        // silently reveal a window the user opted out of.
-        if (configManager.getSection('behavior').startup.showMain) {
-          mainWindow.showInactive()
-        }
-        // Note: These are commented out but can be enabled if needed:
-        // app.hide() - Hide entire app
-        // app.setActivationPolicy('accessory') - Remove from dock (macOS)
+        // The main window is retired (T18); there is nothing to reveal here. The
+        // panels the user opted into surface themselves once they resolve.
       }
 
       /**
@@ -2295,8 +2249,20 @@ if (!gotTheLock) {
        */
       app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows()
-        // No windows exist at all: recreate from scratch (macOS convention).
+        // No windows exist at all (every panel was closed; the app stayed
+        // tray-resident per window-all-closed).
         if (allWindows.length === 0) {
+          // If the app already booted once, the manager stack is live. Re-running
+          // the full createWindow() here would build a SECOND ConfigManager /
+          // WindowManager / tray / shortcut stack on top of it with no teardown —
+          // leaking a duplicate tray icon and clashing global-shortcut
+          // registrations. Just surface the Floating companion through the
+          // existing WindowManager (creates it if absent, then shows + focuses).
+          if (windowManager) {
+            windowManager.restoreFromTray()
+            return
+          }
+          // Genuinely uninitialized (boot never completed): recreate from scratch.
           // createWindow is async; floating the promise unhandled would swallow
           // a boot failure here silently, so log any rejection instead.
           void createWindow().catch((error: unknown) => {
@@ -2313,13 +2279,10 @@ if (!gotTheLock) {
         // the surviving companion window — via restoreFromTray (T6 retargeted it
         // off the retired main; it creates Floating if absent, then shows + focuses).
         //
-        // The `windowManager?.` optional chain is intentional: if the manager is
-        // somehow absent, `!undefined` is true so the pill (if any) counts as a
-        // real window — the safe status-quo, since restoreFromTray would be a
-        // no-op there anyway.
-        const isAnyRealWindowVisible = allWindows.some(
-          (window) =>
-            window.isVisible() && !windowManager?.isStartupPill(window),
+        // The startup pill is retired with the main window (T18), so any visible
+        // window now counts as a real one.
+        const isAnyRealWindowVisible = allWindows.some((window) =>
+          window.isVisible(),
         )
         if (!isAnyRealWindowVisible) {
           windowManager?.restoreFromTray()
@@ -2354,6 +2317,16 @@ if (!gotTheLock) {
  * Open Question #6: stay tray-resident, never quit on the last panel close.)
  *
  * This handler is intentionally empty to follow that guideline.
+ *
+ * Summon-surface note (why staying alive at zero windows is not a soft-lock):
+ * in the default config at least one route back to a window always remains —
+ * the Dock icon re-opens via the `activate` handler above, the always-registered
+ * global shortcut Cmd+3 (`toggleFloatingNavigator`) creates + shows Floating from
+ * anywhere, and the tray's menu offers a restore item. Becoming truly headless
+ * needs the exotic combination of Hide-App-Icon (accessory Dock) AND
+ * Show-in-Menu-Bar=false (tray destroyed) AND rebinding Cmd+3 to an empty /
+ * unregistrable accelerator — narrow enough to accept here; revisit (e.g. force
+ * the tray to stay while the Dock is hidden) if it is ever reported.
  */
 app.on('window-all-closed', () => {
   // Stay tray-resident: no app.quit() here. Quitting is always explicit

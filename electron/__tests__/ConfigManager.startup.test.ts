@@ -26,11 +26,13 @@ import { ConfigManager } from '../ConfigManager'
 
 /**
  * Writes a raw config.json into the active temp userData dir so the next
- * `new ConfigManager()` loads (and migrates/normalizes) it from disk.
+ * `new ConfigManager()` loads (and migrates/normalizes) it from disk. Typed as a
+ * loose record so a test can persist a legacy shape (e.g. the retired `showMain`
+ * key) that no longer exists on `StartupWindowConfig`.
  *
  * @param rawConfig - Partial config object to persist verbatim.
  * @example
- * writeConfigFile({ behavior: { startup: { showMain: false, showBraindump: true, showFloating: false } } })
+ * writeConfigFile({ behavior: { startup: { showBraindump: true, showFloating: false } } })
  */
 function writeConfigFile(rawConfig: Record<string, unknown>): void {
   fs.writeFileSync(
@@ -70,57 +72,78 @@ describe('ConfigManager startup-window config', () => {
     fs.rmSync(userDataDir.current, { recursive: true, force: true })
   })
 
-  it('defaults to opening only the main window at launch', () => {
+  it('defaults to opening the Floating Navigator at launch', () => {
     // Arrange
     const configManager = new ConfigManager()
 
     // Act
     const startup = configManager.getDefaultConfig().behavior.startup
 
-    // Assert
+    // Assert: the Floating Navigator is the front door after main-window
+    // retirement (T18), so it is the boot-safe default.
     expect(startup).toEqual({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
   })
 
-  it('re-enables the main window when update() turns every startup window off', () => {
+  it('re-enables the Floating Navigator when update() turns every startup window off', () => {
     // Arrange
     const configManager = new ConfigManager()
 
-    // Act: disable all three at once, which would boot zero windows.
+    // Act: disable both panels at once, which would boot zero windows.
     configManager.update({
-      'behavior.startup.showMain': false,
       'behavior.startup.showBraindump': false,
       'behavior.startup.showFloating': false,
     })
 
-    // Assert: the invariant backstop restores the main window.
+    // Assert: the invariant backstop restores the Floating Navigator.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
   })
 
-  it('re-enables the main window when set() replaces the startup block with all-false', () => {
+  it('re-enables the Floating Navigator when set() replaces the startup block with all-false', () => {
     // Arrange
     const configManager = new ConfigManager()
 
     // Act
     configManager.set('behavior.startup', {
-      showMain: false,
       showBraindump: false,
       showFloating: false,
     })
 
     // Assert
-    expect(configManager.getSection('behavior').startup.showMain).toBe(true)
+    expect(configManager.getSection('behavior').startup.showFloating).toBe(true)
   })
 
-  it('preserves a panel-only startup config from disk without forcing the main window on', () => {
-    // Arrange: a Brain-Dump-only launch already satisfies the >=1 invariant.
+  it('migrates a legacy main-only config from disk into the Floating Navigator, dropping the retired showMain key', () => {
+    // Arrange: a config persisted before main-window retirement — the factory
+    // default every untouched install carried (main on, both panels off).
+    writeConfigFile({
+      behavior: {
+        startup: { showMain: true, showBraindump: false, showFloating: false },
+      },
+    })
+
+    // Act
+    const configManager = new ConfigManager()
+
+    // Assert: the now-defunct main choice migrates to the Floating front door
+    // instead of booting a blank desktop, and the retired key is pruned (the
+    // exact-shape match proves no stray `showMain` lingers in the saved config).
+    const startup = configManager.getSection('behavior').startup
+    expect(startup).toEqual({
+      showBraindump: false,
+      showFloating: true,
+    })
+    expect('showMain' in startup).toBe(false)
+  })
+
+  it('honors a Brain-Dump-only choice from disk without forcing another window on', () => {
+    // Arrange: a legacy Brain-Dump-only launch already satisfies the >=1
+    // invariant, so retiring main must not spuriously enable Floating too.
     writeConfigFile({
       behavior: {
         startup: { showMain: false, showBraindump: true, showFloating: false },
@@ -130,9 +153,8 @@ describe('ConfigManager startup-window config', () => {
     // Act
     const configManager = new ConfigManager()
 
-    // Assert: main stays hidden; the user's panel-only choice is honored.
+    // Assert: the panel-only choice is honored and the retired key dropped.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showMain: false,
       showBraindump: true,
       showFloating: false,
     })
@@ -147,34 +169,40 @@ describe('ConfigManager startup-window config', () => {
     // Act
     const configManager = new ConfigManager()
 
-    // Assert: floating carries over; main remains on (default).
+    // Assert: the legacy floating intent carries over to showFloating.
     const startup = configManager.getSection('behavior').startup
     expect(startup.showFloating).toBe(true)
-    expect(startup.showMain).toBe(true)
+    expect(startup.showBraindump).toBe(false)
   })
 
   it('does not override an explicit showFloating:false even when legacy startVisible is true', () => {
-    // Arrange: user already opted out of floating under the new model.
+    // Arrange: user opted out of floating under the new model but kept Brain
+    // Dump on, so the >=1 invariant is satisfied without floating.
     writeConfigFile({
       window: { floating: { startVisible: true } },
       behavior: {
-        startup: { showMain: true, showBraindump: false, showFloating: false },
+        startup: { showBraindump: true, showFloating: false },
       },
     })
 
     // Act
     const configManager = new ConfigManager()
 
-    // Assert: the explicit choice wins; migration is idempotent.
+    // Assert: the explicit choice wins; the startVisible migration is idempotent.
     expect(configManager.getSection('behavior').startup.showFloating).toBe(
       false,
     )
   })
 
-  it('leaves showFloating off when no legacy startVisible flag is present', () => {
-    // Arrange: a config that never set the legacy flag.
+  it('does not migrate a legacy startVisible:false flag into showFloating', () => {
+    // Arrange: a present-but-false legacy flag alongside a Brain-Dump-only
+    // choice — the false flag must not flip floating on (Brain Dump keeps the
+    // invariant satisfied so the Floating default can't mask the migration).
     writeConfigFile({
       window: { floating: { startVisible: false } },
+      behavior: {
+        startup: { showBraindump: true, showFloating: false },
+      },
     })
 
     // Act
@@ -197,8 +225,8 @@ describe('ConfigManager startup-window config', () => {
     // Act
     const configManager = new ConfigManager()
 
-    // Assert
-    expect(configManager.getSection('behavior').startup.showMain).toBe(true)
+    // Assert: the >=1 invariant repairs it to the Floating front door.
+    expect(configManager.getSection('behavior').startup.showFloating).toBe(true)
   })
 
   it('migrates a legacy startVisible:true file when imported, not only on disk load', () => {
@@ -228,7 +256,7 @@ describe('ConfigManager startup-window config', () => {
     configManager.importConfig(importPath)
 
     // Assert: the >=1 invariant is enforced on import, not only on load.
-    expect(configManager.getSection('behavior').startup.showMain).toBe(true)
+    expect(configManager.getSection('behavior').startup.showFloating).toBe(true)
   })
 
   it('resets a non-object behavior block from disk to the default startup config', () => {
@@ -241,9 +269,8 @@ describe('ConfigManager startup-window config', () => {
     // Assert: the whole behavior block is rebuilt so the boot-time
     // `behavior.startup` read can never throw or read garbage.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
   })
 
@@ -256,9 +283,8 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert
     expect(configManager.getSection('behavior').startup).toEqual({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
   })
 
@@ -272,9 +298,8 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert: the array is rejected and the startup block rebuilt from defaults.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
   })
 
@@ -287,9 +312,8 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert
     expect(configManager.getSection('behavior').startup).toEqual({
-      showMain: true,
       showBraindump: false,
-      showFloating: false,
+      showFloating: true,
     })
   })
 
@@ -323,9 +347,9 @@ describe('ConfigManager startup-window config', () => {
     // Act
     const configManager = new ConfigManager()
 
-    // Assert: legacy intent carried into showFloating; main stays on (default).
+    // Assert: legacy intent carried into showFloating.
     const startup = configManager.getSection('behavior').startup
     expect(startup.showFloating).toBe(true)
-    expect(startup.showMain).toBe(true)
+    expect(startup.showBraindump).toBe(false)
   })
 })

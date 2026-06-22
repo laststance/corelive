@@ -15,7 +15,6 @@ import type { WebContents } from 'electron'
 import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
-import type { IPCEventChannel, IPCEventChannels } from './types/ipc'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -71,13 +70,6 @@ interface OAuthCallbackResult {
   provider?: string
   token?: string
   user?: unknown
-  error?: string
-}
-
-/** Code exchange result */
-interface CodeExchangeResult {
-  success: boolean
-  pendingWebExchange?: boolean
   error?: string
 }
 
@@ -259,6 +251,9 @@ export class OAuthManager {
    * @returns Result with success status
    */
   async handleOAuthCallback(url: URL): Promise<OAuthCallbackResult> {
+    // Hoisted to function scope so the catch can route an unexpected failure to
+    // the window that started the flow. Assigned once the pending flow resolves.
+    let flowInitiator: WebContents | undefined
     try {
       const state = url.searchParams.get('state')
       const token = url.searchParams.get('token')
@@ -327,20 +322,16 @@ export class OAuthManager {
       log.info('OAuth state validated, sending sign-in token to WebView')
 
       // Bring the window that STARTED sign-in back to the front so the in-place
-      // re-render is visible. Fall back to the main window while it still exists
-      // (Phase 1); the initiator is the durable target once main is retired.
-      const { initiator } = pendingFlow
-      if (initiator && !initiator.isDestroyed()) {
-        const initiatorWindow = BrowserWindow.fromWebContents(initiator)
+      // re-render is visible. The initiator is the sole target now that the main
+      // window is retired (T18); a missed push is covered by the PULL store.
+      flowInitiator = pendingFlow.initiator
+      if (flowInitiator && !flowInitiator.isDestroyed()) {
+        const initiatorWindow = BrowserWindow.fromWebContents(flowInitiator)
         initiatorWindow?.show()
         initiatorWindow?.focus()
-      } else if (this.windowManager && this.windowManager.hasMainWindow()) {
-        const mainWindow = this.windowManager.getMainWindow()
-        mainWindow?.show()
-        mainWindow?.focus()
       }
 
-      this.sendSignInToken(token, pendingFlow.provider, initiator)
+      this.sendSignInToken(token, pendingFlow.provider, flowInitiator)
 
       if (this.notificationManager) {
         this.notificationManager.showNotification(
@@ -355,7 +346,10 @@ export class OAuthManager {
       const errorMessage =
         error instanceof Error ? error.message : String(error)
       log.error('Failed to handle OAuth callback:', error)
-      this.sendOAuthError('Failed to complete sign-in. Please try again.')
+      this.sendOAuthError(
+        'Failed to complete sign-in. Please try again.',
+        flowInitiator,
+      )
       return { success: false, error: errorMessage }
     }
   }
@@ -365,8 +359,9 @@ export class OAuthManager {
    *
    * Stores the token for PULL retrieval (window-agnostic, serialized → atomic)
    * AND pushes it to a SINGLE recipient — the initiating window — so two windows
-   * never race to consume the one-time ticket. Falls back to the main window
-   * while it still exists (Phase 1).
+   * never race to consume the one-time ticket. When no live initiator exists
+   * (a cold-boot callback that arrives before any panel paints), the PULL store
+   * is the sole delivery path: the renderer pulls it on mount.
    *
    * @param token - Clerk sign-in token
    * @param provider - OAuth provider
@@ -381,9 +376,6 @@ export class OAuthManager {
       provider,
       tokenPrefix: token.slice(0, 10) + '...',
       hasInitiator: !!(initiator && !initiator.isDestroyed()),
-      hasMainWindow: !!(
-        this.windowManager && this.windowManager.hasMainWindow()
-      ),
     })
 
     // PULL store — durable fallback for any window that missed the push, scoped
@@ -398,14 +390,16 @@ export class OAuthManager {
     }
     log.debug('[OAuth] Stored pending sign-in token for retrieval')
 
-    // PUSH to the single initiating window; fall back to the main window so the
-    // existing main-window flow keeps working through Phase 1.
+    // PUSH to the single initiating window when one is live. A signed-out
+    // cold-boot callback can arrive before any panel paints, leaving no
+    // initiator — that window pulls the token from the PULL store on mount, so a
+    // missed push is not a lost sign-in (and never a double-consume race).
     if (initiator && !initiator.isDestroyed()) {
       typedSend(initiator, 'clerk-sign-in-token', { token, provider })
+      log.debug('[OAuth] Sign-in token pushed to initiator')
     } else {
-      this.sendToRenderer('clerk-sign-in-token', { token, provider })
+      log.debug('[OAuth] No live initiator; token left in PULL store for mount')
     }
-    log.debug('[OAuth] Sign-in token sent via IPC')
   }
 
   /**
@@ -467,81 +461,27 @@ export class OAuthManager {
   }
 
   /**
-   * Exchanges authorization code for session using Clerk API.
-   *
-   * @param code - Authorization code from OAuth callback
-   * @param verifier - PKCE code verifier
-   * @param provider - OAuth provider
-   * @returns Exchange result
-   */
-  async exchangeCodeForSession(
-    code: string,
-    verifier: string,
-    provider: string,
-  ): Promise<CodeExchangeResult> {
-    try {
-      log.info('Exchanging authorization code for session')
-
-      this.sendToRenderer('oauth-complete-exchange', {
-        code,
-        verifier,
-        provider,
-      })
-
-      return { success: true, pendingWebExchange: true }
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error)
-      log.error('Failed to exchange code for session:', error)
-      return { success: false, error: errorMessage }
-    }
-  }
-
-  /**
-   * Sends OAuth success event to renderer.
-   *
-   * @param user - User data
-   */
-  sendOAuthSuccess(user: unknown): void {
-    this.sendToRenderer('oauth-success', { user })
-  }
-
-  /**
    * Sends OAuth error event to the renderer that started the flow.
    *
-   * Mirrors `sendSignInToken`'s initiator-targeting: routes the failure to the
-   * initiating window when known (so a floating-initiated flow surfaces its own
-   * error instead of hanging), and falls back to the main renderer otherwise
-   * (Phase 1, or callbacks with no identifiable initiator).
+   * Routes the failure to the initiating window when known (so a
+   * floating-initiated flow surfaces its own error instead of hanging). With the
+   * main window retired (T18) there is no default renderer, so an initiator-less
+   * error (callback with no/expired state, or a pre-flow failure) can only be
+   * logged. There is no renderer-side timeout backstop: a stranded
+   * "Opening browser…" state clears only when the window is reopened (remount) or
+   * a later sign-in event arrives — the `RESET` recovery path in
+   * `ElectronOAuthButtons` is intentionally unwired pending the T20 UX decision.
    *
    * @param error - Error message
    * @param initiator - The renderer that started the flow; receives the error
-   *   when present and alive. Omit to broadcast to the main renderer.
+   *   when present and alive. Omit when no initiator is identifiable.
    */
   sendOAuthError(error: string, initiator?: WebContents): void {
     if (initiator && !initiator.isDestroyed()) {
       typedSend(initiator, 'oauth-error', { error })
       return
     }
-    this.sendToRenderer('oauth-error', { error })
-  }
-
-  /**
-   * Sends event to renderer process using typed IPC channels.
-   *
-   * @param channel - Typed IPC event channel name
-   * @param data - Event payload (validated at compile time against IPCEventChannels[C])
-   */
-  sendToRenderer<C extends IPCEventChannel>(
-    channel: C,
-    ...payload: IPCEventChannels[C] extends void ? [] : [IPCEventChannels[C]]
-  ): void {
-    if (this.windowManager && this.windowManager.hasMainWindow()) {
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow) {
-        typedSend(mainWindow.webContents, channel, ...payload)
-      }
-    }
+    log.warn('[OAuth] OAuth error with no initiator to surface it', { error })
   }
 
   /**

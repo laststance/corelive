@@ -133,6 +133,16 @@ export class ShortcutManager {
     this.focusListenersSetup = false
     this.focusHandlers = new Map()
 
+    // Rebind contextual-shortcut focus/blur listeners to EVERY Floating window
+    // the WindowManager (re)creates — Cmd+3 reopen, tray, restoreFromTray, or a
+    // BrainDump-only startup that opens Floating later. T18 moved these listeners
+    // off the retired main window onto Floating; without rebinding, a Floating
+    // created after the initial setup would carry no listeners and its contextual
+    // shortcuts would never fire. createFloatingNavigator is the single chokepoint.
+    this.windowManager.setOnFloatingNavigatorCreated(() => {
+      this.setupFocusListeners()
+    })
+
     this.isEnabled = true
     this.shortcuts = this.getDefaultShortcuts()
 
@@ -232,79 +242,78 @@ export class ShortcutManager {
    * Setup focus listeners for dynamic shortcut management.
    */
   setupFocusListeners(): void {
-    if (this.focusListenersSetup) {
-      log.debug('[ShortcutManager] Focus listeners already setup')
-      return
-    }
-
     try {
-      const mainWindow = this.windowManager.getMainWindow()
+      // Main window retired (T18): contextual shortcuts hang off the Floating
+      // navigator's focus/blur only. Floating may be absent here (BrainDump-only
+      // startup) or a fresh replacement (closed then reopened via Cmd+3 / tray /
+      // restoreFromTray with a new window id), so this runs again on every
+      // Floating (re)creation via WindowManager.setOnFloatingNavigatorCreated.
       const floatingWindow = this.windowManager.getFloatingNavigator()
 
-      if (mainWindow) {
-        // Create named handlers for cleanup
-        const focusHandler = (): void => {
-          log.debug(
-            '[ShortcutManager] Main window focused - registering contextual shortcuts',
-          )
-          this.registerContextualShortcuts()
-        }
-
-        const blurHandler = (): void => {
-          log.debug(
-            '[ShortcutManager] Main window blurred - unregistering contextual shortcuts',
-          )
-          this.unregisterContextualShortcuts()
-        }
-
-        mainWindow.on('focus', focusHandler)
-        mainWindow.on('blur', blurHandler)
-
-        // Store handlers for cleanup
-        this.focusHandlers.set(mainWindow.id, {
-          focus: focusHandler,
-          blur: blurHandler,
-          window: mainWindow,
-        })
-
-        if (mainWindow.isFocused()) {
-          this.registerContextualShortcuts()
-        }
+      // No Floating to bind yet. Crucially, do NOT mark setup "done": the T18
+      // regression was a sticky boolean that, once set while Floating was absent,
+      // blocked the rebind when a Floating window was created later.
+      if (!floatingWindow || floatingWindow.isDestroyed()) {
+        return
       }
 
-      if (floatingWindow) {
-        // Create named handlers for cleanup
-        const focusHandler = (): void => {
-          log.debug(
-            '[ShortcutManager] Floating window focused - registering contextual shortcuts',
-          )
-          this.registerContextualShortcuts()
+      // Already bound to THIS exact window — idempotent, avoids duplicate
+      // focus/blur handlers when setup runs more than once for one window.
+      const floatingWindowId = floatingWindow.id
+      if (this.focusHandlers.has(floatingWindowId)) {
+        log.debug(
+          '[ShortcutManager] Focus listeners already bound for current floating window',
+        )
+        this.focusListenersSetup = true
+        return
+      }
+
+      // Create named handlers for cleanup
+      const focusHandler = (): void => {
+        log.debug(
+          '[ShortcutManager] Floating window focused - registering contextual shortcuts',
+        )
+        this.registerContextualShortcuts()
+      }
+
+      const blurHandler = (): void => {
+        log.debug(
+          '[ShortcutManager] Floating window blurred - unregistering contextual shortcuts',
+        )
+        this.unregisterContextualShortcuts()
+      }
+
+      floatingWindow.on('focus', focusHandler)
+      floatingWindow.on('blur', blurHandler)
+
+      // Store handlers for cleanup
+      this.focusHandlers.set(floatingWindowId, {
+        focus: focusHandler,
+        blur: blurHandler,
+        window: floatingWindow,
+      })
+
+      // Drop this window's entry once it is destroyed so the NEXT Floating window
+      // (new id) rebinds instead of being mistaken for already-bound. (T18:
+      // Floating is recreated on Cmd+3 / tray after a close.)
+      floatingWindow.once('closed', () => {
+        this.focusHandlers.delete(floatingWindowId)
+        // When no Floating remains, the contextual listeners are gone with it.
+        if (this.focusHandlers.size === 0) {
+          this.focusListenersSetup = false
         }
+      })
 
-        const blurHandler = (): void => {
-          log.debug(
-            '[ShortcutManager] Floating window blurred - unregistering contextual shortcuts',
-          )
-          this.unregisterContextualShortcuts()
-        }
-
-        floatingWindow.on('focus', focusHandler)
-        floatingWindow.on('blur', blurHandler)
-
-        // Store handlers for cleanup
-        this.focusHandlers.set(floatingWindow.id, {
-          focus: focusHandler,
-          blur: blurHandler,
-          window: floatingWindow,
-        })
-
-        if (floatingWindow.isFocused()) {
-          this.registerContextualShortcuts()
-        }
+      // The window may already be focused (created → shown → focused before this
+      // runs), so register now instead of waiting for the next focus event.
+      if (floatingWindow.isFocused()) {
+        this.registerContextualShortcuts()
       }
 
       this.focusListenersSetup = true
-      log.info('[ShortcutManager] Focus listeners setup successfully')
+      log.info(
+        '[ShortcutManager] Focus listeners setup for the floating window',
+      )
     } catch (error) {
       log.error('[ShortcutManager] Failed to setup focus listeners:', error)
     }
@@ -791,14 +800,12 @@ export class ShortcutManager {
     try {
       const focusedWindow = BrowserWindow.getFocusedWindow()
 
-      if (focusedWindow) {
-        if (focusedWindow === this.windowManager.getMainWindow()) {
-          this.windowManager.minimizeToTray()
-        } else if (
-          focusedWindow === this.windowManager.getFloatingNavigator()
-        ) {
-          focusedWindow.minimize()
-        }
+      // Main window retired (T18): only the Floating navigator self-minimizes.
+      if (
+        focusedWindow &&
+        focusedWindow === this.windowManager.getFloatingNavigator()
+      ) {
+        focusedWindow.minimize()
       }
     } catch (error) {
       log.error('Error handling minimize window shortcut:', error)
@@ -1012,14 +1019,13 @@ export class ShortcutManager {
     // Setup focus listeners (handles contextual shortcuts on focus/blur)
     this.setupFocusListeners()
 
-    // Only register contextual shortcuts if a window is currently focused
-    const mainWindow = this.windowManager.getMainWindow()
+    // Only register contextual shortcuts if a window is currently focused.
+    // Main window retired (T18): the Floating navigator is the only surface.
     const floatingWindow = this.windowManager.getFloatingNavigator()
     const isWindowFocused =
-      (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) ||
-      (floatingWindow &&
-        !floatingWindow.isDestroyed() &&
-        floatingWindow.isFocused())
+      floatingWindow &&
+      !floatingWindow.isDestroyed() &&
+      floatingWindow.isFocused()
 
     if (isWindowFocused) {
       this.registerContextualShortcuts()

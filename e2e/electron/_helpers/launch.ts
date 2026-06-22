@@ -5,7 +5,12 @@ import path from 'node:path'
 import { _electron as electron } from 'playwright'
 import type { ElectronApplication, Page } from 'playwright'
 
-const RENDERER_URL = 'http://localhost:4991'
+/**
+ * Renderer origin the E2E main process is pointed at via `ELECTRON_RENDERER_URL`.
+ * Exported as the single source of truth so specs assert against it instead of
+ * re-hardcoding the port (which could silently drift from this launch env).
+ */
+export const RENDERER_URL = 'http://localhost:4991'
 const ELECTRON_MAIN_ENTRY = 'dist-electron/main/index.cjs'
 const LOG_DIR = 'test-results'
 const REMOTE_DEBUG_PORT = '9222'
@@ -73,14 +78,20 @@ export async function launchElectronForTest(
 }
 
 /**
- * Detects the main renderer page by its preload bridge, not creation order.
+ * Detects the renderer page that carries the FULL `electronAPI` bridge.
+ *
+ * After main-window retirement, that bridge is loaded only by the on-demand
+ * Settings window (`WindowManager.createSettingsWindow` → `preload.cjs`); the
+ * front-door Floating window exposes just `{ auth, oauth }`. Probe by the
+ * bridge itself — not by URL, because a signed-out Settings window sits on
+ * `/login?redirect_url=…/settings`, so a `/settings` URL match would miss it.
  *
  * @param page - Electron renderer page to probe.
- * @returns True when the page exposes the main-window preload API.
+ * @returns True when the page exposes the full preload API (`app.getVersion`).
  * @example
- * const isMain = await pageHasMainPreload(page)
+ * const isBridge = await pageHasFullBridge(page)
  */
-async function pageHasMainPreload(page: Page): Promise<boolean> {
+async function pageHasFullBridge(page: Page): Promise<boolean> {
   try {
     await page.waitForLoadState('domcontentloaded', {
       timeout: LOAD_TIMEOUT_MS,
@@ -96,14 +107,16 @@ async function pageHasMainPreload(page: Page): Promise<boolean> {
 }
 
 /**
- * Waits for the main window even when auxiliary panels are created first.
+ * Waits for the window exposing the full `electronAPI` bridge (the Settings
+ * window). Call `openSettingsWindow` first — the bridge window is opened on
+ * demand, not at launch.
  *
  * @param electronApp - Launched Electron application under test.
- * @returns The Playwright page backed by the main BrowserWindow.
+ * @returns The Playwright page backed by the full-bridge (Settings) window.
  * @example
- * const mainWindow = await waitForMainWindow(electronApp)
+ * const settingsWindow = await waitForFullBridgeWindow(electronApp)
  */
-export async function waitForMainWindow(
+export async function waitForFullBridgeWindow(
   electronApp: ElectronApplication,
 ): Promise<Page> {
   const firstWindow = await electronApp.firstWindow()
@@ -112,7 +125,7 @@ export async function waitForMainWindow(
   while (Date.now() < deadline) {
     const windows = [firstWindow, ...electronApp.windows()]
     for (const window of windows) {
-      if (await pageHasMainPreload(window)) {
+      if (await pageHasFullBridge(window)) {
         return window
       }
     }
@@ -123,22 +136,129 @@ export async function waitForMainWindow(
   }
 
   const urls = electronApp.windows().map((window) => window.url())
-  throw new Error(`Main Electron window was not found. Open URLs: ${urls}`)
+  throw new Error(
+    `Full-bridge (Settings) window was not found. Open URLs: ${urls}`,
+  )
 }
 
 /**
- * Launch Electron AND wait for the renderer's first window to load — the
- * setup that `preload.spec.ts` and `window-controls.spec.ts` both need.
- * `startup.spec.ts` does NOT use this helper because it tests the load
- * path itself (the `domcontentloaded` wait belongs in the test body, not
- * `beforeAll`).
+ * Detects the Floating navigator front-door page by its renderer URL.
+ *
+ * @param page - Electron renderer page to probe.
+ * @returns True when the page is the Floating navigator (`/floating-navigator`).
+ * @example
+ * const isFloating = await pageIsFloating(page)
+ */
+async function pageIsFloating(page: Page): Promise<boolean> {
+  try {
+    await page.waitForLoadState('domcontentloaded', {
+      timeout: LOAD_TIMEOUT_MS,
+    })
+    return /\/floating-navigator/.test(page.url())
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Waits for the Floating navigator window — the signed-out front door that
+ * opens on a fresh launch (`showFloating` default). Generic window-control and
+ * startup specs target it because it is always present without opening Settings.
+ *
+ * @param electronApp - Launched Electron application under test.
+ * @returns The Playwright page backed by the Floating BrowserWindow.
+ * @example
+ * const floating = await waitForFloatingWindow(electronApp)
+ */
+export async function waitForFloatingWindow(
+  electronApp: ElectronApplication,
+): Promise<Page> {
+  const firstWindow = await electronApp.firstWindow()
+  const deadline = Date.now() + LOAD_TIMEOUT_MS
+
+  while (Date.now() < deadline) {
+    const windows = [firstWindow, ...electronApp.windows()]
+    for (const window of windows) {
+      if (await pageIsFloating(window)) {
+        return window
+      }
+    }
+
+    await electronApp
+      .waitForEvent('window', { timeout: 250 })
+      .catch(() => undefined)
+  }
+
+  const urls = electronApp.windows().map((window) => window.url())
+  throw new Error(`Floating navigator window was not found. Open URLs: ${urls}`)
+}
+
+/**
+ * Opens the Settings window via the main-process test hook, then waits for its
+ * full-bridge renderer. The Settings window is the only post-retirement surface
+ * that loads the complete `electronAPI` preload, so specs exercising privileged
+ * IPC (settings / window / brainDump) drive it.
+ *
+ * The hook (`__coreliveTestOpenSettings`, installed in `main.ts` right after
+ * WindowManager is constructed) is platform-independent. We deliberately do NOT
+ * click the app-menu "Preferences…" item: that menu is macOS-only, but this
+ * suite runs on Linux+xvfb in CI where it is never built. The hook is set during
+ * `criticalInit`, so retry until it is present after launch.
+ *
+ * @param electronApp - Launched Electron application under test.
+ * @returns The Playwright page backed by the Settings (full-bridge) window.
+ * @example
+ * const settingsWindow = await openSettingsWindow(electronApp)
+ */
+export async function openSettingsWindow(
+  electronApp: ElectronApplication,
+): Promise<Page> {
+  const deadline = Date.now() + LOAD_TIMEOUT_MS
+  let invoked = false
+  while (Date.now() < deadline && !invoked) {
+    // Call the test hook in the main process; `openSettings()` is idempotent
+    // (focuses an existing Settings window rather than spawning a duplicate).
+    invoked = await electronApp.evaluate(() => {
+      const openSettings = (
+        globalThis as typeof globalThis & {
+          __coreliveTestOpenSettings?: () => void
+        }
+      ).__coreliveTestOpenSettings
+      if (typeof openSettings !== 'function') return false
+      openSettings()
+      return true
+    })
+    if (!invoked) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+  }
+  if (!invoked) {
+    throw new Error(
+      'Settings test hook (__coreliveTestOpenSettings) was never installed — ' +
+        'the main process did not reach WindowManager initialisation.',
+    )
+  }
+  return waitForFullBridgeWindow(electronApp)
+}
+
+/**
+ * Launch Electron, open the Settings window, and return its full-bridge page —
+ * the setup every spec that exercises privileged IPC (`settings` / `window` /
+ * `brainDump` namespaces) needs. The pre-retirement main window that hosted
+ * this bridge is gone; the Settings window is its successor.
+ *
+ * `startup.spec.ts` and `window-controls.spec.ts` do NOT use this helper —
+ * they target the front-door Floating window via `waitForFloatingWindow`.
  */
 export async function setupElectronTest(specName: string): Promise<{
   electronApp: ElectronApplication
-  mainWindow: Page
+  settingsWindow: Page
 }> {
   const electronApp = await launchElectronForTest(specName)
-  const mainWindow = await waitForMainWindow(electronApp)
-  await mainWindow.waitForLoadState('domcontentloaded')
-  return { electronApp, mainWindow }
+  // The front-door Floating window opens first; wait for it so the app menu
+  // (built in deferredInit) is ready before we click through to Settings.
+  await electronApp.firstWindow()
+  const settingsWindow = await openSettingsWindow(electronApp)
+  await settingsWindow.waitForLoadState('domcontentloaded')
+  return { electronApp, settingsWindow }
 }
