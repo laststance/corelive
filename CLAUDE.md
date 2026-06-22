@@ -253,11 +253,17 @@ macOS users do **not** need xvfb — Electron uses the native display. Just run 
 
 > **Coverage note**: Linux + xvfb does **not** cover Cocoa-specific paths (dock/menu bar, `app.setActivationPolicy`, `open-url` deep links, vibrancy, notarized .app/asar paths). Run a manual macOS QA before tag pushes.
 
-## Electron Native QA (macOS, computer-use)
+## Electron Native QA (macOS — mac-mcp-server + computer-use)
 
 Electron ships as a **native macOS app**. Its Cocoa chrome — menu bar (`MenuManager`), system tray (`SystemTrayManager`), dock + `app.setActivationPolicy` (`main.ts`), `open-url` deep links (`DeepLinkManager`), traffic-light window controls, vibrancy, and the floating / braindump / startup-pill windows (`WindowManager`) — is **invisible to the Playwright and `mcp__electron__*` suites**: those drive the **renderer (web content) only**, identical to the web app. The Linux + xvfb CI is renderer coverage; the native surfaces have **no automated coverage at all**.
 
-So QA those surfaces **locally on macOS with the `mcp__computer-use__*` MCP** — it screenshots and drives the real desktop, so it can click the menu bar / tray / dock / traffic lights that DOM tools cannot reach. This IS the "manual macOS QA" the Coverage note above asks for.
+So QA those surfaces **locally on macOS, and drive them yourself** — never hand the clicking back to the user (see the Autonomy rule above). When QA needs **macOS-native operation** (clicking a menu / tray / dock / traffic-light, keying a shortcut, moving a window), two MCPs pair up:
+
+- **`mcp__mac-mcp-server__*`** — the **primary native AX driver**, and the first thing to reach for whenever a QA step needs a real macOS action: deterministic `click` / `type_text` / `key_combination`, menu-bar items, status-bar (tray) items, window controls, `move_mouse`. Use it to _operate_ the native Cocoa chrome that DOM tools cannot reach (menu bar, tray, dock, traffic-lights, multi-window).
+- **`mcp__computer-use__*`** — paired with it for **screenshots / video frames** and pixel-level fallback (full tier — it's a native app, not a browser/terminal). Use it to _see_ the whole window plus native chrome and to confirm each result.
+- **`osascript` System Events AX** — deterministic fallback for the packaged app under test when coordinate clicks or status-bar tools are flaky, e.g. `tell process "CoreLive" to click menu item "…" of menu N of menu bar 1`. Sanctioned for the app under test (this is **not** the prohibited "synthetic clicks into a read-tier browser").
+
+This IS the "manual macOS QA" the Coverage note above asks for.
 
 **When**: before any tag push / release, and after touching Electron main-process or native-integration code (menu, tray, dock, window controls, deep links, auto-update, vibrancy, `setActivationPolicy`).
 
@@ -268,10 +274,10 @@ So QA those surfaces **locally on macOS with the `mcp__computer-use__*` MCP** �
    pnpm electron:build:dir && open dist/mac/CoreLive.app
    ```
 2. `mcp__computer-use__request_access` for **CoreLive** (full tier — it's a native app, not a browser/terminal), then `screenshot` to see the whole window plus native chrome.
-3. Exercise native surfaces by clicking / keying: menu bar items (+ the menu-bar toggle), tray menu, dock icon (show/hide), traffic-light buttons, multi-window flows (main ↔ floating ↔ braindump, startup pill), and an `open-url` deep link.
+3. Exercise native surfaces by **driving them with `mcp__mac-mcp-server__*`** (AX `click` / `key_combination` / status-bar items), screenshotting with computer-use between steps: menu bar items (+ the menu-bar toggle), tray menu, dock icon (show/hide), traffic-light buttons, multi-window flows across the floating / braindump / settings panels (the main window was retired in v0.14.0), and an `open-url` deep link.
 4. Verify motion (window / menu transitions) by **video frames, not screenshots** (global rule) — `getComputedStyle` and stills can't reveal jank or flashes.
 
-> **Tooling split**: `mcp__electron__*` & Playwright = renderer/DOM (same paths as web). `mcp__computer-use__*` = native Cocoa chrome (macOS only). Reach for computer-use whenever the thing under test lives **outside** the web content.
+> **Tooling split**: `mcp__electron__*` & Playwright = renderer/DOM (same paths as web). `mcp__mac-mcp-server__*` (AX driver) + `mcp__computer-use__*` (screenshots / video) = native Cocoa chrome (macOS only). Reach for the mac-mcp-server + computer-use pair whenever the thing under test lives **outside** the web content.
 
 ### Dev (`electron:dev`) vs Production: which Electron is running?
 
