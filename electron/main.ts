@@ -960,14 +960,20 @@ async function createWindow(): Promise<void> {
     // shows the OAuth front door (WindowManager nav-watch), a load-failed one
     // self-heals via the DT7 recovery dialog.
     const startupConfig = configManager.getSection('behavior').startup
+    // Count the panels actually opened so the metric reflects the real 0/1/2,
+    // not a flat +1: a bare `++` under-reported the both-panels case and
+    // over-reported the none-open case (both toggles can be off mid-session).
+    let startupPanelsOpened = 0
     if (startupConfig.showFloating) {
       windowManager.openStartupPanel('floating')
+      startupPanelsOpened += 1
     }
     if (startupConfig.showBraindump) {
       windowManager.openStartupPanel('braindump')
+      startupPanelsOpened += 1
     }
 
-    performanceOptimizer.startupMetrics.windowsCreated++
+    performanceOptimizer.startupMetrics.windowsCreated += startupPanelsOpened
 
     return { serverUrl }
   }
@@ -2243,8 +2249,20 @@ if (!gotTheLock) {
        */
       app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows()
-        // No windows exist at all: recreate from scratch (macOS convention).
+        // No windows exist at all (every panel was closed; the app stayed
+        // tray-resident per window-all-closed).
         if (allWindows.length === 0) {
+          // If the app already booted once, the manager stack is live. Re-running
+          // the full createWindow() here would build a SECOND ConfigManager /
+          // WindowManager / tray / shortcut stack on top of it with no teardown —
+          // leaking a duplicate tray icon and clashing global-shortcut
+          // registrations. Just surface the Floating companion through the
+          // existing WindowManager (creates it if absent, then shows + focuses).
+          if (windowManager) {
+            windowManager.restoreFromTray()
+            return
+          }
+          // Genuinely uninitialized (boot never completed): recreate from scratch.
           // createWindow is async; floating the promise unhandled would swallow
           // a boot failure here silently, so log any rejection instead.
           void createWindow().catch((error: unknown) => {
@@ -2299,6 +2317,16 @@ if (!gotTheLock) {
  * Open Question #6: stay tray-resident, never quit on the last panel close.)
  *
  * This handler is intentionally empty to follow that guideline.
+ *
+ * Summon-surface note (why staying alive at zero windows is not a soft-lock):
+ * in the default config at least one route back to a window always remains —
+ * the Dock icon re-opens via the `activate` handler above, the always-registered
+ * global shortcut Cmd+3 (`toggleFloatingNavigator`) creates + shows Floating from
+ * anywhere, and the tray's menu offers a restore item. Becoming truly headless
+ * needs the exotic combination of Hide-App-Icon (accessory Dock) AND
+ * Show-in-Menu-Bar=false (tray destroyed) AND rebinding Cmd+3 to an empty /
+ * unregistrable accelerator — narrow enough to accept here; revisit (e.g. force
+ * the tray to stay while the Dock is hidden) if it is ever reported.
  */
 app.on('window-all-closed', () => {
   // Stay tray-resident: no app.quit() here. Quitting is always explicit

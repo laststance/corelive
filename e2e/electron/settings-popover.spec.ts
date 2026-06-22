@@ -47,6 +47,8 @@ test('reading startup config exposes both window flags', async () => {
   // Assert: both boolean fields are present
   expect(typeof config.showBraindump).toBe('boolean')
   expect(typeof config.showFloating).toBe('boolean')
+  // Assert: the retired `showMain` flag is gone from the IPC payload (T18 main-window retirement)
+  expect('showMain' in config).toBe(false)
 })
 
 test('updating the startup window flags persists successfully', async () => {
@@ -65,6 +67,17 @@ test('updating the startup window flags persists successfully', async () => {
 
   // Assert: IPC handler returns true when config is written
   expect(success).toBe(true)
+
+  // Assert: the write actually persisted — read it back through the same bridge
+  // (the Settings window, since the main window is retired in T18) and confirm
+  // both flags round-tripped, not just that the setter returned true.
+  const persisted = await settingsWindow.evaluate(async () => {
+    const getFn = window.electronAPI?.settings?.getStartupConfig
+    if (!getFn) throw new Error('getStartupConfig not in preload bridge')
+    return getFn()
+  })
+  expect(persisted.showBraindump).toBe(false)
+  expect(persisted.showFloating).toBe(true)
 })
 
 test('toggling dock icon visibility reaches main process without error', async () => {

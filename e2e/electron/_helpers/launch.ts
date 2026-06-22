@@ -5,7 +5,12 @@ import path from 'node:path'
 import { _electron as electron } from 'playwright'
 import type { ElectronApplication, Page } from 'playwright'
 
-const RENDERER_URL = 'http://localhost:4991'
+/**
+ * Renderer origin the E2E main process is pointed at via `ELECTRON_RENDERER_URL`.
+ * Exported as the single source of truth so specs assert against it instead of
+ * re-hardcoding the port (which could silently drift from this launch env).
+ */
+export const RENDERER_URL = 'http://localhost:4991'
 const ELECTRON_MAIN_ENTRY = 'dist-electron/main/index.cjs'
 const LOG_DIR = 'test-results'
 const REMOTE_DEBUG_PORT = '9222'

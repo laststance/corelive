@@ -8,7 +8,11 @@
 import { expect, test } from '@playwright/test'
 import type { ElectronApplication } from 'playwright'
 
-import { LOAD_TIMEOUT_MS, launchElectronForTest } from './_helpers/launch'
+import {
+  LOAD_TIMEOUT_MS,
+  RENDERER_URL,
+  launchElectronForTest,
+} from './_helpers/launch'
 
 let electronApp: ElectronApplication
 
@@ -34,7 +38,9 @@ test('the floating navigator front door opens and loads the local renderer', asy
   })
 
   const url = floatingWindow.url()
-  expect(url).toContain('localhost:4991')
+  // Origin derives from the launch helper's ELECTRON_RENDERER_URL (single
+  // source of truth), not a second hardcoded port that could drift from it.
+  expect(new URL(url).origin).toBe(RENDERER_URL)
   expect(url).toContain('/floating-navigator')
 })
 

@@ -127,6 +127,19 @@ export class WindowManager {
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
   /**
+   * Notified right after a Floating navigator window is (re)created, so
+   * dependents can rebind to the fresh BrowserWindow. ShortcutManager uses it to
+   * re-attach its focus/blur contextual-shortcut listeners: T18 retired the main
+   * window and moved those listeners onto Floating, but Floating can be absent at
+   * setup (BrainDump-only startup) or replaced (closed then reopened via Cmd+3 /
+   * tray / restoreFromTray with a NEW window id). Without this hook such a
+   * later-created Floating would carry no listeners and its contextual shortcuts
+   * would never fire. `createFloatingNavigator` is their single chokepoint, so
+   * firing here covers every creation path at once.
+   */
+  private onFloatingNavigatorCreated: (() => void) | null
+
+  /**
    * Panels that were redirected to an auth page (or failed to load) at startup,
    * so the main window was surfaced in their place. Exposed only through
    * `getStartupAuthFallbacks()` as test-observable evidence of the
@@ -170,6 +183,7 @@ export class WindowManager {
     this.windowStateManager = windowStateManager
     this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
+    this.onFloatingNavigatorCreated = null
     this.startupAuthFallbacks = new Set()
     this.settingsResizeDebounceTimer = null
     this.settingsPersistDebounceTimer = null
@@ -185,6 +199,21 @@ export class WindowManager {
    */
   setTrayBoundsProvider(provider: () => Electron.Rectangle | null): void {
     this.getTrayBoundsProvider = provider
+  }
+
+  /**
+   * Registers a callback fired right after each Floating navigator (re)creation,
+   * letting dependents rebind to the new BrowserWindow — e.g. ShortcutManager
+   * re-attaching its contextual-shortcut focus/blur listeners. Setter injection
+   * (not a constructor arg) because ShortcutManager is built after WindowManager
+   * in `deferredInit`.
+   *
+   * @param handler - Invoked after `createFloatingNavigator` fully wires the window, or null to clear.
+   * @example
+   * windowManager.setOnFloatingNavigatorCreated(() => shortcutManager.setupFocusListeners())
+   */
+  setOnFloatingNavigatorCreated(handler: (() => void) | null): void {
+    this.onFloatingNavigatorCreated = handler
   }
 
   /**
@@ -594,6 +623,12 @@ export class WindowManager {
       this.floatingNavigator,
       Boolean(floatingConfig.visibleOnAllWorkspaces),
     )
+
+    // Notify dependents that a fresh Floating window exists so they can rebind to
+    // it (ShortcutManager re-attaches contextual-shortcut focus/blur listeners).
+    // Fired here — after the window is fully wired but before the caller shows it
+    // — so listeners are in place by the time it first gains focus.
+    this.onFloatingNavigatorCreated?.()
 
     return this.floatingNavigator
   }
