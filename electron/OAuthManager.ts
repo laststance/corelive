@@ -467,7 +467,10 @@ export class OAuthManager {
    * floating-initiated flow surfaces its own error instead of hanging). With the
    * main window retired (T18) there is no default renderer, so an initiator-less
    * error (callback with no/expired state, or a pre-flow failure) can only be
-   * logged — the renderer times out its own "Opening browser…" state as backstop.
+   * logged. There is no renderer-side timeout backstop: a stranded
+   * "Opening browser…" state clears only when the window is reopened (remount) or
+   * a later sign-in event arrives — the `RESET` recovery path in
+   * `ElectronOAuthButtons` is intentionally unwired pending the T20 UX decision.
    *
    * @param error - Error message
    * @param initiator - The renderer that started the flow; receives the error
