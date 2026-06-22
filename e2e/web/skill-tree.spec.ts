@@ -333,13 +333,15 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   )
 
   await todoCheckbox.click()
-  await expect(todoCheckbox).toBeChecked({ timeout: 5000 })
 
-  // Block until the toggle POST completes with 200. Now the DB state is
-  // guaranteed: this todo is `completed: true` and will appear in
-  // getUnassignedPool on the next skill-tree fetch.
   const toggleResponse = await togglePromise
   expect(toggleResponse.status()).toBe(200)
+
+  // Completed todo surfaces in the journal by default, or stays checked in the
+  // active list when 居残りモード is on — either way one checked checkbox is enough.
+  await expect(
+    page.getByRole('checkbox', { name: todoText, checked: true }),
+  ).toBeVisible({ timeout: 10000 })
 }
 
 /**
