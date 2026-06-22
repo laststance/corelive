@@ -10,6 +10,19 @@ import { useReducerState } from '@/hooks/useReducerState'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 
+/**
+ * How long the sign-in CTA may sit at "Opening browser…" before it re-arms
+ * itself to the idle, re-pressable state. Covers ABANDONMENT (user closes the
+ * browser tab / picks no account), which fires neither a success nor an error
+ * event. Recovery is visual-only: a real sign-in completed after this window
+ * still lands via the decoupled token path (electron-auth-provider's
+ * `onSignInToken` → Clerk session → `user`), up to the main process's 10-minute
+ * OAuth state TTL. Sized past a deliberate, read-the-consent-screen sign-in
+ * (~10-20s) yet short enough that an abandoned flow recovers promptly; tuned
+ * down from 45s after watching the real "Opening browser…" hold in native QA.
+ */
+const OAUTH_OPENING_BROWSER_TIMEOUT_MS = 25_000
+
 type OAuthState = {
   isLoading: boolean
   error: string | null
@@ -39,9 +52,9 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
       return { isLoading: false, error: null }
     case 'ERROR':
       return { isLoading: false, error: action.error }
-    // Intentionally unwired in Phase 1 (nothing dispatches RESET yet) — kept as
-    // the recovery scaffold; see the success branch in handleGoogleClick for the
-    // abandonment limitation it will eventually resolve (T20 UX decision).
+    // Abandonment recovery: dispatched by the "Opening browser…" timeout backstop
+    // when a launched flow fires no success/error event (user closed the browser
+    // tab / picked no account). Returns the CTA to its idle, re-pressable state.
     case 'RESET':
       return { isLoading: false, error: null }
     default:
@@ -107,6 +120,21 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
     }
   }, [])
 
+  // Abandonment backstop: a launched flow the user walks away from (closes the
+  // browser tab / picks no account) fires no success or error event, so without
+  // this the CTA would sit disabled at "Opening browser…" until the window is
+  // reopened — the retired main window (T18) is no longer a fallback sign-in
+  // path. Keyed on the masked `isLoading`, so a success/error event OR a
+  // signed-in user disarms the timer immediately; only a truly stranded flow
+  // reaches the RESET. Visual-only — see OAUTH_OPENING_BROWSER_TIMEOUT_MS.
+  useCycleEffect(() => {
+    if (!isLoading) return
+    const recoveryTimer = setTimeout(() => {
+      dispatch({ type: 'RESET' })
+    }, OAUTH_OPENING_BROWSER_TIMEOUT_MS)
+    return () => clearTimeout(recoveryTimer)
+  }, [isLoading])
+
   // Sync, stable click handler (the Button needs a stable useCallback ref) that
   // fires the async native-OAuth start as fire-and-forget.
   const handleGoogleClick = useCallback(() => {
@@ -129,14 +157,13 @@ export const ElectronOAuthButtons = memo(function ElectronOAuthButtons() {
         // On success the system browser opens; the onSuccess/onError events (and
         // the in-place Clerk re-render) take over from here.
         //
-        // KNOWN Phase-1 limitation: if the user ABANDONS the browser flow (closes
-        // the tab / picks no account), no event fires and the CTA stays disabled
-        // at "Opening browser…" until the window is reopened. Non-regressive — the
-        // Electron main window is still a working sign-in path during Phase 1's
-        // strangler-fig, so this is not a dead-ended user. The recovery mechanism
-        // (dispatch RESET on focus-regain vs. a timeout) is a UX decision to settle
-        // during the T20 packaged native-OAuth QA, where the real deep-link timing
-        // can be observed — it must not be guessed at here.
+        // ABANDONMENT (user closes the tab / picks no account) fires no event, so
+        // the OAUTH_OPENING_BROWSER_TIMEOUT_MS backstop re-arms the CTA — the
+        // retired main window (T18) is no longer a fallback path, so this would
+        // otherwise dead-end at "Opening browser…" until window reopen. A timeout,
+        // not focus-regain: the Floating card is always-on-top so a closed-tab
+        // return won't reliably refocus it, and the success path itself refocuses
+        // the window (OAuthManager) — focus-regain would misfire on both.
       } catch {
         dispatch({ type: 'ERROR', error: 'Failed to start authentication' })
       }

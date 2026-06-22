@@ -14,7 +14,7 @@
  * @example
  *   pnpm test -- ElectronOAuthButtons
  */
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ElectronOAuthButtons } from './ElectronOAuthButtons'
@@ -107,5 +107,50 @@ describe('ElectronOAuthButtons', () => {
     expect(
       screen.getByRole('button', { name: /sign in with google/i }),
     ).toBeEnabled()
+  })
+
+  it('re-arms the sign-in button after an abandoned browser flow times out', async () => {
+    // Arrange: fake timers so we can fast-forward the abandonment backstop. The
+    // flow STARTS successfully (the system browser opens), but the user then
+    // ABANDONS it — closes the tab / picks no account — so neither onSuccess nor
+    // onError ever fires (the bridge's listeners are registered but never
+    // invoked). Without the backstop the CTA would sit dead at "Opening browser…"
+    // until the window is reopened, which post-main-window-retirement (T18) is
+    // the only other escape.
+    vi.useFakeTimers()
+    try {
+      const start = plantOAuthBridge({ success: true })
+      render(<ElectronOAuthButtons />)
+
+      // Act: press the only sign-in affordance; it enters the in-flight state.
+      fireEvent.click(
+        screen.getByRole('button', { name: /sign in with google/i }),
+      )
+      // Let the awaited start() promise settle (its success path dispatches
+      // nothing further, leaving the button in its loading state).
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(
+        screen.getByRole('button', { name: /opening browser/i }),
+      ).toBeDisabled()
+
+      // Act: the user walks away and the 25s backstop window elapses with no
+      // event from the main process.
+      act(() => {
+        vi.advanceTimersByTime(25_000)
+      })
+
+      // Assert: the CTA recovers to its idle, re-pressable state on its own —
+      // no window reopen required.
+      expect(
+        screen.getByRole('button', { name: /sign in with google/i }),
+      ).toBeEnabled()
+      // And the recovery is local UI only — it did not silently launch a second
+      // browser flow.
+      expect(start).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
