@@ -910,6 +910,13 @@ describe('BrainDumpEditor clear-on-complete', () => {
     await waitFor(() => {
       expect(noteSet).toHaveBeenCalledWith(1, 'keep me\n- [ ] buy milk')
     })
+    // …and the restored line was NEVER persisted into the switched-to category 2:
+    // a regression that wrote to both categories would corrupt category 2's stored
+    // note via IPC while still satisfying the visible-textarea check below.
+    expect(noteSet).not.toHaveBeenCalledWith(
+      2,
+      expect.stringContaining('- [ ] buy milk'),
+    )
     // …and category 2's visible note was never touched.
     expect(noteField).toHaveValue('')
   })
