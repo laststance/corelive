@@ -521,7 +521,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * @example
    * await syncCompletedAcrossViews()
    */
-  const syncCompletedAcrossViews = async () => {
+  const syncCompletedAcrossViews = async (): Promise<void> => {
     await queryClient.invalidateQueries({
       queryKey: orpc.completed.heatmap.key(),
     })
@@ -727,6 +727,61 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   /**
+   * Put a cleared line back into the category it came from. While still in that
+   * category, restore it into the live editor (optionally moving the caret);
+   * after switching away, persist it straight to that category's STORED note via
+   * IPC — so a cross-category Undo / failed create never drops the line. Called
+   * by both undoClearedCompletion and the background-create failure path.
+   *
+   * @param entry - The completion's undo memory (line text, origin category, index).
+   * @param moveCaret - Move the caret to the restored line (true for a user Undo; false for a background failure that must not yank a caret elsewhere).
+   * @returns Promise<void> — settles once the line is back: synchronously in-editor when still active, or after the IPC write when cross-category.
+   * @example
+   * await restoreClearedLineToCategory(entry, true)  // user tapped Undo
+   * void restoreClearedLineToCategory(entry, false)  // background create failed
+   */
+  const restoreClearedLineToCategory = async (
+    entry: ClearedLineMemory,
+    moveCaret: boolean,
+  ): Promise<void> => {
+    // Still in the origin category → restore into the live editor; the textarea
+    // shows this category's note, so an in-place re-insert is correct.
+    if (activeCategoryIdRef.current === entry.categoryId) {
+      const restored = insertLineAtIndex(
+        noteTextRef.current,
+        entry.originalLineIndex,
+        entry.reinsertText,
+      )
+      setNoteText(restored)
+      if (moveCaret) {
+        pendingCaretRef.current = lineStartOffset(
+          restored,
+          entry.originalLineIndex,
+        )
+      }
+      return
+    }
+    // Switched away → the live textarea now shows a DIFFERENT category's note, so
+    // writing there would corrupt it. Persist the line into the origin category's
+    // stored note directly (read-modify-write its on-disk text) so the line and
+    // the win never BOTH vanish. The debounce/flush effects only ever touch the
+    // *active* note, so this out-of-band write to an inactive category can't race
+    // them. (Worst case, if that category is re-opened mid-write, the line lands
+    // on disk and surfaces on its next load — eventual consistency, never loss.)
+    const api = window.brainDumpAPI
+    if (!api) return
+    try {
+      const stored = await api.note.get(entry.categoryId)
+      await api.note.set(
+        entry.categoryId,
+        insertLineAtIndex(stored, entry.originalLineIndex, entry.reinsertText),
+      )
+    } catch (error) {
+      log.error('BrainDump cross-category line restore failed', error)
+    }
+  }
+
+  /**
    * Clear-on-complete ON path: remove the just-completed line from the note the
    * *instant* Cmd/Ctrl+Enter fires, show the optimistic Undo toast immediately,
    * and run the Completed-create in the background. This kills the old "wait for
@@ -748,7 +803,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     lineIndex: BrainDumpLineIndex,
     originalLine: string,
     title: BrainDumpCompletedTitle,
-  ) => {
+  ): void => {
     if (activeCategoryId === null) {
       toast.error('Pick a category before checking items')
       return
@@ -806,21 +861,14 @@ export const BrainDumpEditor = function BrainDumpEditor({
             return null
           }
           // Create failed and the line is still gone. Restore it (the win never
-          // persisted) — but only while we're still in the originating category,
-          // else we'd write a stale line into a different category's note. This
-          // restore fires even after the 5 s window closed (outcome 'confirmed')
-          // — that is the whole point: without it the line AND the win would
-          // silently vanish. We do NOT move the caret: a background failure must
-          // not yank a user who is typing elsewhere.
-          if (activeCategoryIdRef.current === categoryId) {
-            setNoteText(
-              insertLineAtIndex(
-                noteTextRef.current,
-                entry.originalLineIndex,
-                entry.reinsertText,
-              ),
-            )
-          }
+          // persisted). This fires even after the 5 s window closed (outcome
+          // 'confirmed') — that is the whole point: without it the line AND the
+          // win would silently vanish. restoreClearedLineToCategory puts the line
+          // back in the live editor while we're still here, or into the origin
+          // category's STORED note once the user has switched away (never the
+          // wrong category's visible note). No caret move: a background failure
+          // must not yank a user who is typing elsewhere.
+          void restoreClearedLineToCategory(entry, false)
           // Terminal NOW: the failure handler has put the line back, so a late
           // Undo — the toast stays clickable through sonner's dismiss
           // exit-animation — must not restore a SECOND copy (undo early-returns
@@ -868,9 +916,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * clear toast's Undo action.
    *
    * Idempotent via `entry.outcome` so a double Undo (or undo racing a late
-   * failure) never re-inserts twice or double-deletes. Skips the text re-insert
-   * when the active category has changed since completion (re-inserting into a
-   * different category's note would corrupt it) but still deletes the row.
+   * failure) never re-inserts twice or double-deletes. Restores the verbatim
+   * line into its origin category — in the live editor when still there, else
+   * into that category's stored note via IPC — then deletes the row.
    *
    * @param entry - The completion's undo memory (mutated to `undone`).
    * @param createPromise - The background create; awaited for the row id.
@@ -879,7 +927,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const undoClearedCompletion = async (
     entry: ClearedLineMemory,
     createPromise: Promise<Completed['id'] | null>,
-  ) => {
+  ): Promise<void> => {
     // Idempotent: once the line is already back — via a prior Undo ('undone') or
     // the failure handler's restore ('restored') — do nothing. Re-inserting
     // would duplicate the line; this is the failure→Undo double-insert guard.
@@ -887,21 +935,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
     entry.outcome = 'undone'
     clearedLinesRef.current.delete(entry.token)
 
-    // Re-insert the verbatim line — but only if we're still in the category it
-    // came from. This IS a user action, so moving the caret to the restored
-    // line is desirable (unlike the background-failure path).
-    if (activeCategoryIdRef.current === entry.categoryId) {
-      const restored = insertLineAtIndex(
-        noteTextRef.current,
-        entry.originalLineIndex,
-        entry.reinsertText,
-      )
-      setNoteText(restored)
-      pendingCaretRef.current = lineStartOffset(
-        restored,
-        entry.originalLineIndex,
-      )
-    }
+    // Re-insert the verbatim line into the category it came from — in the live
+    // editor while still here (the caret moves to it, since this IS a user
+    // action), or into that category's STORED note once the user has switched
+    // away (so the line returns to category A, never category B's visible note).
+    await restoreClearedLineToCategory(entry, true)
 
     // Delete the server row once the create resolves. A failed create resolves
     // to null → nothing to delete.

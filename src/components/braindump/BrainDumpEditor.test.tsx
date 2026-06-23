@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactElement } from 'react'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
 import type { ToastT } from 'sonner'
@@ -46,8 +47,15 @@ vi.mock('@/hooks/useClerkQueryReady', () => ({
   useClerkQueryReady: () => true,
 }))
 
+// Controllable active floating category so a spec can flip the active category
+// mid-test (it drives activeCategoryId while sync is on). Defaults to 1 so every
+// existing spec keeps the single "General" category active.
+const { selectedCategoryRef } = vi.hoisted(() => ({
+  selectedCategoryRef: { current: 1 as number },
+}))
+
 vi.mock('@/hooks/useSelectedCategory', () => ({
-  useSelectedCategory: () => [1],
+  useSelectedCategory: () => [selectedCategoryRef.current],
 }))
 
 vi.mock('@/lib/orpc/client-query', () => ({
@@ -529,6 +537,8 @@ describe('BrainDumpEditor clear-on-complete', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
+    // Reset the active floating category — the cross-category spec mutates it.
+    selectedCategoryRef.current = 1
   })
 
   it('removes a finished line from the note immediately when clear-on-complete is on', async () => {
@@ -638,6 +648,11 @@ describe('BrainDumpEditor clear-on-complete', () => {
     const autoClose = vi
       .mocked(toast.success)
       .mock.calls.at(-1)?.[1]?.onAutoClose
+    // This spec only proves the LATE-failure path (undo window closed → outcome
+    // 'confirmed') if onAutoClose actually exists and runs. Without this guard an
+    // undefined onAutoClose would no-op and the test would silently fall back to
+    // exercising the 'pending' path — passing for the wrong reason.
+    expect(autoClose).toBeDefined()
     act(() => {
       autoClose?.({} as ToastT)
     })
@@ -817,5 +832,85 @@ describe('BrainDumpEditor clear-on-complete', () => {
       .mock.calls.at(-1)?.[1]?.onAutoClose
     expect(autoClose).toBeUndefined()
     expect(noteField).toHaveValue('- [x] buy milk')
+  })
+
+  it("restores the cleared line into its origin category's stored note when Undo fires after switching categories", async () => {
+    // Arrange — clear-on-complete on, with TWO categories. note.get is made
+    // category-aware so the assertion proves the line returns to category 1's
+    // REAL content, not an empty stand-in. This is the cross-category data-loss
+    // guard: completing in category 1, switching to 2, then Undo must put the
+    // line back into category 1's STORED note — never category 2's visible one.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    // Category 1 holds 'keep me'; every other category is empty.
+    api.note.get = vi.fn(async (id: number) => (id === 1 ? 'keep me' : ''))
+    const noteSet = vi.mocked(api.note.set)
+
+    const store = configureStore({
+      reducer: { preferences: preferencesReducer },
+      preloadedState: {
+        preferences: {
+          ...preferencesInitialState,
+          braindumpClearOnComplete: true,
+        },
+      },
+    })
+    const [generalCategory] = categories
+    if (!generalCategory)
+      throw new Error('expected the seeded General category')
+    const twoCategories: CategoryWithCount[] = [
+      generalCategory,
+      { ...generalCategory, id: 2, name: 'Work', isDefault: false },
+    ]
+    // Fresh element each render — passing the SAME element reference to rerender
+    // makes React bail out (reference-equal subtree) and never re-read the
+    // controllable useSelectedCategory mock, so the category switch wouldn't take.
+    const tree = (): ReactElement => (
+      <Provider store={store}>
+        <BrainDumpEditor categories={twoCategories} />
+      </Provider>
+    )
+    const { rerender } = render(tree())
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    // Seed two lines and park the caret on the checkbox line (index 1).
+    const value = 'keep me\n- [ ] buy milk'
+    fireEvent.change(noteField, { target: { value } })
+    const caret = value.length
+    noteField.selectionStart = caret
+    noteField.selectionEnd = caret
+
+    // Complete the checkbox line in category 1 → the line clears to 'keep me'.
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me')
+    })
+
+    // Act — switch the active floating category to 2 (the live textarea now
+    // shows category 2's empty note), THEN tap Undo. The toast's onClick still
+    // holds the category-1 completion via closure even though the swap cleared
+    // the in-memory map.
+    selectedCategoryRef.current = 2
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('') // category 2's empty note has loaded
+    })
+    noteSet.mockClear() // drop the category-swap flush write; assert only the restore
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the verbatim line is written back into category 1's STORED note
+    // at its original index via IPC, so neither the line nor the win is lost…
+    await waitFor(() => {
+      expect(noteSet).toHaveBeenCalledWith(1, 'keep me\n- [ ] buy milk')
+    })
+    // …and category 2's visible note was never touched.
+    expect(noteField).toHaveValue('')
   })
 })
