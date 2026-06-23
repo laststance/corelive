@@ -79,6 +79,8 @@ logs/
 claudedocs/
 _trials/
 .superpowers/
+# Project CLAUDE.md is kept local-only (holds prod test-account creds) — never commit
+/CLAUDE.md
 
 # Cursor
 .cursor
