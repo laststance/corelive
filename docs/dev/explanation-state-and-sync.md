@@ -20,12 +20,12 @@ Two state systems coexist, with a hard ownership boundary:
 
 | Owner             | What it holds                                                                                                             | Persistence                                                 | Verified at                                   |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------- |
-| **Redux Toolkit** | Client/device state only — two small slices: `electronSettings` (window chrome) + `preferences` (todo-experience toggles) | `localStorage` key `corelive-redux-state`, selective slices | `src/lib/redux/store.ts:28-53`                |
+| **Redux Toolkit** | Client/device state only — two small slices: `electronSettings` (window chrome) + `preferences` (todo-experience toggles) | `localStorage` key `corelive-redux-state`, selective slices | `src/lib/redux/store.ts:71-79`                |
 | **React Query**   | All server data, via oRPC over HTTP                                                                                       | `localStorage`, `gcTime` 1 week                             | `src/providers/QueryClientProvider.tsx:36-37` |
 
 ### Why the split
 
-Server data already has an owner — the database, reached through oRPC. Duplicating it into Redux would mean two copies that drift, two invalidation stories, and a fat persisted `localStorage` blob. So Redux is kept tiny on purpose: it persists only what the _client_ owns and the server never will (window-chrome preferences, sound/retention toggles). The store at `src/lib/redux/store.ts:28-31` combines exactly two reducers, and the persistence list at `src/lib/redux/store.ts:52` names exactly those two slices.
+Server data already has an owner — the database, reached through oRPC. Duplicating it into Redux would mean two copies that drift, two invalidation stories, and a fat persisted `localStorage` blob. So Redux is kept tiny on purpose: it persists only what the _client_ owns and the server never will (window-chrome preferences, sound/retention toggles). The store's `rootReducer` (`src/lib/redux/store.ts:35-38`) combines exactly two reducers, and the persistence list at `src/lib/redux/store.ts:75` names exactly those two slices.
 
 This also lines up with a Next.js 16 caching rule the project follows: Redux/Zustand state must **never** trigger `revalidatePath`/`revalidateTag`. Those are for cached `fetch` data; the oRPC + Prisma path does not use the Next.js fetch cache, and client state changes are not a server-cache concern. (See the project's TypeScript/Next.js rules; the canonical command list is `package.json` `"scripts"`.)
 
@@ -45,13 +45,13 @@ This is the threat model to keep in mind if you ever "simplify" sign-out back to
 
 ## Part 2 — The cross-window problem
 
-In the desktop build, CoreLive runs **multiple `BrowserWindow`s at once**: the main window (`/home`), the always-on-top **Floating Navigator** (`/floating-navigator`), and the **BrainDump** (`/braindump`). Each is a full, independent renderer. That means each has:
+In the desktop build, CoreLive runs **multiple `BrowserWindow`s at once** — the always-on-top **Floating Navigator** (`/floating-navigator`), the **BrainDump** (`/braindump`), and **Settings** (`/settings`) — alongside the full task app on `/home`, which since v0.14.0 runs **browser-only** (the dedicated Electron main window was retired; the desktop app keeps just the floating/braindump/settings panels — see [explanation-electron-architecture.md](./explanation-electron-architecture.md)). Each renderer — Electron window or `/home` browser tab — is full and independent. That means each has:
 
 - its **own** React Query cache (a fresh `QueryClient` per window),
 - its **own** Redux store + `localStorage`,
 - its **own** copy of every component's state.
 
-So if you complete a todo in the Floating Navigator, the main window's `TodoList` query cache knows nothing about it. If you rename a category in the main window, the Floating Navigator still shows the old name. **A mutation in one window is invisible to the others** until something tells them to refetch.
+So if you complete a todo in the Floating Navigator, a browser tab open on `/home` knows nothing about it — its `TodoList` query cache is a separate world. If you rename a category on `/home`, the Floating Navigator still shows the old name. **A mutation in one window is invisible to the others** until something tells them to refetch.
 
 This is not an Electron-only edge case, either — the same is true of two browser tabs. Electron just makes the multi-window case the _normal_ case, because the floating and braindump windows are core product surfaces, not afterthoughts.
 
@@ -95,25 +95,25 @@ Real wiring, verified in the tree:
 
 ### The paste-import **intent** channel (a ping with a different verb)
 
-`paste-import-channel.ts` shares the ping shape but is semantically different: it is an **intent**, not a data-refresh. The Floating Navigator's Import button lives in its own window and _cannot reach into the main window to open a dialog_. So it does two things together (`src/lib/paste-import-channel.ts:1-11`): calls the preload `focusMainWindow()` IPC to surface the main window, **and** broadcasts `open-completed-import`. The main window's `CompletedImportEntry` subscribes and opens its paste-import dialog. Producer: `FloatingNavigator`. Subscriber: `CompletedImportEntry`. This is why it gets its own channel rather than overloading `todo-sync` — "refetch your todos" and "please open a dialog over there" are different verbs.
+`paste-import-channel.ts` shares the ping shape but is semantically different: it is an **intent**, not a data-refresh. The Floating Navigator's Import button lives in its own window and _cannot reach into the `/home` window to open a dialog_. So it does two things together (`src/lib/paste-import-channel.ts:1-11`): calls the preload `focusMainWindow()` IPC to surface the primary `/home` task surface, **and** broadcasts `open-completed-import`. `/home`'s `CompletedImportEntry` subscribes and opens its paste-import dialog. Producer: `FloatingNavigator`. Subscriber: `CompletedImportEntry`. This is why it gets its own channel rather than overloading `todo-sync` — "refetch your todos" and "please open a dialog over there" are different verbs.
 
 ### Preferences — the stateful exception
 
-`preferences-sync-channel.ts` breaks the ping pattern on purpose: it is **Redux middleware** that carries a **full `PreferencesState` snapshot**, wired into the store at `src/lib/redux/store.ts:76`. The reason for the difference is in the design itself: the ping channels only need _"something changed → invalidate"_, but preferences must apply an **exact copy** of the toggle state in every window. You cannot "invalidate and refetch" a `localStorage` preference — there is no server round-trip to refetch from — so the value must travel on the wire.
+`preferences-sync-channel.ts` breaks the ping pattern on purpose: it is **Redux middleware** that carries a **full `PreferencesState` snapshot**, wired into the store at `src/lib/redux/store.ts:104-105`. The reason for the difference is in the design itself: the ping channels only need _"something changed → invalidate"_, but preferences must apply an **exact copy** of the toggle state in every window. You cannot "invalidate and refetch" a `localStorage` preference — there is no server round-trip to refetch from — so the value must travel on the wire.
 
 Carrying state across windows introduces two hazards a stateless ping never faces, and the middleware defends against both:
 
-1. **The echo loop.** If applying an inbound preference re-broadcast it, two windows would ping-pong forever. The guard (`src/lib/preferences-sync-channel.ts:19-22, 84-114`): only **user-initiated `set*` actions** are in `BROADCASTABLE_ACTION_TYPES` (`preferences/setCompletionSound`, `preferences/setRetainCompletedInList`). Inbound snapshots are applied via `hydratePreferences`, which is **deliberately excluded** from the broadcastable set — so applying a received value never echoes back out. Cross-window propagation and loop prevention live in the _same_ decision: which actions broadcast.
+1. **The echo loop.** If applying an inbound preference re-broadcast it, two windows would ping-pong forever. The guard (`src/lib/preferences-sync-channel.ts:40-51, 107-156`): only **user-initiated `set*` actions** are in `BROADCASTABLE_ACTION_TYPES` — the sound, retention, and braindump toggles (`preferences/setCompletionSound`, `preferences/setSoundMoment`, `preferences/setRetainCompletedInList`, the braindump-font setters, … 10 in all). Inbound snapshots are applied via `hydratePreferences`, which is **deliberately excluded** from the broadcastable set — so applying a received value never echoes back out. Cross-window propagation and loop prevention live in the _same_ decision: which actions broadcast.
 
-2. **Malformed payloads.** A snapshot from the wire is untrusted input. `isPreferencesSyncMessage` (`src/lib/preferences-sync-channel.ts:38-55`) validates the **inner fields**, not just that `state` is an object — both `completionSound` and `retainCompletedInList` must be `boolean`. This matters because the Redux selectors only coalesce `null`/`undefined` (see Part 4); a junk value like `completionSound: 'yes'` would otherwise be hydrated _and persisted_ unchanged. The validator is the gate that keeps channel garbage out of `localStorage`.
+2. **Malformed payloads.** A snapshot from the wire is untrusted input, and it clears **two** gates before it can touch the store. First `isPreferencesSyncEnvelope` (`src/lib/preferences-sync-channel.ts:69-79`) confirms only the **wrapper** — the right type tag plus a `state` field — deliberately _not_ the inner values. Then the inner snapshot is validated and coalesced through the Zod SSoT, `PreferencesStateSchema.safeParse` (`:117`): a legacy payload is accepted with new fields **defaulted**, an out-of-range `soundVolume` is **clamped**, and wrong-typed junk (e.g. `completionSound: 'yes'`) is **rejected wholesale** so it never reaches `localStorage`. Only **after** a successful parse does a legacy-only payload (carrying `completionSound` but no `soundMoments`) get folded: `foldLegacyCompletionSoundIntoMoments` (`:124-130`) materializes the moment map from the raw legacy flag and **overrides** `soundMoments` on the parsed snapshot, mirroring the persisted `migratePersistedState` path (Part 4) so inbound and on-disk legacy data agree. Only that snapshot is dispatched via `hydratePreferences`. Zod (reject wrong types) guards the untrusted **wire**; deepMerge (preserve-and-fill) guards the trusted **persisted** blob — different tactics for different trust levels (see Part 4).
 
-Like the pings, the middleware is SSR-safe: when `BroadcastChannel` is unavailable it returns a transparent pass-through (`preferences-sync-channel.ts:78-80`).
+Like the pings, the middleware is SSR-safe: when `BroadcastChannel` is unavailable it returns a transparent pass-through (`preferences-sync-channel.ts:101-103`).
 
 > **Adding a channel?** This page is the _why_. For the step-by-step recipe — copy the template, name the channel/event, broadcast at the mutation site, subscribe-and-clean-up in an effect, SSR-guard, and (for stateful channels) add the loop guard — follow [howto-add-sync-channel.md](./howto-add-sync-channel.md). The two easy-to-forget mistakes it guards against are skipping `channel.close()` and omitting the loop guard on a stateful channel.
 
 ---
 
-## Part 4 — Two sync paths, two destinations (and a defensive-selector note)
+## Part 4 — Two sync paths, two destinations (and how persisted state survives a version-up)
 
 It is worth stating plainly that the two Redux slices sync **differently**, because they have different destinations:
 
@@ -124,9 +124,15 @@ It is worth stating plainly that the two Redux slices sync **differently**, beca
 
 `ElectronStartupSync` (`src/components/electron/ElectronStartupSync.tsx`) pushes the persisted `hideAppIcon` / `showInMenuBar` values to the main process after Redux hydrates, so a toggle saved as ON doesn't "lie" after a restart (the dock policy and tray are runtime-only and reset at boot). Both slices still persist to the **same** `localStorage` blob; only their _sync targets_ differ. The Electron-facing detail lives in [explanation-electron-architecture.md](./explanation-electron-architecture.md) and [reference-electron.md](./reference-electron.md); what matters here is the shape of the rule — **renderer↔renderer is `BroadcastChannel`, renderer→OS is IPC.**
 
-### Defensive `?? DEFAULT` selectors
+### How persisted preferences survive a version-up (deepMerge, migrate, defensive selectors)
 
-One consequence of persisting Redux to `localStorage` in a **pre-launch repo where slices gain fields**: the storage middleware shallow-merges a user's old persisted blob over the new initial state, which means a field _added_ after a user last persisted will be **absent** (`undefined`) at read time. The preferences selectors therefore read through `?? DEFAULT` to coalesce `undefined` back to the default rather than surfacing `undefined` into the UI. This is also why the cross-window validator (Part 3) checks `typeof === 'boolean'` and not merely "not null": the selectors only protect against `null`/`undefined`, so the _channel_ must reject other junk before it is persisted. The two defenses are complementary — one guards reads, the other guards writes.
+Persisting Redux to `localStorage` in a **pre-launch repo where slices keep gaining fields** raises one hazard: a user who persisted an _older_ blob is missing whatever fields shipped since. Three layers handle it, and they must be kept distinct — they are not the same defense:
+
+1. **`merge: deepMerge` (`store.ts:78`) — the version-up firewall.** On every rehydrate the reconciler recursively fills _missing_ nested fields from the current defaults while preserving every user-set value. So a field added after a user last persisted reads back its **default**, not `undefined` — an update never silently "reverts" a preference. The authoritative why is the source comment at `store.ts:47-67`; it also explains why deepMerge beats re-parsing the slice through Zod: deepMerge **preserves** the user's own data, where Zod would **reject the whole slice** (resetting everything) on a single wrong-typed field — the wrong trade-off for trusted on-disk data.
+2. **`version` + `migrate` (`store.ts:76-77`) — one-time shape transforms.** Bumping `STORAGE_SCHEMA_VERSION` runs `migratePersistedState` **once** on the next rehydrate to transform _incompatible_ shapes (today: folding a legacy `completionSound` boolean into the `soundMoments` map). It **must stay total** — if `migrate` throws, the middleware wipes **all** persisted state.
+3. **`?? DEFAULT` selectors (`preferencesSlice.ts:251-346`) — read-time backstop.** The preference selectors still coalesce `undefined` to a default, but with deepMerge filling fields upstream this is now **defense-in-depth**, not the primary field-drop guard it once was (in the older shallow-merge design it was the _only_ guard). It still covers a corrupt blob, a not-yet-deep-merged path, or a `| undefined` type seam, and it carries the legacy `completionSound`→`complete`-moment read migration.
+
+Note the division of labor with the cross-window validator (Part 3): **deepMerge preserves-and-fills** trusted on-disk data, while **Zod rejects** untrusted wire data. Same goal — never surface `undefined` or junk into the UI — but opposite tactics, because persisted data is the user's own and a wire snapshot is not.
 
 ---
 
@@ -147,11 +153,23 @@ The derived-stat functions, all in `src/lib`:
 
 Three conventions make this pattern hold together:
 
-1. **No extra oRPC calls.** These are client-side math over data already in the cache, so adding a stat does not add a request, a loading state, or a thing to keep in sync across windows. The cache is the single source; the stats are views of it. `useHeatmapData` **memoizes** `dataByDate` on `data` identity (`useHeatmapData.ts:58-70`) specifically so each consumer doesn't get a fresh `Map` per render and bust the downstream `useMemo` dep keys.
+1. **No extra oRPC calls.** These are client-side math over data already in the cache, so adding a stat does not add a request, a loading state, or a thing to keep in sync across windows. The cache is the single source; the stats are views of it. `useHeatmapData` **memoizes** `dataByDate` on `data` identity (`useHeatmapData.ts:69-81`) specifically so each consumer doesn't get a fresh `Map` per render and bust the downstream `useMemo` dep keys (this referential-stability discipline is load-bearing — see the next subsection).
 
 2. **Caller-supplied `today` for determinism.** Every date function takes `today: Date` as an explicit argument instead of reading the wall clock, and operates purely on `YYYY-MM-DD` **UTC** keys (`calc-streak.ts:120`, `shiftIsoDate.ts:24`). This makes them deterministic for tests and SSR, and **DST-safe by construction** — UTC has no DST. The keys deliberately match the heatmap's bucketing (`completedAt.toISOString().split('T')[0]`), so a function's output is always a valid `dataByDate` lookup key. The Year-in-Review tests use fake timers precisely to prove the auto-open gate ignores the wall clock and reads only its argument.
 
 3. **A shared trend vocabulary.** Both the weekly and per-category aggregators classify a trend as one of `firstWeek` / `flat` / `new` / `percent` — `firstWeek` for a genuinely empty heatmap, `flat` for older-only activity, `new` to avoid a `+Infinity%` when the prior window was zero, `percent` otherwise. The vocabulary is **duplicated** across the two modules rather than shared, on purpose, so each can be unit-tested standalone (the comment in `aggregate-category-trends.ts` explains this).
+
+### Referential stability is load-bearing — memoize derived collections
+
+Deriving state cheaply (above) only stays cheap if each derivation is **referentially stable** across renders. A fresh `Map`/array built every render is correct by _value_ but a new reference by _identity_ — and the moment that identity feeds a `useEffect` dep or a downstream `useMemo` key, the dep churns every render. When the effect also calls `setState` with a not-`Object.is`-equal value, that churn becomes a **self-sustaining re-render loop**.
+
+This is not hypothetical: it shipped and reached production. `TodoList` built `pendingTodosFromQuery = mapTodos(...)` — a new array each render — and fed it to a sync effect `useCycleEffect(() => setLocalPendingTodos(pendingTodosFromQuery), [pendingTodosFromQuery])`. New ref every render → dep always differs → `setState` → re-render → repeat (~4196 DOM mutations / 2 s on an _idle_ `/home`). The thread never pegged (the effect yields between passes), so it surfaced not as a freeze but as something subtler: the continuous concurrent re-render **starved App Router's low-priority navigation transition**, so clicking the sidebar fetched the destination RSC but **never committed** — the user-visible "Settings button does nothing / can't leave `/home`" bug (PR #105, 2026-06-24).
+
+Three things worth carrying forward:
+
+- **Memoize the derived collection at its source.** The fix `useMemo`s `pendingTodosFromQuery` and `categoryMap`, and hoists `mapTodos` to module scope so it isn't itself an effect dependency. `useHeatmapData` memoizes its `{ heatmapValues, dataByDate }` on `[data]` for exactly this reason (point 1 above) — TanStack Query's structural sharing keeps `data` referentially stable across refetches, so the memo holds.
+- **Do not rely on the React Compiler for referential stability.** `reactCompiler: true` was enabled, yet the loop reproduced **identically** compiler-ON and compiler-OFF — the compiler _bailed_ on this component. Treat compiler memoization as an optimization, never a correctness guarantee; the origin regression was PR #102 dropping manual memos to "let the compiler handle it," and here it didn't.
+- **The firebreak is the `setState` value, not the dep.** An unstable effect dep only _loops_ when the effect sets a fresh, non-equal value each pass. `setState(boolean)` / setState-to-the-same-primitive can't loop (React bails on `Object.is`) — which is why the heatmap consumers that key effects on `dataByDate` but only call `setOpen(boolean)` re-fire without self-sustaining. Regression-guarded by `e2e/web/sidebar-navigation.spec.ts`, which **clicks** the sidebar (not `goto`) and asserts the URL leaves `/home`.
 
 ### These functions encode product philosophy — don't "improve" the math
 
@@ -204,8 +222,9 @@ A quick map of "if a future engineer does X, Y regresses" — the most durable t
 - **Put server data in Redux** → two sources of truth, a fat persisted blob, and the cross-window sync story doubles (you'd have to broadcast the data, not just "refetch").
 - **Replace the sign-out reset with `clear()`** → in-flight mutations leak user A's data into user B's cache on a shared device (`QueryClientProvider.tsx:98-143`).
 - **Make a ping channel carry data** → you re-create duplicate state; the pings exist _because_ the receiver should refetch the server truth, not trust the wire.
-- **Add a stateful channel without the loop guard** → infinite echo between windows; only `set*` actions may broadcast, and the apply action (`hydratePreferences`) must be excluded (`preferences-sync-channel.ts:19-22`).
-- **Drop the channel's field validation** → malformed values get persisted, because the selectors only coalesce `null`/`undefined` (`preferences-sync-channel.ts:38-55`).
+- **Add a stateful channel without the loop guard** → infinite echo between windows; only `set*` actions may broadcast, and the apply action (`hydratePreferences`) must be excluded (`preferences-sync-channel.ts:40-51`).
+- **Drop the channel's Zod validation** → wrong-typed wire junk gets hydrated and persisted; the inbound snapshot is gated by `PreferencesStateSchema.safeParse` (defaults / clamps / rejects), not the envelope shape-check alone (`preferences-sync-channel.ts:117`).
+- **Feed an un-memoized derived `Map`/array into an effect dep or `useMemo` key** → an unstable dep drives a concurrent re-render loop that starves App Router navigation (the "Settings does nothing" bug); memoize derived collections at their source and don't trust the React Compiler for referential stability (`TodoList.tsx`, `useHeatmapData.ts:69-81`; regression guard `e2e/web/sidebar-navigation.spec.ts`).
 - **Add recency/streak weighting to `heatmap-intensity`** → breaks "temperature = pride" and the no-dedup invariant ([DESIGN.md](../../DESIGN.md), `heatmap-intensity.ts:1-13`).
 - **Import a UI component into `global-error.tsx`** → the last line of defense can fail through the same import graph it exists to catch (`global-error.tsx:3-21`).
 - **Call a preload method behind only a namespace check** → a frozen preload throws a synchronous `TypeError` from the root layout, escaping `error.tsx` (`ElectronStartupSync.tsx:95-120`).
