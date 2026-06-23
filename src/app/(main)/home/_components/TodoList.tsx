@@ -9,7 +9,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
-import { Suspense, useRef, useState } from 'react'
+import { Suspense, useMemo, useRef, useState } from 'react'
 
 import {
   AlertDialog,
@@ -66,6 +66,45 @@ const TODO_QUERY_OFFSET = 0
 const DECIMAL_RADIX = 10
 
 /**
+ * Converts raw API todo payloads into UI-ready Todo objects, enriching each row
+ * with its category name/color from the lookup map. Hoisted to module scope (and
+ * taking `categoryMap` as an argument instead of a closure) so a `useMemo` caller
+ * can key it on stable inputs WITHOUT this function becoming a memo dependency —
+ * an in-component closure here would force exhaustive-deps to list it, bust the
+ * memo every render, and re-open the /home re-render loop this extraction fixes.
+ * @param todos - Raw todo payloads from the API (unknown until array-checked).
+ * @param categoryMap - id → category lookup for name/color enrichment.
+ * @returns
+ * - A normalized list of Todo objects
+ * - An empty list when the input is not an array
+ * @example
+ * mapTodos([{ id: 1, text: 'A', completed: false, createdAt: Date.now() }], new Map())
+ * // => [{ id: '1', text: 'A', completed: false, createdAt: Date, ... }]
+ */
+function mapTodos(
+  todos: unknown,
+  categoryMap: Map<number, CategoryWithCount>,
+): Todo[] {
+  if (!Array.isArray(todos)) {
+    return []
+  }
+
+  return todos.map((todo) => {
+    const category = todo.categoryId ? categoryMap.get(todo.categoryId) : null
+    return {
+      id: todo.id.toString(),
+      text: todo.text,
+      completed: todo.completed,
+      createdAt: new Date(todo.createdAt),
+      notes: todo.notes,
+      categoryId: todo.categoryId,
+      categoryName: category?.name ?? null,
+      categoryColor: category?.color ?? null,
+    }
+  })
+}
+
+/**
  * Renders the primary todo list view with pending and completed tasks.
  * @returns
  * - The todo list UI for the home screen
@@ -109,8 +148,16 @@ export const TodoList = function TodoList() {
     ...orpc.category.list.queryOptions({}),
     enabled: isClerkQueryReady,
   })
-  const categoryMap = new Map<number, CategoryWithCount>(
-    (categoryData?.categories ?? []).map((c) => [c.id, c]),
+  // Memoized on the query data so the map reference only changes when the
+  // categories actually change. A fresh Map every render would bust the
+  // `pendingTodosFromQuery` memo below (it depends on this), re-opening the
+  // idle re-render loop on /home.
+  const categoryMap = useMemo(
+    () =>
+      new Map<number, CategoryWithCount>(
+        (categoryData?.categories ?? []).map((c) => [c.id, c]),
+      ),
+    [categoryData?.categories],
   )
 
   // Fetch pending todos (filtered by selected category)
@@ -259,38 +306,18 @@ export const TodoList = function TodoList() {
     setRetainClearDialogOpen(false)
   }
 
-  // Transform data into Todo component format
-  /**
-   * Converts raw API todo data into UI-ready Todo objects.
-   * @param todos - Raw todo payloads from the API.
-   * @returns
-   * - A normalized list of Todo objects
-   * - An empty list when the input is not an array
-   * @example
-   * mapTodos([{ id: 1, text: 'A', completed: false, createdAt: Date.now() }])
-   * // => [{ id: '1', text: 'A', completed: false, createdAt: Date }]
-   */
-  const mapTodos = (todos: unknown): Todo[] => {
-    if (!Array.isArray(todos)) {
-      return []
-    }
-
-    return todos.map((todo) => {
-      const category = todo.categoryId ? categoryMap.get(todo.categoryId) : null
-      return {
-        id: todo.id.toString(),
-        text: todo.text,
-        completed: todo.completed,
-        createdAt: new Date(todo.createdAt),
-        notes: todo.notes,
-        categoryId: todo.categoryId,
-        categoryName: category?.name ?? null,
-        categoryColor: category?.color ?? null,
-      }
-    })
-  }
-
-  const pendingTodosFromQuery = mapTodos(pendingData?.todos)
+  // Derived list for rendering, memoized on the STABLE query inputs (TanStack
+  // keeps `pendingData.todos` referentially stable via structural sharing) so
+  // the reference changes only when the data actually changes. Mapping in render
+  // with a fresh array (the prior code) made the sync effect below — and the D8
+  // fade effect further down — see new deps every render → setState → re-render
+  // → an idle re-render loop that starved App Router's low-priority navigation
+  // transition, so Settings / Skill-tree never opened from /home. `mapTodos` is
+  // module-scope so it is not a memo dependency. (Investigated 2026-06-24.)
+  const pendingTodosFromQuery = useMemo(
+    () => mapTodos(pendingData?.todos, categoryMap),
+    [pendingData?.todos, categoryMap],
+  )
 
   // Sync local state with query data when it changes
   useCycleEffect(() => {
