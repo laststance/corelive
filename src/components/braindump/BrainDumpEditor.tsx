@@ -110,12 +110,15 @@ type ClearedLineMemory = {
   /** Verbatim removed line, restored as-is on undo/failure (preserves spacing). */
   reinsertText: string
   /**
-   * Lifecycle guard for the success/failure/undo/auto-close overlap:
+   * Lifecycle guard for the success/failure/undo/auto-close overlap. `undone`
+   * and `restored` are BOTH terminal "line is already back" states — undo
+   * early-returns on either so it can never re-insert a second copy.
    * - `pending`   — create in flight, no undo yet
-   * - `undone`    — user clicked Undo (line already restored; suppress failure re-insert)
-   * - `confirmed` — undo window elapsed (a late failure still restores → no silent loss)
+   * - `undone`    — user clicked Undo (line restored by undo; suppress failure re-insert)
+   * - `confirmed` — undo window elapsed with no undo (a late failure still restores → no silent loss)
+   * - `restored`  — the create FAILED and the failure handler already put the line back
    */
-  outcome: 'pending' | 'undone' | 'confirmed'
+  outcome: 'pending' | 'undone' | 'confirmed' | 'restored'
   /** sonner toast id, filled right after the create wires up so the failure
    *  handler can dismiss the optimistic success toast. */
   toastId: string | number | undefined
@@ -781,24 +784,35 @@ export const BrainDumpEditor = function BrainDumpEditor({
       .then(
         (created): Completed['id'] | null => {
           entry.completedId = created.id
+          // The row is now persisted, so drop the map entry eagerly instead of
+          // waiting for onAutoClose. Sonner PAUSES the close timer while the
+          // window is hidden, and BrainDump windows are hidden (not destroyed)
+          // between toggles — so onAutoClose can be deferred indefinitely, which
+          // would leak this entry across a long session. Undo still works after
+          // this delete: undoClearedCompletion holds `entry` via closure, not
+          // via the map (the map only serves the category-swap bulk-clear).
+          clearedLinesRef.current.delete(token)
           // Skip the sibling-view sync when the user already undid — the row is
           // about to be deleted by undoClearedCompletion's awaited delete.
           if (entry.outcome !== 'undone') void syncCompletedAcrossViews()
           return created.id
         },
         (error): null => {
-          // Create failed → the win never persisted but the line is already
-          // gone. Restore it unless the user already undid, and only when we're
-          // still in the originating category (else we'd write a stale line
-          // into a different category's note). This restore fires even after
-          // the 5 s window closed (outcome 'confirmed') — that is the whole
-          // point: without it the line AND the win would silently vanish. We do
-          // NOT move the caret here: a background failure must not yank a user
-          // who is typing elsewhere.
-          if (
-            entry.outcome !== 'undone' &&
-            activeCategoryIdRef.current === categoryId
-          ) {
+          // The user already undid → the line is back and they abandoned this
+          // completion, so the create's failure is irrelevant to them: leave the
+          // note alone (undo restored it) and stay silent (no error toast).
+          if (entry.outcome === 'undone') {
+            clearedLinesRef.current.delete(token)
+            return null
+          }
+          // Create failed and the line is still gone. Restore it (the win never
+          // persisted) — but only while we're still in the originating category,
+          // else we'd write a stale line into a different category's note. This
+          // restore fires even after the 5 s window closed (outcome 'confirmed')
+          // — that is the whole point: without it the line AND the win would
+          // silently vanish. We do NOT move the caret: a background failure must
+          // not yank a user who is typing elsewhere.
+          if (activeCategoryIdRef.current === categoryId) {
             setNoteText(
               insertLineAtIndex(
                 noteTextRef.current,
@@ -807,6 +821,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
               ),
             )
           }
+          // Terminal NOW: the failure handler has put the line back, so a late
+          // Undo — the toast stays clickable through sonner's dismiss
+          // exit-animation — must not restore a SECOND copy (undo early-returns
+          // on 'restored'). Set before dismissing the toast for that reason.
+          entry.outcome = 'restored'
           clearedLinesRef.current.delete(token)
           if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
           toast.error(
@@ -861,7 +880,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
     entry: ClearedLineMemory,
     createPromise: Promise<Completed['id'] | null>,
   ) => {
-    if (entry.outcome === 'undone') return
+    // Idempotent: once the line is already back — via a prior Undo ('undone') or
+    // the failure handler's restore ('restored') — do nothing. Re-inserting
+    // would duplicate the line; this is the failure→Undo double-insert guard.
+    if (entry.outcome === 'undone' || entry.outcome === 'restored') return
     entry.outcome = 'undone'
     clearedLinesRef.current.delete(entry.token)
 

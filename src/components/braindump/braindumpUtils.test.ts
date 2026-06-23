@@ -207,6 +207,24 @@ describe('insertLineAtIndex', () => {
     expect(restored).toBe(original)
   })
 
+  it('drops the trailing blank line when the sole content line is cleared then restored (known asymmetry)', () => {
+    // Arrange — one line PLUS a trailing newline (the user typed a line then hit
+    // Enter). `removeLineAtIndex` already collapses BOTH 'buy milk' and
+    // 'buy milk\n' to '', so the trailing blank can never be recovered — this
+    // pins that as intentional, not a latent bug. We keep the single-line
+    // empty-document round-trip lossless (the `text === ''` early return) at the
+    // cost of this trailing newline; restoring content beats a spurious blank.
+    const original = 'buy milk\n'
+
+    // Act — clear line 0, then restore it.
+    const cleared = removeLineAtIndex(original, 0)
+    const restored = insertLineAtIndex(cleared, 0, 'buy milk')
+
+    // Assert — the line content returns; the trailing blank line is dropped.
+    expect(cleared).toBe('')
+    expect(restored).toBe('buy milk')
+  })
+
   it('clamps an out-of-range index to the document end', () => {
     // Arrange
     const cleared = 'a'

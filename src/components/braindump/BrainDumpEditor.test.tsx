@@ -649,6 +649,87 @@ describe('BrainDumpEditor clear-on-complete', () => {
     expect(noteField).toHaveValue('buy milk')
   })
 
+  it('does not duplicate the line when Undo is tapped after a late failure already restored it', async () => {
+    // Arrange — the create rejects, so the failure handler restores the line.
+    // Sonner's dismiss runs an exit animation, leaving the Undo button clickable
+    // for a few hundred ms, so a tap AFTER the restore must NOT re-insert a
+    // SECOND copy of the line (silent note corruption — the exact failure mode
+    // this feature exists to prevent).
+    completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    const value = 'keep me\n- [ ] buy milk'
+    fireEvent.change(noteField, { target: { value } })
+    const caret = value.length // caret at end of the second line
+    noteField.selectionStart = caret
+    noteField.selectionEnd = caret
+
+    // Act 1 — complete the second line; its background create rejects and the
+    // failure handler puts the verbatim line back at index 1. The error toast
+    // is the signal the failure handler has finished.
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled()
+    })
+    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+
+    // Act 2 — tap Undo AFTER the failure already restored the line.
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the line is present exactly ONCE, never doubled.
+    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+  })
+
+  it('stays silent when the create fails after the user already undid', async () => {
+    // Arrange — hold the create in flight so the user can Undo FIRST, then make
+    // it reject. The user abandoned the completion, so a late create failure is
+    // irrelevant to them: no error toast, and no second re-insert of the line.
+    let rejectCreate: (reason: Error) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete (line clears), Undo (line restored, create still pending),
+    // THEN the held create rejects.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+    expect(noteField).toHaveValue('buy milk') // restored by Undo
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+    })
+
+    // Assert — the abandoned completion's failure surfaces NO error toast, and
+    // the line stays put (the failure handler must not re-insert a second copy).
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(noteField).toHaveValue('buy milk')
+  })
+
   it('restores the line with its exact leading whitespace on undo (verbatim, not trimmed)', async () => {
     // Arrange — a plain line the user indented with leading spaces.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
