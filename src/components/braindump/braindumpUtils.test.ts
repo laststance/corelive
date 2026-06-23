@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   COMPLETED_TITLE_MAX_LENGTH,
+  insertLineAtIndex,
+  lineStartOffset,
   markPlainLineCompleted,
   normalizeCompletedTitle,
   parseAllCheckboxes,
@@ -167,6 +169,107 @@ describe('removeLineAtIndex', () => {
     // Act + Assert
     expect(removeLineAtIndex(before, 5)).toBe(before)
     expect(removeLineAtIndex(before, -1)).toBe(before)
+  })
+})
+
+describe('insertLineAtIndex', () => {
+  it('re-inserts an undone line back at its original middle position', () => {
+    // Arrange — the line '- [ ] b' was optimistically cleared from between a and c.
+    const cleared = 'a\nc'
+
+    // Act — Undo puts it back at index 1.
+    const restored = insertLineAtIndex(cleared, 1, '- [ ] b')
+
+    // Assert
+    expect(restored).toBe('a\n- [ ] b\nc')
+  })
+
+  it('restores the only line without leaving a trailing blank line', () => {
+    // Arrange — clearing the single line emptied the note.
+    const cleared = ''
+
+    // Act — Undo restores the original sole line.
+    const restored = insertLineAtIndex(cleared, 0, '- [ ] buy milk')
+
+    // Assert — exactly the line, no '- [ ] buy milk\n' tail.
+    expect(restored).toBe('- [ ] buy milk')
+  })
+
+  it('round-trips a remove then insert back to the original text', () => {
+    // Arrange
+    const original = '- [ ] one\n- [ ] two\n- [ ] three'
+
+    // Act — clear the middle line, then undo by re-inserting it.
+    const cleared = removeLineAtIndex(original, 1)
+    const restored = insertLineAtIndex(cleared, 1, '- [ ] two')
+
+    // Assert
+    expect(restored).toBe(original)
+  })
+
+  it('clamps an out-of-range index to the document end', () => {
+    // Arrange
+    const cleared = 'a'
+
+    // Act — a drifted index past the end still lands in-document.
+    const restored = insertLineAtIndex(cleared, 9, 'b')
+
+    // Assert
+    expect(restored).toBe('a\nb')
+  })
+
+  it('inserts at the document head for a negative index', () => {
+    // Arrange
+    const cleared = 'b\nc'
+
+    // Act
+    const restored = insertLineAtIndex(cleared, -3, 'a')
+
+    // Assert
+    expect(restored).toBe('a\nb\nc')
+  })
+})
+
+describe('lineStartOffset', () => {
+  it('returns the caret offset at the start of a middle line', () => {
+    // Arrange — 'a' (len 1) + '\n' (1) puts line 1 at offset 2.
+    const text = 'a\nbb\nccc'
+
+    // Act
+    const offset = lineStartOffset(text, 1)
+
+    // Assert
+    expect(offset).toBe(2)
+  })
+
+  it('returns the caret offset at the start of the third line', () => {
+    // Arrange — 'a\n'(2) + 'bb\n'(3) puts line 2 at offset 5.
+    const text = 'a\nbb\nccc'
+
+    // Act
+    const offset = lineStartOffset(text, 2)
+
+    // Assert
+    expect(offset).toBe(5)
+  })
+
+  it('drops the caret at the document end when the index is past the last line', () => {
+    // Arrange — completing the final line leaves nothing to shift up into its slot.
+    const text = 'a\nbb\nccc'
+
+    // Act — index 3 is past the 3 lines (0..2).
+    const offset = lineStartOffset(text, 3)
+
+    // Assert — clamp to the document length.
+    expect(offset).toBe(8)
+  })
+
+  it('returns 0 for the first line', () => {
+    // Arrange
+    const text = 'first\nsecond'
+
+    // Act + Assert
+    expect(lineStartOffset(text, 0)).toBe(0)
   })
 })
 

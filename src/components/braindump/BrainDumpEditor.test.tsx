@@ -531,7 +531,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
     completedMutateAsync.mockResolvedValue({ id: 1 })
   })
 
-  it('clears a finished line once its undo window closes when clear-on-complete is on', async () => {
+  it('removes a finished line from the note immediately when clear-on-complete is on', async () => {
     // Arrange — the editor with clear-on-complete opted in.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -542,28 +542,22 @@ describe('BrainDumpEditor clear-on-complete', () => {
     renderEditor({ braindumpClearOnComplete: true })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
-    // Act — complete the line, then simulate the undo window elapsing with no
-    // Undo (Sonner fires the success toast's onAutoClose on the timeout).
+    // Act — complete the only line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
-    await waitFor(() => {
-      expect(noteField).toHaveValue('- [x] buy milk')
-    })
-    const autoClose = vi
-      .mocked(toast.success)
-      .mock.calls.at(-1)?.[1]?.onAutoClose
-    // onAutoClose ignores its ToastT arg (it re-resolves the line from the ref),
-    // so an empty stub stands in for the unused parameter.
-    act(() => {
-      autoClose?.({} as ToastT)
-    })
 
-    // Assert — the finished line is dropped, leaving the scratchpad clean.
-    expect(noteField).toHaveValue('')
+    // Assert — the line is gone instantly (no server round-trip, no 5 s wait),
+    // and the Completed create still fired in the background.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'buy milk',
+    })
   })
 
-  it('keeps a finished line that was undone before its window closed (clear self-suppresses)', async () => {
-    // Arrange — clear-on-complete on; complete a line, then manually uncheck it
-    // (Cmd+Enter on the `- [x]` line) before the undo window elapses.
+  it('undo re-inserts the cleared line at its original position', async () => {
+    // Arrange — clear-on-complete on, two lines so the re-insert index matters.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
     installBrainDumpAPI({
@@ -572,18 +566,74 @@ describe('BrainDumpEditor clear-on-complete', () => {
     })
     renderEditor({ braindumpClearOnComplete: true })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
-    await waitFor(() => {
-      expect(noteField).toHaveValue('- [x] buy milk')
-    })
-
-    // Act — manually uncheck (re-fire Cmd+Enter on the checked line), then fire
-    // the original toast's onAutoClose as the window would.
-    noteField.selectionStart = 1
-    noteField.selectionEnd = 1
+    const value = 'keep me\n- [ ] buy milk'
+    fireEvent.change(noteField, { target: { value } })
+    const caret = value.length // caret at end of the second line
+    noteField.selectionStart = caret
+    noteField.selectionEnd = caret
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
     await waitFor(() => {
-      expect(noteField).toHaveValue('- [ ] buy milk')
+      expect(noteField).toHaveValue('keep me')
+    })
+
+    // Act — click Undo on the optimistic toast (onClick ignores its event arg).
+    // sonner types `action` as `Action | ReactNode`; in this editor it's always
+    // the Action object, so narrow to its no-arg onClick (our handler ignores
+    // the event) before invoking.
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the verbatim line returns at index 1, not appended at the end.
+    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+  })
+
+  it('restores the cleared line when the completion create fails', async () => {
+    // Arrange — the create rejects for this completion.
+    completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete a line whose background create then rejects.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — the verbatim line comes back when the create fails.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk')
+    })
+  })
+
+  it('still restores the cleared line when the create rejects AFTER the undo window closed', async () => {
+    // Arrange — hold the create in flight so the undo window can close (its
+    // onAutoClose fires) BEFORE the create rejects. Without the late-failure
+    // restore, the line AND the win vanish silently — the bug this guards.
+    let rejectCreate: (reason: Error) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete (line clears), let the undo window elapse with no Undo
+    // (Sonner fires onAutoClose on the timeout), THEN the create rejects.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
     })
     const autoClose = vi
       .mocked(toast.success)
@@ -591,10 +641,75 @@ describe('BrainDumpEditor clear-on-complete', () => {
     act(() => {
       autoClose?.({} as ToastT)
     })
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+    })
 
-    // Assert — the now-unchecked line is NOT a checked match, so it survives
-    // instead of being cleared out from under the user.
-    expect(noteField).toHaveValue('- [ ] buy milk')
+    // Assert — the line is restored even though its undo window already closed.
+    expect(noteField).toHaveValue('buy milk')
+  })
+
+  it('restores the line with its exact leading whitespace on undo (verbatim, not trimmed)', async () => {
+    // Arrange — a plain line the user indented with leading spaces.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete the indented line, then undo it.
+    fireCompleteCommandOnFirstLine(noteField, '   buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    // sonner types `action` as `Action | ReactNode`; in this editor it's always
+    // the Action object, so narrow to its no-arg onClick (our handler ignores
+    // the event) before invoking.
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the three leading spaces survive; the DB got the trimmed title
+    // ('buy milk') but the note restores the line exactly as typed.
+    expect(noteField).toHaveValue('   buy milk')
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'buy milk',
+    })
+  })
+
+  it('keeps the caret out of the following line after the optimistic clear', async () => {
+    // Arrange — three lines; completing the middle one shifts 'c' up into its slot.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    const value = 'a\n- [ ] buy milk\nc'
+    fireEvent.change(noteField, { target: { value } })
+    // Park the caret at the end of the middle line (offset 16) before completing.
+    const caret = 'a\n- [ ] buy milk'.length
+    noteField.selectionStart = caret
+    noteField.selectionEnd = caret
+
+    // Act — complete the middle line.
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Assert — the line is gone and the caret sits at the START of the line that
+    // shifted up (offset 2 = after 'a\n'), not stranded mid-'c' where the next
+    // keystroke would corrupt an unrelated line.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('a\nc')
+    })
+    expect(noteField.selectionStart).toBe(2)
   })
 
   it('keeps every finished line in place by default (no auto-close hook wired)', async () => {
@@ -614,68 +729,12 @@ describe('BrainDumpEditor clear-on-complete', () => {
       expect(noteField).toHaveValue('- [x] buy milk')
     })
 
-    // Assert — the success toast carries NO onAutoClose hook, so the finished
-    // line stays put (the clear is strictly opt-in).
+    // Assert — OFF path unchanged: the success toast carries NO onAutoClose
+    // hook, so the finished `[x]` line stays put (the clear is strictly opt-in).
     const autoClose = vi
       .mocked(toast.success)
       .mock.calls.at(-1)?.[1]?.onAutoClose
     expect(autoClose).toBeUndefined()
     expect(noteField).toHaveValue('- [x] buy milk')
-  })
-
-  it('still deletes the right Completed row after an earlier line was auto-cleared', async () => {
-    // Arrange — clear-on-complete on, with two finished lines whose Completed
-    // rows have distinct ids (titles repeat by design — repetition is a feature).
-    completedMutateAsync.mockReset()
-    completedMutateAsync
-      .mockResolvedValueOnce({ id: 1 }) // create: buy milk
-      .mockResolvedValueOnce({ id: 2 }) // create: wash car
-      .mockResolvedValue({ id: 99 }) // any later delete (return ignored)
-    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
-    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
-      getVisibleOnAllWorkspaces,
-      setVisibleOnAllWorkspaces,
-    })
-    renderEditor({ braindumpClearOnComplete: true })
-    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-
-    // Complete the first line ('buy milk', id 1).
-    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nwash car')
-    await waitFor(() => {
-      expect(noteField).toHaveValue('- [x] buy milk\nwash car')
-    })
-    // Complete the second line ('wash car', id 2) — caret at end of line 2.
-    noteField.selectionStart = noteField.value.length
-    noteField.selectionEnd = noteField.value.length
-    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
-    await waitFor(() => {
-      expect(noteField).toHaveValue('- [x] buy milk\n- [x] wash car')
-    })
-
-    // Act — the FIRST line's undo window elapses, auto-clearing 'buy milk' so
-    // 'wash car' shifts up to line 0 (its ref entry key now drifted). Then
-    // uncheck 'wash car'.
-    const autoCloseBuyMilk = vi
-      .mocked(toast.success)
-      .mock.calls.find(
-        (call) => call[0] === 'Completed: buy milk',
-      )?.[1]?.onAutoClose
-    act(() => {
-      autoCloseBuyMilk?.({} as ToastT)
-    })
-    await waitFor(() => {
-      expect(noteField).toHaveValue('- [x] wash car')
-    })
-    noteField.selectionStart = 1
-    noteField.selectionEnd = 1
-    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
-
-    // Assert — the uncheck deletes 'wash car' (id 2), NOT the auto-cleared
-    // 'buy milk' (id 1) whose stale ref entry would otherwise be mis-targeted.
-    await waitFor(() => {
-      expect(completedMutateAsync).toHaveBeenCalledWith({ id: 2 })
-    })
-    expect(completedMutateAsync).not.toHaveBeenCalledWith({ id: 1 })
   })
 })

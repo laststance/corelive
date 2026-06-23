@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
-import { useId, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -47,6 +47,8 @@ import {
   type BrainDumpCompletedTitle,
   type BrainDumpLineIndex,
   COMPLETED_TITLE_MAX_LENGTH,
+  insertLineAtIndex,
+  lineStartOffset,
   markPlainLineCompleted,
   normalizeCompletedTitle,
   parseAllCheckboxes,
@@ -81,6 +83,43 @@ type CheckedRowMemory = Readonly<{
   /** Verbatim title used to detect double-toggles on the same line. */
   title: BrainDumpCompletedTitle
 }>
+
+/**
+ * Undo memory for a line removed the *instant* it completes (clear-on-complete
+ * ON path). Distinct from `CheckedRowMemory`: there the `[x]` line persists, so
+ * undo re-resolves it by title; here the line is gone, so we must remember its
+ * verbatim text + position to put it back.
+ *
+ * Mutable on purpose — `outcome`/`completedId`/`toastId` evolve as the
+ * background create resolves and the user does (or doesn't) undo. Keyed by a
+ * monotonic `token` (never a `lineIndex`) so a later removal shifting indices
+ * can't collide with this entry; the category-swap effect clears the whole map,
+ * neutralising stale cross-category undos for free.
+ */
+type ClearedLineMemory = {
+  /** Stable map key — a monotonic counter, never reused. */
+  token: number
+  /** Created row id; null until the background create resolves. */
+  completedId: Completed['id'] | null
+  /** Normalised title persisted for this completion. */
+  title: BrainDumpCompletedTitle
+  /** Category the line belonged to — guards cross-category re-insertion. */
+  categoryId: Category['id']
+  /** Index the line sat at when removed (best-effort re-insert position). */
+  originalLineIndex: BrainDumpLineIndex
+  /** Verbatim removed line, restored as-is on undo/failure (preserves spacing). */
+  reinsertText: string
+  /**
+   * Lifecycle guard for the success/failure/undo/auto-close overlap:
+   * - `pending`   — create in flight, no undo yet
+   * - `undone`    — user clicked Undo (line already restored; suppress failure re-insert)
+   * - `confirmed` — undo window elapsed (a late failure still restores → no silent loss)
+   */
+  outcome: 'pending' | 'undone' | 'confirmed'
+  /** sonner toast id, filled right after the create wires up so the failure
+   *  handler can dismiss the optimistic success toast. */
+  toastId: string | number | undefined
+}
 
 /**
  * In-flight create-Completed promise for a line that's been ticked but not
@@ -184,6 +223,20 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const pendingCreatesRef = useRef<Map<BrainDumpLineIndex, PendingCreate>>(
     new Map(),
   )
+  // Clear-on-complete ON path: token-keyed undo memory for lines removed the
+  // instant they complete. Separate map from checkedRowsRef (which serves the
+  // keep-the-[x] OFF path) so the two flows never share keys. Cleared on
+  // category swap (load effect below) to neutralise stale cross-category undos.
+  const clearedLinesRef = useRef<Map<number, ClearedLineMemory>>(new Map())
+  // Monotonic token source for clearedLinesRef keys (never reused → no collision).
+  const nextTokenRef = useRef<number>(0)
+  // Caret offset to apply AFTER the next noteText commit. The optimistic clear
+  // changes the line count, so the caret must be repositioned post-render (see
+  // the layout effect). null = leave the caret alone (the normal typing case).
+  const pendingCaretRef = useRef<number | null>(null)
+  // Latest active category for async create handlers — guards a late failure
+  // from re-inserting a line into a different category's note after a swap.
+  const activeCategoryIdRef = useRef<Category['id'] | null>(activeCategoryId)
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
   const noteTextRef = useRef<string>('')
   // Synchronous guard because state-driven disabled UI applies after render.
@@ -197,6 +250,28 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
   useCycleEffect(() => {
     noteTextRef.current = noteText
+  }, [noteText])
+
+  // Keep the category ref in step so async create handlers compare against the
+  // live category, not the one captured when the completion fired.
+  useCycleEffect(() => {
+    activeCategoryIdRef.current = activeCategoryId
+  }, [activeCategoryId])
+
+  // Apply a pending caret position after the textarea value commits. The
+  // optimistic clear/undo changes the line count, so a synchronous
+  // setSelectionRange right after setNoteText would read the stale DOM value —
+  // it has to run post-commit. This is a deliberate raw useLayoutEffect (no
+  // lifecycle-effect wrapper is layout-timed; useRenderEffect is a passive
+  // useEffect, which would let a wrong-position caret paint for a frame). The
+  // null guard makes ordinary typing a no-op.
+  useLayoutEffect(() => {
+    const caretOffset = pendingCaretRef.current
+    if (caretOffset === null) return
+    pendingCaretRef.current = null
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.setSelectionRange(caretOffset, caretOffset)
   }, [noteText])
 
   const createCompletedMutation = useMutation(
@@ -300,6 +375,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         lastPersistedRef.current = { categoryId: activeCategoryId, text }
         checkedRowsRef.current.clear()
         pendingCreatesRef.current.clear()
+        clearedLinesRef.current.clear()
       })
       .catch((error) => {
         if (cancelled) return
@@ -312,6 +388,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         lastPersistedRef.current = { categoryId: null, text: '' }
         checkedRowsRef.current.clear()
         pendingCreatesRef.current.clear()
+        clearedLinesRef.current.clear()
       })
       .finally(() => {
         if (cancelled) return
@@ -431,6 +508,24 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   /**
+   * Invalidate the heatmap query and ask sibling windows to refetch — the
+   * shared tail of every completion mutation (keep-the-`[x]` create-success,
+   * undo, and the optimistic clear's create-success). Extracted so the three
+   * call sites can't drift apart. Awaits the local invalidate first, then
+   * broadcasts, matching the original inline order.
+   *
+   * @returns Promise that settles once the local heatmap refetch is requested.
+   * @example
+   * await syncCompletedAcrossViews()
+   */
+  const syncCompletedAcrossViews = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: orpc.completed.heatmap.key(),
+    })
+    broadcastTodoSync()
+  }
+
+  /**
    * Promote the caret line to `[x]`, create a Completed row, and arm the
    * 5-second undo toast. Called by the complete command (Cmd/Ctrl+Enter) for
    * both checkbox lines and — via `markPlainLineCompleted` — plain prose lines.
@@ -512,10 +607,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       completedId,
       title: safeTitle,
     })
-    await queryClient.invalidateQueries({
-      queryKey: orpc.completed.heatmap.key(),
-    })
-    broadcastTodoSync()
+    await syncCompletedAcrossViews()
 
     const undoToastId = toast.success(`Completed: ${safeTitle}`, {
       description: 'Tap Undo within 5 s to revert.',
@@ -611,10 +703,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
     try {
       await deleteCompletedMutation.mutateAsync({ id: completedId })
-      await queryClient.invalidateQueries({
-        queryKey: orpc.completed.heatmap.key(),
-      })
-      broadcastTodoSync()
+      await syncCompletedAcrossViews()
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to undo completion'
@@ -631,6 +720,178 @@ export const BrainDumpEditor = function BrainDumpEditor({
       if (memoryBeforeUndo) {
         checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
       }
+    }
+  }
+
+  /**
+   * Clear-on-complete ON path: remove the just-completed line from the note the
+   * *instant* Cmd/Ctrl+Enter fires, show the optimistic Undo toast immediately,
+   * and run the Completed-create in the background. This kills the old "wait for
+   * the server round-trip + 5 s, then delete" lag — the line disappears now.
+   *
+   * Undo / failure restore the verbatim line; a create rejection re-inserts even
+   * after the 5 s undo window closed (otherwise the win is lost AND the line is
+   * gone — silent data loss). The `outcome` flag on the entry guards the
+   * success/failure/undo/auto-close overlap so nothing double-applies.
+   *
+   * @param text - The note text as it was when the key fired (pre-removal).
+   * @param lineIndex - Zero-based index of the line being completed.
+   * @param originalLine - The verbatim line, restored as-is on undo/failure.
+   * @param title - Title to persist (uncapped; normalised for the DB here).
+   * @returns void — kicks off the background create; nothing to await.
+   */
+  const completeAndClearLine = (
+    text: string,
+    lineIndex: BrainDumpLineIndex,
+    originalLine: string,
+    title: BrainDumpCompletedTitle,
+  ) => {
+    if (activeCategoryId === null) {
+      toast.error('Pick a category before checking items')
+      return
+    }
+    const safeTitle = normalizeCompletedTitle(title)
+    const categoryId = activeCategoryId
+
+    // 1) Instant removal + remembered caret (applied post-commit by the layout
+    //    effect, since the removed line changes the line count).
+    const clearedText = removeLineAtIndex(text, lineIndex)
+    setNoteText(clearedText)
+    pendingCaretRef.current = lineStartOffset(clearedText, lineIndex)
+
+    // 2) Per-completion record (token-keyed; see ClearedLineMemory).
+    const token = nextTokenRef.current
+    nextTokenRef.current += 1
+    const entry: ClearedLineMemory = {
+      token,
+      completedId: null,
+      title: safeTitle,
+      categoryId,
+      originalLineIndex: lineIndex,
+      reinsertText: originalLine,
+      outcome: 'pending',
+      toastId: undefined,
+    }
+    clearedLinesRef.current.set(token, entry)
+
+    // 3) Background create. Success/failure mutate `entry` and consult
+    //    `outcome` so undo / auto-close / late-failure never double-apply.
+    const createPromise = createCompletedMutation
+      .mutateAsync({ categoryId, title: safeTitle })
+      .then(
+        (created): Completed['id'] | null => {
+          entry.completedId = created.id
+          // Skip the sibling-view sync when the user already undid — the row is
+          // about to be deleted by undoClearedCompletion's awaited delete.
+          if (entry.outcome !== 'undone') void syncCompletedAcrossViews()
+          return created.id
+        },
+        (error): null => {
+          // Create failed → the win never persisted but the line is already
+          // gone. Restore it unless the user already undid, and only when we're
+          // still in the originating category (else we'd write a stale line
+          // into a different category's note). This restore fires even after
+          // the 5 s window closed (outcome 'confirmed') — that is the whole
+          // point: without it the line AND the win would silently vanish. We do
+          // NOT move the caret here: a background failure must not yank a user
+          // who is typing elsewhere.
+          if (
+            entry.outcome !== 'undone' &&
+            activeCategoryIdRef.current === categoryId
+          ) {
+            setNoteText(
+              insertLineAtIndex(
+                noteTextRef.current,
+                entry.originalLineIndex,
+                entry.reinsertText,
+              ),
+            )
+          }
+          clearedLinesRef.current.delete(token)
+          if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : 'Failed to record completion',
+          )
+          return null
+        },
+      )
+
+    // 4) Immediate optimistic toast — feedback at keypress, not after the
+    //    round-trip. Undo re-inserts the line; auto-close just closes the
+    //    affordance (the line is already gone).
+    entry.toastId = toast.success(`Completed: ${safeTitle}`, {
+      description: 'Tap Undo within 5 s to revert.',
+      duration: TOAST_UNDO_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          void undoClearedCompletion(entry, createPromise)
+          if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
+        },
+      },
+      // Sonner fires onAutoClose ONLY on the timeout — an Undo click dismisses
+      // (onDismiss) instead, so this never runs for an undone completion.
+      onAutoClose: () => {
+        // Undo window elapsed with no Undo → confirm and drop the map entry. The
+        // create promise's closure still holds the reinsert info for a late
+        // failure, so this cleanup is safe.
+        if (entry.outcome === 'pending') entry.outcome = 'confirmed'
+        clearedLinesRef.current.delete(token)
+      },
+    })
+  }
+
+  /**
+   * Undo an optimistic clear: put the verbatim line back at its original index
+   * and delete the Completed row once the create resolves. Called from the
+   * clear toast's Undo action.
+   *
+   * Idempotent via `entry.outcome` so a double Undo (or undo racing a late
+   * failure) never re-inserts twice or double-deletes. Skips the text re-insert
+   * when the active category has changed since completion (re-inserting into a
+   * different category's note would corrupt it) but still deletes the row.
+   *
+   * @param entry - The completion's undo memory (mutated to `undone`).
+   * @param createPromise - The background create; awaited for the row id.
+   * @returns Promise<void>.
+   */
+  const undoClearedCompletion = async (
+    entry: ClearedLineMemory,
+    createPromise: Promise<Completed['id'] | null>,
+  ) => {
+    if (entry.outcome === 'undone') return
+    entry.outcome = 'undone'
+    clearedLinesRef.current.delete(entry.token)
+
+    // Re-insert the verbatim line — but only if we're still in the category it
+    // came from. This IS a user action, so moving the caret to the restored
+    // line is desirable (unlike the background-failure path).
+    if (activeCategoryIdRef.current === entry.categoryId) {
+      const restored = insertLineAtIndex(
+        noteTextRef.current,
+        entry.originalLineIndex,
+        entry.reinsertText,
+      )
+      setNoteText(restored)
+      pendingCaretRef.current = lineStartOffset(
+        restored,
+        entry.originalLineIndex,
+      )
+    }
+
+    // Delete the server row once the create resolves. A failed create resolves
+    // to null → nothing to delete.
+    const completedId = await createPromise
+    if (completedId === null) return
+    try {
+      await deleteCompletedMutation.mutateAsync({ id: completedId })
+      await syncCompletedAcrossViews()
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to undo completion',
+      )
     }
   }
 
@@ -656,6 +917,28 @@ export const BrainDumpEditor = function BrainDumpEditor({
     const line = lines[lineIndex]
     if (line === undefined) return
     const parsed = parseCheckboxLine(line, lineIndex)
+
+    // Clear-on-complete ON + a COMPLETION (a plain line, or ticking an unchecked
+    // box) → remove the line instantly and show the optimistic Undo toast.
+    // Un-ticking an existing `[x]` line (parsed.checked === true) and the OFF
+    // preference both fall through to the legacy keep-the-`[x]` path below.
+    if (clearOnComplete && parsed?.checked !== true) {
+      let completionTitle: BrainDumpCompletedTitle
+      if (parsed) {
+        completionTitle = parsed.title
+      } else {
+        // Plain prose line: reuse markPlainLineCompleted only for its title +
+        // skip guards (blank / empty skeleton → null → no-op); ignore its
+        // `[x]`-wrapped text since this path removes the line instead.
+        const promoted = markPlainLineCompleted(text, lineIndex)
+        if (!promoted) return
+        completionTitle = promoted.title
+      }
+      // `line` is the verbatim source row → restored as-is on undo/failure.
+      completeAndClearLine(text, lineIndex, line, completionTitle)
+      return
+    }
+
     if (!parsed) {
       // Not a checkbox line: let the complete command finish an ordinary prose
       // line by wrapping it as `- [x] …` and promoting it, so users don't have
