@@ -3,6 +3,9 @@ import { useEffect, useRef } from 'react'
 
 import { log } from '../lib/logger'
 
+/** Deep-link query parameters; always string-valued because they originate from URL query parsing. */
+type DeepLinkParams = Record<string, string>
+
 interface DeepLinkTask {
   id: string
   title: string
@@ -14,7 +17,7 @@ interface DeepLinkTask {
 
 interface DeepLinkEventData {
   task?: DeepLinkTask
-  params?: Record<string, any>
+  params?: DeepLinkParams
   view?: string
   query?: string
   filter?: string
@@ -25,11 +28,22 @@ interface DeepLinkEventData {
 }
 
 interface UseElectronDeepLinkOptions {
-  onTaskFocus?: (task: DeepLinkTask, params?: Record<string, any>) => void
+  onTaskFocus?: (task: DeepLinkTask, params?: DeepLinkParams) => void
   onTaskCreate?: (data: Partial<DeepLinkTask>) => void
   onTaskCreated?: (task: DeepLinkTask) => void
-  onNavigate?: (view: string, params?: Record<string, any>) => void
+  onNavigate?: (view: string, params?: DeepLinkParams) => void
   onSearch?: (query: string, filter?: string) => void
+}
+
+/**
+ * Builds the `/home?focus=<id>` route with the task id URL-encoded so ids
+ * containing reserved characters (`&`, `=`, spaces) can't corrupt the query.
+ * @param taskId - The task id to focus after navigation.
+ * @returns The encoded home route.
+ * @example buildFocusTaskHref('a&b') // => '/home?focus=a%26b'
+ */
+function buildFocusTaskHref(taskId: string): string {
+  return `/home?${new URLSearchParams({ focus: taskId }).toString()}`
 }
 
 /**
@@ -55,7 +69,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
       if (data.task && optionsRef.current.onTaskFocus) {
         optionsRef.current.onTaskFocus(data.task, data.params)
       } else if (data.task) {
-        router.push(`/home?focus=${data.task.id}`)
+        router.push(buildFocusTaskHref(data.task.id))
       }
     }
 
@@ -82,7 +96,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
       if (data.task && optionsRef.current.onTaskCreated) {
         optionsRef.current.onTaskCreated(data.task)
       } else if (data.task) {
-        router.push(`/home?focus=${data.task.id}`)
+        router.push(buildFocusTaskHref(data.task.id))
       }
     }
 
@@ -129,7 +143,7 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
   // Generate deep link URL
   const generateDeepLink = async (
     action: string,
-    params: Record<string, any> = {},
+    params: DeepLinkParams = {},
   ) => {
     if (typeof window === 'undefined' || !window.electronAPI?.deepLink) {
       return null

@@ -3,6 +3,7 @@
 import React, { useRef, useState, useSyncExternalStore } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { cn } from '@/lib/utils'
 
 interface ConfettiParticle {
@@ -50,6 +51,9 @@ function generateParticles(count: number, seed: number): ConfettiParticle[] {
   }))
 }
 
+/** Shared empty-particles reference so SSR + reset snapshots stay referentially stable for useSyncExternalStore (a fresh `[]` each call trips React's "getServerSnapshot should be cached" loop guard). */
+const EMPTY_CONFETTI_PARTICLES: ConfettiParticle[] = []
+
 /**
  * Creates an external store for confetti animation lifecycle and particles.
  * @param duration - Duration before timer completes
@@ -58,7 +62,7 @@ function generateParticles(count: number, seed: number): ConfettiParticle[] {
  */
 function createConfettiStore(duration: number) {
   let isActive = false
-  let particles: ConfettiParticle[] = []
+  let particles: ConfettiParticle[] = EMPTY_CONFETTI_PARTICLES
   let onComplete: (() => void) | undefined
   const listeners = new Set<() => void>()
   let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -75,7 +79,7 @@ function createConfettiStore(duration: number) {
     getIsActiveSnapshot: () => isActive,
     getParticlesSnapshot: () => particles,
     getServerIsActiveSnapshot: () => false,
-    getServerParticlesSnapshot: () => [] as ConfettiParticle[],
+    getServerParticlesSnapshot: () => EMPTY_CONFETTI_PARTICLES,
     setOnComplete: (handler: (() => void) | undefined) => {
       onComplete = handler
     },
@@ -86,7 +90,7 @@ function createConfettiStore(duration: number) {
       notify()
       timeoutId = setTimeout(() => {
         isActive = false
-        particles = []
+        particles = EMPTY_CONFETTI_PARTICLES
         notify()
         onComplete?.()
       }, duration)
@@ -97,7 +101,7 @@ function createConfettiStore(duration: number) {
         timeoutId = null
       }
       isActive = false
-      particles = []
+      particles = EMPTY_CONFETTI_PARTICLES
       notify()
     },
   }
@@ -116,7 +120,9 @@ export const ConfettiAnimation = function ConfettiAnimation({
 }: ConfettiAnimationProps) {
   const [store, setStore] = useState(() => createConfettiStore(duration))
 
-  useCycleEffect(() => {
+  // Rebuild the store only when `duration` actually changes — the useState
+  // initializer already built it for the mount render, so skip the mount run.
+  useUpdateEffect(() => {
     setStore(createConfettiStore(duration))
   }, [duration])
 

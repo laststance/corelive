@@ -4,6 +4,7 @@ import { Trophy, Star } from 'lucide-react'
 import React, { useRef, useState, useSyncExternalStore } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { cn } from '@/lib/utils'
 
 /**
@@ -63,7 +64,9 @@ function useVisibilityAnimation(
 ) {
   const [store, setStore] = useState(() => createVisibilityStore(duration))
 
-  useCycleEffect(() => {
+  // Rebuild the store only when `duration` actually changes — the useState
+  // initializer already built it for the mount render, so skip the mount run.
+  useUpdateEffect(() => {
     setStore(createVisibilityStore(duration))
   }, [duration])
 

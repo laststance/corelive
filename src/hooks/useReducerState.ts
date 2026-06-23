@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useReducer } from 'react'
 
 /**
- * Keeps reducer-style local state without calling React.useReducer directly.
- *
- * This is a migration bridge for form-like state machines that are not large
- * enough for Redux Toolkit but still benefit from action-based updates.
+ * Keeps reducer-style local state for form-like state machines too small for
+ * Redux Toolkit but that still benefit from action-based updates. Backed by
+ * React.useReducer, so `dispatch` keeps a stable identity for the component's
+ * lifetime (safe to pass as a prop or list in an effect's deps).
  *
  * @param reducer - Pure state transition function.
- * @param initialState - Initial state value used by React.useState.
+ * @param initialState - Initial state value.
  * @returns Current state and a stable dispatch function.
  * @example
  * const [state, dispatch] = useReducerState(reducer, initialState)
@@ -16,11 +16,7 @@ export function useReducerState<State, Action>(
   reducer: (state: State, action: Action) => State,
   initialState: State,
 ): readonly [State, (action: Action) => void] {
-  const [state, setState] = useState(initialState)
-
-  const dispatch = (action: Action) => {
-    setState((currentState) => reducer(currentState, action))
-  }
+  const [state, dispatch] = useReducer(reducer, initialState)
 
   return [state, dispatch] as const
 }
