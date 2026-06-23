@@ -195,6 +195,68 @@ export function removeLineAtIndex(
 }
 
 /**
+ * Insert a line at a (clamped) index — the inverse of `removeLineAtIndex`, used
+ * by the optimistic clear-on-complete flow to restore a line that was removed
+ * the instant it completed (toast Undo / failed-create rollback). The index is
+ * clamped to `[0, lines.length]` so a drifted/stale index never throws and the
+ * line always lands in-document; an empty document returns just the line so a
+ * remove→insert round-trip is lossless (no spurious trailing newline).
+ *
+ * @param text - The full document text.
+ * @param lineIndex - Desired zero-based insertion index (clamped in range).
+ * @param newLine - The line content to insert (no trailing newline).
+ * @returns The text with `newLine` spliced in at the clamped index.
+ * @example
+ * insertLineAtIndex('a\nc', 1, '- [ ] b') // → 'a\n- [ ] b\nc'
+ * insertLineAtIndex('', 0, '- [ ] b')     // → '- [ ] b'
+ * insertLineAtIndex('a', 9, 'b')          // → 'a\nb' (clamped to end)
+ */
+export function insertLineAtIndex(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+  newLine: string,
+): string {
+  // Empty document: return just the line so remove('x')→insert restores 'x'
+  // exactly, instead of 'x\n' (splicing into [''] would keep the empty tail).
+  if (text === '') return newLine
+  const lines = text.split('\n')
+  const clampedIndex = Math.max(0, Math.min(lineIndex, lines.length))
+  lines.splice(clampedIndex, 0, newLine)
+  return lines.join('\n')
+}
+
+/**
+ * Character offset of the start of a given line — used to reposition the caret
+ * after the optimistic clear changes the line count (a removed line shifts all
+ * following text up, so the caret must move with it). Clamps past-the-end to the
+ * document length so completing the final line drops the caret at doc end.
+ *
+ * @param text - The full document text.
+ * @param lineIndex - Zero-based line whose start offset is wanted.
+ * @returns
+ * - The char index of that line's first character when in range.
+ * - `text.length` when `lineIndex` is past the last line (e.g. the final line
+ *   was just removed and nothing shifted up into its slot).
+ * @example
+ * lineStartOffset('a\nbb\nccc', 1) // → 2  (after 'a' + '\n')
+ * lineStartOffset('a\nbb\nccc', 3) // → 8  (past the end → doc length)
+ */
+export function lineStartOffset(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+): number {
+  const lines = text.split('\n')
+  if (lineIndex >= lines.length) return text.length
+  const clampedIndex = Math.max(0, lineIndex)
+  let offset = 0
+  for (let i = 0; i < clampedIndex; i++) {
+    // +1 for the '\n' separator that join() puts back between lines.
+    offset += (lines[i]?.length ?? 0) + 1
+  }
+  return offset
+}
+
+/**
  * Matches an empty checkbox skeleton — a checkbox prefix with no title, e.g.
  * `- [ ]`, `- [x]`, `- []` (optional trailing whitespace). These have nothing
  * to record, so the complete command must skip them rather than logging a junk
