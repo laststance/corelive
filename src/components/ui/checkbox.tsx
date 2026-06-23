@@ -6,7 +6,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Checkbox = React.memo(function Checkbox({
+function Checkbox({
   className,
   ...props
 }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
@@ -27,6 +27,6 @@ const Checkbox = React.memo(function Checkbox({
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )
-})
+}
 
 export { Checkbox }

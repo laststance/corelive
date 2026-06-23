@@ -1,5 +1,3 @@
-import { memo } from 'react'
-
 import type { ThemePreview } from '@/lib/themes/preview'
 import { cn } from '@/lib/utils'
 
@@ -22,7 +20,7 @@ interface ThemePreviewSwatchProps {
  * @example
  * <ThemePreviewSwatch preview={getThemePreview('harbor-dark')} className="h-12 w-full" />
  */
-export const ThemePreviewSwatch = memo(function ThemePreviewSwatch({
+export const ThemePreviewSwatch = function ThemePreviewSwatch({
   preview,
   className,
 }: ThemePreviewSwatchProps) {
@@ -36,17 +34,19 @@ export const ThemePreviewSwatch = memo(function ThemePreviewSwatch({
       style={{ backgroundColor: preview.surface }}
     >
       {/* Raised panel (60% height): accent dot, a card-tone bar, a text-tone line.
-          Percentage heights (not fixed px) let the same chip scale from the sidebar
-          mini (~20px) to the Settings card (~48px) without overflow. */}
+           Percentage heights (not fixed px) let the same chip scale from the sidebar
+           mini (~20px) to the Settings card (~48px) without overflow. */}
       <div className="flex h-3/5 items-center gap-1 px-1.5">
         <span
           className="size-2 shrink-0 rounded-full"
           style={{ backgroundColor: preview.accent }}
         />
+
         <span
           className="h-1 flex-1 rounded-full"
           style={{ backgroundColor: preview.card }}
         />
+
         <span
           className="h-1 w-1/4 rounded-full"
           style={{ backgroundColor: preview.text }}
@@ -63,4 +63,4 @@ export const ThemePreviewSwatch = memo(function ThemePreviewSwatch({
       </div>
     </div>
   )
-})
+}

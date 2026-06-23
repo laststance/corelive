@@ -1,7 +1,6 @@
 'use client'
 
 import { useTheme } from 'next-themes'
-import { useCallback, useMemo } from 'react'
 
 import { useMounted } from '@/hooks/use-mounted'
 import {
@@ -83,39 +82,29 @@ export function useThemeAxis(): ThemeAxis {
   const availableModes: ThemeModeChoice[] =
     family === 'cathedral' ? ['light', 'dark', 'system'] : ['light', 'dark']
 
-  const families = useMemo<ThemeFamilyOption[]>(
-    () =>
-      THEME_FAMILY_IDS.map((familyId) => ({
-        family: familyId,
-        label: THEME_FAMILY_LABEL[familyId],
-      })),
-    [],
-  )
+  const families = THEME_FAMILY_IDS.map((familyId) => ({
+    family: familyId,
+    label: THEME_FAMILY_LABEL[familyId],
+  }))
 
-  const setFamily = useCallback(
-    (nextFamily: ThemeFamilyId): void => {
-      // Re-picking the default while on System keeps the OS-managed pairing.
-      if (nextFamily === 'cathedral' && isSystem) {
-        setTheme('system')
-        return
-      }
-      // Any other pick collapses System to an explicit id at the resolved mode.
-      setTheme(getThemeId(nextFamily, resolvedMode))
-    },
-    [isSystem, resolvedMode, setTheme],
-  )
+  const setFamily = (nextFamily: ThemeFamilyId): void => {
+    // Re-picking the default while on System keeps the OS-managed pairing.
+    if (nextFamily === 'cathedral' && isSystem) {
+      setTheme('system')
+      return
+    }
+    // Any other pick collapses System to an explicit id at the resolved mode.
+    setTheme(getThemeId(nextFamily, resolvedMode))
+  }
 
-  const setMode = useCallback(
-    (nextMode: ThemeModeChoice): void => {
-      // System is OS-managed and family-agnostic → the default Warm Cathedral pair.
-      if (nextMode === 'system') {
-        setTheme('system')
-        return
-      }
-      setTheme(getThemeId(family, nextMode))
-    },
-    [family, setTheme],
-  )
+  const setMode = (nextMode: ThemeModeChoice): void => {
+    // System is OS-managed and family-agnostic → the default Warm Cathedral pair.
+    if (nextMode === 'system') {
+      setTheme('system')
+      return
+    }
+    setTheme(getThemeId(family, nextMode))
+  }
 
   return {
     family,

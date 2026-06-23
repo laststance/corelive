@@ -1,7 +1,6 @@
 'use client'
 
 import { Heart } from 'lucide-react'
-import { memo } from 'react'
 
 import {
   ElectronOAuthButtons,
@@ -50,7 +49,7 @@ const HEATMAP_RIBBON_CELLS = [
  * @example
  * if (isLoaded && !isSignedIn) return <SignedOutFloatingCard />
  */
-export const SignedOutFloatingCard = memo(function SignedOutFloatingCard() {
+export const SignedOutFloatingCard = function SignedOutFloatingCard() {
   // Render-time skew guard (DT3/F4): decide the affordance by CAPABILITY, not a
   // call-time `?.` — a frozen preload from an older install may not expose the
   // oauth bridge at all, in which case the buttons would be dead.
@@ -104,4 +103,4 @@ export const SignedOutFloatingCard = memo(function SignedOutFloatingCard() {
       </div>
     </div>
   )
-})
+}

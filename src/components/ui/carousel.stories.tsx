@@ -25,7 +25,7 @@ function DemoSlides() {
           {Array.from({ length: 5 }).map((_, i) => (
             <CarouselItem
               key={i}
-              className="bg-accent text-accent-foreground flex items-center justify-center rounded-md"
+              className="flex items-center justify-center rounded-md bg-accent text-accent-foreground"
             >
               <div className="text-sm">Slide {i + 1}</div>
             </CarouselItem>
@@ -50,7 +50,7 @@ export const Vertical: Story = {
           {Array.from({ length: 5 }).map((_, i) => (
             <CarouselItem
               key={i}
-              className="bg-accent text-accent-foreground flex items-center justify-center rounded-md"
+              className="flex items-center justify-center rounded-md bg-accent text-accent-foreground"
             >
               <div className="text-sm">Panel {i + 1}</div>
             </CarouselItem>

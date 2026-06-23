@@ -3,7 +3,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { Undo2, ArrowRightLeft } from 'lucide-react'
 import * as React from 'react'
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -39,7 +39,7 @@ export interface ImportUndoBannerProps {
  * @example
  * <ImportUndoBanner lastImport={batch} onDismiss={() => setBatch(null)} onChanged={invalidate} />
  */
-export const ImportUndoBanner = React.memo(function ImportUndoBanner({
+export const ImportUndoBanner = function ImportUndoBanner({
   lastImport,
   onDismiss,
   onChanged,
@@ -76,7 +76,7 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
     deleteTodoMutation.isPending ||
     createCompletedMutation.isPending
 
-  const handleUndo = useCallback(() => {
+  const handleUndo = () => {
     if (!lastImport) return
     const undo =
       lastImport.zone === 'completed'
@@ -94,15 +94,9 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
         },
       },
     )
-  }, [
-    deleteCompletedMutation,
-    deleteTodoMutation,
-    lastImport,
-    onChanged,
-    onDismiss,
-  ])
+  }
 
-  const handleMoveToCompleted = useCallback(() => {
+  const handleMoveToCompleted = () => {
     if (!lastImport || lastImport.zone !== 'todo') return
     // Create-before-delete: add to Completed first (new batch id, all categoryId
     // overrides retained). Only on create success do we delete the Todo batch.
@@ -146,20 +140,13 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
         },
       },
     )
-  }, [
-    createCompletedMutation,
-    deleteTodoMutation,
-    lastImport,
-    onChanged,
-    onDismiss,
-  ])
+  }
 
   // Nothing to show, or the 60s window has closed → render nothing. The
-  // `expired` flag handles the live transition; the inline Date.now() guard
-  // covers an already-expired batch on first render (a plain render read is
-  // safe — unlike a useSyncExternalStore snapshot it never re-renders).
+  // `expired` flag (set by the timer effect) handles both live expiry and
+  // batches that were already past expiresAt on mount.
   if (!lastImport || lastImport.count === 0) return null
-  if (expired || Date.now() >= lastImport.expiresAt) return null
+  if (expired) return null
 
   return (
     <div
@@ -195,4 +182,4 @@ export const ImportUndoBanner = React.memo(function ImportUndoBanner({
       </div>
     </div>
   )
-})
+}

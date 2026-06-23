@@ -5,19 +5,19 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Popover = React.memo(function Popover({
+function Popover({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />
-})
+}
 
-const PopoverTrigger = React.memo(function PopoverTrigger({
+function PopoverTrigger({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
-})
+}
 
-const PopoverContent = React.memo(function PopoverContent({
+function PopoverContent({
   className,
   align = 'center',
   sideOffset = 4,
@@ -37,12 +37,12 @@ const PopoverContent = React.memo(function PopoverContent({
       />
     </PopoverPrimitive.Portal>
   )
-})
+}
 
-const PopoverAnchor = React.memo(function PopoverAnchor({
+function PopoverAnchor({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
   return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
-})
+}
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }

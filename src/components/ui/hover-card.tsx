@@ -5,21 +5,21 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const HoverCard = React.memo(function HoverCard({
+function HoverCard({
   ...props
 }: React.ComponentProps<typeof HoverCardPrimitive.Root>) {
   return <HoverCardPrimitive.Root data-slot="hover-card" {...props} />
-})
+}
 
-const HoverCardTrigger = React.memo(function HoverCardTrigger({
+function HoverCardTrigger({
   ...props
 }: React.ComponentProps<typeof HoverCardPrimitive.Trigger>) {
   return (
     <HoverCardPrimitive.Trigger data-slot="hover-card-trigger" {...props} />
   )
-})
+}
 
-const HoverCardContent = React.memo(function HoverCardContent({
+function HoverCardContent({
   className,
   align = 'center',
   sideOffset = 4,
@@ -39,6 +39,6 @@ const HoverCardContent = React.memo(function HoverCardContent({
       />
     </HoverCardPrimitive.Portal>
   )
-})
+}
 
 export { HoverCard, HoverCardTrigger, HoverCardContent }

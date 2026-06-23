@@ -1,5 +1,5 @@
 import { CheckCircle2 } from 'lucide-react'
-import React, { useCallback } from 'react'
+import React from 'react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { getColorDotClass } from '@/lib/category-colors'
@@ -35,15 +35,15 @@ interface CompletedJournalRowProps {
  * @example
  * <CompletedJournalRow entry={entry} onUncomplete={toggleComplete} />
  */
-export const CompletedJournalRow = React.memo(function CompletedJournalRow({
+export const CompletedJournalRow = function CompletedJournalRow({
   entry,
   onUncomplete,
 }: CompletedJournalRowProps) {
   // Un-checking a todo-source win reverses the completion (true → false). It is
   // intentionally quiet (no completion cue) — only finishing a task celebrates.
-  const handleUncomplete = useCallback(() => {
+  const handleUncomplete = () => {
     onUncomplete?.(String(entry.id))
-  }, [entry.id, onUncomplete])
+  }
 
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
@@ -66,7 +66,7 @@ export const CompletedJournalRow = React.memo(function CompletedJournalRow({
       )}
       <div className="min-w-0 flex-1">
         {/* Completed wins read as done — line-through muted, matching the app's
-            established completed-task styling (TodoItem) this list replaces. */}
+             established completed-task styling (TodoItem) this list replaces. */}
         <div className="block break-words text-muted-foreground line-through">
           {entry.title}
         </div>
@@ -79,6 +79,7 @@ export const CompletedJournalRow = React.memo(function CompletedJournalRow({
                   getColorDotClass(entry.category.color),
                 )}
               />
+
               {entry.category.name}
             </span>
           </div>
@@ -90,4 +91,4 @@ export const CompletedJournalRow = React.memo(function CompletedJournalRow({
       </span>
     </div>
   )
-})
+}

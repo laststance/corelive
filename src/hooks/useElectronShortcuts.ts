@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
 import { log } from '../lib/logger'
 
@@ -25,7 +25,20 @@ interface UseElectronShortcutsReturn {
   refreshStats: () => Promise<void>
 }
 
+function mapShortcutDefinitions(
+  definitions: Array<{ id: string; accelerator: string }>,
+): Record<string, string> {
+  const shortcutMap: Record<string, string> = {}
+  for (const shortcut of definitions) {
+    shortcutMap[shortcut.id] = shortcut.accelerator
+  }
+  return shortcutMap
+}
+
 export function useElectronShortcuts(): UseElectronShortcutsReturn {
+  const isElectron =
+    typeof window !== 'undefined' && Boolean(window.electronAPI?.shortcuts)
+
   const [isSupported, setIsSupported] = useState(false)
   const [shortcuts, setShortcuts] = useState<Record<string, string>>({})
   const [defaultShortcuts, setDefaultShortcuts] = useState<
@@ -33,12 +46,10 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
   >({})
   const [stats, setStats] = useState<ShortcutStats | null>(null)
 
-  // Check if we're in Electron environment
-  const isElectron =
-    typeof window !== 'undefined' && window.electronAPI?.shortcuts
-
-  const loadShortcuts = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.shortcuts) return
+  const loadShortcuts = async () => {
+    if (!isElectron || !window.electronAPI?.shortcuts) {
+      return
+    }
 
     try {
       const [registered, defaults, currentStats] = await Promise.all([
@@ -47,18 +58,9 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         window.electronAPI.shortcuts.getStats(),
       ])
 
-      // Transform ShortcutDefinition[] to Record<string, string>
-      const registeredMap: Record<string, string> = {}
-      for (const shortcut of registered) {
-        registeredMap[shortcut.id] = shortcut.accelerator
-      }
+      const registeredMap = mapShortcutDefinitions(registered)
+      const defaultsMap = mapShortcutDefinitions(defaults)
 
-      const defaultsMap: Record<string, string> = {}
-      for (const shortcut of defaults) {
-        defaultsMap[shortcut.id] = shortcut.accelerator
-      }
-
-      // Use stats directly from main process
       const formattedStats: ShortcutStats = {
         totalRegistered: currentStats.totalRegistered,
         isEnabled: currentStats.isEnabled,
@@ -74,7 +76,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
       log.error('Failed to load shortcuts:', error)
       setIsSupported(false)
     }
-  }, [isElectron])
+  }
 
   /**
    * Batch-persist a full shortcut record via the preload bridge, refreshing local
@@ -84,90 +86,73 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
    * @returns Resolves to `true` when the batch persisted, `false` on failure or non-Electron.
    * @example await updateShortcuts({ toggleBrainDump: 'Alt+Space' })
    */
-  const updateShortcuts = useCallback(
-    async (newShortcuts: Record<string, string>) => {
-      if (!isElectron || !window.electronAPI?.shortcuts) return false
-
-      try {
-        // Persist the whole record in one call — the preload bridge's update()
-        // expects a Record, not positional (id, accelerator) args (a loop throws).
-        const allSuccess =
-          await window.electronAPI.shortcuts.update(newShortcuts)
-        if (allSuccess) {
-          await loadShortcuts() // Refresh after update
-        }
-        return allSuccess
-      } catch (error) {
-        log.error('Failed to update shortcuts:', error)
-        return false
-      }
-    },
-    [isElectron, loadShortcuts],
-  )
-
-  const registerShortcut = useCallback(
-    async (accelerator: string, id: string) => {
-      if (!isElectron || !window.electronAPI?.shortcuts) return false
-
-      try {
-        // Create ShortcutDefinition object as required by API
-        const shortcutDef = {
-          id,
-          accelerator,
-          description: '',
-          enabled: true,
-          isGlobal: false,
-        }
-        const success = await window.electronAPI.shortcuts.register(shortcutDef)
-        if (success) {
-          await loadShortcuts() // Refresh after registration
-        }
-        return success
-      } catch (error) {
-        log.error('Failed to register shortcut:', error)
-        return false
-      }
-    },
-    [isElectron, loadShortcuts],
-  )
-
-  const unregisterShortcut = useCallback(
-    async (id: string) => {
-      if (!isElectron || !window.electronAPI?.shortcuts) return false
-
-      try {
-        const success = await window.electronAPI.shortcuts.unregister(id)
-        if (success) {
-          await loadShortcuts() // Refresh after unregistration
-        }
-        return success
-      } catch (error) {
-        log.error('Failed to unregister shortcut:', error)
-        return false
-      }
-    },
-    [isElectron, loadShortcuts],
-  )
-
-  const isShortcutRegistered = useCallback(
-    async (accelerator: string) => {
-      if (!isElectron || !window.electronAPI?.shortcuts) return false
-
-      try {
-        return await window.electronAPI.shortcuts.isRegistered(accelerator)
-      } catch (error) {
-        log.error('Failed to check shortcut registration:', error)
-        return false
-      }
-    },
-    [isElectron],
-  )
-
-  const enableShortcuts = useCallback(async () => {
+  const updateShortcuts = async (newShortcuts: Record<string, string>) => {
     if (!isElectron || !window.electronAPI?.shortcuts) return false
 
     try {
-      // Enable each shortcut individually
+      const allSuccess = await window.electronAPI.shortcuts.update(newShortcuts)
+      if (allSuccess) {
+        await loadShortcuts()
+      }
+      return allSuccess
+    } catch (error) {
+      log.error('Failed to update shortcuts:', error)
+      return false
+    }
+  }
+
+  const registerShortcut = async (accelerator: string, id: string) => {
+    if (!isElectron || !window.electronAPI?.shortcuts) return false
+
+    try {
+      const shortcutDef = {
+        id,
+        accelerator,
+        description: '',
+        enabled: true,
+        isGlobal: false,
+      }
+      const success = await window.electronAPI.shortcuts.register(shortcutDef)
+      if (success) {
+        await loadShortcuts()
+      }
+      return success
+    } catch (error) {
+      log.error('Failed to register shortcut:', error)
+      return false
+    }
+  }
+
+  const unregisterShortcut = async (id: string) => {
+    if (!isElectron || !window.electronAPI?.shortcuts) return false
+
+    try {
+      const success = await window.electronAPI.shortcuts.unregister(id)
+      if (success) {
+        await loadShortcuts()
+      }
+      return success
+    } catch (error) {
+      log.error('Failed to unregister shortcut:', error)
+      return false
+    }
+  }
+
+  const isShortcutRegistered = async (accelerator: string) => {
+    if (!isElectron || !window.electronAPI?.shortcuts) return false
+
+    try {
+      return await window.electronAPI.shortcuts.isRegistered(accelerator)
+    } catch (error) {
+      log.error('Failed to check shortcut registration:', error)
+      return false
+    }
+  }
+
+  const enableShortcuts = async () => {
+    if (!isElectron || !window.electronAPI?.shortcuts) return false
+
+    try {
       const shortcutIds = Object.keys(shortcuts)
       let allSuccess = true
       for (const id of shortcutIds) {
@@ -177,20 +162,19 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         }
       }
       if (allSuccess) {
-        await loadShortcuts() // Refresh after enabling
+        await loadShortcuts()
       }
       return allSuccess
     } catch (error) {
       log.error('Failed to enable shortcuts:', error)
       return false
     }
-  }, [isElectron, loadShortcuts, shortcuts])
+  }
 
-  const disableShortcuts = useCallback(async () => {
+  const disableShortcuts = async () => {
     if (!isElectron || !window.electronAPI?.shortcuts) return false
 
     try {
-      // Disable each shortcut individually
       const shortcutIds = Object.keys(shortcuts)
       let allSuccess = true
       for (const id of shortcutIds) {
@@ -200,21 +184,20 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
         }
       }
       if (allSuccess) {
-        await loadShortcuts() // Refresh after disabling
+        await loadShortcuts()
       }
       return allSuccess
     } catch (error) {
       log.error('Failed to disable shortcuts:', error)
       return false
     }
-  }, [isElectron, loadShortcuts, shortcuts])
+  }
 
-  const refreshStats = useCallback(async () => {
+  const refreshStats = async () => {
     if (!isElectron || !window.electronAPI?.shortcuts) return
 
     try {
       const currentStats = await window.electronAPI.shortcuts.getStats()
-      // Use stats directly from main process
       const formattedStats: ShortcutStats = {
         totalRegistered: currentStats.totalRegistered,
         isEnabled: currentStats.isEnabled,
@@ -225,17 +208,60 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
     } catch (error) {
       log.error('Failed to refresh shortcut stats:', error)
     }
-  }, [isElectron, shortcuts])
+  }
 
   useEffect(() => {
-    loadShortcuts()
-  }, [loadShortcuts])
+    const electronAPI = window.electronAPI
+    if (!isElectron || !electronAPI?.shortcuts) {
+      return
+    }
 
-  // Set up event listeners for shortcut events
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const [registered, defaults, currentStats] = await Promise.all([
+          electronAPI.shortcuts.getRegistered(),
+          electronAPI.shortcuts.getDefaults(),
+          electronAPI.shortcuts.getStats(),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        const registeredMap = mapShortcutDefinitions(registered)
+        const defaultsMap = mapShortcutDefinitions(defaults)
+
+        const formattedStats: ShortcutStats = {
+          totalRegistered: currentStats.totalRegistered,
+          isEnabled: currentStats.isEnabled,
+          platform: currentStats.platform,
+          shortcuts: registeredMap,
+        }
+
+        setIsSupported(true)
+        setShortcuts(registeredMap)
+        setDefaultShortcuts(defaultsMap)
+        setStats(formattedStats)
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+
+        log.error('Failed to load shortcuts:', error)
+        setIsSupported(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isElectron])
+
   useEffect(() => {
     if (!isElectron || !window.electronAPI?.on) return
 
-    // Listen for shortcut events
     const handleNewTask = () => {
       // This could trigger a custom event or callback
     }
@@ -251,7 +277,6 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
     const cleanupSearch = window.electronAPI.on('shortcut-search', handleSearch)
 
     return () => {
-      // Event cleanup functions may not exist in all implementations
       try {
         if (typeof cleanupNewTask === 'function') cleanupNewTask()
         if (typeof cleanupSearch === 'function') cleanupSearch()

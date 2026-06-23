@@ -1,6 +1,5 @@
 'use client'
 
-import { memo, useCallback } from 'react'
 import { match } from 'ts-pattern'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -110,7 +109,7 @@ function chipAccessibleLabel(
  * @example
  * <CategoryChip entry={entry} isActive={false} onClick={toggle} />
  */
-const CategoryChip = memo(function CategoryChip({
+const CategoryChip = function CategoryChip({
   entry,
   isActive,
   onSelect,
@@ -145,6 +144,7 @@ const CategoryChip = memo(function CategoryChip({
           getColorDotClass(entry.color),
         )}
       />
+
       <span>{entry.name}</span>
       <span
         aria-hidden
@@ -168,7 +168,7 @@ const CategoryChip = memo(function CategoryChip({
       )}
     </button>
   )
-})
+}
 
 /**
  * Per-category trend chip row mounted under the WeeklySummaryCard on the
@@ -196,7 +196,7 @@ const CategoryChip = memo(function CategoryChip({
  * @example
  * <CategoryFilterChips dataByDate={dataByDate} isLoading={false} />
  */
-export const CategoryFilterChips = memo(function CategoryFilterChips({
+export const CategoryFilterChips = function CategoryFilterChips({
   dataByDate,
   isLoading,
 }: CategoryFilterChipsProps) {
@@ -210,18 +210,13 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
     setSelectedCategoryId(null)
   }
 
-  const handleSelectValueChange = useCallback(
-    (value: string) => {
-      setSelectedCategoryId(value === 'all' ? null : Number(value))
-    },
-    [setSelectedCategoryId],
-  )
-  const handleChipSelect = useCallback(
-    (categoryId: number | null) => {
-      setSelectedCategoryId(categoryId)
-    },
-    [setSelectedCategoryId],
-  )
+  const handleSelectValueChange = (value: string) => {
+    setSelectedCategoryId(value === 'all' ? null : Number(value))
+  }
+
+  const handleChipSelect = (categoryId: number | null) => {
+    setSelectedCategoryId(categoryId)
+  }
 
   // Skeleton during the initial heatmap fetch — keeps card height stable
   // so the layout doesn't shift when data arrives.
@@ -289,6 +284,7 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
                           getColorDotClass(entry.color),
                         )}
                       />
+
                       <span>{entry.name}</span>
                       <span className="font-mono tabular-nums text-muted-foreground">
                         {entry.currentCount}
@@ -323,4 +319,4 @@ export const CategoryFilterChips = memo(function CategoryFilterChips({
       </CardContent>
     </Card>
   )
-})
+}

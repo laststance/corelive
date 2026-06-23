@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Avatar = React.memo(function Avatar({
+function Avatar({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
@@ -19,9 +19,9 @@ const Avatar = React.memo(function Avatar({
       {...props}
     />
   )
-})
+}
 
-const AvatarImage = React.memo(function AvatarImage({
+function AvatarImage({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
@@ -32,9 +32,9 @@ const AvatarImage = React.memo(function AvatarImage({
       {...props}
     />
   )
-})
+}
 
-const AvatarFallback = React.memo(function AvatarFallback({
+function AvatarFallback({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
@@ -48,6 +48,6 @@ const AvatarFallback = React.memo(function AvatarFallback({
       {...props}
     />
   )
-})
+}
 
 export { Avatar, AvatarImage, AvatarFallback }

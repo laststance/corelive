@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useRef, useMemo, useState, useSyncExternalStore } from 'react'
+import React, { useRef, useState, useSyncExternalStore } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { cn } from '@/lib/utils'
 
 interface ConfettiParticle {
@@ -50,31 +51,47 @@ function generateParticles(count: number, seed: number): ConfettiParticle[] {
   }))
 }
 
+/** Shared empty-particles reference so SSR + reset snapshots stay referentially stable for useSyncExternalStore (a fresh `[]` each call trips React's "getServerSnapshot should be cached" loop guard). */
+const EMPTY_CONFETTI_PARTICLES: ConfettiParticle[] = []
+
 /**
- * Creates a timer store for managing animation lifecycle
+ * Creates an external store for confetti animation lifecycle and particles.
  * @param duration - Duration before timer completes
  * @param onComplete - Callback when timer completes
  * @returns Store interface for useSyncExternalStore
  */
-function createTimerStore(duration: number, onComplete?: () => void) {
+function createConfettiStore(duration: number) {
   let isActive = false
+  let particles: ConfettiParticle[] = EMPTY_CONFETTI_PARTICLES
+  let onComplete: (() => void) | undefined
   const listeners = new Set<() => void>()
   let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  const notify = () => {
+    listeners.forEach((listener) => listener())
+  }
 
   return {
     subscribe: (listener: () => void) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    getSnapshot: () => isActive,
-    getServerSnapshot: () => false,
-    start: () => {
+    getIsActiveSnapshot: () => isActive,
+    getParticlesSnapshot: () => particles,
+    getServerIsActiveSnapshot: () => false,
+    getServerParticlesSnapshot: () => EMPTY_CONFETTI_PARTICLES,
+    setOnComplete: (handler: (() => void) | undefined) => {
+      onComplete = handler
+    },
+    start: (nextParticles: ConfettiParticle[]) => {
       if (isActive) return
       isActive = true
-      listeners.forEach((l) => l())
+      particles = nextParticles
+      notify()
       timeoutId = setTimeout(() => {
         isActive = false
-        listeners.forEach((l) => l())
+        particles = EMPTY_CONFETTI_PARTICLES
+        notify()
         onComplete?.()
       }, duration)
     },
@@ -84,7 +101,8 @@ function createTimerStore(duration: number, onComplete?: () => void) {
         timeoutId = null
       }
       isActive = false
-      listeners.forEach((l) => l())
+      particles = EMPTY_CONFETTI_PARTICLES
+      notify()
     },
   }
 }
@@ -93,42 +111,49 @@ function createTimerStore(duration: number, onComplete?: () => void) {
  * ConfettiAnimation component for celebrating task completion
  * Renders confetti particles with various colors, shapes, and sizes
  */
-export const ConfettiAnimation = React.memo(function ConfettiAnimation({
+export const ConfettiAnimation = function ConfettiAnimation({
   trigger,
   particleCount = 50,
   duration = 3000,
   className,
   onComplete,
 }: ConfettiAnimationProps) {
-  const prevTriggerRef = useRef(false)
-  const particleSeedRef = useRef(Date.now())
+  const [store, setStore] = useState(() => createConfettiStore(duration))
 
-  // Rebuild the timer store when timing inputs change so callbacks stay fresh.
-  const timerStore = useMemo(
-    () => createTimerStore(duration, onComplete),
-    [duration, onComplete],
-  )
+  // Rebuild the store only when `duration` actually changes — the useState
+  // initializer already built it for the mount render, so skip the mount run.
+  useUpdateEffect(() => {
+    setStore(createConfettiStore(duration))
+  }, [duration])
+
+  useCycleEffect(() => {
+    store.setOnComplete(onComplete)
+  }, [onComplete, store])
 
   const isActive = useSyncExternalStore(
-    timerStore.subscribe,
-    timerStore.getSnapshot,
-    timerStore.getServerSnapshot,
+    store.subscribe,
+    store.getIsActiveSnapshot,
+    store.getServerIsActiveSnapshot,
   )
 
-  useCycleEffect(() => () => timerStore.stop(), [timerStore])
+  const particles = useSyncExternalStore(
+    store.subscribe,
+    store.getParticlesSnapshot,
+    store.getServerParticlesSnapshot,
+  )
 
-  // Detect trigger rising edge during render (not in effect)
-  if (trigger && !prevTriggerRef.current && !isActive) {
-    particleSeedRef.current = Date.now()
-    timerStore.start()
-  }
-  prevTriggerRef.current = trigger
+  const prevTriggerRef = useRef(false)
 
-  // Compute particles only when active (derived state via useMemo)
-  const particles = useMemo(() => {
-    if (!isActive) return []
-    return generateParticles(particleCount, particleSeedRef.current)
-  }, [isActive, particleCount])
+  useCycleEffect(() => {
+    const risingEdge = trigger && !prevTriggerRef.current
+    prevTriggerRef.current = trigger
+
+    if (risingEdge && !isActive) {
+      store.start(generateParticles(particleCount, Date.now()))
+    }
+  }, [trigger, isActive, particleCount, store])
+
+  useCycleEffect(() => () => store.stop(), [store])
 
   if (particles.length === 0) return null
 
@@ -156,7 +181,7 @@ export const ConfettiAnimation = React.memo(function ConfettiAnimation({
       ))}
     </div>
   )
-})
+}
 
 /**
  * Hook to trigger confetti animation

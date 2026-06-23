@@ -29,7 +29,7 @@ type Story = StoryObj<typeof ContextMenu>
 export const Menu: Story = {
   render: () => (
     <ContextMenu>
-      <ContextMenuTrigger className="bg-muted text-muted-foreground rounded p-6">
+      <ContextMenuTrigger className="rounded bg-muted p-6 text-muted-foreground">
         Right click here
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64">

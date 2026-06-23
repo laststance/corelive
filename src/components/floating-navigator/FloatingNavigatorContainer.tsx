@@ -7,7 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
@@ -52,7 +52,7 @@ const DECIMAL_RADIX = 10
  * @example
  * <FloatingNavigatorContainer />
  */
-export const FloatingNavigatorContainer = React.memo(
+export const FloatingNavigatorContainer =
   function FloatingNavigatorContainer() {
     const queryClient = useQueryClient()
     const isClerkQueryReady = useClerkQueryReady()
@@ -143,15 +143,12 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleTaskToggle('42')
      */
-    const handleTaskToggle = useCallback(
-      (id: string) => {
-        const todoId = parseInt(id, DECIMAL_RADIX)
-        if (!isNaN(todoId)) {
-          toggleMutation.mutate({ id: todoId })
-        }
-      },
-      [toggleMutation],
-    )
+    const handleTaskToggle = (id: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        toggleMutation.mutate({ id: todoId })
+      }
+    }
 
     /**
      * Creates a new task from the floating navigator input.
@@ -161,19 +158,16 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleTaskCreate('Write report')
      */
-    const handleTaskCreate = useCallback(
-      (title: string) => {
-        if (selectedCategoryId === null) return
-        createMutation.mutate({
-          text: title,
-          categoryId: selectedCategoryId,
-        })
-        // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
-        // fired inside the user gesture so the engine can resume audio.
-        fireCreate()
-      },
-      [createMutation, fireCreate, selectedCategoryId],
-    )
+    const handleTaskCreate = (title: string) => {
+      if (selectedCategoryId === null) return
+      createMutation.mutate({
+        text: title,
+        categoryId: selectedCategoryId,
+      })
+      // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
+      // fired inside the user gesture so the engine can resume audio.
+      fireCreate()
+    }
 
     /**
      * Updates a task title from the floating navigator.
@@ -184,15 +178,12 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleTaskEdit('42', 'Updated title')
      */
-    const handleTaskEdit = useCallback(
-      (id: string, title: string) => {
-        const todoId = parseInt(id, DECIMAL_RADIX)
-        if (!isNaN(todoId)) {
-          updateMutation.mutate({ id: todoId, data: { text: title } })
-        }
-      },
-      [updateMutation],
-    )
+    const handleTaskEdit = (id: string, title: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        updateMutation.mutate({ id: todoId, data: { text: title } })
+      }
+    }
 
     /**
      * Deletes a task from the floating navigator.
@@ -202,15 +193,12 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleTaskDelete('42')
      */
-    const handleTaskDelete = useCallback(
-      (id: string) => {
-        const todoId = parseInt(id, DECIMAL_RADIX)
-        if (!isNaN(todoId)) {
-          deleteMutation.mutate({ id: todoId })
-        }
-      },
-      [deleteMutation],
-    )
+    const handleTaskDelete = (id: string) => {
+      const todoId = parseInt(id, DECIMAL_RADIX)
+      if (!isNaN(todoId)) {
+        deleteMutation.mutate({ id: todoId })
+      }
+    }
 
     /**
      * Handles drag-and-drop reordering of tasks.
@@ -222,30 +210,27 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleTaskReorder('1', '3')
      */
-    const handleTaskReorder = useCallback(
-      (activeId: string, overId: string) => {
-        const oldIndex = localPendingTodos.findIndex((t) => t.id === activeId)
-        const newIndex = localPendingTodos.findIndex((t) => t.id === overId)
+    const handleTaskReorder = (activeId: string, overId: string) => {
+      const oldIndex = localPendingTodos.findIndex((t) => t.id === activeId)
+      const newIndex = localPendingTodos.findIndex((t) => t.id === overId)
 
-        if (oldIndex === -1 || newIndex === -1) {
-          return
-        }
+      if (oldIndex === -1 || newIndex === -1) {
+        return
+      }
 
-        // Optimistically update local state
-        const reordered = arrayMove(localPendingTodos, oldIndex, newIndex)
-        setLocalPendingTodos(reordered)
+      // Optimistically update local state
+      const reordered = arrayMove(localPendingTodos, oldIndex, newIndex)
+      setLocalPendingTodos(reordered)
 
-        // Build reorder items with new order values
-        const items = reordered.map((t, i) => ({
-          id: parseInt(t.id, DECIMAL_RADIX),
-          order: i,
-        }))
+      // Build reorder items with new order values
+      const items = reordered.map((t, i) => ({
+        id: parseInt(t.id, DECIMAL_RADIX),
+        order: i,
+      }))
 
-        // Call reorder mutation
-        reorderMutation.mutate({ items })
-      },
-      [localPendingTodos, reorderMutation],
-    )
+      // Call reorder mutation
+      reorderMutation.mutate({ items })
+    }
 
     /**
      * Creates a new category from the floating navigator.
@@ -254,12 +239,9 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleCategoryCreate('Work', 'blue')
      */
-    const handleCategoryCreate = useCallback(
-      (name: string, color: CategoryColor) => {
-        categoryCreateMutation.mutate({ name, color })
-      },
-      [categoryCreateMutation],
-    )
+    const handleCategoryCreate = (name: string, color: CategoryColor) => {
+      categoryCreateMutation.mutate({ name, color })
+    }
 
     /**
      * Updates a category name or color from the floating navigator.
@@ -268,12 +250,12 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleCategoryUpdate(1, { name: 'Personal', color: 'green' })
      */
-    const handleCategoryUpdate = useCallback(
-      (id: number, data: { name?: string; color?: CategoryColor }) => {
-        categoryUpdateMutation.mutate({ id, data })
-      },
-      [categoryUpdateMutation],
-    )
+    const handleCategoryUpdate = (
+      id: number,
+      data: { name?: string; color?: CategoryColor },
+    ) => {
+      categoryUpdateMutation.mutate({ id, data })
+    }
 
     /**
      * Deletes a category and resets selection if it was the active filter.
@@ -282,29 +264,22 @@ export const FloatingNavigatorContainer = React.memo(
      * @example
      * handleCategoryDelete(3)
      */
-    const handleCategoryDelete = useCallback(
-      (id: number) => {
-        categoryDeleteMutation.mutate({ id })
-        // If the deleted category was the active filter, clear selection
-        // so useAutoSelectDefaultCategory picks the General category
-        if (id === selectedCategoryId) {
-          setSelectedCategoryId(null)
-        }
-      },
-      [categoryDeleteMutation, selectedCategoryId, setSelectedCategoryId],
-    )
+    const handleCategoryDelete = (id: number) => {
+      categoryDeleteMutation.mutate({ id })
+      // If the deleted category was the active filter, clear selection
+      // so useAutoSelectDefaultCategory picks the General category
+      if (id === selectedCategoryId) {
+        setSelectedCategoryId(null)
+      }
+    }
 
     // Transform todos to FloatingTodo format
-    const todosFromQuery: FloatingTodo[] = useMemo(
-      () =>
-        (data?.todos ?? []).map((todo) => ({
-          id: todo.id.toString(),
-          text: todo.text,
-          completed: todo.completed,
-          createdAt: new Date(todo.createdAt),
-        })),
-      [data],
-    )
+    const todosFromQuery: FloatingTodo[] = (data?.todos ?? []).map((todo) => ({
+      id: todo.id.toString(),
+      text: todo.text,
+      completed: todo.completed,
+      createdAt: new Date(todo.createdAt),
+    }))
 
     // Sync local state with query data when it changes
     useCycleEffect(() => {
@@ -313,16 +288,10 @@ export const FloatingNavigatorContainer = React.memo(
 
     // Use local state for pending todos to enable optimistic reordering
     const pendingTodos = localPendingTodos
-    const completedTodos = useMemo(
-      () => todosFromQuery.filter((t) => t.completed),
-      [todosFromQuery],
-    )
+    const completedTodos = todosFromQuery.filter((t) => t.completed)
 
     // Combine for passing to FloatingNavigator
-    const todos = useMemo(
-      () => [...pendingTodos, ...completedTodos],
-      [completedTodos, pendingTodos],
-    )
+    const todos = [...pendingTodos, ...completedTodos]
 
     useCycleEffect(() => {
       // Cross-window sync: BrainDump + Home todo completions also write to the
@@ -423,5 +392,4 @@ export const FloatingNavigatorContainer = React.memo(
         isCategoryDeletePending={categoryDeleteMutation.isPending}
       />
     )
-  },
-)
+  }

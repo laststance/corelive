@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
-import { memo, useCallback, useId, useMemo, useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -137,7 +137,7 @@ function findCheckedLineIndexByTitle(
  * textarea state first, then fire the IPC + oRPC writes. Failure rollback
  * is handled by the toast cleanup path.
  */
-export const BrainDumpEditor = memo(function BrainDumpEditor({
+export const BrainDumpEditor = function BrainDumpEditor({
   categories,
 }: {
   categories: CategoryWithCount[]
@@ -370,39 +370,33 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
     }
   }, [activeCategoryId, isMounted])
 
-  const handleToggleSync = useCallback((enabled: boolean) => {
+  const handleToggleSync = (enabled: boolean) => {
     setSyncEnabled(enabled)
     void window.brainDumpAPI?.sync.setEnabled(enabled)
-  }, [])
+  }
 
-  const handleManualCategoryChange = useCallback((id: Category['id']) => {
+  const handleManualCategoryChange = (id: Category['id']) => {
     setLocalCategoryId(id)
     void window.brainDumpAPI?.category.setLast(id)
-  }, [])
+  }
 
-  const handleOpacityChange = useCallback((next: number) => {
+  const handleOpacityChange = (next: number) => {
     const clamped = Math.max(
       BRAINDUMP_OPACITY_MIN,
       Math.min(BRAINDUMP_OPACITY_MAX, next),
     )
     setOpacity(clamped)
     void window.brainDumpAPI?.window.setOpacity(clamped)
-  }, [])
+  }
 
-  const handleCategoryValueChange = useCallback(
-    (value: string) => {
-      handleManualCategoryChange(Number(value))
-    },
-    [handleManualCategoryChange],
-  )
+  const handleCategoryValueChange = (value: string) => {
+    handleManualCategoryChange(Number(value))
+  }
 
-  const handleOpacityValueChange = useCallback(
-    (values: number[]) => {
-      const next = values[0]
-      if (next !== undefined) handleOpacityChange(next)
-    },
-    [handleOpacityChange],
-  )
+  const handleOpacityValueChange = (values: number[]) => {
+    const next = values[0]
+    if (next !== undefined) handleOpacityChange(next)
+  }
 
   /**
    * Applies the Mac Spaces tracking switch from the BrainDump header.
@@ -412,30 +406,29 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
    * @example
    * await handleSpacesTrackingChange(true)
    */
-  const handleSpacesTrackingChange = useCallback(
-    async (enabled: boolean): Promise<void> => {
-      if (isUpdatingSpacesTrackingRef.current) return
-      isUpdatingSpacesTrackingRef.current = true
-      setIsUpdatingSpacesTracking(true)
+  const handleSpacesTrackingChange = async (
+    enabled: boolean,
+  ): Promise<void> => {
+    if (isUpdatingSpacesTrackingRef.current) return
+    isUpdatingSpacesTrackingRef.current = true
+    setIsUpdatingSpacesTracking(true)
 
-      const previous = spacesTrackingEnabled
-      setSpacesTrackingEnabled(enabled)
+    const previous = spacesTrackingEnabled
+    setSpacesTrackingEnabled(enabled)
 
-      try {
-        const applied =
-          await window.brainDumpAPI?.spaces?.setVisibleOnAllWorkspaces(enabled)
-        setSpacesTrackingEnabled(applied ?? enabled)
-      } catch (error) {
-        setSpacesTrackingEnabled(previous)
-        toast.error('Failed to update desktop tracking')
-        log.error('BrainDump Spaces tracking update failed', error)
-      } finally {
-        isUpdatingSpacesTrackingRef.current = false
-        setIsUpdatingSpacesTracking(false)
-      }
-    },
-    [spacesTrackingEnabled],
-  )
+    try {
+      const applied =
+        await window.brainDumpAPI?.spaces?.setVisibleOnAllWorkspaces(enabled)
+      setSpacesTrackingEnabled(applied ?? enabled)
+    } catch (error) {
+      setSpacesTrackingEnabled(previous)
+      toast.error('Failed to update desktop tracking')
+      log.error('BrainDump Spaces tracking update failed', error)
+    } finally {
+      isUpdatingSpacesTrackingRef.current = false
+      setIsUpdatingSpacesTracking(false)
+    }
+  }
 
   /**
    * Promote the caret line to `[x]`, create a Completed row, and arm the
@@ -454,141 +447,134 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
    *   (plain-line completions); omit for checkbox lines so they revert to `[ ]`.
    * @returns Promise<void>; the created row id is tracked internally for undo.
    */
-  const promoteLineToCompleted = useCallback(
-    async (
-      lineIndex: BrainDumpLineIndex,
-      title: BrainDumpCompletedTitle,
-      rollbackPlainText?: BrainDumpCompletedTitle,
-    ) => {
-      if (activeCategoryId === null) {
-        toast.error('Pick a category before checking items')
-        return
-      }
-      const safeTitle = normalizeCompletedTitle(title)
-      const promise = createCompletedMutation
-        .mutateAsync({
-          categoryId: activeCategoryId,
-          title: safeTitle,
-        })
-        .then(
-          (created) => created.id,
-          (error) => {
-            const message =
-              error instanceof Error
-                ? error.message
-                : 'Failed to record completion'
-            toast.error(message)
-            // Re-resolve which line still holds the `[x]` for this title —
-            // the original lineIndex may have drifted if the user inserted
-            // text above before the create rejected.
-            const resolvedLine = findCheckedLineIndexByTitle(
-              noteTextRef.current,
-              safeTitle,
-            )
-            const currentLine = resolvedLine ?? lineIndex
-            // Plain-line completion: restore the original prose rather than
-            // leaving a `- [ ] <title>` skeleton the user never typed — but ONLY
-            // when the title search positively found the line. On a miss we fall
-            // back to the safe uncheck (a no-op on non-checkbox lines) so a
-            // drifted stale lineIndex never blind-overwrites an unrelated line
-            // the user edited while the create was in flight. Checkbox lines
-            // (no rollbackPlainText) always revert to `[ ]` as before.
-            setNoteText(
-              rollbackPlainText !== undefined && resolvedLine !== null
-                ? replaceLineAtIndex(
-                    noteTextRef.current,
-                    resolvedLine,
-                    rollbackPlainText,
-                  )
-                : setCheckboxStateAtLine(
-                    noteTextRef.current,
-                    currentLine,
-                    false,
-                  ),
-            )
-            return null
-          },
-        )
-      const pendingEntry: PendingCreate = { promise, title: safeTitle }
-      pendingCreatesRef.current.set(lineIndex, pendingEntry)
-
-      const completedId = await promise
-      // Drop the pending entry only if it's still the same one — a fresh
-      // tick on the same line would have replaced it.
-      if (pendingCreatesRef.current.get(lineIndex) === pendingEntry) {
-        pendingCreatesRef.current.delete(lineIndex)
-      }
-      if (completedId === null) return
-
-      checkedRowsRef.current.set(lineIndex, {
-        completedId,
+  const promoteLineToCompleted = async (
+    lineIndex: BrainDumpLineIndex,
+    title: BrainDumpCompletedTitle,
+    rollbackPlainText?: BrainDumpCompletedTitle,
+  ) => {
+    if (activeCategoryId === null) {
+      toast.error('Pick a category before checking items')
+      return
+    }
+    const safeTitle = normalizeCompletedTitle(title)
+    const promise = createCompletedMutation
+      .mutateAsync({
+        categoryId: activeCategoryId,
         title: safeTitle,
       })
-      await queryClient.invalidateQueries({
-        queryKey: orpc.completed.heatmap.key(),
-      })
-      broadcastTodoSync()
-
-      const undoToastId = toast.success(`Completed: ${safeTitle}`, {
-        description: 'Tap Undo within 5 s to revert.',
-        duration: TOAST_UNDO_MS,
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            // Read latest text via ref so the user's keystrokes between
-            // creation and undo are preserved. Pass the captured title so
-            // undoCompleted can re-resolve the current line index even if
-            // lines have drifted.
-            void undoCompleted(
-              safeTitle,
-              completedId,
-              noteTextRef.current,
-              lineIndex,
-            )
-            toast.dismiss(undoToastId)
-          },
+      .then(
+        (created) => created.id,
+        (error) => {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Failed to record completion'
+          toast.error(message)
+          // Re-resolve which line still holds the `[x]` for this title —
+          // the original lineIndex may have drifted if the user inserted
+          // text above before the create rejected.
+          const resolvedLine = findCheckedLineIndexByTitle(
+            noteTextRef.current,
+            safeTitle,
+          )
+          const currentLine = resolvedLine ?? lineIndex
+          // Plain-line completion: restore the original prose rather than
+          // leaving a `- [ ] <title>` skeleton the user never typed — but ONLY
+          // when the title search positively found the line. On a miss we fall
+          // back to the safe uncheck (a no-op on non-checkbox lines) so a
+          // drifted stale lineIndex never blind-overwrites an unrelated line
+          // the user edited while the create was in flight. Checkbox lines
+          // (no rollbackPlainText) always revert to `[ ]` as before.
+          setNoteText(
+            rollbackPlainText !== undefined && resolvedLine !== null
+              ? replaceLineAtIndex(
+                  noteTextRef.current,
+                  resolvedLine,
+                  rollbackPlainText,
+                )
+              : setCheckboxStateAtLine(noteTextRef.current, currentLine, false),
+          )
+          return null
         },
-        // Clear-on-complete: when the toast auto-closes (the undo window elapsed
-        // without an Undo), drop the finished line so the scratchpad clears as
-        // you go. Sonner fires onAutoClose ONLY on the timeout — an Undo click
-        // dismisses (onDismiss) instead, so undone completions are never cleared.
-        onAutoClose: clearOnComplete
-          ? () => {
-              // Tie the clear to THIS completion via its completedId entry in
-              // checkedRowsRef. If the entry is gone, the completion was already
-              // reverted (toast Undo / manual uncheck both delete it) or the
-              // category was switched (which clears the whole map) — skip, so we
-              // never strip a same-title line belonging to a different
-              // completion or category.
-              let memoryKey: BrainDumpLineIndex | null = null
-              for (const [key, value] of checkedRowsRef.current.entries()) {
-                if (value.completedId === completedId) {
-                  memoryKey = key
-                  break
-                }
-              }
-              if (memoryKey === null) return
-              // Drop the now-defunct entry BEFORE mutating text so no stale
-              // {lineIndex → completedId} lingers: a leftover entry would let the
-              // uncheck path's index/title fallback later delete the WRONG
-              // Completed row (titles repeat by design — repetition is a feature).
-              checkedRowsRef.current.delete(memoryKey)
+      )
+    const pendingEntry: PendingCreate = { promise, title: safeTitle }
+    pendingCreatesRef.current.set(lineIndex, pendingEntry)
 
-              // Re-resolve by title against the freshest text (the index may have
-              // drifted) and remove ONLY a line that is STILL checked: a manual
-              // uncheck leaves it `- [ ]`, which won't match, so this self-suppresses.
-              const lineToClear = findCheckedLineIndexByTitle(
-                noteTextRef.current,
-                safeTitle,
-              )
-              if (lineToClear === null) return
-              setNoteText(removeLineAtIndex(noteTextRef.current, lineToClear))
+    const completedId = await promise
+    // Drop the pending entry only if it's still the same one — a fresh
+    // tick on the same line would have replaced it.
+    if (pendingCreatesRef.current.get(lineIndex) === pendingEntry) {
+      pendingCreatesRef.current.delete(lineIndex)
+    }
+    if (completedId === null) return
+
+    checkedRowsRef.current.set(lineIndex, {
+      completedId,
+      title: safeTitle,
+    })
+    await queryClient.invalidateQueries({
+      queryKey: orpc.completed.heatmap.key(),
+    })
+    broadcastTodoSync()
+
+    const undoToastId = toast.success(`Completed: ${safeTitle}`, {
+      description: 'Tap Undo within 5 s to revert.',
+      duration: TOAST_UNDO_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          // Read latest text via ref so the user's keystrokes between
+          // creation and undo are preserved. Pass the captured title so
+          // undoCompleted can re-resolve the current line index even if
+          // lines have drifted.
+          void undoCompleted(
+            safeTitle,
+            completedId,
+            noteTextRef.current,
+            lineIndex,
+          )
+          toast.dismiss(undoToastId)
+        },
+      },
+      // Clear-on-complete: when the toast auto-closes (the undo window elapsed
+      // without an Undo), drop the finished line so the scratchpad clears as
+      // you go. Sonner fires onAutoClose ONLY on the timeout — an Undo click
+      // dismisses (onDismiss) instead, so undone completions are never cleared.
+      onAutoClose: clearOnComplete
+        ? () => {
+            // Tie the clear to THIS completion via its completedId entry in
+            // checkedRowsRef. If the entry is gone, the completion was already
+            // reverted (toast Undo / manual uncheck both delete it) or the
+            // category was switched (which clears the whole map) — skip, so we
+            // never strip a same-title line belonging to a different
+            // completion or category.
+            let memoryKey: BrainDumpLineIndex | null = null
+            for (const [key, value] of checkedRowsRef.current.entries()) {
+              if (value.completedId === completedId) {
+                memoryKey = key
+                break
+              }
             }
-          : undefined,
-      })
-    },
-    [activeCategoryId, createCompletedMutation, queryClient, clearOnComplete],
-  )
+            if (memoryKey === null) return
+            // Drop the now-defunct entry BEFORE mutating text so no stale
+            // {lineIndex → completedId} lingers: a leftover entry would let the
+            // uncheck path's index/title fallback later delete the WRONG
+            // Completed row (titles repeat by design — repetition is a feature).
+            checkedRowsRef.current.delete(memoryKey)
+
+            // Re-resolve by title against the freshest text (the index may have
+            // drifted) and remove ONLY a line that is STILL checked: a manual
+            // uncheck leaves it `- [ ]`, which won't match, so this self-suppresses.
+            const lineToClear = findCheckedLineIndexByTitle(
+              noteTextRef.current,
+              safeTitle,
+            )
+            if (lineToClear === null) return
+            setNoteText(removeLineAtIndex(noteTextRef.current, lineToClear))
+          }
+        : undefined,
+    })
+  }
 
   /**
    * Reverse a completion: delete the Completed row and flip the line back
@@ -601,57 +587,52 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
    * `checkedRowsRef` map by `completedId` so the cleanup targets the right
    * entry no matter how the keys have shifted.
    */
-  const undoCompleted = useCallback(
-    async (
-      title: BrainDumpCompletedTitle,
-      completedId: Completed['id'],
-      originalText: string,
-      fallbackLineIndex: BrainDumpLineIndex,
-    ) => {
-      const resolvedLineIndex =
-        findCheckedLineIndexByTitle(originalText, title) ?? fallbackLineIndex
+  const undoCompleted = async (
+    title: BrainDumpCompletedTitle,
+    completedId: Completed['id'],
+    originalText: string,
+    fallbackLineIndex: BrainDumpLineIndex,
+  ) => {
+    const resolvedLineIndex =
+      findCheckedLineIndexByTitle(originalText, title) ?? fallbackLineIndex
 
-      // Find the ref entry by completedId (key may have drifted).
-      let memoryKey: BrainDumpLineIndex | null = null
-      let memoryBeforeUndo: CheckedRowMemory | undefined
-      for (const [key, value] of checkedRowsRef.current.entries()) {
-        if (value.completedId === completedId) {
-          memoryKey = key
-          memoryBeforeUndo = value
-          break
-        }
+    // Find the ref entry by completedId (key may have drifted).
+    let memoryKey: BrainDumpLineIndex | null = null
+    let memoryBeforeUndo: CheckedRowMemory | undefined
+    for (const [key, value] of checkedRowsRef.current.entries()) {
+      if (value.completedId === completedId) {
+        memoryKey = key
+        memoryBeforeUndo = value
+        break
       }
-      if (memoryKey !== null) checkedRowsRef.current.delete(memoryKey)
+    }
+    if (memoryKey !== null) checkedRowsRef.current.delete(memoryKey)
+    setNoteText(setCheckboxStateAtLine(originalText, resolvedLineIndex, false))
+
+    try {
+      await deleteCompletedMutation.mutateAsync({ id: completedId })
+      await queryClient.invalidateQueries({
+        queryKey: orpc.completed.heatmap.key(),
+      })
+      broadcastTodoSync()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to undo completion'
+      toast.error(message)
+      // Roll back the optimistic uncheck so the checkbox state matches
+      // the still-existing Completed row. Re-resolve again from the
+      // latest text — drift may have continued during the await.
+      const rollbackLineIndex =
+        findCheckedLineIndexByTitle(noteTextRef.current, title) ??
+        resolvedLineIndex
       setNoteText(
-        setCheckboxStateAtLine(originalText, resolvedLineIndex, false),
+        setCheckboxStateAtLine(noteTextRef.current, rollbackLineIndex, true),
       )
-
-      try {
-        await deleteCompletedMutation.mutateAsync({ id: completedId })
-        await queryClient.invalidateQueries({
-          queryKey: orpc.completed.heatmap.key(),
-        })
-        broadcastTodoSync()
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Failed to undo completion'
-        toast.error(message)
-        // Roll back the optimistic uncheck so the checkbox state matches
-        // the still-existing Completed row. Re-resolve again from the
-        // latest text — drift may have continued during the await.
-        const rollbackLineIndex =
-          findCheckedLineIndexByTitle(noteTextRef.current, title) ??
-          resolvedLineIndex
-        setNoteText(
-          setCheckboxStateAtLine(noteTextRef.current, rollbackLineIndex, true),
-        )
-        if (memoryBeforeUndo) {
-          checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
-        }
+      if (memoryBeforeUndo) {
+        checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
       }
-    },
-    [deleteCompletedMutation, queryClient],
-  )
+    }
+  }
 
   /**
    * Complete the line nearest the caret: toggle an existing `- [ ]`/`- [x]`
@@ -753,7 +734,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
   // Block oRPC calls until Clerk has loaded — otherwise the request 401s
   // before useUser hydrates.
   const isReady = isMounted && isClerkReady && isBrainDumpEnvironment()
-  const opacityValue = useMemo(() => [opacity], [opacity])
+  const opacityValue = [opacity]
   if (!isReady) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
@@ -782,6 +763,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             disabled={isUpdatingSpacesTracking}
             aria-label="Show BrainDump on all Mac desktops"
           />
+
           <Label
             htmlFor={spacesInputId}
             className="cursor-pointer text-xs text-muted-foreground"
@@ -809,6 +791,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             checked={syncEnabled}
             onCheckedChange={handleToggleSync}
           />
+
           <Label htmlFor={syncInputId} className="cursor-pointer text-xs">
             Follow FloatingNav
           </Label>
@@ -852,6 +835,7 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
             className="flex-1"
             aria-label="Window opacity"
           />
+
           <span className="w-10 text-right tabular-nums">
             {Math.round(opacity * 100)}%
           </span>
@@ -887,4 +871,4 @@ export const BrainDumpEditor = memo(function BrainDumpEditor({
       />
     </div>
   )
-})
+}

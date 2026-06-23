@@ -29,7 +29,7 @@ type Story = StoryObj<typeof DropdownMenu>
 export const Menu: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenuTrigger className="bg-muted text-muted-foreground rounded px-4 py-2 text-sm">
+      <DropdownMenuTrigger className="rounded bg-muted px-4 py-2 text-sm text-muted-foreground">
         Open menu
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-60">

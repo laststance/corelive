@@ -6,13 +6,13 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Accordion = React.memo(function Accordion({
+function Accordion({
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Root>) {
   return <AccordionPrimitive.Root data-slot="accordion" {...props} />
-})
+}
 
-const AccordionItem = React.memo(function AccordionItem({
+function AccordionItem({
   className,
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Item>) {
@@ -23,9 +23,9 @@ const AccordionItem = React.memo(function AccordionItem({
       {...props}
     />
   )
-})
+}
 
-const AccordionTrigger = React.memo(function AccordionTrigger({
+function AccordionTrigger({
   className,
   children,
   ...props
@@ -45,9 +45,9 @@ const AccordionTrigger = React.memo(function AccordionTrigger({
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   )
-})
+}
 
-const AccordionContent = React.memo(function AccordionContent({
+function AccordionContent({
   className,
   children,
   ...props
@@ -61,6 +61,6 @@ const AccordionContent = React.memo(function AccordionContent({
       <div className={cn('pb-4 pt-0', className)}>{children}</div>
     </AccordionPrimitive.Content>
   )
-})
+}
 
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }

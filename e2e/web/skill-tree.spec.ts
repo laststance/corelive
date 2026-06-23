@@ -99,7 +99,7 @@ test.describe('Skill Tree E2E', () => {
     // each spec run, so we no longer need Date.now/Math.random for isolation.
     const todoText = 'Skill tree happy path todo'
     await seedCompletedTodo(page, todoText)
-    await page.getByRole('link', { name: /skill tree/i }).click()
+    await page.goto('/skill-tree')
     await expect(page).toHaveURL(/\/skill-tree/)
 
     // `pill.toBeVisible` polls the DOM and is a stronger gate than
@@ -304,13 +304,24 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   await page.getByPlaceholder('Enter a new todo...').fill(todoText)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
 
-  const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+  // Pending-list checkbox only — the same aria-label can appear on optimistic
+  // placeholders (`todo--<ts>`), the settled server row (`todo-<id>`), and
+  // completed journal rows (`journal-todo-<id>`). Scope to the active list row
+  // whose id has a single dash after the `todo-` prefix.
+  const todoCheckbox = page
+    .getByRole('checkbox', { name: todoText })
+    .and(page.locator('[id^="todo-"]:not([id^="todo--"])'))
   await expect(todoCheckbox).toBeVisible()
   // Wait for the create mutation to settle with a positive server ID
   // (optimistic negative IDs would yield "todo--<ts>" — double dash).
   await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
     timeout: 5000,
   })
+  const pendingTodoId = await todoCheckbox.getAttribute('id')
+  if (!pendingTodoId) {
+    throw new Error('seedCompletedTodo: pending todo checkbox has no id')
+  }
+  const serverTodoId = pendingTodoId.replace(/^todo-/, '')
 
   // Arm the toggle POST waiter BEFORE clicking so we reliably catch the
   // request/response pair. The `line-through` assertion below only verifies
@@ -327,15 +338,19 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   )
 
   await todoCheckbox.click()
-  await expect(page.getByText(todoText)).toHaveClass(/line-through/, {
-    timeout: 5000,
-  })
 
-  // Block until the toggle POST completes with 200. Now the DB state is
-  // guaranteed: this todo is `completed: true` and will appear in
-  // getUnassignedPool on the next skill-tree fetch.
   const toggleResponse = await togglePromise
   expect(toggleResponse.status()).toBe(200)
+
+  // Pin the seeded row by server id so Playwright retries (which re-run the
+  // test body but not `beforeAll(resetDatabase)`) cannot strict-match stale
+  // journal rows from earlier attempts with the same title.
+  const completedJournalCheckbox = page.locator(`#journal-todo-${serverTodoId}`)
+  const completedPendingCheckbox = page.locator(`#${pendingTodoId}`)
+
+  await expect(
+    completedJournalCheckbox.or(completedPendingCheckbox),
+  ).toBeChecked({ timeout: 10000 })
 }
 
 /**

@@ -48,21 +48,23 @@ export const Open: Story = {
   ),
 }
 
+function ControlledCollapsibleStory() {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <Collapsible className="w-[320px]" open={open} onOpenChange={setOpen}>
+      <div className="flex items-center justify-between">
+        <span className="font-medium">Controlled</span>
+        <CollapsibleTrigger className="text-sm underline">
+          {open ? 'Close' : 'Open'}
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className="mt-2 rounded border p-3 text-sm">
+        Content controlled by state
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 export const Controlled: Story = {
-  render: () => {
-    const [open, setOpen] = React.useState(false)
-    return (
-      <Collapsible className="w-[320px]" open={open} onOpenChange={setOpen}>
-        <div className="flex items-center justify-between">
-          <span className="font-medium">Controlled</span>
-          <CollapsibleTrigger className="text-sm underline">
-            {open ? 'Close' : 'Open'}
-          </CollapsibleTrigger>
-        </div>
-        <CollapsibleContent className="mt-2 rounded border p-3 text-sm">
-          Content controlled by state
-        </CollapsibleContent>
-      </Collapsible>
-    )
-  },
+  render: () => <ControlledCollapsibleStory />,
 }

@@ -2,7 +2,7 @@
 
 import { useMutation } from '@tanstack/react-query'
 import * as React from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { match } from 'ts-pattern'
 
@@ -83,7 +83,7 @@ export interface PasteImportProps {
  * <PasteImport zone="completed" categories={cats} trigger={<Button>Import</Button>}
  *   onImported={(batch) => invalidateHeatmap()} />
  */
-export const PasteImport = React.memo(function PasteImport({
+export const PasteImport = function PasteImport({
   zone,
   trigger,
   categories,
@@ -98,13 +98,10 @@ export const PasteImport = React.memo(function PasteImport({
   // Support both controlled (D7) and uncontrolled (trigger-only) usage.
   const isControlled = controlledOpen !== undefined
   const open = isControlled ? controlledOpen : uncontrolledOpen
-  const setOpen = useCallback(
-    (next: boolean) => {
-      if (isControlled) controlledOnOpenChange?.(next)
-      else setUncontrolledOpen(next)
-    },
-    [controlledOnOpenChange, isControlled],
-  )
+  const setOpen = (next: boolean) => {
+    if (isControlled) controlledOnOpenChange?.(next)
+    else setUncontrolledOpen(next)
+  }
 
   // The batch id persists across retries (idempotency) and is cleared on
   // success + close so a fresh paste gets a new id.
@@ -126,109 +123,93 @@ export const PasteImport = React.memo(function PasteImport({
   const isSubmitting =
     createCompletedMutation.isPending || createTodoMutation.isPending
 
-  const handleOpenChange = useCallback(
-    (next: boolean) => {
-      if (!next) {
-        // Fresh id + cleared error on every close so a reopen is a new batch.
-        batchIdRef.current = null
-        setError(null)
-      }
-      setOpen(next)
-    },
-    [setOpen],
-  )
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      // Fresh id + cleared error on every close so a reopen is a new batch.
+      batchIdRef.current = null
+      setError(null)
+    }
+    setOpen(next)
+  }
 
   /**
    * Fire the success toast with a 10s Undo that deletes the whole batch by id.
    * Undo re-invalidates via `onImported` so the heatmap/list snap back.
    */
-  const showUndoToast = useCallback(
-    (batch: LastImport) => {
-      const successCopy =
-        batch.zone === 'completed'
-          ? `${batch.count.toLocaleString()} added — today's lit`
-          : `${batch.count.toLocaleString()} added to your list`
+  const showUndoToast = (batch: LastImport) => {
+    const successCopy =
+      batch.zone === 'completed'
+        ? `${batch.count.toLocaleString()} added — today's lit`
+        : `${batch.count.toLocaleString()} added to your list`
 
-      const toastId = toast.success(successCopy, {
-        duration: UNDO_TOAST_MS,
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            const undo =
-              batch.zone === 'completed'
-                ? deleteCompletedMutation
-                : deleteTodoMutation
-            undo.mutate(
-              { importBatchId: batch.importBatchId },
-              {
-                onSuccess: () => {
-                  toast.dismiss(toastId)
-                  // Re-invalidate so the undone rows disappear immediately.
-                  onImported?.({ ...batch, count: 0 })
-                },
-                onError: () => {
-                  toast.error("Couldn't undo — the import is still saved")
-                },
+    const toastId = toast.success(successCopy, {
+      duration: UNDO_TOAST_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          const undo =
+            batch.zone === 'completed'
+              ? deleteCompletedMutation
+              : deleteTodoMutation
+          undo.mutate(
+            { importBatchId: batch.importBatchId },
+            {
+              onSuccess: () => {
+                toast.dismiss(toastId)
+                // Re-invalidate so the undone rows disappear immediately.
+                onImported?.({ ...batch, count: 0 })
               },
-            )
-          },
+              onError: () => {
+                toast.error("Couldn't undo — the import is still saved")
+              },
+            },
+          )
         },
-      })
-    },
-    [deleteCompletedMutation, deleteTodoMutation, onImported],
-  )
+      },
+    })
+  }
 
-  const handleConfirm = useCallback(
-    async (items: PasteImportItem[]) => {
-      setError(null)
-      // Generate once; reuse on retry → idempotent on the server (P2002 no-op).
-      if (batchIdRef.current === null) {
-        batchIdRef.current = crypto.randomUUID()
+  const handleConfirm = async (items: PasteImportItem[]) => {
+    setError(null)
+    // Generate once; reuse on retry → idempotent on the server (P2002 no-op).
+    if (batchIdRef.current === null) {
+      batchIdRef.current = crypto.randomUUID()
+    }
+    const importBatchId = batchIdRef.current
+
+    try {
+      const result = await match(zone)
+        .with('completed', async () =>
+          createCompletedMutation.mutateAsync({ items, importBatchId }),
+        )
+        .with('todo', async () =>
+          createTodoMutation.mutateAsync({ items, importBatchId }),
+        )
+        .exhaustive()
+
+      const batch: LastImport = {
+        importBatchId,
+        zone,
+        count: result.count,
+        // Retain full items (title + categoryId) so Move-to-Completed can
+        // replay them with all per-row overrides intact, not just titles.
+        items,
+        expiresAt: Date.now() + UNDO_WINDOW_MS,
       }
-      const importBatchId = batchIdRef.current
 
-      try {
-        const result = await match(zone)
-          .with('completed', async () =>
-            createCompletedMutation.mutateAsync({ items, importBatchId }),
-          )
-          .with('todo', async () =>
-            createTodoMutation.mutateAsync({ items, importBatchId }),
-          )
-          .exhaustive()
-
-        const batch: LastImport = {
-          importBatchId,
-          zone,
-          count: result.count,
-          // Retain full items (title + categoryId) so Move-to-Completed can
-          // replay them with all per-row overrides intact, not just titles.
-          items,
-          expiresAt: Date.now() + UNDO_WINDOW_MS,
-        }
-
-        // Success: clear the id (next open = new batch), close, notify, toast.
-        batchIdRef.current = null
-        setOpen(false)
-        onImported?.(batch)
-        showUndoToast(batch)
-      } catch {
-        // Offline / server error: keep the dialog open, preserve the paste, and
-        // keep the SAME batch id so "Try again" is idempotent. The error line
-        // renders inside the dialog; a toast mirrors it for discoverability.
-        setError("Couldn't reach the server — your paste is safe")
-        toast.error("Couldn't reach the server — your paste is safe")
-      }
-    },
-    [
-      createCompletedMutation,
-      createTodoMutation,
-      onImported,
-      setOpen,
-      showUndoToast,
-      zone,
-    ],
-  )
+      // Success: clear the id (next open = new batch), close, notify, toast.
+      batchIdRef.current = null
+      setOpen(false)
+      onImported?.(batch)
+      showUndoToast(batch)
+    } catch {
+      // Offline / server error: keep the dialog open, preserve the paste, and
+      // keep the SAME batch id so "Try again" is idempotent. The error line
+      // renders inside the dialog; a toast mirrors it for discoverability.
+      setError("Couldn't reach the server — your paste is safe")
+      toast.error("Couldn't reach the server — your paste is safe")
+    }
+  }
 
   return (
     <PasteImportDialog
@@ -243,4 +224,4 @@ export const PasteImport = React.memo(function PasteImport({
       onConfirm={handleConfirm}
     />
   )
-})
+}

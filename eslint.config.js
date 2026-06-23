@@ -1,21 +1,14 @@
 // For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
 
-import lastStanceReactNextPlugin from '@laststance/react-next-eslint-plugin'
 import { defineConfig } from 'eslint/config'
 import tsPrefixer from 'eslint-config-ts-prefixer'
+import reactHooks from 'eslint-plugin-react-hooks'
 import reactYouMightNotNeedAnEffect from 'eslint-plugin-react-you-might-not-need-an-effect'
 
 import dslint from './packages/eslint-plugin-dslint/dist/index.js'
 
-// Keep every custom React/Next rule enabled at error level as the plugin grows.
-const lastStanceReactNextRules = Object.fromEntries(
-  Object.keys(lastStanceReactNextPlugin.rules).map((ruleName) => [
-    `@laststance/react-next/${ruleName}`,
-    'error',
-  ]),
-)
-
 export default defineConfig([
+  reactHooks.configs.flat.recommended,
   reactYouMightNotNeedAnEffect.configs.recommended,
   {
     ignores: [
@@ -35,24 +28,6 @@ export default defineConfig([
     ],
   },
   ...tsPrefixer,
-  {
-    ignores: [
-      '**/*.stories.ts',
-      '**/*.stories.tsx',
-      '**/*.test.ts',
-      '**/*.test.tsx',
-      // Next.js server route shells are not client render targets for React.memo.
-      'src/app/**/page.tsx',
-      '**/src/app/**/page.tsx',
-      // shadcn/ui wrappers are generated primitives; product components consume them.
-      'src/components/ui/**',
-      '**/src/components/ui/**',
-    ],
-    plugins: {
-      '@laststance/react-next': lastStanceReactNextPlugin,
-    },
-    rules: lastStanceReactNextRules,
-  },
   {
     rules: {
       'no-console': ['error', { allow: ['warn', 'error'] }],

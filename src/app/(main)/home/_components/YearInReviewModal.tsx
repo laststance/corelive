@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -111,7 +111,7 @@ function writeStoredYear(storageKey: string, year: number): void {
  * @example
  * <YearInReviewModal dataByDate={heatmapByDate} isLoading={heatmapLoading} />
  */
-export const YearInReviewModal = memo(function YearInReviewModal({
+export const YearInReviewModal = function YearInReviewModal({
   dataByDate,
   isLoading,
   isRestoring,
@@ -125,7 +125,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
   // documents intent: the effect's `forcedToday` dep stays stable across
   // re-renders for the same `?force=` value, so a background `dataByDate`
   // refetch can't re-fire the open after the QA user clicked Close.
-  const forcedToday = useMemo(() => parseForceDate(forceParam), [forceParam])
+  const forcedToday = parseForceDate(forceParam)
 
   const [open, setOpen] = useState(false)
   // Dedupe force-mode opens by `forceParam` value. Without this, every
@@ -184,13 +184,13 @@ export const YearInReviewModal = memo(function YearInReviewModal({
     writeStoredYear(storageKey, summary.year)
   }, [dataByDate, isLoading, isRestoring, userId, forcedToday, forceParam])
 
-  const handleOpenChange = useCallback((nextOpen: boolean) => {
+  const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen)
-  }, [])
+  }
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setOpen(false)
-  }, [])
+  }
 
   if (!open) return null
 
@@ -221,11 +221,13 @@ export const YearInReviewModal = memo(function YearInReviewModal({
               value={summary.totalCompleted}
               isLoading={isLoading}
             />
+
             <Stat
               label="days shown up"
               value={summary.activeDays}
               isLoading={isLoading}
             />
+
             <Stat
               label="longest streak"
               value={summary.longestStreak}
@@ -252,6 +254,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
                           getColorDotClass(category.color),
                         )}
                       />
+
                       <span className="text-foreground">{category.name}</span>
                     </span>
                     <span className="font-mono tabular-nums text-muted-foreground">
@@ -281,7 +284,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
       </DialogContent>
     </Dialog>
   )
-})
+}
 
 /**
  * Single stat tile inside the modal. Geist Mono tabular numbers + serif
@@ -290,7 +293,7 @@ export const YearInReviewModal = memo(function YearInReviewModal({
  * @example
  * <Stat label="completed" value={412} isLoading={false} />
  */
-const Stat = memo(function Stat({
+const Stat = function Stat({
   label,
   value,
   isLoading,
@@ -313,4 +316,4 @@ const Stat = memo(function Stat({
       <p className="font-serif text-xs italic text-muted-foreground">{label}</p>
     </div>
   )
-})
+}

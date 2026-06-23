@@ -35,7 +35,7 @@ export const WithLabel: Story = {
         Your message
       </label>
       <Textarea placeholder="Type your message here." id="message" />
-      <p className="text-muted-foreground text-xs">
+      <p className="text-xs text-muted-foreground">
         Your message will be sent to our team.
       </p>
     </div>
@@ -53,7 +53,7 @@ export const Invalid: Story = {
         id="message-invalid"
         aria-invalid={true}
       />
-      <p className="text-destructive text-xs">Please enter a valid message.</p>
+      <p className="text-xs text-destructive">Please enter a valid message.</p>
     </div>
   ),
 }

@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
-const Command = React.memo(function Command({
+function Command({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive>) {
@@ -27,9 +27,9 @@ const Command = React.memo(function Command({
       {...props}
     />
   )
-})
+}
 
-const CommandDialog = React.memo(function CommandDialog({
+function CommandDialog({
   title = 'Command Palette',
   description = 'Search for a command to run...',
   children,
@@ -58,9 +58,9 @@ const CommandDialog = React.memo(function CommandDialog({
       </DialogContent>
     </Dialog>
   )
-})
+}
 
-const CommandInput = React.memo(function CommandInput({
+function CommandInput({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
@@ -80,9 +80,9 @@ const CommandInput = React.memo(function CommandInput({
       />
     </div>
   )
-})
+}
 
-const CommandList = React.memo(function CommandList({
+function CommandList({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
@@ -96,9 +96,9 @@ const CommandList = React.memo(function CommandList({
       {...props}
     />
   )
-})
+}
 
-const CommandEmpty = React.memo(function CommandEmpty({
+function CommandEmpty({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
   return (
@@ -108,9 +108,9 @@ const CommandEmpty = React.memo(function CommandEmpty({
       {...props}
     />
   )
-})
+}
 
-const CommandGroup = React.memo(function CommandGroup({
+function CommandGroup({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Group>) {
@@ -124,9 +124,9 @@ const CommandGroup = React.memo(function CommandGroup({
       {...props}
     />
   )
-})
+}
 
-const CommandSeparator = React.memo(function CommandSeparator({
+function CommandSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
@@ -137,9 +137,9 @@ const CommandSeparator = React.memo(function CommandSeparator({
       {...props}
     />
   )
-})
+}
 
-const CommandItem = React.memo(function CommandItem({
+function CommandItem({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Item>) {
@@ -153,9 +153,9 @@ const CommandItem = React.memo(function CommandItem({
       {...props}
     />
   )
-})
+}
 
-const CommandShortcut = React.memo(function CommandShortcut({
+function CommandShortcut({
   className,
   ...props
 }: React.ComponentProps<'span'>) {
@@ -169,7 +169,7 @@ const CommandShortcut = React.memo(function CommandShortcut({
       {...props}
     />
   )
-})
+}
 
 export {
   Command,

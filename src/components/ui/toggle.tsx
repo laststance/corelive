@@ -28,7 +28,7 @@ const toggleVariants = cva(
   },
 )
 
-const Toggle = React.memo(function Toggle({
+function Toggle({
   className,
   variant,
   size,
@@ -42,6 +42,6 @@ const Toggle = React.memo(function Toggle({
       {...props}
     />
   )
-})
+}
 
 export { Toggle, toggleVariants }

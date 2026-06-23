@@ -21,7 +21,7 @@
  * @module app/global-error
  */
 
-import { memo, type ReactElement, useEffect } from 'react'
+import { type ReactElement, useEffect } from 'react'
 
 interface GlobalErrorProps {
   /** The error React caught while rendering the root layout subtree. */
@@ -133,7 +133,7 @@ function useReportRootError(error: Error & { digest?: string }): void {
  * @example
  * // Rendered automatically by Next.js when the root layout subtree throws.
  */
-const GlobalError = memo(function GlobalError({
+const GlobalError = function GlobalError({
   error,
   reset,
 }: GlobalErrorProps): ReactElement {
@@ -153,9 +153,9 @@ const GlobalError = memo(function GlobalError({
               Try again
             </button>
             {/* Secondary escape: reset() re-renders the SAME root layout, so a
-                deterministic throw just re-throws — and going "home" can't help
-                either, since every route shares this layout. A full reload is
-                the one move that fetches a fresh bundle (the stale-preload fix). */}
+                 deterministic throw just re-throws — and going "home" can't help
+                 either, since every route shares this layout. A full reload is
+                 the one move that fetches a fresh bundle (the stale-preload fix). */}
             <button
               type="button"
               onClick={() => window.location.reload()}
@@ -168,6 +168,6 @@ const GlobalError = memo(function GlobalError({
       </body>
     </html>
   )
-})
+}
 
 export default GlobalError

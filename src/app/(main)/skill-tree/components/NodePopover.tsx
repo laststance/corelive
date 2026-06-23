@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { memo, useCallback, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -76,7 +76,7 @@ export interface NodePopoverProps {
  *   <button>Open node</button>
  * </NodePopover>
  */
-export const NodePopover = memo(function NodePopover({
+export const NodePopover = function NodePopover({
   open,
   onOpenChange,
   node,
@@ -84,15 +84,12 @@ export const NodePopover = memo(function NodePopover({
   onUnassign,
   children,
 }: NodePopoverProps) {
-  const handleUnassignClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      const todoId = Number(event.currentTarget.dataset.todoId)
-      if (Number.isInteger(todoId)) {
-        onUnassign(todoId)
-      }
-    },
-    [onUnassign],
-  )
+  const handleUnassignClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const todoId = Number(event.currentTarget.dataset.todoId)
+    if (Number.isInteger(todoId)) {
+      onUnassign(todoId)
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -153,4 +150,4 @@ export const NodePopover = memo(function NodePopover({
       </PopoverContent>
     </Popover>
   )
-})
+}

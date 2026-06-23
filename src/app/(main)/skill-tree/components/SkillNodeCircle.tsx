@@ -37,7 +37,7 @@ export interface SkillNodeCircleProps {
   onClick?: (nodeId: SkillNodeId) => void
 }
 
-export const SkillNodeCircle = React.memo(function SkillNodeCircle({
+export const SkillNodeCircle = function SkillNodeCircle({
   id,
   name,
   cx,
@@ -80,7 +80,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
       style={{ cursor: 'pointer' }}
     >
       {/* SVG AAM canonical accessible-name source. See the role="img" comment
-          in ConstellationCanvas.tsx for the full SVG-AAM rationale. */}
+           in ConstellationCanvas.tsx for the full SVG-AAM rationale. */}
       <title>{ariaLabel}</title>
       {/* Invisible 44x44 hit target */}
       <rect x={cx - 22} y={cy - 22} width={44} height={44} fill="transparent" />
@@ -98,6 +98,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={1.5}
               strokeDasharray="3,3"
             />
+
             <text
               x={cx}
               y={cy + 4}
@@ -120,6 +121,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               stroke="var(--st-cream)"
               strokeWidth={2}
             />
+
             <circle cx={cx} cy={cy} r={3} fill="var(--st-cream)" />
           </>
         ))
@@ -134,6 +136,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={2}
               filter="url(#st-cream-glow)"
             />
+
             <circle cx={cx} cy={cy} r={5} fill="var(--st-cream)" />
           </>
         ))
@@ -148,6 +151,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={1}
               opacity={0.6}
             />
+
             <circle
               cx={cx}
               cy={cy}
@@ -157,6 +161,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={2}
               filter="url(#st-cream-glow)"
             />
+
             <circle cx={cx} cy={cy} r={5} fill="var(--st-cream)" />
           </>
         ))
@@ -171,6 +176,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={1}
               opacity={0.8}
             />
+
             <circle
               cx={cx}
               cy={cy}
@@ -180,6 +186,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={2.5}
               filter="url(#st-gold-glow)"
             />
+
             <circle cx={cx} cy={cy} r={6} fill="var(--st-gold)" />
           </>
         ))
@@ -195,6 +202,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
               className="st-mastered-ring"
             />
+
             <circle
               cx={cx}
               cy={cy}
@@ -204,6 +212,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={1}
               opacity={0.7}
             />
+
             <circle
               cx={cx}
               cy={cy}
@@ -213,6 +222,7 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
               strokeWidth={2}
               filter="url(#st-gold-glow)"
             />
+
             <text
               x={cx}
               y={cy + 4}
@@ -243,4 +253,4 @@ export const SkillNodeCircle = React.memo(function SkillNodeCircle({
       )}
     </g>
   )
-})
+}

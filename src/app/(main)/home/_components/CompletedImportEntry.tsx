@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardPaste } from 'lucide-react'
-import { memo, useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { ImportUndoBanner } from '@/components/import/ImportUndoBanner'
 import { PasteImport, type LastImport } from '@/components/import/PasteImport'
@@ -30,7 +30,7 @@ import { broadcastTodoSync } from '@/lib/todo-sync-channel'
  * @example
  * <CompletedImportEntry />
  */
-export const CompletedImportEntry = memo(function CompletedImportEntry() {
+export const CompletedImportEntry = function CompletedImportEntry() {
   const queryClient = useQueryClient()
   const isClerkQueryReady = useClerkQueryReady()
   const [open, setOpen] = useState(false)
@@ -44,13 +44,13 @@ export const CompletedImportEntry = memo(function CompletedImportEntry() {
   const categories = categoryData?.categories ?? []
 
   // Semantic open handler (instead of passing the raw setOpen setter down).
-  const handleOpenChange = useCallback((next: boolean) => {
+  const handleOpenChange = (next: boolean) => {
     setOpen(next)
-  }, [])
+  }
 
-  const dismissBanner = useCallback(() => {
+  const dismissBanner = () => {
     setLastImport(null)
-  }, [])
+  }
 
   // Cross-window D7: the floating navigator broadcasts an open-intent after it
   // focuses the main window; only this main-window entry opens the dialog.
@@ -64,22 +64,19 @@ export const CompletedImportEntry = memo(function CompletedImportEntry() {
   // floating navigator + braindump windows stay in lockstep. The journal key is
   // invalidated DIRECTLY here, not via broadcast, because the importing window
   // never receives its own BroadcastChannel message.
-  const invalidateCompleted = useCallback(() => {
+  const invalidateCompleted = () => {
     queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
     queryClient.invalidateQueries({ queryKey: orpc.completed.dayDetail.key() })
     queryClient.invalidateQueries({ queryKey: orpc.completed.journal.key() })
     queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
     broadcastTodoSync()
-  }, [queryClient])
+  }
 
-  const handleImported = useCallback(
-    (result: LastImport) => {
-      invalidateCompleted()
-      // count===0 marks an undo → drop the banner; otherwise arm the 60s undo.
-      setLastImport(result.count === 0 ? null : result)
-    },
-    [invalidateCompleted],
-  )
+  const handleImported = (result: LastImport) => {
+    invalidateCompleted()
+    // count===0 marks an undo → drop the banner; otherwise arm the 60s undo.
+    setLastImport(result.count === 0 ? null : result)
+  }
 
   const trigger = (
     <Button type="button" variant="outline" size="sm">
@@ -98,6 +95,7 @@ export const CompletedImportEntry = memo(function CompletedImportEntry() {
         onOpenChange={handleOpenChange}
         onImported={handleImported}
       />
+
       <ImportUndoBanner
         lastImport={lastImport}
         onDismiss={dismissBanner}
@@ -105,4 +103,4 @@ export const CompletedImportEntry = memo(function CompletedImportEntry() {
       />
     </div>
   )
-})
+}

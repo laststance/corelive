@@ -3,8 +3,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import {
-  memo,
-  useCallback,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
@@ -52,7 +50,7 @@ interface CategoryManageDialogProps {
  * @param open - Whether the dialog is visible
  * @param onOpenChange - Callback to toggle dialog visibility
  */
-export const CategoryManageDialog = memo(function CategoryManageDialog({
+export const CategoryManageDialog = function CategoryManageDialog({
   open,
   onOpenChange,
 }: CategoryManageDialogProps) {
@@ -80,31 +78,28 @@ export const CategoryManageDialog = memo(function CategoryManageDialog({
    * Wraps onOpenChange to reset editing state when the dialog closes.
    * Prevents stale inline-edit UI from reappearing on reopen.
    */
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (!nextOpen) {
-        setEditingId(null)
-        setEditName('')
-        setEditColor('blue')
-      }
-      onOpenChange(nextOpen)
-    },
-    [onOpenChange],
-  )
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setEditingId(null)
+      setEditName('')
+      setEditColor('blue')
+    }
+    onOpenChange(nextOpen)
+  }
 
   /**
    * Enters inline edit mode for a category.
    */
-  const startEditing = useCallback((category: CategoryWithCount) => {
+  const startEditing = (category: CategoryWithCount) => {
     setEditingId(category.id)
     setEditName(category.name)
     setEditColor(category.color as CategoryColor)
-  }, [])
+  }
 
   /**
    * Saves the edited category name/color.
    */
-  const saveEdit = useCallback(() => {
+  const saveEdit = () => {
     if (editingId === null || !editName.trim()) return
 
     updateMutation.mutate(
@@ -114,69 +109,53 @@ export const CategoryManageDialog = memo(function CategoryManageDialog({
       },
       { onSuccess: () => setEditingId(null) },
     )
-  }, [editColor, editName, editingId, updateMutation])
+  }
 
   /**
    * Cancels inline editing.
    */
-  const cancelEdit = useCallback(() => {
+  const cancelEdit = () => {
     setEditingId(null)
     setEditName('')
     setEditColor('blue')
-  }, [])
+  }
 
   /**
    * Confirms and executes category deletion.
    */
-  const confirmDelete = useCallback(() => {
+  const confirmDelete = () => {
     if (!deleteTarget || deleteMutation.isPending) return
 
     deleteMutation.mutate(
       { id: deleteTarget.id },
       { onSuccess: () => setDeleteTarget(null) },
     )
-  }, [deleteMutation, deleteTarget])
+  }
 
-  const handleEditNameChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      setEditName(event.target.value)
-    },
-    [],
-  )
+  const handleEditNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setEditName(event.target.value)
+  }
 
-  const handleEditNameKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') saveEdit()
-      if (event.key === 'Escape') cancelEdit()
-    },
-    [cancelEdit, saveEdit],
-  )
+  const handleEditNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') saveEdit()
+    if (event.key === 'Escape') cancelEdit()
+  }
 
-  const handleEditCategoryClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      const categoryId = Number(event.currentTarget.dataset.categoryId)
-      const category = categories.find(
-        (candidate) => candidate.id === categoryId,
-      )
-      if (category) startEditing(category)
-    },
-    [categories, startEditing],
-  )
+  const handleEditCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const categoryId = Number(event.currentTarget.dataset.categoryId)
+    const category = categories.find((candidate) => candidate.id === categoryId)
+    if (category) startEditing(category)
+  }
 
-  const handleDeleteCategoryClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      const categoryId = Number(event.currentTarget.dataset.categoryId)
-      const category = categories.find(
-        (candidate) => candidate.id === categoryId,
-      )
-      if (category) setDeleteTarget(category)
-    },
-    [categories],
-  )
+  const handleDeleteCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const categoryId = Number(event.currentTarget.dataset.categoryId)
+    const category = categories.find((candidate) => candidate.id === categoryId)
+    if (category) setDeleteTarget(category)
+  }
 
-  const handleDeleteDialogOpenChange = useCallback((nextOpen: boolean) => {
+  const handleDeleteDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) setDeleteTarget(null)
-  }, [])
+  }
 
   return (
     <>
@@ -228,6 +207,7 @@ export const CategoryManageDialog = memo(function CategoryManageDialog({
                         maxLength={30}
                         autoFocus
                       />
+
                       <Button
                         variant="ghost"
                         size="icon"
@@ -252,6 +232,7 @@ export const CategoryManageDialog = memo(function CategoryManageDialog({
                       <span
                         className={`h-3 w-3 rounded-full ${getColorDotClass(category.color)}`}
                       />
+
                       <span className="flex-1 text-sm">{category.name}</span>
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {category._count.todos} tasks
@@ -323,4 +304,4 @@ export const CategoryManageDialog = memo(function CategoryManageDialog({
       </AlertDialog>
     </>
   )
-})
+}

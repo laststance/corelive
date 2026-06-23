@@ -1,7 +1,6 @@
 'use client'
 
 import { SignUp } from '@clerk/nextjs'
-import { memo } from 'react'
 
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { ElectronSignUpForm } from '@/components/auth/ElectronSignUpForm'
@@ -17,7 +16,7 @@ import { ElectronSignUpForm } from '@/components/auth/ElectronSignUpForm'
  * - Google OAuth requires system browser (blocks WebView)
  * - GitHub removed: email/password provides simpler desktop experience
  */
-const Page = memo(function Page() {
+const Page = function Page() {
   const isElectron = useIsElectron()
 
   return (
@@ -42,6 +41,6 @@ const Page = memo(function Page() {
       )}
     </div>
   )
-})
+}
 
 export default Page

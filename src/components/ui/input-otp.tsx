@@ -6,7 +6,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const InputOTP = React.memo(function InputOTP({
+function InputOTP({
   className,
   containerClassName,
   ...props
@@ -24,12 +24,9 @@ const InputOTP = React.memo(function InputOTP({
       {...props}
     />
   )
-})
+}
 
-const InputOTPGroup = React.memo(function InputOTPGroup({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function InputOTPGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="input-otp-group"
@@ -37,9 +34,9 @@ const InputOTPGroup = React.memo(function InputOTPGroup({
       {...props}
     />
   )
-})
+}
 
-const InputOTPSlot = React.memo(function InputOTPSlot({
+function InputOTPSlot({
   index,
   className,
   ...props
@@ -67,16 +64,14 @@ const InputOTPSlot = React.memo(function InputOTPSlot({
       )}
     </div>
   )
-})
+}
 
-const InputOTPSeparator = React.memo(function InputOTPSeparator({
-  ...props
-}: React.ComponentProps<'div'>) {
+function InputOTPSeparator({ ...props }: React.ComponentProps<'div'>) {
   return (
     <div data-slot="input-otp-separator" role="separator" {...props}>
       <MinusIcon />
     </div>
   )
-})
+}
 
 export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator }

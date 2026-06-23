@@ -11,69 +11,59 @@ const ToggleGroupContext = React.createContext<
   VariantProps<typeof toggleVariants> | undefined
 >(undefined)
 
-const ToggleGroup = React.memo(
-  React.forwardRef<
-    React.ElementRef<typeof ToggleGroupPrimitive.Root>,
-    React.ComponentProps<typeof ToggleGroupPrimitive.Root> &
-      VariantProps<typeof toggleVariants>
-  >(function ToggleGroup(
-    { className, variant, size, children, ...props },
-    ref,
-  ) {
-    const contextValue = React.useMemo(
-      () => ({ variant, size }),
-      [variant, size],
-    )
+const ToggleGroup = React.forwardRef<
+  React.ElementRef<typeof ToggleGroupPrimitive.Root>,
+  React.ComponentProps<typeof ToggleGroupPrimitive.Root> &
+    VariantProps<typeof toggleVariants>
+>(function ToggleGroup({ className, variant, size, children, ...props }, ref) {
+  const contextValue = { variant, size }
 
-    return (
-      <ToggleGroupPrimitive.Root
-        ref={ref}
-        data-slot="toggle-group"
-        data-variant={variant}
-        data-size={size}
-        className={cn(
-          'group/toggle-group data-[variant=outline]:shadow-xs flex w-fit items-center rounded-md',
-          className,
-        )}
-        {...props}
-      >
-        <ToggleGroupContext value={contextValue}>{children}</ToggleGroupContext>
-      </ToggleGroupPrimitive.Root>
-    )
-  }),
-)
+  return (
+    <ToggleGroupPrimitive.Root
+      ref={ref}
+      data-slot="toggle-group"
+      data-variant={variant}
+      data-size={size}
+      className={cn(
+        'group/toggle-group data-[variant=outline]:shadow-xs flex w-fit items-center rounded-md',
+        className,
+      )}
+      {...props}
+    >
+      <ToggleGroupContext value={contextValue}>{children}</ToggleGroupContext>
+    </ToggleGroupPrimitive.Root>
+  )
+})
 
-const ToggleGroupItem = React.memo(
-  React.forwardRef<
-    React.ElementRef<typeof ToggleGroupPrimitive.Item>,
-    React.ComponentProps<typeof ToggleGroupPrimitive.Item> &
-      VariantProps<typeof toggleVariants>
-  >(function ToggleGroupItem(
-    { className, children, variant, size, ...props },
-    ref,
-  ) {
-    const context = React.useContext(ToggleGroupContext)
+const ToggleGroupItem = React.forwardRef<
+  React.ElementRef<typeof ToggleGroupPrimitive.Item>,
+  React.ComponentProps<typeof ToggleGroupPrimitive.Item> &
+    VariantProps<typeof toggleVariants>
+>(function ToggleGroupItem(
+  { className, children, variant, size, ...props },
+  ref,
+) {
+  const context = React.useContext(ToggleGroupContext)
 
-    return (
-      <ToggleGroupPrimitive.Item
-        ref={ref}
-        data-slot="toggle-group-item"
-        data-variant={context?.variant ?? variant}
-        data-size={context?.size ?? size}
-        className={cn(
-          toggleVariants({
-            variant: context?.variant ?? variant,
-            size: context?.size ?? size,
-          }),
-          'min-w-0 flex-1 shrink-0 rounded-none shadow-none first:rounded-l-md last:rounded-r-md focus:z-10 focus-visible:z-10 data-[variant=outline]:border-l-0 data-[variant=outline]:first:border-l',
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </ToggleGroupPrimitive.Item>
-    )
-  }),
-)
+  return (
+    <ToggleGroupPrimitive.Item
+      ref={ref}
+      data-slot="toggle-group-item"
+      data-variant={context?.variant ?? variant}
+      data-size={context?.size ?? size}
+      className={cn(
+        toggleVariants({
+          variant: context?.variant ?? variant,
+          size: context?.size ?? size,
+        }),
+        'min-w-0 flex-1 shrink-0 rounded-none shadow-none first:rounded-l-md last:rounded-r-md focus:z-10 focus-visible:z-10 data-[variant=outline]:border-l-0 data-[variant=outline]:first:border-l',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </ToggleGroupPrimitive.Item>
+  )
+})
 
 export { ToggleGroup, ToggleGroupItem }

@@ -32,7 +32,7 @@ export const Default: Story = {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-2">
-            <div className="bg-primary h-6 w-6 rounded-md"></div>
+            <div className="h-6 w-6 rounded-md bg-primary"></div>
             <span className="font-semibold">My App</span>
           </div>
         </SidebarHeader>
@@ -66,7 +66,7 @@ export const Default: Story = {
         <SidebarFooter>
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-2">
-              <div className="bg-muted h-6 w-6 rounded-full"></div>
+              <div className="h-6 w-6 rounded-full bg-muted"></div>
               <span className="text-sm">User Name</span>
             </div>
             <SidebarTrigger />
@@ -87,7 +87,7 @@ export const Collapsed: Story = {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-2">
-            <div className="bg-primary h-6 w-6 rounded-md"></div>
+            <div className="h-6 w-6 rounded-md bg-primary"></div>
             <span className="font-semibold">My App</span>
           </div>
         </SidebarHeader>
@@ -121,7 +121,7 @@ export const Collapsed: Story = {
         <SidebarFooter>
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-2">
-              <div className="bg-muted h-6 w-6 rounded-full"></div>
+              <div className="h-6 w-6 rounded-full bg-muted"></div>
               <span className="text-sm">User Name</span>
             </div>
             <SidebarTrigger />

@@ -1,7 +1,6 @@
 'use client'
 
 import { ChevronUp, Package } from 'lucide-react'
-import { memo } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -51,7 +50,7 @@ export interface TaskPoolDrawerProps {
  *   />
  * </DragDropProvider>
  */
-export const TaskPoolDrawer = memo(function TaskPoolDrawer({
+export const TaskPoolDrawer = function TaskPoolDrawer({
   todos,
   open,
   onOpenChange,
@@ -105,4 +104,4 @@ export const TaskPoolDrawer = memo(function TaskPoolDrawer({
       </SheetContent>
     </Sheet>
   )
-})
+}

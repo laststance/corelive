@@ -48,7 +48,7 @@ const ITEMS_PER_PAGE = 10
  * @example
  * <CompletedTodos onToggleComplete={toggleComplete} />
  */
-export const CompletedTodos = React.memo(function CompletedTodos({
+export const CompletedTodos = function CompletedTodos({
   onToggleComplete,
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
@@ -239,4 +239,4 @@ export const CompletedTodos = React.memo(function CompletedTodos({
       </CardContent>
     </Card>
   )
-})
+}

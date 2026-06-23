@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { memo, useCallback, useTransition } from 'react'
+import { useTransition } from 'react'
 
 /**
  * Electron Settings Page Component
@@ -55,7 +55,7 @@ import {
  *
  * @returns Settings page with toggle switches, or fallback for web users
  */
-export const ElectronSettingsPage = memo(
+export const ElectronSettingsPage =
   function ElectronSettingsPage(): React.ReactElement | null {
     const dispatch = useAppDispatch()
     const isElectron = useIsElectron() // SSR-safe via useSyncExternalStore
@@ -73,36 +73,33 @@ export const ElectronSettingsPage = memo(
      *
      * @param checked - New toggle state
      */
-    const handleHideAppIconChange = useCallback(
-      async (checked: boolean): Promise<void> => {
-        // Notify Electron main process via settings API first
-        if (typeof window !== 'undefined' && window.electronAPI?.settings) {
-          try {
-            const success =
-              await window.electronAPI.settings.setHideAppIcon(checked)
-            if (success) {
-              dispatch(setHideAppIcon(checked))
-            } else {
-              // IPC call failed - log error but don't update state
-              if (process.env.NODE_ENV === 'development') {
-                console.error(
-                  'Failed to update dock icon visibility: IPC returned false',
-                )
-              }
-            }
-          } catch (error) {
-            // IPC call threw - log error but don't update state
+    const handleHideAppIconChange = async (checked: boolean): Promise<void> => {
+      // Notify Electron main process via settings API first
+      if (typeof window !== 'undefined' && window.electronAPI?.settings) {
+        try {
+          const success =
+            await window.electronAPI.settings.setHideAppIcon(checked)
+          if (success) {
+            dispatch(setHideAppIcon(checked))
+          } else {
+            // IPC call failed - log error but don't update state
             if (process.env.NODE_ENV === 'development') {
-              console.error('Failed to update dock icon visibility:', error)
+              console.error(
+                'Failed to update dock icon visibility: IPC returned false',
+              )
             }
           }
-        } else {
-          // Not in Electron - update Redux state anyway for local storage
-          dispatch(setHideAppIcon(checked))
+        } catch (error) {
+          // IPC call threw - log error but don't update state
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to update dock icon visibility:', error)
+          }
         }
-      },
-      [dispatch],
-    )
+      } else {
+        // Not in Electron - update Redux state anyway for local storage
+        dispatch(setHideAppIcon(checked))
+      }
+    }
 
     /**
      * Handles the Show in Menu Bar toggle change.
@@ -110,39 +107,38 @@ export const ElectronSettingsPage = memo(
      *
      * @param checked - New toggle state
      */
-    const handleShowInMenuBarChange = useCallback(
-      async (checked: boolean): Promise<void> => {
-        // Notify Electron main process via settings API first
-        if (typeof window !== 'undefined' && window.electronAPI?.settings) {
-          try {
-            const success =
-              await window.electronAPI.settings.setShowInMenuBar(checked)
-            if (success) {
-              dispatch(setShowInMenuBar(checked))
-            } else {
-              // IPC returned false: the tray could not be created (e.g.
-              // createTray failed), so don't persist a "shown" state that
-              // never actually appeared. ElectronStartupSync re-pushes the
-              // persisted value at next launch, keeping the toggle truthful.
-              if (process.env.NODE_ENV === 'development') {
-                console.error(
-                  'Failed to update menu bar visibility: IPC returned false',
-                )
-              }
-            }
-          } catch (error) {
-            // IPC call threw - log error but don't update state
+    const handleShowInMenuBarChange = async (
+      checked: boolean,
+    ): Promise<void> => {
+      // Notify Electron main process via settings API first
+      if (typeof window !== 'undefined' && window.electronAPI?.settings) {
+        try {
+          const success =
+            await window.electronAPI.settings.setShowInMenuBar(checked)
+          if (success) {
+            dispatch(setShowInMenuBar(checked))
+          } else {
+            // IPC returned false: the tray could not be created (e.g.
+            // createTray failed), so don't persist a "shown" state that
+            // never actually appeared. ElectronStartupSync re-pushes the
+            // persisted value at next launch, keeping the toggle truthful.
             if (process.env.NODE_ENV === 'development') {
-              console.error('Failed to update menu bar visibility:', error)
+              console.error(
+                'Failed to update menu bar visibility: IPC returned false',
+              )
             }
           }
-        } else {
-          // Not in Electron - update Redux state anyway for local storage
-          dispatch(setShowInMenuBar(checked))
+        } catch (error) {
+          // IPC call threw - log error but don't update state
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to update menu bar visibility:', error)
+          }
         }
-      },
-      [dispatch],
-    )
+      } else {
+        // Not in Electron - update Redux state anyway for local storage
+        dispatch(setShowInMenuBar(checked))
+      }
+    }
 
     /**
      * Handles the Start at Login toggle change.
@@ -150,42 +146,41 @@ export const ElectronSettingsPage = memo(
      *
      * @param checked - New toggle state
      */
-    const handleStartAtLoginChange = useCallback(
-      async (checked: boolean): Promise<void> => {
-        // Notify Electron main process via settings API first
-        if (typeof window !== 'undefined' && window.electronAPI?.settings) {
-          try {
-            const success =
-              await window.electronAPI.settings.setStartAtLogin(checked)
-            if (success) {
-              dispatch(setStartAtLogin(checked))
-            } else {
-              // IPC call failed - log error but don't update state
-              if (process.env.NODE_ENV === 'development') {
-                console.error(
-                  'Failed to update start at login setting: IPC returned false',
-                )
-              }
-            }
-          } catch (error) {
-            // IPC call threw - log error but don't update state
+    const handleStartAtLoginChange = async (
+      checked: boolean,
+    ): Promise<void> => {
+      // Notify Electron main process via settings API first
+      if (typeof window !== 'undefined' && window.electronAPI?.settings) {
+        try {
+          const success =
+            await window.electronAPI.settings.setStartAtLogin(checked)
+          if (success) {
+            dispatch(setStartAtLogin(checked))
+          } else {
+            // IPC call failed - log error but don't update state
             if (process.env.NODE_ENV === 'development') {
-              console.error('Failed to update start at login setting:', error)
+              console.error(
+                'Failed to update start at login setting: IPC returned false',
+              )
             }
           }
-        } else {
-          // Not in Electron - update Redux state anyway for local storage
-          dispatch(setStartAtLogin(checked))
+        } catch (error) {
+          // IPC call threw - log error but don't update state
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to update start at login setting:', error)
+          }
         }
-      },
-      [dispatch],
-    )
+      } else {
+        // Not in Electron - update Redux state anyway for local storage
+        dispatch(setStartAtLogin(checked))
+      }
+    }
 
     /**
      * Resets the Settings popover to 360×380 via IPC. Guards on method existence
      * so older preloads (version-skew) do not throw.
      */
-    const handleResetPopoverSize = useCallback(() => {
+    const handleResetPopoverSize = () => {
       const resetFn = window.electronAPI?.settings?.resetPopoverSize
       if (!resetFn) return
       startResetSizeTransition(async () => {
@@ -198,7 +193,7 @@ export const ElectronSettingsPage = memo(
           }
         }
       })
-    }, [startResetSizeTransition])
+    }
 
     // Web users see the shared Preferences section (rendered by the settings
     // page); the Electron window-chrome settings below are desktop-only, so
@@ -234,11 +229,11 @@ export const ElectronSettingsPage = memo(
             </div>
 
             {/*
-              Show in Menu Bar — the IPC handler shows/hides the tray live
-              (SystemTrayManager.setMenuBarVisible), and ElectronStartupSync
-              re-pushes the persisted value at every launch so an "off" choice
-              survives restarts (boot creates the tray, then the startup sync
-              hides it — same correct-after-boot pattern as Hide App Icon).
+             Show in Menu Bar — the IPC handler shows/hides the tray live
+             (SystemTrayManager.setMenuBarVisible), and ElectronStartupSync
+             re-pushes the persisted value at every launch so an "off" choice
+             survives restarts (boot creates the tray, then the startup sync
+             hides it — same correct-after-boot pattern as Hide App Icon).
             */}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -319,7 +314,6 @@ export const ElectronSettingsPage = memo(
         />
       </div>
     )
-  },
-)
+  }
 
 export default ElectronSettingsPage

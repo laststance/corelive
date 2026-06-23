@@ -32,7 +32,7 @@ interface SortableTodoItemProps {
  * @example
  * <SortableTodoItem todo={todo} index={0} onToggleComplete={toggle} onDelete={remove} />
  */
-export const SortableTodoItem = React.memo(function SortableTodoItem({
+export const SortableTodoItem = function SortableTodoItem({
   todo,
   index,
   onToggleComplete,
@@ -65,4 +65,4 @@ export const SortableTodoItem = React.memo(function SortableTodoItem({
       />
     </div>
   )
-})
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 
 import { useCycleEffect } from './use-cycle-effect'
 
@@ -89,7 +89,7 @@ export function useSelectedCategory(): [
     getServerSnapshot,
   )
 
-  const setSelectedCategoryId = useCallback((id: number | null) => {
+  const setSelectedCategoryId = (id: number | null) => {
     try {
       if (id === null) {
         localStorage.removeItem(STORAGE_KEY)
@@ -100,7 +100,7 @@ export function useSelectedCategory(): [
       // localStorage unavailable (e.g. private browsing quota exceeded)
     }
     emitChange()
-  }, [])
+  }
 
   return [selectedCategoryId, setSelectedCategoryId]
 }

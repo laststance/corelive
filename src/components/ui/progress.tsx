@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Progress = React.memo(function Progress({
+function Progress({
   className,
   value,
   ...props
@@ -26,6 +26,6 @@ const Progress = React.memo(function Progress({
       />
     </ProgressPrimitive.Root>
   )
-})
+}
 
 export { Progress }

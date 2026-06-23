@@ -4,7 +4,7 @@ import { useSignUp, useUser } from '@clerk/nextjs'
 import { Eye, EyeOff, Loader2, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import * as React from 'react'
-import { memo, useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,7 +63,7 @@ function formReducer(state: FormState, action: FormAction): FormState {
  *
  * @returns Sign-up form with email/password fields and optional Google OAuth fallback
  */
-export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
+export const ElectronSignUpForm = function ElectronSignUpForm() {
   const { signUp, fetchStatus } = useSignUp()
   const { user } = useUser()
   const router = useRouter()
@@ -86,133 +86,128 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
    * Handle sign-up form submission.
    * Creates account with email, sets password, and sends email verification.
    */
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-      if (!signUp) {
-        dispatch({ type: 'SET_ERROR', error: 'Sign-up not ready' })
+    if (!signUp) {
+      dispatch({ type: 'SET_ERROR', error: 'Sign-up not ready' })
+      return
+    }
+
+    dispatch({ type: 'START_LOADING' })
+
+    try {
+      // Create sign-up with email
+      const { error: createError } = await signUp.create({
+        emailAddress: state.email,
+      })
+
+      if (createError) {
+        dispatch({
+          type: 'SET_ERROR',
+          error: createError.message ?? 'Failed to create account',
+        })
         return
       }
 
-      dispatch({ type: 'START_LOADING' })
+      // Set password
+      const { error: passwordError } = await signUp.password({
+        password: state.password,
+      })
 
-      try {
-        // Create sign-up with email
-        const { error: createError } = await signUp.create({
-          emailAddress: state.email,
+      if (passwordError) {
+        dispatch({
+          type: 'SET_ERROR',
+          error: passwordError.message ?? 'Failed to set password',
         })
-
-        if (createError) {
-          dispatch({
-            type: 'SET_ERROR',
-            error: createError.message ?? 'Failed to create account',
-          })
-          return
-        }
-
-        // Set password
-        const { error: passwordError } = await signUp.password({
-          password: state.password,
-        })
-
-        if (passwordError) {
-          dispatch({
-            type: 'SET_ERROR',
-            error: passwordError.message ?? 'Failed to set password',
-          })
-          return
-        }
-
-        // Send email verification code
-        const { error: sendCodeError } =
-          await signUp.verifications.sendEmailCode()
-
-        if (sendCodeError) {
-          dispatch({
-            type: 'SET_ERROR',
-            error: sendCodeError.message ?? 'Failed to send verification code',
-          })
-          return
-        }
-
-        dispatch({ type: 'SET_PENDING_VERIFICATION' })
-      } catch (err) {
-        const clerkError = err as {
-          errors?: Array<{ message?: string; longMessage?: string }>
-        }
-        const errorMessage =
-          clerkError?.errors?.[0]?.longMessage ||
-          clerkError?.errors?.[0]?.message ||
-          'Failed to create account'
-        dispatch({ type: 'SET_ERROR', error: errorMessage })
+        return
       }
-    },
-    [signUp, state.email, state.password],
-  )
+
+      // Send email verification code
+      const { error: sendCodeError } =
+        await signUp.verifications.sendEmailCode()
+
+      if (sendCodeError) {
+        dispatch({
+          type: 'SET_ERROR',
+          error: sendCodeError.message ?? 'Failed to send verification code',
+        })
+        return
+      }
+
+      dispatch({ type: 'SET_PENDING_VERIFICATION' })
+    } catch (err) {
+      const clerkError = err as {
+        errors?: Array<{ message?: string; longMessage?: string }>
+      }
+      const errorMessage =
+        clerkError?.errors?.[0]?.longMessage ||
+        clerkError?.errors?.[0]?.message ||
+        'Failed to create account'
+      dispatch({ type: 'SET_ERROR', error: errorMessage })
+    }
+  }
 
   /**
    * Handle email verification code submission.
    */
-  const handleVerification = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
+  const handleVerification = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-      if (!signUp) {
-        dispatch({ type: 'SET_ERROR', error: 'Verification not ready' })
+    if (!signUp) {
+      dispatch({ type: 'SET_ERROR', error: 'Verification not ready' })
+      return
+    }
+
+    dispatch({ type: 'START_LOADING' })
+
+    try {
+      const { error: verifyError } = await signUp.verifications.verifyEmailCode(
+        {
+          code: state.code,
+        },
+      )
+
+      if (verifyError) {
+        dispatch({
+          type: 'SET_ERROR',
+          error: verifyError.message ?? 'Invalid verification code',
+        })
         return
       }
 
-      dispatch({ type: 'START_LOADING' })
-
-      try {
-        const { error: verifyError } =
-          await signUp.verifications.verifyEmailCode({
-            code: state.code,
-          })
-
-        if (verifyError) {
+      if (signUp.status === 'complete') {
+        const { error: finalizeError } = await signUp.finalize()
+        if (finalizeError) {
           dispatch({
             type: 'SET_ERROR',
-            error: verifyError.message ?? 'Invalid verification code',
+            error: finalizeError.message ?? 'Failed to complete registration',
           })
           return
         }
-
-        if (signUp.status === 'complete') {
-          const { error: finalizeError } = await signUp.finalize()
-          if (finalizeError) {
-            dispatch({
-              type: 'SET_ERROR',
-              error: finalizeError.message ?? 'Failed to complete registration',
-            })
-            return
-          }
-          router.push('/home')
-        } else {
-          dispatch({
-            type: 'SET_ERROR',
-            error: 'Verification incomplete. Please try again.',
-          })
-        }
-      } catch (err) {
-        const clerkError = err as {
-          errors?: Array<{ message?: string; longMessage?: string }>
-        }
-        const errorMessage =
-          clerkError?.errors?.[0]?.longMessage ||
-          clerkError?.errors?.[0]?.message ||
-          'Invalid verification code'
-        dispatch({ type: 'SET_ERROR', error: errorMessage })
+        router.push('/home')
+      } else {
+        dispatch({
+          type: 'SET_ERROR',
+          error: 'Verification incomplete. Please try again.',
+        })
       }
-    },
-    [signUp, state.code, router],
-  )
+    } catch (err) {
+      const clerkError = err as {
+        errors?: Array<{ message?: string; longMessage?: string }>
+      }
+      const errorMessage =
+        clerkError?.errors?.[0]?.longMessage ||
+        clerkError?.errors?.[0]?.message ||
+        'Invalid verification code'
+      dispatch({ type: 'SET_ERROR', error: errorMessage })
+    }
+  }
 
   /**
    * Handle Google OAuth click.
    */
-  const handleGoogleClick = useCallback(async () => {
+  const handleGoogleClick = async () => {
     if (!window.electronAPI?.oauth) {
       dispatch({ type: 'SET_ERROR', error: 'OAuth not available' })
       return
@@ -233,35 +228,26 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
       dispatch({ type: 'SET_ERROR', error: 'Failed to start Google sign-up' })
       setIsGoogleLoading(false)
     }
-  }, [])
+  }
 
   const isFormDisabled =
     isLoading || isGoogleLoading || fetchStatus === 'fetching'
 
-  const handleCodeChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      dispatch({ type: 'SET_CODE', code: event.target.value })
-    },
-    [dispatch],
-  )
+  const handleCodeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({ type: 'SET_CODE', code: event.target.value })
+  }
 
-  const handleEmailChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      dispatch({ type: 'SET_EMAIL', email: event.target.value })
-    },
-    [dispatch],
-  )
+  const handleEmailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({ type: 'SET_EMAIL', email: event.target.value })
+  }
 
-  const handlePasswordChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      dispatch({ type: 'SET_PASSWORD', password: event.target.value })
-    },
-    [dispatch],
-  )
+  const handlePasswordChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({ type: 'SET_PASSWORD', password: event.target.value })
+  }
 
-  const handleGoogleButtonClick = useCallback(() => {
+  const handleGoogleButtonClick = () => {
     void handleGoogleClick()
-  }, [handleGoogleClick])
+  }
 
   // Verification code form
   if (state.pendingVerification) {
@@ -365,6 +351,7 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
               className="pr-10"
               autoComplete="new-password"
             />
+
             <button
               type="button"
               onClick={() => dispatch({ type: 'TOGGLE_PASSWORD_VISIBILITY' })}
@@ -428,14 +415,17 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
               fill="#4285F4"
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
             />
+
             <path
               fill="#34A853"
               d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
             />
+
             <path
               fill="#FBBC05"
               d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
             />
+
             <path
               fill="#EA4335"
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
@@ -452,4 +442,4 @@ export const ElectronSignUpForm = memo(function ElectronSignUpForm() {
       </p>
     </div>
   )
-})
+}

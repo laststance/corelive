@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
 import { log } from '../lib/logger'
 
@@ -19,7 +19,7 @@ interface PerformanceMetrics {
     windows: number
   }
   memory: {
-    current: any
+    current: unknown
     average: number
     peak: number
     minimum: number
@@ -47,55 +47,68 @@ interface UseElectronPerformanceReturn {
   startupTime: number | null
 }
 
+const NOT_ELECTRON_ERROR = 'Not running in Electron environment'
+
+function buildMockMetrics(): PerformanceMetrics {
+  return {
+    optimizer: {
+      uptime: Date.now() - performance.now(),
+      memory: {
+        heapUsed: 50,
+        heapTotal: 100,
+        external: 10,
+        rss: 120,
+      },
+      modules: {
+        loaded: 15,
+        cached: 50,
+        lazyLoaded: 5,
+      },
+      windows: 1,
+    },
+    memory: null,
+    lazyLoad: {
+      total: 10,
+      loaded: 8,
+      loading: 0,
+      components: [],
+    },
+  }
+}
+
+async function fetchPerformanceSnapshot(): Promise<{
+  metrics: PerformanceMetrics
+  startupTime: number
+}> {
+  return {
+    metrics: buildMockMetrics(),
+    startupTime: performance.now(),
+  }
+}
+
 export function useElectronPerformance(): UseElectronPerformanceReturn {
+  const isElectron =
+    typeof window !== 'undefined' && Boolean(window.electronAPI)
+
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(isElectron)
+  const [error, setError] = useState<string | null>(
+    isElectron ? null : NOT_ELECTRON_ERROR,
+  )
   const [startupTime, setStartupTime] = useState<number | null>(null)
 
-  // Check if we're in Electron environment
-  const isElectron = typeof window !== 'undefined' && window.electronAPI
-
-  const refreshMetrics = useCallback(async () => {
+  const refreshMetrics = async () => {
     if (!isElectron) {
-      setError('Not running in Electron environment')
-      setIsLoading(false)
       return
     }
 
     try {
-      setIsLoading(true)
-      setError(null)
-
-      // For now, return mock data since performance APIs aren't exposed yet
-      const metricsData = {
-        optimizer: {
-          uptime: Date.now() - performance.now(),
-          memory: {
-            heapUsed: 50,
-            heapTotal: 100,
-            external: 10,
-            rss: 120,
-          },
-          modules: {
-            loaded: 15,
-            cached: 50,
-            lazyLoaded: 5,
-          },
-          windows: 1,
-        },
-        memory: null,
-        lazyLoad: {
-          total: 10,
-          loaded: 8,
-          loading: 0,
-          components: [],
-        },
-      }
-      const startupTimeData = performance.now()
+      const { metrics: metricsData, startupTime: startupTimeData } =
+        await fetchPerformanceSnapshot()
 
       setMetrics(metricsData)
       setStartupTime(startupTimeData)
+      setError(null)
     } catch (err) {
       const errorMessage =
         err instanceof Error
@@ -106,17 +119,15 @@ export function useElectronPerformance(): UseElectronPerformanceReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [isElectron])
+  }
 
-  const triggerCleanup = useCallback(async () => {
+  const triggerCleanup = async () => {
     if (!isElectron) {
-      throw new Error('Not running in Electron environment')
+      throw new Error(NOT_ELECTRON_ERROR)
     }
 
     try {
-      // Mock cleanup for now
-
-      // Refresh metrics after cleanup
+      // Mock cleanup for now — refresh metrics after cleanup
       await refreshMetrics()
     } catch (err) {
       const errorMessage =
@@ -124,31 +135,62 @@ export function useElectronPerformance(): UseElectronPerformanceReturn {
       setError(errorMessage)
       throw err
     }
-  }, [isElectron, refreshMetrics])
+  }
 
-  // Initial load and periodic refresh
+  // Initial load and periodic refresh — state updates happen after await
   useEffect(() => {
     if (!isElectron) {
-      setError('Not running in Electron environment')
-      setIsLoading(false)
       return
     }
 
-    // Initial load
-    refreshMetrics()
+    let cancelled = false
 
-    // Set up periodic refresh (every 30 seconds)
-    const interval = setInterval(refreshMetrics, 30000)
+    const loadMetrics = async () => {
+      try {
+        const { metrics: metricsData, startupTime: startupTimeData } =
+          await fetchPerformanceSnapshot()
+
+        if (cancelled) {
+          return
+        }
+
+        setMetrics(metricsData)
+        setStartupTime(startupTimeData)
+        setError(null)
+      } catch (err) {
+        if (cancelled) {
+          return
+        }
+
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : 'Failed to fetch performance metrics'
+        setError(errorMessage)
+        log.error('Failed to fetch performance metrics:', err)
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadMetrics()
+
+    const interval = setInterval(() => {
+      void loadMetrics()
+    }, 30000)
 
     return () => {
+      cancelled = true
       clearInterval(interval)
     }
-  }, [isElectron, refreshMetrics])
+  }, [isElectron])
 
   return {
     metrics,
-    isLoading,
-    error,
+    isLoading: isElectron ? isLoading : false,
+    error: isElectron ? error : NOT_ELECTRON_ERROR,
     refreshMetrics,
     triggerCleanup,
     startupTime,

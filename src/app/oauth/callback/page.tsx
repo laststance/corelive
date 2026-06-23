@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { memo, Suspense, useState } from 'react'
+import { Suspense, useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
@@ -31,7 +31,7 @@ type CallbackStatus =
   | 'success'
   | 'error'
 
-const OAuthCallbackContent = memo(function OAuthCallbackContent() {
+const OAuthCallbackContent = function OAuthCallbackContent() {
   const searchParams = useSearchParams()
   const state = searchParams.get('state')
   const error = searchParams.get('error')
@@ -244,14 +244,14 @@ const OAuthCallbackContent = memo(function OAuthCallbackContent() {
       </p>
     </div>
   )
-})
+}
 
 /**
  * OAuth Callback Page with Suspense wrapper.
  *
  * useSearchParams() requires Suspense boundary in Next.js App Router.
  */
-const OAuthCallbackPage = memo(function OAuthCallbackPage() {
+const OAuthCallbackPage = function OAuthCallbackPage() {
   return (
     <Suspense
       fallback={
@@ -263,6 +263,6 @@ const OAuthCallbackPage = memo(function OAuthCallbackPage() {
       <OAuthCallbackContent />
     </Suspense>
   )
-})
+}
 
 export default OAuthCallbackPage

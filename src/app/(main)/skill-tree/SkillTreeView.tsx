@@ -7,14 +7,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  memo,
-  useCallback,
-  useMemo,
-  useOptimistic,
-  useState,
-  useTransition,
-} from 'react'
+import { useOptimistic, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -54,7 +47,7 @@ import './styles.css'
  * }
  * ```
  */
-export const SkillTreeView = memo(function SkillTreeView() {
+export const SkillTreeView = function SkillTreeView() {
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [activeDragId, setActiveDragId] = useState<TodoId | null>(null)
@@ -73,15 +66,13 @@ export const SkillTreeView = memo(function SkillTreeView() {
     isError: poolError,
   } = useQuery(orpc.skillTree.getUnassignedPool.queryOptions())
 
-  const baseState: OptimisticState = useMemo(() => {
-    if (!tree || !pool) {
-      return { assignmentsByNode: {}, unassignedTodoIds: [] }
-    }
-    return buildInitialState(
-      tree.nodes.map((n) => ({ id: n.id, assignments: n.assignments })),
-      pool.map((t) => t.id),
-    )
-  }, [tree, pool])
+  const baseState: OptimisticState =
+    !tree || !pool
+      ? { assignmentsByNode: {}, unassignedTodoIds: [] }
+      : buildInitialState(
+          tree.nodes.map((n) => ({ id: n.id, assignments: n.assignments })),
+          pool.map((t) => t.id),
+        )
 
   const [optimisticState, applyOptimistic] = useOptimistic(
     baseState,
@@ -95,18 +86,15 @@ export const SkillTreeView = memo(function SkillTreeView() {
   // surface a card with "Task #${id}" placeholder until the next full refetch.
   // The tree side uses the `todoText` snapshot column which is populated at
   // assign time and survives the source todo being deleted.
-  const todoTextById = useMemo(() => {
-    const map = new Map<TodoId, TodoText>()
-    pool?.forEach((t) => map.set(t.id, t.text))
-    tree?.nodes.forEach((node) => {
-      node.assignments.forEach((a) => {
-        if (a.todoId !== null) {
-          map.set(a.todoId, a.todoText)
-        }
-      })
+  const todoTextById = new Map<TodoId, TodoText>()
+  pool?.forEach((t) => todoTextById.set(t.id, t.text))
+  tree?.nodes.forEach((node) => {
+    node.assignments.forEach((a) => {
+      if (a.todoId !== null) {
+        todoTextById.set(a.todoId, a.todoText)
+      }
     })
-    return map
-  }, [pool, tree])
+  })
 
   // Invalidation lives in `onSettled` (not `onSuccess`) so failed mutations
   // also reconcile optimistic state. On error: refetch → baseState updates →
@@ -150,12 +138,12 @@ export const SkillTreeView = memo(function SkillTreeView() {
    * @example
    * handleDragStart(event)
    */
-  const handleDragStart = useCallback((event: DragStartEvent) => {
+  const handleDragStart = (event: DragStartEvent) => {
     const todoId = parseTodoDragId(event.operation.source?.id)
     if (todoId !== null) {
       setActiveDragId(todoId)
     }
-  }, [])
+  }
 
   /**
    * Assigns a completed todo to the skill node that received the drop.
@@ -165,63 +153,53 @@ export const SkillTreeView = memo(function SkillTreeView() {
    * @example
    * handleDragEnd(event)
    */
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setActiveDragId(null)
-      if (event.canceled) return
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null)
+    if (event.canceled) return
 
-      const { source, target } = event.operation
-      const todoId = parseTodoDragId(source?.id)
-      const nodeId = parseNodeDropId(target?.id)
-      if (todoId === null || nodeId === null) return
+    const { source, target } = event.operation
+    const todoId = parseTodoDragId(source?.id)
+    const nodeId = parseNodeDropId(target?.id)
+    if (todoId === null || nodeId === null) return
 
-      // Async transition is required for useOptimistic to hold its optimistic
-      // value across the network round-trip. A sync transition completes the
-      // moment mutate() returns (fire-and-forget), causing React to revert the
-      // optimistic state before the server responds — flashing the UI.
-      startTransition(async () => {
-        applyOptimistic({ type: 'assign', nodeId, todoId })
-        // Errors are surfaced through the useMutation onError toast; the .catch
-        // here just prevents an unhandled-rejection warning in the transition.
-        await assignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
-      })
-    },
-    [applyOptimistic, assignMutation, startTransition],
-  )
+    // Async transition is required for useOptimistic to hold its optimistic
+    // value across the network round-trip. A sync transition completes the
+    // moment mutate() returns (fire-and-forget), causing React to revert the
+    // optimistic state before the server responds — flashing the UI.
+    startTransition(async () => {
+      applyOptimistic({ type: 'assign', nodeId, todoId })
+      // Errors are surfaced through the useMutation onError toast; the .catch
+      // here just prevents an unhandled-rejection warning in the transition.
+      await assignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
+    })
+  }
 
-  const handleUnassign = useCallback(
-    (nodeId: SkillNodeId, todoId: TodoId) => {
-      startTransition(async () => {
-        applyOptimistic({ type: 'unassign', nodeId, todoId })
-        await unassignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
-      })
-    },
-    [applyOptimistic, startTransition, unassignMutation],
-  )
+  const handleUnassign = (nodeId: SkillNodeId, todoId: TodoId) => {
+    startTransition(async () => {
+      applyOptimistic({ type: 'unassign', nodeId, todoId })
+      await unassignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
+    })
+  }
 
-  const handleNodeClick = useCallback((nodeId: SkillNodeId) => {
+  const handleNodeClick = (nodeId: SkillNodeId) => {
     setActivePopoverNodeId(nodeId)
-  }, [])
+  }
 
-  const handlePopoverOpenChange = useCallback((open: boolean) => {
+  const handlePopoverOpenChange = (open: boolean) => {
     if (!open) setActivePopoverNodeId(null)
-  }, [])
+  }
 
-  const handlePopoverUnassign = useCallback(
-    (todoId: TodoId) => {
-      if (!activePopoverNodeId) return
-      handleUnassign(activePopoverNodeId, todoId)
-    },
-    [activePopoverNodeId, handleUnassign],
-  )
+  const handlePopoverUnassign = (todoId: TodoId) => {
+    if (!activePopoverNodeId) return
+    handleUnassign(activePopoverNodeId, todoId)
+  }
 
-  const handleDrawerOpenChange = useCallback((open: boolean) => {
+  const handleDrawerOpenChange = (open: boolean) => {
     setDrawerOpen(open)
-  }, [])
+  }
 
-  const canvasNodes = useMemo(() => {
-    if (!tree) return []
-    return tree.nodes.map((n) => {
+  const canvasNodes =
+    tree?.nodes.map((n) => {
       const orphanedCount = n.assignments.filter(
         (a) => a.todoId === null,
       ).length
@@ -233,88 +211,58 @@ export const SkillTreeView = memo(function SkillTreeView() {
         y: n.y,
         xp: activeCount + orphanedCount,
       }
-    })
-  }, [optimisticState.assignmentsByNode, tree])
+    }) ?? []
 
-  const canvasEdges = useMemo(() => {
-    if (!tree) return []
-    return tree.edges.map((e) => ({
+  const canvasEdges =
+    tree?.edges.map((e) => ({
       id: e.id,
       fromNodeId: e.fromNodeId,
       toNodeId: e.toNodeId,
-    }))
-  }, [tree])
+    })) ?? []
 
-  const poolTodos = useMemo(
-    () =>
-      optimisticState.unassignedTodoIds.map((id) => ({
-        id,
-        text: todoTextById.get(id) ?? `Task #${id}`,
-      })),
-    [optimisticState.unassignedTodoIds, todoTextById],
+  const poolTodos = optimisticState.unassignedTodoIds.map((id) => ({
+    id,
+    text: todoTextById.get(id) ?? `Task #${id}`,
+  }))
+
+  const hasAnyCompletedTodos =
+    optimisticState.unassignedTodoIds.length > 0 ||
+    Object.values(optimisticState.assignmentsByNode).some(
+      (a) => a.length > 0,
+    ) ||
+    (tree?.nodes.some((n) => n.assignments.some((a) => a.todoId === null)) ??
+      false)
+
+  const activeTodoText =
+    activeDragId !== null
+      ? (todoTextById.get(activeDragId) ?? `Task #${activeDragId}`)
+      : ''
+
+  const activePopoverNode = tree?.nodes.find(
+    (n) => n.id === activePopoverNodeId,
   )
 
-  const hasAnyCompletedTodos = useMemo(() => {
-    if (!tree) return false
-    return (
-      optimisticState.unassignedTodoIds.length > 0 ||
-      Object.values(optimisticState.assignmentsByNode).some(
-        (a) => a.length > 0,
-      ) ||
-      tree.nodes.some((n) => n.assignments.some((a) => a.todoId === null))
-    )
-  }, [
-    optimisticState.assignmentsByNode,
-    optimisticState.unassignedTodoIds,
-    tree,
-  ])
+  const assignedTodosForPopover = activePopoverNode
+    ? (optimisticState.assignmentsByNode[activePopoverNode.id] ?? []).map(
+        (a) => ({
+          id: a.todoId,
+          text: todoTextById.get(a.todoId) ?? `Task #${a.todoId}`,
+        }),
+      )
+    : []
 
-  const activeTodoText = useMemo(
-    () =>
-      activeDragId !== null
-        ? (todoTextById.get(activeDragId) ?? `Task #${activeDragId}`)
-        : '',
-    [activeDragId, todoTextById],
-  )
+  const activePopoverNodeXp = activePopoverNode
+    ? assignedTodosForPopover.length +
+      activePopoverNode.assignments.filter((a) => a.todoId === null).length
+    : 0
 
-  const activePopoverNode = useMemo(
-    () => tree?.nodes.find((n) => n.id === activePopoverNodeId),
-    [activePopoverNodeId, tree],
-  )
-
-  const assignedTodosForPopover = useMemo(
-    () =>
-      activePopoverNode
-        ? (optimisticState.assignmentsByNode[activePopoverNode.id] ?? []).map(
-            (a) => ({
-              id: a.todoId,
-              text: todoTextById.get(a.todoId) ?? `Task #${a.todoId}`,
-            }),
-          )
-        : [],
-    [activePopoverNode, optimisticState.assignmentsByNode, todoTextById],
-  )
-
-  const activePopoverNodeXp = useMemo(
-    () =>
-      activePopoverNode
-        ? assignedTodosForPopover.length +
-          activePopoverNode.assignments.filter((a) => a.todoId === null).length
-        : 0,
-    [activePopoverNode, assignedTodosForPopover.length],
-  )
-
-  const activePopoverNodeSummary = useMemo(
-    () =>
-      activePopoverNode
-        ? {
-            id: activePopoverNode.id,
-            name: activePopoverNode.name,
-            xp: activePopoverNodeXp,
-          }
-        : null,
-    [activePopoverNode, activePopoverNodeXp],
-  )
+  const activePopoverNodeSummary = activePopoverNode
+    ? {
+        id: activePopoverNode.id,
+        name: activePopoverNode.name,
+        xp: activePopoverNodeXp,
+      }
+    : null
 
   if (treeError || poolError) {
     return (
@@ -393,6 +341,7 @@ export const SkillTreeView = memo(function SkillTreeView() {
             edges={canvasEdges}
             onNodeClick={handleNodeClick}
           />
+
           {activePopoverNode && activePopoverNodeSummary && (
             // Position-based anchor: Radix Popover needs an HTML trigger, but
             // SkillNodeCircle renders inside an SVG. Instead of using
@@ -436,7 +385,7 @@ export const SkillTreeView = memo(function SkillTreeView() {
       </DragOverlay>
     </DragDropProvider>
   )
-})
+}
 
 /**
  * Parses a draggable DnD id of the form `todo-<number>` into its numeric todo id.

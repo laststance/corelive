@@ -6,43 +6,43 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const ContextMenu = React.memo(function ContextMenu({
+function ContextMenu({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
-})
+}
 
-const ContextMenuTrigger = React.memo(function ContextMenuTrigger({
+function ContextMenuTrigger({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
   return (
     <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
   )
-})
+}
 
-const ContextMenuGroup = React.memo(function ContextMenuGroup({
+function ContextMenuGroup({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Group>) {
   return (
     <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />
   )
-})
+}
 
-const ContextMenuPortal = React.memo(function ContextMenuPortal({
+function ContextMenuPortal({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Portal>) {
   return (
     <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />
   )
-})
+}
 
-const ContextMenuSub = React.memo(function ContextMenuSub({
+function ContextMenuSub({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Sub>) {
   return <ContextMenuPrimitive.Sub data-slot="context-menu-sub" {...props} />
-})
+}
 
-const ContextMenuRadioGroup = React.memo(function ContextMenuRadioGroup({
+function ContextMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.RadioGroup>) {
   return (
@@ -51,9 +51,9 @@ const ContextMenuRadioGroup = React.memo(function ContextMenuRadioGroup({
       {...props}
     />
   )
-})
+}
 
-const ContextMenuSubTrigger = React.memo(function ContextMenuSubTrigger({
+function ContextMenuSubTrigger({
   className,
   inset,
   children,
@@ -75,9 +75,9 @@ const ContextMenuSubTrigger = React.memo(function ContextMenuSubTrigger({
       <ChevronRightIcon className="ml-auto" />
     </ContextMenuPrimitive.SubTrigger>
   )
-})
+}
 
-const ContextMenuSubContent = React.memo(function ContextMenuSubContent({
+function ContextMenuSubContent({
   className,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
@@ -91,9 +91,9 @@ const ContextMenuSubContent = React.memo(function ContextMenuSubContent({
       {...props}
     />
   )
-})
+}
 
-const ContextMenuContent = React.memo(function ContextMenuContent({
+function ContextMenuContent({
   className,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
@@ -109,9 +109,9 @@ const ContextMenuContent = React.memo(function ContextMenuContent({
       />
     </ContextMenuPrimitive.Portal>
   )
-})
+}
 
-const ContextMenuItem = React.memo(function ContextMenuItem({
+function ContextMenuItem({
   className,
   inset,
   variant = 'default',
@@ -132,9 +132,9 @@ const ContextMenuItem = React.memo(function ContextMenuItem({
       {...props}
     />
   )
-})
+}
 
-const ContextMenuCheckboxItem = React.memo(function ContextMenuCheckboxItem({
+function ContextMenuCheckboxItem({
   className,
   children,
   checked,
@@ -158,9 +158,9 @@ const ContextMenuCheckboxItem = React.memo(function ContextMenuCheckboxItem({
       {children}
     </ContextMenuPrimitive.CheckboxItem>
   )
-})
+}
 
-const ContextMenuRadioItem = React.memo(function ContextMenuRadioItem({
+function ContextMenuRadioItem({
   className,
   children,
   ...props
@@ -182,9 +182,9 @@ const ContextMenuRadioItem = React.memo(function ContextMenuRadioItem({
       {children}
     </ContextMenuPrimitive.RadioItem>
   )
-})
+}
 
-const ContextMenuLabel = React.memo(function ContextMenuLabel({
+function ContextMenuLabel({
   className,
   inset,
   ...props
@@ -202,9 +202,9 @@ const ContextMenuLabel = React.memo(function ContextMenuLabel({
       {...props}
     />
   )
-})
+}
 
-const ContextMenuSeparator = React.memo(function ContextMenuSeparator({
+function ContextMenuSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
@@ -215,9 +215,9 @@ const ContextMenuSeparator = React.memo(function ContextMenuSeparator({
       {...props}
     />
   )
-})
+}
 
-const ContextMenuShortcut = React.memo(function ContextMenuShortcut({
+function ContextMenuShortcut({
   className,
   ...props
 }: React.ComponentProps<'span'>) {
@@ -231,7 +231,7 @@ const ContextMenuShortcut = React.memo(function ContextMenuShortcut({
       {...props}
     />
   )
-})
+}
 
 export {
   ContextMenu,

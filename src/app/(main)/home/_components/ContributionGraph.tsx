@@ -3,7 +3,7 @@
 import HeatMap, { type HeatMapValue } from '@uiw/react-heat-map'
 import { useSearchParams } from 'next/navigation'
 import * as React from 'react'
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -146,7 +146,7 @@ function formatDate(dateStr: string): string {
 /**
  * Tooltip content showing category breakdown for a specific day.
  */
-const CategoryBreakdown = memo(function CategoryBreakdown({
+const CategoryBreakdown = function CategoryBreakdown({
   day,
 }: {
   day: HeatmapDay
@@ -162,6 +162,7 @@ const CategoryBreakdown = memo(function CategoryBreakdown({
                 className="inline-block h-2 w-2 rounded-full"
                 style={{ backgroundColor: getCategoryHex(cat.color) }}
               />
+
               <span>{cat.name}</span>
               <span className="ml-auto text-muted-foreground">{cat.count}</span>
             </div>
@@ -173,7 +174,7 @@ const CategoryBreakdown = memo(function CategoryBreakdown({
       </p>
     </div>
   )
-})
+}
 
 /**
  * GitHub-style contribution heatmap showing completed task activity.
@@ -183,7 +184,7 @@ const CategoryBreakdown = memo(function CategoryBreakdown({
  * @example
  * <ContributionGraph />
  */
-export const ContributionGraph = memo(function ContributionGraph() {
+export const ContributionGraph = function ContributionGraph() {
   const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef, !isLoading)
@@ -240,101 +241,93 @@ export const ContributionGraph = memo(function ContributionGraph() {
     }
   }, [selectedDate])
 
-  const endDate = useMemo(() => normalizeDate(new Date()), [])
-  const startDate = useMemo(
-    () => getAlignedHeatmapStartDate(endDate),
-    [endDate],
-  )
-  const weekCount = useMemo(
-    () => getHeatmapWeekCount(startDate, endDate),
-    [startDate, endDate],
-  )
-  const heatmapLayout = useMemo(
-    () => calculateHeatmapLayout(containerWidth, weekCount),
-    [containerWidth, weekCount],
-  )
+  const endDate = normalizeDate(new Date())
+  const startDate = getAlignedHeatmapStartDate(endDate)
+
+  const weekCount = getHeatmapWeekCount(startDate, endDate)
+
+  const heatmapLayout = calculateHeatmapLayout(containerWidth, weekCount)
+
   // Set of YYYY-MM-DD strings for each month's peak day. The ◎ overlay below
   // reads `monthlyMaxDates.has(dateKey)` on every rect render, so memoizing
   // the Set keeps that O(1) lookup stable across re-renders triggered by
   // hover/tooltip state.
-  const monthlyMaxDates = useMemo(
-    () => calcMonthlyMaxDates(dataByDate),
-    [dataByDate],
-  )
+  const monthlyMaxDates = calcMonthlyMaxDates(dataByDate)
+
   // Functional setState lets us avoid depending on `selectedDate`, so the
   // callback identity stays stable across renders. PR2 will reuse this exact
   // handler for j/k keyboard navigation — keeping it stable matters because
   // `useKeyboardNav` will attach it to a window event listener.
-  const handleNavigate = useCallback((dayOffset: -1 | 1) => {
+  const handleNavigate = (dayOffset: -1 | 1) => {
     setSelectedDate((currentDate) =>
       currentDate ? shiftIsoDate(currentDate, dayOffset) : currentDate,
     )
-  }, [])
-  const heatmapStyle = useMemo(
-    () => ({
-      color: 'var(--muted-foreground)',
-      fontSize: '10px',
-    }),
-    [],
-  )
-  const renderHeatmapRect = useCallback(
-    (props: HeatmapRectProps, data: HeatmapRectValue) => {
-      const dateKey = toIsoDateKey(data.date)
-      const dayData = dataByDate.get(dateKey)
-      function handleSelect() {
-        if (dateKey) setSelectedDate(dateKey)
-      }
-      const isMonthlyPeak = monthlyMaxDates.has(dateKey)
+  }
+  const heatmapStyle = {
+    color: 'var(--muted-foreground)',
+    fontSize: '10px',
+  }
 
-      if (!dayData || dayData.count === 0) {
-        return (
-          <rect
-            {...props}
-            onClick={handleSelect}
-            style={{ ...props.style, cursor: 'pointer' }}
-          />
-        )
-      }
+  const renderHeatmapRect = (
+    props: HeatmapRectProps,
+    data: HeatmapRectValue,
+  ) => {
+    const dateKey = toIsoDateKey(data.date)
+    const dayData = dataByDate.get(dateKey)
+    function handleSelect() {
+      if (dateKey) setSelectedDate(dateKey)
+    }
+    const isMonthlyPeak = monthlyMaxDates.has(dateKey)
 
-      // The peak mark is decorative; the rect keeps click and tooltip behavior.
-      const monthlyPeakMark = isMonthlyPeak ? (
-        <text
-          x={Number(props.x) + Number(props.width) / 2}
-          y={Number(props.y) + Number(props.height) / 2}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
-          fill="var(--primary-foreground)"
-          aria-hidden
-          style={{ pointerEvents: 'none' }}
-        >
-          ◎
-        </text>
-      ) : null
-
+    if (!dayData || dayData.count === 0) {
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <g>
-              <rect
-                {...props}
-                onClick={handleSelect}
-                style={{ ...props.style, cursor: 'pointer' }}
-              />
-              {monthlyPeakMark}
-            </g>
-          </TooltipTrigger>
-          <TooltipContent>
-            <CategoryBreakdown day={dayData} />
-          </TooltipContent>
-        </Tooltip>
+        <rect
+          {...props}
+          onClick={handleSelect}
+          style={{ ...props.style, cursor: 'pointer' }}
+        />
       )
-    },
-    [dataByDate, heatmapLayout.rectSize, monthlyMaxDates],
-  )
-  const handleDayDetailOpenChange = useCallback((open: boolean) => {
+    }
+
+    // The peak mark is decorative; the rect keeps click and tooltip behavior.
+    const monthlyPeakMark = isMonthlyPeak ? (
+      <text
+        x={Number(props.x) + Number(props.width) / 2}
+        y={Number(props.y) + Number(props.height) / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
+        fill="var(--primary-foreground)"
+        aria-hidden
+        style={{ pointerEvents: 'none' }}
+      >
+        ◎
+      </text>
+    ) : null
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <g>
+            <rect
+              {...props}
+              onClick={handleSelect}
+              style={{ ...props.style, cursor: 'pointer' }}
+            />
+
+            {monthlyPeakMark}
+          </g>
+        </TooltipTrigger>
+        <TooltipContent>
+          <CategoryBreakdown day={dayData} />
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  const handleDayDetailOpenChange = (open: boolean) => {
     if (!open) setSelectedDate(null)
-  }, [])
+  }
 
   if (isLoading) {
     return (
@@ -396,7 +389,7 @@ export const ContributionGraph = memo(function ContributionGraph() {
       </CardContent>
     </Card>
   )
-})
+}
 
 /**
  * Observes an element and returns its current content width.

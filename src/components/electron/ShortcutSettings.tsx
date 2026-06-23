@@ -1,7 +1,7 @@
 'use client'
 
 import { Keyboard, RotateCcw, Save, AlertCircle } from 'lucide-react'
-import { memo, useCallback, useState, type MouseEvent } from 'react'
+import { useState, type MouseEvent } from 'react'
 
 import { KeybindingCaptureInput } from '@/components/electron/KeybindingCaptureInput'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +44,7 @@ const SHORTCUT_DESCRIPTIONS: Record<string, string> = {
   focusFloatingNavigator: 'Focus floating navigator',
 }
 
-export const ShortcutSettings = memo(function ShortcutSettings({
+export const ShortcutSettings = function ShortcutSettings({
   className,
 }: ShortcutSettingsProps) {
   const [shortcuts, setShortcuts] = useState<ShortcutConfig>({})
@@ -59,7 +59,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
   const isElectron =
     typeof window !== 'undefined' && window.electronAPI?.shortcuts
 
-  const loadShortcuts = useCallback(async () => {
+  const loadShortcuts = async () => {
     if (!isElectron) return
 
     try {
@@ -103,7 +103,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     } finally {
       setIsLoading(false)
     }
-  }, [isElectron])
+  }
 
   useCycleEffect(() => {
     if (!isElectron) {
@@ -111,17 +111,17 @@ export const ShortcutSettings = memo(function ShortcutSettings({
       return
     }
 
-    loadShortcuts()
-  }, [isElectron, loadShortcuts])
+    void loadShortcuts()
+  }, [isElectron])
 
-  const updateShortcut = useCallback((id: string, accelerator: string) => {
+  const updateShortcut = (id: string, accelerator: string) => {
     setShortcuts((prev) => ({
       ...prev,
       [id]: accelerator,
     }))
     setHasChanges(true)
     setError(null)
-  }, [])
+  }
 
   /**
    * Persist every pending shortcut edit to the main process in one batch, then
@@ -130,7 +130,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
    * @returns Resolves when the batch save settles; sets error state on any failure.
    * @example saveShortcuts() // flushes pending edits, clears the unsaved-changes flag on success
    */
-  const saveShortcuts = useCallback(async () => {
+  const saveShortcuts = async () => {
     if (!isElectron) return
 
     setIsSaving(true)
@@ -159,15 +159,15 @@ export const ShortcutSettings = memo(function ShortcutSettings({
     } finally {
       setIsSaving(false)
     }
-  }, [isElectron, loadShortcuts, shortcuts])
+  }
 
-  const resetToDefaults = useCallback(() => {
+  const resetToDefaults = () => {
     setShortcuts({ ...defaultShortcuts })
     setHasChanges(true)
     setError(null)
-  }, [defaultShortcuts])
+  }
 
-  const toggleShortcuts = useCallback(async () => {
+  const toggleShortcuts = async () => {
     if (!isElectron || !stats) return
 
     try {
@@ -188,49 +188,45 @@ export const ShortcutSettings = memo(function ShortcutSettings({
       log.error('Failed to toggle shortcuts:', error)
       setError('Failed to toggle shortcuts')
     }
-  }, [isElectron, loadShortcuts, shortcuts, stats])
+  }
 
-  const testShortcut = useCallback(
-    async (id: string) => {
-      if (!isElectron) return
+  const testShortcut = async (id: string) => {
+    if (!isElectron) return
 
-      try {
-        const accelerator = shortcuts[id]
-        if (accelerator) {
-          if (
-            !window.electronAPI?.shortcuts ||
-            !window.electronAPI?.notifications
-          ) {
-            throw new Error('Electron API not available')
-          }
-          const isRegistered =
-            await window.electronAPI.shortcuts.isRegistered(accelerator)
-          if (isRegistered) {
-            // Show a notification that the shortcut is working
-            await window.electronAPI.notifications.show(
-              'Shortcut Test',
-              `${SHORTCUT_DESCRIPTIONS[id]} (${accelerator}) is registered and working`,
-              { silent: true },
-            )
-          } else {
-            setError(`Shortcut ${accelerator} is not currently registered`)
-          }
+    try {
+      const accelerator = shortcuts[id]
+      if (accelerator) {
+        if (
+          !window.electronAPI?.shortcuts ||
+          !window.electronAPI?.notifications
+        ) {
+          throw new Error('Electron API not available')
         }
-      } catch (error) {
-        log.error('Failed to test shortcut:', error)
-        setError('Failed to test shortcut')
+        const isRegistered =
+          await window.electronAPI.shortcuts.isRegistered(accelerator)
+        if (isRegistered) {
+          // Show a notification that the shortcut is working
+          await window.electronAPI.notifications.show(
+            'Shortcut Test',
+            `${SHORTCUT_DESCRIPTIONS[id]} (${accelerator}) is registered and working`,
+            { silent: true },
+          )
+        } else {
+          setError(`Shortcut ${accelerator} is not currently registered`)
+        }
       }
-    },
-    [isElectron, shortcuts],
-  )
+    } catch (error) {
+      log.error('Failed to test shortcut:', error)
+      setError('Failed to test shortcut')
+    }
+  }
 
-  const handleTestShortcutClick = useCallback(
-    async (event: MouseEvent<HTMLButtonElement>) => {
-      const shortcutId = event.currentTarget.dataset.shortcutId
-      if (shortcutId) await testShortcut(shortcutId)
-    },
-    [testShortcut],
-  )
+  const handleTestShortcutClick = async (
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
+    const shortcutId = event.currentTarget.dataset.shortcutId
+    if (shortcutId) await testShortcut(shortcutId)
+  }
 
   if (!isElectron) {
     return (
@@ -372,7 +368,7 @@ export const ShortcutSettings = memo(function ShortcutSettings({
       </CardContent>
     </Card>
   )
-})
+}
 
 interface ShortcutRowProps {
   /** Shortcut id (map key); also builds the stable `shortcut-${id}` control id. */
@@ -400,7 +396,7 @@ interface ShortcutRowProps {
  * @returns The shortcut's settings row.
  * @example <ShortcutRow id="toggleBrainDump" description="Toggle BrainDump" value="Alt+Space" platform="darwin" disabled={false} onChange={updateShortcut} onTest={handleTestShortcutClick} />
  */
-const ShortcutRow = memo(function ShortcutRow({
+const ShortcutRow = function ShortcutRow({
   id,
   description,
   value,
@@ -411,10 +407,7 @@ const ShortcutRow = memo(function ShortcutRow({
 }: ShortcutRowProps) {
   // Bind the parent's (id, accelerator) handler to this row's id so the capture
   // box receives a stable reference instead of a fresh inline closure each render.
-  const handleChange = useCallback(
-    (accelerator: string) => onChange(id, accelerator),
-    [id, onChange],
-  )
+  const handleChange = (accelerator: string) => onChange(id, accelerator)
 
   return (
     <div className="flex items-center gap-3">
@@ -432,6 +425,7 @@ const ShortcutRow = memo(function ShortcutRow({
           disabled={disabled}
           onChange={handleChange}
         />
+
         <Button
           variant="outline"
           size="sm"
@@ -444,4 +438,4 @@ const ShortcutRow = memo(function ShortcutRow({
       </div>
     </div>
   )
-})
+}

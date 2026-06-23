@@ -22,35 +22,33 @@ export default meta
 
 type Story = StoryObj<typeof Form>
 
+function RHFExampleStory() {
+  const methods = useForm<{ email: string }>({ defaultValues: { email: '' } })
+  return (
+    <Form {...methods}>
+      <form
+        className="flex w-80 flex-col gap-3"
+        onSubmit={methods.handleSubmit(() => {})}
+      >
+        <FormField
+          control={methods.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input type="email" placeholder="you@example.com" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit">Submit</Button>
+      </form>
+    </Form>
+  )
+}
+
 export const RHFExample: Story = {
-  render: () => {
-    const methods = useForm<{ email: string }>({ defaultValues: { email: '' } })
-    return (
-      <Form {...methods}>
-        <form
-          className="flex w-80 flex-col gap-3"
-          onSubmit={methods.handleSubmit(() => {})}
-        >
-          <FormField
-            control={methods.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    placeholder="you@example.com"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <Button type="submit">Submit</Button>
-        </form>
-      </Form>
-    )
-  },
+  render: () => <RHFExampleStory />,
 }

@@ -35,7 +35,7 @@ const buttonVariants = cva(
   },
 )
 
-const Button = React.memo(function Button({
+function Button({
   className,
   variant,
   size,
@@ -54,6 +54,6 @@ const Button = React.memo(function Button({
       {...props}
     />
   )
-})
+}
 
 export { Button, buttonVariants }

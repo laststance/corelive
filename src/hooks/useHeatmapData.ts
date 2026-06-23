@@ -1,7 +1,6 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
 
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { orpc } from '@/lib/orpc/client-query'
@@ -55,24 +54,24 @@ export function useHeatmapData(days: number = 365) {
     enabled: isClerkQueryReady,
   })
 
-  // Derived values are memoized on `data` identity. Without this, every call
-  // site (ContributionGraph, WeeklySummaryCard) would receive a fresh Map and
-  // Array on each render, busting downstream `useMemo` dep keys
-  // (calcMonthlyMaxDates, aggregateLastSevenDays). TanStack Query already
-  // dedups the network request — this is the in-render dedup.
-  const { heatmapValues, dataByDate } = useMemo(
-    () => ({
-      heatmapValues:
-        data?.data.map((d) => ({
-          date: d.date.replace(/-/g, '/'),
-          count: d.count,
-        })) ?? [],
-      dataByDate: new Map<string, HeatmapDay>(
-        data?.data.map((d) => [d.date, d]) ?? [],
-      ),
-    }),
-    [data],
-  )
+  // The React Compiler auto-memoizes these derivations on `data` identity, so
+  // call sites (ContributionGraph, WeeklySummaryCard) keep receiving the same
+  // Map and Array references across renders while `data` is unchanged — without
+  // it, each render would hand them a fresh Map/Array and bust their own derived
+  // caches (calcMonthlyMaxDates, aggregateLastSevenDays). TanStack Query already
+  // dedups the network request and keeps `data` referentially stable via
+  // structural sharing; this is the in-render dedup the compiler preserves now
+  // that the manual useMemo is gone.
+  const { heatmapValues, dataByDate } = {
+    heatmapValues:
+      data?.data.map((d) => ({
+        date: d.date.replace(/-/g, '/'),
+        count: d.count,
+      })) ?? [],
+    dataByDate: new Map<string, HeatmapDay>(
+      data?.data.map((d) => [d.date, d]) ?? [],
+    ),
+  }
 
   return {
     heatmapValues,

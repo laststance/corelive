@@ -1,7 +1,7 @@
 'use client'
 
 import { Bell, BellOff, Volume2, VolumeX } from 'lucide-react'
-import { memo, useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,33 +59,28 @@ interface NotificationPreferenceSwitchProps {
  * @example
  * <NotificationPreferenceSwitch id="task-created" preferenceKey="taskCreated" checked updatePreferences={updatePreferences} disabled={false} />
  */
-const NotificationPreferenceSwitch = memo(
-  function NotificationPreferenceSwitch({
-    id,
-    checked,
-    disabled,
-    preferenceKey,
-    updatePreferences,
-  }: NotificationPreferenceSwitchProps) {
-    const handleCheckedChange = useCallback(
-      async (nextChecked: boolean) => {
-        await updatePreferences({ [preferenceKey]: nextChecked })
-      },
-      [preferenceKey, updatePreferences],
-    )
+const NotificationPreferenceSwitch = function NotificationPreferenceSwitch({
+  id,
+  checked,
+  disabled,
+  preferenceKey,
+  updatePreferences,
+}: NotificationPreferenceSwitchProps) {
+  const handleCheckedChange = async (nextChecked: boolean) => {
+    await updatePreferences({ [preferenceKey]: nextChecked })
+  }
 
-    return (
-      <Switch
-        id={id}
-        checked={checked}
-        onCheckedChange={handleCheckedChange}
-        disabled={disabled}
-      />
-    )
-  },
-)
+  return (
+    <Switch
+      id={id}
+      checked={checked}
+      onCheckedChange={handleCheckedChange}
+      disabled={disabled}
+    />
+  )
+}
 
-export const NotificationSettings = memo(function NotificationSettings({
+export const NotificationSettings = function NotificationSettings({
   className,
 }: NotificationSettingsProps) {
   const [preferences, setPreferences] = useState<NotificationPreferences>({
@@ -104,7 +99,7 @@ export const NotificationSettings = memo(function NotificationSettings({
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  const loadPreferences = useCallback(async () => {
+  const loadPreferences = async () => {
     if (!isElectron) return
 
     try {
@@ -132,9 +127,9 @@ export const NotificationSettings = memo(function NotificationSettings({
     } finally {
       setIsLoading(false)
     }
-  }, [isElectron])
+  }
 
-  const loadActiveCount = useCallback(async () => {
+  const loadActiveCount = async () => {
     if (!isElectron) return
 
     try {
@@ -146,7 +141,7 @@ export const NotificationSettings = memo(function NotificationSettings({
     } catch (error) {
       log.error('Failed to load active notification count:', error)
     }
-  }, [isElectron])
+  }
 
   useCycleEffect(() => {
     if (!isElectron) {
@@ -158,32 +153,31 @@ export const NotificationSettings = memo(function NotificationSettings({
     loadActiveCount()
   }, [isElectron, loadActiveCount, loadPreferences])
 
-  const updatePreferences = useCallback(
-    async (newPreferences: Partial<NotificationPreferences>) => {
-      if (!isElectron) return
+  const updatePreferences = async (
+    newPreferences: Partial<NotificationPreferences>,
+  ) => {
+    if (!isElectron) return
 
-      setIsSaving(true)
-      try {
-        if (!window.electronAPI?.notifications) {
-          throw new Error('Electron API not available')
-        }
-        const updatedPrefs = { ...preferences, ...newPreferences }
-        const success =
-          await window.electronAPI.notifications.updatePreferences(updatedPrefs)
-
-        if (success) {
-          setPreferences(updatedPrefs)
-        }
-      } catch (error) {
-        log.error('Failed to update notification preferences:', error)
-      } finally {
-        setIsSaving(false)
+    setIsSaving(true)
+    try {
+      if (!window.electronAPI?.notifications) {
+        throw new Error('Electron API not available')
       }
-    },
-    [isElectron, preferences],
-  )
+      const updatedPrefs = { ...preferences, ...newPreferences }
+      const success =
+        await window.electronAPI.notifications.updatePreferences(updatedPrefs)
 
-  const testNotification = useCallback(async () => {
+      if (success) {
+        setPreferences(updatedPrefs)
+      }
+    } catch (error) {
+      log.error('Failed to update notification preferences:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const testNotification = async () => {
     if (!isElectron) return
 
     try {
@@ -198,9 +192,9 @@ export const NotificationSettings = memo(function NotificationSettings({
     } catch (error) {
       log.error('Failed to show test notification:', error)
     }
-  }, [isElectron, preferences.sound])
+  }
 
-  const clearAllNotifications = useCallback(async () => {
+  const clearAllNotifications = async () => {
     if (!isElectron) return
 
     try {
@@ -212,7 +206,7 @@ export const NotificationSettings = memo(function NotificationSettings({
     } catch (error) {
       log.error('Failed to clear notifications:', error)
     }
-  }, [isElectron])
+  }
 
   if (!isElectron) {
     return (
@@ -411,4 +405,4 @@ export const NotificationSettings = memo(function NotificationSettings({
       </CardContent>
     </Card>
   )
-})
+}

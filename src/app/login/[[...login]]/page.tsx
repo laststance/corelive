@@ -2,7 +2,6 @@
 
 import { SignIn as Login, useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
-import { memo } from 'react'
 
 import {
   ElectronLoginForm,
@@ -21,7 +20,7 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
  * - Google OAuth requires system browser (blocks WebView)
  * - GitHub removed: email/password provides simpler desktop experience
  */
-const Page = memo(function Page() {
+const Page = function Page() {
   const isElectron = useIsElectron()
   const { user, isLoaded } = useUser()
   const router = useRouter()
@@ -64,6 +63,6 @@ const Page = memo(function Page() {
       )}
     </div>
   )
-})
+}
 
 export default Page

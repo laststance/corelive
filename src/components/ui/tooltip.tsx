@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-const TooltipProvider = React.memo(function TooltipProvider({
+function TooltipProvider({
   delayDuration = 0,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
@@ -16,9 +16,9 @@ const TooltipProvider = React.memo(function TooltipProvider({
       {...props}
     />
   )
-})
+}
 
-const Tooltip = React.memo(function Tooltip({
+function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   return (
@@ -26,15 +26,15 @@ const Tooltip = React.memo(function Tooltip({
       <TooltipPrimitive.Root data-slot="tooltip" {...props} />
     </TooltipProvider>
   )
-})
+}
 
-const TooltipTrigger = React.memo(function TooltipTrigger({
+function TooltipTrigger({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
-})
+}
 
-const TooltipContent = React.memo(function TooltipContent({
+function TooltipContent({
   className,
   sideOffset = 0,
   children,
@@ -56,6 +56,6 @@ const TooltipContent = React.memo(function TooltipContent({
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )
-})
+}
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }

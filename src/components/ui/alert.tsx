@@ -19,7 +19,7 @@ const alertVariants = cva(
   },
 )
 
-const Alert = React.memo(function Alert({
+function Alert({
   className,
   variant,
   ...props
@@ -32,12 +32,9 @@ const Alert = React.memo(function Alert({
       {...props}
     />
   )
-})
+}
 
-const AlertTitle = React.memo(function AlertTitle({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="alert-title"
@@ -48,9 +45,9 @@ const AlertTitle = React.memo(function AlertTitle({
       {...props}
     />
   )
-})
+}
 
-const AlertDescription = React.memo(function AlertDescription({
+function AlertDescription({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
@@ -64,6 +61,6 @@ const AlertDescription = React.memo(function AlertDescription({
       {...props}
     />
   )
-})
+}
 
 export { Alert, AlertTitle, AlertDescription }

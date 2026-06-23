@@ -2,7 +2,7 @@
 
 import { AuthenticateWithRedirectCallback } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
-import { memo, Suspense } from 'react'
+import { Suspense } from 'react'
 
 /**
  * SSO Callback Page - Clerk OAuth Callback Handler
@@ -20,7 +20,7 @@ import { memo, Suspense } from 'react'
  * 5. Clerk redirects to /oauth/callback (redirectUrlComplete)
  */
 
-const SSOCallbackContent = memo(function SSOCallbackContent() {
+const SSOCallbackContent = function SSOCallbackContent() {
   const searchParams = useSearchParams()
   const state = searchParams.get('state')
 
@@ -49,12 +49,12 @@ const SSOCallbackContent = memo(function SSOCallbackContent() {
       </p>
     </div>
   )
-})
+}
 
 /**
  * SSO Callback Page with Suspense wrapper.
  */
-const SSOCallbackPage = memo(function SSOCallbackPage() {
+const SSOCallbackPage = function SSOCallbackPage() {
   return (
     <Suspense
       fallback={
@@ -66,6 +66,6 @@ const SSOCallbackPage = memo(function SSOCallbackPage() {
       <SSOCallbackContent />
     </Suspense>
   )
-})
+}
 
 export default SSOCallbackPage

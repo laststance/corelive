@@ -1,12 +1,8 @@
 import * as React from 'react'
-import { memo } from 'react'
 
 import { cn } from '@/lib/utils'
 
-const Skeleton = memo(function Skeleton({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="skeleton"
@@ -14,6 +10,6 @@ const Skeleton = memo(function Skeleton({
       {...props}
     />
   )
-})
+}
 
 export { Skeleton }
