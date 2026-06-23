@@ -13,7 +13,10 @@
  * // Access state directly (prefer using hooks)
  * const state = store.getState()
  */
-import { createStorageMiddleware } from '@laststance/redux-storage-middleware'
+import {
+  createStorageMiddleware,
+  deepMerge,
+} from '@laststance/redux-storage-middleware'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
 
 import { createPreferencesSyncMiddleware } from '../preferences-sync-channel'
@@ -36,30 +39,47 @@ const rootReducer = combineReducers({
 
 /**
  * Storage key used for localStorage persistence.
- * Changing this will reset all persisted state.
+ * Changing this will reset all persisted state. Exported so hydration tests
+ * seed the same key the production store reads.
  */
-const STORAGE_KEY = 'corelive-redux-state'
+export const STORAGE_KEY = 'corelive-redux-state'
 
 /**
- * Configure redux-storage-middleware for localStorage persistence.
- * Only persists specified slices to avoid bloating localStorage.
+ * Builds CoreLive's localStorage persistence middleware. Extracted (and
+ * exported) so the hydration regression tests drive the EXACT production
+ * reconciler instead of a hand-copied config that could silently drift.
  *
- * The middleware handles:
- * - Automatic persistence of state changes to localStorage
- * - SSR-safe hydration on client-side mount
- * - Selective slice persistence
+ * Why `merge: deepMerge` and not the library default `shallowMerge`:
+ * shallowMerge replaces each persisted slice wholesale (`{ ...current,
+ * ...persisted }`), so any preference field ADDED in a newer app version is
+ * simply absent for users who persisted before it existed — it reads back
+ * `undefined` and the UI shows it "reverted to default" on version-up.
+ * deepMerge recursively fills every missing field (at any depth) from the
+ * current defaults while preserving all user-set values, so an update never
+ * silently resets a preference and newer fields appear at their defaults. It is
+ * also preferred over re-parsing through the Zod schema, which would reject the
+ * WHOLE slice (resetting everything) on a single wrong-typed field — the wrong
+ * trade-off for the user's own persisted data, where "preserve" beats "reject".
+ *
+ * The middleware also handles automatic persistence of state changes, SSR-safe
+ * hydration on mount, and selective slice persistence. Bumping the version runs
+ * `migrate` once on the next rehydrate; it MUST stay total or the middleware
+ * wipes ALL persisted state.
+ *
+ * @returns The storage middleware, hydration-wrapped reducer, and hydration api.
  */
-const { middleware: storageMiddleware, reducer: hydratedReducer } =
+export const createPersistenceMiddleware = () =>
   createStorageMiddleware({
     rootReducer,
     key: STORAGE_KEY,
     slices: ['electronSettings', 'preferences'], // Slices to persist to localStorage
-    // Seal the legacy completionSound → soundMoments fold at the hydration
-    // boundary. Bumping the version runs `migrate` once on the next rehydrate;
-    // it MUST stay total or the middleware wipes ALL persisted state.
     version: STORAGE_SCHEMA_VERSION,
     migrate: migratePersistedState,
+    merge: deepMerge,
   })
+
+const { middleware: storageMiddleware, reducer: hydratedReducer } =
+  createPersistenceMiddleware()
 
 /**
  * Configured Redux store with middleware and dev tools.
