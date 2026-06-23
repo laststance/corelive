@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { orpc } from '@/lib/orpc/client-query'
@@ -54,24 +55,30 @@ export function useHeatmapData(days: number = 365) {
     enabled: isClerkQueryReady,
   })
 
-  // The React Compiler auto-memoizes these derivations on `data` identity, so
-  // call sites (ContributionGraph, WeeklySummaryCard) keep receiving the same
-  // Map and Array references across renders while `data` is unchanged — without
-  // it, each render would hand them a fresh Map/Array and bust their own derived
-  // caches (calcMonthlyMaxDates, aggregateLastSevenDays). TanStack Query already
-  // dedups the network request and keeps `data` referentially stable via
-  // structural sharing; this is the in-render dedup the compiler preserves now
-  // that the manual useMemo is gone.
-  const { heatmapValues, dataByDate } = {
-    heatmapValues:
-      data?.data.map((d) => ({
-        date: d.date.replace(/-/g, '/'),
-        count: d.count,
-      })) ?? [],
-    dataByDate: new Map<string, HeatmapDay>(
-      data?.data.map((d) => [d.date, d]) ?? [],
-    ),
-  }
+  // Memoize on `data` identity so call sites keep the SAME Map/Array references
+  // across renders while `data` is unchanged — ContributionGraph's
+  // `calcMonthlyMaxDates(dataByDate)`, WeeklySummaryCard's `aggregateLastSevenDays`,
+  // and especially YearInReviewModal's auto-open effect (which lists `dataByDate`
+  // in its dep array) would otherwise see a fresh Map every render. We do NOT
+  // rely on the React Compiler for this: it provably BAILED on the sibling
+  // TodoList component that had the identical fresh-Map/Array-every-render shape,
+  // letting an unstable effect dep drive a render loop that starved App Router
+  // navigation (the "Settings does nothing" bug, fixed 2026-06-24). TanStack
+  // Query keeps `data` referentially stable via structural sharing, so this memo
+  // recomputes only on a real data change.
+  const { heatmapValues, dataByDate } = useMemo(
+    () => ({
+      heatmapValues:
+        data?.data.map((d) => ({
+          date: d.date.replace(/-/g, '/'),
+          count: d.count,
+        })) ?? [],
+      dataByDate: new Map<string, HeatmapDay>(
+        data?.data.map((d) => [d.date, d]) ?? [],
+      ),
+    }),
+    [data],
+  )
 
   return {
     heatmapValues,
