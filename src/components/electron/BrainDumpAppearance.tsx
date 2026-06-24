@@ -171,8 +171,9 @@ export const BrainDumpAppearance =
             onValueChange={handleBraindumpClearDelayChange}
             disabled={!braindumpClearOnComplete}
           />
-          {/* End-labels orient the extremes; muted + small so the slider leads. */}
-          <div className="flex justify-between text-xs uppercase tracking-wide text-muted-foreground">
+          {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
+             medium, uppercase, 0.05em) — muted so the slider still leads. */}
+          <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <span>Instant</span>
             <span>Linger</span>
           </div>
