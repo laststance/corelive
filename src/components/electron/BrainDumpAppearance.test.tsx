@@ -29,15 +29,17 @@ function renderBrainDumpAppearance(overrides: Partial<PreferencesState> = {}) {
 }
 
 /**
- * Find a slider thumb by its track max. The two sliders here (font size, max 24;
- * clear delay, max 5000) can't be told apart by accessible name — the thumb
- * (role="slider") carries none, because shadcn forwards aria-label to the slider
- * ROOT, not the thumb — so the distinct track max is the stable discriminator.
+ * Find a slider thumb by its track max. The three sliders here (font size, max 24;
+ * clear delay, max 5000; toast duration, max 10000) can't be told apart by
+ * accessible name — the thumb (role="slider") carries none, because shadcn forwards
+ * aria-label to the slider ROOT, not the thumb — so the distinct track max is the
+ * stable discriminator.
  *
- * @param max - The aria-valuemax to match ('24' = font size, '5000' = clear delay).
+ * @param max - The aria-valuemax to match ('24' = font size, '5000' = clear delay,
+ * '10000' = toast duration).
  * @returns The matching slider thumb element.
  * @example
- * getSliderByMax('5000') // the clear-delay slider
+ * getSliderByMax('10000') // the toast-duration slider
  */
 function getSliderByMax(max: string): HTMLElement {
   const slider = screen
@@ -227,5 +229,51 @@ describe('BrainDumpAppearance — editor presentation', () => {
 
     // Assert — the delay rose by one 100 ms step in the slice.
     expect(store.getState().preferences.braindumpClearDelayMs).toBe(600)
+  })
+
+  it('shows the BrainDump toast-duration slider at the saved duration on its [2000,10000] track', () => {
+    // Arrange / Act — a non-default saved confirmation duration.
+    renderBrainDumpAppearance({ braindumpToastDurationMs: 6000 })
+
+    // Assert — the toast-duration slider (the [2000,10000] track) reflects the
+    // saved ms.
+    const toastDurationSlider = getSliderByMax('10000')
+    expect(toastDurationSlider).toHaveAttribute('aria-valuenow', '6000')
+    expect(toastDurationSlider).toHaveAttribute('aria-valuemin', '2000')
+    expect(toastDurationSlider).toHaveAttribute('aria-valuemax', '10000')
+  })
+
+  it('reads out the BrainDump toast duration in milliseconds', () => {
+    // Arrange / Act
+    renderBrainDumpAppearance({ braindumpToastDurationMs: 6000 })
+
+    // Assert — the numeric readout names the exact duration in ms.
+    expect(screen.getByText('6000 ms')).toBeInTheDocument()
+  })
+
+  it('keeps the toast-duration slider enabled even when clear-on-complete is off', () => {
+    // Arrange / Act — the toast shows on EVERY completion, so its duration is
+    // always meaningful, unlike the clear delay which is moot when lines stay.
+    renderBrainDumpAppearance({ braindumpClearOnComplete: false })
+
+    // Assert — the slider is interactive (no disabled marker) regardless.
+    const toastDurationSlider = getSliderByMax('10000')
+    expect(toastDurationSlider).not.toHaveAttribute('data-disabled')
+  })
+
+  it('raises the saved toast duration by one 500 ms step when the slider is nudged right', () => {
+    // Arrange — a known 6000 ms so a single step lands on 6500.
+    const { store } = renderBrainDumpAppearance({
+      braindumpToastDurationMs: 6000,
+    })
+    const toastDurationSlider = getSliderByMax('10000')
+
+    // Act — keyboard-nudge the thumb one step to the right (layout-free, unlike a
+    // pointer drag which jsdom can't measure).
+    toastDurationSlider.focus()
+    fireEvent.keyDown(toastDurationSlider, { key: 'ArrowRight' })
+
+    // Assert — the duration rose by one 500 ms step in the slice.
+    expect(store.getState().preferences.braindumpToastDurationMs).toBe(6500)
   })
 })

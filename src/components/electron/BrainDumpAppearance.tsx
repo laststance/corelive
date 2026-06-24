@@ -29,6 +29,9 @@ import {
   BRAINDUMP_FONT_SIZE_MIN_PX,
   BRAINDUMP_FONT_SIZE_STEP_PX,
   BRAINDUMP_TEXT_COLOR_PRESETS,
+  BRAINDUMP_TOAST_DURATION_MAX_MS,
+  BRAINDUMP_TOAST_DURATION_MIN_MS,
+  BRAINDUMP_TOAST_DURATION_STEP_MS,
 } from '@/lib/constants/braindump'
 import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import {
@@ -37,11 +40,13 @@ import {
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
+  selectBraindumpToastDurationMs,
   setBraindumpClearDelayMs,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
+  setBraindumpToastDurationMs,
 } from '@/lib/redux/slices/preferencesSlice'
 
 /** A 6-digit `#rrggbb` — the only shape a native `<input type="color">` accepts, so
@@ -69,10 +74,14 @@ export const BrainDumpAppearance =
       selectBraindumpClearOnComplete,
     )
     const braindumpClearDelayMs = useAppSelector(selectBraindumpClearDelayMs)
+    const braindumpToastDurationMs = useAppSelector(
+      selectBraindumpToastDurationMs,
+    )
 
     // Radix Slider wants a stable single-thumb array; rebuild only on change.
     const fontSizeSliderValue = [braindumpFontSize]
     const clearDelaySliderValue = [braindumpClearDelayMs]
+    const toastDurationSliderValue = [braindumpToastDurationMs]
 
     // The active color is "custom" when it matches none of the themed presets —
     // then no preset radio is selected and the native picker owns the choice.
@@ -112,6 +121,14 @@ export const BrainDumpAppearance =
       const nextDelay = values[0]
       if (typeof nextDelay === 'number') {
         dispatch(setBraindumpClearDelayMs(nextDelay))
+      }
+    }
+
+    const handleBraindumpToastDurationChange = (values: number[]): void => {
+      // Guard the first thumb value before dispatching.
+      const nextDuration = values[0]
+      if (typeof nextDuration === 'number') {
+        dispatch(setBraindumpToastDurationMs(nextDuration))
       }
     }
 
@@ -182,6 +199,46 @@ export const BrainDumpAppearance =
               Turn on “Clear finished lines” to use the delay.
             </p>
           ) : null}
+        </div>
+
+        {/* Confirmation duration — how long the “Completed” toast (with its Undo)
+           stays before it fades. Unlike the clear delay, this ALWAYS applies
+           (every completion shows the toast), so it's never disabled. The new ✕
+           on the toast dismisses it sooner (#109). Readout is raw ms — the house
+           convention (font-size shows raw px); the MIN of 2 s never hits a 0
+           "Instant" floor, so no special label is needed. */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label
+              htmlFor="braindump-toast-duration"
+              className="text-sm font-medium"
+            >
+              Confirmation duration
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {`${braindumpToastDurationMs} ms`}
+            </span>
+          </div>
+          <Slider
+            id="braindump-toast-duration"
+            aria-label="BrainDump completion toast duration"
+            min={BRAINDUMP_TOAST_DURATION_MIN_MS}
+            max={BRAINDUMP_TOAST_DURATION_MAX_MS}
+            step={BRAINDUMP_TOAST_DURATION_STEP_MS}
+            value={toastDurationSliderValue}
+            onValueChange={handleBraindumpToastDurationChange}
+          />
+          {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
+             medium, uppercase, 0.05em) — muted so the slider still leads. "Quick"
+             (not "Instant" — that's the clear-delay 0-floor above) ↔ "Linger". */}
+          <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <span>Quick</span>
+            <span>Linger</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            How long the “Completed” confirmation — with its Undo — stays before
+            it fades. Press the ✕ to dismiss it sooner.
+          </p>
         </div>
 
         {/* Font family — the three brand fonts; each label previews its face. */}

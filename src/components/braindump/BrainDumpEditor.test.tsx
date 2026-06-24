@@ -1157,3 +1157,149 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     )
   })
 })
+
+describe('BrainDumpEditor completion toast — close button + display duration (#109)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    completedMutateAsync.mockResolvedValue({ id: 1 })
+    // Reset the active floating category — the clamp spec leaves it on 1, but be
+    // explicit so a future cross-category spec here can't bleed state.
+    selectedCategoryRef.current = 1
+  })
+
+  it('shows the completion toast with a close button and the configured display duration', async () => {
+    // Arrange — clear-on-complete OFF (the always-shown toast path), with an
+    // 8 s display duration saved.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({ braindumpToastDurationMs: 8000 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete a plain line.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — the success toast carries the ✕ (closeButton) and stays for the
+    // saved 8000 ms, not the old fixed 5 s.
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalled()
+    })
+    const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+    expect(toastOptions?.closeButton).toBe(true)
+    expect(toastOptions?.duration).toBe(8000)
+  })
+
+  it('phrases the Undo-window copy for the configured display duration', async () => {
+    // Arrange — an 8 s duration must read "within 8 s", not a hardcoded "5 s".
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({ braindumpToastDurationMs: 8000 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — the description names the actual undo window in seconds.
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalled()
+    })
+    const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+    expect(toastOptions?.description).toBe('Tap Undo within 8 s to revert.')
+  })
+
+  it('keeps the close button and configured duration on the clear-on-complete toast', async () => {
+    // Arrange — clear-on-complete ON with instant clear and a 6 s duration: the
+    // SAME helper must wire the ✕ + duration on this second completion path too.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 0,
+      braindumpToastDurationMs: 6000,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete the only line (it clears instantly).
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+
+    // Assert — the clear toast also has the ✕ and the saved 6000 ms duration.
+    const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+    expect(toastOptions?.closeButton).toBe(true)
+    expect(toastOptions?.duration).toBe(6000)
+  })
+
+  it('still restores the cleared line on Undo even though the toast now fires onDismiss on close', async () => {
+    // Arrange — clear-on-complete ON; the ✕ adds an onDismiss that BOTH a ✕ and an
+    // Undo trigger. Undo must still revert, and the trailing onDismiss must NOT
+    // confirm the win away (the call-site wasUndoCalled guard — CEO-D4).
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 0,
+      braindumpToastDurationMs: 6000,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    const value = 'keep me\n- [ ] buy milk'
+    fireEvent.change(noteField, { target: { value } })
+    const caret = value.length // caret at end of the second line
+    noteField.selectionStart = caret
+    noteField.selectionEnd = caret
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me')
+    })
+
+    // Act — tap Undo, THEN let sonner fire onDismiss (it dismisses after the
+    // action runs); the guard must keep the restored line in place.
+    const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+    const undoAction = toastOptions?.action as
+      | { onClick: () => void }
+      | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+    act(() => {
+      toastOptions?.onDismiss?.({} as ToastT)
+    })
+
+    // Assert — the verbatim line returns at index 1 and stays there.
+    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+  })
+
+  it('clamps the clear linger down to the shorter toast duration so a line never outlasts its Undo', async () => {
+    // Arrange — a clear delay (300 ms) LONGER than the toast duration (100 ms).
+    // The runtime min() must remove the line when the toast (and its Undo) closes
+    // at 100 ms, never letting it linger the full 300 ms (#109 replaces #108's
+    // fixed ceiling). In production this is the clearDelay-5000 vs toast-2000 case.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 300,
+      braindumpToastDurationMs: 100,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete line 0; the deferred path leaves it on screen for now.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+
+    // Assert — after 150 ms (past the 100 ms toast, before the 300 ms delay) the
+    // line is already gone: the clamp picked the shorter toast duration.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(noteField).toHaveValue('keep me')
+  })
+})

@@ -9,6 +9,7 @@ import {
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
+  setBraindumpToastDurationMs,
   setCompletionSound,
   setRetainCompletedInList,
   setSoundMoment,
@@ -50,6 +51,7 @@ const BROADCASTABLE_ACTION_TYPES = new Set<string>([
   setBraindumpTextColor.type,
   setBraindumpClearOnComplete.type,
   setBraindumpClearDelayMs.type,
+  setBraindumpToastDurationMs.type,
 ])
 
 /**

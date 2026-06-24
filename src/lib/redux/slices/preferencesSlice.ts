@@ -30,6 +30,8 @@ import {
   BRAINDUMP_FONT_SIZE_MAX_PX,
   BRAINDUMP_FONT_SIZE_MIN_PX,
   BRAINDUMP_TEXT_COLOR_PATTERN,
+  BRAINDUMP_TOAST_DURATION_MAX_MS,
+  BRAINDUMP_TOAST_DURATION_MIN_MS,
   type BrainDumpFontFamilyId,
 } from '@/lib/constants/braindump'
 import { DEFAULT_PREFERENCES } from '@/lib/constants/preferences'
@@ -225,6 +227,24 @@ export const preferencesSlice = createSlice({
     },
 
     /**
+     * Sets the BrainDump completion-toast display duration (ms), clamped to the
+     * slider range so a stray programmatic value can't exceed it; guards
+     * NaN/±Infinity to the default (mirrors setBraindumpClearDelayMs). Governs how
+     * long the completion toast (with its Undo + close ✕) stays before auto-close.
+     * @param state - Current state
+     * @param action - Payload containing the new toast duration in ms.
+     */
+    setBraindumpToastDurationMs: (state, action: PayloadAction<number>) => {
+      const requestedDuration = action.payload
+      state.braindumpToastDurationMs = Number.isFinite(requestedDuration)
+        ? Math.min(
+            BRAINDUMP_TOAST_DURATION_MAX_MS,
+            Math.max(BRAINDUMP_TOAST_DURATION_MIN_MS, requestedDuration),
+          )
+        : DEFAULT_PREFERENCES.braindumpToastDurationMs
+    },
+
+    /**
      * Replaces the whole preferences state. Used by the cross-window sync to
      * apply preferences received from another window without re-broadcasting.
      * @param _state - Current state (unused, returns new state)
@@ -257,6 +277,7 @@ export const {
   setBraindumpTextColor,
   setBraindumpClearOnComplete,
   setBraindumpClearDelayMs,
+  setBraindumpToastDurationMs,
   hydratePreferences,
   resetPreferences,
 } = preferencesSlice.actions
@@ -377,6 +398,15 @@ export const selectBraindumpClearDelayMs = (state: RootState): number =>
   DEFAULT_PREFERENCES.braindumpClearDelayMs
 
 /**
+ * Selects the BrainDump completion-toast display duration (ms).
+ * @param state - Root state
+ * @returns The toast duration in ms (default 5000)
+ */
+export const selectBraindumpToastDurationMs = (state: RootState): number =>
+  state.preferences.braindumpToastDurationMs ??
+  DEFAULT_PREFERENCES.braindumpToastDurationMs
+
+/**
  * Selects the full preferences state (every field coalesced/migrated to its
  * effective value) — the snapshot the cross-window sync broadcasts.
  * @param state - Root state
@@ -397,6 +427,7 @@ export const selectPreferences = (state: RootState): PreferencesState => ({
   braindumpTextColor: selectBraindumpTextColor(state),
   braindumpClearOnComplete: selectBraindumpClearOnComplete(state),
   braindumpClearDelayMs: selectBraindumpClearDelayMs(state),
+  braindumpToastDurationMs: selectBraindumpToastDurationMs(state),
 })
 
 export default preferencesSlice.reducer

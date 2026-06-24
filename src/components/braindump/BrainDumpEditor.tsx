@@ -27,7 +27,6 @@ import {
   BRAINDUMP_OPACITY_MAX,
   BRAINDUMP_OPACITY_MIN,
   BRAINDUMP_OPACITY_STEP,
-  BRAINDUMP_TOAST_UNDO_MS,
 } from '@/lib/constants/braindump'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
@@ -38,6 +37,7 @@ import {
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
+  selectBraindumpToastDurationMs,
 } from '@/lib/redux/slices/preferencesSlice'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
@@ -179,6 +179,62 @@ function findCheckedLineIndexByTitle(
 }
 
 /**
+ * Build the BrainDump completion toast — the `Completed: <title>` success toast
+ * with an Undo action AND a close (✕) button. Both completion paths
+ * (`promoteLineToCompleted`, `completeAndClearLine`) call this so the ✕, the
+ * configurable display duration, the dynamic Undo-window copy, and the Undo
+ * wiring live in ONE place and can't drift between the two sites (#109).
+ *
+ * The two sites differ only in their dismiss bookkeeping, so `onAutoClose` /
+ * `onDismiss` are passed in: site A ties its line-clear to `onAutoClose` and has
+ * no `onDismiss`; site B's clear is timer-independent and runs the same cleanup
+ * on BOTH auto-close and a ✕-close. Sonner can't distinguish a ✕-close from an
+ * Undo-close (both fire `onDismiss`), so that disambiguation is owned by the call
+ * site (which captures the Undo handler), never by this helper.
+ *
+ * @param params - Toast inputs.
+ * @param params.title - Already-normalised completed title (rendered `Completed: <title>`).
+ * @param params.durationMs - How long the toast stays before auto-dismiss (the user pref).
+ * @param params.onUndo - Runs when the user clicks Undo; the toast is dismissed right after.
+ * @param params.onAutoClose - Optional: runs when the toast times out (NOT on ✕/Undo).
+ * @param params.onDismiss - Optional: runs on a manual close (✕ OR Undo — caller guards).
+ * @returns The sonner toast id, so the caller can dismiss it later (e.g. on a late create failure).
+ * @example
+ * const id = showCompletionToast({ title, durationMs: 5000, onUndo: () => revert() })
+ */
+function showCompletionToast({
+  title,
+  durationMs,
+  onUndo,
+  onAutoClose,
+  onDismiss,
+}: {
+  title: BrainDumpCompletedTitle
+  durationMs: number
+  onUndo: () => void
+  onAutoClose?: () => void
+  onDismiss?: () => void
+}): string | number {
+  const toastId = toast.success(`Completed: ${title}`, {
+    // Dynamic Undo-window copy — once the duration is user-configurable a fixed
+    // "5 s" would be wrong at every non-default setting (#109).
+    description: `Tap Undo within ${Math.round(durationMs / 1000)} s to revert.`,
+    duration: durationMs,
+    closeButton: true,
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        onUndo()
+        toast.dismiss(toastId)
+      },
+    },
+    onAutoClose,
+    onDismiss,
+  })
+  return toastId
+}
+
+/**
  * BrainDumpEditor — frameless transparent panel that pairs a category picker
  * with a freeform textarea using markdown checkboxes.
  *
@@ -233,6 +289,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // When ON, a finished line is dropped once its undo window closes (see the
   // toast's onAutoClose in promoteLineToCompleted). Default OFF keeps every line.
   const clearOnComplete = useAppSelector(selectBraindumpClearOnComplete)
+  const braindumpToastDurationMs = useAppSelector(
+    selectBraindumpToastDurationMs,
+  )
   // How long the finished line lingers before it's removed (clear-on-complete ON
   // path). 0 = remove instantly (prior behaviour); >0 defers the removal by this
   // many ms so the eye registers the completion first (#108). Clamped ≤ the Undo
@@ -664,29 +723,26 @@ export const BrainDumpEditor = function BrainDumpEditor({
     })
     await syncCompletedAcrossViews()
 
-    const undoToastId = toast.success(`Completed: ${safeTitle}`, {
-      description: 'Tap Undo within 5 s to revert.',
-      duration: BRAINDUMP_TOAST_UNDO_MS,
-      action: {
-        label: 'Undo',
-        onClick: () => {
-          // Read latest text via ref so the user's keystrokes between
-          // creation and undo are preserved. Pass the captured title so
-          // undoCompleted can re-resolve the current line index even if
-          // lines have drifted.
-          void undoCompleted(
-            safeTitle,
-            completedId,
-            noteTextRef.current,
-            lineIndex,
-          )
-          toast.dismiss(undoToastId)
-        },
+    showCompletionToast({
+      title: safeTitle,
+      durationMs: braindumpToastDurationMs,
+      // Read latest text via ref so the user's keystrokes between creation and
+      // undo are preserved. Pass the captured title so undoCompleted can
+      // re-resolve the current line index even if lines have drifted.
+      onUndo: () => {
+        void undoCompleted(
+          safeTitle,
+          completedId,
+          noteTextRef.current,
+          lineIndex,
+        )
       },
       // Clear-on-complete: when the toast auto-closes (the undo window elapsed
       // without an Undo), drop the finished line so the scratchpad clears as
-      // you go. Sonner fires onAutoClose ONLY on the timeout — an Undo click
-      // dismisses (onDismiss) instead, so undone completions are never cleared.
+      // you go. Sonner fires onAutoClose ONLY on the timeout — an Undo OR a ✕
+      // fires onDismiss instead (site A wires no onDismiss), so an undone or
+      // ✕-closed completion is never cleared here; the ✕ just hides the toast
+      // early (this site's clear is toast-tied, so dismissing simply skips it).
       onAutoClose: clearOnComplete
         ? () => {
             // Tie the clear to THIS completion via its completedId entry in
@@ -870,6 +926,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * scheduleDeferredClear(entry) // drops entry's line after clearDelayMs, unless undone/edited
    */
   const scheduleDeferredClear = (entry: ClearedLineMemory): void => {
+    // Clamp the linger to the toast duration so a finished line can never outlast
+    // its own Undo: once the toast (carrying that Undo) auto-closes, the line must
+    // already be gone. #108 used a FIXED ceiling (BRAINDUMP_CLEAR_DELAY_MAX_MS);
+    // now that the toast duration is user-configurable (#109) this live `min()`
+    // does that job — the clear-delay slider keeps its own fixed [0,5000] bounds.
+    const effectiveClearDelayMs = Math.min(
+      clearDelayMs,
+      braindumpToastDurationMs,
+    )
     const removalTimerId = window.setTimeout(() => {
       // No longer pending — drop it from tracking before doing anything else.
       pendingClearTimersRef.current.delete(entry.token)
@@ -908,7 +973,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           pendingEntry.originalLineIndex -= 1
         }
       }
-    }, clearDelayMs)
+    }, effectiveClearDelayMs)
     entry.removalTimerId = removalTimerId
     pendingClearTimersRef.current.set(entry.token, entry)
   }
@@ -1050,24 +1115,34 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // 4) Immediate optimistic toast — feedback at keypress, not after the
     //    round-trip. Undo re-inserts the line; auto-close just closes the
     //    affordance (the line is already gone).
-    entry.toastId = toast.success(`Completed: ${safeTitle}`, {
-      description: 'Tap Undo within 5 s to revert.',
-      duration: BRAINDUMP_TOAST_UNDO_MS,
-      action: {
-        label: 'Undo',
-        onClick: () => {
-          void undoClearedCompletion(entry, createPromise)
-          if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
-        },
+    // Confirm-cleanup: the undo window closed WITHOUT an undo (a timeout, OR a
+    // manual ✕ close) → mark the outcome confirmed and drop the map entry. The
+    // create promise's closure still holds the reinsert info for a late failure,
+    // so this is safe. (The deferred-clear timer is independent and still fires.)
+    const confirmClearedCompletion = (): void => {
+      if (entry.outcome === 'pending') entry.outcome = 'confirmed'
+      clearedLinesRef.current.delete(token)
+    }
+    // A manual ✕ close and an Undo BOTH fire sonner's onDismiss, but only the ✕
+    // should run confirmClearedCompletion (Undo already reverts via
+    // undoClearedCompletion). This call-site flag — set by onUndo, read by
+    // onDismiss — is what tells the two dismiss paths apart; the helper can't,
+    // since sonner reports both as a plain dismiss (#109 / CEO-D4). Without it, a
+    // ✕ would leak a stale clearedLinesRef entry and leave outcome stuck 'pending'.
+    let wasUndoCalled = false
+    entry.toastId = showCompletionToast({
+      title: safeTitle,
+      durationMs: braindumpToastDurationMs,
+      onUndo: () => {
+        wasUndoCalled = true
+        void undoClearedCompletion(entry, createPromise)
       },
-      // Sonner fires onAutoClose ONLY on the timeout — an Undo click dismisses
-      // (onDismiss) instead, so this never runs for an undone completion.
-      onAutoClose: () => {
-        // Undo window elapsed with no Undo → confirm and drop the map entry. The
-        // create promise's closure still holds the reinsert info for a late
-        // failure, so this cleanup is safe.
-        if (entry.outcome === 'pending') entry.outcome = 'confirmed'
-        clearedLinesRef.current.delete(token)
+      // Timeout (no Undo, no ✕) → confirm + cleanup.
+      onAutoClose: confirmClearedCompletion,
+      // Manual close: a ✕ runs the SAME cleanup as a timeout; an Undo does not
+      // (it already reverted — the flag guards the double-run).
+      onDismiss: () => {
+        if (!wasUndoCalled) confirmClearedCompletion()
       },
     })
   }
