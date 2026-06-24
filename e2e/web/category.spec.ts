@@ -213,7 +213,9 @@ test.describe('Category Feature E2E Tests', () => {
 
       // Act 1 — General is auto-selected on load; add a todo to General
       await selectCategory(page, sidebar, 'General')
-      await page.getByPlaceholder('Enter a new todo...').fill(todoInGeneral)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoInGeneral)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(
         page.getByRole('checkbox', { name: todoInGeneral }),
@@ -222,7 +224,9 @@ test.describe('Category Feature E2E Tests', () => {
       // Act 2 — create a new category and add a todo to it
       await createCategory(page, sidebar, categoryName)
       await selectCategory(page, sidebar, categoryName)
-      await page.getByPlaceholder('Enter a new todo...').fill(todoInCategory)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoInCategory)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(
         page.getByRole('checkbox', { name: todoInCategory }),
@@ -262,7 +266,9 @@ test.describe('Category Feature E2E Tests', () => {
       await selectCategory(page, sidebar, categoryName)
 
       // Act — add a todo under the selected category
-      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 5000,
@@ -569,7 +575,9 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
 
       // Act — General is auto-selected on page load; add a todo directly
-      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       const todoCheckbox = page.getByRole('checkbox', { name: todoText })
       await expect(todoCheckbox).toBeVisible({ timeout: 5000 })
@@ -601,7 +609,9 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
       await selectCategory(page, sidebar, categoryName)
-      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 5000,
@@ -660,7 +670,9 @@ test.describe('Category Feature E2E Tests', () => {
       await selectCategory(page, sidebar, categoryName)
 
       // Act — add a todo
-      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       const todoCheckbox = page.getByRole('checkbox', { name: todoText })
       await expect(todoCheckbox).toBeVisible({ timeout: 5000 })
@@ -682,7 +694,7 @@ test.describe('Category Feature E2E Tests', () => {
 
       // Act — General is auto-selected; create a todo to ensure at least
       // one pending task exists
-      const todoInput = page.getByPlaceholder('Enter a new todo...')
+      const todoInput = page.getByPlaceholder('Type a todo, or paste a list...')
       await expect(todoInput).toBeVisible({ timeout: 10000 })
       await todoInput.fill(todoText)
       await todoInput.press('Enter')
@@ -707,7 +719,9 @@ test.describe('Category Feature E2E Tests', () => {
       const sidebar = getSidebar(page)
       await createCategory(page, sidebar, categoryName)
       await selectCategory(page, sidebar, categoryName)
-      await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+      await page
+        .getByPlaceholder('Type a todo, or paste a list...')
+        .fill(todoText)
       await page.getByRole('button', { name: 'Add', exact: true }).click()
       await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
         timeout: 5000,

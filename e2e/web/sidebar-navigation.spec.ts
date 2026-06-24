@@ -35,7 +35,9 @@ test.describe('Sidebar navigation from /home', () => {
     // Arrange — land on /home and wait until TodoList (the loop source) has
     // mounted, so the navigation transition is exercised under real conditions.
     await page.goto('/home')
-    await expect(page.getByPlaceholder('Enter a new todo...')).toBeVisible({
+    await expect(
+      page.getByPlaceholder('Type a todo, or paste a list...'),
+    ).toBeVisible({
       timeout: 15000,
     })
     await expect(page).toHaveURL(/\/home/)
@@ -52,7 +54,9 @@ test.describe('Sidebar navigation from /home', () => {
   }) => {
     // Arrange — land on /home and wait for the loop-source component to mount.
     await page.goto('/home')
-    await expect(page.getByPlaceholder('Enter a new todo...')).toBeVisible({
+    await expect(
+      page.getByPlaceholder('Type a todo, or paste a list...'),
+    ).toBeVisible({
       timeout: 15000,
     })
     await expect(page).toHaveURL(/\/home/)

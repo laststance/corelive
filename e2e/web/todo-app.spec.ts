@@ -43,7 +43,9 @@ test.describe('TODO App E2E Tests', () => {
     await expect(page.getByText('Todo List')).toBeVisible()
     await expect(page.getByText('Manage your tasks efficiently')).toBeVisible()
     await expect(page.getByText(/\d+ pending/)).toBeVisible()
-    await expect(page.getByPlaceholder('Enter a new todo...')).toBeVisible()
+    await expect(
+      page.getByPlaceholder('Type a todo, or paste a list...'),
+    ).toBeVisible()
     await expect(
       page.getByText('Completed', { exact: false }).first(),
     ).toBeVisible()
@@ -54,7 +56,9 @@ test.describe('TODO App E2E Tests', () => {
     const todoText = 'Add new TODO test'
 
     // Act
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
     // Assert — new item appears, pending counter present, item starts unchecked
@@ -68,7 +72,9 @@ test.describe('TODO App E2E Tests', () => {
     // Arrange — seed a pending todo and wait for the create mutation to settle
     // with a positive server ID (optimistic negative IDs would yield "todo--<ts>").
     const todoText = 'Toggle completion test todo'
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
@@ -90,7 +96,9 @@ test.describe('TODO App E2E Tests', () => {
   test('should delete a TODO item', async ({ page }) => {
     // Arrange — seed a todo so we have a real row to delete
     const todoText = 'Delete TODO test'
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
@@ -124,7 +132,9 @@ test.describe('TODO App E2E Tests', () => {
     const todoNotes = 'These are some important notes for this task'
 
     // Act — fill text, expand notes section, fill notes, submit
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     const addNotesButton = page
       .getByRole('button', { name: 'Add notes' })
       .first()
@@ -178,7 +188,9 @@ test.describe('TODO App E2E Tests', () => {
   }) => {
     // Arrange — seed a todo and wait for the server-confirmed positive ID
     const todoText = 'Uncheck completion test todo'
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()
@@ -216,7 +228,9 @@ test.describe('TODO App E2E Tests', () => {
   }) => {
     // Arrange — seed a todo and wait for the server-confirmed positive ID
     const todoText = 'Checkbox-only toggle test todo'
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     const todoCheckbox = page.getByRole('checkbox', { name: todoText })
     await expect(todoCheckbox).toBeVisible()

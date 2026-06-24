@@ -110,7 +110,7 @@ async function instrumentSoundEngine(page: Page): Promise<void> {
  * @returns The pending todo's checkbox locator, server-confirmed.
  */
 async function addPendingTodo(page: Page, todoText: string) {
-  await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+  await page.getByPlaceholder('Type a todo, or paste a list...').fill(todoText)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   const todoCheckbox = page.getByRole('checkbox', { name: todoText })
   await expect(todoCheckbox).toBeVisible()
