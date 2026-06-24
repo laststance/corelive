@@ -153,20 +153,25 @@ never during SSR.
 ### Worked example (real code)
 
 `TodoList` invalidates the relevant React Query caches whenever any other window
-broadcasts a todo change (`src/app/(main)/home/_components/TodoList.tsx:358-371`):
+broadcasts a todo change (`src/app/(main)/home/_components/TodoList.tsx:457-475`):
 
 ```typescript
 useCycleEffect(() => {
   // Cross-window sync: BrainDump / Floating Navigator completions broadcast
   // via the BroadcastChannel and also write to the Completed table, so the
-  // Home heatmap + day-detail caches need invalidation alongside the todo
-  // list. Without these two extra keys, completing a task in BrainDump
-  // leaves the main heatmap stale until reload (Codex review HIGH).
+  // Home heatmap + day-detail + journal caches need invalidation alongside the
+  // todo list. The journal key is what surfaces a cross-window completion in
+  // the Completed Tasks list (only the main window renders it, and a window
+  // never receives its own broadcast). Without these keys, completing a task
+  // in BrainDump leaves the main heatmap + journal stale until reload.
   return subscribeToTodoSync(() => {
     queryClient.invalidateQueries({ queryKey: orpc.todo.key() })
     queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
     queryClient.invalidateQueries({
       queryKey: orpc.completed.dayDetail.key(),
+    })
+    queryClient.invalidateQueries({
+      queryKey: orpc.completed.journal.key(),
     })
   })
 }, [queryClient])
@@ -176,7 +181,7 @@ Note the shape every ping receiver follows: `useCycleEffect(() =>
 subscribeToX(handler), [deps])`. The `subscribeToX(...)` call's return value is
 returned straight out of the effect callback — that is the cleanup. The Floating
 Navigator subscribes the same way in
-`src/components/floating-navigator/FloatingNavigatorContainer.tsx:311`.
+`src/components/floating-navigator/FloatingNavigatorContainer.tsx:302`.
 
 > **Receivers respond, they don't replay.** The ping carries no data, so the
 > handler re-derives state from a fresh source — almost always

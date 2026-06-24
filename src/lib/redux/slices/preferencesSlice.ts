@@ -76,9 +76,9 @@ export const preferencesSlice = createSlice({
 
     /**
      * Sets ON/OFF for a single sound moment (task-create / complete / clear).
-     * Coalesces a missing soundMoments object (a legacy persisted blob that
-     * predates the field — shallowMerge replaces the whole slice) to the default
-     * before writing, so the first toggle never reads `undefined[moment]`.
+     * Coalesces a missing soundMoments object to the default before writing, so
+     * the first toggle never reads `undefined[moment]`. deepMerge normally fills
+     * the field from defaults on rehydrate; this coalesce is the read-time backstop.
      * @param state - Current state
      * @param action - Payload: which moment, and whether it should play.
      */
@@ -240,9 +240,9 @@ export const {
   resetPreferences,
 } = preferencesSlice.actions
 
-// Selectors — read through `?? DEFAULT` so a field dropped by shallowMerge (the
-// whole preferences slice is replaced by a persisted blob that predates the
-// field) coalesces to its default instead of surfacing `undefined` (Finding 5).
+// Selectors — read through `?? DEFAULT` as a read-time backstop: deepMerge
+// (store.ts) already fills any field a pre-field persisted blob lacks, so this
+// only guards the remaining edges instead of surfacing `undefined` (Finding 5).
 /**
  * Selects the LEGACY completion-sound preference.
  * @param state - Root state
@@ -279,8 +279,9 @@ export const selectSoundMoment = (
   state: RootState,
   moment: SoundMomentId,
 ): boolean => {
-  // Annotated `| undefined`: shallowMerge replaces the whole preferences slice,
-  // so a pre-soundMoments persisted blob has no soundMoments at runtime.
+  // Annotated `| undefined` defensively: deepMerge normally fills soundMoments
+  // from defaults on rehydrate, so the read only guards the residual edges where
+  // it could still be absent.
   const soundMoments: PreferencesState['soundMoments'] | undefined =
     state.preferences.soundMoments
   const explicit = soundMoments?.[moment]
