@@ -7,8 +7,9 @@ import type { IPCChannel } from '../types/ipc'
 // renderer constants change, update both this and `src/lib/constants/braindump.ts`.
 const BRAINDUMP_NOTE_MAX_LENGTH = 255 * 200
 // Electron accelerator strings are short tokens like "CommandOrControl+Shift+B".
-// 64 is generous and bounds memory/log noise from malformed payloads.
-const BRAINDUMP_SHORTCUT_MAX_LENGTH = 64
+// 64 is generous and bounds memory/log noise from malformed payloads. Shared by
+// the BrainDump and Floating Navigator shortcut channels.
+const SHORTCUT_ACCELERATOR_MAX_LENGTH = 64
 // Window dimension floor matches `WindowStateManager` minWidth/minHeight (320).
 // Ceiling is loose enough for 8K displays but rejects runaway values.
 const BRAINDUMP_WINDOW_DIMENSION_MIN = 320
@@ -290,6 +291,10 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'floating-window-is-always-on-top': z.tuple([]),
   'floating-window-get-always-on-top': z.tuple([]),
   'floating-window-set-always-on-top': z.tuple([z.boolean()]),
+  'floating-config-get-shortcut': z.tuple([]),
+  'floating-config-set-shortcut': z.tuple([
+    z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
+  ]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Window State Management
@@ -378,7 +383,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'braindump-config-set-sync': z.tuple([z.boolean()]),
   'braindump-config-get-shortcut': z.tuple([]),
   'braindump-config-set-shortcut': z.tuple([
-    z.string().max(BRAINDUMP_SHORTCUT_MAX_LENGTH),
+    z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
   ]),
   'braindump-config-get-last-category': z.tuple([]),
   'braindump-config-set-last-category': z.tuple([z.number().int().positive()]),

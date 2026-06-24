@@ -370,3 +370,24 @@ ipcRenderer.on(
     )
   },
 )
+
+// ============================================================================
+// Keep-On-Top Cross-Window Sync (§6d)
+// ============================================================================
+
+/**
+ * Forward the main process's keep-on-top broadcast to a DOM CustomEvent so the
+ * FloatingNavigator pin button live-updates when the preference changes from the
+ * Settings window. Mirrors the menu-action forward above; the payload is the
+ * typed `{ alwaysOnTop: boolean }` from `WindowManager.setFloatingNavigatorAlwaysOnTop`.
+ */
+ipcRenderer.on(
+  'floating-window-always-on-top-changed',
+  (_event: IpcRendererEvent, payload: { alwaysOnTop: boolean }): void => {
+    window.dispatchEvent(
+      new CustomEvent('floating-window-always-on-top-changed', {
+        detail: payload,
+      }),
+    )
+  },
+)

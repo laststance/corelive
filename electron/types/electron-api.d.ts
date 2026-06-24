@@ -307,6 +307,10 @@ export interface ElectronAPI {
     getBrainDumpAlwaysOnTop: () => Promise<boolean>
     /** Persist and apply BrainDump's always-on-top preference. */
     setBrainDumpAlwaysOnTop: (enabled: boolean) => Promise<boolean>
+    /** Read FloatingNavigator's global toggle accelerator (empty when disabled). */
+    getFloatingNavigatorShortcut: () => Promise<string>
+    /** Persist + register the accelerator; resolves false on conflict. */
+    setFloatingNavigatorShortcut: (accelerator: string) => Promise<boolean>
   }
 
   /**

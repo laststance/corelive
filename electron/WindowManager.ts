@@ -33,6 +33,7 @@ import {
   SETTINGS_POPOVER_MIN_WIDTH_PX,
   SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS,
 } from './constants'
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
@@ -357,9 +358,11 @@ export class WindowManager {
   /**
    * Persists + applies FloatingNavigator's always-on-top preference across all
    * three layers that decide its relaunch state — config seed, window-state.json,
-   * and the live window. The window-state write is load-bearing: `getWindowOptions`
-   * reads `state.isAlwaysOnTop` at create and main re-applies it post-create, so a
-   * config-only write would be silently overridden after the first launch.
+   * and the live window — then broadcasts the change so the floating window's own
+   * pin button live-updates (§6d). The window-state write is load-bearing:
+   * `getWindowOptions` reads `state.isAlwaysOnTop` at create and main re-applies it
+   * post-create, so a config-only write would be silently overridden after the
+   * first launch.
    * @param enabled - true pins FloatingNavigator above others; false unpins it.
    * @returns The applied value (echoed for optimistic-UI confirmation).
    */
@@ -372,6 +375,18 @@ export class WindowManager {
       isAlwaysOnTop: enabled,
     })
     this.applyAlwaysOnTop(this.floatingNavigator, enabled)
+    // §6d cross-window sync: tell the floating window's own pin button about the
+    // change so a toggle made from the Settings window updates it live. The
+    // in-window pin toggles through here too, where this is a harmless echo (the
+    // button already updated optimistically). No-op when the window is closed —
+    // it re-reads fresh state via its mount-init effect on next open.
+    if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
+      typedSend(
+        this.floatingNavigator.webContents,
+        'floating-window-always-on-top-changed',
+        { alwaysOnTop: enabled },
+      )
+    }
     return enabled
   }
 

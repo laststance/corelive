@@ -7,12 +7,17 @@
  * read "off" — otherwise the button lies (shows pinned over an unpinned window).
  * The unpinned case below fails if that mount-init read regresses.
  *
+ * The fourth test guards §6d cross-window sync: when ANOTHER window (the Settings
+ * "Keep on top" toggle) changes the shared keep-on-top preference, the main
+ * process broadcasts it and this window's own pin button must live-update —
+ * otherwise the button lies until the next relaunch.
+ *
  * Triggered when: `pnpm test` (Vitest, happy-dom).
  *
  * @example
  *   pnpm test -- FloatingNavigator
  */
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FloatingNavigator } from './FloatingNavigator'
@@ -132,5 +137,33 @@ describe('FloatingNavigator pin button', () => {
       name: 'Disable always on top',
     })
     expect(pinButton).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('updates the pin button when another window changes the keep-on-top preference', async () => {
+    // Arrange: the window mounts pinned (its real state reads on), so the button
+    // starts offering to disable.
+    isAlwaysOnTopMock.mockResolvedValue(true)
+    installFloatingNavigatorAPI(isAlwaysOnTopMock)
+    render(<FloatingNavigator {...noopTaskProps} />)
+    await screen.findByRole('button', { name: 'Disable always on top' })
+
+    // Act: the Settings "Keep on top" toggle (a DIFFERENT window) turns pinning
+    // OFF. The main process broadcasts the new state to this window, which the
+    // preload forwards as this DOM CustomEvent (mirroring menu actions).
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('floating-window-always-on-top-changed', {
+          detail: { alwaysOnTop: false },
+        }),
+      )
+    })
+
+    // Assert: the pin button reflects the cross-window change live. Without the
+    // §6d subscription it would stay "Disable always on top" — pinned over an
+    // unpinned window — until the next relaunch.
+    const pinButton = await screen.findByRole('button', {
+      name: 'Enable always on top',
+    })
+    expect(pinButton).toHaveAttribute('aria-pressed', 'false')
   })
 })

@@ -141,6 +141,9 @@ const ALLOWED_CHANNELS = {
   'deep-link-navigate': true,
   'deep-link-search': true,
   'floating-navigator-menu-action': true,
+  // Consumed by the floating window's preload (§6d keep-on-top sync); listed
+  // here too because AllowedChannelsMap is exhaustive over IPCEventChannels.
+  'floating-window-always-on-top-changed': true,
   'braindump-category-changed': true,
   'notification-permission-denied': true,
   'show-fallback-notification': true,
@@ -436,6 +439,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('braindump-window-set-always-on-top', enabled)
       } catch (error) {
         log.error('Failed to set braindump always-on-top:', error)
+        throw error
+      }
+    },
+    /** Read FloatingNavigator's global toggle accelerator (empty when disabled). */
+    getFloatingNavigatorShortcut: async (): Promise<string> => {
+      try {
+        return await typedInvoke('floating-config-get-shortcut')
+      } catch (error) {
+        // Surface a load failure instead of returning '' — '' is the real
+        // "intentionally unbound" value, so masking an IPC error as '' would
+        // seed the wrong (disabled) shortcut into the Settings rollback state.
+        log.error('Failed to get floating navigator shortcut:', error)
+        throw error
+      }
+    },
+    /** Persist + register FloatingNavigator's toggle accelerator; false on conflict. */
+    setFloatingNavigatorShortcut: async (
+      accelerator: string,
+    ): Promise<boolean> => {
+      if (typeof accelerator !== 'string') {
+        throw new Error('FloatingNavigator shortcut must be a string')
+      }
+      try {
+        return await typedInvoke('floating-config-set-shortcut', accelerator)
+      } catch (error) {
+        log.error('Failed to set floating navigator shortcut:', error)
         throw error
       }
     },

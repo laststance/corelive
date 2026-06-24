@@ -22,11 +22,17 @@ import { useTransition } from 'react'
  */
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
+import { BrainDumpAppearance } from '@/components/electron/BrainDumpAppearance'
 import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
-import { FloatingWindowSettings } from '@/components/electron/FloatingWindowSettings'
+import { FloatingNavigatorSettings } from '@/components/electron/FloatingNavigatorSettings'
+import {
+  BRAIN_DUMP_PIN_PREFERENCE,
+  FloatingPanelToggle,
+  VISIBLE_ON_ALL_WORKSPACES_PREFERENCE,
+} from '@/components/electron/FloatingPanelToggle'
 import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
+import { SettingsSection } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
@@ -202,105 +208,140 @@ export const ElectronSettingsPage =
       return null
     }
 
+    // Electron is macOS-only in production, but keep the defensive guard the old
+    // Floating windows card carried: the Spaces toggle only applies on macOS.
+    const platform =
+      typeof window === 'undefined' ? undefined : window.electronEnv?.platform
+    const isMac = !platform || platform === 'darwin'
+
     return (
-      <div className="h-full space-y-4 p-4">
-        <AppUpdateSettings />
+      // A fragment, NOT a wrapper div: these Electron sections become direct
+      // siblings of the web-common sections in page.tsx's `space-y-12` flow, so
+      // all seven settings sections share one 48px rhythm (DESIGN.md 2xl).
+      <>
+        {/* BRAIN DUMP — note behavior, look-and-feel, and its keep-on-top pin.
+            Three independent siblings (advisor): the note card degrades on the
+            `brainDump` preload, the appearance is pure Redux, and the pin lives
+            on `floatingPanels` — nesting the pin in the card would let a stale
+            `brainDump` preload hide a working pin. */}
+        <SettingsSection label="Brain Dump">
+          <BrainDumpSettings />
+          <BrainDumpAppearance />
+          <FloatingPanelToggle
+            preference={BRAIN_DUMP_PIN_PREFERENCE}
+            label="Keep on top"
+            description="Pin Brain Dump above your other windows so it stays visible."
+          />
+        </SettingsSection>
 
-        <Card className="border-0 bg-transparent shadow-none">
-          <CardHeader className="px-2 pb-2 pt-0">
-            <CardTitle className="text-lg">Application</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 px-2">
-            {/* Hide App Icon */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="hide-app-icon" className="text-sm font-medium">
-                  Hide App Icon
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Hide the CoreLive icon from the Dock
-                </p>
-              </div>
-              <Switch
-                id="hide-app-icon"
-                checked={hideAppIcon}
-                onCheckedChange={handleHideAppIconChange}
-              />
+        {/* FLOATING NAVIGATOR — Floating-Navigator-only behavior. */}
+        <SettingsSection label="Floating Navigator">
+          <FloatingNavigatorSettings />
+        </SettingsSection>
+
+        {/* APPLICATION — app-wide chrome: dock/menu-bar/login presence, the
+            on-launch sub-group, the shared Spaces toggle, and the Settings
+            window size (folded from its old standalone card, DR-D2). */}
+        <SettingsSection label="Application">
+          {/* Hide App Icon */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="hide-app-icon" className="text-sm font-medium">
+                Hide App Icon
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Hide the CoreLive icon from the Dock
+              </p>
             </div>
+            <Switch
+              id="hide-app-icon"
+              checked={hideAppIcon}
+              onCheckedChange={handleHideAppIconChange}
+            />
+          </div>
 
-            {/*
-             Show in Menu Bar — the IPC handler shows/hides the tray live
-             (SystemTrayManager.setMenuBarVisible), and ElectronStartupSync
-             re-pushes the persisted value at every launch so an "off" choice
-             survives restarts (boot creates the tray, then the startup sync
-             hides it — same correct-after-boot pattern as Hide App Icon).
-            */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label
-                  htmlFor="show-in-menu-bar"
-                  className="text-sm font-medium"
-                >
-                  Show in Menu Bar
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Display CoreLive in the system menu bar
-                </p>
-              </div>
-              <Switch
-                id="show-in-menu-bar"
-                checked={showInMenuBar}
-                onCheckedChange={handleShowInMenuBarChange}
-              />
+          {/*
+           Show in Menu Bar — the IPC handler shows/hides the tray live
+           (SystemTrayManager.setMenuBarVisible), and ElectronStartupSync
+           re-pushes the persisted value at every launch so an "off" choice
+           survives restarts (boot creates the tray, then the startup sync
+           hides it — same correct-after-boot pattern as Hide App Icon).
+          */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="show-in-menu-bar" className="text-sm font-medium">
+                Show in Menu Bar
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Display CoreLive in the system menu bar
+              </p>
             </div>
+            <Switch
+              id="show-in-menu-bar"
+              checked={showInMenuBar}
+              onCheckedChange={handleShowInMenuBarChange}
+            />
+          </div>
 
-            {/* Start at Login */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="start-at-login" className="text-sm font-medium">
-                  Start at Login
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Automatically launch CoreLive when you log in
-                </p>
-              </div>
-              <Switch
-                id="start-at-login"
-                checked={startAtLogin}
-                onCheckedChange={handleStartAtLoginChange}
-              />
+          {/* Start at Login */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="start-at-login" className="text-sm font-medium">
+                Start at Login
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Automatically launch CoreLive when you log in
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Switch
+              id="start-at-login"
+              checked={startAtLogin}
+              onCheckedChange={handleStartAtLoginChange}
+            />
+          </div>
 
-        <StartupWindowSettings />
-        <FloatingWindowSettings />
-        <BrainDumpSettings />
+          {/* On launch — sub-group (StartupWindowSettings renders its own caption). */}
+          <StartupWindowSettings />
 
-        {/* Settings Window size */}
-        <Card className="border-0 bg-transparent shadow-none">
-          <CardHeader className="px-2 pb-2 pt-0">
-            <CardTitle className="text-lg">Settings Window</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 px-2">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-sm font-medium">Window size</Label>
+          {/* Show on all desktops — one OS-level flag shared by both panels,
+              relocated here from the retired Floating windows card. */}
+          <FloatingPanelToggle
+            preference={VISIBLE_ON_ALL_WORKSPACES_PREFERENCE}
+            label="Show on all desktops"
+            description="Keep CoreLive's panels visible while switching Spaces, including fullscreen Spaces."
+            disabled={!isMac}
+            note={
+              !isMac && (
                 <p className="text-xs text-muted-foreground">
-                  Drag the window edge to resize. Default: 360×380.
+                  This option only applies on macOS.
                 </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isResettingPopoverSize}
-                onClick={handleResetPopoverSize}
-              >
-                Restore default size
-              </Button>
+              )
+            }
+          />
+
+          {/* Settings window size — folded in from its own "Settings Window" card. */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Window size</Label>
+              <p className="text-xs text-muted-foreground">
+                Drag the window edge to resize. Default: 360×380.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isResettingPopoverSize}
+              onClick={handleResetPopoverSize}
+            >
+              Restore default size
+            </Button>
+          </div>
+        </SettingsSection>
+
+        {/* UPDATES */}
+        <SettingsSection label="Updates">
+          <AppUpdateSettings />
+        </SettingsSection>
 
         {/* Visible resize grip — pointer-events:none so native edge resize still works */}
         <div
@@ -312,7 +353,7 @@ export const ElectronSettingsPage =
             backgroundSize: '3px 3px',
           }}
         />
-      </div>
+      </>
     )
   }
 

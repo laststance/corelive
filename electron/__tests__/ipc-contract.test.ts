@@ -147,6 +147,19 @@ describe('IPC contract', () => {
       expect(() => setAlwaysOnTop.parse([])).toThrow(ZodError)
     })
 
+    it('accepts empty string (disable shortcut) for floating-config-set-shortcut', () => {
+      const setShortcut = IPC_ARG_SCHEMAS['floating-config-set-shortcut']
+      // Empty string is the "disable the global toggle" sentinel.
+      expect(() => setShortcut.parse([''])).not.toThrow()
+      expect(() => setShortcut.parse(['CommandOrControl+3'])).not.toThrow()
+      // An over-length accelerator (> SHORTCUT_ACCELERATOR_MAX_LENGTH) is
+      // rejected, so a malicious renderer can't smuggle an unbounded string in.
+      expect(() => setShortcut.parse(['x'.repeat(65)])).toThrow(ZodError)
+      // A malicious renderer cannot smuggle a non-string past the trust boundary.
+      expect(() => setShortcut.parse([null])).toThrow(ZodError)
+      expect(() => setShortcut.parse([])).toThrow(ZodError)
+    })
+
     it('requires boolean for braindump-window-set-always-on-top', () => {
       const setAlwaysOnTop =
         IPC_ARG_SCHEMAS['braindump-window-set-always-on-top']

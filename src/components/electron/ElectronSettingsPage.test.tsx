@@ -1,11 +1,11 @@
 /**
- * @fileoverview ElectronSettingsPage "Settings Window" card tests.
+ * @fileoverview ElectronSettingsPage folded "Window size" control tests.
  *
- * Covers the "Restore default size" button and related version-skew guard
- * added in the settings-popover-resize feature. The existing application/
- * startup-window/floating/braindump toggle behaviours are tested in their own
- * sub-component test files — only new code introduced by this PR is exercised
- * here.
+ * Covers the "Restore default size" button and its version-skew guard, now
+ * folded into the Application section (the standalone "Settings Window" card was
+ * retired in the settings regroup, DR-D2). The application/startup-window/
+ * floating/braindump toggle behaviours are tested in their own sub-component
+ * test files — only the page-level composition is exercised here.
  *
  * Triggered when: `pnpm test` (Vitest, happy-dom environment).
  *
@@ -31,18 +31,23 @@ vi.mock('../../../electron/utils/electron-client', () => ({
   isElectronEnvironment: () => isElectronMock.value,
 }))
 
-// Sub-component stubs: focus on the Settings Window card, not the toggles
+// Sub-component stubs: focus on the folded Window size control, not the toggles.
+// (FloatingPanelToggle is left real — without a floatingPanels bridge it renders
+// null on its own, and ElectronSettingsPage imports its preference descriptors.)
 vi.mock('./AppUpdateSettings', () => ({
   AppUpdateSettings: () => null,
 }))
 vi.mock('./StartupWindowSettings', () => ({
   StartupWindowSettings: () => null,
 }))
-vi.mock('./FloatingWindowSettings', () => ({
-  FloatingWindowSettings: () => null,
+vi.mock('./FloatingNavigatorSettings', () => ({
+  FloatingNavigatorSettings: () => null,
 }))
 vi.mock('./BrainDumpSettings', () => ({
   BrainDumpSettings: () => null,
+}))
+vi.mock('./BrainDumpAppearance', () => ({
+  BrainDumpAppearance: () => null,
 }))
 
 // --- Redux store ----------------------------------------------------------
@@ -104,28 +109,33 @@ function installFullSettingsBridge(): void {
 
 // -------------------------------------------------------------------------
 
-describe('ElectronSettingsPage — Settings Window card', () => {
+describe('ElectronSettingsPage — folded Window size control', () => {
   beforeEach(() => {
     isElectronMock.value = true
     resetPopoverSizeMock.mockReset()
     resetPopoverSizeMock.mockResolvedValue(true)
   })
 
-  it('renders the Settings Window card and Restore default size button in Electron', () => {
+  it('folds the Window size control into the Application section in Electron', () => {
     // Arrange
     installFullSettingsBridge()
 
     // Act
     render(withStore(<ElectronSettingsPage />))
 
-    // Assert: CardTitle renders as a div (not an h* element), so use getByText.
-    expect(screen.getByText('Settings Window')).toBeInTheDocument()
+    // Assert: the control now lives under the Application section <h2> (the
+    // standalone "Settings Window" card was retired), with its Restore button.
+    expect(
+      screen.getByRole('heading', { name: 'Application' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Settings Window')).not.toBeInTheDocument()
+    expect(screen.getByText('Window size')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Restore default size' }),
     ).toBeInTheDocument()
   })
 
-  it('returns null and hides the Settings Window section outside Electron', () => {
+  it('returns null and renders no settings sections outside Electron', () => {
     // Arrange: web renderer — no electronAPI and isElectron = false.
     isElectronMock.value = false
     installElectronAPI(undefined)
@@ -133,10 +143,10 @@ describe('ElectronSettingsPage — Settings Window card', () => {
     // Act
     const { container } = render(withStore(<ElectronSettingsPage />))
 
-    // Assert: nothing is rendered.
+    // Assert: nothing is rendered — not even the Application section heading.
     expect(container).toBeEmptyDOMElement()
     expect(
-      screen.queryByRole('heading', { name: 'Settings Window' }),
+      screen.queryByRole('heading', { name: 'Application' }),
     ).not.toBeInTheDocument()
   })
 
