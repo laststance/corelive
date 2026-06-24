@@ -184,7 +184,8 @@ export const BRAINDUMP_TEXT_COLOR_PATTERN =
  * How long the "Undo" toast stays up after a clear-on-complete, and the SOLE
  * source for the clear-delay ceiling below. Renderer-only (the toast lives in
  * `BrainDumpEditor`), so — unlike the opacity bounds — this is a real import,
- * not a synced duplicate. `BrainDumpEditor` aliases it back to `TOAST_UNDO_MS`.
+ * not a synced duplicate — `BrainDumpEditor` imports it directly for the toast
+ * `duration` (the old local `TOAST_UNDO_MS` alias was retired in #108).
  */
 export const BRAINDUMP_TOAST_UNDO_MS = 5000
 
