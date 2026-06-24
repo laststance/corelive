@@ -8,7 +8,9 @@
  * re-pin the window on the next boot. These tests fail if that regression
  * returns. They also lock the BrainDump window's constructor to a config read
  * (no hardcoded `alwaysOnTop: true` shadow) and the getters to the right source
- * of truth.
+ * of truth, plus the §6d cross-window broadcast: an open floating window must be
+ * told when the preference changes from another surface so its own pin button
+ * live-updates (and must not throw when that window is closed).
  *
  * Triggered when: `pnpm test:electron` (Vitest).
  *
@@ -29,7 +31,7 @@ interface MockBrowserWindow {
   setVisibleOnAllWorkspaces: Spy
   loadURL: Spy
   on: Spy
-  webContents: { on: Spy }
+  webContents: { on: Spy; send: Spy; isDestroyed: Spy }
 }
 
 /** Every constructed window plus the options it was constructed with. */
@@ -54,7 +56,11 @@ vi.mock('electron', () => ({
       setVisibleOnAllWorkspaces: vi.fn(),
       loadURL: vi.fn(),
       on: vi.fn(),
-      webContents: { on: vi.fn() },
+      webContents: {
+        on: vi.fn(),
+        send: vi.fn(),
+        isDestroyed: vi.fn(() => false),
+      },
     }
     createdWindows.push({ win, options })
     return win
@@ -236,6 +242,71 @@ describe('WindowManager always-on-top', () => {
         isAlwaysOnTop: false,
       })
       expect(floatingWindow.win.setAlwaysOnTop).toHaveBeenCalledWith(false)
+    })
+
+    it('broadcasts the change to the open floating window so its own pin button live-updates', () => {
+      // Arrange: a floating window is open, so its in-window pin button is showing.
+      const { configManager } = createConfigStub(
+        {},
+        {
+          floating: {
+            frame: false,
+            alwaysOnTop: true,
+            resizable: true,
+            maxWidth: 400,
+          },
+        },
+      )
+      const { windowStateManager } = createWindowStateStub(
+        { isAlwaysOnTop: true },
+        {
+          width: 300,
+          height: 400,
+          maxWidth: 400,
+          frame: false,
+          alwaysOnTop: true,
+          resizable: true,
+          skipTaskbar: true,
+        },
+      )
+      const windowManager = new WindowManager(
+        SERVER_URL,
+        configManager,
+        windowStateManager,
+      )
+      windowManager.createFloatingNavigator()
+      const floatingWindow = createdWindows[0]
+      if (!floatingWindow) throw new Error('Expected a floating window')
+
+      // Act: the user unpins from the SETTINGS window — a different surface than
+      // the floating window's own pin button.
+      windowManager.setFloatingNavigatorAlwaysOnTop(false)
+
+      // Assert: the floating window is told about the change (§6d) so its OWN pin
+      // button reflects it live. Without this broadcast the in-window button keeps
+      // showing "pinned" over a now-unpinned window until the next relaunch.
+      expect(floatingWindow.win.webContents.send).toHaveBeenCalledWith(
+        'floating-window-always-on-top-changed',
+        { alwaysOnTop: false },
+      )
+    })
+
+    it('does not broadcast when the floating window is closed', () => {
+      // Arrange: no floating window open — only the persisted layers can be written.
+      const { configManager } = createConfigStub()
+      const { windowStateManager } = createWindowStateStub()
+      const windowManager = new WindowManager(
+        SERVER_URL,
+        configManager,
+        windowStateManager,
+      )
+
+      // Act + Assert: changing the preference with no window must not throw on a
+      // null floating window; the closed window re-reads fresh state on next open.
+      expect(() =>
+        windowManager.setFloatingNavigatorAlwaysOnTop(false),
+      ).not.toThrow()
+      expect(createdWindows).toHaveLength(0)
     })
   })
 

@@ -16,13 +16,7 @@ import { Sunrise } from 'lucide-react'
 import { useId, useState, type ReactElement } from 'react'
 
 import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { SETTINGS_SUBGROUP_LABEL_CLASS } from '@/components/settings/SettingsSection'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -32,6 +26,7 @@ import {
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { log } from '@/lib/logger'
+import { cn } from '@/lib/utils'
 
 interface StartupWindowSettingsProps {
   className?: string
@@ -205,48 +200,47 @@ export const StartupWindowSettings = function StartupWindowSettings({
   ).length
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sunrise className="h-5 w-5" />
-          On launch
-        </CardTitle>
-        <CardDescription>
-          Pick what greets you when CoreLive opens.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <div className="bg-destructive/10 rounded-md p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        {STARTUP_WINDOW_OPTIONS.map((option) => {
-          const isEnabled = startup[option.key]
-          // Lock the sole remaining enabled toggle so a launch never lands on a
-          // blank desktop with nothing open.
-          const isLastEnabled = isEnabled && enabledCount === 1
-
-          return (
-            <StartupWindowToggleRow
-              key={option.key}
-              switchId={`${baseId}-${option.key}`}
-              optionKey={option.key}
-              label={option.label}
-              description={option.description}
-              checked={isEnabled}
-              disabled={isSaving || isLastEnabled}
-              onToggleAction={handleToggle}
-            />
-          )
-        })}
-
+    // "On launch" demoted from a card title to a sub-group caption inside the
+    // Application section (design-review D1 flatten) — it brackets the two launch
+    // toggles below it, the lone sub-caption left after the regroup.
+    <div className={cn('space-y-3', className)}>
+      <div className="space-y-0.5">
+        <p className={SETTINGS_SUBGROUP_LABEL_CLASS}>On launch</p>
         <p className="text-xs text-muted-foreground">
-          At least one window opens at launch.
+          Pick what greets you when CoreLive opens.
         </p>
-      </CardContent>
-    </Card>
+      </div>
+
+      {error && (
+        <div className="bg-destructive/10 rounded-md p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {STARTUP_WINDOW_OPTIONS.map((option) => {
+        const isEnabled = startup[option.key]
+        // Lock the sole remaining enabled toggle so a launch never lands on a
+        // blank desktop with nothing open.
+        const isLastEnabled = isEnabled && enabledCount === 1
+
+        return (
+          <StartupWindowToggleRow
+            key={option.key}
+            switchId={`${baseId}-${option.key}`}
+            optionKey={option.key}
+            label={option.label}
+            description={option.description}
+            checked={isEnabled}
+            disabled={isSaving || isLastEnabled}
+            onToggleAction={handleToggle}
+          />
+        )
+      })}
+
+      <p className="text-xs text-muted-foreground">
+        At least one window opens at launch.
+      </p>
+    </div>
   )
 }
 

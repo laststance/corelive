@@ -446,6 +446,23 @@ export interface IPCChannels {
     request: boolean
     response: boolean
   }
+  /**
+   * Floating Navigator global toggle accelerator. Mirrors the BrainDump shortcut
+   * channels, but reads/writes the canonical `shortcuts.toggleFloatingNavigator`
+   * config key (no separate mirror), so the inline box never drifts from a rebind
+   * made via the generic keybind settings. `get` returns the configured
+   * accelerator (empty string when disabled); `set` re-registers it and returns
+   * false on conflict — including a silently-substituted fallback, which the main
+   * handler unwinds so the renderer shows the conflict copy (§6e).
+   */
+  'floating-config-get-shortcut': {
+    request: void
+    response: string
+  }
+  'floating-config-set-shortcut': {
+    request: string
+    response: boolean
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // BrainDump Window
@@ -854,6 +871,12 @@ export interface IPCEventChannels {
 
   // Floating navigator events (main → floating renderer)
   'floating-navigator-menu-action': string
+  /**
+   * Broadcast when the Floating Navigator's keep-on-top preference changes from
+   * ANY surface (the Settings toggle or the in-window pin). Lets the floating
+   * window's own pin button live-update instead of lying until relaunch (§6d).
+   */
+  'floating-window-always-on-top-changed': { alwaysOnTop: boolean }
 
   // BrainDump events (main → braindump renderer)
   /** Sent when the active category changes (via FloatingNav sync, etc.). */

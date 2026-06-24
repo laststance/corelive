@@ -6,28 +6,21 @@ import React, { useId, useRef, useState } from 'react'
 import { KeybindingCaptureInput } from '@/components/electron/KeybindingCaptureInput'
 import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
+import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import {
   type BrainDumpOpacity,
-  type BrainDumpShortcut,
   type BrainDumpSyncMode,
   BRAINDUMP_OPACITY_MAX,
   BRAINDUMP_OPACITY_MIN,
   BRAINDUMP_OPACITY_STEP,
 } from '@/lib/constants/braindump'
-import { KEYBINDING_CONFLICT_MESSAGE } from '@/lib/constants/keybinding'
 import { log } from '@/lib/logger'
+import { cn } from '@/lib/utils'
 
 /**
  * @fileoverview BrainDump Note settings panel for the Electron Settings page.
@@ -79,13 +72,22 @@ export const BrainDumpSettings = function BrainDumpSettings({
   const hasMounted = useMounted()
   const [syncMode, setSyncMode] = useState<BrainDumpSyncMode>(true)
   const [opacity, setOpacity] = useState<BrainDumpOpacity>(1.0)
-  const [shortcut, setShortcut] = useState<BrainDumpShortcut>('')
   const [error, setError] = useState<string | null>(null)
-  // Last successfully persisted values — used as rollback targets so we
-  // don't restore the in-flight optimistic value (which is what local
-  // `opacity`/`shortcut` state holds while the IPC call is pending).
+  // Last successfully persisted opacity — a rollback target so we don't restore
+  // the in-flight optimistic value (held in `opacity`) while the IPC call pends.
   const lastGoodOpacityRef = useRef<BrainDumpOpacity>(1.0)
-  const lastGoodShortcutRef = useRef<BrainDumpShortcut>('')
+  // Shortcut capture (optimistic set + conflict rollback) shared with the
+  // Floating Navigator row via the hook; persists over the `brainDump` bridge.
+  const {
+    shortcut,
+    setLoadedShortcut,
+    capture: handleShortcutCapture,
+  } = useShortcutCapture({
+    persist: async (accelerator) =>
+      window.electronAPI?.brainDump?.setShortcut(accelerator) ??
+      Promise.resolve(undefined),
+    onError: setError,
+  })
 
   // Compute inside the effect so the dependency array stays stable across
   // renders and the env check runs only once on mount.
@@ -113,9 +115,8 @@ export const BrainDumpSettings = function BrainDumpSettings({
         if (cancelled) return
         setSyncMode(sync)
         setOpacity(op)
-        setShortcut(sc)
+        setLoadedShortcut(sc)
         lastGoodOpacityRef.current = op
-        lastGoodShortcutRef.current = sc
       })
       .catch((loadError: unknown) => {
         log.error('Failed to load BrainDump settings:', loadError)
@@ -166,38 +167,6 @@ export const BrainDumpSettings = function BrainDumpSettings({
       // in-flight optimistic value held in `opacity` state.
       setOpacity(lastGoodOpacityRef.current)
       setError('Failed to update opacity')
-    }
-  }
-
-  /**
-   * Commit a captured BrainDump accelerator: apply optimistically, persist over
-   * IPC, then roll back to the last accepted value on conflict (`ok === false`)
-   * or error. Wired to the capture box's onChange (fires on key-press, not blur).
-   * @param nextAccelerator - Captured accelerator string, or `''` to unbind.
-   * @returns Resolves once the binding is persisted or rolled back.
-   * @example handleShortcutCapture('Alt+Space') // persists, or reverts + shows conflict copy if taken
-   */
-  const handleShortcutCapture = async (
-    nextAccelerator: string,
-  ): Promise<void> => {
-    // The capture box commits immediately (no blur step), so the optimistic
-    // update + registration + rollback that used to live in onBlur run here.
-    setShortcut(nextAccelerator)
-    setError(null)
-    try {
-      const ok =
-        await window.electronAPI?.brainDump?.setShortcut(nextAccelerator)
-      if (ok === false) {
-        // Already registered elsewhere — revert to the last accepted value.
-        setError(KEYBINDING_CONFLICT_MESSAGE)
-        setShortcut(lastGoodShortcutRef.current)
-        return
-      }
-      lastGoodShortcutRef.current = nextAccelerator
-    } catch (err) {
-      log.error('Failed to update BrainDump shortcut:', err)
-      setShortcut(lastGoodShortcutRef.current)
-      setError('Failed to update shortcut')
     }
   }
 
@@ -258,99 +227,93 @@ export const BrainDumpSettings = function BrainDumpSettings({
   const opacityPercent = Math.round(opacity * 100)
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Brain className="h-5 w-5" />
-          BrainDump Note
-        </CardTitle>
-        <CardDescription>
-          A frameless scratchpad for the active category. Checked items become
-          Completed entries with a 5-second undo window.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {error && (
-          <div className="bg-destructive/10 rounded-md p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor={syncId} className="text-sm font-medium">
-              Follow Floating Navigator category
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              When on, BrainDump always shows the same category as the floating
-              navigator. Turn off to keep its own selection.
-            </p>
-          </div>
-          <Switch
-            id={syncId}
-            checked={syncMode}
-            onCheckedChange={handleSyncChange}
-          />
+    // The "BrainDump Note" card title collapsed into the Brain Dump section
+    // <h2> (design-review D1 flatten); the behavior copy stays as a lead-in.
+    <div className={cn('space-y-6', className)}>
+      <p className="text-sm text-muted-foreground">
+        A frameless scratchpad for the active category. Checked items become
+        Completed entries with a 5-second undo window.
+      </p>
+      {error && (
+        <div className="bg-destructive/10 rounded-md p-3 text-sm text-destructive">
+          {error}
         </div>
+      )}
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor={opacityId}
-              className="flex items-center gap-2 text-sm font-medium"
-            >
-              <Eye className="h-4 w-4" />
-              Window opacity
-            </Label>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {opacityPercent}%
-            </span>
-          </div>
-          <Slider
-            id={opacityId}
-            min={BRAINDUMP_OPACITY_MIN}
-            max={BRAINDUMP_OPACITY_MAX}
-            step={BRAINDUMP_OPACITY_STEP}
-            value={opacityValue}
-            onValueChange={handleOpacityChange}
-            onValueCommit={handleOpacityCommit}
-            aria-label="BrainDump window opacity"
-          />
-
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label htmlFor={syncId} className="text-sm font-medium">
+            Follow Floating Navigator category
+          </Label>
           <p className="text-xs text-muted-foreground">
-            {Math.round(BRAINDUMP_OPACITY_MIN * 100)}% is the minimum so the
-            window stays discoverable.
+            When on, BrainDump always shows the same category as the floating
+            navigator. Turn off to keep its own selection.
           </p>
         </div>
+        <Switch
+          id={syncId}
+          checked={syncMode}
+          onCheckedChange={handleSyncChange}
+        />
+      </div>
 
-        <div className="space-y-2">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
           <Label
-            htmlFor={shortcutId}
+            htmlFor={opacityId}
             className="flex items-center gap-2 text-sm font-medium"
           >
-            <Keyboard className="h-4 w-4" />
-            Toggle shortcut
+            <Eye className="h-4 w-4" />
+            Window opacity
           </Label>
-          <KeybindingCaptureInput
-            id={shortcutId}
-            value={shortcut}
-            ariaLabel="Toggle shortcut"
-            onChange={handleShortcutCapture}
-          />
-
-          <p className="text-xs text-muted-foreground">
-            Click, then press the keys you want. Esc cancels; Backspace clears
-            it to disable the global shortcut.
-          </p>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {opacityPercent}%
+          </span>
         </div>
+        <Slider
+          id={opacityId}
+          min={BRAINDUMP_OPACITY_MIN}
+          max={BRAINDUMP_OPACITY_MAX}
+          step={BRAINDUMP_OPACITY_STEP}
+          value={opacityValue}
+          onValueChange={handleOpacityChange}
+          onValueCommit={handleOpacityCommit}
+          aria-label="BrainDump window opacity"
+        />
 
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={handleOpenBrainDump}>
-            Toggle BrainDump window
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        <p className="text-xs text-muted-foreground">
+          {Math.round(BRAINDUMP_OPACITY_MIN * 100)}% is the minimum so the
+          window stays discoverable.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label
+          htmlFor={shortcutId}
+          className="flex items-center gap-2 text-sm font-medium"
+        >
+          <Keyboard className="h-4 w-4" />
+          Toggle shortcut
+        </Label>
+        <KeybindingCaptureInput
+          id={shortcutId}
+          value={shortcut}
+          ariaLabel="Toggle shortcut"
+          onChange={handleShortcutCapture}
+        />
+
+        <p className="text-xs text-muted-foreground">
+          Click, then press the keys you want. Esc cancels; Backspace clears it
+          to disable the global shortcut.
+        </p>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={handleOpenBrainDump}>
+          Toggle BrainDump window
+        </Button>
+      </div>
+    </div>
   )
 }
 

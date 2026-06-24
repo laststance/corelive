@@ -501,7 +501,7 @@ export const FloatingNavigator = function FloatingNavigator({
   // Seed the pin button from the window's real state on mount. The button no
   // longer assumes the window launched pinned: the always-on-top preference now
   // survives relaunch, so a user who turned it off must see the button reflect
-  // that. T2-minimal — initialize only; no live main→renderer event sync.
+  // that. Initialize only — the sibling effect below keeps it live (§6d).
   useInitialEffect(() => {
     if (!isFloatingNavigatorEnvironment()) return
     // Guard the METHOD, not just the namespace: a frozen older preload can expose
@@ -521,6 +521,35 @@ export const FloatingNavigator = function FloatingNavigator({
       })
     return () => {
       cancelled = true
+    }
+  })
+
+  // §6d cross-window sync: keep-on-top is one OS-level preference shared across
+  // windows, so a change made from ANOTHER surface (the Settings "Keep on top"
+  // toggle) must live-update this window's own pin button — without it the button
+  // would lie (e.g. show "pinned" over a now-unpinned window) until relaunch. The
+  // main process broadcasts the new state to this window
+  // (`WindowManager.setFloatingNavigatorAlwaysOnTop`), the preload forwards it as
+  // a DOM CustomEvent (mirroring `floating-navigator-menu-action`), and we reflect
+  // it here. This window's OWN toggle already updates optimistically, so an echoed
+  // broadcast for a self-initiated change is a harmless no-op re-set.
+  useInitialEffect(() => {
+    if (!isFloatingNavigatorEnvironment()) return
+    const handleAlwaysOnTopChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ alwaysOnTop?: boolean }>).detail
+      if (typeof detail?.alwaysOnTop === 'boolean') {
+        setIsAlwaysOnTop(detail.alwaysOnTop)
+      }
+    }
+    window.addEventListener(
+      'floating-window-always-on-top-changed',
+      handleAlwaysOnTopChanged,
+    )
+    return () => {
+      window.removeEventListener(
+        'floating-window-always-on-top-changed',
+        handleAlwaysOnTopChanged,
+      )
     }
   })
 

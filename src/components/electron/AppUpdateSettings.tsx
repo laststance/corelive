@@ -16,7 +16,6 @@ import { useState, type ReactElement } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -27,6 +26,7 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT } from '@/lib/constants/appUpdate'
 import { log } from '@/lib/logger'
+import { cn } from '@/lib/utils'
 
 interface AppUpdateSettingsProps {
   className?: string
@@ -268,71 +268,65 @@ export const AppUpdateSettings = function AppUpdateSettings({
   }
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Download className="h-5 w-5" />
-          App Updates
-        </CardTitle>
-        <CardDescription>
-          {appVersion
-            ? `You're running CoreLive ${appVersion}.`
-            : 'Check for the latest CoreLive release.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={handleCheckForUpdates}
-            disabled={isChecking}
-            aria-busy={isChecking}
-          >
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${isChecking ? 'animate-spin' : ''}`}
-              aria-hidden
-            />
+    // The "App Updates" card title collapsed into the Updates section <h2>
+    // (design-review D1 flatten); the running-version line stays as a lead-in.
+    <div className={cn('flex flex-col gap-3', className)}>
+      <p className="text-sm text-muted-foreground">
+        {appVersion
+          ? `You're running CoreLive ${appVersion}.`
+          : 'Check for the latest CoreLive release.'}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={handleCheckForUpdates}
+          disabled={isChecking}
+          aria-busy={isChecking}
+        >
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${isChecking ? 'animate-spin' : ''}`}
+            aria-hidden
+          />
 
-            {isChecking ? 'Checking…' : 'Check for Updates'}
+          {isChecking ? 'Checking…' : 'Check for Updates'}
+        </Button>
+
+        {updateDownloaded ? (
+          <Button type="button" size="sm" onClick={handleRestartToUpdate}>
+            Restart to Update
           </Button>
-
-          {updateDownloaded ? (
-            <Button type="button" size="sm" onClick={handleRestartToUpdate}>
-              Restart to Update
-            </Button>
-          ) : null}
-        </div>
-
-        {statusMessage ? (
-          <p
-            className="text-sm text-muted-foreground"
-            role="status"
-            aria-live="polite"
-          >
-            {statusMessage}
-          </p>
         ) : null}
+      </div>
 
-        {downloadProgress ? (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>Download progress</span>
-              <span className="font-mono tabular-nums">
-                {Math.round(downloadProgress.percent)}%
-              </span>
-            </div>
-            <Progress
-              value={downloadProgress.percent}
-              max={UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT}
-              aria-label="Update download progress"
-              aria-valuenow={Math.round(downloadProgress.percent)}
-            />
+      {statusMessage ? (
+        <p
+          className="text-sm text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          {statusMessage}
+        </p>
+      ) : null}
+
+      {downloadProgress ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>Download progress</span>
+            <span className="font-mono tabular-nums">
+              {Math.round(downloadProgress.percent)}%
+            </span>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+          <Progress
+            value={downloadProgress.percent}
+            max={UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT}
+            aria-label="Update download progress"
+            aria-valuenow={Math.round(downloadProgress.percent)}
+          />
+        </div>
+      ) : null}
+    </div>
   )
 }
 

@@ -50,6 +50,7 @@ import {
   type AuthUserPayload,
   type WindowBounds,
 } from './types/ipc'
+import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import { WindowManager } from './WindowManager'
@@ -1475,12 +1476,18 @@ function setupIPCHandlers(): void {
     const previous = configManager.get<string>('braindump.shortcut', '') ?? ''
     if (shortcutManager) {
       try {
-        const ok = shortcutManager.updateShortcuts({
-          toggleBrainDump: accelerator,
-        })
-        if (!ok) {
-          // Rollback so config and registered shortcut stay in sync.
-          shortcutManager.updateShortcuts({ toggleBrainDump: previous })
+        // Reject a hard failure OR a silently-substituted fallback as a conflict
+        // BEFORE the mirror write, so the renderer's boolean reflects the real
+        // binding and `braindump.shortcut` never records a key that isn't live
+        // (§6e Design B; handleShortcutConflict itself is left untouched).
+        if (
+          !applyShortcutRebind(
+            shortcutManager,
+            'toggleBrainDump',
+            accelerator,
+            previous,
+          )
+        ) {
           return false
         }
       } catch (error) {
@@ -1490,6 +1497,45 @@ function setupIPCHandlers(): void {
     }
     configManager.set('braindump.shortcut', accelerator)
     // Keep the tray's displayed BrainDump hotkey in sync with the rebind.
+    systemTrayManager?.refreshTrayMenu()
+    return true
+  })
+
+  typedHandle('floating-config-get-shortcut', () => {
+    if (!configManager) return ''
+    // Read the canonical store ShortcutManager registers from (and the generic
+    // keybind UI writes), NOT a separate mirror — so the inline box always shows
+    // the real, current binding even if it was rebound elsewhere. Seeded to the
+    // platform default in ConfigManager, so a fresh install shows it, not empty.
+    return (
+      configManager.get<string>('shortcuts.toggleFloatingNavigator', '') ?? ''
+    )
+  })
+
+  typedHandle('floating-config-set-shortcut', (_event, accelerator) => {
+    if (!shortcutManager) return false
+    // updateShortcuts persists `shortcuts.toggleFloatingNavigator` itself, so
+    // there is no separate config write here (unlike the BrainDump mirror above).
+    const previous =
+      configManager?.get<string>('shortcuts.toggleFloatingNavigator', '') ?? ''
+    try {
+      // Reject a hard failure OR a silently-substituted fallback as a conflict so
+      // the renderer shows the real binding, not a key the user never chose (§6e).
+      if (
+        !applyShortcutRebind(
+          shortcutManager,
+          'toggleFloatingNavigator',
+          accelerator,
+          previous,
+        )
+      ) {
+        return false
+      }
+    } catch (error) {
+      log.error('Failed to update Floating Navigator shortcut:', error)
+      return false
+    }
+    // Keep the tray's displayed Floating Navigator hotkey in sync with the rebind.
     systemTrayManager?.refreshTrayMenu()
     return true
   })

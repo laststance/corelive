@@ -1,0 +1,249 @@
+'use client'
+
+/**
+ * @fileoverview Brain Dump editor look-and-behavior controls (font family, size,
+ * text color, and clear-on-complete).
+ *
+ * Pure Redux — these write the `preferences` slice (persisted to localStorage and
+ * synced across windows), with no IPC. Split out of the old web-common
+ * PreferencesSettings during the Settings regroup so they sit beside the rest of
+ * the Brain Dump settings instead of on the web-common surface, and rendered as
+ * an independent sibling (not nested inside the IPC-gated note card) so a preload
+ * skew on the `brainDump` bridge never hides these DOM-only controls.
+ *
+ * @module components/electron/BrainDumpAppearance
+ */
+import { type ReactElement } from 'react'
+
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
+import {
+  BRAINDUMP_FONT_FAMILIES,
+  BRAINDUMP_FONT_FAMILY_CSS,
+  BRAINDUMP_FONT_SIZE_MAX_PX,
+  BRAINDUMP_FONT_SIZE_MIN_PX,
+  BRAINDUMP_FONT_SIZE_STEP_PX,
+  BRAINDUMP_TEXT_COLOR_PRESETS,
+} from '@/lib/constants/braindump'
+import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
+import {
+  selectBraindumpClearOnComplete,
+  selectBraindumpFontFamily,
+  selectBraindumpFontSize,
+  selectBraindumpTextColor,
+  setBraindumpClearOnComplete,
+  setBraindumpFontFamily,
+  setBraindumpFontSize,
+  setBraindumpTextColor,
+} from '@/lib/redux/slices/preferencesSlice'
+
+/** A 6-digit `#rrggbb` — the only shape a native `<input type="color">` accepts, so
+ * a preset (theme `var()`) or a 3/8-digit hex can't seed the picker's swatch. */
+const SIX_DIGIT_HEX_PATTERN = /^#[0-9a-fA-F]{6}$/
+/** Picker swatch shown when the active color isn't a 6-digit hex (i.e. a preset is on). */
+const BRAINDUMP_CUSTOM_COLOR_FALLBACK = '#000000'
+
+/**
+ * Brain Dump editor appearance + clear-on-complete controls. Lives under the
+ * Brain Dump settings section as a pure-Redux sibling of the IPC-backed note
+ * card; toggling any control writes the `preferences` slice directly.
+ *
+ * @returns The Brain Dump appearance control group.
+ * @example
+ * <BrainDumpAppearance />
+ */
+export const BrainDumpAppearance =
+  function BrainDumpAppearance(): ReactElement {
+    const dispatch = useAppDispatch()
+    const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
+    const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
+    const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
+    const braindumpClearOnComplete = useAppSelector(
+      selectBraindumpClearOnComplete,
+    )
+
+    // Radix Slider wants a stable single-thumb array; rebuild only on change.
+    const fontSizeSliderValue = [braindumpFontSize]
+
+    // The active color is "custom" when it matches none of the themed presets —
+    // then no preset radio is selected and the native picker owns the choice.
+    const isCustomBraindumpColor = !BRAINDUMP_TEXT_COLOR_PRESETS.some(
+      (preset) => preset.cssValue === braindumpTextColor,
+    )
+    // `<input type="color">` can only display a 6-digit hex; fall back to a
+    // neutral swatch while a (non-hex) preset is active so the control still renders.
+    const braindumpCustomColorValue = SIX_DIGIT_HEX_PATTERN.test(
+      braindumpTextColor,
+    )
+      ? braindumpTextColor
+      : BRAINDUMP_CUSTOM_COLOR_FALLBACK
+
+    const handleBraindumpClearOnCompleteChange = (checked: boolean): void => {
+      dispatch(setBraindumpClearOnComplete(checked))
+    }
+
+    const handleBraindumpFontFamilyChange = (value: string): void => {
+      // RadioGroup yields a bare string; resolve it against the registry so the id
+      // narrows to a BrainDumpFontFamilyId without an unsafe cast.
+      const family = BRAINDUMP_FONT_FAMILIES.find((entry) => entry.id === value)
+      if (!family) return
+      dispatch(setBraindumpFontFamily(family.id))
+    }
+
+    const handleBraindumpFontSizeChange = (values: number[]): void => {
+      // Guard the first thumb value before dispatching.
+      const nextSize = values[0]
+      if (typeof nextSize === 'number') {
+        dispatch(setBraindumpFontSize(nextSize))
+      }
+    }
+
+    const handleBraindumpTextColorPresetChange = (value: string): void => {
+      // RadioGroup values ARE the preset cssValue strings, stored verbatim.
+      dispatch(setBraindumpTextColor(value))
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Clear-on-complete — tuck a finished line away after the undo window. */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label
+              htmlFor="braindump-clear-on-complete"
+              className="text-sm font-medium"
+            >
+              Clear finished lines
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Once you finish a line, tuck it away after the undo moment — so
+              the page clears as you go. Off keeps every line in place.
+            </p>
+          </div>
+          <Switch
+            id="braindump-clear-on-complete"
+            checked={braindumpClearOnComplete}
+            onCheckedChange={handleBraindumpClearOnCompleteChange}
+          />
+        </div>
+
+        {/* Font family — the three brand fonts; each label previews its face. */}
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Font</span>
+          <RadioGroup
+            aria-label="BrainDump font family"
+            value={braindumpFontFamily}
+            onValueChange={handleBraindumpFontFamilyChange}
+            className="grid grid-cols-3 gap-2"
+          >
+            {BRAINDUMP_FONT_FAMILIES.map((family) => (
+              <div key={family.id} className="flex items-center gap-2">
+                <RadioGroupItem
+                  id={`braindump-font-${family.id}`}
+                  value={family.id}
+                />
+
+                <Label
+                  htmlFor={`braindump-font-${family.id}`}
+                  className="text-sm font-normal"
+                >
+                  {/* Preview each option in its own face. Inline style sits on
+                     this intrinsic span (not the Label component) — a fresh
+                     object on a DOM element is free and needs no useMemo. */}
+                  <span
+                    style={{
+                      fontFamily: BRAINDUMP_FONT_FAMILY_CSS[family.id],
+                    }}
+                  >
+                    {family.label}
+                  </span>
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+        </div>
+
+        {/* Font size — px slider; default 14 matches the prior text-sm. */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label
+              htmlFor="braindump-font-size"
+              className="text-sm font-medium"
+            >
+              Font size
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {braindumpFontSize}px
+            </span>
+          </div>
+          <Slider
+            id="braindump-font-size"
+            aria-label="BrainDump font size"
+            min={BRAINDUMP_FONT_SIZE_MIN_PX}
+            max={BRAINDUMP_FONT_SIZE_MAX_PX}
+            step={BRAINDUMP_FONT_SIZE_STEP_PX}
+            value={fontSizeSliderValue}
+            onValueChange={handleBraindumpFontSizeChange}
+          />
+        </div>
+
+        {/* Text color — theme-aware presets, or a custom color (Presets First). */}
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Text color</span>
+          <RadioGroup
+            aria-label="BrainDump text color"
+            value={isCustomBraindumpColor ? '' : braindumpTextColor}
+            onValueChange={handleBraindumpTextColorPresetChange}
+            className="grid grid-cols-3 gap-2"
+          >
+            {BRAINDUMP_TEXT_COLOR_PRESETS.map((preset) => (
+              <div key={preset.id} className="flex items-center gap-2">
+                <RadioGroupItem
+                  id={`braindump-text-color-${preset.id}`}
+                  value={preset.cssValue}
+                />
+
+                <Label
+                  htmlFor={`braindump-text-color-${preset.id}`}
+                  className="flex items-center gap-2 text-sm font-normal"
+                >
+                  <span
+                    aria-hidden
+                    className="inline-block h-3 w-3 rounded-full border"
+                    style={{ backgroundColor: preset.cssValue }}
+                  />
+
+                  {preset.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+          {/* Custom color — native picker; choosing one overrides the presets. */}
+          <div className="flex items-center gap-2">
+            <Label
+              htmlFor="braindump-text-color-custom"
+              className="text-sm font-normal"
+            >
+              Custom
+            </Label>
+            <input
+              id="braindump-text-color-custom"
+              type="color"
+              aria-label="Custom BrainDump text color"
+              value={braindumpCustomColorValue}
+              // Inline (not useCallback) — a fresh handler on an intrinsic
+              // element is free. The native picker emits a 6-digit hex; store it
+              // verbatim as the (custom) color.
+              onChange={(event) =>
+                dispatch(setBraindumpTextColor(event.target.value))
+              }
+              className="h-7 w-10 cursor-pointer rounded border bg-transparent"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+export default BrainDumpAppearance
