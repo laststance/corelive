@@ -46,7 +46,6 @@ import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { AddTodoForm } from './AddTodoForm'
-import { CategoryFilterChips } from './CategoryFilterChips'
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import {
@@ -596,11 +595,6 @@ export const TodoList = function TodoList() {
       {/* Completed Tasks Column */}
       <div className="space-y-6">
         <WeeklySummaryCard
-          dataByDate={heatmapByDate}
-          isLoading={heatmapLoading}
-        />
-
-        <CategoryFilterChips
           dataByDate={heatmapByDate}
           isLoading={heatmapLoading}
         />
