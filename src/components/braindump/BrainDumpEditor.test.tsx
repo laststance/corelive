@@ -988,10 +988,14 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // ('dishes'); the note is unchanged meanwhile, so all three lines stay present
     // and both completions are tracked at their original indices (0 and 1).
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\ndishes\nlaundry')
+    // The deferred path advances the caret to the START OF THE NEXT line itself,
+    // so the second Cmd/Ctrl+Enter naturally targets 'dishes' — assert that here
+    // and DON'T reposition the caret by hand (a manual set masked the
+    // caret-never-advances bug this regression now guards).
+    expect(noteField.selectionStart).toBe(9) // start of 'dishes' (line 1)
+    // ~100 ms human-paced gap so the second completion lands while line 0's
+    // removal timer is still pending — both timers pend together (finding G).
     await new Promise((resolve) => setTimeout(resolve, 100))
-    const dishesCaret = 'buy milk\ndishes'.length // offset 15 → resolves to line 1
-    noteField.selectionStart = dishesCaret
-    noteField.selectionEnd = dishesCaret
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
 
     // Assert — BOTH finished lines clear; only the untouched 'laundry' survives.

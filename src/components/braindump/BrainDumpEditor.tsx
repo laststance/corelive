@@ -975,9 +975,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
       entry.lineCleared = true
     } else {
       // Deferred path: leave the line on screen for the linger, but move the
-      // caret to the START OF THE NEXT line so a repeated Cmd/Ctrl+Enter walks
-      // down the list. The line is removed when the timer fires (finding A/B/G).
-      pendingCaretRef.current = lineStartOffset(text, lineIndex + 1)
+      // caret to the START OF THE NEXT line NOW so a repeated Cmd/Ctrl+Enter
+      // walks down the list instead of re-completing this still-visible line.
+      // Apply it synchronously (NOT via pendingCaretRef): the textarea value is
+      // unchanged in this branch, so the `[noteText]` layout effect never fires
+      // to consume a pending ref — a stashed offset would sit stale and then
+      // yank the caret on the next unrelated noteText change (e.g. typing).
+      // The line itself is removed when the timer fires (finding A/B/G).
+      const nextLineCaret = lineStartOffset(text, lineIndex + 1)
+      textareaRef.current?.setSelectionRange(nextLineCaret, nextLineCaret)
       scheduleDeferredClear(entry)
     }
 
