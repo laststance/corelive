@@ -301,7 +301,7 @@ async function seedCompletedTodo(page: Page, todoText: string): Promise<void> {
   // No `waitForLoadState('networkidle')` here — `fill()` runs Playwright's
   // actionability checks on the input, which is a stronger gate than waiting
   // for network quiet (the React Query persister keeps the network chatty).
-  await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+  await page.getByPlaceholder('Type a todo, or paste a list...').fill(todoText)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
 
   // Pending-list checkbox only — the same aria-label can appear on optimistic

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { interceptBulkPaste } from '@/lib/interceptBulkPaste'
 
 // Form schema definition for the add-todo inputs.
 const todoFormSchema = z.object({
@@ -33,11 +34,18 @@ interface AddTodoFormProps {
   onAddTodo: (text: string, notes?: string) => void
   /** Disables the form (e.g. while category selection is loading). */
   disabled?: boolean
+  /**
+   * Called when a multi-line list is pasted into the (empty or fully-selected)
+   * todo input, with the raw pasted text — the caller opens the bulk import
+   * dialog seeded with it (Issue #110). When omitted, paste behaves natively.
+   */
+  onBulkPaste?: (text: string) => void
 }
 
 export const AddTodoForm = function AddTodoForm({
   onAddTodo,
   disabled,
+  onBulkPaste,
 }: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const handleNotesOpenChange = (open: boolean) => {
@@ -65,7 +73,11 @@ export const AddTodoForm = function AddTodoForm({
   }) => (
     <FormItem className="flex-1">
       <FormControl>
-        <Input placeholder="Enter a new todo..." {...field} />
+        <Input
+          placeholder="Type a todo, or paste a list..."
+          onPaste={(event) => interceptBulkPaste(event, onBulkPaste)}
+          {...field}
+        />
       </FormControl>
       <FormMessage />
     </FormItem>

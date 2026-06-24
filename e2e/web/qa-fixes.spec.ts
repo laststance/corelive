@@ -36,7 +36,7 @@ test.describe('QA Fixes Verification', () => {
       const longText = 'A'.repeat(200)
 
       // Act — create the todo via Enter key
-      const input = page.getByPlaceholder('Enter a new todo...')
+      const input = page.getByPlaceholder('Type a todo, or paste a list...')
       await input.fill(longText)
       await input.press('Enter')
       const todoCheckbox = page.getByRole('checkbox', { name: longText })

@@ -67,6 +67,13 @@ export interface PasteImportProps {
   open?: boolean
   /** Controlled open setter (optional). */
   onOpenChange?: (open: boolean) => void
+  /**
+   * Pre-fills the dialog's textarea on mount (Issue #110: the pasted list seeds
+   * the confirm step). The dialog reads this once via `useState`, so callers
+   * re-seed a still-mounted controlled dialog by re-keying it (see TodoList /
+   * FloatingNavigatorContainer's `key={seedNonce}`).
+   */
+  initialText?: string
 }
 
 /**
@@ -90,6 +97,7 @@ export const PasteImport = function PasteImport({
   onImported,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  initialText,
 }: PasteImportProps) {
   const [selectedCategoryId] = useSelectedCategory()
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
@@ -216,6 +224,7 @@ export const PasteImport = function PasteImport({
       zone={zone}
       categories={categories}
       defaultCategoryId={selectedCategoryId}
+      initialText={initialText}
       open={open}
       onOpenChange={handleOpenChange}
       trigger={trigger}

@@ -43,7 +43,9 @@ test.describe('Theme Visual Test', () => {
     // Arrange — seed a todo so the list area has at least one row, matching
     // the realistic state we want the theme to be applied to.
     const todoText = 'Theme test todo'
-    await page.getByPlaceholder('Enter a new todo...').fill(todoText)
+    await page
+      .getByPlaceholder('Type a todo, or paste a list...')
+      .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     await expect(page.getByRole('checkbox', { name: todoText })).toBeVisible({
       timeout: 5000,
