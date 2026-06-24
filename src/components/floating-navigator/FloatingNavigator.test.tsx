@@ -17,7 +17,7 @@
  * @example
  *   pnpm test -- FloatingNavigator
  */
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FloatingNavigator } from './FloatingNavigator'
@@ -165,5 +165,70 @@ describe('FloatingNavigator pin button', () => {
       name: 'Enable always on top',
     })
     expect(pinButton).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+describe('FloatingNavigator bulk paste (Issue #110 AC#2)', () => {
+  /**
+   * Fires a paste carrying `text` into the floating task input. Mirrors the web
+   * E2E's synthetic ClipboardEvent but stubs `clipboardData.getData` directly, so
+   * the assertion never rides on happy-dom's DataTransfer fidelity.
+   *
+   * @param input - The task input node (paste event target).
+   * @param text - The clipboard payload the handler reads as `text/plain`.
+   */
+  function pasteTextInto(input: HTMLElement, text: string): void {
+    fireEvent.paste(input, { clipboardData: { getData: () => text } })
+  }
+
+  it('opens the bulk import dialog when a multi-line list is pasted into the empty task input', () => {
+    // Arrange: a floating window with the bulk-paste callback wired. This is the
+    // genuinely new AC#2 path — a web E2E can't reach it because the floating route
+    // renders a desktop-only fallback in a plain browser (no window.floatingNavigatorAPI).
+    const onBulkPaste = vi.fn()
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    render(<FloatingNavigator {...noopTaskProps} onBulkPaste={onBulkPaste} />)
+    const input = screen.getByRole('textbox', { name: 'New task title' })
+    input.focus()
+
+    // Act: paste three lines into the empty (therefore fully-selected) input.
+    pasteTextInto(input, 'Buy milk\nWalk the dog\nWrite the report')
+
+    // Assert: the paste is routed to the import dialog verbatim, not typed inline.
+    expect(onBulkPaste).toHaveBeenCalledTimes(1)
+    expect(onBulkPaste).toHaveBeenCalledWith(
+      'Buy milk\nWalk the dog\nWrite the report',
+    )
+  })
+
+  it('adds inline without the import dialog when a single line is pasted', () => {
+    // Arrange
+    const onBulkPaste = vi.fn()
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    render(<FloatingNavigator {...noopTaskProps} onBulkPaste={onBulkPaste} />)
+    const input = screen.getByRole('textbox', { name: 'New task title' })
+    input.focus()
+
+    // Act: a single line is ordinary input, not a list to import.
+    pasteTextInto(input, 'Just one task')
+
+    // Assert: the bulk path stays out of the way — native paste handles it.
+    expect(onBulkPaste).not.toHaveBeenCalled()
+  })
+
+  it('does not hijack a multi-line paste made mid-edit (caret not over a full selection)', () => {
+    // Arrange: the user already typed a draft, so a paste lands inside existing
+    // text — intercepting here would destroy what they were writing.
+    const onBulkPaste = vi.fn()
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    render(<FloatingNavigator {...noopTaskProps} onBulkPaste={onBulkPaste} />)
+    const input = screen.getByRole('textbox', { name: 'New task title' })
+    fireEvent.change(input, { target: { value: 'draft note' } })
+
+    // Act: paste a multi-line list while the field holds a partial value.
+    pasteTextInto(input, 'first\nsecond')
+
+    // Assert: native paste wins; the bulk dialog is NOT opened over a partial edit.
+    expect(onBulkPaste).not.toHaveBeenCalled()
   })
 })
