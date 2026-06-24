@@ -3,6 +3,40 @@ import { defineConfig, devices } from '@playwright/test'
 import 'dotenv/config'
 
 /**
+ * Exempt loopback from any ambient HTTP proxy BEFORE Playwright reads the env.
+ *
+ * Why this exists (Issue #115): this Mac runs the Bash tool inside a network
+ * sandbox (Socket Firewall / `sfw`) that injects `HTTP_PROXY`/`http_proxy=
+ * http://127.0.0.1:<dynamic-port>` into every child process to police outbound
+ * traffic. Playwright's webServer readiness probe resolves its target through
+ * `proxy-from-env` (`getProxyForUrl`), which honors those vars — so the
+ * `http://127.0.0.1:4991` probe gets routed through the firewall proxy, which
+ * answers **405** (observed BEFORE `next` had even started: only a proxy can
+ * 405 a port with no upstream). 405 is >= 400, so the waiter never sees the dev
+ * server's real 200 and times out at 120s — `pnpm e2e:web` could not boot
+ * locally. (`curl`/bare Node bypassed the proxy → 200, which is why earlier
+ * hostname/happy-eyeballs theories looked plausible but were wrong.)
+ *
+ * Fix: add loopback to NO_PROXY so `getProxyForUrl` returns "" for the probe
+ * URL and the waiter connects straight to `next`. EXTERNAL hosts (Clerk,
+ * corelive.app) stay absent from NO_PROXY, so they remain proxied and the
+ * firewall is still enforced for real outbound traffic. No-op on CI, which sets
+ * no proxy at all — there `getProxyForUrl` already returns "" regardless.
+ */
+// IPv6 loopback is bracketed (`[::1]`, not `::1`): `proxy-from-env` matches
+// NO_PROXY entries against the URL's host verbatim, and a URL host keeps its
+// brackets, so a bare `::1` entry would never match a `[::1]` probe.
+const LOOPBACK_NO_PROXY = 'localhost,127.0.0.1,[::1]'
+for (const proxyExemptionKey of ['NO_PROXY', 'no_proxy']) {
+  process.env[proxyExemptionKey] = [
+    process.env[proxyExemptionKey],
+    LOOPBACK_NO_PROXY,
+  ]
+    .filter(Boolean)
+    .join(',')
+}
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -101,7 +135,13 @@ export default defineConfig({
 
   webServer: {
     command: 'pnpm start',
-    url: 'http://localhost:4991',
+    // Probe an IP literal (`127.0.0.1`), not `localhost`: unambiguous IPv4, no
+    // dual-stack resolution in the waiter, and it matches the host CI listens
+    // on. The loopback-proxy exemption at the top of this file (Issue #115) is
+    // what actually lets this probe reach `next` — without it the `sfw` sandbox
+    // proxy intercepts the probe and 405s it. `use.baseURL` stays `localhost`
+    // (drives Chromium; Clerk dev keys are localhost-scoped).
+    url: 'http://127.0.0.1:4991',
     reuseExistingServer: false,
     timeout: 120 * 1000,
   },
