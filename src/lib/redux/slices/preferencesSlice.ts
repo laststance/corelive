@@ -24,6 +24,8 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 import {
+  BRAINDUMP_CLEAR_DELAY_MAX_MS,
+  BRAINDUMP_CLEAR_DELAY_MIN_MS,
   BRAINDUMP_FONT_FAMILY_IDS,
   BRAINDUMP_FONT_SIZE_MAX_PX,
   BRAINDUMP_FONT_SIZE_MIN_PX,
@@ -205,6 +207,24 @@ export const preferencesSlice = createSlice({
     },
 
     /**
+     * Sets the BrainDump clear-on-complete linger (ms), clamped to the slider
+     * range so a stray programmatic value can't exceed it; guards NaN/±Infinity
+     * to the default (mirrors setBraindumpFontSize). Only takes visible effect
+     * when braindumpClearOnComplete is ON.
+     * @param state - Current state
+     * @param action - Payload containing the new clear delay in ms.
+     */
+    setBraindumpClearDelayMs: (state, action: PayloadAction<number>) => {
+      const requestedDelay = action.payload
+      state.braindumpClearDelayMs = Number.isFinite(requestedDelay)
+        ? Math.min(
+            BRAINDUMP_CLEAR_DELAY_MAX_MS,
+            Math.max(BRAINDUMP_CLEAR_DELAY_MIN_MS, requestedDelay),
+          )
+        : DEFAULT_PREFERENCES.braindumpClearDelayMs
+    },
+
+    /**
      * Replaces the whole preferences state. Used by the cross-window sync to
      * apply preferences received from another window without re-broadcasting.
      * @param _state - Current state (unused, returns new state)
@@ -236,6 +256,7 @@ export const {
   setBraindumpFontSize,
   setBraindumpTextColor,
   setBraindumpClearOnComplete,
+  setBraindumpClearDelayMs,
   hydratePreferences,
   resetPreferences,
 } = preferencesSlice.actions
@@ -347,6 +368,15 @@ export const selectBraindumpClearOnComplete = (state: RootState): boolean =>
   DEFAULT_PREFERENCES.braindumpClearOnComplete
 
 /**
+ * Selects the BrainDump clear-on-complete linger (ms).
+ * @param state - Root state
+ * @returns The clear delay in ms (default 500)
+ */
+export const selectBraindumpClearDelayMs = (state: RootState): number =>
+  state.preferences.braindumpClearDelayMs ??
+  DEFAULT_PREFERENCES.braindumpClearDelayMs
+
+/**
  * Selects the full preferences state (every field coalesced/migrated to its
  * effective value) — the snapshot the cross-window sync broadcasts.
  * @param state - Root state
@@ -366,6 +396,7 @@ export const selectPreferences = (state: RootState): PreferencesState => ({
   braindumpFontSize: selectBraindumpFontSize(state),
   braindumpTextColor: selectBraindumpTextColor(state),
   braindumpClearOnComplete: selectBraindumpClearOnComplete(state),
+  braindumpClearDelayMs: selectBraindumpClearDelayMs(state),
 })
 
 export default preferencesSlice.reducer

@@ -27,11 +27,13 @@ import {
   BRAINDUMP_OPACITY_MAX,
   BRAINDUMP_OPACITY_MIN,
   BRAINDUMP_OPACITY_STEP,
+  BRAINDUMP_TOAST_UNDO_MS,
 } from '@/lib/constants/braindump'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
 import {
+  selectBraindumpClearDelayMs,
   selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
@@ -59,7 +61,6 @@ import {
 } from './braindumpUtils'
 
 const NOTE_DEBOUNCE_MS = 400
-const TOAST_UNDO_MS = 5000
 
 const NOTE_MAX_LENGTH =
   COMPLETED_TITLE_MAX_LENGTH * BRAINDUMP_NOTE_LINES_PER_CAP
@@ -122,6 +123,22 @@ type ClearedLineMemory = {
   /** sonner toast id, filled right after the create wires up so the failure
    *  handler can dismiss the optimistic success toast. */
   toastId: string | number | undefined
+  /**
+   * Whether the line has actually been REMOVED from the note yet. With a
+   * non-zero clear delay the removal is deferred, so during the linger the line
+   * is still on screen (`false`) — undo/failure then just cancel the pending
+   * removal and leave it in place (no re-insert). `true` once removed (the
+   * instant path, or after the deferred timer fired). Undo/failure only
+   * re-insert when this is `true`.
+   */
+  lineCleared: boolean
+  /**
+   * `window.setTimeout` id for a deferred removal still pending, or `undefined`
+   * when none is armed (instant path, or after the timer fired / was cancelled).
+   * Lets undo and the create-failure handler cancel THIS completion's pending
+   * removal so it can't fire after the completion was reverted.
+   */
+  removalTimerId: number | undefined
 }
 
 /**
@@ -216,6 +233,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // When ON, a finished line is dropped once its undo window closes (see the
   // toast's onAutoClose in promoteLineToCompleted). Default OFF keeps every line.
   const clearOnComplete = useAppSelector(selectBraindumpClearOnComplete)
+  // How long the finished line lingers before it's removed (clear-on-complete ON
+  // path). 0 = remove instantly (prior behaviour); >0 defers the removal by this
+  // many ms so the eye registers the completion first (#108). Clamped ≤ the Undo
+  // window by the schema, so the line never outlasts its own Undo affordance.
+  const clearDelayMs = useAppSelector(selectBraindumpClearDelayMs)
 
   const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
@@ -233,6 +255,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const clearedLinesRef = useRef<Map<number, ClearedLineMemory>>(new Map())
   // Monotonic token source for clearedLinesRef keys (never reused → no collision).
   const nextTokenRef = useRef<number>(0)
+  // Deferred-clear timers still pending (token → entry). SEPARATE from
+  // clearedLinesRef, which the create-success path empties eagerly — this map
+  // must outlive that so a firing timer can (a) be cancelled in bulk on a
+  // category swap / unmount and (b) re-index its still-pending siblings after it
+  // removes a line (a sequential top-to-bottom burst of completions all shift up
+  // by one, so each later entry's tracked index must follow — finding G).
+  const pendingClearTimersRef = useRef<Map<number, ClearedLineMemory>>(
+    new Map(),
+  )
   // Caret offset to apply AFTER the next noteText commit. The optimistic clear
   // changes the line count, so the caret must be repositioned post-render (see
   // the layout effect). null = leave the caret alone (the normal typing case).
@@ -276,6 +307,27 @@ export const BrainDumpEditor = function BrainDumpEditor({
     if (!textarea) return
     textarea.setSelectionRange(caretOffset, caretOffset)
   }, [noteText])
+
+  // Cancel every pending deferred-clear timer SYNCHRONOUSLY when the active
+  // category changes or the editor unmounts. This is a deliberate raw layout
+  // effect (like the caret effect above — no lifecycle-effect wrapper is
+  // layout-timed): a passive cleanup could let a timer fire AFTER the swap began
+  // loading category B's note and remove a line from the WRONG category's text
+  // (finding C). The lingering lines stay in their origin note (the win is
+  // already recorded); only the deferred REMOVAL is abandoned. Keyed on
+  // activeCategoryId so it does not re-run on every keystroke — timers must
+  // survive ordinary typing within a category.
+  useLayoutEffect(() => {
+    const pendingTimers = pendingClearTimersRef.current
+    return () => {
+      for (const trackedEntry of pendingTimers.values()) {
+        if (trackedEntry.removalTimerId !== undefined) {
+          window.clearTimeout(trackedEntry.removalTimerId)
+        }
+      }
+      pendingTimers.clear()
+    }
+  }, [activeCategoryId])
 
   const createCompletedMutation = useMutation(
     orpc.completed.create.mutationOptions({}),
@@ -614,7 +666,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
     const undoToastId = toast.success(`Completed: ${safeTitle}`, {
       description: 'Tap Undo within 5 s to revert.',
-      duration: TOAST_UNDO_MS,
+      duration: BRAINDUMP_TOAST_UNDO_MS,
       action: {
         label: 'Undo',
         onClick: () => {
@@ -782,14 +834,97 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   /**
-   * Clear-on-complete ON path: remove the just-completed line from the note the
-   * *instant* Cmd/Ctrl+Enter fires, show the optimistic Undo toast immediately,
-   * and run the Completed-create in the background. This kills the old "wait for
-   * the server round-trip + 5 s, then delete" lag — the line disappears now.
+   * Cancel a single completion's pending deferred-clear timer (if still armed)
+   * and stop tracking it. Idempotent. Called by undo and the create-failure
+   * handler so a removal can't fire after the completion was reverted.
    *
-   * Undo / failure restore the verbatim line; a create rejection re-inserts even
-   * after the 5 s undo window closed (otherwise the win is lost AND the line is
-   * gone — silent data loss). The `outcome` flag on the entry guards the
+   * @param entry - The completion whose pending removal timer to cancel.
+   * @returns void.
+   * @example
+   * cancelPendingClearTimer(entry) // a no-op when no timer is armed
+   */
+  const cancelPendingClearTimer = (entry: ClearedLineMemory): void => {
+    if (entry.removalTimerId !== undefined) {
+      window.clearTimeout(entry.removalTimerId)
+      entry.removalTimerId = undefined
+    }
+    pendingClearTimersRef.current.delete(entry.token)
+  }
+
+  /**
+   * Schedule the deferred removal of an already-completed line after the
+   * `clearDelayMs` linger (clear-on-complete ON, delay > 0). The line stays on
+   * screen during the linger so it exits gently instead of snapping out the
+   * instant it completes; when the timer fires we remove it — but ONLY if the
+   * tracked index STILL holds the verbatim line (finding A: a user edit, or an
+   * unaccounted shift, self-suppresses to a no-op, leaving the line). The caret
+   * is preserved across the removal (finding B). After removing, every
+   * still-pending sibling below shifts up by one, so we decrement their tracked
+   * index (finding G) — without this a top-to-bottom burst of completions within
+   * one linger would leave all but the first un-cleared. Category swap / unmount
+   * cancel every pending timer synchronously (the layout effect above).
+   *
+   * @param entry - The completion's undo memory; its `removalTimerId` is set here.
+   * @returns void — the timer drives the removal; nothing to await.
+   * @example
+   * scheduleDeferredClear(entry) // drops entry's line after clearDelayMs, unless undone/edited
+   */
+  const scheduleDeferredClear = (entry: ClearedLineMemory): void => {
+    const removalTimerId = window.setTimeout(() => {
+      // No longer pending — drop it from tracking before doing anything else.
+      pendingClearTimersRef.current.delete(entry.token)
+      entry.removalTimerId = undefined
+      // Undo / a failed create already put the line back (or never removed it).
+      if (entry.outcome === 'undone' || entry.outcome === 'restored') return
+      const currentText = noteTextRef.current
+      const lines = currentText.split('\n')
+      // Finding A: only remove when the tracked index STILL holds this exact
+      // line; otherwise leave it (the win is already recorded).
+      if (lines[entry.originalLineIndex] !== entry.reinsertText) return
+      const removalStart = lineStartOffset(currentText, entry.originalLineIndex)
+      // removeLineAtIndex drops the line plus its joining newline.
+      const removedLength = entry.reinsertText.length + 1
+      const clearedText = removeLineAtIndex(
+        currentText,
+        entry.originalLineIndex,
+      )
+      // Finding B: keep the caret put across the removal — below the removed
+      // block shift up by its length, inside the block clamp to its start, above
+      // it leave untouched. Read the LIVE DOM caret (the user may have typed on).
+      const liveCaret = textareaRef.current?.selectionStart ?? removalStart
+      let nextCaret = liveCaret
+      if (liveCaret >= removalStart + removedLength) {
+        nextCaret = liveCaret - removedLength
+      } else if (liveCaret > removalStart) {
+        nextCaret = removalStart
+      }
+      pendingCaretRef.current = nextCaret
+      setNoteText(clearedText)
+      entry.lineCleared = true
+      // Finding G: our removal shifted every later still-pending line up by one,
+      // so decrement their tracked index to keep their own finding-A guard matching.
+      for (const pendingEntry of pendingClearTimersRef.current.values()) {
+        if (pendingEntry.originalLineIndex > entry.originalLineIndex) {
+          pendingEntry.originalLineIndex -= 1
+        }
+      }
+    }, clearDelayMs)
+    entry.removalTimerId = removalTimerId
+    pendingClearTimersRef.current.set(entry.token, entry)
+  }
+
+  /**
+   * Clear-on-complete ON path: remove the just-completed line from the note —
+   * instantly when the clear delay is 0, else after the configured `clearDelayMs`
+   * linger (#108) — show the optimistic Undo toast immediately, and run the
+   * Completed-create in the background. This kills the old "wait for the server
+   * round-trip + 5 s, then delete" lag.
+   *
+   * Undo / failure restore the verbatim line ONLY if it was already removed; during
+   * the linger the line is still on screen, so they just cancel the pending removal
+   * and leave it. A create rejection still re-inserts a removed line even after the
+   * 5 s undo window closed (otherwise the win is lost AND the line is gone — silent
+   * data loss). The `outcome` flag on the entry guards the
    * success/failure/undo/auto-close overlap so nothing double-applies.
    *
    * @param text - The note text as it was when the key fired (pre-removal).
@@ -811,13 +946,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
     const safeTitle = normalizeCompletedTitle(title)
     const categoryId = activeCategoryId
 
-    // 1) Instant removal + remembered caret (applied post-commit by the layout
-    //    effect, since the removed line changes the line count).
-    const clearedText = removeLineAtIndex(text, lineIndex)
-    setNoteText(clearedText)
-    pendingCaretRef.current = lineStartOffset(clearedText, lineIndex)
-
-    // 2) Per-completion record (token-keyed; see ClearedLineMemory).
+    // 1) Per-completion record (token-keyed; see ClearedLineMemory). Created
+    //    BEFORE the removal so the deferred-clear timer can close over it.
     const token = nextTokenRef.current
     nextTokenRef.current += 1
     const entry: ClearedLineMemory = {
@@ -829,8 +959,33 @@ export const BrainDumpEditor = function BrainDumpEditor({
       reinsertText: originalLine,
       outcome: 'pending',
       toastId: undefined,
+      lineCleared: false,
+      removalTimerId: undefined,
     }
     clearedLinesRef.current.set(token, entry)
+
+    // 2) Remove the line — instantly (delay ≤ 0) or after the chosen linger.
+    if (clearDelayMs <= 0) {
+      // Instant path (verbatim prior behaviour): drop the line now and put the
+      // caret at the start of the line that slid up into its place. The layout
+      // effect applies the caret post-commit since the line count changed.
+      const clearedText = removeLineAtIndex(text, lineIndex)
+      setNoteText(clearedText)
+      pendingCaretRef.current = lineStartOffset(clearedText, lineIndex)
+      entry.lineCleared = true
+    } else {
+      // Deferred path: leave the line on screen for the linger, but move the
+      // caret to the START OF THE NEXT line NOW so a repeated Cmd/Ctrl+Enter
+      // walks down the list instead of re-completing this still-visible line.
+      // Apply it synchronously (NOT via pendingCaretRef): the textarea value is
+      // unchanged in this branch, so the `[noteText]` layout effect never fires
+      // to consume a pending ref — a stashed offset would sit stale and then
+      // yank the caret on the next unrelated noteText change (e.g. typing).
+      // The line itself is removed when the timer fires (finding A/B/G).
+      const nextLineCaret = lineStartOffset(text, lineIndex + 1)
+      textareaRef.current?.setSelectionRange(nextLineCaret, nextLineCaret)
+      scheduleDeferredClear(entry)
+    }
 
     // 3) Background create. Success/failure mutate `entry` and consult
     //    `outcome` so undo / auto-close / late-failure never double-apply.
@@ -853,26 +1008,33 @@ export const BrainDumpEditor = function BrainDumpEditor({
           return created.id
         },
         (error): null => {
+          // Whatever happens next, this completion's deferred-clear timer (if one
+          // is still pending) must NOT fire — cancel it up front so it can't drop
+          // a line whose win never persisted.
+          cancelPendingClearTimer(entry)
           // The user already undid → the line is back and they abandoned this
           // completion, so the create's failure is irrelevant to them: leave the
-          // note alone (undo restored it) and stay silent (no error toast).
+          // note alone (undo handled it) and stay silent (no error toast).
           if (entry.outcome === 'undone') {
             clearedLinesRef.current.delete(token)
             return null
           }
-          // Create failed and the line is still gone. Restore it (the win never
-          // persisted). This fires even after the 5 s window closed (outcome
-          // 'confirmed') — that is the whole point: without it the line AND the
-          // win would silently vanish. restoreClearedLineToCategory puts the line
-          // back in the live editor while we're still here, or into the origin
-          // category's STORED note once the user has switched away (never the
-          // wrong category's visible note). No caret move: a background failure
-          // must not yank a user who is typing elsewhere.
-          void restoreClearedLineToCategory(entry, false)
-          // Terminal NOW: the failure handler has put the line back, so a late
-          // Undo — the toast stays clickable through sonner's dismiss
-          // exit-animation — must not restore a SECOND copy (undo early-returns
-          // on 'restored'). Set before dismissing the toast for that reason.
+          // Create failed and the win never persisted. Restore the line ONLY if it
+          // was already removed (instant path, or the timer fired): this re-insert
+          // fires even after the 5 s window closed (outcome 'confirmed') — that is
+          // the whole point, else the line AND the win silently vanish.
+          // restoreClearedLineToCategory puts it back in the live editor while
+          // we're still here, or into the origin category's STORED note once the
+          // user switched away (never the wrong category's visible note). No caret
+          // move: a background failure must not yank a user typing elsewhere. If
+          // the line is STILL on screen (linger not yet elapsed, timer just
+          // cancelled above), there is nothing to restore — leave it.
+          if (entry.lineCleared) {
+            void restoreClearedLineToCategory(entry, false)
+          }
+          // Terminal NOW: a late Undo — the toast stays clickable through sonner's
+          // dismiss exit-animation — must not restore a SECOND copy (undo
+          // early-returns on 'restored'). Set before dismissing the toast.
           entry.outcome = 'restored'
           clearedLinesRef.current.delete(token)
           if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
@@ -890,7 +1052,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     //    affordance (the line is already gone).
     entry.toastId = toast.success(`Completed: ${safeTitle}`, {
       description: 'Tap Undo within 5 s to revert.',
-      duration: TOAST_UNDO_MS,
+      duration: BRAINDUMP_TOAST_UNDO_MS,
       action: {
         label: 'Undo',
         onClick: () => {
@@ -934,12 +1096,20 @@ export const BrainDumpEditor = function BrainDumpEditor({
     if (entry.outcome === 'undone' || entry.outcome === 'restored') return
     entry.outcome = 'undone'
     clearedLinesRef.current.delete(entry.token)
+    // Cancel a still-pending deferred removal: if the line never left the editor
+    // (linger not yet elapsed), undo just abandons the clear and leaves it.
+    cancelPendingClearTimer(entry)
 
-    // Re-insert the verbatim line into the category it came from — in the live
-    // editor while still here (the caret moves to it, since this IS a user
-    // action), or into that category's STORED note once the user has switched
-    // away (so the line returns to category A, never category B's visible note).
-    await restoreClearedLineToCategory(entry, true)
+    // Re-insert the verbatim line into the category it came from — but ONLY if it
+    // was actually removed (instant path, or the timer already fired). If it is
+    // still on screen (deferred clear cancelled above) there is nothing to put
+    // back. When restored: into the live editor while still here (the caret moves
+    // to it, since this IS a user action), or into that category's STORED note
+    // once the user switched away (so the line returns to category A, never
+    // category B's visible note).
+    if (entry.lineCleared) {
+      await restoreClearedLineToCategory(entry, true)
+    }
 
     // Delete the server row once the create resolves. A failed create resolves
     // to null → nothing to delete.

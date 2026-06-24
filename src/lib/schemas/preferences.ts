@@ -12,10 +12,13 @@
 import { z } from 'zod'
 
 import {
+  BRAINDUMP_CLEAR_DELAY_MAX_MS,
+  BRAINDUMP_CLEAR_DELAY_MIN_MS,
   BRAINDUMP_FONT_FAMILY_IDS,
   BRAINDUMP_FONT_SIZE_MAX_PX,
   BRAINDUMP_FONT_SIZE_MIN_PX,
   BRAINDUMP_TEXT_COLOR_PATTERN,
+  DEFAULT_BRAINDUMP_CLEAR_DELAY_MS,
   DEFAULT_BRAINDUMP_FONT_FAMILY,
   DEFAULT_BRAINDUMP_FONT_SIZE_PX,
   DEFAULT_BRAINDUMP_TEXT_COLOR,
@@ -98,6 +101,20 @@ export const PreferencesStateSchema = z.object({
    * Default OFF keeps the on-concept behavior (every line stays in place); the
    * clear is the opt-in deviation ("Presets First, Then Options"). */
   braindumpClearOnComplete: z.boolean().default(false),
+  /** BrainDump clear-on-complete linger (ms) before the finished line is removed.
+   * A finite number is clamped to the slider range; a non-finite or non-number
+   * (corrupt blob, bad sync) self-heals to the default via `.catch` — mirroring
+   * `braindumpFontSize`. Only takes effect when `braindumpClearOnComplete` is ON. */
+  braindumpClearDelayMs: z
+    .number()
+    .finite()
+    .transform((value) =>
+      Math.min(
+        BRAINDUMP_CLEAR_DELAY_MAX_MS,
+        Math.max(BRAINDUMP_CLEAR_DELAY_MIN_MS, value),
+      ),
+    )
+    .catch(DEFAULT_BRAINDUMP_CLEAR_DELAY_MS),
 })
 
 /** The validated core user-preferences shape (inferred from the schema SSoT). */

@@ -8,6 +8,7 @@ import reducer, {
   hydratePreferences,
   initialState,
   resetPreferences,
+  selectBraindumpClearDelayMs,
   selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
@@ -18,6 +19,7 @@ import reducer, {
   selectSoundMoment,
   selectSoundTimbre,
   selectSoundVolume,
+  setBraindumpClearDelayMs,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
@@ -52,6 +54,7 @@ describe('preferencesSlice', () => {
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
+      braindumpClearDelayMs: 500,
     })
   })
 
@@ -174,6 +177,7 @@ describe('preferencesSlice', () => {
       braindumpFontSize: 20,
       braindumpTextColor: 'var(--primary)',
       braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 1200,
     }
 
     // Act
@@ -195,6 +199,7 @@ describe('preferencesSlice', () => {
       braindumpFontSize: 24,
       braindumpTextColor: '#abcdef',
       braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 2000,
     }
 
     // Act
@@ -211,6 +216,7 @@ describe('preferencesSlice', () => {
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
+      braindumpClearDelayMs: 500,
     })
   })
 
@@ -275,6 +281,7 @@ describe('preferencesSlice', () => {
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
+      braindumpClearDelayMs: 500,
     })
   })
 
@@ -360,5 +367,42 @@ describe('preferencesSlice', () => {
 
     // Act / Assert — the selector coalesces to the default, never undefined (Finding 5).
     expect(selectBraindumpClearOnComplete(legacyState)).toBe(false)
+  })
+
+  it('sets the BrainDump clear delay when setBraindumpClearDelayMs is dispatched', () => {
+    // Act
+    const next = reducer(initialState, setBraindumpClearDelayMs(1500))
+
+    // Assert
+    expect(next.braindumpClearDelayMs).toBe(1500)
+  })
+
+  it('clamps an out-of-range BrainDump clear delay into the bounds [0,5000]', () => {
+    // Act — above the 5 s undo window clamps to the ceiling, below 0 to the floor,
+    // in-range passes through.
+    const tooLong = reducer(initialState, setBraindumpClearDelayMs(99000))
+    const negative = reducer(initialState, setBraindumpClearDelayMs(-200))
+    const inRange = reducer(initialState, setBraindumpClearDelayMs(800))
+
+    // Assert
+    expect(tooLong.braindumpClearDelayMs).toBe(5000)
+    expect(negative.braindumpClearDelayMs).toBe(0)
+    expect(inRange.braindumpClearDelayMs).toBe(800)
+  })
+
+  it('guards a NaN BrainDump clear delay to the default instead of poisoning the slider', () => {
+    // Act — a non-finite value (e.g. a stray empty slider event) must not stick.
+    const next = reducer(initialState, setBraindumpClearDelayMs(Number.NaN))
+
+    // Assert
+    expect(next.braindumpClearDelayMs).toBe(500)
+  })
+
+  it('falls back to the default clear delay for a slice that predates the field', () => {
+    // Arrange — a persisted slice from before the clear delay existed.
+    const legacyState = stateWith({ completionSound: false })
+
+    // Act / Assert — the selector coalesces to the 500 ms default, never undefined.
+    expect(selectBraindumpClearDelayMs(legacyState)).toBe(500)
   })
 })

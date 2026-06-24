@@ -175,3 +175,51 @@ export const DEFAULT_BRAINDUMP_TEXT_COLOR = 'var(--foreground)'
  */
 export const BRAINDUMP_TEXT_COLOR_PATTERN =
   /^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\(--[a-z0-9-]+\))$/
+
+/* -------------------------------------------------------------------------- */
+/* BrainDump clear-on-complete linger delay (#108)                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How long the "Undo" toast stays up after a clear-on-complete, and the SOLE
+ * source for the clear-delay ceiling below. Renderer-only (the toast lives in
+ * `BrainDumpEditor`), so — unlike the opacity bounds — this is a real import,
+ * not a synced duplicate — `BrainDumpEditor` imports it directly for the toast
+ * `duration` (the old local `TOAST_UNDO_MS` alias was retired in #108).
+ */
+export const BRAINDUMP_TOAST_UNDO_MS = 5000
+
+/** Fastest clear — 0 ms removes the line the instant the task is completed. */
+export const BRAINDUMP_CLEAR_DELAY_MIN_MS = 0
+
+/**
+ * Slowest clear. Capped at {@link BRAINDUMP_TOAST_UNDO_MS} so the line can never
+ * outlast its own Undo window — a longer linger would let the toast vanish while
+ * the line is still on screen, stranding the user with no way to undo (#109 will
+ * lift the toast duration into a pref; this ceiling then tracks it for free).
+ */
+export const BRAINDUMP_CLEAR_DELAY_MAX_MS = BRAINDUMP_TOAST_UNDO_MS
+
+/** Delay slider granularity — 100 ms steps read cleanly and avoid jitter. */
+export const BRAINDUMP_CLEAR_DELAY_STEP_MS = 100
+
+/**
+ * Default clear-on-complete linger — 500 ms. A brief, gentle beat so a finished
+ * line leaves softly instead of snapping out the instant it completes; the
+ * completion itself is acknowledged by the Undo toast, which fires immediately
+ * (the line stays verbatim during the dwell — this is a soft exit, not a visible
+ * state change). DESIGN.md self-affirmation; 0 ms felt abrupt. Opt into "Instant"
+ * (0) via the Settings slider.
+ */
+export const DEFAULT_BRAINDUMP_CLEAR_DELAY_MS = 500
+
+/**
+ * Clear-on-complete linger in ms, within
+ * [{@link BRAINDUMP_CLEAR_DELAY_MIN_MS}, {@link BRAINDUMP_CLEAR_DELAY_MAX_MS}].
+ * Type alias documents intent without changing the runtime shape.
+ *
+ * @example
+ * const delay: BrainDumpClearDelayMs = 500
+ * const instant: BrainDumpClearDelayMs = 0
+ */
+export type BrainDumpClearDelayMs = number
