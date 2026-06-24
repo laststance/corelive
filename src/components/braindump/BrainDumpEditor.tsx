@@ -854,18 +854,20 @@ export const BrainDumpEditor = function BrainDumpEditor({
   /**
    * Schedule the deferred removal of an already-completed line after the
    * `clearDelayMs` linger (clear-on-complete ON, delay > 0). The line stays on
-   * screen during the linger so the eye registers the win; when the timer fires
-   * we remove it — but ONLY if the tracked index STILL holds the verbatim line
-   * (finding A: a user edit, or an unaccounted shift, self-suppresses to a
-   * no-op, leaving the line). The caret is preserved across the removal (finding
-   * B). After removing, every still-pending sibling below shifts up by one, so
-   * we decrement their tracked index (finding G) — without this a top-to-bottom
-   * burst of completions within one linger would leave all but the first
-   * un-cleared. Category swap / unmount cancel every pending timer synchronously
-   * (the layout effect above).
+   * screen during the linger so it exits gently instead of snapping out the
+   * instant it completes; when the timer fires we remove it — but ONLY if the
+   * tracked index STILL holds the verbatim line (finding A: a user edit, or an
+   * unaccounted shift, self-suppresses to a no-op, leaving the line). The caret
+   * is preserved across the removal (finding B). After removing, every
+   * still-pending sibling below shifts up by one, so we decrement their tracked
+   * index (finding G) — without this a top-to-bottom burst of completions within
+   * one linger would leave all but the first un-cleared. Category swap / unmount
+   * cancel every pending timer synchronously (the layout effect above).
    *
    * @param entry - The completion's undo memory; its `removalTimerId` is set here.
    * @returns void — the timer drives the removal; nothing to await.
+   * @example
+   * scheduleDeferredClear(entry) // drops entry's line after clearDelayMs, unless undone/edited
    */
   const scheduleDeferredClear = (entry: ClearedLineMemory): void => {
     const removalTimerId = window.setTimeout(() => {
