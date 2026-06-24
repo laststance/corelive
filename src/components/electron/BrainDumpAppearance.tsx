@@ -237,7 +237,7 @@ export const BrainDumpAppearance =
           </div>
           <p className="text-xs text-muted-foreground">
             How long the “Completed” confirmation — with its Undo — stays before
-            it fades. Press the ✕ to dismiss it sooner.
+            it fades. The ✕ lets it fade early.
           </p>
         </div>
 
