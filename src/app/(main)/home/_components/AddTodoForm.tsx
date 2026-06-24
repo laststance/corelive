@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { isMultiLinePaste } from '@/lib/isMultiLinePaste'
+import { interceptBulkPaste } from '@/lib/interceptBulkPaste'
 
 // Form schema definition for the add-todo inputs.
 const todoFormSchema = z.object({
@@ -66,23 +66,6 @@ export const AddTodoForm = function AddTodoForm({
     setIsNotesOpen(false)
   }
 
-  // Intercept a multi-line paste into the empty/fully-selected todo input and
-  // route it to the bulk import dialog instead of letting a whole list land as
-  // one mangled task (Issue #110 AC#1/#3). A single-line paste — or a paste into
-  // a partial selection / caret mid-text — falls through to the native paste so
-  // ordinary editing is never hijacked.
-  const handleTextPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
-    if (!onBulkPaste) return
-    const pastedText = event.clipboardData.getData('text/plain')
-    if (!isMultiLinePaste(pastedText)) return
-    const input = event.currentTarget
-    const replacesEntireValue =
-      input.selectionStart === 0 && input.selectionEnd === input.value.length
-    if (!replacesEntireValue) return
-    event.preventDefault()
-    onBulkPaste(pastedText)
-  }
-
   const renderTextField = ({
     field,
   }: {
@@ -92,7 +75,7 @@ export const AddTodoForm = function AddTodoForm({
       <FormControl>
         <Input
           placeholder="Type a todo, or paste a list..."
-          onPaste={handleTextPaste}
+          onPaste={(event) => interceptBulkPaste(event, onBulkPaste)}
           {...field}
         />
       </FormControl>

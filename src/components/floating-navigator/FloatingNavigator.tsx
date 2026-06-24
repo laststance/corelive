@@ -13,7 +13,7 @@ import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { COLOR_DOT_CLASSES } from '@/lib/category-colors'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
-import { isMultiLinePaste } from '@/lib/isMultiLinePaste'
+import { interceptBulkPaste } from '@/lib/interceptBulkPaste'
 import { log } from '@/lib/logger'
 import { requestOpenCompletedImport } from '@/lib/paste-import-channel'
 import { isEnterKeyPress } from '@/lib/utils'
@@ -441,22 +441,6 @@ export const FloatingNavigator = function FloatingNavigator({
     }
   }
 
-  // Intercept a multi-line paste into the empty/fully-selected task input and
-  // route it to the bulk import dialog (Issue #110 AC#2). A single-line paste —
-  // or a paste into a partial selection / caret mid-text — falls through to the
-  // native paste so ordinary editing is never hijacked.
-  const handleTaskPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
-    if (!onBulkPaste) return
-    const pastedText = event.clipboardData.getData('text/plain')
-    if (!isMultiLinePaste(pastedText)) return
-    const input = event.currentTarget
-    const replacesEntireValue =
-      input.selectionStart === 0 && input.selectionEnd === input.value.length
-    if (!replacesEntireValue) return
-    event.preventDefault()
-    onBulkPaste(pastedText)
-  }
-
   const saveEdit = () => {
     if (editingId && editText.trim()) {
       onTaskEdit(editingId, editText.trim())
@@ -881,7 +865,7 @@ export const FloatingNavigator = function FloatingNavigator({
                 value={newTaskText}
                 onChange={handleNewTaskTextChange}
                 onKeyDown={handleKeyPress}
-                onPaste={handleTaskPaste}
+                onPaste={(event) => interceptBulkPaste(event, onBulkPaste)}
                 className="h-8 border-0 text-sm ring-0 focus-visible:border-0 focus-visible:ring-0"
                 aria-label="New task title"
                 aria-describedby="task-input-help"
