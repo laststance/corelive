@@ -13,6 +13,7 @@ import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { COLOR_DOT_CLASSES } from '@/lib/category-colors'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
+import { isMultiLinePaste } from '@/lib/isMultiLinePaste'
 import { log } from '@/lib/logger'
 import { requestOpenCompletedImport } from '@/lib/paste-import-channel'
 import { isEnterKeyPress } from '@/lib/utils'
@@ -83,6 +84,18 @@ interface FloatingNavigatorProps {
   todos: FloatingTodo[]
   onTaskToggle: (id: string) => void
   onTaskCreate: (title: string) => void
+  /**
+   * Called when a multi-line list is pasted into the (empty or fully-selected)
+   * task input — the container opens the bulk import dialog seeded with the raw
+   * text (Issue #110). When omitted, paste behaves natively.
+   */
+  onBulkPaste?: (pastedText: string) => void
+  /**
+   * Slot for the post-import undo banner, rendered above the task list (Issue
+   * #110). Renders nothing when there's no recent import. Supplied by the
+   * container so this presentational component stays decoupled from oRPC.
+   */
+  bulkImportBanner?: React.ReactNode
   onTaskEdit: (id: string, title: string) => void
   onTaskDelete: (id: string) => void
   onTaskReorder?: (activeId: string, overId: string) => void
@@ -341,6 +354,8 @@ export const FloatingNavigator = function FloatingNavigator({
   todos,
   onTaskToggle,
   onTaskCreate,
+  onBulkPaste,
+  bulkImportBanner,
   onTaskEdit,
   onTaskDelete,
   onTaskReorder,
@@ -424,6 +439,22 @@ export const FloatingNavigator = function FloatingNavigator({
     if (isEnterKeyPress(e)) {
       handleCreateTask()
     }
+  }
+
+  // Intercept a multi-line paste into the empty/fully-selected task input and
+  // route it to the bulk import dialog (Issue #110 AC#2). A single-line paste —
+  // or a paste into a partial selection / caret mid-text — falls through to the
+  // native paste so ordinary editing is never hijacked.
+  const handleTaskPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!onBulkPaste) return
+    const pastedText = event.clipboardData.getData('text/plain')
+    if (!isMultiLinePaste(pastedText)) return
+    const input = event.currentTarget
+    const replacesEntireValue =
+      input.selectionStart === 0 && input.selectionEnd === input.value.length
+    if (!replacesEntireValue) return
+    event.preventDefault()
+    onBulkPaste(pastedText)
   }
 
   const saveEdit = () => {
@@ -850,6 +881,7 @@ export const FloatingNavigator = function FloatingNavigator({
                 value={newTaskText}
                 onChange={handleNewTaskTextChange}
                 onKeyDown={handleKeyPress}
+                onPaste={handleTaskPaste}
                 className="h-8 border-0 text-sm ring-0 focus-visible:border-0 focus-visible:ring-0"
                 aria-label="New task title"
                 aria-describedby="task-input-help"
@@ -857,7 +889,7 @@ export const FloatingNavigator = function FloatingNavigator({
 
               <div id="task-input-help" className="sr-only">
                 Type a task title and press Enter or click the add button to
-                create a new task
+                create a new task. Paste a list to add several at once.
               </div>
               <Button
                 size="sm"
@@ -873,6 +905,11 @@ export const FloatingNavigator = function FloatingNavigator({
               </Button>
             </div>
           </section>
+
+          {/* Post-import undo banner slot (Issue #110) — sits between the input
+              and the scrollable list, staying visible while the list scrolls.
+              Renders nothing until a recent import seeds it. */}
+          {bulkImportBanner}
 
           {/* Task list */}
           <main

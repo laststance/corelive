@@ -4,12 +4,14 @@ import { test, expect, type Page } from '@playwright/test'
 import { resetDatabase } from './_helpers/db'
 
 /**
- * E2E coverage for the paste-import flow (Issue #53, Slice 1) across both
- * destination zones. These specs exercise the real paste → import → undo loop
- * against the real Next.js server, real Clerk Dev session, and real Postgres —
- * nothing is mocked (CLAUDE.md: "Never mock auth/DB in E2E tests"). They are the
- * last untested layer for the feature, which otherwise leans on parser unit
- * tests + server integration tests + Storybook.
+ * E2E coverage for the paste-import flow (Issue #53 Slice 1; Issue #110 made a
+ * multi-line paste into the Add-todo input the sole Todo-zone entry point and
+ * retired the Import buttons) across both destination zones. These specs
+ * exercise the real paste → import → undo loop against the real Next.js server,
+ * real Clerk Dev session, and real Postgres — nothing is mocked (CLAUDE.md:
+ * "Never mock auth/DB in E2E tests"). They are the last untested layer for the
+ * feature, which otherwise leans on parser unit tests + server integration
+ * tests + Storybook.
  *
  * Key behaviours under test:
  * - Todo zone: pasted lines become pending todos; a 60s inline undo banner
@@ -92,18 +94,45 @@ async function waitForAppReady(page: Page) {
 }
 
 /**
- * Opens the Todo-zone import dialog and waits for it to be ready for input.
- * The Todo toolbar button has the exact accessible name "Import" — `exact: true`
- * is load-bearing because the Completed entry ("Import past wins") and the Todo
- * empty-state entry ("Import a list") both CONTAIN the word "Import".
+ * Opens the Todo-zone import dialog by pasting a multi-line list into the
+ * Add-todo input. Issue #110 retired the "Import" button — a paste of ≥2
+ * non-blank lines into the (empty/fully-selected) input is now the ONLY way in.
+ * Dispatches a real `paste` ClipboardEvent carrying a populated DataTransfer;
+ * the renderer's `onPaste` reads `clipboardData.getData('text/plain')`, so the
+ * dialog opens already SEEDED with `seedLines` — no separate textarea fill.
  * @param page - Playwright page object.
- * @returns The dialog locator, ready for `.getByRole('textbox')`.
+ * @param seedLines - The list to paste; becomes the dialog's seeded content.
+ * @returns The dialog locator, ready for assertions / confirm.
  */
-async function openTodoImportDialog(page: Page) {
-  await page.getByRole('button', { name: 'Import', exact: true }).click()
+async function openTodoImportDialog(page: Page, seedLines: string[]) {
+  await pasteIntoTodoInput(page, seedLines.join('\n'))
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Add to your list')).toBeVisible()
   return dialog
+}
+
+/**
+ * Fires a real `paste` ClipboardEvent (populated DataTransfer) on the Add-todo
+ * input — the deterministic way to exercise the renderer's `onPaste` handler
+ * without OS clipboard permissions. The handler only intercepts when the input
+ * is empty/fully-selected, which a freshly-clicked empty input satisfies.
+ * @param page - Playwright page object.
+ * @param text - Raw clipboard text (use `\n` between lines for a list).
+ */
+async function pasteIntoTodoInput(page: Page, text: string) {
+  const input = page.getByPlaceholder('Type a todo, or paste a list...')
+  await input.click()
+  await input.evaluate((element, clipboardText) => {
+    const dataTransfer = new DataTransfer()
+    dataTransfer.setData('text/plain', clipboardText)
+    element.dispatchEvent(
+      new ClipboardEvent('paste', {
+        clipboardData: dataTransfer,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  }, text)
 }
 
 /**
@@ -160,11 +189,14 @@ test.describe('Paste Import E2E', () => {
     test('imports pasted lines as pending todos and offers a 60s undo', async ({
       page,
     }) => {
-      // Arrange — open the Todo import dialog and paste three tasks.
-      const dialog = await openTodoImportDialog(page)
-      await dialog.getByRole('textbox').fill(TODO_IMPORT_LINES.join('\n'))
+      // Arrange — paste three tasks into the Add-todo input; the dialog opens
+      // seeded with them (Issue #110: paste is the entry point, no Import button).
+      const dialog = await openTodoImportDialog(page, TODO_IMPORT_LINES)
 
-      // Act — the live count drives the confirm label; confirm imports them.
+      // Act — the seeded paste drives the live count; confirm imports them. The
+      // checkboxes appearing below is also the direct-invalidate proof: oRPC
+      // mutationOptions don't auto-invalidate, so the list only refetches because
+      // the importing window invalidates its own queries in `onImported`.
       await expect(dialog.getByText('3 tasks')).toBeVisible()
       await dialog.getByRole('button', { name: 'Add 3 to your list' }).click()
 
@@ -188,8 +220,7 @@ test.describe('Paste Import E2E', () => {
 
     test('Undo import removes the just-imported todos', async ({ page }) => {
       // Arrange — import two distinctly-titled todos so this test self-seeds.
-      const dialog = await openTodoImportDialog(page)
-      await dialog.getByRole('textbox').fill(TODO_UNDO_LINES.join('\n'))
+      const dialog = await openTodoImportDialog(page, TODO_UNDO_LINES)
       await dialog.getByRole('button', { name: 'Add 2 to your list' }).click()
       await expect(
         page.getByRole('checkbox', { name: 'Cancel the legacy domain' }),
@@ -213,16 +244,15 @@ test.describe('Paste Import E2E', () => {
       page,
     }) => {
       // Arrange — paste five raw lines: two real tasks plus a blank, a
-      // whitespace-only line, and a bullet-prefix-only line.
-      const dialog = await openTodoImportDialog(page)
-      const pastedText = [
+      // whitespace-only line, and a bullet-prefix-only line. The paste opens the
+      // dialog (2 real lines clear the multi-line threshold) seeded with all five.
+      const dialog = await openTodoImportDialog(page, [
         'First pasted task',
         '',
         '   ',
         '- ',
         'Second pasted task',
-      ].join('\n')
-      await dialog.getByRole('textbox').fill(pastedText)
+      ])
 
       // Assert — only the two real lines count; the other three are skipped,
       // and the confirm label reflects the importable count (preview-only, no
@@ -240,11 +270,17 @@ test.describe('Paste Import E2E', () => {
       await expect(page.getByRole('dialog')).not.toBeVisible()
     })
 
-    test('confirm is disabled and the empty hint shows for an empty paste', async ({
+    test('confirm is disabled and the empty hint shows when the dialog is cleared', async ({
       page,
     }) => {
-      // Arrange — open the dialog but paste nothing.
-      const dialog = await openTodoImportDialog(page)
+      // Arrange — a paste is the only entry point now (an empty paste opens
+      // nothing), so open via a throwaway list, then clear the textarea to reach
+      // the dialog's empty state.
+      const dialog = await openTodoImportDialog(page, [
+        'Throwaway line one',
+        'Throwaway line two',
+      ])
+      await dialog.getByRole('textbox').fill('')
 
       // Assert — the empty hint shows and the confirm label has no count to add
       // (its disabled state guards a no-op import).
@@ -254,6 +290,25 @@ test.describe('Paste Import E2E', () => {
       await expect(
         dialog.getByRole('button', { name: 'Add 0 to your list' }),
       ).toBeDisabled()
+    })
+
+    test('a single-line paste adds inline without opening the dialog, and the Import button is gone', async ({
+      page,
+    }) => {
+      // AC#3 + AC#6: a single line falls through to native paste (no dialog), and
+      // the retired toolbar "Import" button no longer exists anywhere on /home.
+      await expect(
+        page.getByRole('button', { name: 'Import', exact: true }),
+      ).toHaveCount(0)
+
+      // Act — paste a single line into the Add-todo input.
+      await pasteIntoTodoInput(page, 'just a single grocery item')
+
+      // Assert — no bulk-import dialog opens (the 300ms settle lets any errant
+      // open render before we assert its absence).
+      await page.waitForTimeout(300)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await expect(page.getByText('Add to your list')).toHaveCount(0)
     })
   })
 
@@ -323,8 +378,7 @@ test.describe('Paste Import E2E', () => {
       // Arrange — import two todos via the Todo zone, then confirm they landed
       // as pending checkboxes with the banner's Move affordance available.
       const todayIso = TODAY_ISO
-      const dialog = await openTodoImportDialog(page)
-      await dialog.getByRole('textbox').fill(MOVE_TO_COMPLETED_LINES.join('\n'))
+      const dialog = await openTodoImportDialog(page, MOVE_TO_COMPLETED_LINES)
       await dialog.getByRole('button', { name: 'Add 2 to your list' }).click()
       await expect(
         page.getByRole('checkbox', { name: 'Prototype the share image' }),

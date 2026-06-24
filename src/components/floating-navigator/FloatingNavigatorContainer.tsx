@@ -9,6 +9,8 @@ import {
 } from '@tanstack/react-query'
 import React, { useState } from 'react'
 
+import { ImportUndoBanner } from '@/components/import/ImportUndoBanner'
+import { PasteImport } from '@/components/import/PasteImport'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
@@ -19,6 +21,7 @@ import {
 } from '@/hooks/useSelectedCategory'
 import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { useTodoPasteImport } from '@/hooks/useTodoPasteImport'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
@@ -112,6 +115,10 @@ export const FloatingNavigatorContainer =
       setSelectedCategoryId,
       categories,
     )
+
+    // Bulk paste-import controller (Issue #110): a multi-line paste into the
+    // task input opens a seeded confirm dialog; shared with the main list.
+    const pasteImport = useTodoPasteImport()
 
     // Fetch todos filtered by selected category
     const { data, isLoading, error } = useQuery({
@@ -374,22 +381,46 @@ export const FloatingNavigatorContainer =
     }
 
     return (
-      <FloatingNavigator
-        todos={todos}
-        onTaskToggle={handleTaskToggle}
-        onTaskCreate={handleTaskCreate}
-        onTaskEdit={handleTaskEdit}
-        onTaskDelete={handleTaskDelete}
-        onTaskReorder={handleTaskReorder}
-        categories={categories}
-        selectedCategoryId={selectedCategoryId}
-        onCategoryChange={setSelectedCategoryId}
-        onCategoryCreate={handleCategoryCreate}
-        onCategoryUpdate={handleCategoryUpdate}
-        onCategoryDelete={handleCategoryDelete}
-        isCategoryCreatePending={categoryCreateMutation.isPending}
-        isCategoryUpdatePending={categoryUpdateMutation.isPending}
-        isCategoryDeletePending={categoryDeleteMutation.isPending}
-      />
+      <>
+        <FloatingNavigator
+          todos={todos}
+          onTaskToggle={handleTaskToggle}
+          onTaskCreate={handleTaskCreate}
+          onBulkPaste={pasteImport.openWithPaste}
+          bulkImportBanner={
+            <ImportUndoBanner
+              lastImport={pasteImport.lastImport}
+              onDismiss={pasteImport.dismissBanner}
+              onChanged={pasteImport.invalidate}
+            />
+          }
+          onTaskEdit={handleTaskEdit}
+          onTaskDelete={handleTaskDelete}
+          onTaskReorder={handleTaskReorder}
+          categories={categories}
+          selectedCategoryId={selectedCategoryId}
+          onCategoryChange={setSelectedCategoryId}
+          onCategoryCreate={handleCategoryCreate}
+          onCategoryUpdate={handleCategoryUpdate}
+          onCategoryDelete={handleCategoryDelete}
+          isCategoryCreatePending={categoryCreateMutation.isPending}
+          isCategoryUpdatePending={categoryUpdateMutation.isPending}
+          isCategoryDeletePending={categoryDeleteMutation.isPending}
+        />
+        {/* Controlled bulk paste-import dialog (Issue #110): the task input's
+            multi-line paste opens it; it's a portal Dialog so its position in
+            the tree is irrelevant. The 10s success toast + the 60s
+            bulkImportBanner above give the post-import Undo, same as the main
+            list. */}
+        <PasteImport
+          key={pasteImport.seedNonce}
+          zone="todo"
+          initialText={pasteImport.seedText}
+          categories={categories}
+          open={pasteImport.isOpen}
+          onOpenChange={pasteImport.setOpen}
+          onImported={pasteImport.handleImported}
+        />
+      </>
     )
   }

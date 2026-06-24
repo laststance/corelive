@@ -11,6 +11,8 @@ import {
 import { Circle } from 'lucide-react'
 import { Suspense, useMemo, useRef, useState } from 'react'
 
+import { ImportUndoBanner } from '@/components/import/ImportUndoBanner'
+import { PasteImport } from '@/components/import/PasteImport'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +40,7 @@ import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
+import { useTodoPasteImport } from '@/hooks/useTodoPasteImport'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
@@ -55,7 +58,6 @@ import {
 } from './retroactivePopulateFade'
 import { SortableTodoItem } from './SortableTodoItem'
 import { SundayDigestCard } from './SundayDigestCard'
-import { TodoImportEntry } from './TodoImportEntry'
 import type { Todo } from './TodoItem'
 import { WeeklySummaryCard } from './WeeklySummaryCard'
 import { YearInReviewModal } from './YearInReviewModal'
@@ -158,6 +160,10 @@ export const TodoList = function TodoList() {
       ),
     [categoryData?.categories],
   )
+
+  // Bulk paste-import controller (Issue #110): a multi-line paste into the Add
+  // form opens a seeded confirm dialog; shared with the Floating Navigator.
+  const pasteImport = useTodoPasteImport()
 
   // Fetch pending todos (filtered by selected category)
   const {
@@ -547,13 +553,27 @@ export const TodoList = function TodoList() {
           <CardContent className="space-y-4">
             <AddTodoForm
               onAddTodo={addTodo}
+              onBulkPaste={pasteImport.openWithPaste}
               disabled={selectedCategoryId === null}
             />
 
-            {/* Active-Todo-zone Import entry (D4) — next to the Add form. */}
-            <div className="flex justify-end">
-              <TodoImportEntry />
-            </div>
+            {/* Bulk paste-import (Issue #110): the Add form's multi-line paste
+                opens this controlled dialog — there's no visible Import button.
+                The banner gives the post-import 60s Undo + Move-to-Completed. */}
+            <PasteImport
+              key={pasteImport.seedNonce}
+              zone="todo"
+              initialText={pasteImport.seedText}
+              categories={categoryData?.categories ?? []}
+              open={pasteImport.isOpen}
+              onOpenChange={pasteImport.setOpen}
+              onImported={pasteImport.handleImported}
+            />
+            <ImportUndoBanner
+              lastImport={pasteImport.lastImport}
+              onDismiss={pasteImport.dismissBanner}
+              onChanged={pasteImport.invalidate}
+            />
           </CardContent>
         </Card>
 
@@ -564,8 +584,10 @@ export const TodoList = function TodoList() {
               <p className="text-muted-foreground">
                 No pending tasks. Add a new task to get started.
               </p>
-              {/* Empty-state discoverability for bulk import. */}
-              <TodoImportEntry variant="inline" />
+              {/* Quiet discoverability for bulk paste — a hint, not a button (Issue #110). */}
+              <p className="text-sm text-muted-foreground">
+                Paste a list to add several at once.
+              </p>
             </CardContent>
           </Card>
         ) : (

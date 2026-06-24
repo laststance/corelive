@@ -28,3 +28,12 @@ export const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
  * higher. Overflow is shown, never silently dropped.
  */
 export const MAX_IMPORT_LINES_PER_BATCH = 1000
+
+/**
+ * Minimum number of parseable task lines a paste must yield before it is treated
+ * as a BULK paste (opens the import confirm dialog) rather than a normal
+ * single-task paste. Two-or-more is the definition of "multi-line" here:
+ * one line stays an instant add (Issue #110 AC#3), so the gesture only escalates
+ * to the dialog once a real list is detected. Read by `isMultiLinePaste`.
+ */
+export const MULTI_LINE_PASTE_MIN_LINES = 2

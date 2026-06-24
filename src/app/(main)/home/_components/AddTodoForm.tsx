@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { isMultiLinePaste } from '@/lib/isMultiLinePaste'
 
 // Form schema definition for the add-todo inputs.
 const todoFormSchema = z.object({
@@ -33,11 +34,18 @@ interface AddTodoFormProps {
   onAddTodo: (text: string, notes?: string) => void
   /** Disables the form (e.g. while category selection is loading). */
   disabled?: boolean
+  /**
+   * Called when a multi-line list is pasted into the (empty or fully-selected)
+   * todo input, with the raw pasted text — the caller opens the bulk import
+   * dialog seeded with it (Issue #110). When omitted, paste behaves natively.
+   */
+  onBulkPaste?: (text: string) => void
 }
 
 export const AddTodoForm = function AddTodoForm({
   onAddTodo,
   disabled,
+  onBulkPaste,
 }: AddTodoFormProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const handleNotesOpenChange = (open: boolean) => {
@@ -58,6 +66,23 @@ export const AddTodoForm = function AddTodoForm({
     setIsNotesOpen(false)
   }
 
+  // Intercept a multi-line paste into the empty/fully-selected todo input and
+  // route it to the bulk import dialog instead of letting a whole list land as
+  // one mangled task (Issue #110 AC#1/#3). A single-line paste — or a paste into
+  // a partial selection / caret mid-text — falls through to the native paste so
+  // ordinary editing is never hijacked.
+  const handleTextPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!onBulkPaste) return
+    const pastedText = event.clipboardData.getData('text/plain')
+    if (!isMultiLinePaste(pastedText)) return
+    const input = event.currentTarget
+    const replacesEntireValue =
+      input.selectionStart === 0 && input.selectionEnd === input.value.length
+    if (!replacesEntireValue) return
+    event.preventDefault()
+    onBulkPaste(pastedText)
+  }
+
   const renderTextField = ({
     field,
   }: {
@@ -65,7 +90,11 @@ export const AddTodoForm = function AddTodoForm({
   }) => (
     <FormItem className="flex-1">
       <FormControl>
-        <Input placeholder="Enter a new todo..." {...field} />
+        <Input
+          placeholder="Type a todo, or paste a list..."
+          onPaste={handleTextPaste}
+          {...field}
+        />
       </FormControl>
       <FormMessage />
     </FormItem>
