@@ -28,6 +28,25 @@ function renderBrainDumpAppearance(overrides: Partial<PreferencesState> = {}) {
   return { store, user }
 }
 
+/**
+ * Find a slider thumb by its track max. The two sliders here (font size, max 24;
+ * clear delay, max 5000) can't be told apart by accessible name — the thumb
+ * (role="slider") carries none, because shadcn forwards aria-label to the slider
+ * ROOT, not the thumb — so the distinct track max is the stable discriminator.
+ *
+ * @param max - The aria-valuemax to match ('24' = font size, '5000' = clear delay).
+ * @returns The matching slider thumb element.
+ * @example
+ * getSliderByMax('5000') // the clear-delay slider
+ */
+function getSliderByMax(max: string): HTMLElement {
+  const slider = screen
+    .getAllByRole('slider')
+    .find((element) => element.getAttribute('aria-valuemax') === max)
+  if (!slider) throw new Error(`No slider with aria-valuemax="${max}"`)
+  return slider
+}
+
 describe('BrainDumpAppearance — editor presentation', () => {
   afterEach(() => {
     vi.clearAllMocks()
@@ -48,9 +67,9 @@ describe('BrainDumpAppearance — editor presentation', () => {
     // Arrange / Act — a non-default saved size.
     renderBrainDumpAppearance({ braindumpFontSize: 20 })
 
-    // Assert — the appearance group owns a single slider (the volume slider stayed
-    // on the web-common Sound section), so it reads the saved px directly.
-    const fontSizeSlider = screen.getByRole('slider')
+    // Assert — pick the font-size slider by its [12,24] track (the clear-delay
+    // slider shares the role but runs [0,5000]) and read the saved px.
+    const fontSizeSlider = getSliderByMax('24')
     expect(fontSizeSlider).toHaveAttribute('aria-valuenow', '20')
     expect(fontSizeSlider).toHaveAttribute('aria-valuemin', '12')
     expect(fontSizeSlider).toHaveAttribute('aria-valuemax', '24')
@@ -130,5 +149,83 @@ describe('BrainDumpAppearance — editor presentation', () => {
 
     // Assert — the preference is now enabled in the slice.
     expect(store.getState().preferences.braindumpClearOnComplete).toBe(true)
+  })
+
+  it('shows the BrainDump clear-delay slider at the saved delay on its [0,5000] track', () => {
+    // Arrange / Act — clearing is on, with a non-default saved linger.
+    renderBrainDumpAppearance({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 1500,
+    })
+
+    // Assert — the clear-delay slider (the [0,5000] track) reflects the saved ms.
+    const clearDelaySlider = getSliderByMax('5000')
+    expect(clearDelaySlider).toHaveAttribute('aria-valuenow', '1500')
+    expect(clearDelaySlider).toHaveAttribute('aria-valuemin', '0')
+    expect(clearDelaySlider).toHaveAttribute('aria-valuemax', '5000')
+  })
+
+  it('reads out the BrainDump clear delay in milliseconds when it is non-zero', () => {
+    // Arrange / Act
+    renderBrainDumpAppearance({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 1500,
+    })
+
+    // Assert — the numeric readout names the exact linger in ms.
+    expect(screen.getByText('1500 ms')).toBeInTheDocument()
+  })
+
+  it('reads out the BrainDump clear delay as Instant at zero', () => {
+    // Arrange / Act — a 0 ms delay means remove the line the instant it completes.
+    renderBrainDumpAppearance({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 0,
+    })
+
+    // Assert — "Instant" shows in BOTH the numeric readout and the left
+    // end-label at zero, so it appears exactly twice.
+    expect(screen.getAllByText('Instant')).toHaveLength(2)
+  })
+
+  it('disables the clear-delay slider and nudges to enable it while clear-on-complete is off', () => {
+    // Arrange / Act — the default: finished lines stay, so the delay is moot.
+    renderBrainDumpAppearance({ braindumpClearOnComplete: false })
+
+    // Assert — the slider is disabled and a helper explains how to enable it.
+    const clearDelaySlider = getSliderByMax('5000')
+    expect(clearDelaySlider).toHaveAttribute('data-disabled')
+    expect(
+      screen.getByText(/Turn on .* to use the delay\./),
+    ).toBeInTheDocument()
+  })
+
+  it('enables the clear-delay slider and drops the nudge once clear-on-complete is on', () => {
+    // Arrange / Act — opting into clearing makes the delay meaningful.
+    renderBrainDumpAppearance({ braindumpClearOnComplete: true })
+
+    // Assert — the slider is interactive (no disabled marker) and the helper is gone.
+    const clearDelaySlider = getSliderByMax('5000')
+    expect(clearDelaySlider).not.toHaveAttribute('data-disabled')
+    expect(
+      screen.queryByText(/Turn on .* to use the delay\./),
+    ).not.toBeInTheDocument()
+  })
+
+  it('raises the saved clear delay by one 100 ms step when the slider is nudged right', () => {
+    // Arrange — clearing on, at a known 500 ms so a single step lands on 600.
+    const { store } = renderBrainDumpAppearance({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 500,
+    })
+    const clearDelaySlider = getSliderByMax('5000')
+
+    // Act — keyboard-nudge the thumb one step to the right (layout-free, unlike a
+    // pointer drag which jsdom can't measure).
+    clearDelaySlider.focus()
+    fireEvent.keyDown(clearDelaySlider, { key: 'ArrowRight' })
+
+    // Assert — the delay rose by one 100 ms step in the slice.
+    expect(store.getState().preferences.braindumpClearDelayMs).toBe(600)
   })
 })

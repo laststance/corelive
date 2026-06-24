@@ -4,6 +4,7 @@ import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyComp
 import {
   hydratePreferences,
   setAllSoundMoments,
+  setBraindumpClearDelayMs,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
@@ -48,6 +49,7 @@ const BROADCASTABLE_ACTION_TYPES = new Set<string>([
   setBraindumpFontSize.type,
   setBraindumpTextColor.type,
   setBraindumpClearOnComplete.type,
+  setBraindumpClearDelayMs.type,
 ])
 
 /**

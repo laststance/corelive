@@ -533,7 +533,7 @@ describe('BrainDumpEditor complete command', () => {
   })
 })
 
-describe('BrainDumpEditor clear-on-complete', () => {
+describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
@@ -541,7 +541,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
     selectedCategoryRef.current = 1
   })
 
-  it('removes a finished line from the note immediately when clear-on-complete is on', async () => {
+  it('removes a finished line the instant it completes when the clear delay is zero', async () => {
     // Arrange — the editor with clear-on-complete opted in.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -549,7 +549,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Act — complete the only line.
@@ -574,7 +574,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
@@ -609,7 +609,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Act — complete a line whose background create then rejects.
@@ -636,7 +636,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Act — complete (line clears), let the undo window elapse with no Undo
@@ -677,7 +677,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
@@ -720,7 +720,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Act — complete (line clears), Undo (line restored, create still pending),
@@ -753,7 +753,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Act — complete the indented line, then undo it.
@@ -787,7 +787,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     const value = 'a\n- [ ] buy milk\nc'
     fireEvent.change(noteField, { target: { value } })
@@ -856,6 +856,7 @@ describe('BrainDumpEditor clear-on-complete', () => {
         preferences: {
           ...preferencesInitialState,
           braindumpClearOnComplete: true,
+          braindumpClearDelayMs: 0,
         },
       },
     })
@@ -919,5 +920,236 @@ describe('BrainDumpEditor clear-on-complete', () => {
     )
     // …and category 2's visible note was never touched.
     expect(noteField).toHaveValue('')
+  })
+})
+
+describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
+  // A short, REAL linger keeps these specs deterministic: a setTimeout always
+  // fires AFTER the synchronous fireEvent and the create promise's microtask, so
+  // "still on screen" / "timer cancelled" assertions are race-free. Fake timers
+  // fight RTL's async findBy/waitFor and the microtask-resolving create mock.
+  const LINGER_MS = 100
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    completedMutateAsync.mockResolvedValue({ id: 1 })
+    // Reset the active floating category — the category-swap spec mutates it.
+    selectedCategoryRef.current = 1
+  })
+
+  it('keeps the finished line on screen for the linger, then tucks it away once the delay elapses', async () => {
+    // Arrange — clear-on-complete on with a 100 ms linger (not instant).
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: LINGER_MS,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete the first of two lines.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+
+    // Assert — the line LINGERS (still on screen the moment after completing,
+    // while the Completed create has already fired in the background)…
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'buy milk',
+    })
+    // …and is removed only once the linger elapses.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me')
+    })
+  })
+
+  it('clears every line completed within one linger, not just the first', async () => {
+    // Arrange — three lines; completing two top-to-bottom within ONE linger leaves
+    // two removal timers pending at once. When the first timer removes line 0 it
+    // shifts every later line up, so a still-pending sibling's tracked index must
+    // be decremented — otherwise its content guard misses and that line is silently
+    // never cleared. This is the regression that guard (finding G) exists for.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    // A roomy 500 ms linger so the second completion lands well before the first
+    // timer fires (both pending together); the ~100 ms human-paced gap between the
+    // two completions lets the editor re-sync its text ref between the two firings.
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 500,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete line 0 ('buy milk'), then ~100 ms later complete line 1
+    // ('dishes'); the note is unchanged meanwhile, so all three lines stay present
+    // and both completions are tracked at their original indices (0 and 1).
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\ndishes\nlaundry')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const dishesCaret = 'buy milk\ndishes'.length // offset 15 → resolves to line 1
+    noteField.selectionStart = dishesCaret
+    noteField.selectionEnd = dishesCaret
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Assert — BOTH finished lines clear; only the untouched 'laundry' survives.
+    await waitFor(
+      () => {
+        expect(noteField).toHaveValue('laundry')
+      },
+      { timeout: 2000 },
+    )
+  })
+
+  it('cancels the pending removal when Undo is tapped during the linger, so the line never leaves', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: LINGER_MS,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete (the line is now lingering), then tap Undo before the linger
+    // elapses. The optimistic toast is shown synchronously, so its Undo action is
+    // available the moment after completing.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — Undo cancelled the pending removal, so the line never left — and it
+    // stays put even past the point the linger would have elapsed (timer cancelled,
+    // not merely deferred).
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+    await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+  })
+
+  it('leaves the line in place when the background create fails during the linger', async () => {
+    // Arrange — the create rejects. Its rejection runs as a microtask, BEFORE the
+    // 100 ms removal timer could fire, so it cancels the pending timer: the line was
+    // never cleared, so there is nothing to restore — it simply stays.
+    completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: LINGER_MS,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete a line whose background create then rejects during the linger.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+
+    // Assert — the failure surfaces an error toast, the line stays on screen
+    // verbatim, and it remains put once the linger window has elapsed (no late
+    // blind removal, no duplicate re-insert).
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled()
+    })
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+    await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+  })
+
+  it('does not remove the tracked line if the user edited it during the linger', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: LINGER_MS,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act — complete the first line, then (still within the linger, before the
+    // timer fires) edit that very line so it no longer matches what was completed.
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+    fireEvent.change(noteField, { target: { value: 'buy oat milk\nkeep me' } })
+
+    // Assert — the content guard sees the tracked line changed and no-ops, so the
+    // edited line is preserved (the timer never blind-removes the wrong line).
+    await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
+    expect(noteField).toHaveValue('buy oat milk\nkeep me')
+  })
+
+  it('cancels a pending removal on a category switch, never touching the switched-to category', async () => {
+    // Arrange — clear-on-complete on with a linger, TWO categories. Completing in
+    // category 1 then switching to 2 before the linger elapses must cancel the
+    // pending removal, so the timer can never fire against category 2's freshly
+    // loaded note (which would corrupt it — the cross-category data-loss guard).
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    // Category 1 holds the seeded note; every other category is empty.
+    api.note.get = vi.fn(async (id: number) =>
+      id === 1 ? 'buy milk\nkeep me' : '',
+    )
+    const noteSet = vi.mocked(api.note.set)
+
+    const store = configureStore({
+      reducer: { preferences: preferencesReducer },
+      preloadedState: {
+        preferences: {
+          ...preferencesInitialState,
+          braindumpClearOnComplete: true,
+          braindumpClearDelayMs: LINGER_MS,
+        },
+      },
+    })
+    const [generalCategory] = categories
+    if (!generalCategory)
+      throw new Error('expected the seeded General category')
+    const twoCategories: CategoryWithCount[] = [
+      generalCategory,
+      { ...generalCategory, id: 2, name: 'Work', isDefault: false },
+    ]
+    const tree = (): ReactElement => (
+      <Provider store={store}>
+        <BrainDumpEditor categories={twoCategories} />
+      </Provider>
+    )
+    const { rerender } = render(tree())
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    const value = 'buy milk\nkeep me'
+    fireEvent.change(noteField, { target: { value } })
+    noteField.selectionStart = 'buy milk'.length
+    noteField.selectionEnd = 'buy milk'.length
+
+    // Complete line 0 in category 1 → the line is now lingering, not yet removed.
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    expect(noteField).toHaveValue('buy milk\nkeep me')
+
+    // Act — switch to category 2 before the linger elapses; its empty note loads.
+    selectedCategoryRef.current = 2
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('') // category 2's empty note has loaded
+    })
+    noteSet.mockClear() // drop the category-swap flush write; assert only the rest
+
+    // Assert — wait past the linger; the cancelled timer never fires, so category
+    // 2's visible note stays empty and is never written with the category-1 line.
+    await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
+    expect(noteField).toHaveValue('')
+    expect(noteSet).not.toHaveBeenCalledWith(
+      2,
+      expect.stringContaining('buy milk'),
+    )
   })
 })

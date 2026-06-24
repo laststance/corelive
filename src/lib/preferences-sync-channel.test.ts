@@ -10,6 +10,7 @@ import preferencesReducer, {
   hydratePreferences,
   initialState,
   setAllSoundMoments,
+  setBraindumpClearDelayMs,
   setBraindumpClearOnComplete,
   setBraindumpFontFamily,
   setBraindumpFontSize,
@@ -193,6 +194,19 @@ describe('preferences cross-window sync', () => {
     // Assert — window B reflects the toggle without a reload (the action is in
     // the broadcast allowlist; a NEW set* action would stay silent until added).
     expect(windowB.getState().preferences.braindumpClearOnComplete).toBe(true)
+  })
+
+  it('propagates a BrainDump clear-delay change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — move the linger off the default 500 ms in window A.
+    windowA.dispatch(setBraindumpClearDelayMs(1500))
+
+    // Assert — window B reflects the new delay without a reload (the action is in
+    // the broadcast allowlist; a NEW set* action would stay silent until added).
+    expect(windowB.getState().preferences.braindumpClearDelayMs).toBe(1500)
   })
 
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {

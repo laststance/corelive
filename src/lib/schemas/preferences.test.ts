@@ -20,6 +20,7 @@ describe('PreferencesStateSchema', () => {
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
+      braindumpClearDelayMs: 500,
     })
   })
 
@@ -41,6 +42,7 @@ describe('PreferencesStateSchema', () => {
       braindumpFontSize: 14,
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
+      braindumpClearDelayMs: 500,
     })
   })
 
@@ -54,6 +56,38 @@ describe('PreferencesStateSchema', () => {
     // Assert
     expect(optedIn.braindumpClearOnComplete).toBe(true)
     expect(omitted.braindumpClearOnComplete).toBe(false)
+  })
+
+  it('defaults the BrainDump clear delay to a gentle 500 ms when absent', () => {
+    // Act
+    const result = PreferencesStateSchema.parse({})
+
+    // Assert — a brief linger, not the abrupt 0 ms instant clear.
+    expect(result.braindumpClearDelayMs).toBe(500)
+  })
+
+  it('clamps an out-of-range BrainDump clear delay into the bounds [0,5000]', () => {
+    // Act — the ceiling is the 5 s undo window so a line never outlasts its Undo.
+    const tooLong = PreferencesStateSchema.parse({
+      braindumpClearDelayMs: 99000,
+    })
+    const negative = PreferencesStateSchema.parse({
+      braindumpClearDelayMs: -200,
+    })
+
+    // Assert
+    expect(tooLong.braindumpClearDelayMs).toBe(5000)
+    expect(negative.braindumpClearDelayMs).toBe(0)
+  })
+
+  it('self-heals a non-finite BrainDump clear delay to the default (no poisoned hydrate)', () => {
+    // Act — a NaN that slipped into a persisted/synced blob must not survive.
+    const result = PreferencesStateSchema.parse({
+      braindumpClearDelayMs: Number.NaN,
+    })
+
+    // Assert
+    expect(result.braindumpClearDelayMs).toBe(500)
   })
 
   it('clamps an out-of-range master volume number into [0,1]', () => {
