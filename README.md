@@ -14,12 +14,7 @@ CoreLive is a personal task tracker and BrainDump archive whose centerpiece is a
 
 ## Documentation
 
-Developer documentation lives in **[`docs/dev/`](docs/dev/README.md)**, organized by
-the [Diátaxis](https://diataxis.fr/) framework — tutorial, how-to, reference, and
-explanation. New to the codebase? Start with the
-**[Getting Started tutorial](docs/dev/tutorial-getting-started.md)**, then read the
-**[architecture overview](docs/dev/explanation-architecture.md)**. The design system
-(typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**.
+The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**.
 
 ## Platform Support
 

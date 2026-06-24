@@ -11,7 +11,7 @@ import { resetDatabase } from './_helpers/db'
  * last untested layer for the feature, which otherwise leans on parser unit
  * tests + server integration tests + Storybook.
  *
- * Key behaviours under test (matching `docs/plans/2026-05-29-paste-import-plan.md`):
+ * Key behaviours under test:
  * - Todo zone: pasted lines become pending todos; a 60s inline undo banner
  *   appears; Undo removes them again.
  * - Completed zone: pasted "wins" land on the heatmap (verified via the
