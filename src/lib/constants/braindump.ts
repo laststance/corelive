@@ -203,9 +203,12 @@ export const BRAINDUMP_CLEAR_DELAY_MAX_MS = BRAINDUMP_TOAST_UNDO_MS
 export const BRAINDUMP_CLEAR_DELAY_STEP_MS = 100
 
 /**
- * Default clear-on-complete linger — 500 ms. A brief, gentle beat that lets the
- * eye register the completion before the line leaves (DESIGN.md self-affirmation;
- * 0 ms felt abrupt). Opt into "Instant" (0) via the Settings slider.
+ * Default clear-on-complete linger — 500 ms. A brief, gentle beat so a finished
+ * line leaves softly instead of snapping out the instant it completes; the
+ * completion itself is acknowledged by the Undo toast, which fires immediately
+ * (the line stays verbatim during the dwell — this is a soft exit, not a visible
+ * state change). DESIGN.md self-affirmation; 0 ms felt abrupt. Opt into "Instant"
+ * (0) via the Settings slider.
  */
 export const DEFAULT_BRAINDUMP_CLEAR_DELAY_MS = 500
 
