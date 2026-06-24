@@ -1212,6 +1212,30 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     )
   })
 
+  it('floors the Undo-window copy at a half-step duration so it never over-promises the Undo time', async () => {
+    // Arrange — a half-step 2500 ms duration (reachable via the slider's 500 ms
+    // step) must read "2 s" (floor), never "3 s" (round): the copy must never
+    // claim more Undo time than actually remains (FINDING-001 regret-safe floor).
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({ braindumpToastDurationMs: 2500 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, 'buy milk')
+
+    // Assert — 2500 ms floors to "2 s", never the rounded-up "3 s".
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalled()
+    })
+    const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+    expect(toastOptions?.description).toBe(
+      'Undo stays here for 2 s if you need it.',
+    )
+  })
+
   it('keeps the close button and configured duration on the clear-on-complete toast', async () => {
     // Arrange — clear-on-complete ON with instant clear and a 6 s duration: the
     // SAME helper must wire the ✕ + duration on this second completion path too.
