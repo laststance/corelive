@@ -81,6 +81,10 @@ _trials/
 .superpowers/
 # Project CLAUDE.md is kept local-only (holds prod test-account creds) — never commit
 /CLAUDE.md
+# AGENTS.md is a local symlink → CLAUDE.md (gitignored). A tracked symlink to a
+# gitignored target dangles on a fresh CI checkout, and electron-builder's signed
+# `--mac` file walk stat()s it → ENOENT, breaking the release build. Keep local-only.
+/AGENTS.md
 
 # Cursor
 .cursor
