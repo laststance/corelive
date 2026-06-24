@@ -35,6 +35,9 @@ export interface ShortcutRebinder {
  * @returns
  * - `true` when `accelerator` bound exactly as requested (or was an intentional `''` disable)
  * - `false` when it failed to bind or was silently substituted (then `previous` is restored)
+ * @throws When even restoring `previous` fails — the helper can't honestly report
+ *   a clean rollback, so it surfaces the inconsistency for the caller to log
+ *   (rather than silently returning `false` with the live registration out of sync).
  * @example
  * applyShortcutRebind(sm, 'toggleFloatingNavigator', 'CommandOrControl+3', 'CommandOrControl+3') // => true
  * applyShortcutRebind(sm, 'toggleBrainDump', 'Alt+Space', 'Alt+Shift+Space') // => false when Alt+Space is taken
@@ -49,7 +52,7 @@ export function applyShortcutRebind(
   if (!didRegister) {
     // Nothing (not even a fallback) bound — restore the prior accelerator so
     // config and live registration stay in sync.
-    rebinder.updateShortcuts({ [id]: previous })
+    restorePreviousOrThrow(rebinder, id, previous)
     return false
   }
 
@@ -58,10 +61,30 @@ export function applyShortcutRebind(
   if (accelerator !== '') {
     const effectiveAccelerator = rebinder.getRegisteredShortcuts()[id]
     if (effectiveAccelerator !== accelerator) {
-      rebinder.updateShortcuts({ [id]: previous })
+      restorePreviousOrThrow(rebinder, id, previous)
       return false
     }
   }
 
   return true
+}
+
+/**
+ * Re-apply `previous` on the rollback path and verify it actually took, so a
+ * conflict can't silently leave persisted config and the live registration out
+ * of sync. `updateShortcuts({ id: '' })` (re-disable) returns `true`, so the
+ * empty-`previous` case never spuriously throws.
+ * @param rebinder - The ShortcutManager (or test stand-in) to restore through.
+ * @param id - The toggle's shortcut id being rolled back.
+ * @param previous - The accelerator to restore (`''` re-disables the shortcut).
+ * @throws When `updateShortcuts` reports the restore did not bind.
+ */
+function restorePreviousOrThrow(
+  rebinder: ShortcutRebinder,
+  id: string,
+  previous: string,
+): void {
+  if (!rebinder.updateShortcuts({ [id]: previous })) {
+    throw new Error(`Failed to restore previous shortcut for ${id}`)
+  }
 }

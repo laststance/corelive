@@ -82,6 +82,15 @@ export function useShortcutCapture({
     onError(null)
     try {
       const ok = await persist(accelerator)
+      if (ok === undefined) {
+        // No desktop bridge — nothing was persisted, so don't commit the
+        // optimistic value as the new last-good; just revert it. Not a
+        // conflict, so no error copy (consumers gate the box on bridge
+        // availability, making this largely unreachable, but the documented
+        // `undefined` branch must not masquerade as a successful save).
+        setShortcut(lastGoodShortcutRef.current)
+        return
+      }
       if (ok === false) {
         // Already registered elsewhere (or substituted) — revert to last accepted.
         onError(KEYBINDING_CONFLICT_MESSAGE)

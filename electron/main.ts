@@ -1473,7 +1473,12 @@ function setupIPCHandlers(): void {
     // Try to register first; only persist on success so the renderer's
     // returned boolean accurately reflects whether the new accelerator is
     // live.
-    const previous = configManager.get<string>('braindump.shortcut', '') ?? ''
+    // Source the rollback target from the CANONICAL store ShortcutManager
+    // registers from, not the `braindump.shortcut` mirror: the generic keybind
+    // UI can rebind `shortcuts.toggleBrainDump` without touching the mirror, so a
+    // conflict here must restore the real live binding, not a stale mirror value.
+    const previous =
+      configManager.get<string>('shortcuts.toggleBrainDump', '') ?? ''
     if (shortcutManager) {
       try {
         // Reject a hard failure OR a silently-substituted fallback as a conflict

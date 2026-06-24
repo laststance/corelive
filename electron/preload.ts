@@ -447,8 +447,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       try {
         return await typedInvoke('floating-config-get-shortcut')
       } catch (error) {
+        // Surface a load failure instead of returning '' — '' is the real
+        // "intentionally unbound" value, so masking an IPC error as '' would
+        // seed the wrong (disabled) shortcut into the Settings rollback state.
         log.error('Failed to get floating navigator shortcut:', error)
-        return ''
+        throw error
       }
     },
     /** Persist + register FloatingNavigator's toggle accelerator; false on conflict. */

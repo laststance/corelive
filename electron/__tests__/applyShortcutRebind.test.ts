@@ -52,8 +52,12 @@ describe('applyShortcutRebind', () => {
   })
 
   it('restores the previous binding when nothing could register', () => {
-    // Arrange — updateShortcuts reports a hard failure (no alternative bound).
-    const rebinder = createRebinder({ updateResult: false, effective: {} })
+    // Arrange — the new accelerator fails to bind, but restoring the previous
+    // (just-live) accelerator succeeds, as it does in a single-threaded main.
+    const rebinder = {
+      updateShortcuts: vi.fn().mockReturnValueOnce(false).mockReturnValue(true),
+      getRegisteredShortcuts: vi.fn().mockReturnValue({}),
+    }
 
     // Act
     const didApply = applyShortcutRebind(
@@ -68,6 +72,25 @@ describe('applyShortcutRebind', () => {
     expect(rebinder.updateShortcuts).toHaveBeenNthCalledWith(2, {
       toggleBrainDump: 'Alt+Shift+Space',
     })
+  })
+
+  it('throws when even restoring the previous binding fails', () => {
+    // Arrange — both the new accelerator AND the restore fail to bind, so the
+    // helper cannot honestly report a clean rollback and must surface it.
+    const rebinder = {
+      updateShortcuts: vi.fn().mockReturnValue(false),
+      getRegisteredShortcuts: vi.fn().mockReturnValue({}),
+    }
+
+    // Act + Assert — the restore failure is surfaced for the caller to log.
+    expect(() =>
+      applyShortcutRebind(
+        rebinder,
+        'toggleBrainDump',
+        'Alt+Space',
+        'Alt+Shift+Space',
+      ),
+    ).toThrow('Failed to restore previous shortcut for toggleBrainDump')
   })
 
   it('rejects a silently substituted fallback and restores the previous binding', () => {

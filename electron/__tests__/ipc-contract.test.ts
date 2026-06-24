@@ -152,6 +152,9 @@ describe('IPC contract', () => {
       // Empty string is the "disable the global toggle" sentinel.
       expect(() => setShortcut.parse([''])).not.toThrow()
       expect(() => setShortcut.parse(['CommandOrControl+3'])).not.toThrow()
+      // An over-length accelerator (> SHORTCUT_ACCELERATOR_MAX_LENGTH) is
+      // rejected, so a malicious renderer can't smuggle an unbounded string in.
+      expect(() => setShortcut.parse(['x'.repeat(65)])).toThrow(ZodError)
       // A malicious renderer cannot smuggle a non-string past the trust boundary.
       expect(() => setShortcut.parse([null])).toThrow(ZodError)
       expect(() => setShortcut.parse([])).toThrow(ZodError)

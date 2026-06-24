@@ -45,6 +45,28 @@ describe('useShortcutCapture', () => {
     expect(onError).toHaveBeenLastCalledWith(KEYBINDING_CONFLICT_MESSAGE)
   })
 
+  it('reverts the optimistic value without an error when no desktop bridge is present', async () => {
+    // Arrange — persist resolves `undefined`, the documented "no bridge" signal.
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const onError = vi.fn()
+    const { result } = renderHook(() =>
+      useShortcutCapture({ persist, onError }),
+    )
+    act(() => {
+      result.current.setLoadedShortcut('Alt+Space')
+    })
+
+    // Act — capture a chord while the bridge is absent.
+    await act(async () => {
+      await result.current.capture('CommandOrControl+B')
+    })
+
+    // Assert — reverted to the loaded value with no error (nothing was saved, so
+    // it must not commit the un-persisted chord as the new last-good).
+    expect(result.current.shortcut).toBe('Alt+Space')
+    expect(onError).not.toHaveBeenCalledWith(KEYBINDING_CONFLICT_MESSAGE)
+  })
+
   it('rolls back and reports a generic failure when the persist call throws', async () => {
     // Arrange
     const persist = vi.fn().mockRejectedValue(new Error('IPC down'))
