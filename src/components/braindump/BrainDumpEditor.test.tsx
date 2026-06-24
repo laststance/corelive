@@ -1191,7 +1191,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
   })
 
   it('phrases the Undo-window copy for the configured display duration', async () => {
-    // Arrange — an 8 s duration must read "within 8 s", not a hardcoded "5 s".
+    // Arrange — an 8 s duration must read "8 s", not a hardcoded "5 s".
     installBrainDumpAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
@@ -1207,7 +1207,9 @@ describe('BrainDumpEditor completion toast — close button + display duration (
       expect(toast.success).toHaveBeenCalled()
     })
     const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
-    expect(toastOptions?.description).toBe('Tap Undo within 8 s to revert.')
+    expect(toastOptions?.description).toBe(
+      'Undo stays here for 8 s if you need it.',
+    )
   })
 
   it('keeps the close button and configured duration on the clear-on-complete toast', async () => {

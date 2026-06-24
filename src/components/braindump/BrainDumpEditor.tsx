@@ -216,9 +216,12 @@ function showCompletionToast({
   onDismiss?: () => void
 }): string | number {
   const toastId = toast.success(`Completed: ${title}`, {
-    // Dynamic Undo-window copy — once the duration is user-configurable a fixed
-    // "5 s" would be wrong at every non-default setting (#109).
-    description: `Tap Undo within ${Math.round(durationMs / 1000)} s to revert.`,
+    // Dynamic Undo-window copy in the quiet-companion voice — once the duration
+    // is user-configurable a fixed "5 s" would be wrong at every non-default
+    // setting (#109). floor (not round) keeps the promise regret-safe: at a
+    // half-step like 2500ms it reads "2 s" (under), never "3 s" (over), so the
+    // Undo never expires earlier than the copy says.
+    description: `Undo stays here for ${Math.floor(durationMs / 1000)} s if you need it.`,
     duration: durationMs,
     closeButton: true,
     action: {
