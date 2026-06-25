@@ -45,11 +45,14 @@ const PENDING_TODO: Todo = {
  * @param todo - The row to render.
  * @param retainCompletedInList - 居残りモード on/off.
  * @param onDelete - Spy for the archive/delete callback (defaults to a noop spy).
+ * @param isTogglePending - True while this row's completion toggle is still
+ *   saving; gates the Tuck button so a not-yet-durable win can't be hard-deleted.
  */
 function renderTodoItem(
   todo: Todo,
   retainCompletedInList: boolean,
   onDelete = vi.fn(),
+  isTogglePending = false,
 ) {
   const store = configureStore({
     reducer: { preferences: preferencesReducer },
@@ -59,7 +62,12 @@ function renderTodoItem(
   })
   render(
     <Provider store={store}>
-      <TodoItem todo={todo} onToggleComplete={vi.fn()} onDelete={onDelete} />
+      <TodoItem
+        todo={todo}
+        onToggleComplete={vi.fn()}
+        onDelete={onDelete}
+        isTogglePending={isTogglePending}
+      />
     </Provider>,
   )
   return { onDelete }
@@ -149,5 +157,21 @@ describe('TodoItem — Tuck into Completed (#113)', () => {
     // Assert — the same-row guard disables it (covers the archive helper's
     // documented non-idempotent race between the click and the optimistic unmount).
     expect(moveButton).toBeDisabled()
+  })
+
+  it('keeps the Tuck button inert while the completion is still saving (no hard-delete of an uncommitted win)', () => {
+    // Arrange / Act — a finished row whose completion toggle has NOT yet committed
+    // (isTogglePending). The server still sees it pending, so the reused
+    // delete→archive path would HARD-DELETE the win rather than archive it.
+    const { onDelete } = renderTodoItem(FINISHED_TODO, true, vi.fn(), true)
+    const moveButton = screen.getByRole('button', {
+      name: 'Tuck "Buy milk" into Completed',
+    })
+
+    // Assert — the button is visible but disabled, and a tap fires nothing: the
+    // data-loss gate holds until the toggle is durable.
+    expect(moveButton).toBeDisabled()
+    fireEvent.click(moveButton)
+    expect(onDelete).not.toHaveBeenCalled()
   })
 })

@@ -642,7 +642,9 @@ export const TodoList = function TodoList() {
                 drop target so a single strikethrough row can be dragged out of
                 the list into Completed (the per-row Archive button is the
                 keyboard path). Lives inside the provider to share its context. */}
-            {isRetaining && completedInListCount > 0 && <CompletedDropZone />}
+            {isRetaining && completedInListCount > 0 && (
+              <CompletedDropZone isTogglePending={isAnyTogglePending} />
+            )}
           </DragDropProvider>
         )}
       </div>

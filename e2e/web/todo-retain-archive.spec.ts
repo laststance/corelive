@@ -128,7 +128,10 @@ async function mouseDrag(
 
 test.describe('Move finished tasks to Completed individually (#113)', () => {
   test.describe.configure({ mode: 'serial' })
-  test.beforeAll(resetDatabase)
+  // Reset per-test (not once for the serial suite) so a mid-suite failure can't
+  // leak persisted rows into the next case. No-op on CI (E2E_SKIP_PER_SPEC_RESET
+  // + global-setup own the reset there); it earns its keep on local sequential runs.
+  test.beforeEach(resetDatabase)
 
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
@@ -324,6 +327,13 @@ test.describe('Move finished tasks to Completed individually (#113)', () => {
     // unfixed code it is enabled here, so a tap hard-deletes the completion.
     await expect(tuckButton).toBeVisible()
     await expect(tuckButton).toBeDisabled()
+    // The pointer path mirrors the same guard: the Completed drop zone renders
+    // (a finished row now exists) but is marked inert, so a drag-drop can't
+    // silently no-op during the in-flight window.
+    await expect(page.getByTestId('completed-dropzone')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(deleteFiredWhileInFlight).toBe(false)
 
     // Act 2 — let the toggle commit; the button re-arms once the win is saved.
@@ -336,6 +346,11 @@ test.describe('Move finished tasks to Completed individually (#113)', () => {
     releaseToggle()
     expect((await togglePromise).status()).toBe(200)
     await expect(tuckButton).toBeEnabled()
+    // ...and the drop zone re-arms (sheds its inert marker) once the win is durable.
+    await expect(page.getByTestId('completed-dropzone')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
 
     // Act 3 — now tucking archives it (heatmap-safe) instead of hard-deleting.
     const deletePromise = page.waitForResponse(
