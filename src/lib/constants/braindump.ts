@@ -223,3 +223,39 @@ export const DEFAULT_BRAINDUMP_CLEAR_DELAY_MS = 500
  * const instant: BrainDumpClearDelayMs = 0
  */
 export type BrainDumpClearDelayMs = number
+
+/* -------------------------------------------------------------------------- */
+/* BrainDump completion-toast display duration (#109)                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Default completion-toast display duration — aliases {@link BRAINDUMP_TOAST_UNDO_MS}
+ * (5000 ms) so a fresh install keeps today's Undo-window behaviour exactly. #109
+ * lifts this once-fixed window into a user pref; the #108 clear-delay ceiling now
+ * tracks it at the consumption site via `min(clearDelay, toastDuration)` rather
+ * than the old fixed constant, so a line can still never outlast its own Undo.
+ */
+export const DEFAULT_BRAINDUMP_TOAST_DURATION_MS = BRAINDUMP_TOAST_UNDO_MS
+
+/**
+ * Shortest selectable toast duration — 2000 ms. A 1 s toast with an Undo CTA reads
+ * anxious, not calm; 2 s is the regret-safe floor to read the line and still reach
+ * Undo (DESIGN.md "quiet companion, not coach").
+ */
+export const BRAINDUMP_TOAST_DURATION_MIN_MS = 2000
+
+/** Longest selectable toast duration — 10 s, the outer edge of "let it linger". */
+export const BRAINDUMP_TOAST_DURATION_MAX_MS = 10000
+
+/** Toast-duration slider granularity — 500 ms steps read cleanly without jitter. */
+export const BRAINDUMP_TOAST_DURATION_STEP_MS = 500
+
+/**
+ * BrainDump completion-toast display duration in ms, within
+ * [{@link BRAINDUMP_TOAST_DURATION_MIN_MS}, {@link BRAINDUMP_TOAST_DURATION_MAX_MS}].
+ * Type alias documents intent without changing the runtime shape.
+ *
+ * @example
+ * const duration: BrainDumpToastDurationMs = 5000
+ */
+export type BrainDumpToastDurationMs = number

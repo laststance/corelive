@@ -15,6 +15,7 @@ import preferencesReducer, {
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
+  setBraindumpToastDurationMs,
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
@@ -207,6 +208,20 @@ describe('preferences cross-window sync', () => {
     // Assert — window B reflects the new delay without a reload (the action is in
     // the broadcast allowlist; a NEW set* action would stay silent until added).
     expect(windowB.getState().preferences.braindumpClearDelayMs).toBe(1500)
+  })
+
+  it('propagates a BrainDump toast-duration change to another window', () => {
+    // Arrange
+    const windowA = makeWindowStore()
+    const windowB = makeWindowStore()
+
+    // Act — move the completion-toast display time off the default 5000 ms in
+    // window A.
+    windowA.dispatch(setBraindumpToastDurationMs(8000))
+
+    // Assert — window B reflects the new duration without a reload (the action is
+    // in the broadcast allowlist; a NEW set* action would stay silent until added).
+    expect(windowB.getState().preferences.braindumpToastDurationMs).toBe(8000)
   })
 
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {

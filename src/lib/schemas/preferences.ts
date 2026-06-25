@@ -18,10 +18,13 @@ import {
   BRAINDUMP_FONT_SIZE_MAX_PX,
   BRAINDUMP_FONT_SIZE_MIN_PX,
   BRAINDUMP_TEXT_COLOR_PATTERN,
+  BRAINDUMP_TOAST_DURATION_MAX_MS,
+  BRAINDUMP_TOAST_DURATION_MIN_MS,
   DEFAULT_BRAINDUMP_CLEAR_DELAY_MS,
   DEFAULT_BRAINDUMP_FONT_FAMILY,
   DEFAULT_BRAINDUMP_FONT_SIZE_PX,
   DEFAULT_BRAINDUMP_TEXT_COLOR,
+  DEFAULT_BRAINDUMP_TOAST_DURATION_MS,
 } from '@/lib/constants/braindump'
 import {
   DEFAULT_SOUND_VOLUME,
@@ -115,6 +118,20 @@ export const PreferencesStateSchema = z.object({
       ),
     )
     .catch(DEFAULT_BRAINDUMP_CLEAR_DELAY_MS),
+  /** BrainDump completion-toast display duration (ms) before it auto-dismisses.
+   * A finite number is clamped to the slider range; a non-finite or non-number
+   * (corrupt blob, bad sync) self-heals to the default via `.catch` — mirroring
+   * `braindumpClearDelayMs`. The toast also gains a close (✕) button (#109). */
+  braindumpToastDurationMs: z
+    .number()
+    .finite()
+    .transform((value) =>
+      Math.min(
+        BRAINDUMP_TOAST_DURATION_MAX_MS,
+        Math.max(BRAINDUMP_TOAST_DURATION_MIN_MS, value),
+      ),
+    )
+    .catch(DEFAULT_BRAINDUMP_TOAST_DURATION_MS),
 })
 
 /** The validated core user-preferences shape (inferred from the schema SSoT). */

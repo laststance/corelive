@@ -21,6 +21,7 @@ describe('PreferencesStateSchema', () => {
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
+      braindumpToastDurationMs: 5000,
     })
   })
 
@@ -43,6 +44,7 @@ describe('PreferencesStateSchema', () => {
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
+      braindumpToastDurationMs: 5000,
     })
   })
 
@@ -88,6 +90,38 @@ describe('PreferencesStateSchema', () => {
 
     // Assert
     expect(result.braindumpClearDelayMs).toBe(500)
+  })
+
+  it('defaults the BrainDump completion-toast duration to 5000 ms when absent', () => {
+    // Act
+    const result = PreferencesStateSchema.parse({})
+
+    // Assert — the same 5 s window the toast used before it was configurable.
+    expect(result.braindumpToastDurationMs).toBe(5000)
+  })
+
+  it('clamps an out-of-range BrainDump toast duration into the bounds [2000,10000]', () => {
+    // Act — above the 10 s ceiling clamps down, below the 2 s floor clamps up.
+    const tooLong = PreferencesStateSchema.parse({
+      braindumpToastDurationMs: 99000,
+    })
+    const tooShort = PreferencesStateSchema.parse({
+      braindumpToastDurationMs: 500,
+    })
+
+    // Assert
+    expect(tooLong.braindumpToastDurationMs).toBe(10000)
+    expect(tooShort.braindumpToastDurationMs).toBe(2000)
+  })
+
+  it('self-heals a non-finite BrainDump toast duration to the default (no poisoned hydrate)', () => {
+    // Act — a NaN that slipped into a persisted/synced blob must not survive.
+    const result = PreferencesStateSchema.parse({
+      braindumpToastDurationMs: Number.NaN,
+    })
+
+    // Assert
+    expect(result.braindumpToastDurationMs).toBe(5000)
   })
 
   it('clamps an out-of-range master volume number into [0,1]', () => {

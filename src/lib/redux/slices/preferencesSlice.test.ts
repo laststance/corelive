@@ -13,6 +13,7 @@ import reducer, {
   selectBraindumpFontFamily,
   selectBraindumpFontSize,
   selectBraindumpTextColor,
+  selectBraindumpToastDurationMs,
   selectCompletionSound,
   selectPreferences,
   selectRetainCompletedInList,
@@ -24,6 +25,7 @@ import reducer, {
   setBraindumpFontFamily,
   setBraindumpFontSize,
   setBraindumpTextColor,
+  setBraindumpToastDurationMs,
   setCompletionSound,
   setRetainCompletedInList,
   setSoundMoment,
@@ -55,6 +57,7 @@ describe('preferencesSlice', () => {
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
+      braindumpToastDurationMs: 5000,
     })
   })
 
@@ -178,6 +181,7 @@ describe('preferencesSlice', () => {
       braindumpTextColor: 'var(--primary)',
       braindumpClearOnComplete: true,
       braindumpClearDelayMs: 1200,
+      braindumpToastDurationMs: 8000,
     }
 
     // Act
@@ -200,6 +204,7 @@ describe('preferencesSlice', () => {
       braindumpTextColor: '#abcdef',
       braindumpClearOnComplete: true,
       braindumpClearDelayMs: 2000,
+      braindumpToastDurationMs: 7000,
     }
 
     // Act
@@ -217,6 +222,7 @@ describe('preferencesSlice', () => {
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
+      braindumpToastDurationMs: 5000,
     })
   })
 
@@ -282,6 +288,7 @@ describe('preferencesSlice', () => {
       braindumpTextColor: 'var(--foreground)',
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
+      braindumpToastDurationMs: 5000,
     })
   })
 
@@ -404,5 +411,42 @@ describe('preferencesSlice', () => {
 
     // Act / Assert — the selector coalesces to the 500 ms default, never undefined.
     expect(selectBraindumpClearDelayMs(legacyState)).toBe(500)
+  })
+
+  it('sets the BrainDump toast duration when setBraindumpToastDurationMs is dispatched', () => {
+    // Act
+    const next = reducer(initialState, setBraindumpToastDurationMs(6000))
+
+    // Assert
+    expect(next.braindumpToastDurationMs).toBe(6000)
+  })
+
+  it('clamps an out-of-range BrainDump toast duration into the bounds [2000,10000]', () => {
+    // Act — above the 10 s ceiling clamps down, below the 2 s floor clamps up,
+    // in-range passes through.
+    const tooLong = reducer(initialState, setBraindumpToastDurationMs(99000))
+    const tooShort = reducer(initialState, setBraindumpToastDurationMs(500))
+    const inRange = reducer(initialState, setBraindumpToastDurationMs(6000))
+
+    // Assert
+    expect(tooLong.braindumpToastDurationMs).toBe(10000)
+    expect(tooShort.braindumpToastDurationMs).toBe(2000)
+    expect(inRange.braindumpToastDurationMs).toBe(6000)
+  })
+
+  it('guards a NaN BrainDump toast duration to the default instead of poisoning the slider', () => {
+    // Act — a non-finite value (e.g. a stray empty slider event) must not stick.
+    const next = reducer(initialState, setBraindumpToastDurationMs(Number.NaN))
+
+    // Assert
+    expect(next.braindumpToastDurationMs).toBe(5000)
+  })
+
+  it('falls back to the default toast duration for a slice that predates the field', () => {
+    // Arrange — a persisted slice from before the toast duration existed.
+    const legacyState = stateWith({ completionSound: false })
+
+    // Act / Assert — the selector coalesces to the 5000 ms default, never undefined.
+    expect(selectBraindumpToastDurationMs(legacyState)).toBe(5000)
   })
 })
