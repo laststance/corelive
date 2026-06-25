@@ -49,6 +49,7 @@ import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { AddTodoForm } from './AddTodoForm'
+import { COMPLETED_DROPZONE_ID, CompletedDropZone } from './CompletedDropZone'
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import {
@@ -128,6 +129,7 @@ export const TodoList = function TodoList() {
   const {
     createMutation,
     toggleMutation,
+    isAnyTogglePending,
     deleteMutation,
     updateMutation,
     clearCompletedMutation,
@@ -414,11 +416,17 @@ export const TodoList = function TodoList() {
   }, [retroactivePopulateFadeIds])
 
   /**
-   * Handles drag end event to reorder todos.
-   * Updates local state optimistically and syncs with server.
+   * Resolves a dnd-kit drag-end into one of two outcomes — tuck a finished task
+   * into Completed (drop on the #113 CompletedDropZone) or reorder the active
+   * list — committing optimistically then syncing the server. Fired by
+   * DragDropProvider's onDragEnd.
    * @param event - Latest dnd-kit drag-end event from DragDropProvider.
    * @returns
-   * - No return value; invalid drops exit early and valid drops reorder tasks.
+   * - No return value.
+   * - Drop on the Completed zone: archives the row when it is completed AND its
+   *   completion has committed; a pending row — or one whose toggle is still in
+   *   flight — is a no-op (deleteTodo would hard-delete it — data loss).
+   * - Otherwise: reorders the active list, or exits early on a canceled/invalid drop.
    * @example
    * handleDragEnd(event)
    */
@@ -427,7 +435,26 @@ export const TodoList = function TodoList() {
       return
     }
 
-    const { source } = event.operation
+    const { source, target } = event.operation
+
+    // #113: a row dropped on the Completed drop zone is tucked into the journal
+    // (reuse the delete→archive path) instead of reordered. GUARD is load-
+    // bearing: only a *completed* row may go here — deleteTodo hard-deletes a
+    // pending row (data loss), and in retain mode pending + completed rows share
+    // this one sortable list, so dropping a pending row here must be a no-op.
+    // The `!isAnyTogglePending` half is the same data-loss gate: a row checked
+    // moments ago is optimistically `completed` here, but until the toggle
+    // commits the server still sees it pending and would hard-delete it. This
+    // reads the MutationCache (any toggle in flight), not one observer's latest.
+    if (target?.id === COMPLETED_DROPZONE_ID) {
+      const droppedTodo = pendingTodos.find(
+        (todo) => todo.id === String(source?.id),
+      )
+      if (droppedTodo?.completed && !isAnyTogglePending) {
+        deleteTodo(droppedTodo.id)
+      }
+      return
+    }
 
     if (!isSortable(source) || source.initialIndex === source.index) {
       return
@@ -604,12 +631,20 @@ export const TodoList = function TodoList() {
                   onToggleComplete={toggleComplete}
                   onDelete={deleteTodo}
                   onUpdateNotes={updateNotes}
+                  isTogglePending={isAnyTogglePending}
                   isRetroactivelyPopulated={retroactivePopulateFadeIds.has(
                     todo.id,
                   )}
                 />
               ))}
             </div>
+            {/* #113: in 居残りモード, once there's a finished row to file, show a
+                drop target so a single strikethrough row can be dragged out of
+                the list into Completed (the per-row Archive button is the
+                keyboard path). Lives inside the provider to share its context. */}
+            {isRetaining && completedInListCount > 0 && (
+              <CompletedDropZone isTogglePending={isAnyTogglePending} />
+            )}
           </DragDropProvider>
         )}
       </div>

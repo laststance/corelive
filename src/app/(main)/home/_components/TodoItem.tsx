@@ -1,4 +1,5 @@
 import {
+  Archive,
   Trash2,
   StickyNote,
   ChevronDown,
@@ -45,6 +46,14 @@ interface TodoItemProps {
   dragHandleRef?: DragHandleRef
   /** Whether item is currently being dragged */
   isDragging?: boolean
+  /**
+   * #113 data-loss gate: true while ANY completion toggle for this list is still
+   * in flight. "Tuck into Completed" reuses the delete→archive path, but the
+   * server only archives a row that is ALREADY completed in the DB; tuck a row
+   * whose check hasn't committed yet and it is HARD-DELETED instead (the win is
+   * lost, no heatmap credit). So the button stays disabled until the toggle lands.
+   */
+  isTogglePending?: boolean
 }
 
 export const TodoItem = function TodoItem({
@@ -54,6 +63,7 @@ export const TodoItem = function TodoItem({
   onUpdateNotes,
   dragHandleRef,
   isDragging,
+  isTogglePending = false,
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const [notes, setNotes] = useState(todo.notes ?? '')
@@ -69,6 +79,14 @@ export const TodoItem = function TodoItem({
   // Undo-toast delete). So hide only when this row is completed AND retain is on.
   const isRetaining = useAppSelector(selectRetainCompletedInList)
   const showDeleteButton = !todo.completed || !isRetaining
+  // #113: the new "Tuck into Completed" button takes the D14 slot the trash
+  // vacates — the exact inverse condition, so the two are mutually exclusive.
+  const showMoveToCompletedButton = todo.completed && isRetaining
+
+  // Same-row double-fire guard: the optimistic delete unmounts this row almost
+  // immediately, but this local flag also disables the button between the click
+  // and that unmount (the archive helper's documented non-idempotent race).
+  const [isMovingToCompleted, setIsMovingToCompleted] = useState(false)
 
   const handleToggleComplete = () => {
     // Fire the opt-in sound only on a real completion (false→true); the CSS
@@ -80,6 +98,14 @@ export const TodoItem = function TodoItem({
   }
 
   const handleDelete = () => {
+    onDelete(todo.id)
+  }
+
+  // #113: tuck this one finished row into Completed. Reuses onDelete — deleting a
+  // completed todo archives it into the Completed journal (heatmap-safe) rather
+  // than hard-deleting, so "move to Completed" IS the completed-row delete path.
+  const handleMoveToCompleted = () => {
+    setIsMovingToCompleted(true)
     onDelete(todo.id)
   }
 
@@ -170,6 +196,25 @@ export const TodoItem = function TodoItem({
                 </Button>
               </CollapsibleTrigger>
             </Collapsible>
+          )}
+          {showMoveToCompletedButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleMoveToCompleted}
+              // Disabled while moving (the double-fire guard) OR while the
+              // completion toggle is still in flight — tucking before the check
+              // commits would hard-delete the win instead of archiving it (#113).
+              disabled={isMovingToCompleted || isTogglePending}
+              className="text-muted-foreground hover:text-foreground"
+              // Distinct accessible name: must NOT contain "Move to Completed"
+              // (ImportUndoBanner owns that, substring-matched in e2e) nor start
+              // with "completed task" (skill-tree e2e). Quiet-companion voice.
+              aria-label={`Tuck "${todo.text}" into Completed`}
+              title="Tuck into Completed"
+            >
+              <Archive className="h-4 w-4" aria-hidden="true" />
+            </Button>
           )}
           {showDeleteButton && (
             <Button

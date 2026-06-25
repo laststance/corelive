@@ -17,10 +17,30 @@
  * @example
  *   pnpm test -- FloatingNavigator
  */
+import { configureStore } from '@reduxjs/toolkit'
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { Provider } from 'react-redux'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import preferencesReducer, {
+  initialState,
+} from '@/lib/redux/slices/preferencesSlice'
+
 import { FloatingNavigator } from './FloatingNavigator'
+
+/**
+ * Wraps the FloatingNavigator in a real preferences store — required once a
+ * completed row renders, because its checkbox pulls in useCompletionFeedback →
+ * useAppSelector (the empty-todos tests above never mount a row, so they don't).
+ */
+function renderFloatingWithStore(ui: ReactElement) {
+  const store = configureStore({
+    reducer: { preferences: preferencesReducer },
+    preloadedState: { preferences: { ...initialState } },
+  })
+  return render(<Provider store={store}>{ui}</Provider>)
+}
 
 // Force the floating-navigator environment so the window-controls toolbar (and
 // its pin button) renders and the mount-init effect runs.
@@ -230,5 +250,87 @@ describe('FloatingNavigator bulk paste (Issue #110 AC#2)', () => {
 
     // Assert: native paste wins; the bulk dialog is NOT opened over a partial edit.
     expect(onBulkPaste).not.toHaveBeenCalled()
+  })
+})
+
+describe('FloatingNavigator — Tuck into Completed parity (#113)', () => {
+  const FINISHED_FLOATING_TODO = {
+    id: '7',
+    text: 'Buy milk',
+    completed: true,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  }
+
+  it('labels the finished-row action as tucking into Completed, not a destructive delete', async () => {
+    // Arrange: a finished task is shown in the Floating Completed section.
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    renderFloatingWithStore(
+      <FloatingNavigator {...noopTaskProps} todos={[FINISHED_FLOATING_TODO]} />,
+    )
+
+    // Act: locate the per-row action by its quiet-companion accessible name.
+    const moveButton = await screen.findByRole('button', {
+      name: 'Tuck "Buy milk" into Completed',
+    })
+
+    // Assert: the win-filing button reads as filing, not deleting — the old
+    // "Delete completed task" label (and the trash skin) is gone.
+    expect(moveButton).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /delete completed task/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('files just that finished task into Completed when its button is tapped', async () => {
+    // Arrange
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    const onTaskDelete = vi.fn()
+    renderFloatingWithStore(
+      <FloatingNavigator
+        {...noopTaskProps}
+        todos={[FINISHED_FLOATING_TODO]}
+        onTaskDelete={onTaskDelete}
+      />,
+    )
+    const moveButton = await screen.findByRole('button', {
+      name: 'Tuck "Buy milk" into Completed',
+    })
+
+    // Act
+    fireEvent.click(moveButton)
+
+    // Assert: only that one task is filed (delete-of-completed archives it).
+    expect(onTaskDelete).toHaveBeenCalledTimes(1)
+    expect(onTaskDelete).toHaveBeenCalledWith('7')
+  })
+
+  it('keeps the finished-row tuck button inert while its completion is still saving (no hard-delete)', async () => {
+    // Arrange: a finished row is shown, but its completion toggle has NOT yet
+    // committed to the server (slow network). Tucking reuses delete→archive,
+    // and the server only archives a row that is ALREADY completed in the DB —
+    // fire it before the toggle lands and that row is HARD-DELETED instead (the
+    // win is destroyed, no heatmap credit). So the button must stay disabled
+    // until the completion is durable.
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    const onTaskDelete = vi.fn()
+    renderFloatingWithStore(
+      <FloatingNavigator
+        {...noopTaskProps}
+        todos={[FINISHED_FLOATING_TODO]}
+        onTaskDelete={onTaskDelete}
+        isTogglePending
+      />,
+    )
+    const moveButton = await screen.findByRole('button', {
+      name: 'Tuck "Buy milk" into Completed',
+    })
+
+    // Act: try to file the win while the completion is still in flight.
+    fireEvent.click(moveButton)
+
+    // Assert: the button is inert and no archive/delete is attempted — the gate
+    // holds the win until the toggle commits.
+    expect(moveButton).toBeDisabled()
+    expect(onTaskDelete).not.toHaveBeenCalled()
   })
 })

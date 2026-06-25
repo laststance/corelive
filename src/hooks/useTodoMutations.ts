@@ -1,7 +1,11 @@
 'use client'
 
 import type { InfiniteData, QueryClient } from '@tanstack/react-query'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  useMutation,
+  useMutationState,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
@@ -742,9 +746,26 @@ export function useTodoMutations(
     },
   })
 
+  // #113 data-loss gate, read at the MutationCache level (NOT the observer level).
+  // "Tuck into Completed" reuses the delete→archive path, which only archives a row
+  // the SERVER already sees as completed; tuck a row whose toggle hasn't committed
+  // and it is HARD-DELETED instead — the win is lost, no heatmap credit. A single
+  // mutation's `isPending` tracks only the LATEST mutate() call, so a rapid
+  // double-check whose commits land out of order could read false while an earlier
+  // toggle is still in flight. The cache holds every in-flight toggle independently,
+  // so this stays true while ANY toggle is pending — a true superset of isPending.
+  const pendingToggleMutations = useMutationState({
+    filters: {
+      mutationKey: orpc.todo.toggle.key({ type: 'mutation' }),
+      status: 'pending',
+    },
+  })
+  const isAnyTogglePending = pendingToggleMutations.length > 0
+
   return {
     createMutation,
     toggleMutation,
+    isAnyTogglePending,
     deleteMutation,
     updateMutation,
     clearCompletedMutation,

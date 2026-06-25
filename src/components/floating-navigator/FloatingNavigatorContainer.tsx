@@ -72,6 +72,7 @@ export const FloatingNavigatorContainer =
     const {
       createMutation,
       toggleMutation,
+      isAnyTogglePending,
       deleteMutation,
       updateMutation,
       reorderMutation,
@@ -406,6 +407,11 @@ export const FloatingNavigatorContainer =
           isCategoryCreatePending={categoryCreateMutation.isPending}
           isCategoryUpdatePending={categoryUpdateMutation.isPending}
           isCategoryDeletePending={categoryDeleteMutation.isPending}
+          // #113 data-loss gate: disables a Completed row's "Tuck" button while
+          // ANY completion toggle is in flight, so a freshly-checked win can't be
+          // hard-deleted before the toggle commits (same race as the web list).
+          // Reads the MutationCache (true superset), not one observer's latest.
+          isTogglePending={isAnyTogglePending}
         />
         {/* Controlled bulk paste-import dialog (Issue #110): the task input's
             multi-line paste opens it; it's a portal Dialog so its position in
