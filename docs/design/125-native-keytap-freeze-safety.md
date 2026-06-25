@@ -103,10 +103,22 @@ is a **known macOS limitation**: a `CGEventTap` in a **faceless helper / utility
 with no `NSApplication`/Cocoa main run loop** stops delivering events beyond the
 initial setup (confirmed via deepwiki against the libuiohook/CGEventTap model).
 libuiohook runs its own `CFRunLoopRun()` on a worker pthread, but that is **insufficient
-in a non-GUI helper**. Synthetic key injection was a dead test vehicle on this machine
-(Karabiner's virtual-HID layer transforms synthetic CGEvents — System Events `key code`
-and computer-use `key` both gave 0 fires); the verdict rests on **real physical keys**
-against the running signed probe.
+in a non-GUI helper**. Synthetic key injection is an unreliable delivery vehicle on this
+machine (Karabiner's virtual-HID layer transforms synthetic CGEvents), so it cannot prove
+delivery _works_ — but it reproduces the same **1-then-silent ceiling**, which is the
+point. The verdict that delivery FAILS holds for **real physical keys** too.
+
+**Re-confirmed (2026-06-26, fresh signed re-run).** Relaunched the same signed
+`com.corelive.app` build (`codesign`: `Developer ID Application: Ryota Murakami
+(895TNMSCMH)`, hardened runtime; `app.asar` built 00:55, no builder running). The probe
+forked the `utilityProcess` child, which loaded the native `.node` and posted
+`{type:'started'}`. **15 key events (10×Right, 5×Escape) → exactly ONE `fire`
+(keycode 57421), then silence for the remaining 14** — the 1-then-silent signature
+reproduced. System Settings → Input Monitoring again listed **only `CoreLive.app`**
+(enabled), **no new helper entry** (full list: CoreLive, Cursor, Discord, three Karabiner
+items, KeyCue). So **TCC attribution = PASS** (independently re-verified) and **delivery =
+NOT VIABLE** both hold across two independent runs (original real-key run + this signed
+re-run). The pivot's foundation is solid.
 
 **Decision (FAIL branch, pre-authorized in v1):** abandon `utilityProcess` isolation;
 **keep the tap in main** (the proven #126 baseline) and deliver freeze-safety via the
