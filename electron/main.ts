@@ -50,8 +50,10 @@ import {
   type AuthUserPayload,
   type WindowBounds,
 } from './types/ipc'
+import { createUiohookShortcutEngine } from './uiohookEngine'
 import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
+import { loadUiohook } from './utils/loadUiohook'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import { WindowManager } from './WindowManager'
 import {
@@ -831,10 +833,15 @@ async function loadSystemIntegrationStack(): Promise<void> {
   const ShortcutManagerCls = (await lazyLoadManager.loadComponent(
     'ShortcutManager',
   )) as new (...args: unknown[]) => ShortcutManagerType
+  // Inject the uiohook tap so lone-modifier bindings (e.g. Right ⌥) can register
+  // natively; if the native module can't load it degrades to the no-op engine and
+  // those binds fall back to chords (existing accelerator behavior is untouched).
+  const nativeShortcutEngine = createUiohookShortcutEngine(loadUiohook)
   shortcutManager = new ShortcutManagerCls(
     windowManager,
     notificationManager,
     configManager,
+    nativeShortcutEngine,
   )
   log.info('✅ [DEFERRED] ShortcutManager loaded')
 
