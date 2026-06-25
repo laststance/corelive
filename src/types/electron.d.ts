@@ -7,6 +7,7 @@
 import type {
   AuxWindowVisibility,
   IPCResponse,
+  NativeTapStatus,
   StartupWindowConfig,
 } from '@/electron/types/ipc'
 
@@ -106,6 +107,9 @@ interface ElectronAPI {
     enable: () => Promise<boolean>
     disable: () => Promise<boolean>
     getStats: () => Promise<any>
+    // Native key-tap freeze-safety (#125) — status + manual re-enable.
+    getNativeTapStatus: () => Promise<NativeTapStatus>
+    reenableNativeTap: () => Promise<NativeTapStatus>
   }
 
   // Authentication

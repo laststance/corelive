@@ -28,6 +28,7 @@ import type {
   IPCResponse,
   IPCEventChannel,
   IPCEventData,
+  NativeTapStatus,
 } from './ipc'
 
 /**
@@ -135,6 +136,17 @@ export interface ElectronAPI {
       platform: string
       shortcuts: Record<string, string>
     }>
+    /**
+     * Native key-tap freeze-safety status (#125) — `available` / `latchBlocked`
+     * / `active` so the renderer can show a "disabled after a failed start —
+     * re-enable" control when a prior arming was left unconfirmed.
+     */
+    getNativeTapStatus: () => Promise<NativeTapStatus>
+    /**
+     * Manually re-enable a latch-blocked native key-tap (#125): clears the
+     * stale-latch block and re-arms the tap, returning the post-action status.
+     */
+    reenableNativeTap: () => Promise<NativeTapStatus>
   }
 
   /**

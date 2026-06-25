@@ -11,6 +11,10 @@ import type { IpcMainInvokeEvent } from 'electron'
 
 import type { LoadingStatus } from '../LazyLoadManager'
 import type { MemoryStatistics } from '../MemoryProfiler'
+import type { NativeTapStatus } from '../nativeShortcutEngine'
+// Re-export so the preload barrel (`./types/ipc`) stays the single type surface
+// the renderer bridge imports from — it never reaches into main-process modules.
+export type { NativeTapStatus } from '../nativeShortcutEngine'
 import type { PerformanceMetrics } from '../performance-config'
 import type {
   DisplayInfo as WindowManagerDisplayInfo,
@@ -652,6 +656,15 @@ export interface IPCChannels {
       platform: string
       shortcuts: Record<string, string>
     }
+  }
+  // #125 native key-tap freeze-safety: read tap health / manually re-enable.
+  'shortcuts-get-native-tap-status': {
+    request: void
+    response: NativeTapStatus
+  }
+  'shortcuts-reenable-native-tap': {
+    request: void
+    response: NativeTapStatus
   }
 
   // ──────────────────────────────────────────────────────────────────────────
