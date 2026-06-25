@@ -165,6 +165,70 @@ describe('KeybindingCaptureInput', () => {
     expect(composing.defaultPrevented).toBe(false)
   })
 
+  it('captures a lone Right Option pressed and released by itself', () => {
+    // Arrange
+    const { onChange, button } = renderCaptureBox()
+
+    // Act: enter recording, press the right Option key alone, then release it.
+    fireEvent.click(button)
+    fireEvent.keyDown(button, { code: 'AltRight', altKey: true })
+    fireEvent.keyUp(button, { code: 'AltRight' })
+
+    // Assert: the clean press→release commits the native lone-modifier binding,
+    // and the box shows its labelled glyph.
+    expect(onChange).toHaveBeenCalledWith('lone-modifier:rightOption')
+    expect(button).toHaveTextContent('Right ⌥')
+  })
+
+  it('distinguishes the left modifier from the right when captured alone', () => {
+    // Arrange
+    const { onChange, button } = renderCaptureBox()
+
+    // Act
+    fireEvent.click(button)
+    fireEvent.keyDown(button, { code: 'ShiftLeft', shiftKey: true })
+    fireEvent.keyUp(button, { code: 'ShiftLeft' })
+
+    // Assert: left Shift binds distinctly from right Shift (the native path's point).
+    expect(onChange).toHaveBeenCalledWith('lone-modifier:leftShift')
+  })
+
+  it('binds the chord, not a lone modifier, when a key follows the held modifier', () => {
+    // Arrange
+    const { onChange, button } = renderCaptureBox()
+
+    // Act: hold Option, press a letter (forms Alt+X), then release Option.
+    fireEvent.click(button)
+    fireEvent.keyDown(button, { code: 'AltRight', altKey: true })
+    fireEvent.keyDown(button, { code: 'KeyX', altKey: true })
+    fireEvent.keyUp(button, { code: 'AltRight' })
+
+    // Assert: the chord commits and the trailing key-up never emits a lone binding.
+    expect(onChange).toHaveBeenCalledWith('Alt+X')
+    expect(onChange).not.toHaveBeenCalledWith('lone-modifier:rightOption')
+  })
+
+  it('captures nothing when two modifiers are held together then released', () => {
+    // Arrange
+    const { onChange, button } = renderCaptureBox()
+
+    // Act: Command down (arms a candidate), then Control down (forms a 2-modifier
+    // chord-in-progress, disarming it), then release both.
+    fireEvent.click(button)
+    fireEvent.keyDown(button, { code: 'MetaLeft', metaKey: true })
+    fireEvent.keyDown(button, {
+      code: 'ControlLeft',
+      metaKey: true,
+      ctrlKey: true,
+    })
+    fireEvent.keyUp(button, { code: 'ControlLeft' })
+    fireEvent.keyUp(button, { code: 'MetaLeft' })
+
+    // Assert: neither release commits a lone modifier; the box keeps recording.
+    expect(onChange).not.toHaveBeenCalled()
+    expect(button).toHaveTextContent('Press keys…')
+  })
+
   it('does not start recording when disabled', () => {
     // Arrange
     const onChange = vi.fn()

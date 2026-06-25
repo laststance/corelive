@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { formatAcceleratorForDisplay } from './formatAcceleratorForDisplay'
 import { keyboardEventToAccelerator } from './keyboardEventToAccelerator'
+import { keyboardEventToLoneModifierBinding } from './keyboardEventToLoneModifierBinding'
 
 describe('formatAcceleratorForDisplay', () => {
   it('renders Cmd + digit as a tight ⌘ glyph group on macOS', () => {
@@ -61,6 +62,47 @@ describe('formatAcceleratorForDisplay', () => {
 
     // Assert
     expect(display).toBe('')
+  })
+
+  it('renders a native lone-modifier binding as its labelled glyph on macOS', () => {
+    // Arrange + Act
+    const display = formatAcceleratorForDisplay(
+      'lone-modifier:rightOption',
+      'darwin',
+    )
+
+    // Assert
+    expect(display).toBe('Right ⌥')
+  })
+
+  it('renders a native lone-modifier binding the same off macOS (no token to split)', () => {
+    // Arrange + Act
+    const display = formatAcceleratorForDisplay(
+      'lone-modifier:leftCommand',
+      'other',
+    )
+
+    // Assert
+    expect(display).toBe('Left ⌘')
+  })
+
+  it('round-trips a captured lone modifier from keydown to display label', () => {
+    // Arrange: the lone-modifier handoff — whatever the capture util emits on a
+    // clean single-modifier press must render cleanly here.
+    const event = new KeyboardEvent('keydown', {
+      code: 'AltRight',
+      altKey: true,
+    })
+
+    // Act
+    const binding = keyboardEventToLoneModifierBinding(event)
+    const display = binding
+      ? formatAcceleratorForDisplay(binding, 'darwin')
+      : ''
+
+    // Assert
+    expect(binding).toBe('lone-modifier:rightOption')
+    expect(display).toBe('Right ⌥')
   })
 
   it('round-trips a captured chord from keydown to display glyphs', () => {
