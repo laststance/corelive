@@ -1,4 +1,5 @@
 import {
+  Archive,
   Trash2,
   StickyNote,
   ChevronDown,
@@ -69,6 +70,14 @@ export const TodoItem = function TodoItem({
   // Undo-toast delete). So hide only when this row is completed AND retain is on.
   const isRetaining = useAppSelector(selectRetainCompletedInList)
   const showDeleteButton = !todo.completed || !isRetaining
+  // #113: the new "Tuck into Completed" button takes the D14 slot the trash
+  // vacates — the exact inverse condition, so the two are mutually exclusive.
+  const showMoveToCompletedButton = todo.completed && isRetaining
+
+  // Same-row double-fire guard: the optimistic delete unmounts this row almost
+  // immediately, but this local flag also disables the button between the click
+  // and that unmount (the archive helper's documented non-idempotent race).
+  const [isMovingToCompleted, setIsMovingToCompleted] = useState(false)
 
   const handleToggleComplete = () => {
     // Fire the opt-in sound only on a real completion (false→true); the CSS
@@ -80,6 +89,14 @@ export const TodoItem = function TodoItem({
   }
 
   const handleDelete = () => {
+    onDelete(todo.id)
+  }
+
+  // #113: tuck this one finished row into Completed. Reuses onDelete — deleting a
+  // completed todo archives it into the Completed journal (heatmap-safe) rather
+  // than hard-deleting, so "move to Completed" IS the completed-row delete path.
+  const handleMoveToCompleted = () => {
+    setIsMovingToCompleted(true)
     onDelete(todo.id)
   }
 
@@ -170,6 +187,22 @@ export const TodoItem = function TodoItem({
                 </Button>
               </CollapsibleTrigger>
             </Collapsible>
+          )}
+          {showMoveToCompletedButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleMoveToCompleted}
+              disabled={isMovingToCompleted}
+              className="text-muted-foreground hover:text-foreground"
+              // Distinct accessible name: must NOT contain "Move to Completed"
+              // (ImportUndoBanner owns that, substring-matched in e2e) nor start
+              // with "completed task" (skill-tree e2e). Quiet-companion voice.
+              aria-label={`Tuck "${todo.text}" into Completed`}
+              title="Tuck into Completed"
+            >
+              <Archive className="h-4 w-4" aria-hidden="true" />
+            </Button>
           )}
           {showDeleteButton && (
             <Button

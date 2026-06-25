@@ -41,6 +41,9 @@ const Edit2 = lazy(async () =>
 const Trash2 = lazy(async () =>
   import('lucide-react').then((mod) => ({ default: mod.Trash2 })),
 )
+const Archive = lazy(async () =>
+  import('lucide-react').then((mod) => ({ default: mod.Archive })),
+)
 const Minimize2 = lazy(async () =>
   import('lucide-react').then((mod) => ({ default: mod.Minimize2 })),
 )
@@ -334,16 +337,20 @@ const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
       >
         {todo.text}
       </span>
+      {/* #113: filing a finished task is a win, not a deletion — so this is the
+          neutral Archive affordance, never the destructive (clay-red Trash2)
+          skin. Behaviour is unchanged (onDelete archives the completed row); the
+          accessible name avoids "Move to Completed"/"completed task:" e2e clashes. */}
       <Button
         size="sm"
         variant="ghost"
         onClick={handleDelete}
-        className="h-6 w-6 p-0 text-destructive opacity-0 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
-        aria-label={`Delete completed task: ${todo.text}`}
-        title="Delete task"
+        className="h-6 w-6 p-0 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
+        aria-label={`Tuck "${todo.text}" into Completed`}
+        title="Tuck into Completed"
       >
         <Suspense fallback={<IconFallback />}>
-          <Trash2 className="h-3 w-3" aria-hidden="true" />
+          <Archive className="h-3 w-3" aria-hidden="true" />
         </Suspense>
       </Button>
     </div>
