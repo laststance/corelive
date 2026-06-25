@@ -27,6 +27,19 @@ describe('trayShortcutMenuFields', () => {
     expect(fields.accelerator).toBeUndefined()
   })
 
+  it('shows the plain label for a corrupt lone-modifier value instead of leaking the sentinel', () => {
+    // Arrange + Act: a malformed native value (unknown id) has no glyph — it must
+    // not surface the raw 'lone-modifier:*' sentinel in the tray label.
+    const fields = trayShortcutMenuFields(
+      'Toggle BrainDump',
+      'lone-modifier:bogus',
+    )
+
+    // Assert
+    expect(fields).toEqual({ label: 'Toggle BrainDump' })
+    expect(fields.accelerator).toBeUndefined()
+  })
+
   it('shows the plain label with no hotkey when the binding is unset', () => {
     // Arrange + Act
     const fields = trayShortcutMenuFields('Toggle BrainDump', '')

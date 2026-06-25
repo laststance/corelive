@@ -84,6 +84,29 @@ describe('createUiohookShortcutEngine', () => {
     expect(engine.isAvailable()).toBe(false)
   })
 
+  it('refuses the bind and degrades when the global tap fails to start', () => {
+    // Arrange: the module loads, but start() throws (e.g. macOS denied the event
+    // tap), so the lone-modifier bind must roll back rather than record a dead bind.
+    const startThrowingModule: UiohookModule = {
+      on: () => {},
+      start: () => {
+        throw new Error('tap start failed')
+      },
+      stop: () => {},
+    }
+    const engine = createUiohookShortcutEngine(() => startThrowingModule)
+
+    // Act
+    const didRegister = engine.register(
+      'rightOption',
+      'toggleBrainDump',
+      vi.fn(),
+    )
+
+    // Assert: register reports failure so ShortcutManager falls back to a chord.
+    expect(didRegister).toBe(false)
+  })
+
   it('fires the shortcut when its lone modifier is pressed and released by itself', () => {
     // Arrange
     const fake = createFakeUiohook()

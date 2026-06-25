@@ -122,17 +122,25 @@ export function createUiohookShortcutEngine(
     pressedKeycodes.delete(keycode)
   }
 
-  /** Attach listeners + start the tap once; on failure the engine stays silent. */
-  const ensureTapRunning = (): void => {
-    if (uiohook === null || isTapRunning) return
+  /**
+   * Attach listeners + start the tap once.
+   * @returns `true` when the tap is running (already running, or just started);
+   *   `false` when the module is absent or `start()` threw — the caller then rolls
+   *   the binding back so the lone-modifier shortcut degrades to a chord.
+   */
+  const ensureTapRunning = (): boolean => {
+    if (uiohook === null) return false
+    if (isTapRunning) return true
     try {
       uiohook.on('keydown', handleKeyDown)
       uiohook.on('keyup', handleKeyUp)
       uiohook.start()
       isTapRunning = true
       log.info('[uiohookEngine] Global key tap started')
+      return true
     } catch (error) {
       log.error('[uiohookEngine] Failed to start global key tap:', error)
+      return false
     }
   }
 
@@ -167,7 +175,15 @@ export function createUiohookShortcutEngine(
       const keycode = LONE_MODIFIER_KEYCODES[modifier]
       keycodeById.set(id, keycode)
       bindingByKeycode.set(keycode, { id, callback })
-      ensureTapRunning()
+
+      // If the tap can't start, roll the binding back and report failure so
+      // ShortcutManager treats it as unregistered and degrades to a chord —
+      // rather than recording a native bind that can never fire.
+      if (!ensureTapRunning()) {
+        keycodeById.delete(id)
+        bindingByKeycode.delete(keycode)
+        return false
+      }
       return true
     },
 

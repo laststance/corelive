@@ -12,6 +12,7 @@
 import {
   formatNativeBindingForDisplay,
   isNativeBinding,
+  parseNativeBinding,
 } from '../nativeBinding'
 
 /** Spacer between a tray item's text and an appended lone-modifier glyph. */
@@ -48,6 +49,10 @@ export function trayShortcutMenuFields(
   if (!accelerator) return { label }
 
   if (isNativeBinding(accelerator)) {
+    // A corrupt native value (e.g. 'lone-modifier:bogus') has no glyph —
+    // formatNativeBindingForDisplay would echo the raw sentinel, so show the
+    // plain label instead of leaking the internal format into the tray.
+    if (parseNativeBinding(accelerator) === null) return { label }
     const glyph = formatNativeBindingForDisplay(accelerator)
     return { label: `${label}${LABEL_GLYPH_SEPARATOR}${glyph}` }
   }

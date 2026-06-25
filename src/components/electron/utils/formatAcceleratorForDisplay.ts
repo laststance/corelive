@@ -35,7 +35,9 @@ export function formatAcceleratorForDisplay(
   // on both platforms — it carries no Electron modifier/key tokens to split.
   if (accelerator.startsWith(NATIVE_LONE_MODIFIER_PREFIX)) {
     const modifierId = accelerator.slice(NATIVE_LONE_MODIFIER_PREFIX.length)
-    return LONE_MODIFIER_DISPLAY[modifierId] ?? accelerator
+    // Fall back to the bare id (never the raw `lone-modifier:` sentinel) so an
+    // unknown/corrupt id can't leak the internal persisted format into the UI.
+    return LONE_MODIFIER_DISPLAY[modifierId] ?? modifierId
   }
 
   const segments = accelerator.split('+')

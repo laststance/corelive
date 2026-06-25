@@ -86,6 +86,15 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('Left ⌘')
   })
 
+  it('renders the bare id, never the raw sentinel, for an unknown lone-modifier', () => {
+    // Arrange + Act: a corrupt/unknown id must not leak the 'lone-modifier:'
+    // prefix into the UI — it falls back to the bare id.
+    const display = formatAcceleratorForDisplay('lone-modifier:bogus', 'darwin')
+
+    // Assert
+    expect(display).toBe('bogus')
+  })
+
   it('round-trips a captured lone modifier from keydown to display label', () => {
     // Arrange: the lone-modifier handoff — whatever the capture util emits on a
     // clean single-modifier press must render cleanly here.
