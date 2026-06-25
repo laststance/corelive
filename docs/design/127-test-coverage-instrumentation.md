@@ -104,9 +104,10 @@ via `sourceFilter` (reject `node_modules` / `dist-electron` / `.next`; keep `src
 ### Phase 0 — Unit coverage (lowest risk, do first)
 
 Phase 0 turns the broken CI coverage (Current State, codex #10) into a real one —
-wire a `test.coverage` block into all three vitest configs and add scripts:
+wire a `test.coverage` block into the web + electron vitest configs and add scripts
+(storybook is browser-mode — best-effort, see AC1):
 
-- `coverage:unit` → `vitest run --coverage` (web/src) + `vitest run --config vitest.config.electron.ts --coverage` + storybook config.
+- `coverage:unit` → `coverage:unit:web` (`vitest run --coverage`) + `coverage:unit:electron` (`vitest run --config vitest.config.electron.ts --coverage`).
 - Each config gets a `test.coverage` block: `provider: 'v8'`, `reporter: ['text-summary','json','lcov']`, `reportsDirectory: coverage/unit-<name>`, and an `exclude` list (configs, `*.stories.tsx`, `*.test.*`, `*.spec.*`, generated files, `dist*`). The `json` reporter is the Istanbul `coverage-final.json` that Phase 3 `add()`s into the monocart merge; `lcov` is for human diffing.
 - Output per config: `coverage/unit-<web|electron|storybook>/coverage-final.json` (canonical) + `lcov.info`.
 - **Repoint the existing Codecov upload (codex #10).** `test.yml` currently uploads `./coverage/lcov.info`, which Phase 0 stops emitting (reportsDirectory moves to `coverage/unit-<name>`). Point the Codecov step at the merged report (Phase 3) or the per-config lcovs so the upload stops silently matching nothing.
@@ -127,12 +128,12 @@ cover?" and surfaces the `main.ts`-at-0% fact immediately.
 
 1. In `e2e/electron/_helpers/launch.ts`, when **`process.env.COVERAGE === '1'`** (NOT `CI` — the Electron CI job is a pass/fail gate, and turning coverage on there changes its runtime + output volume, codex #6), add `NODE_V8_COVERAGE: <perLaunchDir>` to the `electron.launch` env block. Each launch writes raw V8 JSON for the main process to its own dir.
 2. Specs already `await electronApp.close()` — the clean exit that flushes V8 coverage. Audit each spec to ensure no path SIGKILLs the app before close (the spike confirmed a normal close flushes).
-3. Post-process (`scripts/electron-coverage-report.mjs`): run `monocart-coverage-reports`' `CoverageReport` over the per-launch `NODE_V8_COVERAGE` dirs with `inputDir: [<dirs>]`, `sourceMap: true` (the spike confirmed each `dist-electron/main/*.cjs` has a sibling `.cjs.map` carrying `sources: ['../../electron/*.ts']` + `sourcesContent: true`, so the remap to `electron/*.ts` is self-contained — codex #3), `entryFilter`/`sourceFilter` keeping only `electron/**`, and `reports: ['raw']` → `coverage/e2e-electron/raw/` for the merge. The script **fails if no `electron/main.ts` entry is present** (codex #6) — asserting the booted-app path was actually measured, not silently empty. Same tool as Phase 1, so the remap/normalize semantics are identical across both E2E sources.
+3. Post-process (`scripts/electron-coverage-report.mjs`): `const mcr = new CoverageReport({ sourceMap: true, entryFilter, sourceFilter, reports: ['raw'], outputDir: 'coverage/e2e-electron' }); await Promise.all(perLaunchDirs.map((d) => mcr.addFromDir(d))); await mcr.generate();`. **`addFromDir()` is the correct API for raw `NODE_V8_COVERAGE` dirs** (codex pass-3 #1) — `inputDir` is for re-reading MCR's own `raw` report dirs (that's Phase 3, a different input shape). `sourceMap: true` remaps each `dist-electron/main/*.cjs` to `electron/*.ts` via its sibling `.cjs.map` (the spike confirmed `sources: ['../../electron/*.ts']` + `sourcesContent: true`, so the remap is self-contained — codex #3); `entryFilter`/`sourceFilter` keep only `electron/**`; `reports: ['raw']` writes `coverage/e2e-electron/raw/` for the Phase 3 merge. The script **fails if no `electron/main.ts` entry is present** (codex #6) — asserting the booted-app path was actually measured, not silently empty.
 4. Electron **unit** coverage is already delivered by Phase 0 (`vitest.config.electron --coverage`); Phase 2 adds only the booted-app delta (`main.ts`). Do NOT also collect `page.coverage` on the Electron renderer — it loads the same web bundle already measured by Phase 1 (double-count).
 
 ### Phase 3 — Merge, report, gate
 
-1. **One engine owns the merge: `monocart-coverage-reports` (codex #5, #9).** `scripts/coverage-merge.mjs` (or the `mcr merge` CLI) constructs one `CoverageReport({ inputDir: ['coverage/e2e-web/raw', 'coverage/e2e-electron/raw'], sourceMap: true, sourcePath, entryFilter, sourceFilter, outputDir: 'coverage/merged', reports: ['v8','lcovonly','json-summary','console-details'] })`, then `.add()`s each Phase-0 vitest `coverage-final.json` (monocart accepts Istanbul input alongside V8) and `.generate()`s. No `lcov-result-merger` / `nyc` / hand-rolled istanbul glue — those eat incompatible formats and double-count; monocart does V8→Istanbul + merge natively.
+1. **One engine owns the merge: `monocart-coverage-reports` (codex #5, #9).** `scripts/coverage-merge.mjs` (or the `mcr merge` CLI): `const mcr = new CoverageReport({ inputDir: ['coverage/e2e-web/raw', 'coverage/e2e-electron/raw'], sourceMap: true, sourcePath, entryFilter, sourceFilter, outputDir: 'coverage/merged', reports: ['v8','lcovonly','json-summary','console-details'] })`, then fold in the Phase-0 unit data — `for (const f of unitJsons) { await mcr.add(JSON.parse(readFileSync(f, 'utf8'))) }` — and `await mcr.generate()`. Here `inputDir` IS correct: these are MCR `raw` report dirs from Phases 1-2 (contrast Phase 2's `addFromDir` for Node V8 dirs — codex pass-3 #1). `.add()` accepts a V8 array OR an Istanbul `coverage-final.json` object, and `sourcePath(filePath, info)` is the documented signature (codex pass-3 #2). No `lcov-result-merger` / `nyc` / hand-rolled istanbul glue — those eat incompatible formats and double-count; monocart does V8→Istanbul + merge natively.
 2. **Path normalization IS the merge config, not a separate gate (codex #4).** `sourceFilter` rejects `**/node_modules/**`, `**/dist-electron/**`, `**/.next/**` and keeps `**/src/**` + `**/electron/**`; `sourcePath` collapses build-prefix variants so the same file from unit / e2e-web / e2e-electron unifies to one repo-relative key. A stray unmatched path shows up in the report's file list (asserted in AC), rather than silently miscounted.
 3. CI: upload the merged report (`coverage/merged/`) as an artifact (and optionally a PR-comment summary via monocart's `json-summary`). Add a **threshold gate** whose numbers are set from the measured baseline (see Open Decision).
 4. `.gitignore` already ignores `/coverage` — confirm it also covers `coverage/.monocart` and the per-launch raw V8 temp dirs (codex #8).
@@ -155,18 +156,30 @@ Run this session against the real built main bundle:
 `NODE_V8_COVERAGE` is honored by Electron's main process; a clean `app.close()`
 flushes; electron-vite's per-module `.cjs.map` makes it source-mappable. That this
 raw V8 + `.cjs.map` feeds straight into `monocart-coverage-reports` (its documented
-`NODE_V8_COVERAGE` + `inputDir` + `sourceMap` path) was Context7-verified against the
-tool's README, closing codex #9. No fallback (e.g. giving `main.ts` a hand-written
+`NODE_V8_COVERAGE` → `addFromDir` + `sourceMap` path) was Context7-verified against
+the tool's README, closing codex #9. No fallback (e.g. giving `main.ts` a hand-written
 unit harness) is needed — though that remains the documented alternative if
 source-map fidelity proves poor in CI.
 
-## Open Decision (deferred until baseline exists)
+## Open Decision — TARGET threshold (Phase 0 baseline now MEASURED)
 
 **The coverage TARGET.** "100%" in the issue title is a direction, not a spec.
 Literal 100% across a Next.js + Electron app forces tests for unreachable error
 branches, defensive `default:` arms, and platform-guarded code, which is low-value
-busywork. The realistic question — what threshold CI should enforce — **cannot be
-answered before Phase 0/1 print the baseline number.**
+busywork. The realistic question is what threshold CI should enforce.
+
+**Phase 0 baseline (measured this session via `pnpm coverage:unit`):**
+
+| Surface          | Statements | Lines  | Notable                                   |
+| ---------------- | ---------- | ------ | ----------------------------------------- |
+| Unit web (`src`) | 37.28%     | 37.62% | 734 tests                                 |
+| Unit electron    | 25.87%     | 25.78% | **`main.ts` 0% (0/842)** ← Phase 2 target |
+
+The `main.ts`-at-0% premise from the #129 context is now confirmed with data: the
+387 electron unit tests never execute the 842-line entry point (next worst real
+files: `MenuManager` 30%, `SystemTrayManager` 32%). Phases 1-3 lift the number once
+E2E + booted-app coverage merge in; these unit figures are the floor the ratchet
+starts from.
 
 **Recommended default (so the pipeline is not blocked):** _ratchet-from-baseline_.
 Phase 3 sets the CI threshold equal to the measured baseline (per-metric) and fails
@@ -178,10 +191,10 @@ one-line edit, so this decision is cheap to revisit and does not gate the build-
 
 ## Acceptance Criteria
 
-1. `pnpm coverage:unit` produces Istanbul JSON + lcov for all three vitest configs and a printed text-summary, with `electron/main.ts` showing a real (non-fabricated) number.
+1. `pnpm coverage:unit` produces Istanbul JSON + lcov for the web + electron vitest configs and a printed text-summary, with `electron/main.ts` showing a real (non-fabricated) number. **DONE + measured this session** (Open Decision baseline). Storybook (browser-mode) coverage is best-effort — its component surface overlaps web unit + web E2E, so it is not a v1 gate.
 2. A `COVERAGE=1` web E2E run (against the source-map build) produces raw V8 under `coverage/e2e-web/raw/` whose merged report lists `src/**` files (not minified `/_next/static/...`), with monocart-reporter coexisting with the existing pass/fail suite (no flake, no shard-merge dependency).
 3. A `COVERAGE=1` Electron E2E run produces raw V8 under `coverage/e2e-electron/raw/` whose merged report includes `electron/main.ts` with non-zero covered lines; the post-process step hard-fails if that entry is absent, proving the booted-app path is measured.
-4. `pnpm coverage:merge` produces one `coverage/merged/` report (v8 HTML + lcov + json-summary) combining unit + both E2E sources via `monocart-coverage-reports`, with `sourceFilter` keeping only `src/**` + `electron/**` (no `node_modules` / `dist-electron` / `.next` keys in the file list).
+4. `pnpm coverage:merge` produces one `coverage/merged/` report (v8 HTML + lcov + json-summary) combining unit + both E2E sources via `monocart-coverage-reports`, with `sourceFilter` keeping only `src/**` + `electron/**` (no `node_modules` / `dist-electron` / `.next` keys in the file list). **After `sourcePath` unification, `electron/main.ts` and any manager file shared between electron-unit and booted-app coverage each appear EXACTLY ONCE** — merged by normalized path, not double-listed as `electron/*` vs `dist-electron/main/*` (codex pass-3 #3).
 5. A CI job publishes the merged summary as an artifact and enforces the agreed threshold (baseline-ratchet by default); the existing sharded web E2E and electron E2E gates are unchanged and still green.
 6. Default runs without `COVERAGE=1` do NOT write coverage caches (no multi-GB `.cache` growth) and do NOT emit production source maps; documented in CLAUDE.md.
 7. `coverage/` is git-ignored. No production code behavior changes.
