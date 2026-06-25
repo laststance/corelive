@@ -10,6 +10,12 @@ import path from 'node:path'
 export const WEB_FIRST_PARTY_PREFIXES = ['src/']
 
 /**
+ * First-party prefixes for the merged report (Phase 3): the web renderer `src/`
+ * plus the Electron main process `electron/`. Both are corelive-authored.
+ */
+export const MERGED_FIRST_PARTY_PREFIXES = ['src/', 'electron/']
+
+/**
  * Patterns mirroring the Phase 0 vitest `coverage.exclude` set so unit + E2E
  * coverage describe the SAME first-party universe (tests, stories, type-only
  * files, and ambient declarations are never product code). Kept in one place so
@@ -47,6 +53,40 @@ export function normalizeSourcePath(filePath) {
 }
 
 /**
+ * Reduces any coverage source path to a repo-relative key: strips an absolute
+ * repo-root prefix first (vitest's istanbul `coverage-final.json` keys are
+ * absolute, e.g. `/…/corelive/electron/main.ts`), THEN applies the webpack/`_N_E`
+ * normalize — so istanbul `add()` data and source-map-expanded V8 entries land
+ * on the same `electron/main.ts` / `src/…` key and merge once.
+ * @param {string} filePath - Source path from any coverage input (abs or virtual).
+ * @param {string} repoRoot - Absolute repo root to strip when present as a prefix.
+ * @returns {string} Repo-relative, normalized key.
+ * @example
+ * toRepoRelative('/Users/x/corelive/electron/main.ts', '/Users/x/corelive') // 'electron/main.ts'
+ * toRepoRelative('_N_E/src/app/page.tsx', '/Users/x/corelive')              // 'src/app/page.tsx'
+ */
+export function toRepoRelative(filePath, repoRoot) {
+  let candidate = filePath
+  if (repoRoot && candidate.startsWith(repoRoot)) {
+    candidate = candidate.slice(repoRoot.length).replace(/^\//, '')
+  }
+  return normalizeSourcePath(candidate)
+}
+
+/**
+ * Builds a monocart `sourcePath` callback that rewrites every input path to the
+ * canonical repo-relative key via {@link toRepoRelative}, so unit (absolute) and
+ * E2E (`_N_E/…`) coverage for one file collapse to a single merged entry.
+ * @param {string} repoRoot - Absolute repo root.
+ * @returns {(filePath: string) => string} monocart sourcePath rewriter.
+ * @example
+ * makeSourcePath('/Users/x/corelive')('_N_E/src/app/page.tsx') // => 'src/app/page.tsx'
+ */
+export function makeSourcePath(repoRoot) {
+  return (filePath) => toRepoRelative(filePath, repoRoot)
+}
+
+/**
  * Builds a monocart `sourceFilter` that keeps ONLY corelive's own source files,
  * using on-disk existence as the discriminator — robust where prefix lists are
  * not, because third-party libs (lucide `src/icons/*`, @tanstack `src/useQuery.ts`,
@@ -66,7 +106,7 @@ export function makeFirstPartyFilter(
   prefixes = WEB_FIRST_PARTY_PREFIXES,
 ) {
   return (sourcePath) => {
-    const rel = normalizeSourcePath(sourcePath)
+    const rel = toRepoRelative(sourcePath, repoRoot)
     // Must live under an allowed first-party subtree.
     if (!prefixes.some((prefix) => rel.startsWith(prefix))) return false
     // Drop tests / stories / types / ambient — match the unit exclude set.

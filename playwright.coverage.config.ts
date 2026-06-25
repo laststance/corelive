@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test'
 import baseConfig from './playwright.config'
 import {
   makeFirstPartyFilter,
-  normalizeSourcePath,
+  makeSourcePath,
 } from './scripts/coverage-source-filter.mjs'
 
 // Playwright runs from the repo root; `import.meta.dirname` is this config's
@@ -53,7 +53,7 @@ export default defineConfig({
           // Next/webpack sources arrive as `_N_E/./src/...`; normalize to the
           // repo-relative `src/...` key vitest v8 emits, so the merge unions
           // each file instead of double-counting it.
-          sourcePath: (filePath: string) => normalizeSourcePath(filePath),
+          sourcePath: makeSourcePath(repoRoot),
         },
       },
     ],

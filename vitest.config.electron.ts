@@ -10,6 +10,9 @@ export default defineConfig({
     include: [
       'electron/**/*.{spec,test}.{js,jsx,ts,tsx,cjs,mjs}',
       'electron/**/__tests__/**/*.{js,jsx,ts,tsx,cjs,mjs}',
+      // #127 coverage tooling (node-only) lives here, not the web project, whose
+      // happy-dom setupFiles touch `window` and break under a node test.
+      'scripts/**/*.{spec,test}.{js,ts,cjs,mjs}',
     ],
     exclude: ['electron/node_modules/**'],
     setupFiles: [],

@@ -280,3 +280,90 @@ produce a meaningful merged number; it can land incrementally as 1 and 2 arrive.
 
 - #125 / PR #129 — the `main.ts` shadow-harness gap that motivated AC#1's "real number" clause.
 - `laststance/gitbox` — `playwright.config.ts` + `e2e/fixtures/coverage.ts` (the ported technique).
+
+## As-Built Notes (what shipped, and where it deviates from the spec above)
+
+The plan above was written before implementation; these are the corrections the
+build surfaced. Where they conflict, **this section is authoritative.**
+
+1. **The merge is TWO-STAGE Istanbul, not a single V8 merge.** monocart cannot
+   V8-merge a file measured by BOTH a V8 source (E2E `page.coverage` /
+   `NODE_V8_COVERAGE`) and an Istanbul source (vitest's `coverage-final.json`):
+   the V8 merge path iterates `scriptCov.functions`, which Istanbul-shaped entries
+   lack (V8→Istanbul conversion is automatic; Istanbul→V8 is not — Istanbul has no
+   raw script coverage). Empirically this throws `scriptCov.functions is not
+iterable`. So `scripts/coverage-merge.mjs` does: **Stage 1** — merge the E2E
+   `raw` V8 dirs (`inputDir`) into one Istanbul `coverage-final.json`; **Stage 2** —
+   `.add()` that E2E Istanbul + the two unit Istanbul files (ALL Istanbul) and
+   generate. Reports are `html` (Istanbul) + `lcovonly` + `json-summary` +
+   `console-details` (not the v8 HTML the plan named — stage 2 has no V8 data).
+   Verified: `electron/main.ts` appears exactly once; zero `dist-electron` /
+   `_next` / `node_modules` keys (AC#4).
+
+2. **First-party filtering is on-disk existence, not globs (`scripts/coverage-source-filter.mjs`).**
+   A `**/src/**` glob cannot isolate corelive code: third-party libs ship source
+   maps that expand to bare `src/…` paths — lucide-react alone leaks **1703**
+   `src/icons/*` entries, plus @tanstack (`src/useQuery.ts`, `src/client/*`) and
+   Next (`src/providers/*`). The filter normalizes each path (strips `_N_E/`,
+   `webpack://`, and an absolute repo-root prefix → the same key vitest emits) and
+   keeps it only if the file exists under `src/`/`electron/` AND is not a
+   test/story/type (mirroring the Phase 0 unit excludes, so unit + E2E describe one
+   universe). The `src/providers` collision (corelive HAS it; Next's internal
+   `src/providers/*` does not exist at that path) is why existence beats a
+   prefix-exclude list. Unit-tested in `scripts/coverage-source-filter.test.mjs`.
+
+3. **Web E2E entryFilter = same-origin Next chunks only; CSS coverage dropped.**
+   Map-less entries (cross-origin Clerk CDN bundles, the HTML document) never reach
+   `sourceFilter`, so they are dropped at `entryFilter` instead. CSS coverage was
+   removed from the fixture: Next/Tailwind emit no CSS source maps back to `src/`,
+   so it mapped to nothing first-party — pure noise.
+
+4. **Playwright bumped `1.60.0`→`1.61.1`.** `monocart-reporter@2.11.3` is
+   realm-coupled to Playwright and threw "two different versions of
+   `@playwright/test`" during collection on 1.60.0 (gitbox pairs it with `^1.61.1`).
+   The bump cleared it; full web + electron E2E suites re-validated green on 1.61.1.
+
+5. **CI scope split (`coverage.yml`): unit + web E2E on Linux; electron E2E stays
+   local/macOS.** A dedicated non-sharded job runs `coverage:unit` + `coverage:e2e:web`
+   - `coverage:merge` and uploads ONE merged report to Codecov (flag `merged`) +
+     an artifact. The merge gracefully skips the absent `coverage/e2e-electron/raw`
+     on Linux — Electron is a macOS-native product and Linux+xvfb does not exercise
+     its Cocoa paths, so booted-app `main.ts` coverage is measured LOCALLY via
+     `pnpm coverage:e2e:electron` (electron _unit_ coverage IS in CI). **codex #10**
+     is fixed by consolidation: `test.yml`'s broken `./coverage/lcov.info` upload is
+     removed (not repointed) so `coverage.yml` is the single Codecov source.
+
+6. **Threshold is report-only by default.** `coverage-merge.mjs` exits 0 regardless
+   of the number unless `COVERAGE_MIN_LINES`/`_STATEMENTS`/`_FUNCTIONS`/`_BRANCHES`
+   are set (CI ratchet = a one-line env edit, deferred per the Open Decision).
+
+### Commands (as-built)
+
+| Command                      | Does                                                                              |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm coverage:unit`         | vitest v8 coverage for web + electron → `coverage/unit-*/`                        |
+| `pnpm coverage:e2e:web`      | `COVERAGE=1` source-map build + full web suite → `coverage/e2e-web/raw/`          |
+| `pnpm coverage:e2e:electron` | `COVERAGE=1` electron suite (booted-app `main.ts`) → `coverage/e2e-electron/raw/` |
+| `pnpm coverage:merge`        | two-stage Istanbul merge of all of the above → `coverage/merged/`                 |
+| `pnpm coverage:all`          | the four above in sequence                                                        |
+
+`COVERAGE` is unset on normal runs: no source maps, no `page.coverage`, no
+`NODE_V8_COVERAGE` — the gating suites and dev/build are untouched (AC#6).
+
+### Measured merged baseline
+
+Full `pnpm coverage:all` on macOS (unit web+electron, web E2E ×10 specs, electron
+E2E booted-app), 289 first-party files:
+
+| Metric     | Merged % |
+| ---------- | -------- |
+| Lines      | 32.42%   |
+| Statements | 32.41%   |
+| Functions  | 27.99%   |
+| Branches   | 27.30%   |
+
+These are the numbers a CI ratchet would floor against (set `COVERAGE_MIN_*` on the
+`coverage:merge` step). The figure is the union: a line covered by unit OR any E2E
+surface counts once. `electron/main.ts`, measured only by the booted-app E2E, appears
+exactly once at its real (non-zero) number — the #129 shadow-harness premise, now
+data-backed.

@@ -1,0 +1,137 @@
+# ----------------------------------------------------------------------------
+# Coverage (#127) — measurable Unit + web E2E coverage, merged into one report
+# ----------------------------------------------------------------------------
+# A dedicated, NON-sharded job that measures coverage and publishes a single
+# merged report. It is ADDITIVE: the pass/fail gates (test.yml, e2e.web.yml,
+# e2e.electron.yml) are untouched and stay coverage-free, so the per-spec shards
+# never pay the coverage cost and never depend on a fragile cross-shard merge.
+#
+# Scope = what CI (Linux) can run reliably:
+#   - Unit coverage (web + electron vitest configs).
+#   - Web E2E coverage (full suite once, COVERAGE=1, against the source-map build).
+#   - The merge gracefully SKIPS electron E2E (`coverage/e2e-electron/raw`) here:
+#     Electron is a macOS-native product and Linux+xvfb does not cover its Cocoa
+#     paths, so its booted-app (`main.ts`) coverage is measured LOCALLY on macOS
+#     via `pnpm coverage:e2e:electron` (electron unit coverage IS included above).
+#
+# Report-only by default (no COVERAGE_MIN_* env → the merge exits 0 regardless of
+# the number). To turn this into a ratchet, set COVERAGE_MIN_LINES / _STATEMENTS /
+# _FUNCTIONS / _BRANCHES on the merge step to the trusted baseline — a one-line edit.
+# ----------------------------------------------------------------------------
+
+name: Coverage
+
+on:
+  pull_request:
+    # Coverage gains nothing from a docs-only change; skip the full E2E run.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Unit + Web E2E coverage 📊
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TZ: Asia/Tokyo
+
+    steps:
+      - name: Checkout repository 🔄
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Use shared prepare action 🔧
+        uses: ./.github/actions/prepare
+
+      # Pipe each secret through an `env:` block so values with newlines or shell
+      # metacharacters cannot inject extra `.env` lines (see e2e.electron.yml).
+      - name: Set environment variables
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          E2E_CLERK_USER_USERNAME: ${{ secrets.E2E_CLERK_USER_USERNAME }}
+          E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
+          E2E_CLERK_USER_EMAIL: ${{ secrets.E2E_CLERK_USER_EMAIL }}
+        run: |
+          {
+            printf 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=%s\n' "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login\n'
+            printf 'NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up\n'
+            printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home\n'
+            printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
+            printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5432/corelive?schema=public'
+            printf 'E2E_CLERK_USER_USERNAME=%s\n' "$E2E_CLERK_USER_USERNAME"
+            printf 'E2E_CLERK_USER_PASSWORD=%s\n' "$E2E_CLERK_USER_PASSWORD"
+            printf 'E2E_CLERK_USER_EMAIL=%s\n' "$E2E_CLERK_USER_EMAIL"
+          } > .env
+
+      - name: Start Postgres via Docker Compose 🐳
+        run: |
+          docker compose -f compose.yml -p corelive up -d postgres --wait
+          docker ps -a
+
+      - name: Verify database connection 🧪
+        run: |
+          timeout 60 bash -c 'until docker compose -f compose.yml -p corelive exec postgres env PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive; do sleep 2; done'
+          echo "Database 'corelive' exists and is ready!"
+
+      - name: Run Prisma migrations 📦
+        run: pnpm prisma migrate deploy
+
+      - name: Generate Prisma Client 🗄️
+        run: pnpm prisma generate
+
+      - name: Install Playwright Browsers 🎭
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Unit coverage (web + electron vitest configs) → coverage/unit-*/.
+      - name: Unit coverage (web + electron)
+        env:
+          RUN_DB_INTEGRATION_TESTS: '1'
+        run: pnpm coverage:unit
+
+      # Web E2E coverage: COVERAGE=1 source-map build + full web suite (non-sharded),
+      # collected via the page.coverage auto-fixture → coverage/e2e-web/raw/.
+      - name: Web E2E coverage
+        env:
+          E2E_TEST_MODE: 'true'
+          E2E_SKIP_PER_SPEC_RESET: 'true'
+        run: pnpm coverage:e2e:web
+
+      # Merge unit + web E2E into coverage/merged (electron E2E raw skipped on Linux).
+      - name: Merge coverage
+        run: pnpm coverage:merge
+
+      - name: Upload merged coverage to Codecov ☂️
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/merged/lcov.info
+          flags: merged
+          fail_ci_if_error: false
+
+      - name: Upload merged coverage report artifact 📦
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-merged
+          path: coverage/merged/
+          retention-days: 30
+
+      - name: Show Postgres logs on failure 🪵
+        if: failure()
+        run: docker compose -f compose.yml -p corelive logs postgres | tail -n 200 || true

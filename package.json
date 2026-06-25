@@ -38,6 +38,8 @@
     "coverage:unit": "pnpm coverage:unit:web && pnpm coverage:unit:electron",
     "coverage:e2e:electron": "rimraf coverage/.electron-v8 coverage/e2e-electron && cross-env COVERAGE=1 pnpm e2e:electron && node scripts/electron-coverage-report.mjs",
     "coverage:e2e:web": "rimraf coverage/e2e-web && cross-env COVERAGE=1 pnpm build && cross-env COVERAGE=1 playwright test --config=playwright.coverage.config.ts",
+    "coverage:merge": "node scripts/coverage-merge.mjs",
+    "coverage:all": "pnpm coverage:unit && pnpm coverage:e2e:electron && pnpm coverage:e2e:web && pnpm coverage:merge",
     "theme:generate": "tsx scripts/generate-theme-css.ts",
     "theme:check": "tsx scripts/generate-theme-css.ts && git diff --exit-code src/lib/themes/generated.css && test -z \"$(git status --porcelain src/lib/themes/generated.css)\"",
     "prettier": "prettier --ignore-unknown --write .",
