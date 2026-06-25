@@ -94,3 +94,6 @@ _trials/
 .claude/auto.json
 .claude/auto-notes.md
 .gbrain-source
+
+# monocart-reporter default output (generated)
+/monocart-report

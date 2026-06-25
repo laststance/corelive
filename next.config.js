@@ -36,6 +36,12 @@ function createCodeInspectorOptions(bundler) {
 const nextConfig = {
   // Stable in Next.js 16 — auto-memoizes components via babel-plugin-react-compiler.
   reactCompiler: true,
+  // #127 Phase 1 (codex #1): emit browser source maps ONLY under COVERAGE=1 so
+  // Playwright `page.coverage` (collected against the prod build the web E2E
+  // suite runs) maps back to `src/**` instead of minified `/_next/static` chunks.
+  // Off by default — no `.map` emission, no bundle-size or source-leak surface
+  // in normal production builds.
+  productionBrowserSourceMaps: process.env.COVERAGE === '1',
   // Electron configuration - keep images unoptimized for better compatibility
   images: {
     unoptimized: true,

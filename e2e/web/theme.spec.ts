@@ -1,8 +1,9 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { type Page } from '@playwright/test'
 
 import { THEME_CROSSFADE_DURATION_MS } from '@/lib/constants/theme'
 
+import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
 
 test.describe('Theme Visual Test', () => {

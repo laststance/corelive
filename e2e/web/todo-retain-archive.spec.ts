@@ -1,8 +1,9 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { type Locator, type Page } from '@playwright/test'
 
 import { STORAGE_SCHEMA_VERSION } from '@/lib/redux/migratePersistedState'
 
+import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
 
 /**
