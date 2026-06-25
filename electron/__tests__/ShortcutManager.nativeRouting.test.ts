@@ -40,19 +40,38 @@ const NEW_TASK_ACCELERATOR = 'CommandOrControl+N'
 /**
  * Builds an available native tap whose register/unregister are spies, so a test
  * can assert the lone-modifier binding reached the engine with the right id.
- * @returns the engine plus its register/unregister/unregisterAll spies.
+ * `isLatchBlocked` is a spy defaulting to `false` (healthy) so routing tests are
+ * unchanged; a latch-block test overrides it to drive the inactive path (#125).
+ * @returns the engine plus its register/unregister/unregisterAll/isLatchBlocked spies.
  */
 function createAvailableNativeEngineHarness() {
   const register = vi.fn(() => true)
   const unregister = vi.fn(() => true)
   const unregisterAll = vi.fn()
+  const isLatchBlocked = vi.fn(() => false)
+  const clearLatchBlock = vi.fn()
+  const reArm = vi.fn()
+  const resetPressedState = vi.fn()
   const engine: NativeShortcutEngine = {
     isAvailable: () => true,
     register,
     unregister,
     unregisterAll,
+    isLatchBlocked,
+    clearLatchBlock,
+    reArm,
+    resetPressedState,
   }
-  return { engine, register, unregister, unregisterAll }
+  return {
+    engine,
+    register,
+    unregister,
+    unregisterAll,
+    isLatchBlocked,
+    clearLatchBlock,
+    reArm,
+    resetPressedState,
+  }
 }
 
 /** Minimal WindowManager stand-in — only the constructor chokepoint hook is read. */
@@ -93,6 +112,36 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
       callback,
     )
     expect(globalRegisterMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves a lone-modifier binding INACTIVE when the freeze-safety latch is blocked', () => {
+    // Arrange: a prior launch armed the tap but never confirmed stability (#125),
+    // so the engine reports latch-blocked — re-arming could re-freeze every launch.
+    const { engine, register, isLatchBlocked } =
+      createAvailableNativeEngineHarness()
+    isLatchBlocked.mockReturnValue(true)
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      null,
+      engine,
+    )
+
+    // Act
+    const didRegister = shortcutManager.registerShortcut(
+      RIGHT_OPTION_BINDING,
+      'toggleBrainDump',
+      vi.fn(),
+    )
+
+    // Assert: never re-arms (engine.register untouched), reports inactive, and a
+    // lone modifier has NO chord equivalent so globalShortcut stays untouched too.
+    expect(didRegister).toBe(false)
+    expect(register).not.toHaveBeenCalled()
+    expect(globalRegisterMock).not.toHaveBeenCalled()
+    expect(
+      shortcutManager.getRegisteredShortcuts()['toggleBrainDump'],
+    ).toBeUndefined()
   })
 
   it('exposes the native binding in the read-back map so a rebind is confirmed', () => {
@@ -152,6 +201,10 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
       register: vi.fn(() => true),
       unregister: vi.fn(() => true),
       unregisterAll: vi.fn(),
+      isLatchBlocked: () => false,
+      clearLatchBlock: vi.fn(),
+      reArm: vi.fn(),
+      resetPressedState: vi.fn(),
     }
     const shortcutManager = new ShortcutManager(
       createWindowManagerStub(),
@@ -195,5 +248,80 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
       callback,
     )
     expect(register).not.toHaveBeenCalled()
+  })
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Freeze-safety recovery surface (#125): status + power-event + manual re-arm
+  // ──────────────────────────────────────────────────────────────────────────
+
+  it('reports the native tap status straight from the engine for the renderer affordance', () => {
+    // Arrange: a latch-blocked engine (a prior arming never confirmed).
+    const { engine, isLatchBlocked } = createAvailableNativeEngineHarness()
+    isLatchBlocked.mockReturnValue(true)
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      null,
+      engine,
+    )
+
+    // Act + Assert
+    expect(shortcutManager.getNativeTapStatus()).toEqual({
+      available: true,
+      latchBlocked: true,
+    })
+  })
+
+  it('revives the tap on reArmNativeTap (wired to powerMonitor resume/unlock)', () => {
+    // Arrange
+    const { engine, reArm } = createAvailableNativeEngineHarness()
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      null,
+      engine,
+    )
+
+    // Act
+    shortcutManager.reArmNativeTap()
+
+    // Assert
+    expect(reArm).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops pressed-alone state on resetNativeTapState (wired to powerMonitor suspend/lock)', () => {
+    // Arrange
+    const { engine, resetPressedState } = createAvailableNativeEngineHarness()
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      null,
+      engine,
+    )
+
+    // Act
+    shortcutManager.resetNativeTapState()
+
+    // Assert
+    expect(resetPressedState).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the latch block and returns status on manual reenableNativeTap', () => {
+    // Arrange
+    const { engine, clearLatchBlock } = createAvailableNativeEngineHarness()
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      null,
+      engine,
+    )
+
+    // Act
+    const status = shortcutManager.reenableNativeTap()
+
+    // Assert: the block is cleared (so the next register re-arms) and the
+    // post-action status is surfaced back to the caller.
+    expect(clearLatchBlock).toHaveBeenCalledTimes(1)
+    expect(status).toEqual({ available: true, latchBlocked: false })
   })
 })

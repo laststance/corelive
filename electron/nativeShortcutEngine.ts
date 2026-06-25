@@ -17,6 +17,20 @@
 import type { LoneModifierId } from './nativeBinding'
 
 /**
+ * The observable health of the native tap, surfaced to the renderer so a
+ * latch-blocked launch can show a "re-enable" affordance (#125). `available`
+ * mirrors {@link NativeShortcutEngine.isAvailable}; `latchBlocked` mirrors
+ * {@link NativeShortcutEngine.isLatchBlocked}. Kept here (next to the engine)
+ * so `ShortcutManager`'s status method and the IPC layer share one shape.
+ */
+export interface NativeTapStatus {
+  /** Whether the tap can run right now (module loaded + permission). */
+  available: boolean
+  /** Whether a prior unconfirmed arming is blocking a re-arm (needs manual re-enable). */
+  latchBlocked: boolean
+}
+
+/**
  * A swappable recognizer for lone-modifier key taps. A concrete implementation
  * (uiohook adapter / signed helper) holds the OS-level event tap and invokes the
  * stored callback when its modifier is pressed alone; `ShortcutManager` treats it
@@ -53,6 +67,35 @@ export interface NativeShortcutEngine {
 
   /** Removes every binding and releases the tap (called on cleanup/disable). */
   unregisterAll(): void
+
+  /**
+   * Whether a prior launch armed this tap but never confirmed stability (the
+   * brick-proof launch latch is still set — #125). `true` means {@link register}
+   * will refuse to start the tap; the caller binds the shortcut INACTIVE and
+   * offers a manual re-enable instead of re-arming a possible brick loop.
+   */
+  isLatchBlocked(): boolean
+
+  /**
+   * Clear the latch-block state so the next {@link register} may arm the tap —
+   * the manual "re-enable" path taken after a latch-blocked launch.
+   */
+  clearLatchBlock(): void
+
+  /**
+   * Stop then restart the running tap, resetting the pressed-alone state, to
+   * revive a tap that may have gone silent across sleep/lock (powerMonitor
+   * `resume`/`unlock-screen`) or on a manual re-enable. No-op when unavailable
+   * or when no binding is active.
+   */
+  reArm(): void
+
+  /**
+   * Drop any in-flight pressed-alone state WITHOUT restarting the tap — used on
+   * `suspend`/`lock-screen` so a modifier "held across sleep" can't leave a
+   * stale pressed key that mis-fires or never re-fires after wake.
+   */
+  resetPressedState(): void
 }
 
 /**
@@ -71,5 +114,9 @@ export function createUnavailableNativeShortcutEngine(): NativeShortcutEngine {
     register: () => false,
     unregister: () => false,
     unregisterAll: () => {},
+    isLatchBlocked: () => false,
+    clearLatchBlock: () => {},
+    reArm: () => {},
+    resetPressedState: () => {},
   }
 }

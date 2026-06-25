@@ -118,3 +118,18 @@ export const SETTINGS_POPOVER_MAX_HEIGHT_PX = 900
 
 /** Debounce delay (ms) before persisting Settings popover size after a resize drag. */
 export const SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS = 200
+
+// ============================================================================
+// Native key-tap freeze-safety (#125)
+// ============================================================================
+
+/**
+ * How long after a healthy `uIOhook.start()` the brick-proof launch latch waits
+ * before clearing its on-disk marker (electron/utils/nativeTapLatch.ts). The
+ * marker is armed just before `start()`; if the tap start crashes or wedges the
+ * process within this window the clear-timer never runs, so the marker survives
+ * to the next launch and blocks a re-arm (the brick loop). 5s comfortably covers
+ * a near-immediate arming crash while keeping the false-block window (app killed
+ * right after launch) small and one-click recoverable.
+ */
+export const NATIVE_TAP_STABILITY_WINDOW_MS = 5000

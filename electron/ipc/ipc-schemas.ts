@@ -147,6 +147,10 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'shortcuts-enable': z.tuple([]),
   'shortcuts-disable': z.tuple([]),
   'shortcuts-get-stats': z.tuple([]),
+  // #125 native key-tap freeze-safety: query the tap's health and the manual
+  // re-enable after a latch-blocked launch. Both take no args.
+  'shortcuts-get-native-tap-status': z.tuple([]),
+  'shortcuts-reenable-native-tap': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Configuration

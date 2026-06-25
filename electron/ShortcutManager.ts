@@ -15,6 +15,7 @@ import { isNativeBinding, parseNativeBinding } from './nativeBinding'
 import {
   createUnavailableNativeShortcutEngine,
   type NativeShortcutEngine,
+  type NativeTapStatus,
 } from './nativeShortcutEngine'
 import type { NotificationManager } from './NotificationManager'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
@@ -584,6 +585,26 @@ export class ShortcutManager {
       return false
     }
 
+    // #125 brick-proof launch latch: a prior launch armed the tap but never
+    // confirmed stability (it may have wedged the app during arming). Re-arming
+    // would risk re-freezing on every launch — so do NOT register. A lone
+    // modifier has no chord equivalent, so the binding is simply left INACTIVE
+    // (not "degraded to chord"); the user re-enables it from Settings, which
+    // calls reenableNativeTap() to clear the block and re-arm.
+    if (this.nativeEngine.isLatchBlocked()) {
+      log.warn(
+        `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Manual re-enable required.`,
+      )
+      if (this.notificationManager) {
+        this.notificationManager.showNotification(
+          'Native Shortcut Disabled',
+          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Re-enable it in Settings.`,
+          { silent: true },
+        )
+      }
+      return false
+    }
+
     // Replace any prior binding under this id (native or accelerator) first.
     if (this.registeredShortcuts.has(id)) {
       this.unregisterShortcut(id)
@@ -615,6 +636,62 @@ export class ShortcutManager {
       `[registerNativeShortcut] Native engine rejected ${id} = ${nativeBinding}`,
     )
     return false
+  }
+
+  /**
+   * Reports the native tap's health for the renderer's re-enable affordance
+   * (#125) — exposed over the `shortcuts-get-native-tap-status` IPC so the UI
+   * can show a "disabled after a failed start — re-enable" control when a prior
+   * arming was left unconfirmed.
+   * @returns `{ available, latchBlocked }` straight from the engine.
+   * @example
+   * getNativeTapStatus() // => { available: true, latchBlocked: true }
+   */
+  getNativeTapStatus(): NativeTapStatus {
+    return {
+      available: this.nativeEngine.isAvailable(),
+      latchBlocked: this.nativeEngine.isLatchBlocked(),
+    }
+  }
+
+  /**
+   * Manual "re-enable" path after a latch-blocked launch (#125): clears the
+   * engine's stale-latch block, then re-runs registration so the lone-modifier
+   * binding re-arms the tap (a fresh arm overwrites the stale marker, which then
+   * clears after the stability window). Triggered by the
+   * `shortcuts-reenable-native-tap` IPC from the renderer's re-enable control.
+   * @returns the post-re-enable status so the caller can confirm the block cleared.
+   * @example
+   * reenableNativeTap() // => { available: true, latchBlocked: false }
+   */
+  reenableNativeTap(): NativeTapStatus {
+    this.nativeEngine.clearLatchBlock()
+    // Re-run the global registration chokepoint; with the block cleared, the
+    // lone-modifier binding now arms the tap instead of being left inactive.
+    this.registerGlobalShortcuts()
+    return this.getNativeTapStatus()
+  }
+
+  /**
+   * Revives a tap that may have gone silent across sleep/lock by stopping and
+   * restarting it (#125). Wired to `powerMonitor` `resume`/`unlock-screen` in
+   * `main.ts`; no-op when the engine is unavailable or has no active binding.
+   * @example
+   * reArmNativeTap() // after `powerMonitor` 'resume'
+   */
+  reArmNativeTap(): void {
+    this.nativeEngine.reArm()
+  }
+
+  /**
+   * Drops any in-flight pressed-alone state WITHOUT restarting the tap (#125),
+   * so a modifier "held across sleep" can't leave a stale pressed key that
+   * mis-fires on wake. Wired to `powerMonitor` `suspend`/`lock-screen`.
+   * @example
+   * resetNativeTapState() // before `powerMonitor` 'suspend' sleeps the machine
+   */
+  resetNativeTapState(): void {
+    this.nativeEngine.resetPressedState()
   }
 
   /**

@@ -7,6 +7,15 @@
  * first/last binding. The native module is INJECTED (a loader thunk) so the
  * adapter unit-tests with a fake and `main.ts` supplies the real `require`.
  *
+ * Freeze-safety (#125): the tap stays in the main process (a `utilityProcess`
+ * child proved non-viable on macOS — a CGEventTap with no Cocoa run loop delivers
+ * one event then goes silent). Instead the adapter (a) dispatches the toggle via
+ * `setImmediate` so heavy window work never runs on the tap's emit path, (b)
+ * exposes `reArm()` to revive a possibly-silent tap on sleep/wake without
+ * duplicating listeners (attached once, ever), and (c) wraps `start()` in a
+ * brick-proof launch latch so a tap that crashes/wedges during arming starts
+ * INACTIVE next launch instead of re-bricking.
+ *
  * macOS needs Accessibility/Input-Monitoring (TCC) permission for the tap to
  * deliver events; `isAvailable()` only reports that the module LOADED — whether
  * events actually flow is proven at runtime (and on a signed build), which is why
@@ -15,9 +24,14 @@
  * @module electron/uiohookEngine
  */
 
+import { NATIVE_TAP_STABILITY_WINDOW_MS } from './constants'
 import { log } from './logger'
 import type { LoneModifierId } from './nativeBinding'
 import type { NativeShortcutEngine } from './nativeShortcutEngine'
+import {
+  defaultNativeTapLatch,
+  type NativeTapLatch,
+} from './utils/nativeTapLatch'
 
 /**
  * Lone-modifier id → libuiohook keycode (left/right distinct). Values are the
@@ -65,6 +79,8 @@ interface KeycodeBinding {
  * permanently unavailable and every op is a safe no-op, so callers degrade to a
  * chord exactly as with {@link createUnavailableNativeShortcutEngine}.
  * @param loadUiohook - Thunk returning the `uIOhook` singleton, or `null` on failure.
+ * @param latch - Injectable brick-proof latch (#125); defaults to the fsync-backed
+ *   marker file. Tests pass an in-memory fake to drive the latch-blocked path.
  * @returns A {@link NativeShortcutEngine} backed by the global key tap.
  * @example
  * const engine = createUiohookShortcutEngine(() => {
@@ -73,6 +89,7 @@ interface KeycodeBinding {
  */
 export function createUiohookShortcutEngine(
   loadUiohook: () => UiohookModule | null,
+  latch: NativeTapLatch = defaultNativeTapLatch,
 ): NativeShortcutEngine {
   const uiohook = safeLoad(loadUiohook)
 
@@ -88,6 +105,21 @@ export function createUiohookShortcutEngine(
   // The tap is started lazily on the first bind and stopped on the last, so the
   // app holds no global hook (and triggers no permission prompt) until needed.
   let isTapRunning = false
+
+  // Listeners are attached EXACTLY ONCE, ever (codex #4). They used to be added
+  // inside the start path; a reArm() (stop+start) would then stack duplicate
+  // keydown/keyup listeners and fire each binding twice (then thrice, …).
+  let listenersAttached = false
+
+  // Brick-proof launch latch (#125): clear-after-stability timer, and whether a
+  // PRIOR launch armed the tap but never confirmed (→ start INACTIVE this run).
+  let stabilityTimer: ReturnType<typeof setTimeout> | null = null
+  let blockedByStaleLatch = uiohook !== null && latch.isSet()
+  if (blockedByStaleLatch) {
+    log.warn(
+      '[uiohookEngine] freeze-safety latch set from a prior unconfirmed arming — tap starts INACTIVE until re-enabled',
+    )
+  }
 
   /** Fire a lone-modifier callback without letting a throw kill the tap. */
   const invokeBindingSafely = (binding: KeycodeBinding): void => {
@@ -116,10 +148,75 @@ export function createUiohookShortcutEngine(
       const binding = bindingByKeycode.get(keycode)
       armedKeycode = null
       pressedKeycodes.delete(keycode)
-      if (binding) invokeBindingSafely(binding)
+      // Schedule the toggle off the tap's dispatch path (codex #1): heavy window
+      // work must NOT run synchronously where the native thread delivers events.
+      // `setImmediate` defers to the next main-loop tick — NOT a microtask, which
+      // would still drain on this tick. (This shrinks, not removes, the wedge
+      // surface — a hang INSIDE the callback still freezes main; see AC#3.)
+      if (binding) setImmediate(() => invokeBindingSafely(binding))
       return
     }
     pressedKeycodes.delete(keycode)
+  }
+
+  /** Wire keydown/keyup to the singleton exactly once for the engine's lifetime. */
+  const attachListenersOnce = (): void => {
+    if (uiohook === null || listenersAttached) return
+    uiohook.on('keydown', handleKeyDown)
+    uiohook.on('keyup', handleKeyUp)
+    listenersAttached = true
+  }
+
+  /** Drop in-flight pressed-alone state (used around reArm and on suspend/lock). */
+  const resetPressedState = (): void => {
+    pressedKeycodes.clear()
+    armedKeycode = null
+  }
+
+  /**
+   * Clear the latch marker once the tap has run a stability window without
+   * crashing/wedging the process. A crash/wedge before this fires leaves the
+   * marker set → next launch starts INACTIVE (the brick-loop break).
+   */
+  const scheduleLatchClear = (): void => {
+    if (stabilityTimer) clearTimeout(stabilityTimer)
+    stabilityTimer = setTimeout(() => {
+      stabilityTimer = null
+      latch.clear()
+    }, NATIVE_TAP_STABILITY_WINDOW_MS)
+    stabilityTimer.unref()
+  }
+
+  /**
+   * Arm the brick-guard, attach listeners once, start the tap, schedule the
+   * latch clear. Shared by the first lazy start and every reArm so the
+   * freeze-safety wrapper is identical on each (re)start.
+   * @returns `true` when the tap is running; `false` if the latch couldn't be
+   *   armed (refuse to start unguarded) or `start()` threw.
+   */
+  const startTapGuarded = (): boolean => {
+    if (uiohook === null) return false
+    // Persist the brick-guard BEFORE start(); a freeze with no on-disk guard
+    // would brick the next launch, so refuse to start if it didn't land.
+    if (!latch.arm()) {
+      log.error(
+        '[uiohookEngine] could not arm freeze-safety latch; refusing to start tap',
+      )
+      return false
+    }
+    attachListenersOnce()
+    try {
+      uiohook.start()
+      isTapRunning = true
+      scheduleLatchClear()
+      return true
+    } catch (error) {
+      log.error('[uiohookEngine] Failed to start global key tap:', error)
+      // A synchronous start() failure is not a freeze — clear the guard so the
+      // next launch isn't falsely blocked.
+      latch.clear()
+      return false
+    }
   }
 
   /**
@@ -131,34 +228,37 @@ export function createUiohookShortcutEngine(
   const ensureTapRunning = (): boolean => {
     if (uiohook === null) return false
     if (isTapRunning) return true
-    try {
-      uiohook.on('keydown', handleKeyDown)
-      uiohook.on('keyup', handleKeyUp)
-      uiohook.start()
-      isTapRunning = true
-      log.info('[uiohookEngine] Global key tap started')
-      return true
-    } catch (error) {
-      log.error('[uiohookEngine] Failed to start global key tap:', error)
-      return false
-    }
+    const started = startTapGuarded()
+    if (started) log.info('[uiohookEngine] Global key tap started')
+    return started
   }
 
   /** Stop the tap when no bindings remain so the app releases the global hook. */
   const stopTapIfIdle = (): void => {
     if (uiohook === null || !isTapRunning || bindingByKeycode.size > 0) return
+    if (stabilityTimer) {
+      clearTimeout(stabilityTimer)
+      stabilityTimer = null
+    }
     try {
       uiohook.stop()
     } catch (error) {
       log.error('[uiohookEngine] Failed to stop global key tap:', error)
     }
     isTapRunning = false
-    pressedKeycodes.clear()
-    armedKeycode = null
+    resetPressedState()
+    // A clean stop is a confirmed-healthy session — drop the brick-guard.
+    latch.clear()
   }
 
   return {
     isAvailable: () => uiohook !== null,
+
+    isLatchBlocked: () => blockedByStaleLatch,
+
+    clearLatchBlock: () => {
+      blockedByStaleLatch = false
+    },
 
     register: (
       modifier: LoneModifierId,
@@ -166,6 +266,9 @@ export function createUiohookShortcutEngine(
       callback: () => void,
     ): boolean => {
       if (uiohook === null) return false
+      // #125: a prior unconfirmed arming → do NOT re-arm (possible brick loop).
+      // The caller reads isLatchBlocked() to bind INACTIVE + offer re-enable.
+      if (blockedByStaleLatch) return false
 
       // Drop any prior binding for this id before re-binding it.
       const previousKeycode = keycodeById.get(id)
@@ -201,6 +304,29 @@ export function createUiohookShortcutEngine(
       bindingByKeycode.clear()
       stopTapIfIdle()
     },
+
+    reArm: (): void => {
+      // Revive a possibly-silent tap (resume / unlock-screen / manual re-enable).
+      // Only meaningful when a binding exists; attach-once means stop+start never
+      // duplicates listeners (codex #4). Reset pressed-state on BOTH sides so a
+      // modifier "held across sleep" can't leave a stale armed key (codex #5).
+      if (uiohook === null || bindingByKeycode.size === 0) return
+      resetPressedState()
+      if (stabilityTimer) {
+        clearTimeout(stabilityTimer)
+        stabilityTimer = null
+      }
+      try {
+        if (isTapRunning) uiohook.stop()
+      } catch (error) {
+        log.error('[uiohookEngine] stop during re-arm failed:', error)
+      }
+      isTapRunning = false
+      if (startTapGuarded()) log.info('[uiohookEngine] Global key tap re-armed')
+      resetPressedState()
+    },
+
+    resetPressedState,
   }
 }
 

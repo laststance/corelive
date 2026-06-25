@@ -22,6 +22,7 @@ import {
   dialog,
   session,
   Notification,
+  powerMonitor,
   screen,
 } from 'electron'
 import type { WebContents, Event as ElectronEvent } from 'electron'
@@ -268,6 +269,13 @@ let notificationManager: NotificationManagerType | null = null
 /** Promise to track in-flight NotificationManager initialization (prevents race conditions) */
 let notificationManagerPromise: Promise<NotificationManagerType> | null = null
 let shortcutManager: ShortcutManagerType | null = null
+/**
+ * Guards the one-time attachment of the #125 native key-tap `powerMonitor`
+ * listeners (sleep/lock → reset pressed-state, wake/unlock → re-arm). They are
+ * app-lifetime, so re-running the deferred ShortcutManager load must not stack
+ * duplicate listeners.
+ */
+let nativeTapPowerListenersAttached = false
 let systemIntegrationErrorHandler: SystemIntegrationErrorHandlerType | null =
   null
 let menuManager: MenuManagerType | null = null
@@ -844,6 +852,23 @@ async function loadSystemIntegrationStack(): Promise<void> {
     nativeShortcutEngine,
   )
   log.info('✅ [DEFERRED] ShortcutManager loaded')
+
+  // #125 native key-tap freeze-safety — power-event recovery. A CGEventTap can
+  // silently die across display sleep / screen lock; revive it on wake/unlock.
+  // And a lone modifier "held across sleep" must not leave a stale pressed-alone
+  // key, so drop the pressed-set before sleeping. Attached once (app-lifetime).
+  if (!nativeTapPowerListenersAttached) {
+    nativeTapPowerListenersAttached = true
+    // Sleep / lock: clear in-flight pressed-alone state WITHOUT restarting.
+    const dropNativeTapPressedState = () =>
+      shortcutManager?.resetNativeTapState()
+    powerMonitor.on('suspend', dropNativeTapPressedState)
+    powerMonitor.on('lock-screen', dropNativeTapPressedState)
+    // Wake / unlock: stop→start the tap so a silently-dead tap revives.
+    const reviveNativeTap = () => shortcutManager?.reArmNativeTap()
+    powerMonitor.on('resume', reviveNativeTap)
+    powerMonitor.on('unlock-screen', reviveNativeTap)
+  }
 
   // Feed the tray live, display-only hotkeys for the two toggle items it shows.
   // ShortcutManager is constructed AFTER SystemTrayManager, so this is a setter
@@ -2144,6 +2169,22 @@ function setupIPCHandlers(): void {
       }
     }
     return shortcutManager.getStats()
+  })
+
+  // #125 native key-tap freeze-safety: surface tap health + manual re-enable to
+  // the renderer's "disabled after a failed start — re-enable" control.
+  typedHandle('shortcuts-get-native-tap-status', () => {
+    if (!shortcutManager) {
+      return { available: false, latchBlocked: false }
+    }
+    return shortcutManager.getNativeTapStatus()
+  })
+
+  typedHandle('shortcuts-reenable-native-tap', () => {
+    if (!shortcutManager) {
+      return { available: false, latchBlocked: false }
+    }
+    return shortcutManager.reenableNativeTap()
   })
 
   // Deep linking IPC handlers

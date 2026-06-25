@@ -39,6 +39,7 @@ import type {
   DeepLinkExamples,
   IPCEventChannel,
   IPCResponse,
+  NativeTapStatus,
   NotificationOptions,
   NotificationPreferences,
   ShortcutDefinition,
@@ -853,6 +854,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } catch (error) {
         log.error('Failed to get shortcut stats:', error)
         return null
+      }
+    },
+
+    /**
+     * Read the native key-tap's health (#125) so the renderer can show a
+     * "disabled after a failed start — re-enable" control when a prior arming
+     * was left unconfirmed. Falls back to "unavailable, not blocked" on error.
+     */
+    getNativeTapStatus: async (): Promise<NativeTapStatus> => {
+      try {
+        return await typedInvoke('shortcuts-get-native-tap-status')
+      } catch (error) {
+        log.error('Failed to get native tap status:', error)
+        return { available: false, latchBlocked: false }
+      }
+    },
+
+    /**
+     * Manually re-enable the native key-tap after a latch-blocked launch (#125):
+     * clears the stale-latch block and re-arms the tap. Returns the post-action
+     * status so the UI can confirm the block cleared.
+     */
+    reenableNativeTap: async (): Promise<NativeTapStatus> => {
+      try {
+        return await typedInvoke('shortcuts-reenable-native-tap')
+      } catch (error) {
+        log.error('Failed to re-enable native tap:', error)
+        return { available: false, latchBlocked: false }
       }
     },
   },
