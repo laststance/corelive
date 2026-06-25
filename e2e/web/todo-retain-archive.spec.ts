@@ -234,4 +234,44 @@ test.describe('Move finished tasks to Completed individually (#113)', () => {
       { timeout: 10000 },
     )
   })
+
+  test('tucking one finished task leaves my other finished tasks in the list', async ({
+    page,
+  }) => {
+    // Arrange — two finished, retained rows. AC5: moving one files ONLY that one;
+    // the rest of my checked tasks stay in the list until I move each of them.
+    const tuckedText = 'Retain AC5 tucked'
+    const stayingText = 'Retain AC5 staying'
+    await page.goto('/home')
+    await addPendingTodo(page, tuckedText)
+    await addPendingTodo(page, stayingText)
+    await completeRetainedTodo(page, tuckedText)
+    await completeRetainedTodo(page, stayingText)
+
+    // Act — tuck only the first finished task into Completed.
+    const deletePromise = page.waitForResponse(
+      (resp) =>
+        resp.url().includes(ORPC_PATHS.deleteTodo) &&
+        resp.request().method() === 'POST',
+      { timeout: 10000 },
+    )
+    await page
+      .getByRole('button', { name: `Tuck "${tuckedText}" into Completed` })
+      .click()
+    expect((await deletePromise).status()).toBe(200)
+
+    // Assert — only that one left; the other finished task is untouched, still a
+    // completed-retained row with its own Tuck button and checkbox in the list.
+    await expect(
+      page.getByRole('button', { name: `Tuck "${tuckedText}" into Completed` }),
+    ).toHaveCount(0, { timeout: 10000 })
+    await expect(
+      page.getByRole('button', {
+        name: `Tuck "${stayingText}" into Completed`,
+      }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('checkbox', { name: stayingText }),
+    ).toBeVisible()
+  })
 })
