@@ -9,6 +9,12 @@
 > freeze-safety with a **brick-proof launch latch + powerMonitor/manual re-arm**, with
 > structural isolation (AC#3) recorded as a **documented exception**. The Phase 0
 > evidence and the v1/codex history are preserved below.
+>
+> **codex v2 review (gpt-5.x, high effort): `ready-with-changes`.** Its 9 findings —
+> `setImmediate` (not microtask) + AC#3 "reduced not removed", **fsync** latch (file+dir,
+> fail-safe), `reArm()` **attach-listeners-once**, **inactive** (not "chord") safe mode,
+> `suspend`/`lock-screen` state-clear, **typed** re-arm IPC, scaffold-already-gone — are
+> folded throughout and tagged `(codex #N)`.
 
 ## Context
 
@@ -141,10 +147,11 @@ mechanism is understood, not a mystery to chase.
 > surface `CGEventTapIsEnabled` + maintaining arm64/x64 prebuilds — heavy maintenance
 > for a personal app, guarding the **least severe** mode (feature degrades; app fine).
 >
-> **Covered instead** by the most common real silent-death cause being handled
-> blind (powerMonitor `resume` re-arm), a manual "re-enable" affordance, and the
-> brick-proof latch. **To restore auto-detection, say the word** and I'll scope the
-> `uiohook-napi` fork as its own task. Veto point: the PR.
+> **Covered instead** by the most common real silent-death cause being handled blind
+> (`powerMonitor` `resume`/`unlock-screen` re-arm) plus a manual "re-enable" affordance.
+> The brick-proof latch does **NOT** cover silent-tap (codex #3 — it guards the
+> arming-time brick loop only). **To restore auto-detection, say the word** and I'll scope
+> the `uiohook-napi` fork as its own task. Veto point: the PR.
 
 ---
 
@@ -160,113 +167,150 @@ Structural isolation is **out** (Phase 0). The residual catastrophic-wedge surfa
 tap activity. Harden it:
 
 - The main `keydown`/`keyup` handler does **no heavy synchronous work** — it updates the
-  pressed-set and **schedules** the window toggle (e.g. `setImmediate`/microtask), then
-  returns. Main cannot wedge _through_ the tap.
-- This is cheap and is the entire cost of dropping isolation. **Residual risk is LOW
-  and is documented (AC#3 exception):** the tap runs on its **own native thread** and
-  dispatches via a **non-blocking** threadsafe function (`addon.c:20`), so a tap-thread
-  stall degrades the **feature**, not the app; and the CGEventTap is an **active**
-  listen-and-dispatch tap (`kCGEventTapOptionDefault`), so a slow tap is **disabled by
-  the OS on its own timeout**, it does not freeze the system. With the fire handler
-  non-blocking and the feature opt-in (default binds nothing), the catastrophic mode is
-  bounded without a child process.
+  pressed-set and **schedules** the window toggle via **`setImmediate`** (NOT a microtask —
+  a microtask still drains on the same tick), then returns. This **shrinks**, but does
+  **not eliminate**, the main-thread wedge surface.
+- **Honest scope (codex #1) — AC#3 is RISK-REDUCED, NOT REMOVED.** `setImmediate` only
+  moves the toggle to the next main-loop tick; if `toggleBrainDump()` / window work itself
+  hangs, the app still freezes. We do **not** claim "main cannot wedge through the tap."
+  What IS true and bounds the risk: the tap runs on its **own native thread** dispatching
+  via a **non-blocking** threadsafe function (`addon.c:20`), so a tap-thread stall degrades
+  the **feature**, not the app; the CGEventTap is **active** (`kCGEventTapOptionDefault`),
+  so a slow tap is **disabled by the OS on its own timeout**; the toggle work is light and
+  the feature is opt-in (default binds nothing). The latch (Layer 3) catches an
+  **arming-time** crash/wedge, **not** a later runtime freeze after the marker cleared.
+  Net: the catastrophic mode is **reduced** to a small, opt-in surface without a child
+  process — the documented exception, not a structural fix.
 
 ### Layer 2 — re-arm on the recoverable causes (no silence-detection)
 
 No runtime silence-detector (descoped). Instead, **re-arm the tap on the events that
 actually correlate with a tap going dead**, none of which need detection:
 
-- **`powerMonitor` `resume` → re-arm.** CGEventTaps commonly die across sleep/wake. On
-  `resume`, if a lone-modifier binding is active, **stop + start** the tap (full
-  re-arm). This handles the single most common real-world silent-death cause **blind**,
-  with no false-positive risk (re-arming a healthy tap is a no-op cost).
-- **Manual re-arm affordance.** A user-facing "shortcut not responding? re-enable"
-  control (renderer → IPC → engine) does the same stop+start and re-enables the binding.
-  This is the recovery path for the residual silent-tap case the latch doesn't cover.
+- **`reArm()` must attach listeners ONCE (codex #4 — critical).** Today
+  `ensureTapRunning()` re-attaches `keydown`/`keyup` on **every** `start()`; a naive
+  stop→start re-arm would **duplicate listeners → duplicate fires**. So the engine gains a
+  `listenersAttached` guard (attach exactly once, ever) and a `reArm()` that **resets
+  `pressedKeycodes` + `armedKeycode` before AND after** the `stop()`+`start()` cycle. A
+  unit test asserts **10 reArms still fire exactly once**.
+- **`powerMonitor` events (codex #5).** CGEventTaps commonly die across sleep/wake, and a
+  modifier **held across sleep/lock** can leave a stale pressed-set. So: on **`suspend`**
+  and **`lock-screen`** → clear the pressed-set state; on **`resume`** and
+  **`unlock-screen`** → `reArm()` if a lone-modifier binding is active. (Skip
+  display-change unless QA shows it matters.) Re-arming a healthy tap is a cheap no-op, so
+  no false-positive risk.
+- **Manual re-arm affordance (typed IPC — codex #7).** A user-facing "shortcut not
+  responding? re-enable" control **reuses the existing typed shortcut IPC stack**
+  (`ipc-schemas.ts` + `types/ipc.ts` + `typedHandle` + `preload.ts`), adding
+  `shortcuts-reenable-native-tap` + `shortcuts-get-native-tap-status` — **not** ad-hoc
+  `ipcMain.handle`. It calls the same `reArm()` and re-enables the binding — the recovery
+  path for the residual silent-tap case (NOT covered by the latch; see Layer 3).
 - **libuiohook's built-in re-enable (free, documented).** `input_hook.c:995` already
   calls `CGEventTapEnable(true)` on `kCGEventTapDisabledByTimeout`, so the **timeout**
   sub-case self-heals inside the native layer. **Gap (documented):**
   `kCGEventTapDisabledByUserInput` is **not** handled — but it fires only transiently
-  (secure-input fields) and is covered by the manual re-arm. No code change here; we
-  rely on and document existing behavior.
+  (secure-input fields) and is covered by the manual re-arm. No code change here.
 
 ### Layer 3 — brick-proof launch latch (THE core fix; AC#2)
 
 The real GA blocker is the **relaunch brick loop**. Fix it with a process-stability
 latch in userData (a **SEPARATE file, NOT `config.json`**):
 
-- **Arm:** before starting the tap, write a `native-tap-arming` marker to userData.
-- **Clear:** a short **stability window** after a successful `start()`, if the process
-  is still alive and responsive, clear the marker. (Honest semantics — codex finding #2:
-  this is a **process-stability latch**, not a tap-liveness latch; it exists to break a
-  **wedge/crash brick loop** and is named accordingly. A wedge or crash during/just
-  after arming means the clear-timer never runs → marker persists.)
-- **Block:** on launch, if the marker is **still set** from last run (armed, never
-  confirmed → last launch crashed/wedged during arming), **do NOT re-arm the tap** —
-  start with the lone-modifier binding **inactive (chord-only safe mode)** and notify
-  the renderer ("native shortcut disabled after a failed start — re-enable?"). The user
-  recovers with one click (Layer 2 manual re-arm), which re-arms + clears the latch.
-  **Recovery never needs a `config.json` hand-edit.**
+This is a **process-stability latch** (codex #2), **not** a tap-liveness latch: it breaks
+a **wedge/crash brick loop**, and protects **only** against an arming-time crash/wedge — it
+does **NOT** cover a `start()`-succeeds-but-tap-silent case (codex #3; that is accepted
+degradation, recovered via Layer 2 re-arm). It is its **own** util (`nativeTapLatch.ts`),
+**not** `ConfigManager.saveConfig()` — that uses temp+rename **without fsync**, too weak
+for a launch-safety gate. Durable ordering (codex #2):
 
-"Degrade-to-chord" therefore lives **at the boot/latch layer** (latch trips → start
-chord-only), not in a runtime silence-detector. That is the entire degrade mechanism.
+- **Read** the marker **before any tap start**. A **present or corrupt** marker ⇒ **block**
+  (fail-safe).
+- **Arm:** before `start()`, write temp JSON → **`fsync` the file** → `rename` → **`fsync`
+  the userData dir**. If the arming write fails, **refuse to start** (never arm a tap whose
+  brick-guard didn't persist).
+- **Clear:** a **stability window** after a healthy `start()`, `unlink` the marker (`fsync`
+  the dir so a stale marker can't false-block next launch). A wedge/crash before then ⇒ the
+  clear-timer never runs ⇒ marker persists ⇒ next launch blocks.
+- **Block path:** marker still set ⇒ **do NOT re-arm**; start the lone-modifier in
+  **native-shortcut-inactive safe mode** (codex #6 — a lone modifier has **no chord
+  equivalent**, so this is _inactive_, NOT "degrade to chord"; `registerNativeShortcut()`
+  returning false already leaves it unregistered) + notify the renderer ("native shortcut
+  disabled after a failed start — re-enable?"). One click (Layer 2 manual re-arm) re-arms +
+  clears the latch. **Recovery never needs a `config.json` hand-edit.**
+
+The degrade therefore lives **at the boot/latch layer** (latch trips → start the
+lone-modifier **inactive**), not in a runtime silence-detector.
 
 ### AC#4 — signed re-prove
 
 Rebuild signed+notarized; grant TCC once; verify on the packaged arm64 build: (a) the
 in-main tap fires under the existing CoreLive.app grant (#126 baseline re-confirmed);
-(b) a simulated unconfirmed prior run (pre-set latch marker) starts chord-only +
-notifies, and manual re-enable recovers; (c) `powerMonitor resume` re-arms without a
+(b) a simulated unconfirmed prior run (pre-set latch marker) starts the lone-modifier in
+**inactive safe mode** + notifies, and manual re-enable recovers; (c) `powerMonitor`
+`resume`/`unlock-screen` re-arms (and `suspend`/`lock-screen` clears state) without a
 window hang.
 
 ## Acceptance Criteria (v2, testable)
 
 1. **(descoped — see notice)** Silent-tap auto-detection is **not** in scope. The
-   silent-tap case is covered by powerMonitor re-arm + manual re-enable + the latch.
-2. **A frozen/crashed tap never bricks on relaunch** — an unconfirmed prior arming
-   starts chord-only safe mode; recovery is one click, no `config.json` hand-edit.
-3. **(documented exception)** The tap runs **in main**, not isolated. Mode #2
-   (catastrophic main wedge) is **bounded** by a non-blocking fire handler + the OS
-   active-tap timeout + opt-in default, and the residual risk is documented as LOW —
-   **not** structurally removed. _Phase 0 proved isolation non-viable on macOS._
-4. **`powerMonitor resume` re-arms** the tap when a lone-modifier binding is active,
-   with no window hang and no false-degrade.
+   silent-tap case (`start()` succeeds, tap goes dead) is **accepted degradation**,
+   recovered via `powerMonitor` re-arm + manual re-enable **only** — the latch does NOT
+   cover it (codex #3).
+2. **A frozen/crashed tap never bricks on relaunch** — an unconfirmed prior arming starts
+   the lone-modifier in **native-shortcut-inactive safe mode** (NOT a chord — codex #6);
+   recovery is one click, no `config.json` hand-edit. Latch writes are fsync-durable and
+   fail-safe (corrupt/missing-on-arm ⇒ block).
+3. **(documented exception — RISK-REDUCED, not removed; codex #1)** The tap runs **in
+   main**, not isolated. Mode #2 (catastrophic main wedge) is **reduced** by a
+   `setImmediate` fire handler + the OS active-tap timeout + opt-in default, but is **not**
+   structurally removed — a hang inside the toggle work itself still freezes main, and the
+   latch only catches an arming-time wedge. _Phase 0 proved isolation non-viable on macOS._
+4. **`reArm()` is listener-safe** (attach-once guard; 10 reArms fire once — codex #4) and
+   fires on `resume`/`unlock-screen`; `suspend`/`lock-screen` clears the pressed-set — no
+   window hang, no false-degrade (codex #5).
 5. Re-proven on a **SIGNED** build (existing grant honored; latch blocks re-arm after an
-   unconfirmed prior run; manual + resume re-arm work).
-6. Unit + Electron tests: latch arm/clear/block-on-relaunch; powerMonitor-resume →
-   re-arm; manual re-arm IPC → re-arm + re-enable; fire handler is non-blocking
-   (schedules, doesn't block). **No regression to the chord path.**
+   unconfirmed prior run; manual + power-event re-arm work).
+6. Unit + Electron tests: latch arm/clear/block-on-relaunch + **corrupt-marker-blocks**;
+   **reArm-attaches-listeners-once (10× → 1 fire)**; power-event re-arm/clear; manual
+   re-arm IPC → re-arm + re-enable; fire handler schedules via `setImmediate` (no
+   synchronous heavy work). **No regression to the chord path.**
 
 ## Testing Plan
 
-| Layer             | What                                                                                                                                                            | Count |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| Unit              | latch arm writes marker; stability-window clears it; marker-present-on-boot → engine NOT armed + binding inactive + notify; manual re-arm path re-arms + clears | +~7   |
-| Electron (vitest) | powerMonitor `resume` → engine `stop()`+`start()`; fire handler schedules (no synchronous heavy work); packaged `.node` real-load smoke; cleanup tears down     | +~5   |
-| Manual signed QA  | AC#4 a/b/c on packaged arm64 (drive packaged app, computer-use): #126 baseline re-fires; pre-set latch → chord-only + notify; resume re-arm                     | n/a   |
+| Layer                       | What                                                                                                                                                                                                                                                             | Count |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Unit                        | latch arm(fsync)/clear/block-on-relaunch + **corrupt/missing marker ⇒ block**; **reArm attaches listeners ONCE → 10 reArms fire exactly once**; pressed-set reset on reArm; manual re-arm re-arms + clears                                                       | +~9   |
+| Electron (vitest)           | `resume`/`unlock-screen` → `reArm()`; `suspend`/`lock-screen` → clear state; fire handler schedules via `setImmediate`; packaged `.node` real-load smoke; cleanup tears down                                                                                     | +~6   |
+| Manual signed QA (codex #8) | packaged arm64 (drive app + computer-use, **real physical keys**): #126 baseline re-fires; **20 manual reArms → still fires once, no dup**; **sleep/wake + lock/unlock** re-arm; **latch-preseed boot → inactive safe mode + notify**, manual re-enable recovers | n/a   |
 
-> **TEST IMPLICATION:** every latch/re-arm test drives a **fake engine** (inject the
-> state — "marker present", "resume fired") — **never synthetic real keys.** Synthetic
-> key injection cannot exercise the live tap on a Karabiner machine (Phase 0 proved 0
-> fires), so it is invalid as a test vehicle. Real keys are for the signed manual QA only.
+> **TEST IMPLICATION:** every unit/electron latch/re-arm test drives a **fake engine**
+> (inject the state — "marker present", "resume fired", "10× reArm") — **never synthetic
+> keys.** Synthetic injection cannot exercise the live tap on a Karabiner machine (Phase 0:
+> at most 1-then-silent), so it is invalid as a unit vehicle. **Real physical keys are for
+> the signed manual QA only** — and fake tests alone are insufficient (codex #8): they
+> can't prove real `uiohook-napi` start→stop→start, listener duplication, TSFN cleanup, or
+> wake/unlock, hence the signed-QA row.
 
 ## Build / Packaging
 
-- **No new entry points.** v1's `utilityProcess` child host
-  (`electron/uiohookHost.ts`), the `electron.vite.config.ts` `uiohookHost` input, and
-  the Phase 0 probe (`electron/utils/tccProbe.ts` + the `main.ts` probe hook) are
-  **removed** in implementation — they were Phase 0 scaffolding and their finding
-  (TCC PASS) is now durable in this doc.
+- **No new entry points.** v1's Phase 0 scaffolding (`electron/uiohookHost.ts`,
+  `electron/utils/tccProbe.ts`, the `electron.vite.config.ts` `uiohookHost` input, the
+  `main.ts` probe hook) was **already reverted** before this doc's commit (codex #9) — so
+  the implementation step is just **verify no scaffold remains** (`git grep -i 'tccProbe\|uiohookHost'`
+  ⇒ empty). Its finding (TCC PASS) is durable in this doc.
 - The native `.node` stays `asarUnpack`'d and is loaded by the existing in-main loader
   (`loadUiohook.ts`); the packaged real-load smoke test guards the asar-leaf-drop class.
 
 ## Sequencing
 
-In-main is **smaller** than v1 (no child, no IPC, no ready-handshake, no gen tokens, no
-proxy). Single staged PR: (1) remove Phase 0 scaffolding; (2) fire-and-forget handler +
-latch; (3) powerMonitor + manual re-arm; (4) tests. A PR that ships before the signed
-AC#4 proof is **risk-reduction, NOT the closed GA gate** — the GA gate closes only on
-the signed re-prove. **Do not push a `v*` release tag until #125 lands + signed re-prove.**
+In-main is **smaller** than v1 (no child, no IPC ready-handshake, no gen tokens, no
+proxy). Single staged PR: (1) verify Phase 0 scaffold gone (already reverted); (2)
+`setImmediate` fire handler + `listenersAttached` guard + `reArm()` + fsync latch; (3)
+`powerMonitor` suspend/lock/resume/unlock + typed manual-re-arm IPC; (4) tests. A PR that
+ships before the signed AC#4 proof is **risk-reduction, NOT the closed GA gate** — the GA
+gate closes only on the signed re-prove. \*_Do not push a `v_` release tag until #125 lands
+
+- signed re-prove.\*\*
 
 ## Rollback
 
@@ -282,16 +326,15 @@ powerMonitor + manual re-arm ~1.5h • tests ~2.5h • signed re-prove ~1.5h = *
 
 ## Files Reference
 
-| File                               | Change                                                                                                         |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `electron/uiohookEngine.ts`        | fire-and-forget keydown/keyup handler; expose a `reArm()` (stop+start); latch arm/clear around `start()`       |
-| `electron/utils/nativeTapLatch.ts` | **NEW** — process-stability launch latch read/arm/clear in userData (separate file, NOT `config.json`)         |
-| `electron/ShortcutManager.ts`      | boot: if latch blocks, start lone-modifier inactive + notify; manual-re-arm intake re-enables + clears latch   |
-| `electron/main.ts`                 | `powerMonitor.on('resume')` → re-arm; remove the Phase 0 probe hook; wire manual re-arm IPC + degrade→renderer |
-| `electron/uiohookHost.ts`          | **DELETE** — v1 utilityProcess child host (Phase 0 scaffolding)                                                |
-| `electron/utils/tccProbe.ts`       | **DELETE** — Phase 0 gated probe launcher                                                                      |
-| `electron.vite.config.ts`          | **REVERT** — remove the `uiohookHost` main input                                                               |
-| `electron/__tests__/*`             | new specs per Testing Plan (fake engine; no synthetic keys)                                                    |
+| File                                                           | Change                                                                                                                                                                                |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `electron/uiohookEngine.ts`                                    | `setImmediate` fire-and-forget keydown/keyup; **`listenersAttached` attach-once guard**; `reArm()` (stop+start, **reset pressed-set before+after**); latch arm/clear around `start()` |
+| `electron/utils/nativeTapLatch.ts`                             | **NEW** — process-stability latch (separate userData file, NOT `config.json`); **fsync file + dir**, fail-safe (corrupt/missing ⇒ block)                                              |
+| `electron/ShortcutManager.ts`                                  | boot: if latch blocks, start lone-modifier **inactive** + notify; manual-re-arm intake re-enables + clears latch                                                                      |
+| `electron/main.ts`                                             | `powerMonitor`: `suspend`/`lock-screen` → clear state, `resume`/`unlock-screen` → `reArm()`; wire manual re-arm IPC + degrade→renderer                                                |
+| `ipc-schemas.ts` · `types/ipc.ts` · `preload.ts`               | **typed IPC** (codex #7): `shortcuts-reenable-native-tap` + `shortcuts-get-native-tap-status` (reuse `typedHandle`, not ad-hoc `ipcMain`)                                             |
+| Phase 0 scaffold (`uiohookHost.ts`, `tccProbe.ts`, vite input) | **already reverted** (codex #9) — implementation just verifies none remains                                                                                                           |
+| `electron/__tests__/*`                                         | new specs per Testing Plan (fake engine; no synthetic keys)                                                                                                                           |
 
 ## Out of Scope
 
