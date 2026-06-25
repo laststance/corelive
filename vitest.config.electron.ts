@@ -20,6 +20,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text-summary', 'json', 'lcov'],
       reportsDirectory: 'coverage/unit-electron',
+      // `include` is the explicit allowlist; in vitest 4 this also pulls in
+      // untested files (e.g. main.ts at 0%), which is the old `all: true` behavior.
       include: ['electron/**/*.ts'],
       exclude: [
         'electron/**/*.{test,spec}.{ts,cts,mts}',
@@ -27,7 +29,6 @@ export default defineConfig({
         'electron/node_modules/**',
         '**/*.d.ts',
       ],
-      all: true,
     },
   },
   esbuild: {

@@ -21,6 +21,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text-summary', 'json', 'lcov'],
       reportsDirectory: 'coverage/unit-web',
+      // `include` is the explicit allowlist; in vitest 4 this also pulls in
+      // untested files (reported at 0%), which is the old `all: true` behavior.
       include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/**/*.{test,spec}.{ts,tsx}',
@@ -29,7 +31,6 @@ export default defineConfig({
         'src/types/**',
         '**/*.d.ts',
       ],
-      all: true,
     },
   },
   resolve: {
