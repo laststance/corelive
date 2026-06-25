@@ -45,11 +45,12 @@ const EXCLUDE_PATTERNS = [
  */
 export function normalizeSourcePath(filePath) {
   return filePath
+    .replace(/\\/g, '/') // Windows separators → POSIX so prefix checks match cross-platform
     .replace(/^webpack:\/\/[^/]*\/\.?\//, '') // `webpack://_N_E/./` or `webpack:///`
     .replace(/^webpack:\/\//, '') // bare `webpack://` residue
     .replace(/^_N_E\//, '') // Next webpack library prefix after scheme strip
     .replace(/^\.\//, '') // leading `./`
-    .replace(/^\//, '') // accidental leading slash
+    .replace(/^\/+/, '') // accidental leading slash(es)
 }
 
 /**
@@ -68,7 +69,7 @@ export function normalizeSourcePath(filePath) {
 export function toRepoRelative(filePath, repoRoot) {
   let candidate = filePath
   if (repoRoot && candidate.startsWith(repoRoot)) {
-    candidate = candidate.slice(repoRoot.length).replace(/^\//, '')
+    candidate = candidate.slice(repoRoot.length).replace(/^[\\/]+/, '')
   }
   return normalizeSourcePath(candidate)
 }

@@ -85,7 +85,10 @@ if (e2eRawDirs.length > 0) {
     name: 'CoreLive E2E Coverage (intermediate)',
     inputDir: e2eRawDirs,
     outputDir: e2eIstanbulDir,
-    reports: ['json'], // Istanbul coverage-final.json
+    // Pin the filename: the istanbul `json` report defaults to `coverage-final.json`
+    // (istanbul-reports/lib/json defaults `opts.file`), but state it explicitly so a
+    // future monocart/istanbul default change can't silently break the read below.
+    reports: [['json', { file: 'coverage-final.json' }]],
   }).generate()
   const e2eFinal = path.join(repoRoot, e2eIstanbulDir, 'coverage-final.json')
   if (fs.existsSync(e2eFinal)) {

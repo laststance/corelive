@@ -51,6 +51,10 @@ jobs:
     steps:
       - name: Checkout repository 🔄
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Token is only needed for the initial fetch; don't persist it in
+          # .git/config where later steps (build, pnpm scripts) could read it.
+          persist-credentials: false
 
       - name: Use shared prepare action 🔧
         uses: ./.github/actions/prepare

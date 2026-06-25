@@ -37,7 +37,7 @@ turned out to be **shadow reimplementations** — it defines its own `WindowMana
 "387 passing tests" never touch the entry point. Coverage is the instrument that
 makes that gap visible instead of a surprise in production.
 
-#127 points at **`laststance/gitbox`** for "how to obtain E2E coverage." That repo
+Issue #127 points at **`laststance/gitbox`** for "how to obtain E2E coverage." That repo
 (a web-only Next.js app, no Electron) collects V8 coverage through the Playwright
 runner. This plan ports that technique and extends it to the one surface gitbox
 never had: the Electron main process.
@@ -150,7 +150,7 @@ cover?" and surfaces the `main.ts`-at-0% fact immediately.
 
 Run this session against the real built main bundle:
 
-```
+```text
 [spike] main entry exists: true
 [spike] main sourcemap exists: true            # dist-electron/main/index.cjs.map (124 KB)
 [spike] firstWindow resolved
@@ -265,7 +265,7 @@ on normal local + CI runs.
 
 ## Dependency Graph / Sequencing
 
-```
+```text
 Phase 0 (unit) ──┐
                  ├─> Phase 3 (merge + report + CI threshold)
 Phase 1 (web) ───┤
