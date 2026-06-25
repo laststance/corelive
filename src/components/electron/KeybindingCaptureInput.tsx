@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -11,6 +11,19 @@ import { cn } from '@/lib/utils'
 
 import { formatAcceleratorForDisplay } from './utils/formatAcceleratorForDisplay'
 import { keyboardEventToAccelerator } from './utils/keyboardEventToAccelerator'
+import { keyboardEventToLoneModifierBinding } from './utils/keyboardEventToLoneModifierBinding'
+
+/**
+ * A lone-modifier candidate armed on key-down: the physical key still held and
+ * the binding it commits to if released cleanly. `null` whenever no clean single
+ * modifier is down — any intervening key (a chord, a second modifier) clears it.
+ */
+interface LoneModifierCandidate {
+  /** `KeyboardEvent.code` of the held modifier — matched on key-up to commit. */
+  code: string
+  /** The binding string to emit, e.g. `'lone-modifier:rightOption'`. */
+  binding: string
+}
 
 /** A keydown fired mid-IME-composition reports this sentinel keyCode (legacy but still emitted). */
 const IME_COMPOSITION_KEYCODE = 229
@@ -84,6 +97,11 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
   className,
 }: KeybindingCaptureInputProps) {
   const [isRecording, setIsRecording] = useState(false)
+  // Lone-modifier capture is key-up based: a clean single-modifier key-down arms
+  // this candidate, and the matching key-up commits it — but only if no other key
+  // intervened. A ref (not state) because it changes within one capture gesture
+  // and must never trigger a re-render mid-recording.
+  const loneModifierCandidateRef = useRef<LoneModifierCandidate | null>(null)
 
   // Recording starts on explicit activation — a click, or keyboard Enter/Space,
   // both of which fire the button's onClick. Deliberately NOT on focus: auto-
@@ -91,10 +109,12 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
   // preventDefaults Tab (Escape is the only keyboard exit).
   const startRecording = () => {
     if (disabled) return
+    loneModifierCandidateRef.current = null
     setIsRecording(true)
   }
 
   const stopRecording = () => {
+    loneModifierCandidateRef.current = null
     setIsRecording(false)
   }
 
@@ -138,6 +158,33 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
     const accelerator = keyboardEventToAccelerator(nativeEvent)
     if (accelerator) {
       onChange(accelerator)
+      loneModifierCandidateRef.current = null
+      stopRecording()
+      return
+    }
+
+    // No chord yet. Arm a lone-modifier candidate only for a clean single-modifier
+    // key-down; any other key (a non-modifier, or a second modifier forming a
+    // chord) returns null and disarms it, so a later modifier key-up won't commit.
+    const loneModifierBinding = keyboardEventToLoneModifierBinding(nativeEvent)
+    loneModifierCandidateRef.current = loneModifierBinding
+      ? { code: nativeEvent.code, binding: loneModifierBinding }
+      : null
+  }
+
+  const handleKeyUp = (event: KeyboardEvent<HTMLButtonElement>) => {
+    // Only commit a lone modifier while recording; ignore the Enter/Space key-up
+    // that activated the button (its code is never a modifier, so candidate is null).
+    if (!isRecording) return
+
+    const candidate = loneModifierCandidateRef.current
+    // Commit only when the SAME physical modifier that was armed is released with
+    // nothing else pressed in between — that is the lone-modifier gesture.
+    if (candidate && event.code === candidate.code) {
+      event.preventDefault()
+      event.stopPropagation()
+      onChange(candidate.binding)
+      loneModifierCandidateRef.current = null
       stopRecording()
     }
   }
@@ -153,6 +200,7 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
       onClick={startRecording}
       onBlur={stopRecording}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
       data-recording={isRecording || undefined}
       className={cn(
         'w-36 font-mono font-medium tabular-nums',

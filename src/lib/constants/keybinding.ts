@@ -184,6 +184,46 @@ export const ASCII_MODIFIER_LABELS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// Native lone-modifier bindings (#111). A single modifier pressed alone (e.g.
+// Right ⌥) can't be an Electron accelerator, so it persists as a sentinel-
+// prefixed compat string that rides the same shortcut config + IPC. This is the
+// RENDERER mirror of electron/nativeBinding.ts: the two sides share the STRING
+// FORMAT as their contract (the electron/src build boundary forbids importing
+// across it), so the prefix + id tokens here MUST match that module.
+// ---------------------------------------------------------------------------
+
+/** Sentinel marking a shortcut value as a native lone-modifier binding. */
+export const NATIVE_LONE_MODIFIER_PREFIX = 'lone-modifier:'
+
+/**
+ * `KeyboardEvent.code` for a physical modifier key → lone-modifier id token (the
+ * part after {@link NATIVE_LONE_MODIFIER_PREFIX}). Left/right are distinct, which
+ * is the whole point of the native path — `globalShortcut` can't tell them apart.
+ */
+export const CODE_TO_LONE_MODIFIER: Record<string, string> = {
+  AltLeft: 'leftOption',
+  AltRight: 'rightOption',
+  ControlLeft: 'leftControl',
+  ControlRight: 'rightControl',
+  ShiftLeft: 'leftShift',
+  ShiftRight: 'rightShift',
+  MetaLeft: 'leftCommand',
+  MetaRight: 'rightCommand',
+}
+
+/** Lone-modifier id token → display label (side word + glyph), e.g. `Right ⌥`. */
+export const LONE_MODIFIER_DISPLAY: Record<string, string> = {
+  leftOption: 'Left ⌥',
+  rightOption: 'Right ⌥',
+  leftControl: 'Left ⌃',
+  rightControl: 'Right ⌃',
+  leftShift: 'Left ⇧',
+  rightShift: 'Right ⇧',
+  leftCommand: 'Left ⌘',
+  rightCommand: 'Right ⌘',
+}
+
+// ---------------------------------------------------------------------------
 // KeybindingCaptureInput microcopy — gentle, no-shame voice per DESIGN.md. The
 // box is a button whose label cycles through these three states.
 // ---------------------------------------------------------------------------

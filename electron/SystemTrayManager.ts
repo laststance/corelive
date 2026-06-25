@@ -14,6 +14,7 @@ import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 
 import { log } from './logger'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
+import { trayShortcutMenuFields } from './utils/trayShortcutMenuFields'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -530,10 +531,12 @@ export class SystemTrayManager {
         },
         { type: 'separator' },
         {
-          label: 'Toggle Floating Navigator',
-          ...(floatingNavigatorAccelerator
-            ? { accelerator: floatingNavigatorAccelerator }
-            : {}),
+          // A native lone-modifier binding renders as a label glyph, not an
+          // Electron accelerator (which can't parse 'lone-modifier:*').
+          ...trayShortcutMenuFields(
+            'Toggle Floating Navigator',
+            floatingNavigatorAccelerator,
+          ),
           click: () => {
             try {
               this.windowManager.toggleFloatingNavigator()
@@ -543,10 +546,7 @@ export class SystemTrayManager {
           },
         },
         {
-          label: 'Toggle BrainDump',
-          ...(brainDumpAccelerator
-            ? { accelerator: brainDumpAccelerator }
-            : {}),
+          ...trayShortcutMenuFields('Toggle BrainDump', brainDumpAccelerator),
           click: () => {
             try {
               this.windowManager.toggleBrainDump()

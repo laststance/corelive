@@ -1,9 +1,11 @@
 import {
   ACCELERATOR_MODIFIER_TOKENS,
   ASCII_MODIFIER_LABELS,
+  LONE_MODIFIER_DISPLAY,
   MAC_KEY_GLYPHS,
   MAC_MODIFIER_DISPLAY_ORDER,
   MAC_MODIFIER_GLYPHS,
+  NATIVE_LONE_MODIFIER_PREFIX,
 } from '@/lib/constants/keybinding'
 
 /**
@@ -17,16 +19,26 @@ import {
  * - The display string, e.g. `'⇧⌘N'` (darwin) or `'Ctrl+Shift+N'` (other)
  * - `''` when `accelerator` is empty (the unbound state)
  * @example
- * formatAcceleratorForDisplay('CommandOrControl+3', 'darwin')       // '⌘3'
- * formatAcceleratorForDisplay('Alt+Space', 'darwin')               // '⌥Space'
- * formatAcceleratorForDisplay('CommandOrControl+Shift+N', 'darwin') // '⇧⌘N'
- * formatAcceleratorForDisplay('CommandOrControl+3', 'other')        // 'Ctrl+3'
+ * formatAcceleratorForDisplay('CommandOrControl+3', 'darwin')         // '⌘3'
+ * formatAcceleratorForDisplay('Alt+Space', 'darwin')                 // '⌥Space'
+ * formatAcceleratorForDisplay('CommandOrControl+Shift+N', 'darwin')   // '⇧⌘N'
+ * formatAcceleratorForDisplay('lone-modifier:rightOption', 'darwin')  // 'Right ⌥'
+ * formatAcceleratorForDisplay('CommandOrControl+3', 'other')          // 'Ctrl+3'
  */
 export function formatAcceleratorForDisplay(
   accelerator: string,
   platform: 'darwin' | 'other',
 ): string {
   if (!accelerator) return ''
+
+  // A native lone-modifier binding renders as its labelled glyph (e.g. `Right ⌥`)
+  // on both platforms — it carries no Electron modifier/key tokens to split.
+  if (accelerator.startsWith(NATIVE_LONE_MODIFIER_PREFIX)) {
+    const modifierId = accelerator.slice(NATIVE_LONE_MODIFIER_PREFIX.length)
+    // Fall back to the bare id (never the raw `lone-modifier:` sentinel) so an
+    // unknown/corrupt id can't leak the internal persisted format into the UI.
+    return LONE_MODIFIER_DISPLAY[modifierId] ?? modifierId
+  }
 
   const segments = accelerator.split('+')
   const modifiers = segments.filter((segment) =>

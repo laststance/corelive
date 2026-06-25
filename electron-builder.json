@@ -48,7 +48,11 @@
       "filter": ["**/*.png"]
     }
   ],
-  "asarUnpack": ["node_modules/@img/**"],
+  "asarUnpack": [
+    "node_modules/@img/**",
+    "node_modules/uiohook-napi/**",
+    "node_modules/node-gyp-build/**"
+  ],
   "publish": {
     "provider": "github",
     "owner": "laststance",

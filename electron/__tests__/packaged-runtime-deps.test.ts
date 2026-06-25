@@ -53,4 +53,32 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
     expect(typeof declaredWrappyRange).toBe('string')
     expect(declaredWrappyRange).toBeTruthy()
   })
+
+  // `node-gyp-build` is REQUIRED at runtime by uiohook-napi: its dist/index.js
+  // calls require('node-gyp-build') to resolve the correct prebuilt .node for the
+  // platform/arch. It is a hoisted LEAF (uiohook-napi's only dependency), so the
+  // same electron-builder+pnpm drop would leave the unpacked uiohook-napi unable
+  // to load — silently disabling #111 lone-modifier shortcuts in packaged builds.
+  // Pinned direct so the asar always bundles it.
+  it('keeps "node-gyp-build" as a direct dependency so packaged uiohook-napi can resolve its prebuilt binary', () => {
+    // Act
+    const declaredNodeGypBuildRange = dependencies['node-gyp-build']
+
+    // Assert
+    expect(typeof declaredNodeGypBuildRange).toBe('string')
+    expect(declaredNodeGypBuildRange).toBeTruthy()
+  })
+
+  // `uiohook-napi` is the native key-tap powering #111 lone-modifier shortcuts.
+  // It is imported only via a runtime require() in loadUiohook (the CJS main
+  // process), never a static import our source-scanners can see, so a cleanup
+  // pass could flag it as unused. Pinned direct so the desktop build keeps it.
+  it('keeps "uiohook-napi" as a direct dependency so the native lone-modifier tap ships in the app', () => {
+    // Act
+    const declaredUiohookRange = dependencies['uiohook-napi']
+
+    // Assert
+    expect(typeof declaredUiohookRange).toBe('string')
+    expect(declaredUiohookRange).toBeTruthy()
+  })
 })
