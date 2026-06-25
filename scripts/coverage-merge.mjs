@@ -126,6 +126,12 @@ write(
 
 // Optional CI gate: fail when any metric regresses below its env floor. Explicit
 // per-metric access (no dynamic indexing) keeps this @ts-check-clean.
+//
+// ⚠️ Baseline caveat: the ~32% baseline in the design doc was measured LOCALLY
+// with the Electron E2E run folded in. CI's merged report is unit + WEB E2E only
+// (Electron E2E is macOS-local, never in CI — see design doc As-Built #5), so CI's
+// merged percentages are LOWER. Do NOT set COVERAGE_MIN_* to the local baseline or
+// CI reds on a phantom regression — derive each floor from a CI run's own number.
 const metrics = [
   {
     name: 'lines',

@@ -98,6 +98,12 @@ jobs:
       - name: Install Playwright Browsers 🎭
         run: pnpm exec playwright install --with-deps chromium
 
+      # electron unit tests (icon-system.test.mjs) read the generated artifact
+      # build/icons/icon-manifest.json — generate it before any electron vitest run
+      # (mirrors test.yml). Without this, coverage:unit:electron fails ENOENT in CI.
+      - name: Generate Icons 🎨
+        run: pnpm build:icons
+
       # Unit coverage (web + electron vitest configs) → coverage/unit-*/.
       - name: Unit coverage (web + electron)
         env:

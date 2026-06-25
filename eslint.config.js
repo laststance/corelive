@@ -18,6 +18,9 @@ export default defineConfig([
       'dist/**',
       'out/**',
       'build/**',
+      // #127: monocart/V8 write generated .js under coverage/ (e2e-electron raw +
+      // assets) that would trip rules like no-unused-expressions during lint.
+      'coverage/**',
       'next-env.d.ts',
       'dist-electron/**',
       'public/**',
