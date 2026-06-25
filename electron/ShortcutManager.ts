@@ -11,6 +11,11 @@ import { BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
+import { isNativeBinding, parseNativeBinding } from './nativeBinding'
+import {
+  createUnavailableNativeShortcutEngine,
+  type NativeShortcutEngine,
+} from './nativeShortcutEngine'
 import type { NotificationManager } from './NotificationManager'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
@@ -40,6 +45,11 @@ interface RegisteredShortcut {
   callback: () => void
   registeredAt: Date
   isAlternative: boolean
+  /**
+   * `true` when this binding lives in the native lone-modifier tap rather than
+   * Electron's `globalShortcut`, so unregister routes to the right registrar.
+   */
+  isNative?: boolean
 }
 
 /** Failed shortcut info */
@@ -105,14 +115,23 @@ export class ShortcutManager {
     { focus: () => void; blur: () => void; window: BrowserWindow }
   >
 
+  /**
+   * Native tap for lone-modifier bindings (e.g. Right ⌥ alone) that
+   * `globalShortcut` cannot express. Defaults to the unavailable no-op engine so
+   * accelerator behavior is unchanged until a real recognizer is injected.
+   */
+  private nativeEngine: NativeShortcutEngine
+
   constructor(
     windowManager: WindowManager,
     notificationManager: NotificationManager | null,
     configManager: ConfigManager | null = null,
+    nativeEngine: NativeShortcutEngine = createUnavailableNativeShortcutEngine(),
   ) {
     this.windowManager = windowManager
     this.notificationManager = notificationManager
     this.configManager = configManager
+    this.nativeEngine = nativeEngine
 
     this.registeredShortcuts = new Map()
     this.failedShortcuts = null
@@ -482,6 +501,13 @@ export class ShortcutManager {
       return false
     }
 
+    // Route lone-modifier bindings (e.g. 'lone-modifier:rightOption') to the
+    // native tap — globalShortcut only binds modifier+key chords and cannot
+    // express a single modifier pressed alone.
+    if (isNativeBinding(accelerator)) {
+      return this.registerNativeShortcut(accelerator, id, callback)
+    }
+
     try {
       if (this.registeredShortcuts.has(id)) {
         log.debug(`[registerShortcut] Unregistering existing shortcut: ${id}`)
@@ -522,6 +548,73 @@ export class ShortcutManager {
       log.error(`Error registering shortcut ${accelerator}:`, error)
       return this.handleShortcutConflict(accelerator, id, callback)
     }
+  }
+
+  /**
+   * Registers a lone-modifier binding through the native tap, storing its compat
+   * string in `registeredShortcuts` (keyed by id) so conflict read-back and
+   * display treat it exactly like an accelerator. Returns `false` for a malformed
+   * binding or an unavailable engine, letting the caller degrade to a chord.
+   * @param nativeBinding - The `lone-modifier:<id>` compat string.
+   * @param id - The shortcut id being bound.
+   * @param callback - Invoked when the lone modifier fires.
+   * @returns
+   * - `true` when the native engine accepted the binding
+   * - `false` for a malformed binding or an unavailable engine
+   * @example
+   * registerNativeShortcut('lone-modifier:rightOption', 'toggleBrainDump', openBrainDump) // => true | false
+   */
+  private registerNativeShortcut(
+    nativeBinding: string,
+    id: string,
+    callback: () => void,
+  ): boolean {
+    const binding = parseNativeBinding(nativeBinding)
+    if (binding === null) {
+      log.warn(
+        `[registerNativeShortcut] Malformed lone-modifier binding for ${id}: "${nativeBinding}"`,
+      )
+      return false
+    }
+
+    if (!this.nativeEngine.isAvailable()) {
+      log.warn(
+        `[registerNativeShortcut] Native tap unavailable; cannot bind ${id} = ${nativeBinding}`,
+      )
+      return false
+    }
+
+    // Replace any prior binding under this id (native or accelerator) first.
+    if (this.registeredShortcuts.has(id)) {
+      this.unregisterShortcut(id)
+    }
+
+    const didRegister = this.nativeEngine.register(
+      binding.modifier,
+      id,
+      callback,
+    )
+    if (didRegister) {
+      // Store the compat string verbatim so getRegisteredShortcuts()[id] equals
+      // the requested value — applyShortcutRebind's read-back compares against
+      // exactly this string to confirm the rebind took.
+      this.registeredShortcuts.set(id, {
+        accelerator: nativeBinding,
+        callback,
+        registeredAt: new Date(),
+        isAlternative: false,
+        isNative: true,
+      })
+      log.debug(
+        `[registerNativeShortcut] Registered native: ${id} = ${nativeBinding}`,
+      )
+      return true
+    }
+
+    log.warn(
+      `[registerNativeShortcut] Native engine rejected ${id} = ${nativeBinding}`,
+    )
+    return false
   }
 
   /**
@@ -743,7 +836,13 @@ export class ShortcutManager {
     if (!shortcut) return false
 
     try {
-      globalShortcut.unregister(shortcut.accelerator)
+      // Native lone-modifier binds live in the tap, not globalShortcut — route
+      // unregister to the engine that actually holds them.
+      if (shortcut.isNative) {
+        this.nativeEngine.unregister(id)
+      } else {
+        globalShortcut.unregister(shortcut.accelerator)
+      }
       this.registeredShortcuts.delete(id)
       return true
     } catch (error) {
@@ -1044,11 +1143,17 @@ export class ShortcutManager {
       // instead of globalShortcut.unregisterAll() which removes all app shortcuts
       for (const [id, shortcut] of this.registeredShortcuts) {
         try {
-          globalShortcut.unregister(shortcut.accelerator)
+          // Native binds aren't in globalShortcut; skip them here and release the
+          // whole tap once below via the engine.
+          if (!shortcut.isNative) {
+            globalShortcut.unregister(shortcut.accelerator)
+          }
         } catch (error) {
           log.warn(`Failed to unregister shortcut ${id}:`, error)
         }
       }
+      // Tear down every native lone-modifier binding + release the OS-level tap.
+      this.nativeEngine.unregisterAll()
       this.registeredShortcuts.clear()
     } catch (error) {
       log.error('Error unregistering all shortcuts:', error)
