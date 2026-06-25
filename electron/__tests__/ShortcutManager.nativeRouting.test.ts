@@ -1,8 +1,10 @@
 import { globalShortcut } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { ConfigManager } from '../ConfigManager'
 import { createNativeBinding } from '../nativeBinding'
 import type { NativeShortcutEngine } from '../nativeShortcutEngine'
+import type { NotificationManager } from '../NotificationManager'
 import ShortcutManager from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
@@ -265,10 +267,12 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
       engine,
     )
 
-    // Act + Assert
+    // Act + Assert: latch-blocked, and no lone-modifier binding registered, so
+    // the tap is not active — the renderer keeps the recovery affordance (#125).
     expect(shortcutManager.getNativeTapStatus()).toEqual({
       available: true,
       latchBlocked: true,
+      active: false,
     })
   })
 
@@ -320,8 +324,108 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     const status = shortcutManager.reenableNativeTap()
 
     // Assert: the block is cleared (so the next register re-arms) and the
-    // post-action status is surfaced back to the caller.
+    // post-action status is surfaced back to the caller. With only default chord
+    // shortcuts (no lone-modifier binding) nothing arms the tap, so active stays
+    // false — the status honestly reflects no live native binding (#125, codex #5).
     expect(clearLatchBlock).toHaveBeenCalledTimes(1)
-    expect(status).toEqual({ available: true, latchBlocked: false })
+    expect(status).toEqual({
+      available: true,
+      latchBlocked: false,
+      active: false,
+    })
+  })
+
+  it('notifies the user only once while the tap stays latch-blocked', () => {
+    // Arrange: a latch-blocked engine + a configured lone-modifier binding, so
+    // every registerGlobalShortcuts() hits the inactive branch. The OS toast must
+    // fire once, not once per attempt (startup + rebinds would spam) — codex #6.
+    const { engine, isLatchBlocked } = createAvailableNativeEngineHarness()
+    isLatchBlocked.mockReturnValue(true)
+    const showNotification = vi.fn()
+    const notificationManager = {
+      showNotification,
+    } as unknown as NotificationManager
+    const configManager = {
+      getSection: vi.fn((section: string) =>
+        section === 'shortcuts'
+          ? { toggleBrainDump: 'lone-modifier:rightOption' }
+          : {},
+      ),
+      get: vi.fn(),
+      set: vi.fn(),
+    } as unknown as ConfigManager
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      notificationManager,
+      configManager,
+      engine,
+    )
+
+    // Act: the chokepoint runs several times while still blocked.
+    shortcutManager.registerGlobalShortcuts()
+    shortcutManager.registerGlobalShortcuts()
+    shortcutManager.registerGlobalShortcuts()
+
+    // Assert: exactly one toast across all attempts.
+    expect(showNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the native tap active once a lone-modifier binding is live', () => {
+    // Arrange: an available tap whose register succeeds (#125, codex #5).
+    const { engine } = createAvailableNativeEngineHarness()
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      null,
+      engine,
+    )
+
+    // Act: a successful native registration makes the tap active.
+    shortcutManager.registerShortcut(
+      RIGHT_OPTION_BINDING,
+      'toggleBrainDump',
+      vi.fn(),
+    )
+
+    // Assert
+    expect(shortcutManager.getNativeTapStatus().active).toBe(true)
+  })
+
+  it('keeps the tap INACTIVE after a re-enable whose re-arm still fails', () => {
+    // Arrange: a lone-modifier binding is configured, but the engine refuses to
+    // register it even once the block is cleared (the tap won't start). The
+    // status must NOT claim a healthy tap — the renderer keeps the recovery
+    // control because active is false despite latchBlocked clearing (codex #5).
+    const { engine, register, clearLatchBlock } =
+      createAvailableNativeEngineHarness()
+    register.mockReturnValue(false)
+    const configManager = {
+      getSection: vi.fn((section: string) =>
+        section === 'shortcuts'
+          ? { toggleBrainDump: 'lone-modifier:rightOption' }
+          : {},
+      ),
+      get: vi.fn(),
+      set: vi.fn(),
+    } as unknown as ConfigManager
+    const shortcutManager = new ShortcutManager(
+      createWindowManagerStub(),
+      null,
+      configManager,
+      engine,
+    )
+
+    // Act
+    const status = shortcutManager.reenableNativeTap()
+
+    // Assert: block cleared and a re-register was attempted, but it failed so the
+    // tap is honestly reported inactive.
+    expect(clearLatchBlock).toHaveBeenCalledTimes(1)
+    expect(register).toHaveBeenCalled()
+    expect(status).toEqual({
+      available: true,
+      latchBlocked: false,
+      active: false,
+    })
   })
 })

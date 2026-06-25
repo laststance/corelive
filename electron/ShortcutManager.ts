@@ -123,6 +123,14 @@ export class ShortcutManager {
    */
   private nativeEngine: NativeShortcutEngine
 
+  /**
+   * One-shot guard so a latch-blocked launch notifies the user ONCE, not on
+   * every `registerGlobalShortcuts()` retry while still blocked (codex #6). Reset
+   * by {@link reenableNativeTap} so a fresh block after a manual re-enable can
+   * notify again.
+   */
+  private hasNotifiedLatchBlock = false
+
   constructor(
     windowManager: WindowManager,
     notificationManager: NotificationManager | null,
@@ -595,7 +603,11 @@ export class ShortcutManager {
       log.warn(
         `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Manual re-enable required.`,
       )
-      if (this.notificationManager) {
+      // Notify ONCE per block (codex #6): registerGlobalShortcuts() can run many
+      // times while still latch-blocked (startup, rebinds), and an OS toast on
+      // each would spam the user.
+      if (this.notificationManager && !this.hasNotifiedLatchBlock) {
+        this.hasNotifiedLatchBlock = true
         this.notificationManager.showNotification(
           'Native Shortcut Disabled',
           `${this.getShortcutDisplayName(id)} was disabled after a failed start. Re-enable it in Settings.`,
@@ -643,15 +655,33 @@ export class ShortcutManager {
    * (#125) — exposed over the `shortcuts-get-native-tap-status` IPC so the UI
    * can show a "disabled after a failed start — re-enable" control when a prior
    * arming was left unconfirmed.
-   * @returns `{ available, latchBlocked }` straight from the engine.
+   * @returns `{ available, latchBlocked, active }` — engine health plus whether a
+   *   lone-modifier binding is actually live right now (codex #5).
    * @example
-   * getNativeTapStatus() // => { available: true, latchBlocked: true }
+   * getNativeTapStatus() // => { available: true, latchBlocked: true, active: false }
    */
   getNativeTapStatus(): NativeTapStatus {
     return {
       available: this.nativeEngine.isAvailable(),
       latchBlocked: this.nativeEngine.isLatchBlocked(),
+      active: this.hasActiveNativeBinding(),
     }
+  }
+
+  /**
+   * Whether any lone-modifier binding is currently registered as native — i.e.
+   * the tap actually armed and the binding is live (codex #5). Lets
+   * {@link getNativeTapStatus} report `active: false` when a re-enable cleared the
+   * latch block but the re-arm still failed, so the UI keeps the recovery control.
+   * @returns `true` when a registered shortcut is flagged `isNative`.
+   * @example
+   * hasActiveNativeBinding() // => false right after a failed re-enable
+   */
+  private hasActiveNativeBinding(): boolean {
+    for (const registered of this.registeredShortcuts.values()) {
+      if (registered.isNative) return true
+    }
+    return false
   }
 
   /**
@@ -665,6 +695,9 @@ export class ShortcutManager {
    * reenableNativeTap() // => { available: true, latchBlocked: false }
    */
   reenableNativeTap(): NativeTapStatus {
+    // Re-arm the one-shot toast guard so a fresh block (re-arm fails again) can
+    // re-notify the user (codex #6).
+    this.hasNotifiedLatchBlock = false
     this.nativeEngine.clearLatchBlock()
     // Re-run the global registration chokepoint; with the block cleared, the
     // lone-modifier binding now arms the tap instead of being left inactive.

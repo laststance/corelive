@@ -28,6 +28,13 @@ export interface NativeTapStatus {
   available: boolean
   /** Whether a prior unconfirmed arming is blocking a re-arm (needs manual re-enable). */
   latchBlocked: boolean
+  /**
+   * Whether a lone-modifier binding is actually registered and live in the tap
+   * right now (codex #5). Distinct from `!latchBlocked`: a manual re-enable can
+   * clear the block yet still fail to arm/start, leaving the binding inactive —
+   * the renderer must not hide the recovery affordance in that case.
+   */
+  active: boolean
 }
 
 /**

@@ -445,4 +445,49 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.stop).toHaveBeenCalledTimes(1)
     expect(clear).toHaveBeenCalled()
   })
+
+  it('cancels a deferred shortcut whose binding is unregistered before the immediate runs', async () => {
+    // Arrange: the toggle is dispatched via setImmediate (codex #1), so a window
+    // exists where the binding can be torn down between keyup and the next tick.
+    // A stale callback firing after unregister/stop would be a use-after-free
+    // (codex #3) — e.g. Settings disabling the shortcut, or app cleanup.
+    const fake = createFakeUiohook()
+    const { latch } = createFakeLatch()
+    const engine = createUiohookShortcutEngine(() => fake.module, latch)
+    const callback = vi.fn()
+    engine.register('rightOption', 'toggleBrainDump', callback)
+
+    // Act: press+release SCHEDULES the deferred toggle, then unregister BEFORE
+    // the macrotask queue drains.
+    fake.pressKey(RIGHT_OPTION_KEYCODE)
+    fake.releaseKey(RIGHT_OPTION_KEYCODE)
+    engine.unregister('toggleBrainDump')
+    await flushImmediate()
+
+    // Assert: the now-stale callback was cancelled.
+    expect(callback).not.toHaveBeenCalled()
+  })
+
+  it('skips the reArm restart when stop throws, so a wedged tap is not double-started', () => {
+    // Arrange: stop() throws on re-arm, so the old CGEventTap's state is unknown.
+    // Starting again could double-start the OS tap (codex #4) — reArm must bail.
+    const start = vi.fn()
+    const stopThrowingModule: UiohookModule = {
+      on: () => {},
+      start,
+      stop: () => {
+        throw new Error('stop failed during re-arm')
+      },
+    }
+    const { latch } = createFakeLatch()
+    const engine = createUiohookShortcutEngine(() => stopThrowingModule, latch)
+    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    expect(start).toHaveBeenCalledTimes(1) // initial lazy start
+
+    // Act: reArm — stop() throws.
+    engine.reArm()
+
+    // Assert: no second start (the restart was skipped to avoid a double-start).
+    expect(start).toHaveBeenCalledTimes(1)
+  })
 })

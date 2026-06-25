@@ -153,7 +153,15 @@ export function createUiohookShortcutEngine(
       // `setImmediate` defers to the next main-loop tick — NOT a microtask, which
       // would still drain on this tick. (This shrinks, not removes, the wedge
       // surface — a hang INSIDE the callback still freezes main; see AC#3.)
-      if (binding) setImmediate(() => invokeBindingSafely(binding))
+      if (binding)
+        setImmediate(() => {
+          // Re-resolve at fire time (codex #3): an unregister / unregisterAll /
+          // rebind between this tick and the next must cancel a now-stale
+          // callback. Fire ONLY if this exact binding is still the live one for
+          // the keycode — a replaced or removed binding bails.
+          if (bindingByKeycode.get(keycode) === binding)
+            invokeBindingSafely(binding)
+        })
       return
     }
     pressedKeycodes.delete(keycode)
@@ -312,14 +320,27 @@ export function createUiohookShortcutEngine(
       // modifier "held across sleep" can't leave a stale armed key (codex #5).
       if (uiohook === null || bindingByKeycode.size === 0) return
       resetPressedState()
+      // Stop the old tap FIRST. If stop() throws, the old singleton's state is
+      // unknown — starting again could double-start a CGEventTap (codex #4). Bail
+      // BEFORE touching the stability timer / isTapRunning so state stays exactly
+      // as it was; the still-armed latch self-heals on a later clean stop / next
+      // launch rather than this turning a stop failure into a double-start.
+      if (isTapRunning) {
+        try {
+          uiohook.stop()
+        } catch (error) {
+          log.error(
+            '[uiohookEngine] stop during re-arm failed; skipping restart to avoid double-start:',
+            error,
+          )
+          return
+        }
+      }
+      // Stop succeeded (or the tap wasn't running) — now safe to drop the old
+      // stability timer and re-arm a fresh tap.
       if (stabilityTimer) {
         clearTimeout(stabilityTimer)
         stabilityTimer = null
-      }
-      try {
-        if (isTapRunning) uiohook.stop()
-      } catch (error) {
-        log.error('[uiohookEngine] stop during re-arm failed:', error)
       }
       isTapRunning = false
       if (startTapGuarded()) log.info('[uiohookEngine] Global key tap re-armed')

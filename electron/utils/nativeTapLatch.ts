@@ -35,17 +35,38 @@ function latchPath(): string {
 /**
  * fsync a directory so a create/rename/unlink of one of its entries is durable
  * across a power loss — without it the rename can be lost even though the file
- * data was fsync'd. Best-effort: some filesystems reject directory fsync, which
- * must not fail the caller.
+ * data was fsync'd. Distinguishes "this FS can't fsync a dir" (EINVAL/ENOTSUP —
+ * not our write's fault, treat as flushed) from a real IO failure (EIO/ENOSPC —
+ * the rename may NOT be durable), so `armNativeTapLatch` can refuse to start
+ * unguarded on a genuine durability failure (codex #1) without breaking the
+ * feature on exotic filesystems that simply don't support directory fsync.
  * @param dirPath - The directory whose metadata to flush.
+ * @returns
+ * - `true`: dir metadata flushed, or the FS doesn't support dir fsync (benign)
+ * - `false`: a real IO error — the just-renamed entry may not be crash-durable
  */
-function fsyncDir(dirPath: string): void {
+function fsyncDir(dirPath: string): boolean {
   let fd: number | undefined
   try {
     fd = fs.openSync(dirPath, 'r')
     fs.fsyncSync(fd)
+    return true
   } catch (error) {
-    log.warn('[nativeTapLatch] directory fsync failed (non-fatal):', error)
+    const code = (error as NodeJS.ErrnoException).code
+    // Some filesystems reject directory fsync outright — that is not a
+    // durability failure of our write, so it must not fail the caller.
+    if (code === 'EINVAL' || code === 'ENOTSUP') {
+      log.warn(
+        '[nativeTapLatch] directory fsync unsupported (non-fatal):',
+        error,
+      )
+      return true
+    }
+    log.error(
+      '[nativeTapLatch] directory fsync failed; marker not durable:',
+      error,
+    )
+    return false
   } finally {
     if (fd !== undefined) {
       try {
@@ -61,18 +82,28 @@ function fsyncDir(dirPath: string): void {
  * Whether a prior launch armed the tap but never cleared the marker — i.e. it
  * crashed/wedged during arming. Fail-safe: a present OR unreadable marker counts
  * as set, so ambiguity blocks the re-arm rather than risking the brick loop.
+ *
+ * Uses `statSync`, NOT `existsSync` (codex #2): `existsSync` collapses EVERY
+ * error — including a permission/IO failure — to `false`, which would report
+ * "not armed" on an ambiguous read and re-arm a possible brick loop. `statSync`
+ * lets us treat ONLY `ENOENT` as "definitely absent" and any other error as SET.
  * @returns
  * - `true`: marker present (or its state can't be read) → start the tap INACTIVE
- * - `false`: no marker → safe to arm
+ * - `false`: marker definitively absent (ENOENT) → safe to arm
  * @example
  * if (isNativeTapLatchSet()) startInactive() // a prior arming never confirmed
  */
 export function isNativeTapLatchSet(): boolean {
   try {
-    return fs.existsSync(latchPath())
+    fs.statSync(latchPath())
+    // The entry exists (file, or even a stray dir) → armed-and-unconfirmed.
+    return true
   } catch (error) {
+    // ENOENT is the ONLY signal that the marker is truly absent; every other
+    // error (EACCES, EIO, …) is ambiguous and must block (fail-safe).
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     log.warn(
-      '[nativeTapLatch] latch stat failed; treating as SET (fail-safe):',
+      '[nativeTapLatch] latch stat ambiguous; treating as SET (fail-safe):',
       error,
     )
     return true
@@ -100,7 +131,19 @@ export function armNativeTapLatch(): boolean {
     fs.closeSync(fd)
     fd = undefined
     fs.renameSync(temp, target)
-    fsyncDir(path.dirname(target))
+    // A real dir-fsync IO failure means the rename may not survive a crash, so
+    // the brick-guard isn't durable — roll the marker back and refuse to start
+    // (codex #1). On filesystems that simply don't support dir fsync this still
+    // returns true, so the lone-modifier feature keeps working there.
+    if (!fsyncDir(path.dirname(target))) {
+      try {
+        fs.unlinkSync(target)
+      } catch {
+        // best-effort rollback; a leftover marker only blocks (fail-safe), it
+        // never bricks, so an unlink failure here is not actionable.
+      }
+      return false
+    }
     return true
   } catch (error) {
     log.error('[nativeTapLatch] failed to arm latch:', error)

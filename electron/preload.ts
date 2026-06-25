@@ -867,7 +867,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('shortcuts-get-native-tap-status')
       } catch (error) {
         log.error('Failed to get native tap status:', error)
-        return { available: false, latchBlocked: false }
+        return { available: false, latchBlocked: false, active: false }
       }
     },
 
@@ -881,7 +881,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('shortcuts-reenable-native-tap')
       } catch (error) {
         log.error('Failed to re-enable native tap:', error)
-        return { available: false, latchBlocked: false }
+        return { available: false, latchBlocked: false, active: false }
       }
     },
   },

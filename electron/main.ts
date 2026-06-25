@@ -2175,14 +2175,14 @@ function setupIPCHandlers(): void {
   // the renderer's "disabled after a failed start — re-enable" control.
   typedHandle('shortcuts-get-native-tap-status', () => {
     if (!shortcutManager) {
-      return { available: false, latchBlocked: false }
+      return { available: false, latchBlocked: false, active: false }
     }
     return shortcutManager.getNativeTapStatus()
   })
 
   typedHandle('shortcuts-reenable-native-tap', () => {
     if (!shortcutManager) {
-      return { available: false, latchBlocked: false }
+      return { available: false, latchBlocked: false, active: false }
     }
     return shortcutManager.reenableNativeTap()
   })
