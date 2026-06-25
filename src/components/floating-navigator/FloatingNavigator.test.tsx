@@ -303,4 +303,34 @@ describe('FloatingNavigator — Tuck into Completed parity (#113)', () => {
     expect(onTaskDelete).toHaveBeenCalledTimes(1)
     expect(onTaskDelete).toHaveBeenCalledWith('7')
   })
+
+  it('keeps the finished-row tuck button inert while its completion is still saving (no hard-delete)', async () => {
+    // Arrange: a finished row is shown, but its completion toggle has NOT yet
+    // committed to the server (slow network). Tucking reuses delete→archive,
+    // and the server only archives a row that is ALREADY completed in the DB —
+    // fire it before the toggle lands and that row is HARD-DELETED instead (the
+    // win is destroyed, no heatmap credit). So the button must stay disabled
+    // until the completion is durable.
+    installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
+    const onTaskDelete = vi.fn()
+    renderFloatingWithStore(
+      <FloatingNavigator
+        {...noopTaskProps}
+        todos={[FINISHED_FLOATING_TODO]}
+        onTaskDelete={onTaskDelete}
+        isTogglePending
+      />,
+    )
+    const moveButton = await screen.findByRole('button', {
+      name: 'Tuck "Buy milk" into Completed',
+    })
+
+    // Act: try to file the win while the completion is still in flight.
+    fireEvent.click(moveButton)
+
+    // Assert: the button is inert and no archive/delete is attempted — the gate
+    // holds the win until the toggle commits.
+    expect(moveButton).toBeDisabled()
+    expect(onTaskDelete).not.toHaveBeenCalled()
+  })
 })

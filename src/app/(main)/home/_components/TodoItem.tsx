@@ -46,6 +46,14 @@ interface TodoItemProps {
   dragHandleRef?: DragHandleRef
   /** Whether item is currently being dragged */
   isDragging?: boolean
+  /**
+   * #113 data-loss gate: true while ANY completion toggle for this list is still
+   * in flight. "Tuck into Completed" reuses the delete→archive path, but the
+   * server only archives a row that is ALREADY completed in the DB; tuck a row
+   * whose check hasn't committed yet and it is HARD-DELETED instead (the win is
+   * lost, no heatmap credit). So the button stays disabled until the toggle lands.
+   */
+  isTogglePending?: boolean
 }
 
 export const TodoItem = function TodoItem({
@@ -55,6 +63,7 @@ export const TodoItem = function TodoItem({
   onUpdateNotes,
   dragHandleRef,
   isDragging,
+  isTogglePending = false,
 }: TodoItemProps) {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const [notes, setNotes] = useState(todo.notes ?? '')
@@ -193,7 +202,10 @@ export const TodoItem = function TodoItem({
               variant="ghost"
               size="sm"
               onClick={handleMoveToCompleted}
-              disabled={isMovingToCompleted}
+              // Disabled while moving (the double-fire guard) OR while the
+              // completion toggle is still in flight — tucking before the check
+              // commits would hard-delete the win instead of archiving it (#113).
+              disabled={isMovingToCompleted || isTogglePending}
               className="text-muted-foreground hover:text-foreground"
               // Distinct accessible name: must NOT contain "Move to Completed"
               // (ImportUndoBanner owns that, substring-matched in e2e) nor start

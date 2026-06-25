@@ -32,7 +32,7 @@ export const CompletedDropZone = function CompletedDropZone() {
       // Quiet companion, not a coach: a calm place to tuck a finished thing. The
       // warm tint is primary (amber), never success-green — filing a win is not
       // an error and not a second celebration (DESIGN.md motion/voice notes).
-      className={`mt-3 flex items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-6 text-sm transition-colors ${
+      className={`mt-3 flex items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-6 text-sm transition-colors ${
         isDropTarget
           ? 'bg-primary/10 border-primary text-foreground'
           : 'border-muted-foreground/30 text-muted-foreground'

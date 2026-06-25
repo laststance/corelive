@@ -174,6 +174,9 @@ test.describe('Move finished tasks to Completed individually (#113)', () => {
     const todoText = 'Retain drag fixture'
     await page.goto('/home')
     await addPendingTodo(page, todoText)
+    // #113 gate: with no finished task yet, the Completed drop zone is absent
+    // (isRetaining && completedInListCount > 0) — it appears only once one is checked.
+    await expect(page.getByTestId('completed-dropzone')).toHaveCount(0)
     await completeRetainedTodo(page, todoText)
     const dropZone = page.getByTestId('completed-dropzone')
     await expect(dropZone).toBeVisible()
@@ -215,7 +218,10 @@ test.describe('Move finished tasks to Completed individually (#113)', () => {
     const dropZone = page.getByTestId('completed-dropzone')
     await expect(dropZone).toBeVisible()
 
-    // Act — drag the PENDING row's handle onto the Completed drop zone.
+    // Act — drag the PENDING row's handle onto the Completed drop zone. The
+    // sibling "dragging a finished row" test proves this same mouseDrag lands on
+    // the zone (it fires a 200 delete), so the survival asserted below is the
+    // guard no-oping a *pending* drop — not the drag silently missing its target.
     await mouseDrag(
       page,
       activeRow(page, pendingText).getByRole('button', {
@@ -273,5 +279,83 @@ test.describe('Move finished tasks to Completed individually (#113)', () => {
     await expect(
       page.getByRole('checkbox', { name: stayingText }),
     ).toBeVisible()
+  })
+
+  test('checking then tucking before the save commits keeps the win (no hard-delete)', async ({
+    page,
+  }) => {
+    // Arrange — a pending row, plus a HELD toggle response so the completion
+    // stays "in flight". This is the slow-network window where the #113 data-loss
+    // race lives: the row is optimistically completed in the UI, but the DB still
+    // sees it pending, so the reused delete→archive path would HARD-DELETE it.
+    const todoText = 'Retain race fixture'
+    await page.goto('/home')
+    await addPendingTodo(page, todoText)
+
+    let releaseToggle = (): void => {}
+    const toggleHeld = new Promise<void>((resolve) => {
+      releaseToggle = resolve
+    })
+    // Hold the toggle POST open until we release it (continue, NOT abort —
+    // aborting rolls the optimistic completion back and the button disappears).
+    await page.route(/\/api\/orpc\/todo\/toggle/, async (route) => {
+      await toggleHeld
+      await route.continue()
+    })
+    // Tripwire: nothing may archive/delete this row while the toggle is unsettled.
+    let deleteFiredWhileInFlight = false
+    page.on('request', (request) => {
+      if (
+        request.url().includes(ORPC_PATHS.deleteTodo) &&
+        request.method() === 'POST'
+      ) {
+        deleteFiredWhileInFlight = true
+      }
+    })
+
+    // Act 1 — check the task. The optimistic update strikes it through and shows
+    // the "Tuck into Completed" button immediately, before the toggle commits.
+    await page.getByRole('checkbox', { name: todoText }).first().click()
+    const tuckButton = page.getByRole('button', {
+      name: `Tuck "${todoText}" into Completed`,
+    })
+
+    // Assert 1 — the button is present but INERT until the win is durable. On the
+    // unfixed code it is enabled here, so a tap hard-deletes the completion.
+    await expect(tuckButton).toBeVisible()
+    await expect(tuckButton).toBeDisabled()
+    expect(deleteFiredWhileInFlight).toBe(false)
+
+    // Act 2 — let the toggle commit; the button re-arms once the win is saved.
+    const togglePromise = page.waitForResponse(
+      (resp) =>
+        resp.url().includes(ORPC_PATHS.toggleTodo) &&
+        resp.request().method() === 'POST',
+      { timeout: 10000 },
+    )
+    releaseToggle()
+    expect((await togglePromise).status()).toBe(200)
+    await expect(tuckButton).toBeEnabled()
+
+    // Act 3 — now tucking archives it (heatmap-safe) instead of hard-deleting.
+    const deletePromise = page.waitForResponse(
+      (resp) =>
+        resp.url().includes(ORPC_PATHS.deleteTodo) &&
+        resp.request().method() === 'POST',
+      { timeout: 10000 },
+    )
+    await tuckButton.click()
+    expect((await deletePromise).status()).toBe(200)
+
+    // Assert 2 — it left the active list as an archive (not destroyed): the row
+    // is gone and, after a reload, does not come back as a pending task.
+    await expect(tuckButton).toHaveCount(0, { timeout: 10000 })
+    await page.reload()
+    await expect(page.getByRole('checkbox', { name: todoText })).toHaveCount(
+      0,
+      {
+        timeout: 10000,
+      },
+    )
   })
 })

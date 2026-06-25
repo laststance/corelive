@@ -119,6 +119,14 @@ interface FloatingNavigatorProps {
   isCategoryCreatePending?: boolean
   isCategoryUpdatePending?: boolean
   isCategoryDeletePending?: boolean
+  /**
+   * #113 data-loss gate: true while a completion toggle is in flight. The
+   * Completed-row "Tuck into Completed" button reuses the delete→archive path,
+   * which only archives a row already completed in the DB; tuck a freshly-checked
+   * row before its toggle commits and it is HARD-DELETED instead (the win is lost,
+   * no heatmap credit). Disables that button until the completion is durable.
+   */
+  isTogglePending?: boolean
 }
 
 interface PendingFloatingTodoRowProps {
@@ -141,6 +149,12 @@ interface CompletedFloatingTodoRowProps {
   todo: FloatingTodo
   onToggle: (id: string) => void
   onDelete: (id: string) => void
+  /**
+   * #113: a completion toggle is in flight; disables the "Tuck into Completed"
+   * button so a freshly-checked win can't be hard-deleted before its toggle
+   * commits (see FloatingNavigatorProps.isTogglePending).
+   */
+  isTogglePending?: boolean
 }
 
 /**
@@ -308,6 +322,7 @@ const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
   todo,
   onToggle,
   onDelete,
+  isTogglePending = false,
 }: CompletedFloatingTodoRowProps): React.ReactNode {
   const { checkboxMotionClassName } = useCompletionFeedback()
   const handleToggle = () => {
@@ -345,6 +360,10 @@ const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
         size="sm"
         variant="ghost"
         onClick={handleDelete}
+        // Disabled while the completion toggle is still in flight — tucking
+        // before the check commits would hard-delete the win instead of
+        // archiving it (#113 data-loss race, mirrors the web TodoItem gate).
+        disabled={isTogglePending}
         className="h-6 w-6 p-0 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group-hover:opacity-100"
         aria-label={`Tuck "${todo.text}" into Completed`}
         title="Tuck into Completed"
@@ -375,6 +394,7 @@ export const FloatingNavigator = function FloatingNavigator({
   isCategoryCreatePending = false,
   isCategoryUpdatePending = false,
   isCategoryDeletePending = false,
+  isTogglePending = false,
 }: FloatingNavigatorProps) {
   const [newTaskText, setNewTaskText] = useState('')
   const [showManagePanel, setShowManagePanel] = useState(false)
@@ -944,6 +964,7 @@ export const FloatingNavigator = function FloatingNavigator({
                       todo={todo}
                       onToggle={handleTaskToggle}
                       onDelete={handleTaskDelete}
+                      isTogglePending={isTogglePending}
                     />
                   ))}
                   {completedTodos.length > 3 && (
