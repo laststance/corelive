@@ -44,7 +44,9 @@ const NEW_TASK_ACCELERATOR = 'CommandOrControl+N'
  * can assert the lone-modifier binding reached the engine with the right id.
  * `isLatchBlocked` is a spy defaulting to `false` (healthy) so routing tests are
  * unchanged; a latch-block test overrides it to drive the inactive path (#125).
- * @returns the engine plus its register/unregister/unregisterAll/isLatchBlocked spies.
+ * `isActive` is a spy defaulting to `false` (no live tap); the "tap is live" test
+ * drives it `true` to prove `getNativeTapStatus` surfaces engine RUNTIME state.
+ * @returns the engine plus its register/unregister/unregisterAll/isLatchBlocked/isActive spies.
  */
 function createAvailableNativeEngineHarness() {
   const register = vi.fn(() => true)
@@ -54,6 +56,7 @@ function createAvailableNativeEngineHarness() {
   const clearLatchBlock = vi.fn()
   const reArm = vi.fn()
   const resetPressedState = vi.fn()
+  const isActive = vi.fn(() => false)
   const engine: NativeShortcutEngine = {
     isAvailable: () => true,
     register,
@@ -63,6 +66,7 @@ function createAvailableNativeEngineHarness() {
     clearLatchBlock,
     reArm,
     resetPressedState,
+    isActive,
   }
   return {
     engine,
@@ -73,6 +77,7 @@ function createAvailableNativeEngineHarness() {
     clearLatchBlock,
     reArm,
     resetPressedState,
+    isActive,
   }
 }
 
@@ -207,6 +212,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
       clearLatchBlock: vi.fn(),
       reArm: vi.fn(),
       resetPressedState: vi.fn(),
+      isActive: () => false,
     }
     const shortcutManager = new ShortcutManager(
       createWindowManagerStub(),
@@ -371,8 +377,11 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
   })
 
   it('marks the native tap active once a lone-modifier binding is live', () => {
-    // Arrange: an available tap whose register succeeds (#125, codex #5).
-    const { engine } = createAvailableNativeEngineHarness()
+    // Arrange: an available tap that registers the bind AND reports itself live
+    // at runtime (#125 codex review). `active` must come from the engine's
+    // RUNTIME state, so the harness drives isActive() true here.
+    const { engine, isActive } = createAvailableNativeEngineHarness()
+    isActive.mockReturnValue(true)
     const shortcutManager = new ShortcutManager(
       createWindowManagerStub(),
       null,
@@ -380,14 +389,14 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
       engine,
     )
 
-    // Act: a successful native registration makes the tap active.
+    // Act: a successful native registration with a live tap.
     shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
       'toggleBrainDump',
       vi.fn(),
     )
 
-    // Assert
+    // Assert: getNativeTapStatus surfaces the engine's live runtime state.
     expect(shortcutManager.getNativeTapStatus().active).toBe(true)
   })
 

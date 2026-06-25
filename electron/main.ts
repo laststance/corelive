@@ -55,6 +55,7 @@ import { createUiohookShortcutEngine } from './uiohookEngine'
 import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { loadUiohook } from './utils/loadUiohook'
+import { isNativeTapLatchSet } from './utils/nativeTapLatch'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import { WindowManager } from './WindowManager'
 import {
@@ -2175,14 +2176,28 @@ function setupIPCHandlers(): void {
   // the renderer's "disabled after a failed start — re-enable" control.
   typedHandle('shortcuts-get-native-tap-status', () => {
     if (!shortcutManager) {
-      return { available: false, latchBlocked: false, active: false }
+      // ShortcutManager not constructed yet: read the persisted brick-guard from
+      // disk so an early renderer poll during a latch-blocked launch still sees
+      // the block (and keeps the re-enable affordance) instead of a false
+      // "not blocked" (codex review). `active` is false — nothing is live yet.
+      return {
+        available: false,
+        latchBlocked: isNativeTapLatchSet(),
+        active: false,
+      }
     }
     return shortcutManager.getNativeTapStatus()
   })
 
   typedHandle('shortcuts-reenable-native-tap', () => {
     if (!shortcutManager) {
-      return { available: false, latchBlocked: false, active: false }
+      // Re-enable can't act before ShortcutManager exists, but report the real
+      // persisted latch state so the renderer doesn't conclude the block cleared.
+      return {
+        available: false,
+        latchBlocked: isNativeTapLatchSet(),
+        active: false,
+      }
     }
     return shortcutManager.reenableNativeTap()
   })

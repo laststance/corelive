@@ -656,7 +656,10 @@ export class ShortcutManager {
    * can show a "disabled after a failed start — re-enable" control when a prior
    * arming was left unconfirmed.
    * @returns `{ available, latchBlocked, active }` — engine health plus whether a
-   *   lone-modifier binding is actually live right now (codex #5).
+   *   lone-modifier binding is actually LIVE right now. `active` reads the engine's
+   *   RUNTIME state (codex review), not registration: after a failed re-enable/
+   *   re-arm the binding stays registered while the tap is down, and the renderer
+   *   must keep the recovery affordance, so registration intent is not the truth.
    * @example
    * getNativeTapStatus() // => { available: true, latchBlocked: true, active: false }
    */
@@ -664,24 +667,8 @@ export class ShortcutManager {
     return {
       available: this.nativeEngine.isAvailable(),
       latchBlocked: this.nativeEngine.isLatchBlocked(),
-      active: this.hasActiveNativeBinding(),
+      active: this.nativeEngine.isActive(),
     }
-  }
-
-  /**
-   * Whether any lone-modifier binding is currently registered as native — i.e.
-   * the tap actually armed and the binding is live (codex #5). Lets
-   * {@link getNativeTapStatus} report `active: false` when a re-enable cleared the
-   * latch block but the re-arm still failed, so the UI keeps the recovery control.
-   * @returns `true` when a registered shortcut is flagged `isNative`.
-   * @example
-   * hasActiveNativeBinding() // => false right after a failed re-enable
-   */
-  private hasActiveNativeBinding(): boolean {
-    for (const registered of this.registeredShortcuts.values()) {
-      if (registered.isNative) return true
-    }
-    return false
   }
 
   /**

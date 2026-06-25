@@ -114,7 +114,7 @@ machine (Karabiner's virtual-HID layer transforms synthetic CGEvents), so it can
 delivery _works_ — but it reproduces the same **1-then-silent ceiling**, which is the
 point. The verdict that delivery FAILS holds for **real physical keys** too.
 
-**Re-confirmed (2026-06-26, fresh signed re-run).** Relaunched the same signed
+**Re-confirmed (2026-06-26 JST, fresh signed re-run).** Relaunched the same signed
 `com.corelive.app` build (`codesign`: `Developer ID Application: Ryota Murakami
 (895TNMSCMH)`, hardened runtime; `app.asar` built 00:55, no builder running). The probe
 forked the `utilityProcess` child, which loaded the native `.node` and posted

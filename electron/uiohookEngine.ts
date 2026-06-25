@@ -244,18 +244,24 @@ export function createUiohookShortcutEngine(
   /** Stop the tap when no bindings remain so the app releases the global hook. */
   const stopTapIfIdle = (): void => {
     if (uiohook === null || !isTapRunning || bindingByKeycode.size > 0) return
-    if (stabilityTimer) {
-      clearTimeout(stabilityTimer)
-      stabilityTimer = null
-    }
+    // Stop FIRST. A thrown stop() leaves the old tap in an UNKNOWN state, so bail
+    // WITHOUT flipping isTapRunning or clearing the brick-guard (codex review):
+    // keeping isTapRunning=true makes a later register() see the tap as still up
+    // and skip a second start() — the same double-start reArm() already avoids.
     try {
       uiohook.stop()
     } catch (error) {
       log.error('[uiohookEngine] Failed to stop global key tap:', error)
+      return
+    }
+    // Clean stop only — now safe to drop the stability timer, mark the tap down,
+    // reset pressed-state, and clear the brick-guard (a confirmed-healthy session).
+    if (stabilityTimer) {
+      clearTimeout(stabilityTimer)
+      stabilityTimer = null
     }
     isTapRunning = false
     resetPressedState()
-    // A clean stop is a confirmed-healthy session — drop the brick-guard.
     latch.clear()
   }
 
@@ -348,6 +354,12 @@ export function createUiohookShortcutEngine(
     },
 
     resetPressedState,
+
+    // RUNTIME truth for the renderer's `active` flag (#125 codex review): a
+    // binding is registered AND the tap is actually running. After a failed
+    // reArm() the binding map is still populated but `isTapRunning` is false, so
+    // this correctly reports inactive while registration intent persists.
+    isActive: () => isTapRunning && bindingByKeycode.size > 0,
   }
 }
 

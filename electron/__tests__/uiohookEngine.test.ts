@@ -490,4 +490,72 @@ describe('createUiohookShortcutEngine', () => {
     // Assert: no second start (the restart was skipped to avoid a double-start).
     expect(start).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps the brick-guard set and the tap un-restartable when stop throws on the last unbind', () => {
+    // Arrange: stop() throws when the final binding is removed, so the old tap's
+    // state is unknown. Treating that as a clean shutdown (clearing the guard and
+    // flipping isTapRunning) would let a later register() start() a SECOND
+    // CGEventTap — the same double-start reArm() guards against (codex review).
+    const start = vi.fn()
+    const stopThrowingModule: UiohookModule = {
+      on: () => {},
+      start,
+      stop: () => {
+        throw new Error('stop failed on idle')
+      },
+    }
+    const { latch, clear } = createFakeLatch()
+    const engine = createUiohookShortcutEngine(() => stopThrowingModule, latch)
+    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    expect(start).toHaveBeenCalledTimes(1) // initial lazy start
+
+    // Act: remove the last binding (stop() throws), then bind again — a mistaken
+    // "clean shutdown" would start() a second tap here.
+    engine.unregister('toggleBrainDump')
+    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+
+    // Assert: the failed stop did NOT clear the guard, and no second start ran.
+    expect(clear).not.toHaveBeenCalled()
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports isActive true while a binding is registered and the tap is running', () => {
+    // Arrange
+    const fake = createFakeUiohook()
+    const { latch } = createFakeLatch()
+    const engine = createUiohookShortcutEngine(() => fake.module, latch)
+
+    // Act
+    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+
+    // Assert: a live tap with a binding is active (renderer hides recovery).
+    expect(engine.isActive()).toBe(true)
+  })
+
+  it('reports isActive false after a re-arm whose restart fails, though the binding stays registered', () => {
+    // Arrange: the initial start succeeds but the start during reArm throws, so
+    // the tap is down while the binding remains registered. isActive must read
+    // RUNTIME state (tap down), not registration intent, or the renderer would
+    // hide the recovery affordance over a dead tap (codex review).
+    let startCount = 0
+    const start = vi.fn(() => {
+      startCount += 1
+      if (startCount >= 2) throw new Error('start failed on re-arm')
+    })
+    const reArmFailingModule: UiohookModule = {
+      on: () => {},
+      start,
+      stop: vi.fn(),
+    }
+    const { latch } = createFakeLatch()
+    const engine = createUiohookShortcutEngine(() => reArmFailingModule, latch)
+    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    expect(engine.isActive()).toBe(true) // live before the failed re-arm
+
+    // Act: reArm stops cleanly then fails to restart.
+    engine.reArm()
+
+    // Assert: tap is down → inactive, even though the binding is still registered.
+    expect(engine.isActive()).toBe(false)
+  })
 })

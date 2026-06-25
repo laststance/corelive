@@ -103,6 +103,16 @@ export interface NativeShortcutEngine {
    * stale pressed key that mis-fires or never re-fires after wake.
    */
   resetPressedState(): void
+
+  /**
+   * Whether the tap is LIVE right now — a binding is registered AND the OS-level
+   * tap is actually running (#125 codex review). This is RUNTIME truth, distinct
+   * from registration intent: after a failed {@link reArm} (stop succeeded but
+   * the restart failed) a binding stays registered while the tap is down, so the
+   * caller must read this — not "a binding exists" — to decide `active`, or the
+   * renderer would hide the recovery affordance over a dead tap.
+   */
+  isActive(): boolean
 }
 
 /**
@@ -125,5 +135,6 @@ export function createUnavailableNativeShortcutEngine(): NativeShortcutEngine {
     clearLatchBlock: () => {},
     reArm: () => {},
     resetPressedState: () => {},
+    isActive: () => false,
   }
 }
