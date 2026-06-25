@@ -74,43 +74,53 @@ executes.** That makes its value measurable and bounds the work.
 
 ## Proposed Change
 
-Four phases, each independently shippable and each producing a V8/lcov artifact.
-All four feed one merged report because every collector here is **V8-based**
-(`@vitest/coverage-v8`, Playwright `page.coverage`, `NODE_V8_COVERAGE`), so the raw
-formats are mergeable.
+> **Codex plan-eng-review (gpt-5.5): `needs-rethink` → addressed.** 8 findings,
+> all "specify the mechanics," not "wrong approach"; the spike-proven core stands.
+> Folded below, tagged `(codex #N)`: the Next.js sourcemap Blocker (#1),
+> `COVERAGE`-not-`CI` gating (#2/#6), the concrete `v8-to-istanbul` remap (#3),
+> one merge format + explicit `SF:` normalization (#4/#5), monocart peer-pin (#7),
+> scoped cache (#8).
+
+Four phases, each independently shippable. Each collector here is V8-based
+(`@vitest/coverage-v8`, Playwright `page.coverage`, `NODE_V8_COVERAGE`), but
+"V8-based" does NOT mean the raw outputs are merge-compatible **(codex #4)**: each
+is first converted to a normalized **Istanbul JSON** coverage map with
+repo-relative `SF:` paths, and only those normalized maps are merged (Phase 3).
 
 ### Phase 0 — Unit coverage (lowest risk, do first)
 
 Wire `--coverage` into the three vitest configs and add scripts:
 
 - `coverage:unit` → `vitest run --coverage` (web/src) + `vitest run --config vitest.config.electron.ts --coverage` + storybook config.
-- Each config gets a `test.coverage` block: `provider: 'v8'`, `reporter: ['text-summary','json','lcov']`, `reportsDirectory: coverage/unit-<name>`, and an `exclude` list (configs, `*.stories.tsx`, `*.test.*`, `*.spec.*`, generated files, `dist*`).
-- Output: `coverage/unit-web/lcov.info`, `coverage/unit-electron/lcov.info`, `coverage/unit-storybook/lcov.info`.
+- Each config gets a `test.coverage` block: `provider: 'v8'`, `reporter: ['text-summary','json','lcov']`, `reportsDirectory: coverage/unit-<name>`, and an `exclude` list (configs, `*.stories.tsx`, `*.test.*`, `*.spec.*`, generated files, `dist*`). The `json` reporter is the canonical Istanbul `coverage-final.json` Phase 3 merges; `lcov` is for human diffing.
+- Output per config: `coverage/unit-<web|electron|storybook>/coverage-final.json` (canonical) + `lcov.info`.
 
 This alone answers "what % of `src/` and `electron/` do the 1100+ unit tests
 cover?" and surfaces the `main.ts`-at-0% fact immediately.
 
 ### Phase 1 — Web E2E coverage (port gitbox)
 
-1. Add dep `monocart-reporter` (verify peer range vs `@playwright/test ^1.60.0`).
-2. New fixture `e2e/web/_helpers/coverage.ts` (mirrors gitbox's `e2e/fixtures/coverage.ts`): an `auto` fixture that, **gated on `process.env.CI`** and Chromium projects only, runs `page.coverage.startJSCoverage({resetOnNavigation:false})` + `startCSSCoverage`, then on teardown stops both and calls `addCoverageReport([...js,...css], testInfo)`. CI-gating prevents the multi-GB `.cache` bloat gitbox documents for local runs.
+1. Add dep `monocart-reporter@2.11.3` (the gitbox-proven version). Run `pnpm add -D monocart-reporter@2.11.3` and record the peer-compat result against `@playwright/test ^1.60.0` in this doc before implementing — gitbox pairs it with `^1.61.1`, so 1.60 is the one unverified delta (codex #7). Playwright 1.60's `page.coverage.startJSCoverage/startCSSCoverage` API is present (Chromium-only) and unchanged across 1.60→1.61.
+2. New fixture `e2e/web/_helpers/coverage.ts` (mirrors gitbox's `e2e/fixtures/coverage.ts`): an `auto` fixture that, **gated on `process.env.COVERAGE === '1'`** (NOT `CI` — every existing sharded gate job already runs with `CI=true`, so a `CI` gate would fire coverage inside the pass/fail suite too, codex #2) and Chromium projects only, runs `page.coverage.startJSCoverage({resetOnNavigation:false})` + `startCSSCoverage`, then on teardown stops both and calls `addCoverageReport([...js,...css], testInfo)`. The `COVERAGE` gate also prevents the multi-GB `.cache` bloat gitbox documents on normal local/CI runs.
 3. The 10 web specs change their import from `@playwright/test` to the fixture: `import { test, expect } from './_helpers/coverage'` (preserve `type Page` from `@playwright/test` where used).
-4. A coverage-only Playwright config (or a `COVERAGE=1` reporter branch) adds `['monocart-reporter', { coverage: { reports: ['v8','lcovonly','json-summary','text-summary'], entryFilter, sourceFilter, sourcePath } }]` with corelive-specific `sourceFilter` globs (include `src/app`, `src/components`, `src/lib`, `src/hooks`; exclude server-only routes, `*.config.*`, tests, stories).
-5. **CI: a dedicated, NON-sharded coverage job.** The existing web E2E matrix shards one job per spec with the `blob` reporter; monocart coverage across shards would need a fragile cross-shard merge. Instead, run the full web E2E once in a separate `e2e-web-coverage` job (its own runner) that emits `coverage/e2e-web/lcov.info`. This sidesteps the merge entirely (gitbox runs monocart in its non-parallel branch for the same reason) and keeps the fast sharded suite unchanged as the pass/fail gate.
+4. **Browser source maps are mandatory and OFF by default (codex #1, Blocker).** corelive runs web E2E against a PRODUCTION build (`pnpm build` + `pnpm start`, `playwright.config.ts:137`) and has no Sentry, so by default `page.coverage` only sees minified `/_next/static/chunks/*.js` and maps to nothing under `src/**`. Add env-gated `productionBrowserSourceMaps: process.env.COVERAGE === '1'` to `next.config.js` and rebuild inside the coverage job; a Phase-1 assertion greps the emitted report for `SF:src/` and fails the job if absent. Normal builds keep the flag off (no `.map` emission → no bundle-size or source-leak surface in prod).
+5. A coverage-only Playwright config (gated on `COVERAGE=1`) registers `monocart-reporter` with a coverage block that emits an **Istanbul-shaped `coverage-final.json`** (monocart runs `v8-to-istanbul` internally) plus `lcovonly` for human diffing, scoped via `entryFilter`/`sourceFilter`/`sourcePath` to corelive globs (include `src/app`, `src/components`, `src/lib`, `src/hooks`; exclude server-only routes, `*.config.*`, tests, stories). Point monocart's cache + output at `coverage/.monocart`, cleaned before each coverage run (codex #8). Phase 3 consumes the Istanbul JSON, never the lcov.
+6. **CI: a dedicated, NON-sharded `e2e-web-coverage` job, gated on `COVERAGE=1`.** The existing per-spec matrix shards stay the pass/fail gate, untouched and coverage-free. A separate job runs the full web E2E once with `COVERAGE=1` (+ the source-map build) and emits `coverage/e2e-web/coverage-final.json`. Because the fixture and reporter gate on `COVERAGE` not `CI` (codex #2), the gate shards never collect coverage — only this job does. Tradeoff vs gitbox's per-shard+merge: one extra full E2E run, accepted to avoid a fragile cross-shard monocart merge and any gate-suite drift.
 
 ### Phase 2 — Electron main-process coverage (spike-confirmed)
 
-1. In `e2e/electron/_helpers/launch.ts`, when `process.env.CI` (or `COVERAGE`) is set, add `NODE_V8_COVERAGE: <perLaunchDir>` to the `electron.launch` env block. Each launch writes raw V8 JSON for the main process to its own dir.
+1. In `e2e/electron/_helpers/launch.ts`, when **`process.env.COVERAGE === '1'`** (NOT `CI` — the Electron CI job is a pass/fail gate, and turning coverage on there changes its runtime + output volume, codex #6), add `NODE_V8_COVERAGE: <perLaunchDir>` to the `electron.launch` env block. Each launch writes raw V8 JSON for the main process to its own dir.
 2. Specs already `await electronApp.close()` — the clean exit that flushes V8 coverage. Audit each spec to ensure no path SIGKILLs the app before close (the spike confirmed a normal close flushes).
-3. Post-process: a script (`scripts/electron-coverage-report.mjs`) reads the raw dirs, filters to `dist-electron/main/*.cjs`, applies the emitted `.cjs.map` source maps (via `c8` or monocart's programmatic API / `v8-to-istanbul`), and writes `coverage/e2e-electron/lcov.info` mapping to `electron/*.ts`.
-4. Electron **unit** coverage is already delivered by Phase 0 (`vitest.config.electron --coverage`); Phase 2 adds only the booted-app delta (`main.ts`).
+3. Post-process (`scripts/electron-coverage-report.mjs`): for each raw V8 entry whose URL resolves under `dist-electron/main/*.cjs`, feed the `.cjs` + its sibling `.cjs.map` to **`v8-to-istanbul`** (the spike confirmed the maps carry `sources: ['../../electron/*.ts']` + `sourcesContent: true`, so the remap is self-contained — codex #3), merge the per-file objects with **`istanbul-lib-coverage`**, rewrite paths to repo-relative `electron/*.ts`, and write `coverage/e2e-electron/coverage-final.json` (Istanbul JSON — the one canonical format, no lcov here). The step **fails if no `electron/main.ts` entry is present** (codex #6) — asserting the booted-app path was actually measured, not silently empty. (`c8 report --temp-directory` is the lower-effort alternative but gives less control over the strict path filtering; the custom script is chosen for that control.)
+4. Electron **unit** coverage is already delivered by Phase 0 (`vitest.config.electron --coverage`); Phase 2 adds only the booted-app delta (`main.ts`). Do NOT also collect `page.coverage` on the Electron renderer — it loads the same web bundle already measured by Phase 1 (double-count).
 
 ### Phase 3 — Merge, report, gate
 
-1. `coverage:merge` → combine all `lcov.info` files (lcov-result-merger or `nyc merge` on the json) into `coverage/merged/lcov.info` + an HTML report.
-2. Print a `text-summary` and write `coverage/merged/coverage-summary.json`.
-3. CI: upload the merged report as an artifact (and optionally a PR comment with the summary). Add a **threshold gate** whose numbers are set from the measured baseline (see Open Decision).
-4. `.gitignore` the `coverage/` dir.
+1. **One canonical format: Istanbul JSON `coverage-final.json` (codex #5).** Each phase produces it — Phase 0 via vitest `reporter: ['json']`, Phase 1 via monocart's internal `v8-to-istanbul`, Phase 2 via the remap script. `lcov-result-merger` and `nyc merge` are NOT interchangeable — the first consumes LCOV, the second Istanbul JSON; mixing them double-counts or drops files. We standardize on Istanbul JSON end-to-end and merge with a single tool.
+2. **Path-normalization gate BEFORE merge (codex #4).** A script rejects any source key that is absolute, under `dist-electron/**`, or a `webpack://` / `/_next/` URL, and requires every retained key to be repo-relative `src/**` or `electron/**`. This identical path space — not the bare fact that all three sources were V8-derived — is what makes the maps mergeable; the gate fails loudly on a stray path rather than silently miscounting.
+3. `coverage:merge` → merge the normalized `coverage-final.json` files with **`istanbul-lib-coverage`** (`createCoverageMap().merge(...)`), then render `lcov.info` + HTML + `coverage-summary.json` from the merged map via `istanbul-lib-report` + `istanbul-reports`.
+4. CI: upload the merged report as an artifact (and optionally a PR-comment summary). Add a **threshold gate** whose numbers are set from the measured baseline (see Open Decision).
+5. `.gitignore` already ignores `/coverage` — confirm it also covers `coverage/.monocart` and the per-launch raw V8 temp dirs (codex #8).
 
 ## Spike (evidence the Phase 2 mechanism works)
 
@@ -150,22 +160,23 @@ one-line edit, so this decision is cheap to revisit and does not gate the build-
 
 ## Acceptance Criteria
 
-1. `pnpm coverage:unit` produces lcov for all three vitest configs and a printed text-summary, with `electron/main.ts` showing a real (non-fabricated) number.
-2. `COVERAGE=1`/CI web E2E run produces `coverage/e2e-web/lcov.info` whose source paths map to `src/**`, with monocart-reporter coexisting with the existing pass/fail suite (no flake, no shard-merge dependency).
-3. The Electron E2E run with coverage enabled produces `coverage/e2e-electron/lcov.info` that includes `electron/main.ts` with non-zero covered lines (proving the booted-app path is measured).
-4. `pnpm coverage:merge` produces one `coverage/merged/lcov.info` + HTML combining unit + both E2E sources.
+1. `pnpm coverage:unit` produces Istanbul JSON + lcov for all three vitest configs and a printed text-summary, with `electron/main.ts` showing a real (non-fabricated) number.
+2. A `COVERAGE=1` web E2E run (against the source-map build) produces `coverage/e2e-web/coverage-final.json` whose `SF:` paths map to `src/**`, with monocart-reporter coexisting with the existing pass/fail suite (no flake, no shard-merge dependency).
+3. A `COVERAGE=1` Electron E2E run produces `coverage/e2e-electron/coverage-final.json` including `electron/main.ts` with non-zero covered lines; the post-process step hard-fails if that entry is absent, proving the booted-app path is measured.
+4. `pnpm coverage:merge` produces one `coverage/merged/coverage-final.json` (+ derived `lcov.info` + HTML) combining unit + both E2E sources, after the path-normalization gate rejects any non-`src/**`/`electron/**` key.
 5. A CI job publishes the merged summary as an artifact and enforces the agreed threshold (baseline-ratchet by default); the existing sharded web E2E and electron E2E gates are unchanged and still green.
-6. Local default runs (no `CI`/`COVERAGE`) do NOT write coverage caches (no multi-GB `.cache` growth); documented in CLAUDE.md.
+6. Default runs without `COVERAGE=1` do NOT write coverage caches (no multi-GB `.cache` growth) and do NOT emit production source maps; documented in CLAUDE.md.
 7. `coverage/` is git-ignored. No production code behavior changes.
 
 ## Testing Plan
 
-| Layer       | What                                                                                          | Count |
-| ----------- | --------------------------------------------------------------------------------------------- | ----- |
-| Unit        | `electron-coverage-report.mjs` map-merge logic (raw V8 → source-mapped lcov) on a fixture dir | +2-3  |
-| Unit        | coverage fixture gating (CI-on collects, CI-off skips)                                        | +1-2  |
-| Integration | `pnpm coverage:unit` exits 0 and writes the three lcov files                                  | +1    |
-| E2E (meta)  | one electron spec under `COVERAGE=1` yields a non-empty `main.ts` entry                       | +1    |
+| Layer       | What                                                                                                    | Count |
+| ----------- | ------------------------------------------------------------------------------------------------------- | ----- |
+| Unit        | `electron-coverage-report.mjs` remap logic (raw V8 → Istanbul JSON via v8-to-istanbul) on a fixture dir | +2-3  |
+| Unit        | coverage fixture gating (`COVERAGE=1` collects, unset skips)                                            | +1-2  |
+| Unit        | path-normalization gate rejects absolute / `dist-electron/**` / `webpack://` keys                       | +1    |
+| Integration | `pnpm coverage:unit` exits 0 and writes the three Istanbul JSON files                                   | +1    |
+| E2E (meta)  | one electron spec under `COVERAGE=1` yields a non-empty `main.ts` entry                                 | +1    |
 
 The instrument is itself code, so it gets tested — but the "tests" here are mostly
 asserting the report files exist and contain expected source paths, not re-deriving
@@ -173,20 +184,22 @@ coverage math (that's monocart/v8's job).
 
 ## Files Reference
 
-| File                                         | Change                                                                                   |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `package.json`                               | add `monocart-reporter` dep; add `coverage:unit`/`coverage:e2e`/`coverage:merge` scripts |
-| `vitest.config.ts`                           | add `test.coverage` (v8, lcov, exclude list)                                             |
-| `vitest.config.electron.ts`                  | add `test.coverage`                                                                      |
-| `vitest.config.storybook.ts`                 | add `test.coverage`                                                                      |
-| `playwright.config.ts` (+ coverage variant)  | monocart-reporter behind a `COVERAGE`/CI branch                                          |
-| `e2e/web/_helpers/coverage.ts` (new)         | auto-fixture porting gitbox's `page.coverage` collector                                  |
-| `e2e/web/*.spec.ts` (10 files)               | import `{ test, expect }` from the fixture                                               |
-| `e2e/electron/_helpers/launch.ts:46-56`      | inject `NODE_V8_COVERAGE` into the launch env under CI/COVERAGE                          |
-| `scripts/electron-coverage-report.mjs` (new) | raw V8 → source-mapped lcov for the main process                                         |
-| `.github/workflows/*`                        | new non-sharded `e2e-web-coverage` job + merge/threshold step                            |
-| `.gitignore`                                 | add `coverage/`                                                                          |
-| `CLAUDE.md`                                  | document `pnpm coverage:*` + the CI-gated local behavior                                 |
+| File                                         | Change                                                                                                                                                                                    |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`                               | add devDeps `monocart-reporter@2.11.3`, `v8-to-istanbul`, `istanbul-lib-coverage`, `istanbul-lib-report`, `istanbul-reports`; add `coverage:unit`/`coverage:e2e`/`coverage:merge` scripts |
+| `vitest.config.ts`                           | add `test.coverage` (v8, json + lcov, exclude list)                                                                                                                                       |
+| `vitest.config.electron.ts`                  | add `test.coverage`                                                                                                                                                                       |
+| `vitest.config.storybook.ts`                 | add `test.coverage`                                                                                                                                                                       |
+| `next.config.js`                             | env-gated `productionBrowserSourceMaps: process.env.COVERAGE === '1'` (codex #1)                                                                                                          |
+| `playwright.config.ts` (+ coverage variant)  | monocart-reporter behind a `COVERAGE=1` branch (emits Istanbul JSON + lcov)                                                                                                               |
+| `e2e/web/_helpers/coverage.ts` (new)         | auto-fixture porting gitbox's `page.coverage` collector (gated on `COVERAGE=1`)                                                                                                           |
+| `e2e/web/*.spec.ts` (10 files)               | import `{ test, expect }` from the fixture                                                                                                                                                |
+| `e2e/electron/_helpers/launch.ts:46-56`      | inject `NODE_V8_COVERAGE` into the launch env under `COVERAGE=1`                                                                                                                          |
+| `scripts/electron-coverage-report.mjs` (new) | raw V8 → Istanbul JSON for the main process (v8-to-istanbul + istanbul-lib-coverage)                                                                                                      |
+| `scripts/coverage-merge.mjs` (new)           | path-normalization gate + istanbul-lib-coverage merge → merged report                                                                                                                     |
+| `.github/workflows/*`                        | new non-sharded `e2e-web-coverage` job (`COVERAGE=1`) + merge/threshold step                                                                                                              |
+| `.gitignore`                                 | already ignores `/coverage`; confirm `coverage/.monocart` + raw temp dirs covered                                                                                                         |
+| `CLAUDE.md`                                  | document `pnpm coverage:*` + the `COVERAGE=1`-gated local behavior                                                                                                                        |
 
 ## Effort Estimate
 
@@ -208,8 +221,8 @@ coverage math (that's monocart/v8's job).
 Pure additive tooling. Rollback = revert the PR: scripts, configs, the fixture, the
 launch-env line, and the CI job all disappear; the existing sharded E2E gates and
 unit suites are untouched throughout, so nothing user-facing or release-blocking
-depends on this. The `COVERAGE`/CI gating means even a half-applied state is inert
-on normal local runs.
+depends on this. The `COVERAGE=1` gating means even a half-applied state is inert
+on normal local + CI runs.
 
 ## Dependency Graph / Sequencing
 
