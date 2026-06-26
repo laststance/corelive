@@ -158,6 +158,13 @@ interface AppearanceConfig {
 /** Behavior configuration */
 interface BehaviorConfig {
   startOnLogin: boolean
+  /**
+   * macOS: hide the Dock icon + Cmd+Tab entry (`setActivationPolicy('accessory')`).
+   * Persisted here (not just renderer localStorage) so the main process can apply
+   * it at boot BEFORE any window shows — surviving a cold Start-at-Login restart
+   * when the remote renderer (and its ElectronStartupSync) may never load (#112).
+   */
+  hideAppIcon: boolean
   checkForUpdates: boolean
   autoSave: boolean
   autoSaveInterval: number
@@ -368,6 +375,9 @@ export class ConfigManager {
 
       behavior: {
         startOnLogin: false,
+        // Default OFF (icon shown) — matches the renderer default
+        // (DEFAULT_ELECTRON_SETTINGS.hideAppIcon) so a fresh install never flashes.
+        hideAppIcon: false,
         checkForUpdates: true,
         autoSave: true,
         autoSaveInterval: 30000,
