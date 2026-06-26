@@ -1,6 +1,7 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { test, expect, type Page, type Locator } from '@playwright/test'
+import { type Locator, type Page } from '@playwright/test'
 
+import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
 
 /**

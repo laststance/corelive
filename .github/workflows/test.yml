@@ -61,19 +61,19 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Generate Icons 🎨
         run: pnpm build:icons
+      # Coverage now lives in the dedicated `coverage.yml` workflow (#127): it
+      # measures unit + web E2E and uploads ONE merged report to Codecov. This
+      # gate stays coverage-free and fast — its old `--coverage` + Codecov step
+      # uploaded `./coverage/lcov.info`, which the Phase 0 vitest config no longer
+      # emits (it writes `coverage/unit-web/`), so the upload silently matched
+      # nothing. Dropped here rather than repointed, to keep one Codecov source.
       - name: Run unit tests
         env:
           RUN_DB_INTEGRATION_TESTS: '1'
-        run: pnpm test --run --coverage
+        run: pnpm test --run
       - name: Run workspace package tests
         run: pnpm test:packages
       - name: Verify generated theme CSS is not stale
         run: pnpm theme:check
       - name: Run Electron tests
         run: pnpm test:electron --run
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          fail_ci_if_error: false

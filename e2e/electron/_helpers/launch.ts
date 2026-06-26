@@ -15,6 +15,18 @@ const ELECTRON_MAIN_ENTRY = 'dist-electron/main/index.cjs'
 const LOG_DIR = 'test-results'
 const REMOTE_DEBUG_PORT = '9222'
 
+/**
+ * #127 Phase 2: root for per-launch V8 coverage dirs. Each booted main process
+ * flushes its own V8 data here on clean close; `scripts/electron-coverage-report.mjs`
+ * source-map-remaps them to `electron/*.ts` for the Phase 3 merge.
+ */
+const ELECTRON_V8_COVERAGE_ROOT = 'coverage/.electron-v8'
+/**
+ * Inject `NODE_V8_COVERAGE` only when explicitly collecting (`COVERAGE=1`), so
+ * the normal pass/fail Electron suite + CI gate run untouched.
+ */
+const COVERAGE_ENABLED = process.env.COVERAGE === '1'
+
 /** Default timeout (ms) for waiting on renderer URL transitions in specs. */
 export const LOAD_TIMEOUT_MS = 30_000
 
@@ -30,6 +42,17 @@ export async function launchElectronForTest(
   const userDataDir = fs.mkdtempSync(
     path.join(os.tmpdir(), `corelive-electron-${safeSpecName}-`),
   )
+
+  // #127 Phase 2: a per-launch V8 coverage dir so the booted main process
+  // flushes its own coverage on clean close; collected later by the report
+  // script. Created only under COVERAGE=1 to keep the normal suite inert.
+  let coverageDir: string | undefined
+  if (COVERAGE_ENABLED) {
+    fs.mkdirSync(ELECTRON_V8_COVERAGE_ROOT, { recursive: true })
+    coverageDir = fs.mkdtempSync(
+      path.join(ELECTRON_V8_COVERAGE_ROOT, `${safeSpecName}-`),
+    )
+  }
 
   fs.writeFileSync(
     logPath,
@@ -52,6 +75,8 @@ export async function launchElectronForTest(
         PLAYWRIGHT_REMOTE_DEBUGGING_PORT: REMOTE_DEBUG_PORT,
         ELECTRON_E2E_DISABLE_SYSTEM_INTEGRATION: 'true',
         ELECTRON_E2E_USER_DATA_DIR: userDataDir,
+        // #127 Phase 2: per-launch main-process V8 coverage (COVERAGE=1 only).
+        ...(coverageDir ? { NODE_V8_COVERAGE: coverageDir } : {}),
       },
     })
   } catch (error) {

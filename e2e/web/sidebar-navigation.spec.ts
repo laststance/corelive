@@ -1,5 +1,6 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { expect, test } from '@playwright/test'
+
+import { test, expect } from './_helpers/coverage'
 
 /**
  * Sidebar client-navigation regression coverage.

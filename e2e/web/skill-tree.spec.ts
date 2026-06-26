@@ -1,8 +1,9 @@
 import { setupClerkTestingToken } from '@clerk/testing/playwright'
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { type Locator, type Page } from '@playwright/test'
 
 import { xpToLevel } from '../../src/app/(main)/skill-tree/lib/xp'
 
+import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
 
 /**
