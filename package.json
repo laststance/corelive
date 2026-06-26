@@ -45,7 +45,7 @@
     "prettier": "prettier --ignore-unknown --write .",
     "typecheck": "tsc --noEmit",
     "validate": "concurrently -n test,pkg,lint,build,type,theme -c blue,magenta,yellow,green,cyan,white --kill-others-on-fail \"pnpm test\" \"pnpm test:packages\" \"pnpm lint:fix\" \"pnpm build\" \"pnpm typecheck\" \"pnpm theme:check\"",
-    "clean": "rimraf .next node_modules pnpm-lock.yaml tsconfig.tsbuildinfo dist dist-electron dist-electron-dev",
+    "clean": "rimraf .next node_modules pnpm-lock.yaml tsconfig.tsbuildinfo dist dist-electron dist-electron-dev playwright-report tmp test-results storybook-static .playwright-mcp .playwright-cli monocart-report coverage .gstack",
     "prepare": "husky",
     "prisma:migrate": "node scripts/assert-local-db.cjs && cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate dev",
     "prisma:status": "cross-env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 prisma migrate status",
@@ -155,7 +155,18 @@
       "minimatch@>=10.2.3 <10.3.0": "10.2.2"
     },
     "onlyBuiltDependencies": [
-      "uiohook-napi"
+      "@clerk/shared",
+      "@prisma/client",
+      "@prisma/engines",
+      "@tailwindcss/oxide",
+      "core-js-pure",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "msw",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
     ]
   },
   "devDependencies": {
