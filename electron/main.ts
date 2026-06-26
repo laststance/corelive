@@ -57,6 +57,10 @@ import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { loadUiohook } from './utils/loadUiohook'
 import { isNativeTapLatchSet } from './utils/nativeTapLatch'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
+import {
+  HIDE_APP_ICON_CONFIG_PATH,
+  resolveHideAppIcon,
+} from './utils/resolveHideAppIcon'
 import { WindowManager } from './WindowManager'
 import {
   WindowStateManager,
@@ -948,6 +952,17 @@ async function createWindow(): Promise<void> {
 
     // Initialize configuration manager
     configManager = new ConfigManager()
+
+    // Apply the persisted dock-icon policy BEFORE any window shows (the first one
+    // is openStartupPanel below), so a hidden icon stays hidden across a cold
+    // Start-at-Login restart without waiting on the renderer's ElectronStartupSync
+    // round-trip — a REMOTE load that can be slow or never complete at login,
+    // leaving the icon visible. Setting 'accessory' before the app activates a
+    // window also avoids the stale Cmd+Tab entry a later regular→accessory flip
+    // leaves. macOS-only; the default 'regular' needs no action when false. (#112)
+    if (process.platform === 'darwin' && resolveHideAppIcon(configManager)) {
+      app.setActivationPolicy('accessory')
+    }
 
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
@@ -1861,15 +1876,30 @@ function setupIPCHandlers(): void {
         return true // Return true to indicate success (no-op on non-macOS)
       }
 
-      if (hide) {
-        // Hide from dock - app becomes "accessory" (no dock icon)
-        app.setActivationPolicy('accessory')
-      } else {
-        // Show in dock - app becomes "regular" application
-        app.setActivationPolicy('regular')
-      }
-      log.info(`Dock icon visibility changed: ${hide ? 'hidden' : 'visible'}`)
-      return true
+      // accessory = no Dock icon / no Cmd+Tab entry; regular = normal app.
+      app.setActivationPolicy(hide ? 'accessory' : 'regular')
+
+      // Persist so the main process re-applies this at the NEXT boot, before any
+      // window shows — the renderer round-trip (ElectronStartupSync) that pushes
+      // this can be slow or never run on a cold Start-at-Login restart (#112).
+      // Guarded like the sibling settings:setStartupConfig handler. This write is
+      // also what SEEDS config for an existing user whose hideAppIcon only ever
+      // lived in renderer localStorage.
+      //
+      // Propagate the write result: if it fails (unwritable userData / full disk)
+      // the runtime policy still applied, but the next cold restart would read the
+      // OLD value and reintroduce #112 — so report the durable save failed instead
+      // of claiming success. The renderer gates its Redux/localStorage update on
+      // this boolean (ElectronSettingsPage.tsx:88), so a false keeps the toggle
+      // honest (not shown as saved).
+      const persisted = configManager
+        ? configManager.set(HIDE_APP_ICON_CONFIG_PATH, hide)
+        : false
+
+      log.info(
+        `Dock icon visibility changed: ${hide ? 'hidden' : 'visible'} (persisted: ${persisted})`,
+      )
+      return persisted
     } catch (error) {
       log.error(
         'settings:setHideAppIcon - Failed to change dock icon visibility:',

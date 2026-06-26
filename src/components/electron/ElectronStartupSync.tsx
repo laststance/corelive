@@ -14,6 +14,14 @@
  * menu-bar icon stayed visible until the user toggled it again — i.e. the toggle
  * would "lie" across restarts.
  *
+ * `hideAppIcon` is ALSO now bootstrapped by the main process at boot from its own
+ * persisted config (ConfigManager `behavior.hideAppIcon`), so on a cold restart
+ * the dock policy is correct before any window shows even if this renderer never
+ * loads (#112). This component stays the live-toggle path and the writer that
+ * SEEDS that config: its mount run reads the already-hydrated value (the storage
+ * middleware rehydrates in a microtask, before mount effects), so it pushes the
+ * correct value, not the pre-hydration default — see ElectronStartupSync.test.tsx.
+ *
  * Renders nothing. Mount once near the top of the React tree, inside
  * `<ReduxProvider>`.
  *
