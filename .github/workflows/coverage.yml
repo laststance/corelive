@@ -122,10 +122,18 @@ jobs:
           # E2E run — the same env e2e.web.yml uses. The heatmap/day-detail specs
           # deep-link via a UTC `TODAY_ISO` but the browser buckets completedAt in
           # the LOCAL tz, so a non-UTC runner straddles the date boundary and the
-          # day-detail/banner assertions (paste-import :317/:378, todo-retain) fail.
+          # day-detail/banner assertions (paste-import :317/:378) fail.
           TZ: UTC
           E2E_TEST_MODE: 'true'
-          E2E_SKIP_PER_SPEC_RESET: 'true'
+          # Deliberately NOT setting E2E_SKIP_PER_SPEC_RESET here. Unlike the
+          # sharded e2e.web.yml (one spec per runner → global-setup's single reset
+          # suffices, see e2e/web/_helpers/db.ts), this job runs the WHOLE web suite
+          # NON-sharded in one runner. Skipping the per-spec `pnpm db:reset` then
+          # leaks an earlier spec's finished tasks forward, so e.g.
+          # todo-retain-archive:174's precondition — `completed-dropzone`
+          # toHaveCount(0), which holds only when completedInListCount === 0 — fails.
+          # Letting resetDatabase run per spec restores the seeded baseline, exactly
+          # like a local sequential run.
         run: pnpm coverage:e2e:web
 
       # Merge unit + web E2E into coverage/merged (electron E2E raw skipped on Linux).
