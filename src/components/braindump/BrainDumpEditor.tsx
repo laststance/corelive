@@ -1446,7 +1446,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
         }
         disabled={activeCategoryId === null}
         maxLength={NOTE_MAX_LENGTH}
-        spellCheck
+        // Braindump is messy quick-capture — the native red spellcheck underlines
+        // make unfinished / mixed-language fragments feel "corrected" and noisy, so
+        // we keep the writing surface calm by disabling them. Only the correction
+        // overlay is suppressed; typing / IME / save are unaffected (#128).
+        spellCheck={false}
         className="bg-background/60 flex-1 resize-none rounded-lg border p-3 shadow-sm focus:outline-none disabled:opacity-50"
         // Inline (not a useMemo) — a fresh style object on an intrinsic element is
         // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the

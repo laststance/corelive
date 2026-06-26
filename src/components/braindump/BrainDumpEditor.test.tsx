@@ -330,6 +330,31 @@ describe('BrainDumpEditor text styling preferences', () => {
   })
 })
 
+describe('BrainDumpEditor writing surface', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('keeps the surface calm by disabling the native red spellcheck underlines', async () => {
+    // Arrange
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+
+    // Act — open the braindump writing surface.
+    renderEditor()
+    const noteField = await screen.findByRole('textbox')
+
+    // Assert — the textarea opts out of the browser spellchecker, so misspelled,
+    // unfinished, or mixed-language fragments never get red correction underlines.
+    // Regression guard for #128: a refactor that drops this re-enables the noise.
+    expect(noteField.getAttribute('spellcheck')).toBe('false')
+  })
+})
+
 describe('BrainDumpEditor focus on window show', () => {
   beforeEach(() => {
     vi.clearAllMocks()
