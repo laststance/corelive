@@ -105,6 +105,14 @@ export class WindowManager {
 
   /** Frameless transparent BrainDump Note panel */
   private brainDumpWindow: BrowserWindow | null
+  /** True after BrainDump has loaded its protected editor route in this window. */
+  private brainDumpHasLoadedOnce: boolean
+  /** True while a manual BrainDump show waits for auth redirect/load settlement. */
+  private brainDumpRevealPending: boolean
+  /** Cancels the current delayed BrainDump reveal watcher, if one is active. */
+  private cancelBrainDumpReveal: (() => void) | null
+  /** True after BrainDump was suppressed and must reload `/braindump` before reveal. */
+  private brainDumpNeedsReloadBeforeReveal: boolean
 
   /** Settings window */
   private settingsWindow: BrowserWindow | null
@@ -177,6 +185,10 @@ export class WindowManager {
   ) {
     this.floatingNavigator = null
     this.brainDumpWindow = null
+    this.brainDumpHasLoadedOnce = false
+    this.brainDumpRevealPending = false
+    this.cancelBrainDumpReveal = null
+    this.brainDumpNeedsReloadBeforeReveal = false
     this.settingsWindow = null
     this.isDev = process.env.NODE_ENV === 'development'
     this.serverUrl = serverUrl
@@ -815,6 +827,10 @@ export class WindowManager {
     const brainDumpUrl = this.getPanelUrl('braindump')
 
     log.debug('Loading BrainDump URL:', brainDumpUrl)
+    this.brainDumpHasLoadedOnce = false
+    this.brainDumpRevealPending = false
+    this.cancelBrainDumpReveal = null
+    this.brainDumpNeedsReloadBeforeReveal = false
     this.brainDumpWindow.loadURL(brainDumpUrl)
 
     this.brainDumpWindow.on('resize', () => {
@@ -844,6 +860,10 @@ export class WindowManager {
     this.brainDumpWindow.on('closed', () => {
       log.debug('BrainDump window closed')
       this.brainDumpWindow = null
+      this.brainDumpHasLoadedOnce = false
+      this.brainDumpRevealPending = false
+      this.cancelBrainDumpReveal = null
+      this.brainDumpNeedsReloadBeforeReveal = false
     })
 
     this.brainDumpWindow.webContents.on(
@@ -888,17 +908,193 @@ export class WindowManager {
       return false
     }
 
+    if (this.brainDumpRevealPending) {
+      this.cancelPendingBrainDumpReveal()
+      return false
+    }
+
     this.showBrainDump()
     return true
   }
 
-  /** Show the BrainDump window, creating it if needed, then focus it. */
+  /**
+   * Show BrainDump only after its protected route settles; signed-out redirects surface Floating Navigator instead.
+   *
+   * @returns void.
+   * @example
+   * windowManager.showBrainDump()
+   */
   showBrainDump(): void {
-    if (!this.brainDumpWindow || this.brainDumpWindow.isDestroyed()) {
-      this.createBrainDumpWindow()
+    const brainDumpWindow =
+      !this.brainDumpWindow || this.brainDumpWindow.isDestroyed()
+        ? this.createBrainDumpWindow()
+        : this.brainDumpWindow
+
+    this.revealBrainDumpAfterAuthGate(brainDumpWindow)
+  }
+
+  /**
+   * Reveal a manual BrainDump open only when it is on the editor route; auth pages are always re-homed to Floating.
+   *
+   * @param panel - Hidden BrainDump window whose current navigation decides whether it can appear.
+   * @returns void.
+   * @example
+   * this.revealBrainDumpAfterAuthGate(this.createBrainDumpWindow())
+   */
+  private revealBrainDumpAfterAuthGate(panel: BrowserWindow): void {
+    if (panel.isDestroyed()) return
+
+    const currentUrl = panel.webContents.getURL()
+
+    if (
+      this.brainDumpNeedsReloadBeforeReveal ||
+      (currentUrl && this.isAuthPathname(currentUrl))
+    ) {
+      // The old hidden window is parked on /login; reload the protected editor
+      // route so a later signed-in open can reach BrainDump instead of stale auth/error.
+      this.brainDumpHasLoadedOnce = false
+      this.cancelPendingBrainDumpReveal()
+      this.brainDumpNeedsReloadBeforeReveal = false
+      panel.loadURL(this.getPanelUrl('braindump'))
     }
-    this.brainDumpWindow?.show()
-    this.brainDumpWindow?.focus()
+
+    if (this.brainDumpHasLoadedOnce) {
+      panel.show()
+      panel.focus()
+      return
+    }
+
+    // A prior manual show is already waiting for the redirect/load decision.
+    if (this.brainDumpRevealPending) return
+
+    this.watchManualBrainDumpLoad(panel)
+  }
+
+  /**
+   * Watch a manual BrainDump open until it either reaches the editor or redirects to auth.
+   *
+   * @param panel - BrainDump BrowserWindow that has started loading `/braindump`.
+   * @returns void.
+   * @example
+   * this.watchManualBrainDumpLoad(panel)
+   */
+  private watchManualBrainDumpLoad(panel: BrowserWindow): void {
+    const { webContents } = panel
+    const removeListeners: Array<() => void> = []
+    let decided = false
+    let latestMainFrameUrl = webContents.getURL() || null
+
+    this.brainDumpRevealPending = true
+
+    const cancelReveal = (): void => {
+      if (decided) return
+      decided = true
+      this.brainDumpRevealPending = false
+      this.brainDumpHasLoadedOnce = false
+      this.brainDumpNeedsReloadBeforeReveal = true
+      if (this.cancelBrainDumpReveal === cancelReveal) {
+        this.cancelBrainDumpReveal = null
+      }
+      removeListeners.forEach((remove) => remove())
+
+      // A toggle-off before load settlement must keep BrainDump hidden.
+      if (!panel.isDestroyed()) panel.hide()
+    }
+    this.cancelBrainDumpReveal = cancelReveal
+
+    const finish = (authenticated: boolean): void => {
+      if (decided) return
+      decided = true
+      this.brainDumpRevealPending = false
+      if (this.cancelBrainDumpReveal === cancelReveal) {
+        this.cancelBrainDumpReveal = null
+      }
+      removeListeners.forEach((remove) => remove())
+
+      if (panel.isDestroyed()) return
+
+      if (authenticated) {
+        // Authenticated: now the editor route is safe to expose in BrainDump.
+        this.brainDumpHasLoadedOnce = true
+        this.brainDumpNeedsReloadBeforeReveal = false
+        panel.show()
+        panel.focus()
+        return
+      }
+
+      this.suppressBrainDumpAuthRedirect(panel)
+    }
+
+    const onDidNavigate = (_event: Electron.Event, url: string): void => {
+      latestMainFrameUrl = url
+      // Auth redirects are terminal: do not let /login render inside BrainDump.
+      if (this.isAuthPathname(url)) finish(false)
+    }
+
+    const onDidFinishLoad = (): void => {
+      // Trust the route only after load settles; unauthenticated redirects can
+      // report the requested /braindump URL before landing on /login.
+      const currentSettledUrl = webContents.getURL() || latestMainFrameUrl
+      finish(
+        currentSettledUrl === null
+          ? false
+          : !this.isAuthPathname(currentSettledUrl),
+      )
+    }
+
+    const onDidFailLoad = (
+      _event: Electron.Event,
+      errorCode: number,
+      _errorDescription: string,
+      _validatedURL: string,
+      isMainFrame: boolean,
+    ): void => {
+      // Ignore subresource failures and normal redirect cancellations.
+      if (!isMainFrame || errorCode === ERR_ABORTED) return
+      finish(false)
+    }
+
+    webContents.on('did-navigate', onDidNavigate)
+    webContents.on('did-finish-load', onDidFinishLoad)
+    webContents.on('did-fail-load', onDidFailLoad)
+    removeListeners.push(
+      () => webContents.removeListener('did-navigate', onDidNavigate),
+      () => webContents.removeListener('did-finish-load', onDidFinishLoad),
+      () => webContents.removeListener('did-fail-load', onDidFailLoad),
+    )
+  }
+
+  /**
+   * Hide BrainDump when it hits auth and show Floating Navigator as the only sign-in surface.
+   *
+   * @param panel - BrainDump BrowserWindow that attempted to host an auth page.
+   * @returns void.
+   * @example
+   * this.suppressBrainDumpAuthRedirect(panel)
+   */
+  private suppressBrainDumpAuthRedirect(panel: BrowserWindow): void {
+    this.brainDumpHasLoadedOnce = false
+    this.brainDumpRevealPending = false
+    this.cancelBrainDumpReveal = null
+    this.brainDumpNeedsReloadBeforeReveal = true
+    panel.hide()
+    this.restoreFromTray()
+  }
+
+  /**
+   * Cancels a pending manual BrainDump reveal when callers toggle it off before navigation settles.
+   *
+   * @returns void.
+   * @example
+   * this.cancelPendingBrainDumpReveal()
+   */
+  private cancelPendingBrainDumpReveal(): void {
+    if (this.cancelBrainDumpReveal) {
+      this.cancelBrainDumpReveal()
+      return
+    }
+
+    this.brainDumpRevealPending = false
   }
 
   /** Hide the BrainDump window without destroying it (instant re-show). */
@@ -1185,6 +1381,10 @@ export class WindowManager {
 
       if (authenticated) {
         // Authed: reveal the panel the user asked to start with.
+        if (kind === 'braindump') {
+          this.brainDumpHasLoadedOnce = true
+          this.brainDumpNeedsReloadBeforeReveal = false
+        }
         panel.show()
         return
       }
@@ -1195,6 +1395,12 @@ export class WindowManager {
       // signed-out launch always leaves one visible, interactive window to sign in
       // from. The suppressed panel reopens from the tray after sign-in; main's
       // post-login auto-reshow is retired with the window.
+      if (kind === 'braindump') {
+        this.brainDumpHasLoadedOnce = false
+        this.brainDumpRevealPending = false
+        this.cancelBrainDumpReveal = null
+        this.brainDumpNeedsReloadBeforeReveal = true
+      }
       this.startupAuthFallbacks.add(kind)
       this.restoreFromTray()
     }
