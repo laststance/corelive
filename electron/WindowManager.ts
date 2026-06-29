@@ -109,6 +109,8 @@ export class WindowManager {
   private brainDumpHasLoadedOnce: boolean
   /** True while a manual BrainDump show waits for auth redirect/load settlement. */
   private brainDumpRevealPending: boolean
+  /** Cancels the current delayed BrainDump reveal watcher, if one is active. */
+  private cancelBrainDumpReveal: (() => void) | null
   /** True after BrainDump was suppressed and must reload `/braindump` before reveal. */
   private brainDumpNeedsReloadBeforeReveal: boolean
 
@@ -185,6 +187,7 @@ export class WindowManager {
     this.brainDumpWindow = null
     this.brainDumpHasLoadedOnce = false
     this.brainDumpRevealPending = false
+    this.cancelBrainDumpReveal = null
     this.brainDumpNeedsReloadBeforeReveal = false
     this.settingsWindow = null
     this.isDev = process.env.NODE_ENV === 'development'
@@ -826,6 +829,7 @@ export class WindowManager {
     log.debug('Loading BrainDump URL:', brainDumpUrl)
     this.brainDumpHasLoadedOnce = false
     this.brainDumpRevealPending = false
+    this.cancelBrainDumpReveal = null
     this.brainDumpNeedsReloadBeforeReveal = false
     this.brainDumpWindow.loadURL(brainDumpUrl)
 
@@ -858,6 +862,7 @@ export class WindowManager {
       this.brainDumpWindow = null
       this.brainDumpHasLoadedOnce = false
       this.brainDumpRevealPending = false
+      this.cancelBrainDumpReveal = null
       this.brainDumpNeedsReloadBeforeReveal = false
     })
 
@@ -903,6 +908,11 @@ export class WindowManager {
       return false
     }
 
+    if (this.brainDumpRevealPending) {
+      this.cancelPendingBrainDumpReveal()
+      return false
+    }
+
     this.showBrainDump()
     return true
   }
@@ -943,7 +953,7 @@ export class WindowManager {
       // The old hidden window is parked on /login; reload the protected editor
       // route so a later signed-in open can reach BrainDump instead of stale auth/error.
       this.brainDumpHasLoadedOnce = false
-      this.brainDumpRevealPending = false
+      this.cancelPendingBrainDumpReveal()
       this.brainDumpNeedsReloadBeforeReveal = false
       panel.loadURL(this.getPanelUrl('braindump'))
     }
@@ -976,10 +986,27 @@ export class WindowManager {
 
     this.brainDumpRevealPending = true
 
+    const cancelReveal = (): void => {
+      if (decided) return
+      decided = true
+      this.brainDumpRevealPending = false
+      if (this.cancelBrainDumpReveal === cancelReveal) {
+        this.cancelBrainDumpReveal = null
+      }
+      removeListeners.forEach((remove) => remove())
+
+      // A toggle-off before load settlement must keep BrainDump hidden.
+      if (!panel.isDestroyed()) panel.hide()
+    }
+    this.cancelBrainDumpReveal = cancelReveal
+
     const finish = (authenticated: boolean): void => {
       if (decided) return
       decided = true
       this.brainDumpRevealPending = false
+      if (this.cancelBrainDumpReveal === cancelReveal) {
+        this.cancelBrainDumpReveal = null
+      }
       removeListeners.forEach((remove) => remove())
 
       if (panel.isDestroyed()) return
@@ -1046,9 +1073,26 @@ export class WindowManager {
   private suppressBrainDumpAuthRedirect(panel: BrowserWindow): void {
     this.brainDumpHasLoadedOnce = false
     this.brainDumpRevealPending = false
+    this.cancelBrainDumpReveal = null
     this.brainDumpNeedsReloadBeforeReveal = true
     panel.hide()
     this.restoreFromTray()
+  }
+
+  /**
+   * Cancels a pending manual BrainDump reveal when callers toggle it off before navigation settles.
+   *
+   * @returns void.
+   * @example
+   * this.cancelPendingBrainDumpReveal()
+   */
+  private cancelPendingBrainDumpReveal(): void {
+    if (this.cancelBrainDumpReveal) {
+      this.cancelBrainDumpReveal()
+      return
+    }
+
+    this.brainDumpRevealPending = false
   }
 
   /** Hide the BrainDump window without destroying it (instant re-show). */
@@ -1352,6 +1396,7 @@ export class WindowManager {
       if (kind === 'braindump') {
         this.brainDumpHasLoadedOnce = false
         this.brainDumpRevealPending = false
+        this.cancelBrainDumpReveal = null
         this.brainDumpNeedsReloadBeforeReveal = true
       }
       this.startupAuthFallbacks.add(kind)

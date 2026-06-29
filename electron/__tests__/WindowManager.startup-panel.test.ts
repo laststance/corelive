@@ -369,6 +369,31 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(restoreFromTray).toHaveBeenCalledTimes(1)
   })
 
+  it('cancels a pending manual BrainDump reveal when toggled off before load settles', () => {
+    // Arrange: the first toggle starts a hidden BrainDump load guarded by the
+    // manual auth watcher, but the route has not settled yet.
+    const windowManager = new WindowManager(SERVER_URL)
+    const firstToggleResult = windowManager.toggleBrainDump()
+    const brainDumpWindow = getWindow(0)
+
+    // Act: a second toggle before did-finish-load means the caller intended to
+    // close the pending reveal, then the original load completes successfully.
+    const secondToggleResult = windowManager.toggleBrainDump()
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/braindump`,
+    )
+    brainDumpWindow.fireWebContents('did-finish-load')
+
+    // Assert: the stale load callback cannot show/focus BrainDump after cancel.
+    expect(firstToggleResult).toBe(true)
+    expect(secondToggleResult).toBe(false)
+    expect(brainDumpWindow.win.hide).toHaveBeenCalledTimes(1)
+    expect(brainDumpWindow.win.show).not.toHaveBeenCalled()
+    expect(brainDumpWindow.win.focus).not.toHaveBeenCalled()
+  })
+
   it('reloads a suppressed BrainDump back to its route before revealing it after sign-in', () => {
     // Arrange: the first open is signed out, leaving the hidden BrainDump window
     // sitting on /login until the user signs in from Floating Navigator.
