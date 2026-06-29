@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: 'Personal Todo navigator for you.',
 }
 
-const Home = function Home() {
+function Home() {
   return (
     <div className="container mx-auto min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center">
