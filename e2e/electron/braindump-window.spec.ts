@@ -90,8 +90,9 @@ test('opening braindump creates a new browser window', async () => {
   expect(electronApp.windows().length).toBe(windowCountBefore + 1)
 })
 
-test('aux visibility reports the braindump as visible after opening', async () => {
-  // Arrange: braindump was shown by the previous test
+test('signed-out BrainDump stays hidden while Floating remains the sign-in front door', async () => {
+  // Arrange: the previous test created BrainDump while signed out. It must stay
+  // hidden because the protected route redirects to /login.
   // Act
   const visibility = await settingsWindow.evaluate(async () => {
     const getFn = window.electronAPI?.window?.getAuxVisibility
@@ -99,8 +100,9 @@ test('aux visibility reports the braindump as visible after opening', async () =
     return getFn()
   })
 
-  // Assert
-  expect(visibility.braindump).toBe(true)
+  // Assert: login is not exposed in BrainDump; Floating is the sign-in surface.
+  expect(visibility.braindump).toBe(false)
+  expect(visibility.floating).toBe(true)
 })
 
 test('setting braindump opacity to 0.75 persists the exact value', async () => {

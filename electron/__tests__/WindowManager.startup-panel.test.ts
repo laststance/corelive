@@ -346,6 +346,65 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps a signed-out manual BrainDump open hidden and surfaces the Floating front door', () => {
+    // Arrange: a menu/shortcut/manual BrainDump open does not go through the
+    // startup-only gate, so WindowManager must guard this path itself.
+    const windowManager = new WindowManager(SERVER_URL)
+    const restoreFromTray = vi
+      .spyOn(windowManager, 'restoreFromTray')
+      .mockImplementation(() => {})
+
+    // Act: proxy.ts redirected the protected BrainDump route to /login.
+    windowManager.showBrainDump()
+    const brainDumpWindow = getWindow(0)
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/login?redirect_url=/braindump`,
+    )
+
+    // Assert: login never renders in BrainDump; Floating becomes the sign-in front door.
+    expect(brainDumpWindow.win.show).not.toHaveBeenCalled()
+    expect(brainDumpWindow.win.focus).not.toHaveBeenCalled()
+    expect(restoreFromTray).toHaveBeenCalledTimes(1)
+  })
+
+  it('reloads a suppressed BrainDump back to its route before revealing it after sign-in', () => {
+    // Arrange: the first open is signed out, leaving the hidden BrainDump window
+    // sitting on /login until the user signs in from Floating Navigator.
+    const windowManager = new WindowManager(SERVER_URL)
+    vi.spyOn(windowManager, 'restoreFromTray').mockImplementation(() => {})
+    windowManager.showBrainDump()
+    const brainDumpWindow = getWindow(0)
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/login?redirect_url=/braindump`,
+    )
+
+    // Act: after sign-in, opening BrainDump again reloads /braindump and waits
+    // for that protected route to settle before showing the panel.
+    windowManager.showBrainDump()
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/braindump`,
+    )
+    brainDumpWindow.fireWebContents('did-finish-load')
+
+    // Assert: the stale /login host was not shown; the real editor route was.
+    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+      1,
+      `${SERVER_URL}/braindump`,
+    )
+    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+      2,
+      `${SERVER_URL}/braindump`,
+    )
+    expect(brainDumpWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(brainDumpWindow.win.focus).toHaveBeenCalledTimes(1)
+  })
+
   it('locks in the first navigation decision and ignores a later load failure', () => {
     // Arrange: a panel-only cold boot.
     const windowManager = new WindowManager(SERVER_URL)
