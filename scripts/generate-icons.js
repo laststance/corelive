@@ -304,11 +304,11 @@ class IconGenerator {
     log.warn('\n🍎 Generating macOS .icns bundle...')
 
     // iconutil is bundled with macOS only — Linux CI runners (ubuntu-latest)
-    // don't have it. Skip cleanly so the test job can still validate the rest
-    // of the icon pipeline; the committed icon.icns covers the macOS build job.
+    // don't have it. Skip cleanly; the macOS release job runs prebuild → build:icons
+    // and generates icon.icns before electron-builder packages the app.
     if (process.platform !== 'darwin') {
       log.warn(
-        `  ⏭️  Skipped (platform=${process.platform}); using committed icon.icns`,
+        `  ⏭️  Skipped (platform=${process.platform}); icon.icns is macOS-only`,
       )
       return
     }
