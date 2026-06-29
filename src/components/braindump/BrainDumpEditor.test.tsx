@@ -591,6 +591,28 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
+  it('shows the checked state once before an instant clear removes the line', async () => {
+    // Arrange: instant clear should still acknowledge the completion visually
+    // before the line leaves the scratchpad.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Act: complete an unchecked checkbox line.
+    fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk')
+
+    // Assert: the user sees the box tick before the async clear tucks it away.
+    expect(noteField).toHaveValue('- [x] buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+  })
+
   it('undo re-inserts the cleared line at its original position', async () => {
     // Arrange — clear-on-complete on, two lines so the re-insert index matters.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -977,9 +999,9 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // Act — complete the first of two lines.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
 
-    // Assert — the line LINGERS (still on screen the moment after completing,
-    // while the Completed create has already fired in the background)…
-    expect(noteField).toHaveValue('buy milk\nkeep me')
+    // Assert — the checked line LINGERS (the completion is visible before it
+    // leaves, while the Completed create has already fired in the background)…
+    expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
     expect(completedMutateAsync).toHaveBeenCalledWith({
       categoryId: 1,
       title: 'buy milk',
@@ -1010,14 +1032,14 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Act — complete line 0 ('buy milk'), then ~100 ms later complete line 1
-    // ('dishes'); the note is unchanged meanwhile, so all three lines stay present
-    // and both completions are tracked at their original indices (0 and 1).
+    // ('dishes'); the checked lines stay present meanwhile, and both completions
+    // are tracked at their original indices (0 and 1).
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\ndishes\nlaundry')
     // The deferred path advances the caret to the START OF THE NEXT line itself,
     // so the second Cmd/Ctrl+Enter naturally targets 'dishes' — assert that here
     // and DON'T reposition the caret by hand (a manual set masked the
     // caret-never-advances bug this regression now guards).
-    expect(noteField.selectionStart).toBe(9) // start of 'dishes' (line 1)
+    expect(noteField.selectionStart).toBe(15) // start of 'dishes' (line 1)
     // ~100 ms human-paced gap so the second completion lands while line 0's
     // removal timer is still pending — both timers pend together (finding G).
     await new Promise((resolve) => setTimeout(resolve, 100))
@@ -1160,9 +1182,9 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     noteField.selectionStart = 'buy milk'.length
     noteField.selectionEnd = 'buy milk'.length
 
-    // Complete line 0 in category 1 → the line is now lingering, not yet removed.
+    // Complete line 0 in category 1 → the checked line lingers, not yet removed.
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
-    expect(noteField).toHaveValue('buy milk\nkeep me')
+    expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
 
     // Act — switch to category 2 before the linger elapses; its empty note loads.
     selectedCategoryRef.current = 2
@@ -1315,8 +1337,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     // action runs); the guard must keep the restored line in place.
     const toastOptions = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
     const undoAction = toastOptions?.action as
-      | { onClick: () => void }
-      | undefined
+      { onClick: () => void } | undefined
     await act(async () => {
       undoAction?.onClick()
     })
@@ -1344,9 +1365,9 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
-    // Act — complete line 0; the deferred path leaves it on screen for now.
+    // Act — complete line 0; the deferred path leaves it checked on screen for now.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
-    expect(noteField).toHaveValue('buy milk\nkeep me')
+    expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
 
     // Assert — after 150 ms (past the 100 ms toast, before the 300 ms delay) the
     // line is already gone: the clamp picked the shorter toast duration.
