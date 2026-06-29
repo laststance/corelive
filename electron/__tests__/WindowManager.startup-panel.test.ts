@@ -394,6 +394,44 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(brainDumpWindow.win.focus).not.toHaveBeenCalled()
   })
 
+  it('reloads BrainDump on the next open after canceling a pending reveal', () => {
+    // Arrange: a hidden BrainDump load is canceled, then the old navigation
+    // settles after its listeners were removed.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.toggleBrainDump()
+    const brainDumpWindow = getWindow(0)
+    windowManager.toggleBrainDump()
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/braindump`,
+    )
+    brainDumpWindow.fireWebContents('did-finish-load')
+    brainDumpWindow.win.show.mockClear()
+    brainDumpWindow.win.focus.mockClear()
+
+    // Act: the next open must start a fresh protected-route load before reveal.
+    windowManager.showBrainDump()
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/braindump`,
+    )
+    brainDumpWindow.fireWebContents('did-finish-load')
+
+    // Assert: the canceled settled page was reloaded, then safely revealed.
+    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+      1,
+      `${SERVER_URL}/braindump`,
+    )
+    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+      2,
+      `${SERVER_URL}/braindump`,
+    )
+    expect(brainDumpWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(brainDumpWindow.win.focus).toHaveBeenCalledTimes(1)
+  })
+
   it('reloads a suppressed BrainDump back to its route before revealing it after sign-in', () => {
     // Arrange: the first open is signed out, leaving the hidden BrainDump window
     // sitting on /login until the user signs in from Floating Navigator.

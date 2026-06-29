@@ -990,6 +990,8 @@ export class WindowManager {
       if (decided) return
       decided = true
       this.brainDumpRevealPending = false
+      this.brainDumpHasLoadedOnce = false
+      this.brainDumpNeedsReloadBeforeReveal = true
       if (this.cancelBrainDumpReveal === cancelReveal) {
         this.cancelBrainDumpReveal = null
       }
