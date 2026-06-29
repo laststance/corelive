@@ -59,7 +59,6 @@ export default defineConfig({
       'react',
       'react-dom',
       'react/jsx-runtime',
-      '@storybook/addon-vitest/vitest-plugin',
       'clsx',
       'tailwind-merge',
       'class-variance-authority',
