@@ -1,0 +1,165 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+# CodeRabbit configuration for CoreLive
+# Next.js 16 App Router + Electron (macOS) + oRPC + Clerk + Prisma
+
+language: en-US
+early_access: false
+
+chat:
+  auto_reply: true
+  art: false
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    file_patterns:
+      - DESIGN.md
+      - AGENTS.md
+      - CLAUDE.md
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  review_details: false
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >-
+        Use a concise, descriptive title. Prefer conventional-commit style
+        prefixes (feat, fix, refactor, chore, docs, test) when they fit.
+    description:
+      mode: warning
+    docstrings:
+      mode: off
+
+  path_filters:
+    # Dependencies and lockfiles
+    - '!**/node_modules/**'
+    - '!**/pnpm-lock.yaml'
+    - '!**/package-lock.json'
+    - '!**/yarn.lock'
+
+    # Build outputs
+    - '!**/.next/**'
+    - '!**/dist/**'
+    - '!**/dist-electron/**'
+    - '!**/dist-electron-dev/**'
+    - '!**/out/**'
+    - '!**/build/**'
+    - '!**/storybook-static/**'
+
+    # Generated / machine-written
+    - '!**/prisma/migrations/**'
+    - '!**/.prisma/**'
+    - '!**/src/lib/themes/generated.css'
+    - '!**/next-env.d.ts'
+    - '!**/*.tsbuildinfo'
+
+    # Test and coverage artifacts
+    - '!**/test-results/**'
+    - '!**/playwright-report/**'
+    - '!**/coverage/**'
+    - '!**/monocart-report/**'
+    - '!**/.playwright-mcp/**'
+    - '!**/.playwright-cli/**'
+    - '!**/.playwright-electron/**'
+
+    # Logs and temp
+    - '!**/*.log'
+    - '!**/logs/**'
+    - '!**/tmp/**'
+
+    # Static assets (icons, sounds, screenshots)
+    - '!**/public/**'
+
+  path_instructions:
+    - path: 'src/**/*.{ts,tsx}'
+      instructions: |
+        CoreLive web/renderer conventions:
+        - Next.js 16 App Router; keep `'use client'` at the boundary only.
+        - Prefer lifecycle hooks from `@/hooks` (`useInitialEffect`, `useUpdateEffect`, etc.) over raw `useEffect` when intent matches.
+        - Use `useSyncExternalStore` for SSR-safe subscriptions (timers, media queries).
+        - Never use `any`; prefer `unknown`. Avoid unnecessary type assertions (`as`).
+        - Data access goes through oRPC (`src/server/procedures`, `/api/orpc/*`), not ad-hoc fetch shapes.
+        - Auth: Clerk on client (`useUser`, `useAuth`); server uses `auth()` from `@clerk/nextjs/server`.
+        - UI must follow DESIGN.md: Warm Cathedral aesthetic, self-affirmation voice (no KPI guilt, streak shame, or gamified copy).
+        - Do not use banned fonts (Inter, Geist Sans, DM Sans, etc.) as primary typography.
+        - Put magic numbers in `constants.ts` with `_MS` / `_PX` suffixes.
+        - Code and comments in English. Run `pnpm validate` before merge.
+
+    - path: 'electron/**/*.{ts,mjs}'
+      instructions: |
+        Electron main-process rules:
+        - macOS-only product; gate platform-specific behavior on `app.isPackaged`, not `NODE_ENV`.
+        - Security: no raw `ipcMain.handle` / `webContents.send` outside typed IPC wrappers (`typedHandle`, `typedSend`, `typedInvoke`).
+        - Preload must expose a minimal, validated surface; never leak Node APIs to renderer.
+        - Renderer loads production `https://corelive.app/` (packaged) or dev server URL; data path matches web via HTTP oRPC.
+        - Review native integrations (menu, tray, dock, deep links, shortcuts, multi-window sync) for lifecycle leaks and focus/input-freeze risks.
+        - Prefer structured logging (pino) over `console.log`.
+
+    - path: 'src/server/**/*.{ts,tsx}'
+      instructions: |
+        Server / oRPC layer:
+        - Procedures live in `src/server/procedures` with Zod-validated inputs.
+        - Protect routes with Clerk auth middleware; map Clerk `userId` to `User.clerkId` in Prisma.
+        - Do not mock auth or DB in production code paths.
+        - Keep business logic testable; avoid leaking Prisma types across the client boundary.
+
+    - path: 'prisma/schema.prisma'
+      instructions: |
+        Review schema changes for migration safety, index coverage, nullable vs required fields,
+        and backward compatibility with existing Electron/web clients. Flag destructive changes
+        without a migration plan.
+
+    - path: 'packages/eslint-plugin-dslint/**'
+      instructions: |
+        Custom ESLint plugin enforcing design-token usage (`dslint/token-only`, `dslint/ban-stylelist`).
+        Keep rules aligned with DESIGN.md tokens and Tailwind conventions.
+
+    - path: '**/*.{test,spec}.{ts,tsx,mjs}'
+      instructions: |
+        Tests use Vitest (unit) and Playwright (e2e). Prefer DAMP over DRY; use AAA comments.
+        Name tests by observable behavior, not implementation. Hard-code expected values.
+        E2E must use real Clerk Dev credentials—never mock auth/DB in e2e specs.
+
+    - path: 'e2e/**'
+      instructions: |
+        Playwright E2E: web specs under `e2e/web`, Electron under `e2e/electron`.
+        Do not mock auth or database. Flag flaky waits; prefer deterministic selectors and fixtures.
+
+    - path: '**/*.{stories,mdx}.{ts,tsx,mdx}'
+      instructions: |
+        Storybook stories and MDX docs: lighter review. Ensure stories reflect DESIGN.md
+        tokens and accessible defaults; avoid decorative-only churn.
+
+    - path: '*.{config,config.*}.{js,ts,mjs}'
+      instructions: |
+        Build/tooling config (Next, Vitest, Playwright, Electron Vite, ESLint flat config).
+        Changes here affect CI (`pnpm validate`, E2E, electron build). Flag breaking path or env assumptions.
+
+    - path: 'scripts/**'
+      instructions: |
+        Node scripts for icons, theme generation, coverage merge, and release artifacts.
+        ShellCheck-worthy bash should stay minimal; prefer Node for cross-platform behavior.
+
+  tools:
+    eslint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
