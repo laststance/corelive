@@ -410,6 +410,35 @@ describe('BrainDumpEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalledWith(1, '')
     expect(noteSet).not.toHaveBeenCalled()
   })
+
+  it('persists a new user edit after the existing category note fails to load', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi
+      .fn()
+      .mockRejectedValue(new Error('temporary disk read error'))
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to load note for this category',
+      )
+    })
+    fireEvent.change(noteField, { target: { value: 'fresh rescue note' } })
+
+    // Assert
+    await waitFor(() => {
+      expect(noteSet).toHaveBeenCalledWith(1, 'fresh rescue note')
+    })
+  })
 })
 
 describe('BrainDumpEditor focus on window show', () => {
