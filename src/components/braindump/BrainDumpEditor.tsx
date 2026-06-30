@@ -345,6 +345,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
     categoryId: Category['id'] | null
     text: string
   }>({ categoryId: null, text: '' })
+  // Category whose textarea value may be written back to disk. It only flips on
+  // after a successful load or direct user input, so load failures do not save "".
+  const noteWritableCategoryRef = useRef<Category['id'] | null>(null)
 
   useCycleEffect(() => {
     noteTextRef.current = noteText
@@ -476,6 +479,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null) {
       setNoteText('')
       lastPersistedRef.current = { categoryId: null, text: '' }
+      noteWritableCategoryRef.current = null
       return
     }
     const api = window.brainDumpAPI
@@ -484,6 +488,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     if (!api) return
     let cancelled = false
     setIsLoadingNote(true)
+    noteWritableCategoryRef.current = null
     api.note
       .get(activeCategoryId)
       .then((text) => {
@@ -492,6 +497,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         // Mark as already-persisted so the debounce effect doesn't immediately
         // echo this text back to disk.
         lastPersistedRef.current = { categoryId: activeCategoryId, text }
+        noteWritableCategoryRef.current = activeCategoryId
         checkedRowsRef.current.clear()
         pendingCreatesRef.current.clear()
         clearedLinesRef.current.clear()
@@ -505,6 +511,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         // while we render category B's failure.
         setNoteText('')
         lastPersistedRef.current = { categoryId: null, text: '' }
+        noteWritableCategoryRef.current = null
         checkedRowsRef.current.clear()
         pendingCreatesRef.current.clear()
         clearedLinesRef.current.clear()
@@ -529,6 +536,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
     const api = window.brainDumpAPI
     if (!api) return
     const persisted = lastPersistedRef.current
+    // Never persist the initial empty textarea before this category's note has
+    // loaded; a deploy-driven reload can otherwise overwrite real disk content.
+    if (noteWritableCategoryRef.current !== activeCategoryId) return
     if (
       persisted.categoryId === activeCategoryId &&
       persisted.text === noteText
@@ -558,6 +568,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
     return () => {
       const text = noteTextRef.current
       const persisted = lastPersistedRef.current
+      // If note.get never resolved for this category, `text` is only the local
+      // initial value. Skipping the flush preserves the existing stored note.
+      if (noteWritableCategoryRef.current !== flushCategoryId) return
       if (persisted.categoryId === flushCategoryId && persisted.text === text) {
         return
       }
@@ -1495,14 +1508,19 @@ export const BrainDumpEditor = function BrainDumpEditor({
         ref={textareaRef}
         id={noteInputId}
         value={noteText}
-        onChange={(event) => setNoteText(event.target.value)}
+        onChange={(event) => {
+          // A direct edit after a load failure is intentional new content, so it
+          // can be saved even though no prior disk value was loaded.
+          noteWritableCategoryRef.current = activeCategoryId
+          setNoteText(event.target.value)
+        }}
         onKeyDown={handleKeyDown}
         placeholder={
           activeCategoryId === null
             ? 'Pick a category to start writing'
             : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
         }
-        disabled={activeCategoryId === null}
+        disabled={activeCategoryId === null || isLoadingNote}
         maxLength={NOTE_MAX_LENGTH}
         // Braindump is messy quick-capture — the native red spellcheck underlines
         // make unfinished / mixed-language fragments feel "corrected" and noisy, so

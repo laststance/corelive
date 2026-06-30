@@ -194,8 +194,10 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
       try {
         return await typedInvoke('braindump-note-get', categoryId)
       } catch (error) {
+        // Re-throw so the renderer can avoid treating a failed disk read as an
+        // intentionally empty note; swallowing this can overwrite real content.
         log.error('BrainDump: Failed to read note:', error)
-        return ''
+        throw error
       }
     },
 
