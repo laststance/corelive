@@ -450,6 +450,7 @@ describe('BrainDumpEditor note persistence during reload', () => {
       .fn()
       .mockRejectedValue(new Error('temporary disk read error'))
     const noteSet = vi.mocked(api.note.set)
+    const user = userEvent.setup()
 
     // Act
     renderEditor()
@@ -459,7 +460,8 @@ describe('BrainDumpEditor note persistence during reload', () => {
         'Failed to load note for this category',
       )
     })
-    fireEvent.change(noteField, { target: { value: 'fresh rescue note' } })
+    expect(noteField).toBeEnabled()
+    await user.type(noteField, 'fresh rescue note')
 
     // Assert
     await waitFor(() => {
