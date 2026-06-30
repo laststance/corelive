@@ -355,6 +355,63 @@ describe('BrainDumpEditor writing surface', () => {
   })
 })
 
+describe('BrainDumpEditor note persistence during reload', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    selectedCategoryRef.current = 1
+  })
+
+  it('keeps the existing category note on disk when BrainDump reloads before the note finishes loading', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async () => new Promise<string>(() => undefined))
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    const { unmount } = renderEditor()
+    await waitFor(() => {
+      expect(api.note.get).toHaveBeenCalledWith(1)
+    })
+    unmount()
+
+    // Assert
+    expect(noteSet).not.toHaveBeenCalledWith(1, '')
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('keeps the existing category note on disk when loading that note fails', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi
+      .fn()
+      .mockRejectedValue(new Error('temporary disk read error'))
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    renderEditor()
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to load note for this category',
+      )
+    })
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // Assert
+    expect(noteSet).not.toHaveBeenCalledWith(1, '')
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+})
+
 describe('BrainDumpEditor focus on window show', () => {
   beforeEach(() => {
     vi.clearAllMocks()

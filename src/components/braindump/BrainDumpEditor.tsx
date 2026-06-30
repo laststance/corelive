@@ -529,6 +529,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
     const api = window.brainDumpAPI
     if (!api) return
     const persisted = lastPersistedRef.current
+    // Never persist the initial empty textarea before this category's note has
+    // loaded; a deploy-driven reload can otherwise overwrite real disk content.
+    if (persisted.categoryId !== activeCategoryId) return
     if (
       persisted.categoryId === activeCategoryId &&
       persisted.text === noteText
@@ -558,6 +561,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
     return () => {
       const text = noteTextRef.current
       const persisted = lastPersistedRef.current
+      // If note.get never resolved for this category, `text` is only the local
+      // initial value. Skipping the flush preserves the existing stored note.
+      if (persisted.categoryId !== flushCategoryId) return
       if (persisted.categoryId === flushCategoryId && persisted.text === text) {
         return
       }
