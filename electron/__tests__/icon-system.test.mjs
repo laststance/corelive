@@ -1,7 +1,29 @@
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 
+import sharp from 'sharp'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+import { generateMacTemplateTrayIcons } from '../../scripts/generate-icons.js'
+
+/**
+ * Temporarily overrides process.platform so macOS-only tray behavior can run on CI.
+ * @param platform - The platform value exposed during the callback.
+ * @param callback - The assertions or setup that need the temporary platform.
+ * @returns The callback's return value.
+ * @example
+ * withPlatform('darwin', () => process.platform) // => 'darwin'
+ */
+function withPlatform(platform, callback) {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
+  Object.defineProperty(process, 'platform', { value: platform })
+  try {
+    return callback()
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform)
+  }
+}
 
 describe('Icon System', () => {
   const iconDir = path.join(process.cwd(), 'build', 'icons')
@@ -30,6 +52,40 @@ describe('Icon System', () => {
           )
           expect(fs.existsSync(iconPath)).toBe(true)
         }
+      }
+    })
+
+    it('generates macOS Template tray icons in a clean output directory', async () => {
+      // Arrange
+      const outputDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'corelive-tray-icons-'),
+      )
+      const expectedTemplateIcons = [
+        { filename: 'trayTemplate.png', size: 16 },
+        { filename: 'trayTemplate@2x.png', size: 32 },
+        { filename: 'checkTemplate.png', size: 16 },
+        { filename: 'checkTemplate@2x.png', size: 32 },
+      ]
+
+      try {
+        // Act
+        await generateMacTemplateTrayIcons(outputDir)
+
+        // Assert
+        for (const templateIcon of expectedTemplateIcons) {
+          const templateIconPath = path.join(outputDir, templateIcon.filename)
+          const metadata = await sharp(templateIconPath).metadata()
+          const stats = await sharp(templateIconPath).stats()
+
+          expect(metadata.width).toBe(templateIcon.size)
+          expect(metadata.height).toBe(templateIcon.size)
+          expect(stats.channels[0].max).toBe(0)
+          expect(stats.channels[1].max).toBe(0)
+          expect(stats.channels[2].max).toBe(0)
+          expect(stats.channels[3].max).toBeGreaterThan(0)
+        }
+      } finally {
+        fs.rmSync(outputDir, { recursive: true, force: true })
       }
     })
 
@@ -72,8 +128,15 @@ describe('Icon System', () => {
     let SystemTrayManager
     let trayManager
     let mockWindowManager
+    let mockNativeImageInstance
 
     beforeEach(async () => {
+      mockNativeImageInstance = {
+        isEmpty: vi.fn(() => false),
+        setTemplateImage: vi.fn(),
+        resize: vi.fn(() => mockNativeImageInstance),
+      }
+
       // Mock Electron modules
       vi.doMock('electron', () => ({
         app: {
@@ -91,11 +154,7 @@ describe('Icon System', () => {
           buildFromTemplate: vi.fn(() => ({})),
         },
         nativeImage: {
-          createFromPath: vi.fn(() => ({
-            isEmpty: vi.fn(() => false),
-            resize: vi.fn(() => ({})),
-            setTemplateImage: vi.fn(),
-          })),
+          createFromPath: vi.fn(() => mockNativeImageInstance),
         },
         Notification: vi.fn(),
       }))
@@ -136,6 +195,27 @@ describe('Icon System', () => {
       it('should be a function that accepts a state parameter', () => {
         expect(typeof trayManager.getTrayIconPath).toBe('function')
         expect(trayManager.getTrayIconPath.length).toBe(0) // Has default parameter
+      })
+    })
+
+    describe('createTrayIcon', () => {
+      it('marks Template icons without resizing away the macOS template image', () => {
+        withPlatform('darwin', () => {
+          // Arrange
+          trayManager.getTrayIconPath = vi.fn(
+            () => '/mock/path/trayTemplate.png',
+          )
+
+          // Act
+          const icon = trayManager.createTrayIcon()
+
+          // Assert
+          expect(icon).toBe(mockNativeImageInstance)
+          expect(mockNativeImageInstance.setTemplateImage).toHaveBeenCalledWith(
+            true,
+          )
+          expect(mockNativeImageInstance.resize).not.toHaveBeenCalled()
+        })
       })
     })
 
