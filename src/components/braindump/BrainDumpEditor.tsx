@@ -1520,7 +1520,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             ? 'Pick a category to start writing'
             : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
         }
-        disabled={activeCategoryId === null}
+        disabled={activeCategoryId === null || isLoadingNote}
         maxLength={NOTE_MAX_LENGTH}
         // Braindump is messy quick-capture — the native red spellcheck underlines
         // make unfinished / mixed-language fragments feel "corrected" and noisy, so

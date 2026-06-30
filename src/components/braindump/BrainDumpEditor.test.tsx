@@ -384,6 +384,33 @@ describe('BrainDumpEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
+  it('blocks editing while the existing category note is still loading', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async () => new Promise<string>(() => undefined))
+    const noteSet = vi.mocked(api.note.set)
+    const user = userEvent.setup()
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(api.note.get).toHaveBeenCalledWith(1)
+    })
+    await user.type(noteField, 'do not save during load')
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // Assert
+    expect(noteField).toBeDisabled()
+    expect(noteField).toHaveValue('')
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
   it('keeps the existing category note on disk when loading that note fails', async () => {
     // Arrange
     installBrainDumpAPI({
