@@ -1113,6 +1113,80 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     expect(noteField).toHaveValue('buy milk\nkeep me')
   })
 
+  it('restores the origin category when a failed linger completion still reads the pre-flush row after switching away', async () => {
+    // Arrange — hold the create in flight so category 1 can switch away before the
+    // failure handler runs. Its stored note still reads the original row, matching
+    // the real pre-flush race CodeRabbit caught.
+    let rejectCreate: (reason: Error) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async (id: number) =>
+      id === 1 ? 'buy milk\nkeep me' : '',
+    )
+    const noteSet = vi.mocked(api.note.set)
+
+    const store = configureStore({
+      reducer: { preferences: preferencesReducer },
+      preloadedState: {
+        preferences: {
+          ...preferencesInitialState,
+          braindumpClearOnComplete: true,
+          braindumpClearDelayMs: LINGER_MS,
+        },
+      },
+    })
+    const [generalCategory] = categories
+    if (!generalCategory)
+      throw new Error('expected the seeded General category')
+    const twoCategories: CategoryWithCount[] = [
+      generalCategory,
+      { ...generalCategory, id: 2, name: 'Work', isDefault: false },
+    ]
+    const tree = (): ReactElement => (
+      <Provider store={store}>
+        <BrainDumpEditor categories={twoCategories} />
+      </Provider>
+    )
+    const { rerender } = render(tree())
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    const value = 'buy milk\nkeep me'
+    fireEvent.change(noteField, { target: { value } })
+    noteField.selectionStart = 'buy milk'.length
+    noteField.selectionEnd = 'buy milk'.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
+
+    selectedCategoryRef.current = 2
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    noteSet.mockClear()
+
+    // Act — category 1 still reads the original row, so the restore must be
+    // idempotent and explicitly write that original row back instead of skipping.
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+    })
+
+    // Assert — the origin note is restored even though it never observed `[x]`.
+    await waitFor(() => {
+      expect(noteSet).toHaveBeenCalledWith(1, 'buy milk\nkeep me')
+    })
+    expect(noteSet).not.toHaveBeenCalledWith(
+      2,
+      expect.stringContaining('buy milk'),
+    )
+  })
+
   it('does not remove the tracked line if the user edited it during the linger', async () => {
     // Arrange
     installBrainDumpAPI({

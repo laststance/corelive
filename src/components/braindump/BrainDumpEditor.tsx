@@ -932,8 +932,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
     try {
       const stored = await api.note.get(entry.categoryId)
       const lines = stored.split('\n')
-      // Category switched before the linger cleared; repair the origin note only.
-      if (lines[entry.originalLineIndex] !== entry.completedLineText) return
+      const currentLine = lines[entry.originalLineIndex]
+      // Category switched before linger finished; write the original row even if
+      // the stored note still shows the pre-flush original instead of `[x]`.
+      if (
+        currentLine !== entry.completedLineText &&
+        currentLine !== entry.reinsertText
+      ) {
+        return
+      }
       await api.note.set(
         entry.categoryId,
         replaceLineAtIndex(stored, entry.originalLineIndex, entry.reinsertText),
