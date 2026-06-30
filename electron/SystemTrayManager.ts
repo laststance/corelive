@@ -194,17 +194,15 @@ export class SystemTrayManager {
 
       if (iconPath) {
         try {
+          const isTemplateIcon = this.isMacTemplateIconPath(iconPath)
           trayIcon = nativeImage.createFromPath(iconPath)
           if (!trayIcon.isEmpty()) {
-            if (
-              process.platform === 'darwin' &&
-              iconPath.includes('Template')
-            ) {
+            if (isTemplateIcon) {
               trayIcon.setTemplateImage(true)
               log.warn('Set tray icon as Template image for macOS')
             }
 
-            if (process.platform === 'darwin') {
+            if (process.platform === 'darwin' && !isTemplateIcon) {
               trayIcon = trayIcon.resize({ width: 16, height: 16 })
             }
 
@@ -234,6 +232,20 @@ export class SystemTrayManager {
       log.error('Error creating tray icon:', error)
       return null
     }
+  }
+
+  /**
+   * Detects macOS Template icon files so the tray keeps system tinting intact.
+   * @param iconPath - The absolute path returned by getTrayIconPath.
+   * @returns true when the file follows Electron's `*Template.png` convention.
+   * @example
+   * this.isMacTemplateIconPath('/Resources/tray-icons/trayTemplate.png') // => true
+   */
+  private isMacTemplateIconPath(iconPath: string): boolean {
+    return (
+      process.platform === 'darwin' &&
+      /Template(?:@2x)?\.png$/.test(path.basename(iconPath))
+    )
   }
 
   /**
@@ -819,15 +831,14 @@ export class SystemTrayManager {
     }
 
     try {
-      const iconPath = this.getTrayIconPath(state)
-      if (iconPath) {
-        const icon = nativeImage.createFromPath(iconPath)
+      const icon = this.createTrayIcon(state)
+      if (icon && !icon.isEmpty()) {
         this.tray.setImage(icon)
         return true
-      } else {
-        log.warn(`Tray icon for state '${state}' not found`)
-        return false
       }
+
+      log.warn(`Tray icon for state '${state}' not found`)
+      return false
     } catch (error) {
       log.error('Failed to set tray icon state:', error)
       return false

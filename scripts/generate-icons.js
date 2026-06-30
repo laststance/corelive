@@ -32,6 +32,36 @@ const ICON_SIZES = {
   tray: [16, 20, 24, 32],
 }
 
+const MAC_TEMPLATE_TRAY_ICON_COLOR = '#000000'
+
+const MAC_TEMPLATE_TRAY_ICONS = [
+  {
+    filename: 'trayTemplate.png',
+    size: 16,
+    createSvg: createNotepadCheckmarkTemplateSVG,
+  },
+  {
+    filename: 'trayTemplate@2x.png',
+    size: 32,
+    createSvg: createNotepadCheckmarkTemplateSVG,
+  },
+  {
+    filename: 'checkTemplate.png',
+    size: 16,
+    createSvg: createCheckmarkTemplateSVG,
+  },
+  {
+    filename: 'checkTemplate@2x.png',
+    size: 32,
+    createSvg: createCheckmarkTemplateSVG,
+  },
+]
+
+const DEPRECATED_TEMPLATE_TRAY_ICON_FILENAMES = [
+  'filledTemplate.png',
+  'filledTemplate@2x.png',
+]
+
 // Tray icon states
 const TRAY_STATES = {
   default: { suffix: '', description: 'Default tray icon' },
@@ -51,6 +81,100 @@ const TRAY_STATES = {
 const BIG_SUR_CANVAS = 1024
 const BIG_SUR_SAFE_AREA = 824
 const BIG_SUR_PADDING = (BIG_SUR_CANVAS - BIG_SUR_SAFE_AREA) / 2 // 100
+
+/**
+ * Builds the fallback checkmark template SVG used when the primary tray glyph is unavailable.
+ * @param size - The square canvas size in physical pixels.
+ * @returns Black-alpha SVG markup that macOS can tint as a Template image.
+ * @example
+ * createCheckmarkTemplateSVG(16) // => '<svg width="16" ...'
+ */
+function createCheckmarkTemplateSVG(size) {
+  const strokeWidth = Math.max(2, size / 7)
+
+  return `
+<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+  <path
+    d="M${size * 0.15} ${size * 0.5} L${size * 0.4} ${size * 0.75} L${size * 0.85} ${size * 0.25}"
+    stroke="${MAC_TEMPLATE_TRAY_ICON_COLOR}"
+    stroke-width="${strokeWidth}"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>
+`
+}
+
+/**
+ * Builds the primary notepad/check template SVG for CoreLive's macOS menu bar item.
+ * @param size - The square canvas size in physical pixels.
+ * @returns Black-alpha SVG markup that macOS can tint as a Template image.
+ * @example
+ * createNotepadCheckmarkTemplateSVG(16) // => '<svg width="16" ...'
+ */
+function createNotepadCheckmarkTemplateSVG(size) {
+  const padding = Math.max(1, Math.round(size * 0.06))
+  const innerSize = size - padding * 2
+  const strokeWidth = Math.max(1.6, size / 10)
+  const checkmarkStrokeWidth = Math.max(1.9, size / 8)
+
+  return `
+<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+  <rect
+    x="${padding}"
+    y="${padding + innerSize * 0.12}"
+    width="${innerSize}"
+    height="${innerSize * 0.88}"
+    rx="${Math.max(1.5, size / 8)}"
+    fill="none"
+    stroke="${MAC_TEMPLATE_TRAY_ICON_COLOR}"
+    stroke-width="${strokeWidth}"
+  />
+  <line x1="${padding + innerSize * 0.25}" y1="${padding}" x2="${padding + innerSize * 0.25}" y2="${padding + innerSize * 0.2}" stroke="${MAC_TEMPLATE_TRAY_ICON_COLOR}" stroke-width="${strokeWidth}" stroke-linecap="round"/>
+  <line x1="${padding + innerSize * 0.5}" y1="${padding}" x2="${padding + innerSize * 0.5}" y2="${padding + innerSize * 0.2}" stroke="${MAC_TEMPLATE_TRAY_ICON_COLOR}" stroke-width="${strokeWidth}" stroke-linecap="round"/>
+  <line x1="${padding + innerSize * 0.75}" y1="${padding}" x2="${padding + innerSize * 0.75}" y2="${padding + innerSize * 0.2}" stroke="${MAC_TEMPLATE_TRAY_ICON_COLOR}" stroke-width="${strokeWidth}" stroke-linecap="round"/>
+  <path
+    d="M${padding + innerSize * 0.22} ${padding + innerSize * 0.55} L${padding + innerSize * 0.4} ${padding + innerSize * 0.73} L${padding + innerSize * 0.78} ${padding + innerSize * 0.38}"
+    stroke="${MAC_TEMPLATE_TRAY_ICON_COLOR}"
+    stroke-width="${checkmarkStrokeWidth}"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>
+`
+}
+
+/**
+ * Writes macOS Template tray PNGs so clean builds never fall back to the colored app icon.
+ * @param outputDir - The directory that electron-builder packages as `tray-icons`.
+ * @param logger - Logger with warn/error methods, usually the build-script logger.
+ * @returns A promise that resolves after all Template PNGs are written.
+ * @example
+ * await generateMacTemplateTrayIcons('build/icons/tray')
+ */
+async function generateMacTemplateTrayIcons(outputDir, logger = log) {
+  await fs.mkdir(outputDir, { recursive: true })
+  logger.warn('\n🔔 Generating macOS Template tray icons...')
+
+  for (const templateIcon of MAC_TEMPLATE_TRAY_ICONS) {
+    const svg = templateIcon.createSvg(templateIcon.size)
+    const outputPath = path.join(outputDir, templateIcon.filename)
+
+    await sharp(Buffer.from(svg))
+      .resize(templateIcon.size, templateIcon.size)
+      .png({ compressionLevel: 9 })
+      .toFile(outputPath)
+
+    logger.warn(`  ✅ Generated ${templateIcon.filename}`)
+  }
+
+  // Remove old square alternatives so packaged apps only ship the live glyphs.
+  for (const filename of DEPRECATED_TEMPLATE_TRAY_ICON_FILENAMES) {
+    await fs.rm(path.join(outputDir, filename), { force: true })
+  }
+}
 
 class IconGenerator {
   constructor() {
@@ -226,6 +350,8 @@ class IconGenerator {
         }
       }
     }
+
+    await generateMacTemplateTrayIcons(this.trayDir)
   }
 
   async generateFavicons() {
@@ -420,6 +546,22 @@ class IconGenerator {
             manifest.icons.tray[state][size] = `tray/${file}`
           }
         }
+
+        const templateMatch = file.match(
+          /^(trayTemplate|checkTemplate)(@2x)?\.png$/,
+        )
+        if (templateMatch) {
+          const state =
+            templateMatch[1] === 'trayTemplate' ? 'default' : 'check'
+          const size = templateMatch[2] ? 32 : 16
+          if (!manifest.icons.tray.template) {
+            manifest.icons.tray.template = {}
+          }
+          if (!manifest.icons.tray.template[state]) {
+            manifest.icons.tray.template[state] = {}
+          }
+          manifest.icons.tray.template[state][size] = `tray/${file}`
+        }
       }
 
       // Save manifest
@@ -465,4 +607,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   generator.generateAll()
 }
 
-export { IconGenerator }
+export { IconGenerator, generateMacTemplateTrayIcons }
