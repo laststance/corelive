@@ -95,6 +95,20 @@ const categories: CategoryWithCount[] = [
   },
 ]
 
+const categoriesWithCorelive: CategoryWithCount[] = [
+  ...categories,
+  {
+    id: 12,
+    name: 'Corelive',
+    color: 'blue',
+    isDefault: false,
+    userId: 1,
+    createdAt: new Date('2026-06-12T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-12T00:00:00.000Z'),
+    _count: { todos: 0 },
+  },
+]
+
 type BrainDumpSpacesBridge = {
   getVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
   setVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
@@ -148,6 +162,21 @@ function installBrainDumpAPI(spaces: BrainDumpSpacesBridge): void {
  * renderEditor({ braindumpFontSize: 20 })
  */
 function renderEditor(preferenceOverrides: Partial<PreferencesState> = {}) {
+  return renderEditorWithCategories(categories, preferenceOverrides)
+}
+
+/**
+ * Renders the editor with custom categories for category-switching persistence specs.
+ * @param editorCategories - Categories available in the BrainDump picker.
+ * @param preferenceOverrides - Fields to override on top of the slice defaults.
+ * @returns The Testing Library render result.
+ * @example
+ * renderEditorWithCategories(categoriesWithCorelive)
+ */
+function renderEditorWithCategories(
+  editorCategories: CategoryWithCount[],
+  preferenceOverrides: Partial<PreferencesState> = {},
+) {
   const store = configureStore({
     reducer: { preferences: preferencesReducer },
     preloadedState: {
@@ -156,7 +185,7 @@ function renderEditor(preferenceOverrides: Partial<PreferencesState> = {}) {
   })
   return render(
     <Provider store={store}>
-      <BrainDumpEditor categories={categories} />
+      <BrainDumpEditor categories={editorCategories} />
     </Provider>,
   )
 }
@@ -361,6 +390,136 @@ describe('BrainDumpEditor note persistence during reload', () => {
     selectedCategoryRef.current = 1
   })
 
+  it('does not read or write the temporary floating category before BrainDump config finishes loading', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.sync.getEnabled = vi.fn(
+      async () => new Promise<boolean>(() => undefined),
+    )
+    api.category.getLast = vi.fn().mockResolvedValue(12)
+    api.note.get = vi.fn().mockResolvedValue('should not load yet')
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    renderEditor()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // Assert
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(api.note.get).not.toHaveBeenCalled()
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('loads only the saved local BrainDump category after config disables FloatingNav sync', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.sync.getEnabled = vi.fn().mockResolvedValue(false)
+    api.category.getLast = vi.fn().mockResolvedValue(12)
+    api.note.get = vi.fn(async (categoryId: number) =>
+      categoryId === 12 ? 'local Corelive note' : 'temporary floating note',
+    )
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    renderEditorWithCategories(categoriesWithCorelive)
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('local Corelive note')
+    })
+    expect(api.note.get).toHaveBeenCalledWith(12)
+    expect(api.note.get).not.toHaveBeenCalledWith(1)
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('does not flush a clean loaded note when the active category changes', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async (categoryId: number) =>
+      categoryId === 1 ? 'keep category one' : 'work category twelve',
+    )
+    const noteSet = vi.mocked(api.note.set)
+    const store = configureStore({
+      reducer: { preferences: preferencesReducer },
+      preloadedState: {
+        preferences: { ...preferencesInitialState },
+      },
+    })
+
+    // Act
+    const { rerender } = render(
+      <Provider store={store}>
+        <BrainDumpEditor categories={categoriesWithCorelive} />
+      </Provider>,
+    )
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep category one')
+    })
+    noteSet.mockClear()
+    selectedCategoryRef.current = 12
+    rerender(
+      <Provider store={store}>
+        <BrainDumpEditor categories={categoriesWithCorelive} />
+      </Provider>,
+    )
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('work category twelve')
+    })
+    expect(noteSet).not.toHaveBeenCalledWith(1, '')
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('persists an intentional full clear after the loaded category note is editable', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn().mockResolvedValue('keep me until the user clears it')
+    const noteSet = vi.mocked(api.note.set)
+    const user = userEvent.setup()
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me until the user clears it')
+      expect(noteField).toBeEnabled()
+    })
+    await user.clear(noteField)
+
+    // Assert
+    await waitFor(
+      () => {
+        expect(noteSet).toHaveBeenCalledWith(1, '')
+      },
+      { timeout: 1200 },
+    )
+  })
+
   it('keeps the existing category note on disk when BrainDump reloads before the note finishes loading', async () => {
     // Arrange
     installBrainDumpAPI({
@@ -489,7 +648,10 @@ describe('BrainDumpEditor focus on window show', () => {
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Assert — keyboard focus lands in the editor, not on a header control.
-    expect(noteField).toHaveFocus()
+    await waitFor(() => {
+      expect(noteField).toBeEnabled()
+      expect(noteField).toHaveFocus()
+    })
   })
 
   it('returns focus to the note editor when the window is shown again, instead of leaving it on the Follow Spaces switch', async () => {
@@ -503,6 +665,9 @@ describe('BrainDumpEditor focus on window show', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toBeEnabled()
+    })
     const spacesSwitch = screen.getByRole('switch', {
       name: 'Show BrainDump on all Mac desktops',
     })
@@ -522,7 +687,9 @@ describe('BrainDumpEditor focus on window show', () => {
     })
 
     // Assert — focus is back in the note editor, ready for the next capture.
-    expect(noteField).toHaveFocus()
+    await waitFor(() => {
+      expect(noteField).toHaveFocus()
+    })
   })
 })
 
@@ -547,6 +714,19 @@ function fireCompleteCommandOnFirstLine(
   fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
 }
 
+/**
+ * Waits for the config/note boot load to finish before tests type into BrainDump.
+ * @param noteField - The BrainDump textarea rendered by the test.
+ * @returns A promise that resolves once user input is accepted.
+ * @example
+ * await waitForBrainDumpReady(noteField)
+ */
+async function waitForBrainDumpReady(noteField: HTMLTextAreaElement) {
+  await waitFor(() => {
+    expect(noteField).toBeEnabled()
+  })
+}
+
 describe('BrainDumpEditor complete command', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -563,6 +743,7 @@ describe('BrainDumpEditor complete command', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — fire the complete command on the plain line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -587,6 +768,7 @@ describe('BrainDumpEditor complete command', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, '- [ ] write tests')
@@ -612,6 +794,7 @@ describe('BrainDumpEditor complete command', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete a plain prose line whose create then fails.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -638,6 +821,7 @@ describe('BrainDumpEditor complete command', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete 'buy milk', then (while the create is still pending) prepend
     // an unrelated line and rename the completed one so the title search misses.
@@ -664,6 +848,7 @@ describe('BrainDumpEditor complete command', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, '   ')
@@ -691,6 +876,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete the only line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -717,6 +903,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act: complete an unchecked checkbox line.
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk')
@@ -738,6 +925,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
     const caret = value.length // caret at end of the second line
@@ -759,7 +947,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
 
     // Assert — the verbatim line returns at index 1, not appended at the end.
-    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    })
   })
 
   it('restores the cleared line when the completion create fails', async () => {
@@ -773,12 +963,14 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete a line whose background create then rejects.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
 
     // Assert — the verbatim line comes back when the create fails.
     await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled()
       expect(noteField).toHaveValue('buy milk')
     })
   })
@@ -800,6 +992,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete (line clears), let the undo window elapse with no Undo
     // (Sonner fires onAutoClose on the timeout), THEN the create rejects.
@@ -823,7 +1016,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
 
     // Assert — the line is restored even though its undo window already closed.
-    expect(noteField).toHaveValue('buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk')
+    })
   })
 
   it('does not duplicate the line when Undo is tapped after a late failure already restored it', async () => {
@@ -841,6 +1036,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
     const caret = value.length // caret at end of the second line
@@ -853,8 +1049,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalled()
+      expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
     })
-    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
 
     // Act 2 — tap Undo AFTER the failure already restored the line.
     const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
@@ -864,7 +1060,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
 
     // Assert — the line is present exactly ONCE, never doubled.
-    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    })
   })
 
   it('stays silent when the create fails after the user already undid', async () => {
@@ -884,6 +1082,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete (line clears), Undo (line restored, create still pending),
     // THEN the held create rejects.
@@ -896,7 +1095,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     await act(async () => {
       undoAction?.onClick()
     })
-    expect(noteField).toHaveValue('buy milk') // restored by Undo
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk') // restored by Undo
+    })
     await act(async () => {
       rejectCreate(new Error('network down'))
     })
@@ -904,7 +1105,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Assert — the abandoned completion's failure surfaces NO error toast, and
     // the line stays put (the failure handler must not re-insert a second copy).
     expect(toast.error).not.toHaveBeenCalled()
-    expect(noteField).toHaveValue('buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk')
+    })
   })
 
   it('restores the line with its exact leading whitespace on undo (verbatim, not trimmed)', async () => {
@@ -917,6 +1120,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete the indented line, then undo it.
     fireCompleteCommandOnFirstLine(noteField, '   buy milk')
@@ -934,7 +1138,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
 
     // Assert — the three leading spaces survive; the DB got the trimmed title
     // ('buy milk') but the note restores the line exactly as typed.
-    expect(noteField).toHaveValue('   buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('   buy milk')
+    })
     expect(completedMutateAsync).toHaveBeenCalledWith({
       categoryId: 1,
       title: 'buy milk',
@@ -951,6 +1157,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     const value = 'a\n- [ ] buy milk\nc'
     fireEvent.change(noteField, { target: { value } })
     // Park the caret at the end of the middle line (offset 16) before completing.
@@ -980,6 +1187,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete a plain line under the default preference.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1039,6 +1247,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     // Seed two lines and park the caret on the checkbox line (index 1).
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
@@ -1110,6 +1319,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       braindumpClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete the first of two lines.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
@@ -1145,6 +1355,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       braindumpClearDelayMs: 500,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete line 0 ('buy milk'), then ~100 ms later complete line 1
     // ('dishes'); the checked lines stay present meanwhile, and both completions
@@ -1180,6 +1391,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       braindumpClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete (the line is now lingering), then tap Undo before the linger
     // elapses. The optimistic toast is shown synchronously, so its Undo action is
@@ -1194,7 +1406,9 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // Assert — Undo cancelled the pending removal, so the line never left — and it
     // stays put even past the point the linger would have elapsed (timer cancelled,
     // not merely deferred).
-    expect(noteField).toHaveValue('buy milk\nkeep me')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('buy milk\nkeep me')
+    })
     await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
     expect(noteField).toHaveValue('buy milk\nkeep me')
   })
@@ -1213,6 +1427,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       braindumpClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete a line whose background create then rejects during the linger.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
@@ -1222,8 +1437,8 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // blind removal, no duplicate re-insert).
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalled()
+      expect(noteField).toHaveValue('buy milk\nkeep me')
     })
-    expect(noteField).toHaveValue('buy milk\nkeep me')
     await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
     expect(noteField).toHaveValue('buy milk\nkeep me')
   })
@@ -1272,6 +1487,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     const value = 'buy milk\nkeep me'
     fireEvent.change(noteField, { target: { value } })
     noteField.selectionStart = 'buy milk'.length
@@ -1313,6 +1529,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       braindumpClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete the first line, then (still within the linger, before the
     // timer fires) edit that very line so it no longer matches what was completed.
@@ -1366,6 +1583,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     const value = 'buy milk\nkeep me'
     fireEvent.change(noteField, { target: { value } })
     noteField.selectionStart = 'buy milk'.length
@@ -1412,6 +1630,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     })
     renderEditor({ braindumpToastDurationMs: 8000 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete a plain line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1434,6 +1653,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     })
     renderEditor({ braindumpToastDurationMs: 8000 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1458,6 +1678,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     })
     renderEditor({ braindumpToastDurationMs: 2500 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1485,6 +1706,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
       braindumpToastDurationMs: 6000,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
     // Act — complete the only line (it clears instantly).
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1512,6 +1734,7 @@ describe('BrainDumpEditor completion toast — close button + display duration (
       braindumpToastDurationMs: 6000,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
     const caret = value.length // caret at end of the second line
@@ -1535,7 +1758,9 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     })
 
     // Assert — the verbatim line returns at index 1 and stays there.
-    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    })
   })
 
   it('clamps the clear linger down to the shorter toast duration so a line never outlasts its Undo', async () => {
@@ -1553,14 +1778,22 @@ describe('BrainDumpEditor completion toast — close button + display duration (
       braindumpToastDurationMs: 100,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
 
-    // Act — complete line 0; the deferred path leaves it checked on screen for now.
-    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
-    expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
+    vi.useFakeTimers()
+    try {
+      // Act — complete line 0; the deferred path leaves it checked on screen for now.
+      fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+      expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
 
-    // Assert — after 150 ms (past the 100 ms toast, before the 300 ms delay) the
-    // line is already gone: the clamp picked the shorter toast duration.
-    await new Promise((resolve) => setTimeout(resolve, 150))
-    expect(noteField).toHaveValue('keep me')
+      // Assert — after 150 ms (past the 100 ms toast, before the 300 ms delay) the
+      // line is already gone: the clamp picked the shorter toast duration.
+      await act(async () => {
+        vi.advanceTimersByTime(150)
+      })
+      expect(noteField).toHaveValue('keep me')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -85,6 +85,13 @@ type CheckedRowMemory = Readonly<{
   title: BrainDumpCompletedTitle
 }>
 
+type NoteDraftUpdateOptions = Readonly<{
+  /** Category this draft belongs to; defaults to the active category ref. */
+  categoryId?: Category['id'] | null
+  /** True only after a user/internal edit that should be flushed to disk. */
+  dirty: boolean
+}>
+
 /**
  * Undo memory for a line that clear-on-complete will tuck away. Distinct from
  * `CheckedRowMemory`: here the line may be briefly visible as `[x]`, then
@@ -178,6 +185,32 @@ function findCheckedLineIndexByTitle(
     if (box.checked && box.title === title) return box.lineIndex
   }
   return null
+}
+
+/**
+ * Rebuilds a failed optimistic completion in the note it came from. Called by create rollback paths.
+ * @param text - Note text to repair.
+ * @param lineIndex - Original/fallback line index for the optimistic completion.
+ * @param title - Normalised completion title used to re-find a drifted checked row.
+ * @param rollbackPlainText - Original prose for plain-line completions; omitted for checkbox rows.
+ * @returns Text with the optimistic `[x]` row reverted, or the input when no safe target exists.
+ * @example
+ * rollbackPromotedLineText('- [x] buy milk', 0, 'buy milk') // => '- [ ] buy milk'
+ */
+function rollbackPromotedLineText(
+  text: string,
+  lineIndex: BrainDumpLineIndex,
+  title: BrainDumpCompletedTitle,
+  rollbackPlainText?: BrainDumpCompletedTitle,
+): string {
+  const resolvedLine = findCheckedLineIndexByTitle(text, title)
+  const currentLine = resolvedLine ?? lineIndex
+  // Plain-line rollback is safe only when we can positively find the optimistic row.
+  if (rollbackPlainText !== undefined) {
+    if (resolvedLine === null) return text
+    return replaceLineAtIndex(text, resolvedLine, rollbackPlainText)
+  }
+  return setCheckboxStateAtLine(text, currentLine, false)
 }
 
 /**
@@ -275,6 +308,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
   )
   const [noteText, setNoteText] = useState<string>('')
   const [isLoadingNote, setIsLoadingNote] = useState<boolean>(false)
+  const [noteReadyCategoryId, setNoteReadyCategoryId] = useState<
+    Category['id'] | null
+  >(null)
+  const [isBrainDumpConfigReady, setIsBrainDumpConfigReady] =
+    useState<boolean>(false)
   const [spacesTrackingEnabled, setSpacesTrackingEnabled] =
     useState<boolean>(false)
   const [isUpdatingSpacesTracking, setIsUpdatingSpacesTracking] =
@@ -303,7 +341,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // Clamped ≤ the Undo window by the schema, so the line never outlasts Undo.
   const clearDelayMs = useAppSelector(selectBraindumpClearDelayMs)
 
-  const activeCategoryId = syncEnabled ? floatingCategoryId : localCategoryId
+  const activeCategoryId = isBrainDumpConfigReady
+    ? syncEnabled
+      ? floatingCategoryId
+      : localCategoryId
+    : null
   const checkedRowsRef = useRef<Map<BrainDumpLineIndex, CheckedRowMemory>>(
     new Map(),
   )
@@ -345,9 +387,156 @@ export const BrainDumpEditor = function BrainDumpEditor({
     categoryId: Category['id'] | null
     text: string
   }>({ categoryId: null, text: '' })
-  // Category whose textarea value may be written back to disk. It only flips on
-  // after a successful load or direct user input, so load failures do not save "".
+  // Category whose textarea value may be written back to disk. It flips on only
+  // after the load attempt settles or direct user input; dirty guard blocks a
+  // load-failure empty reset from writing "".
   const noteWritableCategoryRef = useRef<Category['id'] | null>(null)
+  // Tracks whether the visible draft diverged from the last loaded/saved value.
+  // Loaded clean notes must never be flushed by category swaps or updater quits.
+  const dirtyNoteRef = useRef<{
+    categoryId: Category['id'] | null
+    dirty: boolean
+  }>({ categoryId: null, dirty: false })
+
+  /**
+   * Updates the visible BrainDump draft and marks whether it may flush to disk.
+   * @param text - Next textarea value.
+   * @param options - Category ownership plus whether the change is user/internal dirty.
+   * @returns Nothing; synchronizes React state and the callback ref in one tick.
+   * @example
+   * setNoteDraft('buy milk', { dirty: true })
+   */
+  const setNoteDraft = (
+    text: string,
+    options: NoteDraftUpdateOptions,
+  ): void => {
+    const categoryId = options.categoryId ?? activeCategoryIdRef.current
+    noteTextRef.current = text
+    dirtyNoteRef.current =
+      options.dirty && categoryId !== null
+        ? { categoryId, dirty: true }
+        : { categoryId, dirty: false }
+    setNoteText(text)
+  }
+
+  /**
+   * Persists a dirty draft and marks it clean only after IPC succeeds. Called by debounce/final flush effects.
+   * @param categoryId - Category whose note is being written.
+   * @param text - Exact note text being persisted.
+   * @param api - Electron preload API used for note storage.
+   * @returns void; completion updates refs only when the visible draft still matches.
+   * @example
+   * persistNoteDraft(1, '- [ ] buy milk', window.brainDumpAPI!)
+   */
+  const persistNoteDraft = React.useCallback(
+    (
+      categoryId: Category['id'],
+      text: string,
+      api: NonNullable<typeof window.brainDumpAPI>,
+    ): void => {
+      void api.note.set(categoryId, text).then(
+        () => {
+          // A late save from category A must not mark category B's active draft clean.
+          if (
+            activeCategoryIdRef.current === categoryId &&
+            noteTextRef.current === text
+          ) {
+            lastPersistedRef.current = { categoryId, text }
+            dirtyNoteRef.current = { categoryId, dirty: false }
+          }
+        },
+        (error: unknown) => {
+          toast.error('Failed to save BrainDump note')
+          log.error('BrainDump note save failed', error)
+        },
+      )
+    },
+    [],
+  )
+
+  /**
+   * Restores a failed keep-visible completion in its origin category. Called by create rollback handlers.
+   * @param categoryId - Category that owned the optimistic completion.
+   * @param lineIndex - Original/fallback line index for the completed row.
+   * @param title - Normalised completion title.
+   * @param rollbackPlainText - Original plain text when the source row was prose.
+   * @returns Promise that settles after visible or stored note restoration.
+   * @example
+   * await restoreFailedPromotionToCategory(1, 0, 'buy milk')
+   */
+  const restoreFailedPromotionToCategory = async (
+    categoryId: Category['id'],
+    lineIndex: BrainDumpLineIndex,
+    title: BrainDumpCompletedTitle,
+    rollbackPlainText?: BrainDumpCompletedTitle,
+  ): Promise<void> => {
+    const restoreText = (text: string) =>
+      rollbackPromotedLineText(text, lineIndex, title, rollbackPlainText)
+
+    if (activeCategoryIdRef.current === categoryId) {
+      setNoteDraft(restoreText(noteTextRef.current), {
+        categoryId,
+        dirty: true,
+      })
+      return
+    }
+
+    const api = window.brainDumpAPI
+    if (!api) return
+    try {
+      const stored = await api.note.get(categoryId)
+      const restored = restoreText(stored)
+      if (restored !== stored) await api.note.set(categoryId, restored)
+    } catch (error) {
+      log.error('BrainDump failed completion restore failed', error)
+    }
+  }
+
+  /**
+   * Writes an undo/rollback checkbox state to the category that owns it. Called by undoCompleted.
+   * @param categoryId - Category that owns the completion row.
+   * @param title - Normalised completion title used to recover from line drift.
+   * @param fallbackLineIndex - Best-known line index when title lookup cannot find a checked row.
+   * @param checked - Target checkbox state.
+   * @param sourceText - Optional active-category snapshot for immediate visible updates.
+   * @returns Line index used for bookkeeping.
+   * @example
+   * await setCompletedCheckboxStateInCategory(1, 'buy milk', 0, false)
+   */
+  const setCompletedCheckboxStateInCategory = async (
+    categoryId: Category['id'],
+    title: BrainDumpCompletedTitle,
+    fallbackLineIndex: BrainDumpLineIndex,
+    checked: boolean,
+    sourceText?: string,
+  ): Promise<BrainDumpLineIndex> => {
+    const updateText = (text: string) => {
+      const resolvedLineIndex =
+        findCheckedLineIndexByTitle(text, title) ?? fallbackLineIndex
+      return {
+        lineIndex: resolvedLineIndex,
+        text: setCheckboxStateAtLine(text, resolvedLineIndex, checked),
+      }
+    }
+
+    if (activeCategoryIdRef.current === categoryId) {
+      const updated = updateText(sourceText ?? noteTextRef.current)
+      setNoteDraft(updated.text, { categoryId, dirty: true })
+      return updated.lineIndex
+    }
+
+    const api = window.brainDumpAPI
+    if (!api) return fallbackLineIndex
+    try {
+      const stored = await api.note.get(categoryId)
+      const updated = updateText(stored)
+      if (updated.text !== stored) await api.note.set(categoryId, updated.text)
+      return updated.lineIndex
+    } catch (error) {
+      log.error('BrainDump cross-category checkbox restore failed', error)
+      return fallbackLineIndex
+    }
+  }
 
   useCycleEffect(() => {
     noteTextRef.current = noteText
@@ -421,6 +610,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         setSyncEnabled(enabled)
         setLocalCategoryId(lastCategoryId)
         setSpacesTrackingEnabled(followsSpaces)
+        setIsBrainDumpConfigReady(true)
       })
       .catch((error) => {
         // Failures here keep the safe defaults seeded by useState; surface
@@ -428,6 +618,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         if (cancelled) return
         toast.error('Failed to load BrainDump preferences')
         log.error('BrainDump preferences load failed', error)
+        setIsBrainDumpConfigReady(true)
       })
     return () => {
       cancelled = true
@@ -454,13 +645,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // hidden — not destroyed — between toggles, so the textarea can't lean on a
   // mount-time autoFocus to refocus on re-show; we listen for the Page
   // Visibility transition to 'visible' that BrowserWindow.show() drives, and
-  // also focus once on mount for the first open. focus() is a no-op while the
-  // textarea is disabled (no active category) — picking a category first is the
-  // expected flow there.
+  // also focus once on mount / after config+note loading for the first open.
+  // focus() is a no-op while the textarea is disabled (no active category) —
+  // picking a category first is the expected flow there.
   useCycleEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment()) return
     const focusNoteEditor = () => {
-      textareaRef.current?.focus()
+      const textarea = textareaRef.current
+      if (!textarea || textarea.disabled) return
+      textarea.focus()
     }
     // First open: show() already fired before this effect subscribed, so the
     // visibilitychange we would catch has passed — focus directly.
@@ -472,14 +665,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [isMounted])
+  }, [activeCategoryId, isLoadingNote, isMounted])
 
   // Whenever the active category flips, load that category's note text.
   useCycleEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null) {
-      setNoteText('')
+      setNoteDraft('', { categoryId: null, dirty: false })
       lastPersistedRef.current = { categoryId: null, text: '' }
       noteWritableCategoryRef.current = null
+      setNoteReadyCategoryId(null)
       return
     }
     const api = window.brainDumpAPI
@@ -489,15 +683,18 @@ export const BrainDumpEditor = function BrainDumpEditor({
     let cancelled = false
     setIsLoadingNote(true)
     noteWritableCategoryRef.current = null
+    setNoteReadyCategoryId(null)
+    dirtyNoteRef.current = { categoryId: activeCategoryId, dirty: false }
     api.note
       .get(activeCategoryId)
       .then((text) => {
         if (cancelled) return
-        setNoteText(text)
+        setNoteDraft(text, { categoryId: activeCategoryId, dirty: false })
         // Mark as already-persisted so the debounce effect doesn't immediately
         // echo this text back to disk.
         lastPersistedRef.current = { categoryId: activeCategoryId, text }
         noteWritableCategoryRef.current = activeCategoryId
+        setNoteReadyCategoryId(activeCategoryId)
         checkedRowsRef.current.clear()
         pendingCreatesRef.current.clear()
         clearedLinesRef.current.clear()
@@ -509,9 +706,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
         // Reset editor state BEFORE clearing the loading flag so the
         // category swap doesn't briefly show stale text from category A
         // while we render category B's failure.
-        setNoteText('')
+        setNoteDraft('', { categoryId: activeCategoryId, dirty: false })
         lastPersistedRef.current = { categoryId: null, text: '' }
-        noteWritableCategoryRef.current = null
+        noteWritableCategoryRef.current = activeCategoryId
+        setNoteReadyCategoryId(activeCategoryId)
         checkedRowsRef.current.clear()
         pendingCreatesRef.current.clear()
         clearedLinesRef.current.clear()
@@ -539,6 +737,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // Never persist the initial empty textarea before this category's note has
     // loaded; a deploy-driven reload can otherwise overwrite real disk content.
     if (noteWritableCategoryRef.current !== activeCategoryId) return
+    const dirtyNote = dirtyNoteRef.current
+    if (!dirtyNote.dirty || dirtyNote.categoryId !== activeCategoryId) return
     if (
       persisted.categoryId === activeCategoryId &&
       persisted.text === noteText
@@ -546,16 +746,12 @@ export const BrainDumpEditor = function BrainDumpEditor({
       return
     }
     const timeoutId = window.setTimeout(() => {
-      lastPersistedRef.current = {
-        categoryId: activeCategoryId,
-        text: noteText,
-      }
-      void api.note.set(activeCategoryId, noteText)
+      persistNoteDraft(activeCategoryId, noteText, api)
     }, NOTE_DEBOUNCE_MS)
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [activeCategoryId, isLoadingNote, isMounted, noteText])
+  }, [activeCategoryId, isLoadingNote, isMounted, noteText, persistNoteDraft])
 
   // Final flush: runs on category swap and unmount only (not on every keystroke).
   // Reads the latest text via ref so we never persist a stale snapshot.
@@ -571,13 +767,14 @@ export const BrainDumpEditor = function BrainDumpEditor({
       // If note.get never resolved for this category, `text` is only the local
       // initial value. Skipping the flush preserves the existing stored note.
       if (noteWritableCategoryRef.current !== flushCategoryId) return
+      const dirtyNote = dirtyNoteRef.current
+      if (!dirtyNote.dirty || dirtyNote.categoryId !== flushCategoryId) return
       if (persisted.categoryId === flushCategoryId && persisted.text === text) {
         return
       }
-      lastPersistedRef.current = { categoryId: flushCategoryId, text }
-      void api.note.set(flushCategoryId, text)
+      persistNoteDraft(flushCategoryId, text, api)
     }
-  }, [activeCategoryId, isMounted])
+  }, [activeCategoryId, isMounted, persistNoteDraft])
 
   const handleToggleSync = (enabled: boolean) => {
     setSyncEnabled(enabled)
@@ -683,10 +880,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
       toast.error('Pick a category before checking items')
       return
     }
+    const categoryId = activeCategoryId
     const safeTitle = normalizeCompletedTitle(title)
     const promise = createCompletedMutation
       .mutateAsync({
-        categoryId: activeCategoryId,
+        categoryId,
         title: safeTitle,
       })
       .then(
@@ -697,29 +895,13 @@ export const BrainDumpEditor = function BrainDumpEditor({
               ? error.message
               : 'Failed to record completion'
           toast.error(message)
-          // Re-resolve which line still holds the `[x]` for this title —
-          // the original lineIndex may have drifted if the user inserted
-          // text above before the create rejected.
-          const resolvedLine = findCheckedLineIndexByTitle(
-            noteTextRef.current,
+          // Restore the origin category. If the user already switched away, this
+          // writes category A's stored note instead of touching category B's draft.
+          void restoreFailedPromotionToCategory(
+            categoryId,
+            lineIndex,
             safeTitle,
-          )
-          const currentLine = resolvedLine ?? lineIndex
-          // Plain-line completion: restore the original prose rather than
-          // leaving a `- [ ] <title>` skeleton the user never typed — but ONLY
-          // when the title search positively found the line. On a miss we fall
-          // back to the safe uncheck (a no-op on non-checkbox lines) so a
-          // drifted stale lineIndex never blind-overwrites an unrelated line
-          // the user edited while the create was in flight. Checkbox lines
-          // (no rollbackPlainText) always revert to `[ ]` as before.
-          setNoteText(
-            rollbackPlainText !== undefined && resolvedLine !== null
-              ? replaceLineAtIndex(
-                  noteTextRef.current,
-                  resolvedLine,
-                  rollbackPlainText,
-                )
-              : setCheckboxStateAtLine(noteTextRef.current, currentLine, false),
+            rollbackPlainText,
           )
           return null
         },
@@ -753,6 +935,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           completedId,
           noteTextRef.current,
           lineIndex,
+          categoryId,
         )
       },
       // Clear-on-complete: when the toast auto-closes (the undo window elapsed
@@ -791,7 +974,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
               safeTitle,
             )
             if (lineToClear === null) return
-            setNoteText(removeLineAtIndex(noteTextRef.current, lineToClear))
+            setNoteDraft(removeLineAtIndex(noteTextRef.current, lineToClear), {
+              dirty: true,
+            })
           }
         : undefined,
     })
@@ -807,12 +992,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * re-resolve the line by `title` against the latest text and walk the
    * `checkedRowsRef` map by `completedId` so the cleanup targets the right
    * entry no matter how the keys have shifted.
+   *
+   * @param categoryId - Origin category for cross-category undo and rollback writes.
    */
   const undoCompleted = async (
     title: BrainDumpCompletedTitle,
     completedId: Completed['id'],
     originalText: string,
     fallbackLineIndex: BrainDumpLineIndex,
+    categoryId: Category['id'],
   ) => {
     const resolvedLineIndex =
       findCheckedLineIndexByTitle(originalText, title) ?? fallbackLineIndex
@@ -828,7 +1016,13 @@ export const BrainDumpEditor = function BrainDumpEditor({
       }
     }
     if (memoryKey !== null) checkedRowsRef.current.delete(memoryKey)
-    setNoteText(setCheckboxStateAtLine(originalText, resolvedLineIndex, false))
+    await setCompletedCheckboxStateInCategory(
+      categoryId,
+      title,
+      resolvedLineIndex,
+      false,
+      originalText,
+    )
 
     try {
       await deleteCompletedMutation.mutateAsync({ id: completedId })
@@ -840,13 +1034,13 @@ export const BrainDumpEditor = function BrainDumpEditor({
       // Roll back the optimistic uncheck so the checkbox state matches
       // the still-existing Completed row. Re-resolve again from the
       // latest text — drift may have continued during the await.
-      const rollbackLineIndex =
-        findCheckedLineIndexByTitle(noteTextRef.current, title) ??
-        resolvedLineIndex
-      setNoteText(
-        setCheckboxStateAtLine(noteTextRef.current, rollbackLineIndex, true),
+      const rollbackLineIndex = await setCompletedCheckboxStateInCategory(
+        categoryId,
+        title,
+        resolvedLineIndex,
+        true,
       )
-      if (memoryBeforeUndo) {
+      if (memoryBeforeUndo && activeCategoryIdRef.current === categoryId) {
         checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
       }
     }
@@ -878,7 +1072,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         entry.originalLineIndex,
         entry.reinsertText,
       )
-      setNoteText(restored)
+      setNoteDraft(restored, { categoryId: entry.categoryId, dirty: true })
       if (moveCaret) {
         pendingCaretRef.current = lineStartOffset(
           restored,
@@ -929,8 +1123,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         entry.originalLineIndex,
         entry.reinsertText,
       )
-      noteTextRef.current = restored
-      setNoteText(restored)
+      setNoteDraft(restored, { categoryId: entry.categoryId, dirty: true })
       if (moveCaret) {
         pendingCaretRef.current = lineStartOffset(
           restored,
@@ -1040,8 +1233,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         }
       }
       pendingCaretRef.current = nextCaret
-      noteTextRef.current = clearedText
-      setNoteText(clearedText)
+      setNoteDraft(clearedText, { categoryId: entry.categoryId, dirty: true })
       entry.lineCleared = true
       // Finding G: our removal shifted every later still-pending line up by one,
       // so decrement their tracked index to keep their own finding-A guard matching.
@@ -1114,8 +1306,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
     // 2) Show the checked state first, then remove it on the clear timer. A
     // 0 ms setting means "next turn", not "skip the visible check mark".
-    noteTextRef.current = completedText
-    setNoteText(completedText)
+    setNoteDraft(completedText, { categoryId, dirty: true })
     if (clearDelayMs > 0) {
       // During a linger, move the caret to the START OF THE NEXT line after the
       // checked text commits, so repeated Cmd/Ctrl+Enter walks down the list.
@@ -1325,16 +1516,18 @@ export const BrainDumpEditor = function BrainDumpEditor({
       // checkbox skeletons return null and fall through to a no-op.
       const promoted = markPlainLineCompleted(text, lineIndex)
       if (!promoted) return
-      setNoteText(promoted.text)
+      setNoteDraft(promoted.text, { dirty: true })
       // Pass the plain prose as rollback text so a failed create restores the
       // original line instead of leaving the optimistic `- [x]` skeleton.
       void promoteLineToCompleted(lineIndex, promoted.title, promoted.title)
       return
     }
 
+    const categoryId = activeCategoryIdRef.current
+    if (categoryId === null) return
     const nextChecked = !parsed.checked
     const nextText = setCheckboxStateAtLine(text, lineIndex, nextChecked)
-    setNoteText(nextText)
+    setNoteDraft(nextText, { dirty: true })
 
     if (nextChecked) {
       void promoteLineToCompleted(lineIndex, parsed.title)
@@ -1357,6 +1550,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           memory.completedId,
           nextText,
           lineIndex,
+          categoryId,
         )
         return
       }
@@ -1383,6 +1577,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             completedId,
             noteTextRef.current,
             lineIndex,
+            categoryId,
           )
         })
       }
@@ -1406,6 +1601,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   const hasCategories = categories.length > 0
+  const isNoteFieldDisabled =
+    activeCategoryId === null ||
+    isLoadingNote ||
+    noteReadyCategoryId !== activeCategoryId
 
   return (
     <div
@@ -1512,7 +1711,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
           // A direct edit after a load failure is intentional new content, so it
           // can be saved even though no prior disk value was loaded.
           noteWritableCategoryRef.current = activeCategoryId
-          setNoteText(event.target.value)
+          setNoteReadyCategoryId(activeCategoryId)
+          setNoteDraft(event.target.value, {
+            categoryId: activeCategoryId,
+            dirty: true,
+          })
         }}
         onKeyDown={handleKeyDown}
         placeholder={
@@ -1520,7 +1723,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             ? 'Pick a category to start writing'
             : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
         }
-        disabled={activeCategoryId === null || isLoadingNote}
+        disabled={isNoteFieldDisabled}
         maxLength={NOTE_MAX_LENGTH}
         // Braindump is messy quick-capture — the native red spellcheck underlines
         // make unfinished / mixed-language fragments feel "corrected" and noisy, so
