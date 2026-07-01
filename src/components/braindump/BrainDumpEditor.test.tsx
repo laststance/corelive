@@ -95,6 +95,20 @@ const categories: CategoryWithCount[] = [
   },
 ]
 
+const categoriesWithCorelive: CategoryWithCount[] = [
+  ...categories,
+  {
+    id: 12,
+    name: 'Corelive',
+    color: 'blue',
+    isDefault: false,
+    userId: 1,
+    createdAt: new Date('2026-06-12T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-12T00:00:00.000Z'),
+    _count: { todos: 0 },
+  },
+]
+
 type BrainDumpSpacesBridge = {
   getVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
   setVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
@@ -148,6 +162,21 @@ function installBrainDumpAPI(spaces: BrainDumpSpacesBridge): void {
  * renderEditor({ braindumpFontSize: 20 })
  */
 function renderEditor(preferenceOverrides: Partial<PreferencesState> = {}) {
+  return renderEditorWithCategories(categories, preferenceOverrides)
+}
+
+/**
+ * Renders the editor with custom categories for category-switching persistence specs.
+ * @param editorCategories - Categories available in the BrainDump picker.
+ * @param preferenceOverrides - Fields to override on top of the slice defaults.
+ * @returns The Testing Library render result.
+ * @example
+ * renderEditorWithCategories(categoriesWithCorelive)
+ */
+function renderEditorWithCategories(
+  editorCategories: CategoryWithCount[],
+  preferenceOverrides: Partial<PreferencesState> = {},
+) {
   const store = configureStore({
     reducer: { preferences: preferencesReducer },
     preloadedState: {
@@ -156,7 +185,7 @@ function renderEditor(preferenceOverrides: Partial<PreferencesState> = {}) {
   })
   return render(
     <Provider store={store}>
-      <BrainDumpEditor categories={categories} />
+      <BrainDumpEditor categories={editorCategories} />
     </Provider>,
   )
 }
@@ -361,6 +390,135 @@ describe('BrainDumpEditor note persistence during reload', () => {
     selectedCategoryRef.current = 1
   })
 
+  it('does not read or write the temporary floating category before BrainDump config finishes loading', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.sync.getEnabled = vi.fn(
+      async () => new Promise<boolean>(() => undefined),
+    )
+    api.category.getLast = vi.fn().mockResolvedValue(12)
+    api.note.get = vi.fn().mockResolvedValue('should not load yet')
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    renderEditor()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // Assert
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(api.note.get).not.toHaveBeenCalled()
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('loads only the saved local BrainDump category after config disables FloatingNav sync', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.sync.getEnabled = vi.fn().mockResolvedValue(false)
+    api.category.getLast = vi.fn().mockResolvedValue(12)
+    api.note.get = vi.fn(async (categoryId: number) =>
+      categoryId === 12 ? 'local Corelive note' : 'temporary floating note',
+    )
+    const noteSet = vi.mocked(api.note.set)
+
+    // Act
+    renderEditorWithCategories(categoriesWithCorelive)
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('local Corelive note')
+    })
+    expect(api.note.get).toHaveBeenCalledWith(12)
+    expect(api.note.get).not.toHaveBeenCalledWith(1)
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('does not flush a clean loaded note when the active category changes', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async (categoryId: number) =>
+      categoryId === 1 ? 'keep category one' : 'work category twelve',
+    )
+    const noteSet = vi.mocked(api.note.set)
+    const store = configureStore({
+      reducer: { preferences: preferencesReducer },
+      preloadedState: {
+        preferences: { ...preferencesInitialState },
+      },
+    })
+
+    // Act
+    const { rerender } = render(
+      <Provider store={store}>
+        <BrainDumpEditor categories={categoriesWithCorelive} />
+      </Provider>,
+    )
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep category one')
+    })
+    noteSet.mockClear()
+    selectedCategoryRef.current = 12
+    rerender(
+      <Provider store={store}>
+        <BrainDumpEditor categories={categoriesWithCorelive} />
+      </Provider>,
+    )
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('work category twelve')
+    })
+    expect(noteSet).not.toHaveBeenCalledWith(1, '')
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  it('persists an intentional full clear after the loaded category note is editable', async () => {
+    // Arrange
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn().mockResolvedValue('keep me until the user clears it')
+    const noteSet = vi.mocked(api.note.set)
+    const user = userEvent.setup()
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me until the user clears it')
+    })
+    await user.clear(noteField)
+
+    // Assert
+    await waitFor(
+      () => {
+        expect(noteSet).toHaveBeenCalledWith(1, '')
+      },
+      { timeout: 1200 },
+    )
+  })
+
   it('keeps the existing category note on disk when BrainDump reloads before the note finishes loading', async () => {
     // Arrange
     installBrainDumpAPI({
@@ -489,7 +647,10 @@ describe('BrainDumpEditor focus on window show', () => {
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
     // Assert — keyboard focus lands in the editor, not on a header control.
-    expect(noteField).toHaveFocus()
+    await waitFor(() => {
+      expect(noteField).toBeEnabled()
+      expect(noteField).toHaveFocus()
+    })
   })
 
   it('returns focus to the note editor when the window is shown again, instead of leaving it on the Follow Spaces switch', async () => {
@@ -503,6 +664,9 @@ describe('BrainDumpEditor focus on window show', () => {
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toBeEnabled()
+    })
     const spacesSwitch = screen.getByRole('switch', {
       name: 'Show BrainDump on all Mac desktops',
     })
@@ -522,7 +686,9 @@ describe('BrainDumpEditor focus on window show', () => {
     })
 
     // Assert — focus is back in the note editor, ready for the next capture.
-    expect(noteField).toHaveFocus()
+    await waitFor(() => {
+      expect(noteField).toHaveFocus()
+    })
   })
 })
 
@@ -884,6 +1050,9 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitFor(() => {
+      expect(noteField).toBeEnabled()
+    })
 
     // Act — complete (line clears), Undo (line restored, create still pending),
     // THEN the held create rejects.
