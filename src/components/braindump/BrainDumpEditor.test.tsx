@@ -1020,8 +1020,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalled()
+      expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
     })
-    expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
 
     // Act 2 — tap Undo AFTER the failure already restored the line.
     const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
