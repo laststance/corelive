@@ -1724,13 +1724,20 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
 
-    // Act — complete line 0; the deferred path leaves it checked on screen for now.
-    fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
-    expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
+    vi.useFakeTimers()
+    try {
+      // Act — complete line 0; the deferred path leaves it checked on screen for now.
+      fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
+      expect(noteField).toHaveValue('- [x] buy milk\nkeep me')
 
-    // Assert — after 150 ms (past the 100 ms toast, before the 300 ms delay) the
-    // line is already gone: the clamp picked the shorter toast duration.
-    await new Promise((resolve) => setTimeout(resolve, 150))
-    expect(noteField).toHaveValue('keep me')
+      // Assert — after 150 ms (past the 100 ms toast, before the 300 ms delay) the
+      // line is already gone: the clamp picked the shorter toast duration.
+      await act(async () => {
+        vi.advanceTimersByTime(150)
+      })
+      expect(noteField).toHaveValue('keep me')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

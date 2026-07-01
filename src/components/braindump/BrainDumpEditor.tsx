@@ -206,7 +206,8 @@ function rollbackPromotedLineText(
   const resolvedLine = findCheckedLineIndexByTitle(text, title)
   const currentLine = resolvedLine ?? lineIndex
   // Plain-line rollback is safe only when we can positively find the optimistic row.
-  if (rollbackPlainText !== undefined && resolvedLine !== null) {
+  if (rollbackPlainText !== undefined) {
+    if (resolvedLine === null) return text
     return replaceLineAtIndex(text, resolvedLine, rollbackPlainText)
   }
   return setCheckboxStateAtLine(text, currentLine, false)
