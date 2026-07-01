@@ -28,6 +28,7 @@ import {
 import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
+import { getBrainDumpNote, setBrainDumpNote } from './BrainDumpNoteStore'
 import { ConfigManager } from './ConfigManager'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
 import { typedHandle } from './ipc/typedHandle'
@@ -1481,21 +1482,12 @@ function setupIPCHandlers(): void {
   // Per-category note text (persisted in `braindump.notes[<categoryId>]`).
   typedHandle('braindump-note-get', (_event, categoryId) => {
     if (!configManager) return ''
-    const notes = configManager.get<Record<string, string>>(
-      'braindump.notes',
-      {},
-    )
-    return notes?.[String(categoryId)] ?? ''
+    return getBrainDumpNote(configManager, categoryId)
   })
 
   typedHandle('braindump-note-set', (_event, categoryId, text) => {
     if (!configManager) return false
-    const notes = {
-      ...(configManager.get<Record<string, string>>('braindump.notes', {}) ??
-        {}),
-      [String(categoryId)]: text,
-    }
-    configManager.set('braindump.notes', notes)
+    setBrainDumpNote(configManager, categoryId, text)
     return true
   })
 
