@@ -507,6 +507,7 @@ describe('BrainDumpEditor note persistence during reload', () => {
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     await waitFor(() => {
       expect(noteField).toHaveValue('keep me until the user clears it')
+      expect(noteField).toBeEnabled()
     })
     await user.clear(noteField)
 
