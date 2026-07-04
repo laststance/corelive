@@ -650,10 +650,21 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // picking a category first is the expected flow there.
   useCycleEffect(() => {
     if (!isMounted || !isBrainDumpEnvironment()) return
+    const canFocusNoteEditor =
+      activeCategoryId !== null &&
+      noteReadyCategoryId === activeCategoryId &&
+      !isLoadingNote
     const focusNoteEditor = () => {
+      if (!canFocusNoteEditor) return
       const textarea = textareaRef.current
       if (!textarea || textarea.disabled) return
-      textarea.focus()
+      // Defer past child mount/update effects (Radix Slider thumb auto-focus) so
+      // quick-capture keyboard input lands in the note field, not header controls.
+      window.setTimeout(() => {
+        const el = textareaRef.current
+        if (!el || el.disabled) return
+        el.focus()
+      }, 0)
     }
     // First open: show() already fired before this effect subscribed, so the
     // visibilitychange we would catch has passed — focus directly.
@@ -665,7 +676,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activeCategoryId, isLoadingNote, isMounted])
+  }, [activeCategoryId, isLoadingNote, isMounted, noteReadyCategoryId])
 
   // Whenever the active category flips, load that category's note text.
   useCycleEffect(() => {
