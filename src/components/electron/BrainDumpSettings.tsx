@@ -323,7 +323,7 @@ export const BrainDumpSettings = function BrainDumpSettings({
 
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <Label className="text-sm font-medium">Open config file</Label>
+          <p className="text-sm font-medium">Open config file</p>
           <p className="text-xs text-muted-foreground">
             BrainDump text is saved per category in config.json on this device.
           </p>
