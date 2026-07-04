@@ -10,15 +10,15 @@
  * Why it lives in `src/lib/` (not a component): the same pure util runs in both
  * the PR2 client preview and the server normalization, so preview count ==
  * inserted count. No React/Electron deps; reuses `normalizeCompletedTitle` +
- * `CHECKBOX_LINE_REGEX` from braindumpUtils as the single source of truth for
+ * `parseCheckboxLine` from braindumpUtils as the single source of truth for
  * title clamping and checkbox detection.
  *
  * @module lib/parsePasteToTasks
  */
 
 import {
-  CHECKBOX_LINE_REGEX,
   normalizeCompletedTitle,
+  parseCheckboxLine,
 } from '@/components/braindump/braindumpUtils'
 
 /**
@@ -77,15 +77,11 @@ export function parsePasteLine(rawLine: string): ParsedPasteTask | null {
 
   // Checkbox first: capture done-state, then derive the title from the
   // post-prefix capture group so the `[x] ` marker never leaks into the title.
-  const checkboxMatch = CHECKBOX_LINE_REGEX.exec(line)
-  if (checkboxMatch) {
-    const checkboxState = checkboxMatch[1]
-    const checkboxBody = checkboxMatch[2]
-    if (checkboxBody !== undefined) {
-      const title = normalizeCompletedTitle(checkboxBody)
-      if (title.length === 0) return null
-      return { title, done: checkboxState === 'x' }
-    }
+  const checkbox = parseCheckboxLine(line, 0)
+  if (checkbox) {
+    const title = normalizeCompletedTitle(checkbox.title)
+    if (title.length === 0) return null
+    return { title, done: checkbox.checked }
   }
 
   // Not a checkbox: strip at most one leading bullet/ordered prefix, then

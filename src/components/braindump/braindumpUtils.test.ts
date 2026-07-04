@@ -27,6 +27,7 @@ describe('parseCheckboxLine', () => {
   it('parses an unchecked checkbox line', () => {
     expect(parseCheckboxLine('- [ ] write tests', 3)).toEqual({
       lineIndex: 3,
+      leadingWhitespace: '',
       checked: false,
       title: 'write tests',
     })
@@ -35,8 +36,18 @@ describe('parseCheckboxLine', () => {
   it('parses a checked checkbox line', () => {
     expect(parseCheckboxLine('- [x] ship it', 0)).toEqual({
       lineIndex: 0,
+      leadingWhitespace: '',
       checked: true,
       title: 'ship it',
+    })
+  })
+
+  it('parses an indented nested checkbox line', () => {
+    expect(parseCheckboxLine('  - [ ] nested task', 2)).toEqual({
+      lineIndex: 2,
+      leadingWhitespace: '  ',
+      checked: false,
+      title: 'nested task',
     })
   })
 
@@ -55,6 +66,7 @@ describe('parseCheckboxLine', () => {
   it('trims whitespace from the title', () => {
     expect(parseCheckboxLine('- [ ]   spaced out   ', 0)).toEqual({
       lineIndex: 0,
+      leadingWhitespace: '',
       checked: false,
       title: 'spaced out',
     })
@@ -67,8 +79,36 @@ describe('parseAllCheckboxes', () => {
       '\n',
     )
     expect(parseAllCheckboxes(text)).toEqual([
-      { lineIndex: 1, checked: false, title: 'todo a' },
-      { lineIndex: 3, checked: true, title: 'done b' },
+      {
+        lineIndex: 1,
+        leadingWhitespace: '',
+        checked: false,
+        title: 'todo a',
+      },
+      {
+        lineIndex: 3,
+        leadingWhitespace: '',
+        checked: true,
+        title: 'done b',
+      },
+    ])
+  })
+
+  it('collects indented nested checkboxes in document order', () => {
+    const text = ['- [ ] parent', '  - [ ] child', 'plain'].join('\n')
+    expect(parseAllCheckboxes(text)).toEqual([
+      {
+        lineIndex: 0,
+        leadingWhitespace: '',
+        checked: false,
+        title: 'parent',
+      },
+      {
+        lineIndex: 1,
+        leadingWhitespace: '  ',
+        checked: false,
+        title: 'child',
+      },
     ])
   })
 
@@ -92,6 +132,13 @@ describe('setCheckboxStateAtLine', () => {
     const before = ['line 0', '- [ ] a', 'line 2', '- [x] b'].join('\n')
     const after = setCheckboxStateAtLine(before, 1, true)
     expect(after).toBe(['line 0', '- [x] a', 'line 2', '- [x] b'].join('\n'))
+  })
+
+  it('preserves indentation when checking and unchecking a nested checkbox line', () => {
+    const unchecked = ['- [ ] parent', '  - [ ] child'].join('\n')
+    const checked = ['- [ ] parent', '  - [x] child'].join('\n')
+    expect(setCheckboxStateAtLine(unchecked, 1, true)).toBe(checked)
+    expect(setCheckboxStateAtLine(checked, 1, false)).toBe(unchecked)
   })
 
   it('returns the original text for non-checkbox lines', () => {
@@ -337,6 +384,7 @@ describe('markPlainLineCompleted', () => {
   it('returns null for an empty checkbox skeleton so no junk title is logged', () => {
     // Arrange + Act + Assert
     expect(markPlainLineCompleted('- [ ]', 0)).toBeNull()
+    expect(markPlainLineCompleted('  - [ ]', 0)).toBeNull()
     expect(markPlainLineCompleted('- [ ] ', 0)).toBeNull()
     expect(markPlainLineCompleted('- [x]', 0)).toBeNull()
     expect(markPlainLineCompleted('- []', 0)).toBeNull()
