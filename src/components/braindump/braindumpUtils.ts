@@ -23,12 +23,12 @@
 import type { Completed } from '@/server/schemas/completed'
 
 /**
- * Regex for a markdown checkbox line. Captures the `[ ]`/`[x]` state in group 1
- * and the title in group 2. Exported so the paste-import parser
+ * Regex for a markdown checkbox line. Captures leading indentation in group 1,
+ * the `[ ]`/`[x]` state in group 2, and the title in group 3. Exported so the paste-import parser
  * (`src/lib/parsePasteToTasks.ts`) reuses one source of truth for checkbox
  * detection instead of redefining the grammar.
  */
-export const CHECKBOX_LINE_REGEX = /^- \[([ x])\] (.+)$/
+export const CHECKBOX_LINE_REGEX = /^([ \t]*)- \[([ x])\] (.+)$/
 
 /** Maximum allowed Completed.title length, mirroring `CreateCompletedSchema`. */
 export const COMPLETED_TITLE_MAX_LENGTH = 255
@@ -56,6 +56,8 @@ export type BrainDumpCompletedTitle = Completed['title']
 export type ParsedCheckbox = Readonly<{
   /** Zero-based line index in the original text. */
   lineIndex: BrainDumpLineIndex
+  /** Original spaces/tabs before `-`, preserved when toggling nested tasks. */
+  leadingWhitespace: string
   /** True when the box is `[x]`, false when `[ ]`. */
   checked: boolean
   /** The text after `- [x] ` / `- [ ] ` (already trimmed). */
@@ -68,10 +70,10 @@ export type ParsedCheckbox = Readonly<{
  *
  * @param line - Raw line of text (no trailing newline).
  * @param lineIndex - Index of this line within the source text.
- * @returns ParsedCheckbox when the line matches `^- \[ ?x\] .+$`, else null.
+ * @returns ParsedCheckbox when the line matches an optionally indented dash checkbox, else null.
  * @example
- * parseCheckboxLine('- [x] write tests', 3)
- * // → { lineIndex: 3, checked: true, title: 'write tests' }
+ * parseCheckboxLine('  - [x] write tests', 3)
+ * // → { lineIndex: 3, leadingWhitespace: '  ', checked: true, title: 'write tests' }
  * parseCheckboxLine('plain text', 0) // → null
  */
 export function parseCheckboxLine(
@@ -81,8 +83,10 @@ export function parseCheckboxLine(
   const match = CHECKBOX_LINE_REGEX.exec(line)
   if (!match) return null
 
-  const mark = match[1]
-  const rest = match[2]
+  const leadingWhitespace = match[1]
+  const mark = match[2]
+  const rest = match[3]
+  if (leadingWhitespace === undefined) return null
   if (mark === undefined || rest === undefined) return null
 
   const title = rest.trim()
@@ -90,6 +94,7 @@ export function parseCheckboxLine(
 
   return {
     lineIndex,
+    leadingWhitespace,
     checked: mark === 'x',
     title,
   }
@@ -140,7 +145,7 @@ export function setCheckboxStateAtLine(
   if (!parsed) return text
 
   const mark = checked ? 'x' : ' '
-  lines[lineIndex] = `- [${mark}] ${parsed.title}`
+  lines[lineIndex] = `${parsed.leadingWhitespace}- [${mark}] ${parsed.title}`
   return lines.join('\n')
 }
 
@@ -257,12 +262,12 @@ export function lineStartOffset(
 }
 
 /**
- * Matches an empty checkbox skeleton — a checkbox prefix with no title, e.g.
- * `- [ ]`, `- [x]`, `- []` (optional trailing whitespace). These have nothing
+ * Matches an empty checkbox skeleton — an indented checkbox prefix with no title, e.g.
+ * `  - [ ]`, `- [x]`, `- []` (optional trailing whitespace). These have nothing
  * to record, so the complete command must skip them rather than logging a junk
  * `- [ ]` title.
  */
-const EMPTY_CHECKBOX_SKELETON_REGEX = /^- \[[ xX]?\]\s*$/
+const EMPTY_CHECKBOX_SKELETON_REGEX = /^[ \t]*- \[[ xX]?\]\s*$/
 
 /**
  * Result of wrapping a plain line as a checked checkbox for the complete

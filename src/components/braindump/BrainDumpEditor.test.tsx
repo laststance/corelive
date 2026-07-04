@@ -783,6 +783,37 @@ describe('BrainDumpEditor complete command', () => {
     })
   })
 
+  it('toggles the nested checkbox line at the caret into a Completed row on Cmd+Enter', async () => {
+    // Arrange — a parent task with one indented child checkbox under it.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const value = ['- [ ] parent task', '  - [ ] nested task'].join('\n')
+    fireEvent.change(noteField, { target: { value } })
+    noteField.selectionStart = value.length
+    noteField.selectionEnd = value.length
+
+    // Act — complete only the nested caret line.
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Assert — the parent stays untouched, and only the child is recorded.
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'nested task',
+    })
+    await waitFor(() => {
+      expect(noteField).toHaveValue(
+        ['- [ ] parent task', '  - [x] nested task'].join('\n'),
+      )
+    })
+  })
+
   it('restores the original plain prose when the completion create fails', async () => {
     // Arrange — the create mutation rejects for this completion.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
@@ -949,6 +980,43 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Assert — the verbatim line returns at index 1, not appended at the end.
     await waitFor(() => {
       expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    })
+  })
+
+  it('undo re-inserts a cleared nested checkbox with its original indentation', async () => {
+    // Arrange — clear-on-complete on, with the caret parked on an indented child.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const value = ['- [ ] parent task', '  - [ ] nested task'].join('\n')
+    fireEvent.change(noteField, { target: { value } })
+    noteField.selectionStart = value.length
+    noteField.selectionEnd = value.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [ ] parent task')
+    })
+
+    // Act — Undo should return the exact nested source row, not a top-level box.
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the child checkbox returns with its two leading spaces intact.
+    await waitFor(() => {
+      expect(noteField).toHaveValue(value)
+    })
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'nested task',
     })
   })
 
