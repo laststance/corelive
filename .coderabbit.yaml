@@ -3,7 +3,7 @@
 # CodeRabbit configuration for CoreLive
 # Next.js 16 App Router + Electron (macOS) + oRPC + Clerk + Prisma
 
-language: en-US
+language: ja-JP
 early_access: false
 
 chat:
@@ -22,7 +22,7 @@ reviews:
   profile: assertive
   request_changes_workflow: false
   high_level_summary: true
-  poem: false
+  poem: true
   review_status: true
   review_details: false
   collapse_walkthrough: false
