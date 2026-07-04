@@ -179,6 +179,19 @@ export const BrainDumpSettings = function BrainDumpSettings({
     }
   }
 
+  const handleOpenConfigFile = async (): Promise<void> => {
+    setError(null)
+    try {
+      const opened = await window.electronAPI?.config?.open()
+      if (!opened) {
+        setError('Failed to open config file')
+      }
+    } catch (err) {
+      log.error('Failed to open config file:', err)
+      setError('Failed to open config file')
+    }
+  }
+
   const opacityValue = [opacity]
 
   // Defer the non-Electron fallback until after hydration so server and
@@ -306,6 +319,18 @@ export const BrainDumpSettings = function BrainDumpSettings({
           Click, then press the keys you want. Esc cancels; Backspace clears it
           to disable the global shortcut.
         </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label className="text-sm font-medium">Open config file</Label>
+          <p className="text-xs text-muted-foreground">
+            BrainDump text is saved per category in config.json on this device.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleOpenConfigFile}>
+          Open config.json
+        </Button>
       </div>
 
       <div className="flex justify-end">

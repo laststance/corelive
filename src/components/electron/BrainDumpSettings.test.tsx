@@ -10,6 +10,7 @@ const setOpacityMock = vi.fn()
 const getShortcutMock = vi.fn()
 const setShortcutMock = vi.fn()
 const toggleMock = vi.fn()
+const openConfigMock = vi.fn()
 
 type BrainDumpBridge = {
   getSyncMode: () => Promise<boolean>
@@ -21,6 +22,10 @@ type BrainDumpBridge = {
   toggle: () => Promise<void>
 }
 
+type ConfigBridge = {
+  open: () => Promise<boolean>
+}
+
 /**
  * Defines the preload bridge shape the Settings card expects during renderer tests.
  *
@@ -30,7 +35,12 @@ type BrainDumpBridge = {
  * installElectronAPI({ brainDump: fakeBridge })
  */
 function installElectronAPI(
-  api: { brainDump?: Partial<BrainDumpBridge> } | undefined,
+  api:
+    | {
+        brainDump?: Partial<BrainDumpBridge>
+        config?: Partial<ConfigBridge>
+      }
+    | undefined,
 ): void {
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
@@ -59,6 +69,7 @@ function installBrainDumpBridge(saved: {
   getShortcutMock.mockResolvedValue(saved.shortcut)
   setShortcutMock.mockResolvedValue(true)
   toggleMock.mockResolvedValue(undefined)
+  openConfigMock.mockResolvedValue(true)
 
   installElectronAPI({
     brainDump: {
@@ -69,6 +80,9 @@ function installBrainDumpBridge(saved: {
       getShortcut: getShortcutMock,
       setShortcut: setShortcutMock,
       toggle: toggleMock,
+    },
+    config: {
+      open: openConfigMock,
     },
   })
 }
@@ -82,6 +96,7 @@ describe('BrainDumpSettings', () => {
     getShortcutMock.mockReset()
     setShortcutMock.mockReset()
     toggleMock.mockReset()
+    openConfigMock.mockReset()
   })
 
   afterEach(() => {
@@ -187,6 +202,9 @@ describe('BrainDumpSettings', () => {
         setShortcut: setShortcutMock,
         toggle: toggleMock,
       },
+      config: {
+        open: openConfigMock,
+      },
     })
 
     // Act
@@ -197,5 +215,46 @@ describe('BrainDumpSettings', () => {
       await screen.findByText('Loading BrainDump settings…'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  it('opens config.json via the main-process config bridge when the button is clicked', async () => {
+    // Arrange
+    installBrainDumpBridge({
+      syncMode: false,
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    render(<BrainDumpSettings />)
+    const openButton = await screen.findByRole('button', {
+      name: 'Open config.json',
+    })
+
+    // Act
+    fireEvent.click(openButton)
+
+    // Assert
+    expect(openConfigMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an error banner when opening config.json fails', async () => {
+    // Arrange
+    installBrainDumpBridge({
+      syncMode: false,
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    openConfigMock.mockResolvedValueOnce(false)
+    render(<BrainDumpSettings />)
+    const openButton = await screen.findByRole('button', {
+      name: 'Open config.json',
+    })
+
+    // Act
+    fireEvent.click(openButton)
+
+    // Assert
+    expect(
+      await screen.findByText('Failed to open config file'),
+    ).toBeInTheDocument()
   })
 })

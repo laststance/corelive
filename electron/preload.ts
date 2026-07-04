@@ -1139,6 +1139,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return { config: '', windowState: '', directory: '' }
       }
     },
+
+    /**
+     * Open config.json in the default application.
+     *
+     * The path is resolved in the main process from ConfigManager — the renderer
+     * cannot supply a filesystem target.
+     */
+    open: async (): Promise<boolean> => {
+      try {
+        return await typedInvoke('config-open')
+      } catch (error) {
+        log.error('Failed to open config file:', error)
+        return false
+      }
+    },
   },
 
   // Window state management APIs

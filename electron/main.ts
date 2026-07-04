@@ -57,6 +57,7 @@ import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { loadUiohook } from './utils/loadUiohook'
 import { isNativeTapLatchSet } from './utils/nativeTapLatch'
+import { openConfigFile } from './utils/openConfigFile'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import {
   HIDE_APP_ICON_CONFIG_PATH,
@@ -1795,6 +1796,16 @@ function setupIPCHandlers(): void {
       return { config: '', windowState: '', directory: '' }
     }
     return configManager.getConfigPaths()
+  })
+
+  // Security: path is resolved from ConfigManager only — renderer cannot supply
+  // an arbitrary filesystem target (same rule as config-export/import).
+  typedHandle('config-open', async () => {
+    if (!configManager) {
+      return false
+    }
+    const { config: configPath } = configManager.getConfigPaths()
+    return openConfigFile(configPath)
   })
 
   // Authentication IPC handlers (basic implementations for testing)

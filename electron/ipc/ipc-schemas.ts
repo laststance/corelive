@@ -191,6 +191,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'config-import': z.tuple([]),
   'config-backup': z.tuple([]),
   'config-get-paths': z.tuple([]),
+  'config-open': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Authentication
