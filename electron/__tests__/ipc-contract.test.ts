@@ -185,6 +185,12 @@ describe('IPC contract', () => {
       expect(() => oauthCancel.parse([123])).toThrow(ZodError)
     })
 
+    it('accepts empty tuple for config-open', () => {
+      const openConfig = IPC_ARG_SCHEMAS['config-open']
+      expect(() => openConfig.parse([])).not.toThrow()
+      expect(() => openConfig.parse([null])).toThrow(ZodError)
+    })
+
     /**
      * BrainDump Note channels — locks down the contract used by
      * `preload-braindump.ts` and the main-window Settings bridge.

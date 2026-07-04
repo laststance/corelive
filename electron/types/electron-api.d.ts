@@ -233,6 +233,8 @@ export interface ElectronAPI {
       windowState: string
       directory: string
     }>
+    /** Open config.json in the default application (path resolved in main process) */
+    open: () => Promise<boolean>
     /** Save config to file (no-op - config auto-persists on modification) */
     save?: () => Promise<boolean>
     /** Load config from file (async via IPC) */

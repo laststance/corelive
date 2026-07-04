@@ -718,6 +718,10 @@ export interface IPCChannels {
     request: void
     response: { config: string; windowState: string; directory: string }
   }
+  'config-open': {
+    request: void
+    response: boolean
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Deep Linking
