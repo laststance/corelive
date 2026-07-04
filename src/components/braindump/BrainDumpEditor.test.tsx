@@ -15,16 +15,26 @@ import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { BrainDumpEditor } from './BrainDumpEditor'
 
-// Shared across create + delete mutations so the complete-command specs can
-// assert the create call. Resolves `{ id }` so promoteLineToCompleted's
-// `.then(created => created.id)` chain runs instead of throwing on undefined.
-const { completedMutateAsync } = vi.hoisted(() => ({
+// Split create/delete mutations so completion specs can assert create calls
+// without counting undo cleanup deletes.
+const {
+  completedCreateMutationOptions,
+  completedDeleteMutationOptions,
+  completedMutateAsync,
+  deleteCompletedMutateAsync,
+} = vi.hoisted(() => ({
+  completedCreateMutationOptions: {},
+  completedDeleteMutationOptions: {},
   completedMutateAsync: vi.fn(),
+  deleteCompletedMutateAsync: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
-  useMutation: () => ({
-    mutateAsync: completedMutateAsync,
+  useMutation: (options: unknown) => ({
+    mutateAsync:
+      options === completedDeleteMutationOptions
+        ? deleteCompletedMutateAsync
+        : completedMutateAsync,
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
@@ -62,10 +72,10 @@ vi.mock('@/lib/orpc/client-query', () => ({
   orpc: {
     completed: {
       create: {
-        mutationOptions: vi.fn(() => ({})),
+        mutationOptions: vi.fn(() => completedCreateMutationOptions),
       },
       delete: {
-        mutationOptions: vi.fn(() => ({})),
+        mutationOptions: vi.fn(() => completedDeleteMutationOptions),
       },
       heatmap: {
         key: vi.fn(() => ['completed', 'heatmap']),
@@ -1018,6 +1028,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       categoryId: 1,
       title: 'nested task',
     })
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
   })
 
   it('restores the cleared line when the completion create fails', async () => {
