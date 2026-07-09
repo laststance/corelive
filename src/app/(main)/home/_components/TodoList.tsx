@@ -11,6 +11,7 @@ import {
 import { Circle } from 'lucide-react'
 import { Suspense, useMemo, useRef, useState } from 'react'
 
+import { Grid } from '@/components/grid'
 import { ImportUndoBanner } from '@/components/import/ImportUndoBanner'
 import { PasteImport } from '@/components/import/PasteImport'
 import {
@@ -517,7 +518,7 @@ export const TodoList = function TodoList() {
   }
 
   return (
-    <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-2">
+    <Grid className="h-full grid-cols-1 gap-6 lg:grid-cols-2">
       {/* Activity Heatmap — promoted to span both columns so it gets the full
            content-width DESIGN.md mandates for the centerpiece. At full width the
            trailing-year grid fits the card, removing the horizontal scroll the
@@ -693,6 +694,6 @@ export const TodoList = function TodoList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Grid>
   )
 }
