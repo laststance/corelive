@@ -28,6 +28,11 @@ minimumReleaseAgeExclude:
   - '@types/react'
   - '@types/react-dom'
   - typescript
+  # TypeScript 7 ships platform-specific optional deps that inherit the same
+  # publish timestamp as `typescript` itself; exclude the whole scope so
+  # `pnpm upgrade --latest` can adopt TS7 without waiting out minimumReleaseAge.
+  - '@typescript/typescript6'
+  - '@typescript/typescript-*'
   - vite
   - vitest
   - '@vitejs/plugin-react'
