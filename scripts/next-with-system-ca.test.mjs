@@ -1,7 +1,6 @@
 /**
  * Unit coverage for Cursor SSL_CERT_FILE sanitization used by the Next launcher.
  */
-import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -64,11 +63,8 @@ describe('next-with-system-ca TLS env sanitization', () => {
       },
     })
 
-    // Assert — Next prints help (or usage) without crashing on env sanitization
-    assert.notEqual(result.status, null)
-    expect(
-      result.status === 0 ||
-        (result.stdout + result.stderr).toLowerCase().includes('next'),
-    ).toBe(true)
+    // Assert — launcher sanitizes env and Next exits cleanly for --help
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(0)
   })
 })

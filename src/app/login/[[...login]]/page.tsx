@@ -18,10 +18,10 @@ const POST_LOGIN_HOME_PATH = '/home'
  *
  * @param search - `window.location.search` (or equivalent query string)
  * @param origin - Current page origin used for same-origin checks
- * @returns Safe in-app path or absolute same-origin URL
+ * @returns Safe in-app relative path (pathname + search + hash)
  * @example
  * resolvePostLoginPath('?redirect_url=http://localhost:4991/settings', 'http://localhost:4991')
- * // => 'http://localhost:4991/settings'
+ * // => '/settings'
  * resolvePostLoginPath('', 'http://localhost:4991') // => '/home'
  */
 function resolvePostLoginPath(search: string, origin: string): string {

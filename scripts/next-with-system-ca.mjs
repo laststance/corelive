@@ -95,9 +95,10 @@ if (isExecutedDirectly) {
     },
   )
 
-  // Forward orchestrator stop signals when this wrapper is PID 1 (containers)
+  // Forward orchestrator stop signals when this wrapper is PID 1 (containers).
+  // Use once so the exit handler's self-signal replay can still terminate us.
   for (const signalToForward of ['SIGINT', 'SIGTERM']) {
-    process.on(signalToForward, () => {
+    process.once(signalToForward, () => {
       nextProcess.kill(signalToForward)
     })
   }
