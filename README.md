@@ -82,6 +82,8 @@ All Next.js environment variables are loaded and validated via `src/env.mjs` usi
 
 This project uses PostgreSQL v17 as the database, managed through Docker Compose for local development.
 
+The Docker Compose service maps **host port `5491`** to the container's default `5432`, so CoreLive does not collide with other local Postgres instances on the standard port.
+
 ```bash
 # Start the PostgreSQL database
 docker compose up -d postgres
@@ -91,6 +93,12 @@ pnpm prisma:migrate
 
 # Seed initial data (optional)
 pnpm prisma:seed
+```
+
+Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
+
+```
+POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive?schema=public"
 ```
 
 #### Database Management

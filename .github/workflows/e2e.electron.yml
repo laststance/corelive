@@ -92,7 +92,7 @@ jobs:
             printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home\n'
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
-            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5432/corelive?schema=public'
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive?schema=public'
             printf 'E2E_CLERK_USER_USERNAME=%s\n' "$E2E_CLERK_USER_USERNAME"
             printf 'E2E_CLERK_USER_PASSWORD=%s\n' "$E2E_CLERK_USER_PASSWORD"
             printf 'E2E_CLERK_USER_EMAIL=%s\n' "$E2E_CLERK_USER_EMAIL"

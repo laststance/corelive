@@ -36,7 +36,7 @@ jobs:
             printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL"
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
-            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5432/corelive?schema=public'
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive?schema=public'
           } > .env
       # Provision Postgres for the real-DB integration suites (paste-import
       # procedures). Mirrors e2e.web.yml. Those tests are gated behind

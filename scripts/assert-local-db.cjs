@@ -19,6 +19,8 @@
 // prisma.config.ts と同じく .env を読み込んでから判定する（手動 `pnpm db:reset` 時、URLが .env 内にしか無いケースを揃えるため）
 require('dotenv').config()
 
+const { LOCAL_POSTGRES_HOST_PORT } = require('./local-db-port.cjs')
+
 // ローカルとみなして破壊操作を許可するホスト名のホワイトリスト（Docker compose / localhost のみ）。
 // 0.0.0.0 は「全インターフェースにbindする」アドレスでクライアントのダイヤル先として意味を持たないため除外。
 const ALLOWED_HOSTS = new Set([
@@ -36,13 +38,13 @@ const ALLOWED_HOSTS = new Set([
 const rawUrl =
   process.env.POSTGRES_PRISMA_URL ||
   process.env.DATABASE_URL ||
-  'postgresql://user:pass@localhost:5432/db?schema=public'
+  `postgresql://user:pass@localhost:${LOCAL_POSTGRES_HOST_PORT}/db?schema=public`
 
 function abort(reason) {
   console.error('\n🛑 [assert-local-db] 破壊的DB操作を中止しました。')
   console.error(`   理由: ${reason}`)
   console.error(
-    '   db:reset / db:truncate / prisma:migrate はローカルDocker（localhost:5432）にのみ許可されています。',
+    `   db:reset / db:truncate / prisma:migrate はローカルDocker（localhost:${LOCAL_POSTGRES_HOST_PORT}）にのみ許可されています。`,
   )
   console.error(
     '   接続先が本番(Neon等)に向いていないか POSTGRES_PRISMA_URL を確認してください。\n',
