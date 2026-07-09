@@ -8,8 +8,39 @@ import {
 } from '@/components/auth/ElectronLoginForm'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
-/** Post-auth destination shared by web SignIn and authenticated-user redirect. */
+/** Default post-auth destination when no same-origin redirect_url is present. */
 const POST_LOGIN_HOME_PATH = '/home'
+
+/**
+ * Resolves the post-login navigation target from the proxy-provided redirect_url
+ * query param, falling back to home. Only same-origin absolute URLs or relative
+ * paths are accepted so open redirects cannot leave the app.
+ *
+ * @param search - `window.location.search` (or equivalent query string)
+ * @param origin - Current page origin used for same-origin checks
+ * @returns Safe in-app path or absolute same-origin URL
+ * @example
+ * resolvePostLoginPath('?redirect_url=http://localhost:4991/settings', 'http://localhost:4991')
+ * // => 'http://localhost:4991/settings'
+ * resolvePostLoginPath('', 'http://localhost:4991') // => '/home'
+ */
+function resolvePostLoginPath(search: string, origin: string): string {
+  const redirectUrlParam = new URLSearchParams(search).get('redirect_url')
+  if (!redirectUrlParam) {
+    return POST_LOGIN_HOME_PATH
+  }
+
+  try {
+    const redirectUrl = new URL(redirectUrlParam, origin)
+    if (redirectUrl.origin !== origin) {
+      return POST_LOGIN_HOME_PATH
+    }
+
+    return `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`
+  } catch {
+    return POST_LOGIN_HOME_PATH
+  }
+}
 
 /**
  * Login Page with Electron Email/Password Support
@@ -22,10 +53,10 @@ const POST_LOGIN_HOME_PATH = '/home'
  * - Google OAuth requires system browser (blocks WebView)
  * - GitHub removed: email/password provides simpler desktop experience
  *
- * Authenticated users hard-navigate to home (not soft router.replace) so the
- * full document request re-runs Clerk middleware with session cookies. Soft
+ * Authenticated users hard-navigate (not soft router.replace) so the full
+ * document request re-runs Clerk middleware with session cookies. Soft
  * navigation can leave this page spinning when middleware previously failed
- * the handshake and bounced /home back to /login?redirect_url=...
+ * the handshake and bounced a protected route back to /login?redirect_url=...
  */
 const Page = function Page() {
   const isElectron = useIsElectron()
@@ -34,7 +65,9 @@ const Page = function Page() {
   // Hard redirect once Clerk client reports an active user
   useCycleEffect(() => {
     if (isLoaded && user) {
-      window.location.replace(POST_LOGIN_HOME_PATH)
+      window.location.replace(
+        resolvePostLoginPath(window.location.search, window.location.origin),
+      )
     }
   }, [user, isLoaded])
 
@@ -65,10 +98,7 @@ const Page = function Page() {
           </div>
         </div>
       ) : (
-        <Login
-          forceRedirectUrl={POST_LOGIN_HOME_PATH}
-          fallbackRedirectUrl={POST_LOGIN_HOME_PATH}
-        />
+        <Login fallbackRedirectUrl={POST_LOGIN_HOME_PATH} />
       )}
     </div>
   )

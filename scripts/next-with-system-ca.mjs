@@ -95,6 +95,13 @@ if (isExecutedDirectly) {
     },
   )
 
+  // Forward orchestrator stop signals when this wrapper is PID 1 (containers)
+  for (const signalToForward of ['SIGINT', 'SIGTERM']) {
+    process.on(signalToForward, () => {
+      nextProcess.kill(signalToForward)
+    })
+  }
+
   nextProcess.on('exit', (exitCode, signalName) => {
     if (signalName) {
       process.kill(process.pid, signalName)
