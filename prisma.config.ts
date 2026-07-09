@@ -14,6 +14,6 @@ export default defineConfig({
     url:
       process.env.POSTGRES_PRISMA_URL ||
       process.env.DATABASE_URL ||
-      'postgresql://user:pass@localhost:5432/db?schema=public',
+      'postgresql://user:pass@localhost:5491/db?schema=public',
   },
 })

@@ -47,7 +47,7 @@ const LOCAL_DB_HOSTS = new Set([
  * @param connectionString - The raw `POSTGRES_PRISMA_URL` value.
  * @returns void — returns normally only when the host is local; otherwise throws.
  * @example
- * assertLocalDatabase('postgresql://postgres:password@localhost:5432/corelive') // ok
+ * assertLocalDatabase('postgresql://postgres:password@localhost:5491/corelive') // ok
  * assertLocalDatabase('postgresql://u:p@prod.neon.tech/db') // throws
  */
 function assertLocalDatabase(connectionString: string | undefined): void {

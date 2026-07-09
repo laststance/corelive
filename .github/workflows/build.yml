@@ -31,7 +31,7 @@ jobs:
             printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home\n'
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
-            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://user:pass@localhost:5432/db?schema=public'
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://user:pass@localhost:5491/db?schema=public'
           } > .env
       - name: Build
         run: pnpm build

@@ -9,7 +9,8 @@ services:
       POSTGRES_DB: corelive
       POSTGRES_INITDB_ARGS: '--auth-host=scram-sha-256 --auth-local=scram-sha-256'
     ports:
-      - '5432:5432'
+      # Host 5491 avoids clashing with other projects on the default 5432 (see scripts/local-db-port.cjs)
+      - '5491:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

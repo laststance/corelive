@@ -14,7 +14,7 @@ import { describeIfDb } from './describeIfDb'
  * id so rows never collide across runs of the persistent dev database. We run
  * the REAL `authMiddleware` (never mocked): `call` passes a `headers` context
  * with a Bearer token, the middleware upserts the user by clerkId, and the
- * handler runs against the live Postgres on :5432.
+ * handler runs against the live Postgres on :5491.
  */
 function authContext(clerkId: string) {
   return {

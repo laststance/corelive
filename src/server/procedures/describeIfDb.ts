@@ -40,7 +40,7 @@ function assertLocalDbBeforeDestructiveTests(): void {
     throw new Error(
       'Refusing to run destructive DB integration tests: the local-DB gate ' +
         '(scripts/assert-local-db.cjs) could not prove POSTGRES_PRISMA_URL is ' +
-        'local. Point it at the local Docker Postgres (localhost:5432).\n' +
+        'local. Point it at the local Docker Postgres (localhost:5491).\n' +
         gateReason,
     )
   }

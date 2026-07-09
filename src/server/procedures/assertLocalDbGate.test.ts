@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest'
  * Runs the gate with a crafted `POSTGRES_PRISMA_URL` and returns its exit code.
  * @param databaseUrl - The connection string the gate should judge.
  * @returns 0 when the gate proves the URL local (allows the op), 1 when it aborts.
- * @example runGate('postgresql://postgres@localhost:5432/db') // => 0
+ * @example runGate('postgresql://postgres@localhost:5491/db') // => 0
  */
 function runGate(databaseUrl: string): number {
   try {
@@ -41,7 +41,7 @@ describe('assert-local-db gate (fail-closed local-DB chokepoint)', () => {
   it('allows the local Docker connection string', () => {
     // Arrange / Act
     const exitCode = runGate(
-      'postgresql://postgres:password@localhost:5432/corelive?schema=public',
+      'postgresql://postgres:password@localhost:5491/corelive?schema=public',
     )
     // Assert — provably local, so the destructive op is permitted.
     expect(exitCode).toBe(0)
