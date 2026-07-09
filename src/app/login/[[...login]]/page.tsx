@@ -1,13 +1,15 @@
 'use client'
 
 import { SignIn as Login, useUser } from '@clerk/nextjs'
-import { useRouter } from 'next/navigation'
 
 import {
   ElectronLoginForm,
   useIsElectron,
 } from '@/components/auth/ElectronLoginForm'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+
+/** Post-auth destination shared by web SignIn and authenticated-user redirect. */
+const POST_LOGIN_HOME_PATH = '/home'
 
 /**
  * Login Page with Electron Email/Password Support
@@ -19,18 +21,22 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
  * - Email/password works directly in Electron WebView (no browser needed)
  * - Google OAuth requires system browser (blocks WebView)
  * - GitHub removed: email/password provides simpler desktop experience
+ *
+ * Authenticated users hard-navigate to home (not soft router.replace) so the
+ * full document request re-runs Clerk middleware with session cookies. Soft
+ * navigation can leave this page spinning when middleware previously failed
+ * the handshake and bounced /home back to /login?redirect_url=...
  */
 const Page = function Page() {
   const isElectron = useIsElectron()
   const { user, isLoaded } = useUser()
-  const router = useRouter()
 
-  // Redirect to home if user is already authenticated
+  // Hard redirect once Clerk client reports an active user
   useCycleEffect(() => {
     if (isLoaded && user) {
-      router.replace('/home')
+      window.location.replace(POST_LOGIN_HOME_PATH)
     }
-  }, [user, isLoaded, router])
+  }, [user, isLoaded])
 
   // Show loading while checking auth or redirecting
   if (!isLoaded || user) {
@@ -59,7 +65,10 @@ const Page = function Page() {
           </div>
         </div>
       ) : (
-        <Login />
+        <Login
+          forceRedirectUrl={POST_LOGIN_HOME_PATH}
+          fallbackRedirectUrl={POST_LOGIN_HOME_PATH}
+        />
       )}
     </div>
   )

@@ -19,11 +19,11 @@
   },
   "scripts": {
     "postinstall": "pnpm prisma generate",
-    "dev": "next dev -p 4991",
+    "dev": "node scripts/next-with-system-ca.mjs dev -p 4991",
     "build": "next build --webpack",
     "build:icons": "node scripts/generate-icons.js",
     "prebuild": "pnpm build:icons",
-    "start": "next start -p 4991",
+    "start": "node scripts/next-with-system-ca.mjs start -p 4991",
     "lint": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --concurrency=2 --max-warnings 0",
     "lint:fix": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --fix --concurrency=2 --max-warnings 0",
     "test": "vitest run",
