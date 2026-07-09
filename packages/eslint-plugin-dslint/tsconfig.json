@@ -17,7 +17,9 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     // TypeScript 7 defaults `types` to [] (no auto @types/*); Node globals need an explicit entry.
-    "types": ["node"]
+    "types": ["node"],
+    // tsup's DTS pipeline still injects `baseUrl`; silence the TS 6 deprecation until tsup drops it.
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
