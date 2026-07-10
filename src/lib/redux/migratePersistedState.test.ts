@@ -2,27 +2,23 @@ import { createStorageMiddleware } from '@laststance/redux-storage-middleware'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { type UserSettingsState } from '@/lib/schemas/settings'
-
 import {
   migratePersistedState,
   STORAGE_SCHEMA_VERSION,
 } from './migratePersistedState'
-import electronSettingsReducer, {
-  type ElectronSettingsState,
-} from './slices/electronSettingsSlice'
+import electronSettingsReducer from './slices/electronSettingsSlice'
 import userSettingsReducer, { setSoundMoment } from './slices/settingsSlice'
 
-/** Wraps a deliberately-partial legacy blob as the untrusted persisted shape
- * migrate sees at runtime. The cast mirrors the `stateWith` idiom in
- * settingsSlice.test.ts: today's complete UserSettingsState type does not admit
- * a pre-palette blob, yet that under-specified shape is exactly what we test. */
-function asPersistedState(blob: {
-  electronSettings?: ElectronSettingsState
-  settings?: Partial<UserSettingsState>
-  preferences?: Partial<UserSettingsState>
-}): Parameters<typeof migratePersistedState>[0] {
-  return blob as Parameters<typeof migratePersistedState>[0]
+/** Preserves a deliberately partial legacy blob as the exact untrusted shape the migration accepts.
+ * @param blob - A persisted root that may omit newer user-setting fields.
+ * @returns The same blob, typed for the migration boundary.
+ * @example
+ * asPersistedState({ preferences: { completionSound: true } })
+ */
+function asPersistedState(
+  blob: Parameters<typeof migratePersistedState>[0],
+): Parameters<typeof migratePersistedState>[0] {
+  return blob
 }
 
 /**

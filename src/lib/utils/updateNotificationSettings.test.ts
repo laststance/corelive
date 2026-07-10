@@ -45,4 +45,17 @@ describe('updateNotificationSettings', () => {
     expect(result).toEqual(SAVED_SETTINGS)
     expect(updatePreferences).toHaveBeenCalledWith({ sound: false })
   })
+
+  it('reports an unavailable notification bridge when no supported writer is installed', async () => {
+    // Arrange
+    const bridge = {}
+
+    // Act
+    const updateAction = updateNotificationSettings(bridge, { sound: false })
+
+    // Assert
+    await expect(updateAction).rejects.toThrow(
+      'Notification settings bridge is unavailable',
+    )
+  })
 })

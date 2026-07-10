@@ -10,9 +10,15 @@ export const STORAGE_SCHEMA_VERSION = 2
 /** Persisted root subset plus the v1 key retained only for lossless migration. */
 type MigratablePersistedState = {
   [key: string]: unknown
+  electronSettings?: Partial<ElectronSettingsState>
+  settings?: Partial<UserSettingsState>
+  preferences?: Partial<UserSettingsState>
+}
+
+/** The canonical persisted shape exposed to the typed storage middleware. */
+type CurrentPersistedState = {
   electronSettings?: ElectronSettingsState
   settings?: UserSettingsState
-  preferences?: UserSettingsState
 }
 
 /** Narrows untrusted persisted JSON to a spread-safe object while rejecting null and arrays.
@@ -44,6 +50,14 @@ const isPersistedObject = (value: unknown): value is Record<string, unknown> =>
  * migratePersistedState({ electronSettings: { hideAppIcon: true } }, 0)
  * // => unchanged (no settings to migrate; electronSettings preserved)
  */
+export function migratePersistedState(
+  persistedState: CurrentPersistedState,
+  oldVersion: number,
+): CurrentPersistedState
+export function migratePersistedState(
+  persistedState: MigratablePersistedState,
+  oldVersion: number,
+): MigratablePersistedState
 export function migratePersistedState(
   persistedState: MigratablePersistedState,
   oldVersion: number,

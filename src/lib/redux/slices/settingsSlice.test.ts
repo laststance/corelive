@@ -61,6 +61,16 @@ describe('settingsSlice', () => {
     })
   })
 
+  it('keeps shared nested sound defaults immutable across settings consumers', () => {
+    // Act
+    const rootIsFrozen = Object.isFrozen(DEFAULT_SETTINGS)
+    const soundMomentsAreFrozen = Object.isFrozen(DEFAULT_SETTINGS.soundMoments)
+
+    // Assert
+    expect(rootIsFrozen).toBe(true)
+    expect(soundMomentsAreFrozen).toBe(true)
+  })
+
   it('enables the legacy completion sound when setCompletionSound(true) is dispatched', () => {
     // Act
     const next = reducer(initialState, setCompletionSound(true))

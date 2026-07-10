@@ -170,14 +170,13 @@ export const NotificationSettings = function NotificationSettings({
       if (!window.electronAPI?.notifications) {
         throw new Error('Electron API not available')
       }
-      const updatedSettings = { ...settings, ...newSettings }
       const savedSettings = await updateNotificationSettings(
         window.electronAPI.notifications,
-        updatedSettings,
+        newSettings,
       )
 
       if (savedSettings) {
-        setSettings(updatedSettings)
+        setSettings(savedSettings)
       }
     } catch (error) {
       log.error('Failed to update notification settings:', error)

@@ -100,7 +100,10 @@ const isUserSettingsSyncEnvelope = (
  *   middleware: (gdm) => gdm().concat(createUserSettingsSyncMiddleware()),
  * })
  */
-export const createUserSettingsSyncMiddleware = (): Middleware => {
+export const createUserSettingsSyncMiddleware = (): Middleware<
+  {},
+  { settings: UserSettingsState }
+> => {
   // No channel on the server (SSR) or in unsupported runtimes — pass through.
   if (!isBrowserWithChannel()) {
     return () => (next) => (action) => next(action)
@@ -147,9 +150,7 @@ export const createUserSettingsSyncMiddleware = (): Middleware => {
         typeof action.type === 'string' &&
         BROADCASTABLE_ACTION_TYPES.has(action.type)
       ) {
-        const { settings } = store.getState() as {
-          settings: UserSettingsState
-        }
+        const { settings } = store.getState()
         channel.postMessage({
           type: SETTINGS_SYNC_EVENT_TYPE,
           state: settings,

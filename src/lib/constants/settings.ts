@@ -14,8 +14,27 @@
  */
 import { UserSettingsStateSchema } from '@/lib/schemas/settings'
 
+/** Recursively freezes schema defaults before consumers share them, preventing nested state pollution.
+ * @param value - The schema-produced value or one of its nested fields.
+ * @returns Nothing; the original value is frozen in place.
+ * @example
+ * deepFreeze({ soundMoments: { complete: false } })
+ */
+function deepFreeze(value: unknown): void {
+  // Primitive values end the recursion; schema defaults contain no cycles.
+  if (typeof value !== 'object' || value === null) return
+
+  // Freeze children first so nested defaults receive the same protection.
+  for (const nestedValue of Object.values(value)) {
+    deepFreeze(nestedValue)
+  }
+  Object.freeze(value)
+}
+
 /**
  * The full default settings: completion sound OFF, 居残りモード OFF, every
  * sound moment OFF, the default timbre, and the default master volume.
  */
-export const DEFAULT_SETTINGS = UserSettingsStateSchema.parse({})
+const defaultSettings = UserSettingsStateSchema.parse({})
+deepFreeze(defaultSettings)
+export const DEFAULT_SETTINGS = defaultSettings
