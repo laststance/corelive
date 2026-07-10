@@ -93,4 +93,46 @@ describe('NotificationSettings', () => {
       expect(taskDeletedSwitch).toBeChecked()
     })
   })
+
+  it('reloads persisted notification settings when the save response is unavailable', async () => {
+    // Arrange — the write returns no state, while a reload exposes persisted truth.
+    const notificationsBridge = {
+      isEnabled: vi.fn().mockResolvedValue(true),
+      getActiveCount: vi.fn().mockResolvedValue(0),
+      show: vi.fn().mockResolvedValue(undefined),
+      clearAll: vi.fn().mockResolvedValue(undefined),
+    }
+    const reloadedSettings = {
+      ...LOADED_SETTINGS,
+      taskUpdated: false,
+      taskDeleted: false,
+    }
+    getNotificationSettingsMock
+      .mockResolvedValueOnce(LOADED_SETTINGS)
+      .mockResolvedValueOnce(reloadedSettings)
+    updateNotificationSettingsMock.mockResolvedValue(null)
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      writable: true,
+      value: { notifications: notificationsBridge },
+    })
+    const user = userEvent.setup()
+    render(<NotificationSettings />)
+    const taskDeletedSwitch = await screen.findByRole('switch', {
+      name: 'Task Deleted',
+    })
+    await waitFor(() => expect(taskDeletedSwitch).not.toBeChecked())
+
+    // Act — try to enable Task Deleted while the save response is missing.
+    await user.click(taskDeletedSwitch)
+
+    // Assert — persisted state is fetched again and replaces the uncertain UI state.
+    await waitFor(() => {
+      expect(getNotificationSettingsMock).toHaveBeenCalledTimes(2)
+      expect(
+        screen.getByRole('switch', { name: 'Task Updated' }),
+      ).not.toBeChecked()
+      expect(taskDeletedSwitch).not.toBeChecked()
+    })
+  })
 })

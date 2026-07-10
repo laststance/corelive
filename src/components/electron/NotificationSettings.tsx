@@ -177,6 +177,9 @@ export const NotificationSettings = function NotificationSettings({
 
       if (savedSettings) {
         setSettings(savedSettings)
+      } else {
+        // A missing response cannot confirm the write, so reload persisted truth.
+        await loadSettings()
       }
     } catch (error) {
       log.error('Failed to update notification settings:', error)
