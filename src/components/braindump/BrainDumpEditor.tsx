@@ -38,7 +38,7 @@ import {
   selectBraindumpFontSize,
   selectBraindumpTextColor,
   selectBraindumpToastDurationMs,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
 import type { Completed } from '@/server/schemas/completed'
@@ -229,7 +229,7 @@ function rollbackPromotedLineText(
  *
  * @param params - Toast inputs.
  * @param params.title - Already-normalised completed title (rendered `Completed: <title>`).
- * @param params.durationMs - How long the toast stays before auto-dismiss (the user pref).
+ * @param params.durationMs - How long the toast stays before auto-dismiss (the user setting).
  * @param params.onUndo - Runs when the user clicks Undo; the toast is dismissed right after.
  * @param params.onAutoClose - Optional: runs when the toast times out (NOT on ✕/Undo).
  * @param params.onDismiss - Optional: runs on a manual close (✕ OR Undo — caller guards).
@@ -323,8 +323,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const categoryInputId = useId()
   const spacesInputId = useId()
 
-  // BrainDump text-presentation preferences (shared via the preferences slice,
-  // hydrated from localStorage + live-synced across windows by the prefs sync
+  // BrainDump text-presentation settings (shared via the settings slice,
+  // hydrated from localStorage + live-synced across windows by the settings sync
   // middleware). Read here and applied inline to the editor surface.
   const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
   const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
@@ -614,10 +614,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
       })
       .catch((error) => {
         // Failures here keep the safe defaults seeded by useState; surface
-        // a toast so the user knows their persisted prefs didn't load.
+        // a toast so the user knows their persisted settings didn't load.
         if (cancelled) return
-        toast.error('Failed to load BrainDump preferences')
-        log.error('BrainDump preferences load failed', error)
+        toast.error('Failed to load BrainDump settings')
+        log.error('BrainDump settings load failed', error)
         setIsBrainDumpConfigReady(true)
       })
     return () => {
@@ -1501,7 +1501,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // Clear-on-complete ON + a COMPLETION (a plain line, or ticking an unchecked
     // box) → show `[x]`, then tuck the line away and show the optimistic Undo toast.
     // Un-ticking an existing `[x]` line (parsed.checked === true) and the OFF
-    // preference both fall through to the legacy keep-the-`[x]` path below.
+    // setting both fall through to the legacy keep-the-`[x]` path below.
     if (clearOnComplete && parsed?.checked !== true) {
       let completionTitle: BrainDumpCompletedTitle
       let completedText: string

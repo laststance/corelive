@@ -7,10 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { playTimbre, prewarmTimbre } from '@/lib/audio/soundEngine'
 import type { SoundMomentId } from '@/lib/constants/sound'
-import preferencesReducer, {
+import userSettingsReducer, {
   initialState,
-} from '@/lib/redux/slices/preferencesSlice'
-import type { PreferencesState } from '@/lib/schemas/preferences'
+} from '@/lib/redux/slices/settingsSlice'
+import type { UserSettingsState } from '@/lib/schemas/settings'
 
 // Mock the per-window sound engine so these tests assert the hook's gate +
 // delegation (which moment fires, at which timbre/volume, and that the timbre is
@@ -25,17 +25,17 @@ vi.mock('@/lib/audio/soundEngine', () => ({
 
 /**
  * Renders useSoundFeedback for the given moment under a minimal Redux store with
- * the supplied preference overrides spread over the slice defaults (so each test
+ * the supplied setting overrides spread over the slice defaults (so each test
  * states only the fields it cares about).
  */
 function renderSoundFeedback(
   moment: SoundMomentId,
-  overrides: Partial<PreferencesState>,
+  overrides: Partial<UserSettingsState>,
 ) {
   const store = configureStore({
-    reducer: { preferences: preferencesReducer },
+    reducer: { settings: userSettingsReducer },
     preloadedState: {
-      preferences: { ...initialState, ...overrides },
+      settings: { ...initialState, ...overrides },
     },
   })
   return renderHook(() => useSoundFeedback(moment), {

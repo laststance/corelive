@@ -10,7 +10,7 @@ interface MenuAction {
 interface UseElectronMenuOptions {
   onNewTask?: () => void
   onFocusSearch?: () => void
-  onOpenPreferences?: () => void
+  onOpenSettings?: () => void
   onImportTasks?: (filePath: string) => void
   onExportTasks?: (filePath: string) => void
 }
@@ -34,7 +34,7 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
       const {
         onNewTask,
         onFocusSearch,
-        onOpenPreferences,
+        onOpenSettings,
         onImportTasks,
         onExportTasks,
       } = optionsRef.current
@@ -46,8 +46,9 @@ export function useElectronMenu(options: UseElectronMenuOptions = {}) {
         case 'focus-search':
           onFocusSearch?.()
           break
-        case 'open-preferences':
-          onOpenPreferences?.()
+        case 'open-settings':
+        case 'open-preferences': // Older installed apps still emit this action.
+          onOpenSettings?.()
           break
         case 'import-tasks':
           if (menuAction.filePath && onImportTasks) {

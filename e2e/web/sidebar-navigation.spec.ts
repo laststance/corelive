@@ -9,7 +9,7 @@ import { test, expect } from './_helpers/coverage'
  * `pendingTodosFromQuery` in TodoList fed a sync effect whose dependency changed
  * on every render, so `setLocalPendingTodos` re-rendered forever. That continuous
  * high-priority render loop starved App Router's low-priority navigation
- * transition — clicking the sidebar Preferences (router.push) or Skill Tree
+ * transition — clicking the sidebar Settings (router.push) or Skill Tree
  * (<Link>) entry fetched the destination RSC but never committed, so the URL
  * stayed on /home (the user saw the Settings entry "do nothing").
  *
@@ -30,9 +30,7 @@ test.describe('Sidebar navigation from /home', () => {
     await setupClerkTestingToken({ page })
   })
 
-  test('Preferences button leaves /home and opens Settings', async ({
-    page,
-  }) => {
+  test('Settings button leaves /home and opens Settings', async ({ page }) => {
     // Arrange — land on /home and wait until TodoList (the loop source) has
     // mounted, so the navigation transition is exercised under real conditions.
     await page.goto('/home')
@@ -43,8 +41,8 @@ test.describe('Sidebar navigation from /home', () => {
     })
     await expect(page).toHaveURL(/\/home/)
 
-    // Act — click the sidebar Preferences entry, which calls router.push('/settings').
-    await page.getByRole('button', { name: /preferences/i }).click()
+    // Act — click the sidebar Settings entry, which calls router.push('/settings').
+    await page.getByRole('button', { name: /settings/i }).click()
 
     // Assert — the client navigation actually commits; the URL changes off /home.
     await expect(page).toHaveURL(/\/settings/, { timeout: 10000 })

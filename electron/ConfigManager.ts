@@ -1,7 +1,7 @@
 /**
  * @fileoverview Configuration Manager for Electron Application
  *
- * Manages all user preferences and application settings with:
+ * Manages all user and application settings with:
  * - Persistent storage in platform-specific directories
  * - Type-safe default values
  * - Automatic backup and recovery
@@ -583,8 +583,7 @@ export class ConfigManager {
     // typed as fully-required even though raw JSON may omit fields. Treat the
     // startup block as genuinely partial so the "unset" check is meaningful.
     const startup = raw.behavior?.startup as
-      | Partial<StartupWindowConfig>
-      | undefined
+      Partial<StartupWindowConfig> | undefined
     const showFloatingAlreadySet = startup?.showFloating !== undefined
 
     // Carry the legacy flag over only when the new field hasn't been set yet.

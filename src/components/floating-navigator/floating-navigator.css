@@ -113,7 +113,7 @@
   }
 }
 
-/* Reduced motion preferences */
+/* Reduced motion settings */
 @media (prefers-reduced-motion: reduce) {
   .floating-navigator-controls,
   * {

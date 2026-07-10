@@ -1,10 +1,10 @@
 /**
  * @fileoverview Settings popover macOS Spaces-following tests.
  *
- * The crux: the menu-bar / tray "Preferences" popover (`createSettingsWindow`)
+ * The crux: the menu-bar / tray "Settings" popover (`createSettingsWindow`)
  * must follow the ACTIVE macOS Space via `setVisibleOnAllWorkspaces(true, …)`.
  * Without it, the window stays bound to the Space it was last shown on, so
- * reopening Preferences after switching desktops yanks the user back to that
+ * reopening Settings after switching desktops yanks the user back to that
  * old Space — the "opens on another desktop" bug these tests guard against.
  *
  * Unlike the Floating / BrainDump panels (opt-in, config-gated, default OFF),
@@ -103,12 +103,12 @@ describe('WindowManager settings popover Spaces-following', () => {
     }
   })
 
-  it('opens Preferences on the current desktop by following the active macOS Space', () => {
+  it('opens Settings on the current desktop by following the active macOS Space', () => {
     // Arrange: a macOS runtime, where the Spaces-following behavior is meaningful.
     setPlatform('darwin')
     const windowManager = new WindowManager(SERVER_URL)
 
-    // Act: open the Preferences popover (menu-bar + tray both route here).
+    // Act: open the Settings popover (menu-bar + tray both route here).
     windowManager.createSettingsWindow()
     const settingsWindow = createdWindows[0]
     if (!settingsWindow) throw new Error('Expected a settings popover window')

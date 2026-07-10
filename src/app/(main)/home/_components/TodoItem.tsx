@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { getColorDotClass } from '@/lib/category-colors'
 import { useAppSelector } from '@/lib/redux/hooks'
-import { selectRetainCompletedInList } from '@/lib/redux/slices/preferencesSlice'
+import { selectRetainCompletedInList } from '@/lib/redux/slices/settingsSlice'
 
 export interface Todo {
   id: string

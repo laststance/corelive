@@ -10,9 +10,9 @@
 
 ## Context
 
-`hideAppIcon` is a macOS-only preference: when ON, CoreLive removes itself from
+`hideAppIcon` is a macOS-only setting: when ON, CoreLive removes itself from
 the **Dock** and the **Cmd+Tab App Switcher** via
-`app.setActivationPolicy('accessory')`. Today that preference lives **only on the
+`app.setActivationPolicy('accessory')`. Today that setting lives **only on the
 renderer side** — in Redux, persisted to `localStorage` via the storage middleware
 (`src/lib/redux/slices/electronSettingsSlice.ts`), with a cloud mirror in Postgres
 behind an auth-gated oRPC procedure (`src/server/procedures/electronSettings.ts`).
@@ -237,7 +237,7 @@ Automated (runs in CI — Linux+xvfb, no Cocoa):
 Native macOS QA (packaged app, driven locally — see CLAUDE.md "Electron Native QA"):
 
 1. `pnpm electron:build:dir && open dist/mac/CoreLive.app`.
-2. **Seed** the preference: Settings → Hide App Icon **ON**; confirm
+2. **Seed** the setting: Settings → Hide App Icon **ON**; confirm
    `behavior.hideAppIcon: true` in `~/Library/Application Support/CoreLive/config.json`.
 3. **Decisive test (no Mac restart needed):** quit CoreLive, **block the network**
    (so the remote renderer can't load — the bug's real failure condition), relaunch

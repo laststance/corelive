@@ -4,7 +4,7 @@
  * Locks the contract that BrainDump ships UNPINNED (`alwaysOnTop=false`) and that
  * a pre-feature `config.json` lacking the key migrates to false — never
  * resurrects a stale `true`. Guards the "off by default" (unpinned) behavior
- * this preference exists to deliver.
+ * this setting exists to deliver.
  *
  * Triggered when: `pnpm test:electron` (Vitest).
  *
@@ -70,7 +70,7 @@ describe('ConfigManager BrainDump always-on-top', () => {
     const braindump = configManager.getDefaultConfig().braindump
 
     // Assert: a `true` default would pin BrainDump on a fresh install — the exact
-    // behavior this preference was added to avoid.
+    // behavior this setting was added to avoid.
     expect(braindump.alwaysOnTop).toBe(false)
   })
 

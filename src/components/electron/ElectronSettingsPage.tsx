@@ -6,7 +6,7 @@ import { useTransition } from 'react'
 /**
  * Electron Settings Page Component
  *
- * A settings interface for Electron-specific preferences including
+ * A settings interface for Electron-specific settings including
  * dock icon visibility, menu bar presence, and startup behavior.
  *
  * This component integrates with Redux for local state management
@@ -26,9 +26,9 @@ import { BrainDumpAppearance } from '@/components/electron/BrainDumpAppearance'
 import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
 import { FloatingNavigatorSettings } from '@/components/electron/FloatingNavigatorSettings'
 import {
-  BRAIN_DUMP_PIN_PREFERENCE,
+  BRAIN_DUMP_PIN_SETTING,
   FloatingPanelToggle,
-  VISIBLE_ON_ALL_WORKSPACES_PREFERENCE,
+  VISIBLE_ON_ALL_WORKSPACES_SETTING,
 } from '@/components/electron/FloatingPanelToggle'
 import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
 import { SettingsSection } from '@/components/settings/SettingsSection'
@@ -201,9 +201,9 @@ export const ElectronSettingsPage =
       })
     }
 
-    // Web users see the shared Preferences section (rendered by the settings
+    // Web users see the shared Settings section (rendered by the settings
     // page); the Electron window-chrome settings below are desktop-only, so
-    // render nothing here off-Electron (D15 — one settings home, prefs for all).
+    // render nothing here off-Electron (D15 — one settings home for all).
     if (!isElectron) {
       return null
     }
@@ -228,7 +228,7 @@ export const ElectronSettingsPage =
           <BrainDumpSettings />
           <BrainDumpAppearance />
           <FloatingPanelToggle
-            preference={BRAIN_DUMP_PIN_PREFERENCE}
+            setting={BRAIN_DUMP_PIN_SETTING}
             label="Keep on top"
             description="Pin Brain Dump above your other windows so it stays visible."
           />
@@ -306,7 +306,7 @@ export const ElectronSettingsPage =
           {/* Show on all desktops — one OS-level flag shared by both panels,
               relocated here from the retired Floating windows card. */}
           <FloatingPanelToggle
-            preference={VISIBLE_ON_ALL_WORKSPACES_PREFERENCE}
+            setting={VISIBLE_ON_ALL_WORKSPACES_SETTING}
             label="Show on all desktops"
             description="Keep CoreLive's panels visible while switching Spaces, including fullscreen Spaces."
             disabled={!isMac}

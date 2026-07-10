@@ -1,13 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import {
-  createPreferencesSyncMiddleware,
-  PREFERENCES_SYNC_CHANNEL_NAME,
-  PREFERENCES_SYNC_EVENT_TYPE,
-} from '@/lib/preferences-sync-channel'
-import preferencesReducer, {
-  hydratePreferences,
+import userSettingsReducer, {
+  hydrateUserSettings,
   initialState,
   setAllSoundMoments,
   setBraindumpClearDelayMs,
@@ -19,7 +14,12 @@ import preferencesReducer, {
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
+import {
+  createUserSettingsSyncMiddleware,
+  SETTINGS_SYNC_CHANNEL_NAME,
+  SETTINGS_SYNC_EVENT_TYPE,
+} from '@/lib/settings-sync-channel'
 
 type ChannelListener = (event: MessageEvent) => void
 
@@ -72,15 +72,15 @@ class FakeBroadcastChannel {
 /** A fresh store wired with the sync middleware — stands in for one app window. */
 function makeWindowStore() {
   return configureStore({
-    reducer: { preferences: preferencesReducer },
+    reducer: { settings: userSettingsReducer },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({ serializableCheck: false }).concat(
-        createPreferencesSyncMiddleware(),
+        createUserSettingsSyncMiddleware(),
       ),
   })
 }
 
-describe('preferences cross-window sync', () => {
+describe('settings cross-window sync', () => {
   const originalBroadcastChannel = globalThis.BroadcastChannel
 
   beforeEach(() => {
@@ -93,6 +93,16 @@ describe('preferences cross-window sync', () => {
     globalThis.BroadcastChannel = originalBroadcastChannel
   })
 
+  it('keeps the existing wire identifiers so tabs from the previous release still sync', () => {
+    // Arrange / Act — read the deployed protocol identifiers.
+    const channelName = SETTINGS_SYNC_CHANNEL_NAME
+    const eventType = SETTINGS_SYNC_EVENT_TYPE
+
+    // Assert — changing either literal would isolate already-open app windows.
+    expect(channelName).toBe('corelive-preferences-sync')
+    expect(eventType).toBe('preferences-sync')
+  })
+
   it('propagates a sound-moment toggle to another window', () => {
     // Arrange — two windows, each with its own store + sync middleware.
     const windowA = makeWindowStore()
@@ -102,7 +112,7 @@ describe('preferences cross-window sync', () => {
     windowA.dispatch(setSoundMoment({ moment: 'clear', enabled: true }))
 
     // Assert — window B sees the same toggle without a reload.
-    expect(windowB.getState().preferences.soundMoments.clear).toBe(true)
+    expect(windowB.getState().settings.soundMoments.clear).toBe(true)
   })
 
   it('propagates a master all-cues toggle to another window', () => {
@@ -114,7 +124,7 @@ describe('preferences cross-window sync', () => {
     windowA.dispatch(setAllSoundMoments(true))
 
     // Assert — window B sees all three cues enabled without a reload.
-    expect(windowB.getState().preferences.soundMoments).toEqual({
+    expect(windowB.getState().settings.soundMoments).toEqual({
       'task-create': true,
       complete: true,
       clear: true,
@@ -130,7 +140,7 @@ describe('preferences cross-window sync', () => {
     windowA.dispatch(setSoundTimbre('wood'))
 
     // Assert
-    expect(windowB.getState().preferences.soundTimbre).toBe('wood')
+    expect(windowB.getState().settings.soundTimbre).toBe('wood')
   })
 
   it('propagates a volume change to another window', () => {
@@ -142,7 +152,7 @@ describe('preferences cross-window sync', () => {
     windowA.dispatch(setSoundVolume(0.25))
 
     // Assert
-    expect(windowB.getState().preferences.soundVolume).toBe(0.25)
+    expect(windowB.getState().settings.soundVolume).toBe(0.25)
   })
 
   it('propagates a BrainDump font-family change to another window', () => {
@@ -155,7 +165,7 @@ describe('preferences cross-window sync', () => {
 
     // Assert — window B reflects the chosen face without a reload (the action is
     // in the broadcast allowlist).
-    expect(windowB.getState().preferences.braindumpFontFamily).toBe('serif')
+    expect(windowB.getState().settings.braindumpFontFamily).toBe('serif')
   })
 
   it('propagates a BrainDump font-size change to another window', () => {
@@ -167,7 +177,7 @@ describe('preferences cross-window sync', () => {
     windowA.dispatch(setBraindumpFontSize(20))
 
     // Assert — window B reflects the new size without a reload.
-    expect(windowB.getState().preferences.braindumpFontSize).toBe(20)
+    expect(windowB.getState().settings.braindumpFontSize).toBe(20)
   })
 
   it('propagates a BrainDump text-color change to another window', () => {
@@ -179,7 +189,7 @@ describe('preferences cross-window sync', () => {
     windowA.dispatch(setBraindumpTextColor('var(--primary)'))
 
     // Assert — window B reflects the new color without a reload.
-    expect(windowB.getState().preferences.braindumpTextColor).toBe(
+    expect(windowB.getState().settings.braindumpTextColor).toBe(
       'var(--primary)',
     )
   })
@@ -194,7 +204,7 @@ describe('preferences cross-window sync', () => {
 
     // Assert — window B reflects the toggle without a reload (the action is in
     // the broadcast allowlist; a NEW set* action would stay silent until added).
-    expect(windowB.getState().preferences.braindumpClearOnComplete).toBe(true)
+    expect(windowB.getState().settings.braindumpClearOnComplete).toBe(true)
   })
 
   it('propagates a BrainDump clear-delay change to another window', () => {
@@ -207,7 +217,7 @@ describe('preferences cross-window sync', () => {
 
     // Assert — window B reflects the new delay without a reload (the action is in
     // the broadcast allowlist; a NEW set* action would stay silent until added).
-    expect(windowB.getState().preferences.braindumpClearDelayMs).toBe(1500)
+    expect(windowB.getState().settings.braindumpClearDelayMs).toBe(1500)
   })
 
   it('propagates a BrainDump toast-duration change to another window', () => {
@@ -221,32 +231,32 @@ describe('preferences cross-window sync', () => {
 
     // Assert — window B reflects the new duration without a reload (the action is
     // in the broadcast allowlist; a NEW set* action would stay silent until added).
-    expect(windowB.getState().preferences.braindumpToastDurationMs).toBe(8000)
+    expect(windowB.getState().settings.braindumpToastDurationMs).toBe(8000)
   })
 
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {
     // Arrange — a window plus a raw sender on the same wire protocol.
     const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
 
     // Act — push a payload whose volume is well above the [0,1] range.
     sender.postMessage({
-      type: PREFERENCES_SYNC_EVENT_TYPE,
+      type: SETTINGS_SYNC_EVENT_TYPE,
       state: { soundVolume: 50 },
     })
 
     // Assert — the receiver applies the CLAMPED value, never the raw 50.
-    expect(windowB.getState().preferences.soundVolume).toBe(1)
+    expect(windowB.getState().settings.soundVolume).toBe(1)
   })
 
   it('clamps and heals out-of-range inbound BrainDump fields when applying a raw broadcast', () => {
     // Arrange — a window plus a raw sender on the same wire protocol.
     const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
 
     // Act — push a payload whose BrainDump fields are out of range / off-shape.
     sender.postMessage({
-      type: PREFERENCES_SYNC_EVENT_TYPE,
+      type: SETTINGS_SYNC_EVENT_TYPE,
       state: {
         braindumpFontFamily: 'comic-sans',
         braindumpFontSize: 99,
@@ -257,9 +267,9 @@ describe('preferences cross-window sync', () => {
     // Assert — the receiver applies the HEALED family (the default 'mono'),
     // CLAMPED size (24, the max), and HEALED color (the default token), never
     // the raw 'comic-sans' / 99 / 'red'.
-    expect(windowB.getState().preferences.braindumpFontFamily).toBe('mono')
-    expect(windowB.getState().preferences.braindumpFontSize).toBe(24)
-    expect(windowB.getState().preferences.braindumpTextColor).toBe(
+    expect(windowB.getState().settings.braindumpFontFamily).toBe('mono')
+    expect(windowB.getState().settings.braindumpFontSize).toBe(24)
+    expect(windowB.getState().settings.braindumpTextColor).toBe(
       'var(--foreground)',
     )
   })
@@ -269,41 +279,41 @@ describe('preferences cross-window sync', () => {
     // carries ONLY the legacy completionSound flag (no soundMoments at all),
     // exactly what an old cached web tab on the same origin would broadcast.
     const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
 
     // Act — push the cross-version legacy payload.
     sender.postMessage({
-      type: PREFERENCES_SYNC_EVENT_TYPE,
+      type: SETTINGS_SYNC_EVENT_TYPE,
       state: { completionSound: true },
     })
 
     // Assert — the legacy "completion sound ON" intent survives as complete:true
     // instead of being defaulted to false by the schema (the fold mirrors the
     // persisted migratePersistedState path).
-    expect(windowB.getState().preferences.soundMoments.complete).toBe(true)
+    expect(windowB.getState().settings.soundMoments.complete).toBe(true)
   })
 
   it('ignores a malformed inbound payload, leaving the receiver state unchanged', () => {
     // Arrange
     const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
-    const before = windowB.getState().preferences
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
+    const before = windowB.getState().settings
 
     // Act — a wrong-typed volume must fail validation wholesale.
     sender.postMessage({
-      type: PREFERENCES_SYNC_EVENT_TYPE,
+      type: SETTINGS_SYNC_EVENT_TYPE,
       state: { soundVolume: 'loud' },
     })
 
     // Assert — nothing was applied.
-    expect(windowB.getState().preferences).toEqual(before)
+    expect(windowB.getState().settings).toEqual(before)
   })
 
   it('ignores a message with the wrong type tag', () => {
     // Arrange
     const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(PREFERENCES_SYNC_CHANNEL_NAME)
-    const before = windowB.getState().preferences
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
+    const before = windowB.getState().settings
 
     // Act — a foreign message on the same channel name.
     sender.postMessage({
@@ -312,21 +322,21 @@ describe('preferences cross-window sync', () => {
     })
 
     // Assert
-    expect(windowB.getState().preferences).toEqual(before)
+    expect(windowB.getState().settings).toEqual(before)
   })
 
-  it('does not re-broadcast an applied snapshot (hydratePreferences is the loop guard)', () => {
+  it('does not re-broadcast an applied snapshot (hydrateUserSettings is the loop guard)', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
-    // Act — hydratePreferences is the APPLY action, not a user toggle, so it must
+    // Act — hydrateUserSettings is the APPLY action, not a user toggle, so it must
     // never trigger an outgoing broadcast (otherwise windows would echo forever).
     windowA.dispatch(
-      hydratePreferences({ ...initialState, soundTimbre: 'paper' }),
+      hydrateUserSettings({ ...initialState, soundTimbre: 'paper' }),
     )
 
     // Assert — window B never received it; it keeps its own default timbre.
-    expect(windowB.getState().preferences.soundTimbre).toBe('felt')
+    expect(windowB.getState().settings.soundTimbre).toBe('felt')
   })
 })

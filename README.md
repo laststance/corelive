@@ -154,9 +154,9 @@ Beyond the web app, the macOS build adds native surfaces:
 
 - **Floating Navigator** — a compact, always-available quick-capture window
 - **BrainDump** — a distraction-light freeform capture window
-- **Settings** — a native preferences window
+- **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
-- **Always-on-top** — per-window keep-on-top preference (Floating on by default)
+- **Always-on-top** — per-window keep-on-top setting (Floating on by default)
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default)
 - **Deep links** — `corelive://` URLs open the app

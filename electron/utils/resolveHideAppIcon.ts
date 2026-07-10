@@ -1,5 +1,5 @@
 /**
- * Dot-path of the persisted macOS "hide Dock icon" preference in config.json.
+ * Dot-path of the persisted macOS "hide Dock icon" setting in config.json.
  * Single-sourced so the boot-time read (resolveHideAppIcon) and the IPC handler
  * write (settings:setHideAppIcon) can never drift apart.
  */

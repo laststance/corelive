@@ -15,7 +15,7 @@ import type {
   WindowState,
   DisplayInfo,
   NotificationOptions,
-  NotificationPreferences,
+  NotificationSettingsState,
   TrayIconState,
   OAuthProvider,
   OAuthResult,
@@ -93,12 +93,18 @@ export interface ElectronAPI {
       body: string,
       options?: NotificationOptions,
     ) => Promise<{ id: string } | null>
-    /** Get notification preferences */
-    getPreferences: () => Promise<NotificationPreferences | null>
-    /** Update notification preferences */
+    /** Get notification settings */
+    getSettings: () => Promise<NotificationSettingsState | null>
+    /** Update notification settings */
+    updateSettings: (
+      settings: Partial<NotificationSettingsState>,
+    ) => Promise<NotificationSettingsState | null>
+    /** @deprecated Use getSettings; retained for hosted-renderer version skew. */
+    getPreferences: () => Promise<NotificationSettingsState | null>
+    /** @deprecated Use updateSettings; retained for hosted-renderer version skew. */
     updatePreferences: (
-      preferences: Partial<NotificationPreferences>,
-    ) => Promise<boolean>
+      settings: Partial<NotificationSettingsState>,
+    ) => Promise<NotificationSettingsState | null>
     /** Clear all active notifications */
     clearAll: () => Promise<void>
     /** Clear specific notification */
@@ -313,13 +319,13 @@ export interface ElectronAPI {
     getVisibleOnAllWorkspaces: () => Promise<boolean>
     /** Persist and apply whether both panels follow macOS Spaces. */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
-    /** Read FloatingNavigator's always-on-top preference (effective state). */
+    /** Read FloatingNavigator's always-on-top setting (effective state). */
     getFloatingNavigatorAlwaysOnTop: () => Promise<boolean>
-    /** Persist and apply FloatingNavigator's always-on-top preference. */
+    /** Persist and apply FloatingNavigator's always-on-top setting. */
     setFloatingNavigatorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
-    /** Read BrainDump's always-on-top preference (config-backed, default off). */
+    /** Read BrainDump's always-on-top setting (config-backed, default off). */
     getBrainDumpAlwaysOnTop: () => Promise<boolean>
-    /** Persist and apply BrainDump's always-on-top preference. */
+    /** Persist and apply BrainDump's always-on-top setting. */
     setBrainDumpAlwaysOnTop: (enabled: boolean) => Promise<boolean>
     /** Read FloatingNavigator's global toggle accelerator (empty when disabled). */
     getFloatingNavigatorShortcut: () => Promise<string>
@@ -457,7 +463,7 @@ export interface ElectronAPI {
 
   /**
    * Electron-specific settings management.
-   * Controls app behavior like dock visibility and startup preferences.
+   * Controls app behavior like dock visibility and startup settings.
    */
   settings?: {
     /**

@@ -87,7 +87,7 @@ export const electronSettingsSlice = createSlice({
 
     /**
      * Resets all settings to their default values.
-     * Useful for clearing user preferences.
+     * Useful for clearing user settings.
      *
      * @param _state - Current state (unused, returns new state)
      */

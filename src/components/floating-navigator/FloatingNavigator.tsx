@@ -541,7 +541,7 @@ export const FloatingNavigator = function FloatingNavigator({
   }
 
   // Seed the pin button from the window's real state on mount. The button no
-  // longer assumes the window launched pinned: the always-on-top preference now
+  // longer assumes the window launched pinned: the always-on-top setting now
   // survives relaunch, so a user who turned it off must see the button reflect
   // that. Initialize only — the sibling effect below keeps it live (§6d).
   useInitialEffect(() => {
@@ -566,7 +566,7 @@ export const FloatingNavigator = function FloatingNavigator({
     }
   })
 
-  // §6d cross-window sync: keep-on-top is one OS-level preference shared across
+  // §6d cross-window sync: keep-on-top is one OS-level setting shared across
   // windows, so a change made from ANOTHER surface (the Settings "Keep on top"
   // toggle) must live-update this window's own pin button — without it the button
   // would lie (e.g. show "pinned" over a now-unpinned window) until relaunch. The

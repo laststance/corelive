@@ -34,7 +34,7 @@ export interface ThemeAxis {
   mode: ThemeModeChoice
   /** True when the OS-managed System theme is selected. */
   isSystem: boolean
-  /** The concrete light/dark actually applied (System → the OS preference). */
+  /** The concrete light/dark actually applied (System → the OS setting). */
   resolvedMode: ThemeMode
   /** The concrete theme id currently applied (e.g. `harbor-dark`). */
   activeId: ThemeId

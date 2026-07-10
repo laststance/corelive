@@ -139,7 +139,7 @@ select {
 /* Increase-contrast mode (macOS "Increase Contrast", Windows High Contrast).
  * Strengthens node circle strokes (2 → 3) and the focus indicator (3 → 4) so
  * the skill-tree constellation stays clearly readable for users who rely on
- * the OS accessibility preference. WCAG 2.2 SC 1.4.11 (non-text contrast)
+ * the OS accessibility setting. WCAG 2.2 SC 1.4.11 (non-text contrast)
  * does not require this, but macOS HIG recommends honoring it.
  *
  * `forced-colors: active` covers Windows High Contrast Mode (which does NOT

@@ -990,7 +990,7 @@ async function createWindow(): Promise<void> {
     // E2E-only: expose a hook so the Playwright Electron suite can open the
     // Settings window — the only renderer that still carries the full
     // `electronAPI` bridge after main-window retirement (T18). The app menu's
-    // "Preferences…" item lives in the macOS-only app menu, but the Electron
+    // "Settings…" item lives in the macOS-only app menu, but the Electron
     // E2E suite runs on Linux+xvfb where that menu is never built, so specs
     // cannot drive Settings open through the menu. Gated on `isTestEnvironment`
     // (NODE_ENV==='test'), so it is absent from every production build.
@@ -1291,7 +1291,7 @@ function setupIPCHandlers(): void {
     },
   )
 
-  // Always-on-top preference (persisted Settings toggles, per window). The
+  // Always-on-top setting (persisted Settings toggles, per window). The
   // floating setter writes config + window-state + the live window atomically
   // inside WindowManager — so relaunch honors it — which is why these handlers
   // only delegate and never touch WindowStateManager directly.
@@ -1642,17 +1642,17 @@ function setupIPCHandlers(): void {
     return notif ? { id: String(Date.now()) } : null
   })
 
-  typedHandle('notification-get-preferences', () => {
+  typedHandle('notification-get-settings', () => {
     if (notificationManager) {
-      return notificationManager.getPreferences()
+      return notificationManager.getSettings()
     }
     return null
   })
 
-  typedHandle('notification-update-preferences', (_event, preferences) => {
+  typedHandle('notification-update-settings', (_event, settings) => {
     if (notificationManager) {
-      notificationManager.updatePreferences(preferences)
-      return notificationManager.getPreferences()
+      notificationManager.updateSettings(settings)
+      return notificationManager.getSettings()
     }
     return null
   })
@@ -2484,7 +2484,7 @@ app.on('window-all-closed', () => {
  * Application cleanup handler.
  *
  * Ensures graceful shutdown by:
- * 1. Saving user state (window positions, preferences)
+ * 1. Saving user state (window positions, settings)
  * 2. Closing database connections properly
  * 3. Removing system integrations (shortcuts, tray icons)
  * 4. Stopping background processes

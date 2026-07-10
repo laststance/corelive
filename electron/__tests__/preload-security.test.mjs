@@ -6,22 +6,31 @@ import { sanitizeData } from '../preload-floating.ts'
 // Mock Electron modules. Defined via vi.hoisted so the (hoisted) vi.mock factory
 // can reference them without a TDZ error — needed now that a real preload module
 // (preload-floating) is imported through this mock for the sanitizer test.
-const { mockIpcRenderer, mockContextBridge } = vi.hoisted(() => ({
-  mockIpcRenderer: {
-    invoke: vi.fn(),
-    on: vi.fn(),
-    removeListener: vi.fn(),
-    removeAllListeners: vi.fn(),
-  },
-  mockContextBridge: {
-    exposeInMainWorld: vi.fn(),
-  },
-}))
+const { mockIpcRenderer, mockContextBridge, exposedWorlds } = vi.hoisted(() => {
+  const worlds = new Map()
+
+  return {
+    mockIpcRenderer: {
+      invoke: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      removeAllListeners: vi.fn(),
+    },
+    mockContextBridge: {
+      exposeInMainWorld: vi.fn((worldName, api) => {
+        worlds.set(worldName, api)
+      }),
+    },
+    exposedWorlds: worlds,
+  }
+})
 
 vi.mock('electron', () => ({
   contextBridge: mockContextBridge,
   ipcRenderer: mockIpcRenderer,
 }))
+
+await import('../preload.ts')
 
 describe('Preload Script Security Tests', () => {
   beforeEach(() => {
@@ -342,6 +351,88 @@ describe('Preload Script Security Tests', () => {
   })
 
   describe('Context Bridge Security', () => {
+    it('keeps older hosted renderers reading notification settings through the current IPC channel', async () => {
+      // Arrange
+      const electronAPI = exposedWorlds.get('electronAPI')
+      const savedSettings = {
+        enabled: true,
+        taskCreated: true,
+        taskCompleted: true,
+        taskUpdated: false,
+        taskDeleted: false,
+        sound: false,
+        showInTray: true,
+        autoHide: false,
+        autoHideDelay: 5000,
+        position: 'topRight',
+      }
+      mockIpcRenderer.invoke.mockResolvedValue(savedSettings)
+
+      // Act
+      const currentResult = await electronAPI.notifications.getSettings()
+      const legacyResult = await electronAPI.notifications.getPreferences()
+
+      // Assert
+      expect(electronAPI.notifications.getSettings).toBe(
+        electronAPI.notifications.getPreferences,
+      )
+      expect(currentResult).toEqual(savedSettings)
+      expect(legacyResult).toEqual(savedSettings)
+      expect(mockIpcRenderer.invoke).toHaveBeenNthCalledWith(
+        1,
+        'notification-get-settings',
+      )
+      expect(mockIpcRenderer.invoke).toHaveBeenNthCalledWith(
+        2,
+        'notification-get-settings',
+      )
+    })
+
+    it('keeps older hosted renderers updating notification settings through the current IPC channel', async () => {
+      // Arrange
+      const electronAPI = exposedWorlds.get('electronAPI')
+      const settingsUpdate = {
+        enabled: false,
+        sound: true,
+      }
+      const savedSettings = {
+        enabled: false,
+        taskCreated: true,
+        taskCompleted: true,
+        taskUpdated: false,
+        taskDeleted: false,
+        sound: true,
+        showInTray: true,
+        autoHide: false,
+        autoHideDelay: 5000,
+        position: 'topRight',
+      }
+      mockIpcRenderer.invoke.mockResolvedValue(savedSettings)
+
+      // Act
+      const currentResult =
+        await electronAPI.notifications.updateSettings(settingsUpdate)
+      const legacyResult =
+        await electronAPI.notifications.updatePreferences(settingsUpdate)
+
+      // Assert
+      expect(electronAPI.notifications.updateSettings).toBe(
+        electronAPI.notifications.updatePreferences,
+      )
+      expect(currentResult).toEqual(savedSettings)
+      expect(legacyResult).toEqual(savedSettings)
+      expect(mockIpcRenderer.invoke).toHaveBeenNthCalledWith(
+        1,
+        'notification-update-settings',
+        settingsUpdate,
+      )
+      expect(mockIpcRenderer.invoke).toHaveBeenNthCalledWith(
+        2,
+        'notification-update-settings',
+        settingsUpdate,
+      )
+    })
+
     it('should expose only whitelisted APIs to renderer', () => {
       // Simulate the contextBridge.exposeInMainWorld call
       const mockAPI = {

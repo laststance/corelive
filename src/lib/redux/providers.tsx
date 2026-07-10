@@ -34,6 +34,12 @@ import { Provider } from 'react-redux'
 
 import { store } from './store'
 
+// Capture the server-rendered default before the storage middleware's hydration
+// microtask runs. React Redux uses this for the first browser render, then
+// immediately publishes the restored localStorage state without losing an
+// update that completed before descendant subscriptions were attached.
+const serverState = store.getState()
+
 /**
  * Props for ReduxProvider component.
  */
@@ -62,5 +68,9 @@ interface ReduxProviderProps {
 export const ReduxProvider = function ReduxProvider({
   children,
 }: ReduxProviderProps): ReactNode {
-  return <Provider store={store}>{children}</Provider>
+  return (
+    <Provider store={store} serverState={serverState}>
+      {children}
+    </Provider>
+  )
 }

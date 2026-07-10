@@ -6,7 +6,7 @@ const isProtectedRoute = createRouteMatcher([
   '/skill-tree(.*)',
   '/braindump(.*)',
   // /settings is web-reachable (D15) but still requires auth like the rest of
-  // the app — the preferences it edits belong to a signed-in user's experience.
+  // the app — the settings it edits belong to a signed-in user's experience.
   '/settings(.*)',
   // NOTE: /floating-navigator is intentionally NOT protected. The Electron
   // companion renders a signed-out "front door" card on this route so the

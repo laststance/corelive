@@ -18,9 +18,9 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { describe, expect, it, vi } from 'vitest'
 
-import preferencesReducer, {
+import userSettingsReducer, {
   initialState,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 import type { Todo } from './TodoItem'
 import { TodoItem } from './TodoItem'
@@ -40,7 +40,7 @@ const PENDING_TODO: Todo = {
 }
 
 /**
- * Renders a TodoItem under a real preferences store so the retain-mode branch is
+ * Renders a TodoItem under a real settings store so the retain-mode branch is
  * exercised exactly as in the app.
  * @param todo - The row to render.
  * @param retainCompletedInList - 居残りモード on/off.
@@ -55,9 +55,9 @@ function renderTodoItem(
   isTogglePending = false,
 ) {
   const store = configureStore({
-    reducer: { preferences: preferencesReducer },
+    reducer: { settings: userSettingsReducer },
     preloadedState: {
-      preferences: { ...initialState, retainCompletedInList },
+      settings: { ...initialState, retainCompletedInList },
     },
   })
   render(

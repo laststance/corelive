@@ -177,7 +177,7 @@ export function replaceLineAtIndex(
 
 /**
  * Remove one line entirely, joining the surrounding lines. Used by the
- * clear-on-complete preference: once a finished line's undo window closes, the
+ * clear-on-complete setting: once a finished line's undo window closes, the
  * `- [x] <title>` line is dropped so the BrainDump scratchpad stays clean.
  * Returns the original text for out-of-range indices, mirroring
  * `replaceLineAtIndex`.

@@ -1,13 +1,13 @@
 /**
- * Preferences schema — the single source of truth (D2) for the core user
- * preferences shape. `DEFAULT_PREFERENCES` is `PreferencesStateSchema.parse({})`
- * and `PreferencesState` is `z.infer` of this schema, so the default values, the
+ * Settings schema — the single source of truth (D2) for the core user
+ * settings shape. `DEFAULT_SETTINGS` is `UserSettingsStateSchema.parse({})`
+ * and `UserSettingsState` is `z.infer` of this schema, so the default values, the
  * runtime type, and cross-window validation can never drift apart. Used by the
  * constants module (for the default) and the cross-window sync (for validating +
  * clamping inbound payloads). Zod is already the project's validation idiom (oRPC
  * inputs), so this stays consistent.
  *
- * @module lib/schemas/preferences
+ * @module lib/schemas/settings
  */
 import { z } from 'zod'
 
@@ -53,13 +53,13 @@ const SoundMomentsSchema = z
   } satisfies Record<SoundMomentId, boolean>)
 
 /**
- * The core user-preferences schema. Every field has a default so `parse({})`
+ * The core user-settings schema. Every field has a default so `parse({})`
  * yields the full default state and a smaller-but-valid legacy payload (only the
  * original two booleans) is accepted with the new fields defaulted — never
  * rejected. `soundVolume` clamps an out-of-range NUMBER into [0,1] but still
  * rejects a non-number (so a malformed sync payload fails wholesale).
  */
-export const PreferencesStateSchema = z.object({
+export const UserSettingsStateSchema = z.object({
   /** Legacy single completion-sound toggle. RETAINED as a read-only fallback that
    * the `complete`-moment selector migrates from; the new UI writes soundMoments. */
   completionSound: z.boolean().default(false),
@@ -134,5 +134,5 @@ export const PreferencesStateSchema = z.object({
     .catch(DEFAULT_BRAINDUMP_TOAST_DURATION_MS),
 })
 
-/** The validated core user-preferences shape (inferred from the schema SSoT). */
-export type PreferencesState = z.infer<typeof PreferencesStateSchema>
+/** The validated core user-settings shape (inferred from the schema SSoT). */
+export type UserSettingsState = z.infer<typeof UserSettingsStateSchema>

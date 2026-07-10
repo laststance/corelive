@@ -88,7 +88,7 @@ export class ShortcutManager {
   /** Notification manager for user feedback */
   private notificationManager: NotificationManager | null
 
-  /** Config manager for user preferences */
+  /** Config manager for user settings */
   private configManager: ConfigManager | null
 
   /** Track registered shortcuts */

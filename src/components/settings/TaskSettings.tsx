@@ -6,19 +6,19 @@ import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import {
   selectRetainCompletedInList,
   setRetainCompletedInList,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 /**
- * Web-common TASKS preferences — the 居残りモード toggle, which previously floated
- * with no header inside the old `PreferencesSettings` card. Now rendered under the
- * `TASKS` section header (`src/app/settings/page.tsx`). Writes the `preferences`
+ * Web-common TASKS settings — the 居残りモード toggle, which previously floated
+ * with no header inside the old common settings card. Now rendered under the
+ * `TASKS` section header (`src/app/settings/page.tsx`). Writes the `settings`
  * Redux slice (persisted + synced across windows).
  *
- * @returns The Tasks preferences controls.
+ * @returns The Tasks settings controls.
  * @example
- * <SettingsSection label="Tasks"><TaskPreferences /></SettingsSection>
+ * <SettingsSection label="Tasks"><TaskSettings /></SettingsSection>
  */
-export const TaskPreferences = function TaskPreferences() {
+export const TaskSettings = function TaskSettings() {
   const dispatch = useAppDispatch()
   const retainCompletedInList = useAppSelector(selectRetainCompletedInList)
 
@@ -50,4 +50,4 @@ export const TaskPreferences = function TaskPreferences() {
   )
 }
 
-export default TaskPreferences
+export default TaskSettings

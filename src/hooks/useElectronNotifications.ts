@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from 'react'
 
+import { getNotificationSettings } from '@/lib/utils/getNotificationSettings'
+import { updateNotificationSettings } from '@/lib/utils/updateNotificationSettings'
+
 import { log } from '../lib/logger'
 
 /**
- * Subset of NotificationPreferences from electron/types/ipc.ts.
+ * Subset of NotificationSettingsState from electron/types/ipc.ts.
  * The full IPC type includes additional fields (taskReminders, dueDateAlerts,
  * achievementNotifications, quietHours*, etc.) that this hook doesn't use.
- * We only track the preferences relevant to task-based notifications.
+ * We only track the settings relevant to task-based notifications.
  */
-interface NotificationPreferences {
+interface NotificationSettingsState {
   enabled: boolean
   taskCreated: boolean
   taskCompleted: boolean
@@ -25,8 +28,8 @@ interface NotificationShowOptions {
   urgency?: 'normal' | 'critical' | 'low'
 }
 
-/** Default notification preferences */
-const DEFAULT_PREFS: NotificationPreferences = {
+/** Default notification settings */
+const DEFAULT_SETTINGS: NotificationSettingsState = {
   enabled: true,
   taskCreated: true,
   taskCompleted: true,
@@ -38,34 +41,41 @@ const DEFAULT_PREFS: NotificationPreferences = {
 interface UseElectronNotificationsReturn {
   isSupported: boolean
   isEnabled: boolean
-  preferences: NotificationPreferences | null
+  settings: NotificationSettingsState | null
   activeCount: number
   showNotification: (
     title: string,
     body: string,
     options?: NotificationShowOptions,
   ) => Promise<void>
-  updatePreferences: (
-    preferences: Partial<NotificationPreferences>,
+  updateSettings: (
+    settings: Partial<NotificationSettingsState>,
   ) => Promise<void>
   clearAll: () => Promise<void>
   clearNotification: (tag: string) => Promise<void>
   refreshActiveCount: () => Promise<void>
 }
 
-function normalizePreferences(
-  prefs: Partial<NotificationPreferences> & {
+/** Coalesces the older notification payload when initial hook hydration receives missing task toggles.
+ * @param storedSettings - Settings returned by either generation of the preload bridge.
+ * @returns The complete task-notification settings used by this hook.
+ * @example
+ * normalizeSettings({ enabled: true, sound: false }) // => task toggles filled from defaults
+ */
+function normalizeSettings(
+  storedSettings: Partial<NotificationSettingsState> & {
     enabled: boolean
     sound: boolean
   },
-): NotificationPreferences {
+): NotificationSettingsState {
   return {
-    enabled: prefs.enabled,
-    sound: prefs.sound,
-    taskCreated: prefs.taskCreated ?? DEFAULT_PREFS.taskCreated,
-    taskCompleted: prefs.taskCompleted ?? DEFAULT_PREFS.taskCompleted,
-    taskUpdated: prefs.taskUpdated ?? DEFAULT_PREFS.taskUpdated,
-    taskDeleted: prefs.taskDeleted ?? DEFAULT_PREFS.taskDeleted,
+    enabled: storedSettings.enabled,
+    sound: storedSettings.sound,
+    taskCreated: storedSettings.taskCreated ?? DEFAULT_SETTINGS.taskCreated,
+    taskCompleted:
+      storedSettings.taskCompleted ?? DEFAULT_SETTINGS.taskCompleted,
+    taskUpdated: storedSettings.taskUpdated ?? DEFAULT_SETTINGS.taskUpdated,
+    taskDeleted: storedSettings.taskDeleted ?? DEFAULT_SETTINGS.taskDeleted,
   }
 }
 
@@ -76,8 +86,9 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
   const isSupported = isElectron
 
   const [isEnabled, setIsEnabled] = useState(false)
-  const [preferences, setPreferences] =
-    useState<NotificationPreferences | null>(null)
+  const [settings, setSettings] = useState<NotificationSettingsState | null>(
+    null,
+  )
   const [activeCount, setActiveCount] = useState(0)
 
   const refreshActiveCount = async () => {
@@ -109,22 +120,24 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
     }
   }
 
-  const updatePreferences = async (
-    newPreferences: Partial<NotificationPreferences>,
+  const updateSettings = async (
+    newSettings: Partial<NotificationSettingsState>,
   ) => {
     if (!isElectron || !window.electronAPI?.notifications) return
 
     try {
-      const currentPrefs = preferences ?? DEFAULT_PREFS
-      const updatedPrefs = { ...currentPrefs, ...newPreferences }
-      const success =
-        await window.electronAPI.notifications.updatePreferences(newPreferences)
-      if (success) {
-        setPreferences(updatedPrefs)
-        setIsEnabled(updatedPrefs.enabled)
+      const currentSettings = settings ?? DEFAULT_SETTINGS
+      const updatedSettings = { ...currentSettings, ...newSettings }
+      const savedSettings = await updateNotificationSettings(
+        window.electronAPI.notifications,
+        newSettings,
+      )
+      if (savedSettings) {
+        setSettings(updatedSettings)
+        setIsEnabled(updatedSettings.enabled)
       }
     } catch (error) {
-      log.error('Failed to update notification preferences:', error)
+      log.error('Failed to update notification settings:', error)
       throw error
     }
   }
@@ -163,9 +176,9 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
 
     void (async () => {
       try {
-        const [enabled, prefs, count] = await Promise.all([
+        const [enabled, storedSettings, count] = await Promise.all([
           electronAPI.notifications.isEnabled(),
-          electronAPI.notifications.getPreferences(),
+          getNotificationSettings(electronAPI.notifications),
           electronAPI.notifications.getActiveCount(),
         ])
 
@@ -174,8 +187,8 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
         }
 
         setIsEnabled(enabled)
-        if (prefs) {
-          setPreferences(normalizePreferences(prefs))
+        if (storedSettings) {
+          setSettings(normalizeSettings(storedSettings))
         }
         setActiveCount(count)
       } catch (error) {
@@ -195,10 +208,10 @@ export function useElectronNotifications(): UseElectronNotificationsReturn {
   return {
     isSupported,
     isEnabled,
-    preferences,
+    settings,
     activeCount,
     showNotification,
-    updatePreferences,
+    updateSettings,
     clearAll,
     clearNotification,
     refreshActiveCount,

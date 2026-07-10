@@ -2,26 +2,23 @@ import { createStorageMiddleware } from '@laststance/redux-storage-middleware'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { type PreferencesState } from '@/lib/schemas/preferences'
-
 import {
   migratePersistedState,
   STORAGE_SCHEMA_VERSION,
 } from './migratePersistedState'
-import electronSettingsReducer, {
-  type ElectronSettingsState,
-} from './slices/electronSettingsSlice'
-import preferencesReducer, { setSoundMoment } from './slices/preferencesSlice'
+import electronSettingsReducer from './slices/electronSettingsSlice'
+import userSettingsReducer, { setSoundMoment } from './slices/settingsSlice'
 
-/** Wraps a deliberately-partial legacy blob as the untrusted persisted shape
- * migrate sees at runtime. The cast mirrors the `stateWith` idiom in
- * preferencesSlice.test.ts: today's complete PreferencesState type does not admit
- * a pre-palette blob, yet that under-specified shape is exactly what we test. */
-function asPersistedState(blob: {
-  electronSettings?: ElectronSettingsState
-  preferences?: Partial<PreferencesState>
-}): Parameters<typeof migratePersistedState>[0] {
-  return blob as Parameters<typeof migratePersistedState>[0]
+/** Preserves a deliberately partial legacy blob as the exact untrusted shape the migration accepts.
+ * @param blob - A persisted root that may omit newer user-setting fields.
+ * @returns The same blob, typed for the migration boundary.
+ * @example
+ * asPersistedState({ preferences: { completionSound: true } })
+ */
+function asPersistedState(
+  blob: Parameters<typeof migratePersistedState>[0],
+): Parameters<typeof migratePersistedState>[0] {
+  return blob
 }
 
 /**
@@ -45,7 +42,7 @@ describe('migratePersistedState (orchestrator)', () => {
     const migrated = migratePersistedState(legacyPersistedState, 0)
 
     // Assert — completion cue materialized AND window settings survive intact
-    expect(migrated.preferences?.soundMoments).toEqual({
+    expect(migrated.settings?.soundMoments).toEqual({
       'task-create': false,
       complete: true,
       clear: false,
@@ -55,12 +52,13 @@ describe('migratePersistedState (orchestrator)', () => {
       showInMenuBar: false,
       startAtLogin: true,
     })
+    expect(migrated).not.toHaveProperty('preferences')
   })
 
   it('leaves an already-current blob untouched (returns the same reference)', () => {
     // Arrange — stored at the current version, so no migration should run
     const currentPersistedState = asPersistedState({
-      preferences: { completionSound: true },
+      settings: { completionSound: true },
     })
 
     // Act
@@ -73,7 +71,7 @@ describe('migratePersistedState (orchestrator)', () => {
     expect(migrated).toBe(currentPersistedState)
   })
 
-  it('passes a blob with no preferences slice straight through', () => {
+  it('passes a blob with no settings slice straight through', () => {
     // Arrange
     const electronOnlyState = asPersistedState({
       electronSettings: {
@@ -90,7 +88,63 @@ describe('migratePersistedState (orchestrator)', () => {
     expect(migrated).toBe(electronOnlyState)
   })
 
-  it('does not add soundMoments when the legacy completion sound was off', () => {
+  it('restores defaults instead of throwing when the persisted root is null', () => {
+    // Arrange — localStorage JSON can be syntactically valid while its state root is null.
+    const corruptRoot = null as unknown as Parameters<
+      typeof migratePersistedState
+    >[0]
+
+    // Act
+    const migrateCorruptRoot = () => migratePersistedState(corruptRoot, 1)
+
+    // Assert — an empty root lets deepMerge seed reducer defaults safely.
+    expect(migrateCorruptRoot).not.toThrow()
+    expect(migrateCorruptRoot()).toEqual({})
+  })
+
+  it('drops a corrupt legacy settings slice without losing electronSettings', () => {
+    // Arrange — only the user-settings payload is corrupt; native settings are healthy.
+    const corruptLegacyState = {
+      electronSettings: {
+        hideAppIcon: true,
+        showInMenuBar: false,
+        startAtLogin: true,
+      },
+      preferences: 'corrupt',
+    } as unknown as Parameters<typeof migratePersistedState>[0]
+
+    // Act
+    const migrated = migratePersistedState(corruptLegacyState, 1)
+
+    // Assert — the corrupt slice resets while unrelated saved state survives.
+    expect(migrated).toEqual({
+      electronSettings: {
+        hideAppIcon: true,
+        showInMenuBar: false,
+        startAtLogin: true,
+      },
+    })
+  })
+
+  it('falls back to a valid legacy slice when the canonical settings slice is corrupt', () => {
+    // Arrange — an interrupted prior write left the new key corrupt but the old key intact.
+    const recoverableState = {
+      settings: [],
+      preferences: { completionSound: false, retainCompletedInList: true },
+    } as unknown as Parameters<typeof migratePersistedState>[0]
+
+    // Act
+    const migrated = migratePersistedState(recoverableState, 1)
+
+    // Assert — the valid legacy value wins and only the canonical key remains.
+    expect(migrated.settings).toMatchObject({
+      completionSound: false,
+      retainCompletedInList: true,
+    })
+    expect(migrated).not.toHaveProperty('preferences')
+  })
+
+  it('moves a v0 setting without fabricating sound moments when the legacy completion sound was off', () => {
     // Arrange
     const legacyOffState = asPersistedState({
       preferences: { completionSound: false, retainCompletedInList: true },
@@ -99,9 +153,46 @@ describe('migratePersistedState (orchestrator)', () => {
     // Act
     const migrated = migratePersistedState(legacyOffState, 0)
 
-    // Assert — untouched, no soundMoments fabricated
-    expect(migrated).toBe(legacyOffState)
-    expect(migrated.preferences).not.toHaveProperty('soundMoments')
+    // Assert — root key moved, but no soundMoments were fabricated
+    expect(migrated.settings).not.toHaveProperty('soundMoments')
+    expect(migrated.settings?.retainCompletedInList).toBe(true)
+    expect(migrated).not.toHaveProperty('preferences')
+  })
+
+  it('moves every v1 user setting to the v2 root key without changing values', () => {
+    // Arrange
+    const versionOneState = asPersistedState({
+      electronSettings: {
+        hideAppIcon: true,
+        showInMenuBar: false,
+        startAtLogin: true,
+      },
+      preferences: {
+        completionSound: false,
+        retainCompletedInList: true,
+        soundMoments: { 'task-create': true, complete: false, clear: true },
+        soundTimbre: 'wood',
+        soundVolume: 0.3,
+      },
+    })
+
+    // Act
+    const migrated = migratePersistedState(versionOneState, 1)
+
+    // Assert
+    expect(migrated.settings).toMatchObject({
+      completionSound: false,
+      retainCompletedInList: true,
+      soundMoments: { 'task-create': true, complete: false, clear: true },
+      soundTimbre: 'wood',
+      soundVolume: 0.3,
+    })
+    expect(migrated.electronSettings).toEqual({
+      hideAppIcon: true,
+      showInMenuBar: false,
+      startAtLogin: true,
+    })
+    expect(migrated).not.toHaveProperty('preferences')
   })
 })
 
@@ -119,12 +210,12 @@ describe('storage rehydrate migration (integration)', () => {
   async function buildAndRehydrateStore() {
     const rootReducer = combineReducers({
       electronSettings: electronSettingsReducer,
-      preferences: preferencesReducer,
+      settings: userSettingsReducer,
     })
     const { middleware, reducer, api } = createStorageMiddleware({
       rootReducer,
       key: TEST_STORAGE_KEY,
-      slices: ['electronSettings', 'preferences'],
+      slices: ['electronSettings', 'settings'],
       version: STORAGE_SCHEMA_VERSION,
       migrate: migratePersistedState,
     })
@@ -167,7 +258,7 @@ describe('storage rehydrate migration (integration)', () => {
     const store = await buildAndRehydrateStore()
 
     // Assert — the complete cue is now ON and window settings are intact
-    expect(store.getState().preferences.soundMoments.complete).toBe(true)
+    expect(store.getState().settings.soundMoments.complete).toBe(true)
     expect(store.getState().electronSettings).toEqual({
       hideAppIcon: true,
       showInMenuBar: false,
@@ -202,10 +293,43 @@ describe('storage rehydrate migration (integration)', () => {
     const store = await buildAndRehydrateStore()
 
     // Assert — every moment the user set survives the version bump untouched
-    expect(store.getState().preferences.soundMoments).toEqual({
+    expect(store.getState().settings.soundMoments).toEqual({
       'task-create': true,
       complete: true,
       clear: true,
+    })
+    expect(store.getState().electronSettings).toEqual({
+      hideAppIcon: true,
+      showInMenuBar: false,
+      startAtLogin: true,
+    })
+  })
+
+  it('rehydrates defaults for a corrupt user slice without wiping electronSettings', async () => {
+    // Arrange — the v1 user slice is corrupt while the native settings remain valid.
+    window.localStorage.setItem(
+      TEST_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        state: {
+          electronSettings: {
+            hideAppIcon: true,
+            showInMenuBar: false,
+            startAtLogin: true,
+          },
+          preferences: 'corrupt',
+        },
+      }),
+    )
+
+    // Act
+    const store = await buildAndRehydrateStore()
+
+    // Assert — Redux defaults replace only the corrupt slice.
+    expect(store.getState().settings.soundMoments).toEqual({
+      'task-create': false,
+      complete: false,
+      clear: false,
     })
     expect(store.getState().electronSettings).toEqual({
       hideAppIcon: true,
@@ -225,7 +349,7 @@ describe('storage rehydrate migration (integration)', () => {
     )
     const store = await buildAndRehydrateStore()
     // Precondition — the seal materialized the legacy intent into soundMoments
-    expect(store.getState().preferences.soundMoments.complete).toBe(true)
+    expect(store.getState().settings.soundMoments.complete).toBe(true)
 
     // Act — toggle a DIFFERENT moment on. Before the seal, this reducer read
     // soundMoments as absent and reseeded from the all-OFF default, silently
@@ -233,7 +357,7 @@ describe('storage rehydrate migration (integration)', () => {
     store.dispatch(setSoundMoment({ moment: 'task-create', enabled: true }))
 
     // Assert — the migrated complete cue survives the unrelated toggle
-    expect(store.getState().preferences.soundMoments).toEqual({
+    expect(store.getState().settings.soundMoments).toEqual({
       'task-create': true,
       complete: true,
       clear: false,

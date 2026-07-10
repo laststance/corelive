@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { playTimbre } from '@/lib/audio/soundEngine'
-import preferencesReducer, {
+import userSettingsReducer, {
   initialState,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 // The wrapper delegates all audio to the per-window sound engine; mock it so each
 // test asserts the delegation contract (the complete cue's timbre/volume, and
@@ -30,9 +30,9 @@ vi.mock('@/lib/audio/soundEngine', () => ({
  */
 function renderWithCompleteMoment(enabled: boolean) {
   const store = configureStore({
-    reducer: { preferences: preferencesReducer },
+    reducer: { settings: userSettingsReducer },
     preloadedState: {
-      preferences: {
+      settings: {
         ...initialState,
         soundMoments: { 'task-create': false, complete: enabled, clear: false },
       },

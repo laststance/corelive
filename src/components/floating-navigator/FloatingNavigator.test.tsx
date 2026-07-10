@@ -3,12 +3,12 @@
  *
  * The sentinel: the always-on-top pin button must seed from the window's REAL
  * state on mount, not from its hardcoded `useState(true)`. Because the pin
- * preference now survives relaunch, a user who turned it off must see the button
+ * setting now survives relaunch, a user who turned it off must see the button
  * read "off" — otherwise the button lies (shows pinned over an unpinned window).
  * The unpinned case below fails if that mount-init read regresses.
  *
  * The fourth test guards §6d cross-window sync: when ANOTHER window (the Settings
- * "Keep on top" toggle) changes the shared keep-on-top preference, the main
+ * "Keep on top" toggle) changes the shared keep-on-top setting, the main
  * process broadcasts it and this window's own pin button must live-update —
  * otherwise the button lies until the next relaunch.
  *
@@ -23,21 +23,21 @@ import type { ReactElement } from 'react'
 import { Provider } from 'react-redux'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import preferencesReducer, {
+import userSettingsReducer, {
   initialState,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 import { FloatingNavigator } from './FloatingNavigator'
 
 /**
- * Wraps the FloatingNavigator in a real preferences store — required once a
+ * Wraps the FloatingNavigator in a real settings store — required once a
  * completed row renders, because its checkbox pulls in useCompletionFeedback →
  * useAppSelector (the empty-todos tests above never mount a row, so they don't).
  */
 function renderFloatingWithStore(ui: ReactElement) {
   const store = configureStore({
-    reducer: { preferences: preferencesReducer },
-    preloadedState: { preferences: { ...initialState } },
+    reducer: { settings: userSettingsReducer },
+    preloadedState: { settings: { ...initialState } },
   })
   return render(<Provider store={store}>{ui}</Provider>)
 }
@@ -92,7 +92,7 @@ describe('FloatingNavigator pin button', () => {
 
   it('shows the pin button OFF when the window launched unpinned', async () => {
     // Arrange: the window's real state is NOT pinned — the user turned pinning
-    // off in a prior session and the preference survived relaunch.
+    // off in a prior session and the setting survived relaunch.
     isAlwaysOnTopMock.mockResolvedValue(false)
     installFloatingNavigatorAPI(isAlwaysOnTopMock)
 
@@ -129,7 +129,7 @@ describe('FloatingNavigator pin button', () => {
   it('does not crash when the preload predates the pin-state method', async () => {
     // Arrange: preload skew — the floatingNavigatorAPI namespace is present (an
     // installed app) but its `window` bridge predates `isAlwaysOnTop` (this
-    // preference added it). isFloatingNavigatorEnvironment() only checks the
+    // setting added it). isFloatingNavigatorEnvironment() only checks the
     // namespace, so the mount-init effect must method-guard before calling it.
     Object.defineProperty(window, 'floatingNavigatorAPI', {
       configurable: true,
@@ -159,7 +159,7 @@ describe('FloatingNavigator pin button', () => {
     expect(pinButton).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('updates the pin button when another window changes the keep-on-top preference', async () => {
+  it('updates the pin button when another window changes the keep-on-top setting', async () => {
     // Arrange: the window mounts pinned (its real state reads on), so the button
     // starts offering to disable.
     isAlwaysOnTopMock.mockResolvedValue(true)

@@ -5,19 +5,19 @@ import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { BrainDumpAppearance } from '@/components/electron/BrainDumpAppearance'
-import preferencesReducer, {
+import userSettingsReducer, {
   initialState,
-} from '@/lib/redux/slices/preferencesSlice'
-import type { PreferencesState } from '@/lib/schemas/preferences'
+} from '@/lib/redux/slices/settingsSlice'
+import type { UserSettingsState } from '@/lib/schemas/settings'
 
 /**
- * Renders the Brain Dump appearance controls under a real preferences store (so
- * assertions read the actual reducer result) with the given preference overrides.
+ * Renders the Brain Dump appearance controls under a real settings store (so
+ * assertions read the actual reducer result) with the given setting overrides.
  */
-function renderBrainDumpAppearance(overrides: Partial<PreferencesState> = {}) {
+function renderBrainDumpAppearance(overrides: Partial<UserSettingsState> = {}) {
   const store = configureStore({
-    reducer: { preferences: preferencesReducer },
-    preloadedState: { preferences: { ...initialState, ...overrides } },
+    reducer: { settings: userSettingsReducer },
+    preloadedState: { settings: { ...initialState, ...overrides } },
   })
   const user = userEvent.setup()
   render(
@@ -61,8 +61,8 @@ describe('BrainDumpAppearance — editor presentation', () => {
     // Act — pick the Serif face.
     await user.click(screen.getByRole('radio', { name: 'Serif' }))
 
-    // Assert — the serif font is saved to preferences.
-    expect(store.getState().preferences.braindumpFontFamily).toBe('serif')
+    // Assert — the serif font is saved to settings.
+    expect(store.getState().settings.braindumpFontFamily).toBe('serif')
   })
 
   it('shows the BrainDump font-size slider at the saved size on its [12,24] track', () => {
@@ -85,9 +85,7 @@ describe('BrainDumpAppearance — editor presentation', () => {
     await user.click(screen.getByRole('radio', { name: 'Amber' }))
 
     // Assert — the amber theme token is saved.
-    expect(store.getState().preferences.braindumpTextColor).toBe(
-      'var(--primary)',
-    )
+    expect(store.getState().settings.braindumpTextColor).toBe('var(--primary)')
   })
 
   it('saves a custom BrainDump text color chosen from the native color picker', () => {
@@ -101,7 +99,7 @@ describe('BrainDumpAppearance — editor presentation', () => {
     fireEvent.change(customColorInput, { target: { value: '#abcdef' } })
 
     // Assert — the hex is stored verbatim as the custom color.
-    expect(store.getState().preferences.braindumpTextColor).toBe('#abcdef')
+    expect(store.getState().settings.braindumpTextColor).toBe('#abcdef')
   })
 
   it('shows a saved custom hex in the BrainDump color picker', () => {
@@ -149,8 +147,8 @@ describe('BrainDumpAppearance — editor presentation', () => {
       screen.getByRole('switch', { name: 'Clear finished lines' }),
     )
 
-    // Assert — the preference is now enabled in the slice.
-    expect(store.getState().preferences.braindumpClearOnComplete).toBe(true)
+    // Assert — the setting is now enabled in the slice.
+    expect(store.getState().settings.braindumpClearOnComplete).toBe(true)
   })
 
   it('shows the BrainDump clear-delay slider at the saved delay on its [0,5000] track', () => {
@@ -228,7 +226,7 @@ describe('BrainDumpAppearance — editor presentation', () => {
     fireEvent.keyDown(clearDelaySlider, { key: 'ArrowRight' })
 
     // Assert — the delay rose by one 100 ms step in the slice.
-    expect(store.getState().preferences.braindumpClearDelayMs).toBe(600)
+    expect(store.getState().settings.braindumpClearDelayMs).toBe(600)
   })
 
   it('shows the BrainDump toast-duration slider at the saved duration on its [2000,10000] track', () => {
@@ -274,6 +272,6 @@ describe('BrainDumpAppearance — editor presentation', () => {
     fireEvent.keyDown(toastDurationSlider, { key: 'ArrowRight' })
 
     // Assert — the duration rose by one 500 ms step in the slice.
-    expect(store.getState().preferences.braindumpToastDurationMs).toBe(6500)
+    expect(store.getState().settings.braindumpToastDurationMs).toBe(6500)
   })
 })

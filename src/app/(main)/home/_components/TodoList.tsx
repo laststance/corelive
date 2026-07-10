@@ -45,7 +45,7 @@ import { useTodoPasteImport } from '@/hooks/useTodoPasteImport'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
-import { selectRetainCompletedInList } from '@/lib/redux/slices/preferencesSlice'
+import { selectRetainCompletedInList } from '@/lib/redux/slices/settingsSlice'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
 

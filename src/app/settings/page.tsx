@@ -5,7 +5,7 @@ import * as React from 'react'
  * Settings Page
  *
  * The single settings home across web and Electron (D15). Everyone sees the
- * shared Preferences section; the Electron window-chrome settings render only
+ * shared Settings section; the Electron window-chrome settings render only
  * under the desktop app (ElectronSettingsPage returns null on web).
  *
  * @module app/settings/page
@@ -13,19 +13,19 @@ import * as React from 'react'
 import { ElectronSettingsPage } from '@/components/electron/ElectronSettingsPage'
 import { SettingsBackButton } from '@/components/settings/SettingsBackButton'
 import { SettingsSection } from '@/components/settings/SettingsSection'
-import { SoundPreferences } from '@/components/settings/SoundPreferences'
-import { TaskPreferences } from '@/components/settings/TaskPreferences'
+import { SoundSettings } from '@/components/settings/SoundSettings'
+import { TaskSettings } from '@/components/settings/TaskSettings'
 import { ThemeSelector } from '@/components/ThemeSelector'
 
 export const metadata: Metadata = {
-  title: 'Preferences',
-  description: 'CoreLive preferences and desktop application settings',
+  title: 'Settings',
+  description: 'CoreLive and desktop app settings',
 }
 
 /**
  * Settings page component.
  *
- * Renders the web-common Preferences section for all users, followed by the
+ * Renders the web-common Settings section for all users, followed by the
  * Electron-only window-chrome settings (which self-gate to the desktop app).
  *
  * @returns Settings page
@@ -43,10 +43,10 @@ const SettingsPage = function SettingsPage(): React.ReactNode {
            avoids orphaned headers with no content under them on web. */}
       <div className="space-y-12 px-4 pb-12 pt-2">
         <SettingsSection label="Tasks">
-          <TaskPreferences />
+          <TaskSettings />
         </SettingsSection>
         <SettingsSection label="Sound">
-          <SoundPreferences />
+          <SoundSettings />
         </SettingsSection>
         <SettingsSection label="Appearance">
           <ThemeSelector />

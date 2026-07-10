@@ -25,7 +25,7 @@ import { useTodoPasteImport } from '@/hooks/useTodoPasteImport'
 import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
-import { selectRetainCompletedInList } from '@/lib/redux/slices/preferencesSlice'
+import { selectRetainCompletedInList } from '@/lib/redux/slices/settingsSlice'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 import type {
   CategoryColor,
@@ -64,7 +64,7 @@ export const FloatingNavigatorContainer =
 
     // Category filter state (shared with main app via localStorage)
     const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
-    // 居残りモード (app-wide pref, D11): keep completed todos visible instead of
+    // 居残りモード (app-wide setting, D11): keep completed todos visible instead of
     // letting them vanish on check. Drives the retain-aware query + mutations.
     const isRetaining = useAppSelector(selectRetainCompletedInList)
 

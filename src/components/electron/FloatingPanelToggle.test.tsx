@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  FLOATING_NAVIGATOR_PIN_PREFERENCE,
+  FLOATING_NAVIGATOR_PIN_SETTING,
   FloatingPanelToggle,
 } from './FloatingPanelToggle'
 
@@ -47,7 +47,7 @@ describe('FloatingPanelToggle', () => {
     // Act
     render(
       <FloatingPanelToggle
-        preference={FLOATING_NAVIGATOR_PIN_PREFERENCE}
+        setting={FLOATING_NAVIGATOR_PIN_SETTING}
         label="Keep Floating Navigator on top"
       />,
     )
@@ -72,7 +72,7 @@ describe('FloatingPanelToggle', () => {
     const user = userEvent.setup()
     render(
       <FloatingPanelToggle
-        preference={FLOATING_NAVIGATOR_PIN_PREFERENCE}
+        setting={FLOATING_NAVIGATOR_PIN_SETTING}
         label="Keep Floating Navigator on top"
       />,
     )
@@ -102,7 +102,7 @@ describe('FloatingPanelToggle', () => {
     const user = userEvent.setup()
     render(
       <FloatingPanelToggle
-        preference={FLOATING_NAVIGATOR_PIN_PREFERENCE}
+        setting={FLOATING_NAVIGATOR_PIN_SETTING}
         label="Keep Floating Navigator on top"
       />,
     )
@@ -119,14 +119,14 @@ describe('FloatingPanelToggle', () => {
     expect(screen.getByText('Failed to update setting')).toBeInTheDocument()
   })
 
-  it('renders nothing when the preload lacks this preference’s methods', () => {
+  it('renders nothing when the preload lacks this setting’s methods', () => {
     // Arrange: an outdated preload exposes floatingPanels but not the pin pair.
     installElectronAPI({ floatingPanels: {} })
 
     // Act
     render(
       <FloatingPanelToggle
-        preference={FLOATING_NAVIGATOR_PIN_PREFERENCE}
+        setting={FLOATING_NAVIGATOR_PIN_SETTING}
         label="Keep Floating Navigator on top"
       />,
     )
@@ -143,7 +143,7 @@ describe('FloatingPanelToggle', () => {
     // Act
     render(
       <FloatingPanelToggle
-        preference={FLOATING_NAVIGATOR_PIN_PREFERENCE}
+        setting={FLOATING_NAVIGATOR_PIN_SETTING}
         label="Keep Floating Navigator on top"
       />,
     )

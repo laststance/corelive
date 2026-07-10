@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { PreferencesStateSchema } from '@/lib/schemas/preferences'
+import { UserSettingsStateSchema } from '@/lib/schemas/settings'
 
-describe('PreferencesStateSchema', () => {
+describe('UserSettingsStateSchema', () => {
   it('parses an empty object into the fully-silent default state (fresh install makes no sound)', () => {
     // Act
-    const result = PreferencesStateSchema.parse({})
+    const result = UserSettingsStateSchema.parse({})
 
     // Assert — every moment OFF, default timbre + volume, both legacy flags OFF,
     // the BrainDump editor at its prior look (mono / 14px / theme foreground),
@@ -30,7 +30,7 @@ describe('PreferencesStateSchema', () => {
     const legacyPayload = { completionSound: true, retainCompletedInList: true }
 
     // Act
-    const result = PreferencesStateSchema.parse(legacyPayload)
+    const result = UserSettingsStateSchema.parse(legacyPayload)
 
     // Assert — the legacy values survive; the new fields fill with defaults.
     expect(result).toEqual({
@@ -50,10 +50,10 @@ describe('PreferencesStateSchema', () => {
 
   it('keeps an explicit BrainDump clear-on-complete opt-in and defaults it OFF when absent', () => {
     // Act — an explicit true is preserved; a payload omitting it defaults to OFF.
-    const optedIn = PreferencesStateSchema.parse({
+    const optedIn = UserSettingsStateSchema.parse({
       braindumpClearOnComplete: true,
     })
-    const omitted = PreferencesStateSchema.parse({})
+    const omitted = UserSettingsStateSchema.parse({})
 
     // Assert
     expect(optedIn.braindumpClearOnComplete).toBe(true)
@@ -62,7 +62,7 @@ describe('PreferencesStateSchema', () => {
 
   it('defaults the BrainDump clear delay to a gentle 500 ms when absent', () => {
     // Act
-    const result = PreferencesStateSchema.parse({})
+    const result = UserSettingsStateSchema.parse({})
 
     // Assert — a brief linger, not the abrupt 0 ms instant clear.
     expect(result.braindumpClearDelayMs).toBe(500)
@@ -70,10 +70,10 @@ describe('PreferencesStateSchema', () => {
 
   it('clamps an out-of-range BrainDump clear delay into the bounds [0,5000]', () => {
     // Act — the ceiling is the 5 s undo window so a line never outlasts its Undo.
-    const tooLong = PreferencesStateSchema.parse({
+    const tooLong = UserSettingsStateSchema.parse({
       braindumpClearDelayMs: 99000,
     })
-    const negative = PreferencesStateSchema.parse({
+    const negative = UserSettingsStateSchema.parse({
       braindumpClearDelayMs: -200,
     })
 
@@ -84,7 +84,7 @@ describe('PreferencesStateSchema', () => {
 
   it('self-heals a non-finite BrainDump clear delay to the default (no poisoned hydrate)', () => {
     // Act — a NaN that slipped into a persisted/synced blob must not survive.
-    const result = PreferencesStateSchema.parse({
+    const result = UserSettingsStateSchema.parse({
       braindumpClearDelayMs: Number.NaN,
     })
 
@@ -94,7 +94,7 @@ describe('PreferencesStateSchema', () => {
 
   it('defaults the BrainDump completion-toast duration to 5000 ms when absent', () => {
     // Act
-    const result = PreferencesStateSchema.parse({})
+    const result = UserSettingsStateSchema.parse({})
 
     // Assert — the same 5 s window the toast used before it was configurable.
     expect(result.braindumpToastDurationMs).toBe(5000)
@@ -102,10 +102,10 @@ describe('PreferencesStateSchema', () => {
 
   it('clamps an out-of-range BrainDump toast duration into the bounds [2000,10000]', () => {
     // Act — above the 10 s ceiling clamps down, below the 2 s floor clamps up.
-    const tooLong = PreferencesStateSchema.parse({
+    const tooLong = UserSettingsStateSchema.parse({
       braindumpToastDurationMs: 99000,
     })
-    const tooShort = PreferencesStateSchema.parse({
+    const tooShort = UserSettingsStateSchema.parse({
       braindumpToastDurationMs: 500,
     })
 
@@ -116,7 +116,7 @@ describe('PreferencesStateSchema', () => {
 
   it('self-heals a non-finite BrainDump toast duration to the default (no poisoned hydrate)', () => {
     // Act — a NaN that slipped into a persisted/synced blob must not survive.
-    const result = PreferencesStateSchema.parse({
+    const result = UserSettingsStateSchema.parse({
       braindumpToastDurationMs: Number.NaN,
     })
 
@@ -126,8 +126,8 @@ describe('PreferencesStateSchema', () => {
 
   it('clamps an out-of-range master volume number into [0,1]', () => {
     // Act
-    const tooLoud = PreferencesStateSchema.parse({ soundVolume: 50 })
-    const tooQuiet = PreferencesStateSchema.parse({ soundVolume: -3 })
+    const tooLoud = UserSettingsStateSchema.parse({ soundVolume: 50 })
+    const tooQuiet = UserSettingsStateSchema.parse({ soundVolume: -3 })
 
     // Assert
     expect(tooLoud.soundVolume).toBe(1)
@@ -136,7 +136,7 @@ describe('PreferencesStateSchema', () => {
 
   it('rejects a non-number master volume so a malformed sync payload fails wholesale', () => {
     // Act
-    const result = PreferencesStateSchema.safeParse({ soundVolume: 'loud' })
+    const result = UserSettingsStateSchema.safeParse({ soundVolume: 'loud' })
 
     // Assert — the whole payload is rejected, not silently coerced.
     expect(result.success).toBe(false)
@@ -144,7 +144,7 @@ describe('PreferencesStateSchema', () => {
 
   it('self-heals an unknown timbre id to the default instead of rejecting', () => {
     // Act
-    const result = PreferencesStateSchema.parse({ soundTimbre: 'banjo' })
+    const result = UserSettingsStateSchema.parse({ soundTimbre: 'banjo' })
 
     // Assert
     expect(result.soundTimbre).toBe('felt')
@@ -155,7 +155,7 @@ describe('PreferencesStateSchema', () => {
     const partial = { soundMoments: { complete: true } }
 
     // Act
-    const result = PreferencesStateSchema.parse(partial)
+    const result = UserSettingsStateSchema.parse(partial)
 
     // Assert — the supplied moment is kept; the rest default to OFF.
     expect(result.soundMoments).toEqual({
@@ -167,8 +167,8 @@ describe('PreferencesStateSchema', () => {
 
   it('clamps an out-of-range BrainDump font size into the slider bounds [12,24]', () => {
     // Act
-    const tooBig = PreferencesStateSchema.parse({ braindumpFontSize: 99 })
-    const tooSmall = PreferencesStateSchema.parse({ braindumpFontSize: 8 })
+    const tooBig = UserSettingsStateSchema.parse({ braindumpFontSize: 99 })
+    const tooSmall = UserSettingsStateSchema.parse({ braindumpFontSize: 8 })
 
     // Assert
     expect(tooBig.braindumpFontSize).toBe(24)
@@ -177,7 +177,7 @@ describe('PreferencesStateSchema', () => {
 
   it('self-heals a non-finite BrainDump font size to the default (no poisoned hydrate)', () => {
     // Act — a NaN that slipped into a persisted/synced blob must not survive.
-    const result = PreferencesStateSchema.parse({
+    const result = UserSettingsStateSchema.parse({
       braindumpFontSize: Number.NaN,
     })
 
@@ -187,7 +187,7 @@ describe('PreferencesStateSchema', () => {
 
   it('self-heals an unknown BrainDump font family to the default instead of rejecting', () => {
     // Act
-    const result = PreferencesStateSchema.parse({
+    const result = UserSettingsStateSchema.parse({
       braindumpFontFamily: 'comic-sans',
     })
 
@@ -197,16 +197,16 @@ describe('PreferencesStateSchema', () => {
 
   it('keeps a valid BrainDump text color (theme token or hex) and self-heals anything else', () => {
     // Act — a themed preset and a custom hex both pass; an unsupported shape heals.
-    const themed = PreferencesStateSchema.parse({
+    const themed = UserSettingsStateSchema.parse({
       braindumpTextColor: 'var(--primary)',
     })
     // A digit-bearing theme token (e.g. a future chart-color preset) must pass —
     // the narrow [a-z-] charset would have silently healed it away.
-    const digitToken = PreferencesStateSchema.parse({
+    const digitToken = UserSettingsStateSchema.parse({
       braindumpTextColor: 'var(--chart-1)',
     })
-    const hex = PreferencesStateSchema.parse({ braindumpTextColor: '#1A2B3C' })
-    const bogus = PreferencesStateSchema.parse({
+    const hex = UserSettingsStateSchema.parse({ braindumpTextColor: '#1A2B3C' })
+    const bogus = UserSettingsStateSchema.parse({
       braindumpTextColor: 'rgba(0,0,0,0.5)',
     })
 
@@ -220,10 +220,10 @@ describe('PreferencesStateSchema', () => {
   it('accepts the 3-digit and 8-digit hex shapes the color pattern allows', () => {
     // Act — the pattern admits #rgb (shorthand) and #rrggbbaa (with alpha), not
     // only the 6-digit form the native picker emits.
-    const shorthand = PreferencesStateSchema.parse({
+    const shorthand = UserSettingsStateSchema.parse({
       braindumpTextColor: '#abc',
     })
-    const withAlpha = PreferencesStateSchema.parse({
+    const withAlpha = UserSettingsStateSchema.parse({
       braindumpTextColor: '#1A2B3C80',
     })
 

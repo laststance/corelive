@@ -2,20 +2,20 @@ import { configureStore } from '@reduxjs/toolkit'
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Provider } from 'react-redux'
 
-import preferencesReducer, {
+import userSettingsReducer, {
   initialState,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 import { TodoItem } from './TodoItem'
 
 // A minimal store with 居残りモード ON so the completed-in-place treatment renders
 // exactly as it does in retain mode: amber checkbox + taupe strikethrough, no
 // status badge (D16), and no per-row trash on the completed row (D14). Spread
-// the slice defaults so this story never has to track new preference fields.
+// the slice defaults so this story never has to track new setting fields.
 const retainStore = configureStore({
-  reducer: { preferences: preferencesReducer },
+  reducer: { settings: userSettingsReducer },
   preloadedState: {
-    preferences: { ...initialState, retainCompletedInList: true },
+    settings: { ...initialState, retainCompletedInList: true },
   },
 })
 

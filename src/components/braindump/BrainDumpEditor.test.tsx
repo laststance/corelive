@@ -7,10 +7,10 @@ import { toast } from 'sonner'
 import type { ToastT } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import preferencesReducer, {
-  initialState as preferencesInitialState,
-} from '@/lib/redux/slices/preferencesSlice'
-import type { PreferencesState } from '@/lib/schemas/preferences'
+import userSettingsReducer, {
+  initialState as userSettingsInitialState,
+} from '@/lib/redux/slices/settingsSlice'
+import type { UserSettingsState } from '@/lib/schemas/settings'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
 import { BrainDumpEditor } from './BrainDumpEditor'
@@ -163,34 +163,34 @@ function installBrainDumpAPI(spaces: BrainDumpSpacesBridge): void {
 }
 
 /**
- * Renders the editor under a real preferences store (so its inline text styling
- * reads the actual slice) with the given preference overrides spread over the
- * slice defaults. Required now that BrainDumpEditor reads the preferences slice.
- * @param preferenceOverrides - Fields to override on top of the slice defaults.
+ * Renders the editor under a real settings store (so its inline text styling
+ * reads the actual slice) with the given setting overrides spread over the
+ * slice defaults. Required now that BrainDumpEditor reads the settings slice.
+ * @param settingOverrides - Fields to override on top of the slice defaults.
  * @returns The Testing Library render result.
  * @example
  * renderEditor({ braindumpFontSize: 20 })
  */
-function renderEditor(preferenceOverrides: Partial<PreferencesState> = {}) {
-  return renderEditorWithCategories(categories, preferenceOverrides)
+function renderEditor(settingOverrides: Partial<UserSettingsState> = {}) {
+  return renderEditorWithCategories(categories, settingOverrides)
 }
 
 /**
  * Renders the editor with custom categories for category-switching persistence specs.
  * @param editorCategories - Categories available in the BrainDump picker.
- * @param preferenceOverrides - Fields to override on top of the slice defaults.
+ * @param settingOverrides - Fields to override on top of the slice defaults.
  * @returns The Testing Library render result.
  * @example
  * renderEditorWithCategories(categoriesWithCorelive)
  */
 function renderEditorWithCategories(
   editorCategories: CategoryWithCount[],
-  preferenceOverrides: Partial<PreferencesState> = {},
+  settingOverrides: Partial<UserSettingsState> = {},
 ) {
   const store = configureStore({
-    reducer: { preferences: preferencesReducer },
+    reducer: { settings: userSettingsReducer },
     preloadedState: {
-      preferences: { ...preferencesInitialState, ...preferenceOverrides },
+      settings: { ...userSettingsInitialState, ...settingOverrides },
     },
   })
   return render(
@@ -205,7 +205,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     vi.clearAllMocks()
   })
 
-  it('reflects the saved Mac desktop tracking preference in the header switch', async () => {
+  it('reflects the saved Mac desktop tracking setting in the header switch', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -321,7 +321,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
   })
 })
 
-describe('BrainDumpEditor text styling preferences', () => {
+describe('BrainDumpEditor text styling settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -335,7 +335,7 @@ describe('BrainDumpEditor text styling preferences', () => {
       setVisibleOnAllWorkspaces,
     })
 
-    // Act — open the editor with serif / 20px / amber text saved in preferences.
+    // Act — open the editor with serif / 20px / amber text saved in settings.
     // findByRole settles the editor's async mount effects under act() before asserting.
     renderEditor({
       braindumpFontFamily: 'serif',
@@ -350,7 +350,7 @@ describe('BrainDumpEditor text styling preferences', () => {
     expect(noteField.style.color).toBe('var(--primary)')
   })
 
-  it('falls back to the default look (mono / 14px) when no preference is saved', async () => {
+  it('falls back to the default look (mono / 14px) when no setting is saved', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -468,9 +468,9 @@ describe('BrainDumpEditor note persistence during reload', () => {
     )
     const noteSet = vi.mocked(api.note.set)
     const store = configureStore({
-      reducer: { preferences: preferencesReducer },
+      reducer: { settings: userSettingsReducer },
       preloadedState: {
-        preferences: { ...preferencesInitialState },
+        settings: { ...userSettingsInitialState },
       },
     })
 
@@ -1268,7 +1268,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     await waitForBrainDumpReady(noteField)
 
-    // Act — complete a plain line under the default preference.
+    // Act — complete a plain line under the default setting.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
     await waitFor(() => {
       expect(noteField).toHaveValue('- [x] buy milk')
@@ -1300,10 +1300,10 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     const noteSet = vi.mocked(api.note.set)
 
     const store = configureStore({
-      reducer: { preferences: preferencesReducer },
+      reducer: { settings: userSettingsReducer },
       preloadedState: {
-        preferences: {
-          ...preferencesInitialState,
+        settings: {
+          ...userSettingsInitialState,
           braindumpClearOnComplete: true,
           braindumpClearDelayMs: 0,
         },
@@ -1543,10 +1543,10 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     const noteSet = vi.mocked(api.note.set)
 
     const store = configureStore({
-      reducer: { preferences: preferencesReducer },
+      reducer: { settings: userSettingsReducer },
       preloadedState: {
-        preferences: {
-          ...preferencesInitialState,
+        settings: {
+          ...userSettingsInitialState,
           braindumpClearOnComplete: true,
           braindumpClearDelayMs: LINGER_MS,
         },
@@ -1639,10 +1639,10 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     const noteSet = vi.mocked(api.note.set)
 
     const store = configureStore({
-      reducer: { preferences: preferencesReducer },
+      reducer: { settings: userSettingsReducer },
       preloadedState: {
-        preferences: {
-          ...preferencesInitialState,
+        settings: {
+          ...userSettingsInitialState,
           braindumpClearOnComplete: true,
           braindumpClearDelayMs: LINGER_MS,
         },
