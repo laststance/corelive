@@ -22,14 +22,14 @@ import { Keyboard } from 'lucide-react'
 import { useId, useState, type ReactElement } from 'react'
 
 import {
-  FLOATING_NAVIGATOR_PIN_PREFERENCE,
+  FLOATING_NAVIGATOR_PIN_SETTING,
   FloatingPanelToggle,
 } from '@/components/electron/FloatingPanelToggle'
 import { KeybindingCaptureInput } from '@/components/electron/KeybindingCaptureInput'
 import { Label } from '@/components/ui/label'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import { type FloatingPanelsBridge } from '@/hooks/useFloatingPanelPreference'
+import { type FloatingPanelsBridge } from '@/hooks/useFloatingPanelSetting'
 import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import { log } from '@/lib/logger'
 
@@ -116,7 +116,7 @@ export const FloatingNavigatorSettings =
     return (
       <div className="space-y-4">
         <FloatingPanelToggle
-          preference={FLOATING_NAVIGATOR_PIN_PREFERENCE}
+          setting={FLOATING_NAVIGATOR_PIN_SETTING}
           label="Keep on top"
           description="Pin the Floating Navigator above your other windows so it stays visible."
         />

@@ -51,7 +51,7 @@ const notificationOptionsSchema = z.strictObject({
   actions: z.array(notificationActionSchema).optional(),
 })
 
-const notificationPreferencesUpdateSchema = z.strictObject({
+const notificationSettingsUpdateSchema = z.strictObject({
   enabled: z.boolean().optional(),
   taskCreated: z.boolean().optional(),
   taskCompleted: z.boolean().optional(),
@@ -118,10 +118,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
     z.string(),
     notificationOptionsSchema.optional(),
   ]),
-  'notification-get-preferences': z.tuple([]),
-  'notification-update-preferences': z.tuple([
-    notificationPreferencesUpdateSchema,
-  ]),
+  'notification-get-settings': z.tuple([]),
+  'notification-update-settings': z.tuple([notificationSettingsUpdateSchema]),
   'notification-clear-all': z.tuple([]),
   'notification-clear': z.tuple([z.string()]),
   'notification-is-enabled': z.tuple([]),

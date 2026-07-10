@@ -20,10 +20,10 @@ vi.mock('./useElectronNotifications', () => ({
   useElectronNotifications: () => ({
     isSupported: electronMocks.isSupported,
     isEnabled: electronMocks.isEnabled,
-    preferences: null,
+    settings: null,
     activeCount: 0,
     showNotification: electronMocks.showNotification,
-    updatePreferences: vi.fn(),
+    updateSettings: vi.fn(),
     clearAll: vi.fn(),
     clearNotification: vi.fn(),
     refreshActiveCount: vi.fn(),

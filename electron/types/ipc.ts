@@ -108,7 +108,7 @@ export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
  * Live visibility of the auxiliary (non-main) windows, read on demand from the
  * main process. Lets the settings UI reflect what is *actually* on screen now
  * (e.g. to label a "Try it now" action) rather than the persisted startup
- * preference, which can drift once a panel is opened/closed at runtime.
+ * setting, which can drift once a panel is opened/closed at runtime.
  *
  * Both flags require the window to both exist and be visible.
  */
@@ -154,8 +154,8 @@ export interface NotificationOptions extends SerializableNotificationOptions {
   onAction?: (actionIndex: number) => Promise<void> | void
 }
 
-/** Notification preferences (matches NotificationManager) */
-export interface NotificationPreferences {
+/** Notification settings (matches NotificationManager) */
+export interface NotificationSettingsState {
   enabled: boolean
   taskCreated: boolean
   taskCompleted: boolean
@@ -437,7 +437,7 @@ export interface IPCChannels {
     response: boolean
   }
   /**
-   * Persisted Settings preference for FloatingNavigator's always-on-top state —
+   * Persisted Settings value for FloatingNavigator's always-on-top state —
    * distinct from the live `is`/`toggle` pair above. `get` returns the effective
    * value (live window when open, else the persisted relaunch state); `set`
    * persists across config + window-state + the live window so relaunch honors it.
@@ -493,7 +493,7 @@ export interface IPCChannels {
     request: void
     response: number
   }
-  /** Persisted Settings preference: keep BrainDump pinned above other windows. */
+  /** Persisted Settings value: keep BrainDump pinned above other windows. */
   'braindump-window-get-always-on-top': {
     request: void
     response: boolean
@@ -588,13 +588,13 @@ export interface IPCChannels {
     request: [string, string, SerializableNotificationOptions?]
     response: { id: string } | null
   }
-  'notification-get-preferences': {
+  'notification-get-settings': {
     request: void
-    response: NotificationPreferences | null
+    response: NotificationSettingsState | null
   }
-  'notification-update-preferences': {
-    request: Partial<NotificationPreferences>
-    response: NotificationPreferences | null
+  'notification-update-settings': {
+    request: Partial<NotificationSettingsState>
+    response: NotificationSettingsState | null
   }
   'notification-clear-all': {
     request: void
@@ -791,7 +791,7 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Settings window + per-user preferences
+  // Settings window + per-user settings
   // ──────────────────────────────────────────────────────────────────────────
   'settings:open': {
     request: void
@@ -889,7 +889,7 @@ export interface IPCEventChannels {
   // Floating navigator events (main → floating renderer)
   'floating-navigator-menu-action': string
   /**
-   * Broadcast when the Floating Navigator's keep-on-top preference changes from
+   * Broadcast when the Floating Navigator's keep-on-top setting changes from
    * ANY surface (the Settings toggle or the in-window pin). Lets the floating
    * window's own pin button live-update instead of lying until relaunch (§6d).
    */

@@ -99,6 +99,7 @@ function findItemByLabel(
 function createStubWindowManager(): WindowManager {
   return {
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+    openSettings: vi.fn(),
     toggleFloatingNavigator: vi.fn(),
     toggleBrainDump: vi.fn(),
   } as unknown as WindowManager
@@ -143,5 +144,39 @@ describe('MenuManager builds the application menu without a main window', () => 
     expect(findItemByLabel(template, 'Import Tasks...')?.enabled).toBe(false)
     expect(findItemByLabel(template, 'Export Tasks...')?.enabled).toBe(false)
     expect(findItemByLabel(template, 'Find')?.enabled).toBe(false)
+  })
+
+  it('opens Settings from the app menu without exposing the retired Preferences label', () => {
+    // Arrange: initialize the manager so the app-menu click can reach WindowManager.
+    const menuManager = new MenuManager()
+    const stubWindowManager = createStubWindowManager()
+    const stubConfigManager = {} as unknown as ConfigManager
+    menuManager.initialize(null, stubWindowManager, stubConfigManager)
+    const appMenu = menuManager.createAppMenu()
+
+    // Act: click the visible Settings item from the native app menu.
+    const settingsItem = findItemByLabel([appMenu], 'Settings...')
+    ;(settingsItem?.click as () => void)?.()
+
+    // Assert: the renamed label is visible, the retired label is absent, and
+    // the click reaches the dedicated Settings window exactly once.
+    expect(settingsItem).toBeDefined()
+    expect(collectLabels([appMenu])).not.toContain('Preferences...')
+    expect(stubWindowManager.openSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens Settings when an older hosted renderer sends open-preferences', () => {
+    // Arrange: an installed desktop shell may outlive the hosted renderer that
+    // still sends the legacy action name during a version-skew transition.
+    const menuManager = new MenuManager()
+    const stubWindowManager = createStubWindowManager()
+    const stubConfigManager = {} as unknown as ConfigManager
+    menuManager.initialize(null, stubWindowManager, stubConfigManager)
+
+    // Act: route the legacy action through the public menu-action dispatcher.
+    menuManager.handleMenuAction({ action: 'open-preferences' })
+
+    // Assert: compatibility preserves behavior while all visible copy says Settings.
+    expect(stubWindowManager.openSettings).toHaveBeenCalledTimes(1)
   })
 })

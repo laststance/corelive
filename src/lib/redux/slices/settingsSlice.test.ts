@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { DEFAULT_PREFERENCES } from '@/lib/constants/preferences'
+import { DEFAULT_SETTINGS } from '@/lib/constants/settings'
 
 import type { RootState } from '../store'
 
 import reducer, {
-  hydratePreferences,
+  hydrateUserSettings,
   initialState,
-  resetPreferences,
+  resetUserSettings,
   selectBraindumpClearDelayMs,
   selectBraindumpClearOnComplete,
   selectBraindumpFontFamily,
@@ -15,7 +15,7 @@ import reducer, {
   selectBraindumpTextColor,
   selectBraindumpToastDurationMs,
   selectCompletionSound,
-  selectPreferences,
+  selectUserSettings,
   selectRetainCompletedInList,
   selectSoundMoment,
   selectSoundTimbre,
@@ -32,18 +32,18 @@ import reducer, {
   setAllSoundMoments,
   setSoundTimbre,
   setSoundVolume,
-  type PreferencesState,
-} from './preferencesSlice'
+  type UserSettingsState,
+} from './settingsSlice'
 
-// Build a RootState-shaped object carrying only the preferences slice the
+// Build a RootState-shaped object carrying only the settings slice the
 // selectors read (other slices are irrelevant to these assertions). The cast
 // is deliberate: these tests simulate malformed/partial persisted slices.
-function stateWith(preferences: Partial<PreferencesState>): RootState {
-  return { preferences } as unknown as RootState
+function stateWith(settings: Partial<UserSettingsState>): RootState {
+  return { settings } as unknown as RootState
 }
 
-describe('preferencesSlice', () => {
-  it('defaults every preference to silent/neutral so a fresh install makes no sound', () => {
+describe('settingsSlice', () => {
+  it('defaults every setting to silent/neutral so a fresh install makes no sound', () => {
     // Assert — all sound moments OFF, default timbre + volume, both legacy flags OFF,
     // and the BrainDump editor at its prior look (mono / 14px / theme foreground).
     expect(initialState).toEqual({
@@ -100,7 +100,7 @@ describe('preferencesSlice', () => {
     const legacyState = {
       completionSound: false,
       retainCompletedInList: false,
-    } as unknown as PreferencesState
+    } as unknown as UserSettingsState
 
     // Act
     const next = reducer(
@@ -130,7 +130,7 @@ describe('preferencesSlice', () => {
 
   it('silences every sound moment at once when the master toggle is disabled', () => {
     // Arrange — a palette with all three cues currently on.
-    const allCuesOnState: PreferencesState = {
+    const allCuesOnState: UserSettingsState = {
       ...initialState,
       soundMoments: { 'task-create': true, complete: true, clear: true },
     }
@@ -168,9 +168,9 @@ describe('preferencesSlice', () => {
     expect(inRange.soundVolume).toBe(0.3)
   })
 
-  it('replaces the whole state on hydratePreferences (the cross-window apply path)', () => {
+  it('replaces the whole state on hydrateUserSettings (the cross-window apply path)', () => {
     // Arrange
-    const incoming: PreferencesState = {
+    const incoming: UserSettingsState = {
       completionSound: true,
       retainCompletedInList: true,
       soundMoments: { 'task-create': true, complete: true, clear: true },
@@ -185,15 +185,15 @@ describe('preferencesSlice', () => {
     }
 
     // Act
-    const next = reducer(initialState, hydratePreferences(incoming))
+    const next = reducer(initialState, hydrateUserSettings(incoming))
 
     // Assert
     expect(next).toEqual(incoming)
   })
 
-  it('restores every default on resetPreferences', () => {
+  it('restores every default on resetUserSettings', () => {
     // Arrange — a fully-enabled state.
-    const enabled: PreferencesState = {
+    const enabled: UserSettingsState = {
       completionSound: true,
       retainCompletedInList: true,
       soundMoments: { 'task-create': true, complete: true, clear: true },
@@ -208,7 +208,7 @@ describe('preferencesSlice', () => {
     }
 
     // Act
-    const next = reducer(enabled, resetPreferences())
+    const next = reducer(enabled, resetUserSettings())
 
     // Assert
     expect(next).toEqual({
@@ -233,7 +233,7 @@ describe('preferencesSlice', () => {
 
     // Act / Assert — the selector returns the default, never undefined.
     expect(selectCompletionSound(legacyState)).toBe(
-      DEFAULT_PREFERENCES.completionSound,
+      DEFAULT_SETTINGS.completionSound,
     )
     expect(selectRetainCompletedInList(legacyState)).toBe(true)
   })
@@ -269,15 +269,15 @@ describe('preferencesSlice', () => {
     expect(selectSoundVolume(legacyState)).toBe(0.6)
   })
 
-  it('selectPreferences returns every field coalesced to defaults for an empty persisted slice', () => {
+  it('selectUserSettings returns every field coalesced to defaults for an empty persisted slice', () => {
     // Arrange — all fields dropped.
     const emptyState = stateWith({})
 
     // Act
-    const preferences = selectPreferences(emptyState)
+    const settings = selectUserSettings(emptyState)
 
     // Assert
-    expect(preferences).toEqual({
+    expect(settings).toEqual({
       completionSound: false,
       retainCompletedInList: false,
       soundMoments: { 'task-create': false, complete: false, clear: false },

@@ -8,6 +8,7 @@ import type {
   AuxWindowVisibility,
   IPCResponse,
   NativeTapStatus,
+  NotificationSettingsState,
   StartupWindowConfig,
 } from '@/electron/types/ipc'
 
@@ -88,8 +89,16 @@ interface ElectronAPI {
   // Notifications
   notifications?: {
     show: (title: string, body: string, options?: any) => Promise<void>
-    getPreferences: () => Promise<any>
-    updatePreferences: (preferences: any) => Promise<any>
+    getSettings?: () => Promise<NotificationSettingsState | null>
+    updateSettings?: (
+      settings: Partial<NotificationSettingsState>,
+    ) => Promise<NotificationSettingsState | null>
+    /** @deprecated Use getSettings; retained for installed-app version skew. */
+    getPreferences?: () => Promise<NotificationSettingsState | null>
+    /** @deprecated Use updateSettings; retained for installed-app version skew. */
+    updatePreferences?: (
+      settings: Partial<NotificationSettingsState>,
+    ) => Promise<NotificationSettingsState | null>
     clearAll: () => Promise<void>
     clear: (tag: string) => Promise<void>
     isEnabled: () => Promise<boolean>
@@ -243,7 +252,7 @@ interface ElectronAPI {
 
   /**
    * Electron-specific settings management.
-   * Controls app behavior like dock visibility and startup preferences.
+   * Controls app behavior like dock visibility and startup settings.
    *
    * Note: Canonical type definition is in /electron/types/electron-api.d.ts
    * Keep this in sync with ElectronAPIInterface.settings

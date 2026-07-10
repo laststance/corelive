@@ -167,7 +167,7 @@ In addition to the basic shortcuts, the component supports:
 ### Visual Accessibility
 
 - **High Contrast Mode**: Enhanced borders and outlines via `@media (prefers-contrast: high)`
-- **Reduced Motion**: Respects user's motion preferences via `@media (prefers-reduced-motion: reduce)`
+- **Reduced Motion**: Respects user's motion settings via `@media (prefers-reduced-motion: reduce)`
 - **Scalable Text**: Supports browser zoom up to 200%
 - **Color Independence**: Information not conveyed by color alone
 - **Focus Indicators**: Clear visual indicators for keyboard navigation

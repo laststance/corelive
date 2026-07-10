@@ -41,7 +41,7 @@ import type {
   IPCResponse,
   NativeTapStatus,
   NotificationOptions,
-  NotificationPreferences,
+  NotificationSettingsState,
   ShortcutDefinition,
   StartupWindowConfig,
   TrayIconState,
@@ -212,6 +212,47 @@ function sanitizeData<T>(data: T): T {
 // Exposed API
 // ============================================================================
 
+/** Reads notification settings for both the canonical bridge and its legacy alias when renderer code requests them.
+ * @returns The saved notification settings, or null when the main process cannot provide them.
+ * @example
+ * await readNotificationSettings() // => { enabled: true, ... } | null
+ */
+const readNotificationSettings =
+  async (): Promise<NotificationSettingsState | null> => {
+    try {
+      return await typedInvoke('notification-get-settings')
+    } catch (error) {
+      log.error('Failed to get notification settings:', error)
+      return null
+    }
+  }
+
+/** Validates and persists notification settings for canonical and legacy bridge callers.
+ * @param settings - Partial notification settings received from the renderer.
+ * @returns The saved notification settings returned by the main process.
+ * @example
+ * await writeNotificationSettings({ sound: false }) // => { enabled: true, sound: false, ... }
+ */
+const writeNotificationSettings = async (
+  settings: Record<string, unknown>,
+): Promise<NotificationSettingsState | null> => {
+  if (!settings || typeof settings !== 'object') {
+    throw new Error('Invalid settings data')
+  }
+
+  const sanitizedSettings = sanitizeData(settings)
+
+  try {
+    return await typedInvoke(
+      'notification-update-settings',
+      sanitizedSettings as Partial<NotificationSettingsState>,
+    )
+  } catch (error) {
+    log.error('Failed to update notification settings:', error)
+    throw new Error('Failed to update settings')
+  }
+}
+
 /**
  * Expose secure API to renderer process via contextBridge.
  *
@@ -365,7 +406,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Shared controls for floating utility panels.
    *
    * Settings uses this narrow surface instead of raw config writes so the main
-   * process can persist the preference and update already-open BrowserWindows.
+   * process can persist the setting and update already-open BrowserWindows.
    */
   floatingPanels: {
     /** Read whether Floating Navigator and BrainDump follow macOS Spaces. */
@@ -395,7 +436,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     },
     /**
-     * Read FloatingNavigator's always-on-top preference (effective state: the
+     * Read FloatingNavigator's always-on-top setting (effective state: the
      * live window when open, else the persisted relaunch value).
      */
     getFloatingNavigatorAlwaysOnTop: async (): Promise<boolean> => {
@@ -407,7 +448,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return true
       }
     },
-    /** Persist and apply FloatingNavigator's always-on-top preference. */
+    /** Persist and apply FloatingNavigator's always-on-top setting. */
     setFloatingNavigatorAlwaysOnTop: async (
       enabled: boolean,
     ): Promise<boolean> => {
@@ -421,7 +462,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw error
       }
     },
-    /** Read BrainDump's always-on-top preference (config-backed, default off). */
+    /** Read BrainDump's always-on-top setting (config-backed, default off). */
     getBrainDumpAlwaysOnTop: async (): Promise<boolean> => {
       try {
         return await typedInvoke('braindump-window-get-always-on-top')
@@ -431,7 +472,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return false
       }
     },
-    /** Persist and apply BrainDump's always-on-top preference. */
+    /** Persist and apply BrainDump's always-on-top setting. */
     setBrainDumpAlwaysOnTop: async (enabled: boolean): Promise<boolean> => {
       if (typeof enabled !== 'boolean') {
         throw new Error('BrainDump alwaysOnTop must be a boolean')
@@ -605,40 +646,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     },
 
-    /**
-     * Get notification preferences.
-     */
-    getPreferences: async (): Promise<NotificationPreferences | null> => {
-      try {
-        return await typedInvoke('notification-get-preferences')
-      } catch (error) {
-        log.error('Failed to get notification preferences:', error)
-        return null
-      }
-    },
+    /** Get notification settings. */
+    getSettings: readNotificationSettings,
 
-    /**
-     * Update notification preferences.
-     */
-    updatePreferences: async (
-      preferences: Record<string, unknown>,
-    ): Promise<NotificationPreferences | null> => {
-      if (!preferences || typeof preferences !== 'object') {
-        throw new Error('Invalid preferences data')
-      }
+    /** Update notification settings. */
+    updateSettings: writeNotificationSettings,
 
-      const sanitizedPreferences = sanitizeData(preferences)
+    /** @deprecated Kept while older hosted renderers still call the v1 bridge. */
+    getPreferences: readNotificationSettings,
 
-      try {
-        return await typedInvoke(
-          'notification-update-preferences',
-          sanitizedPreferences as Partial<NotificationPreferences>,
-        )
-      } catch (error) {
-        log.error('Failed to update notification preferences:', error)
-        throw new Error('Failed to update preferences')
-      }
-    },
+    /** @deprecated Kept while older hosted renderers still call the v1 bridge. */
+    updatePreferences: writeNotificationSettings,
 
     /**
      * Clear all active notifications.

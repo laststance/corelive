@@ -4,9 +4,9 @@
  * @fileoverview Brain Dump editor look-and-behavior controls (font family, size,
  * text color, clear-on-complete, and clear delay).
  *
- * Pure Redux — these write the `preferences` slice (persisted to localStorage and
+ * Pure Redux — these write the `settings` slice (persisted to localStorage and
  * synced across windows), with no IPC. Split out of the old web-common
- * PreferencesSettings during the Settings regroup so they sit beside the rest of
+ * common settings card during the Settings regroup so they sit beside the rest of
  * the Brain Dump settings instead of on the web-common surface, and rendered as
  * an independent sibling (not nested inside the IPC-gated note card) so a preload
  * skew on the `brainDump` bridge never hides these DOM-only controls.
@@ -47,7 +47,7 @@ import {
   setBraindumpFontSize,
   setBraindumpTextColor,
   setBraindumpToastDurationMs,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 /** A 6-digit `#rrggbb` — the only shape a native `<input type="color">` accepts, so
  * a preset (theme `var()`) or a 3/8-digit hex can't seed the picker's swatch. */
@@ -58,7 +58,7 @@ const BRAINDUMP_CUSTOM_COLOR_FALLBACK = '#000000'
 /**
  * Brain Dump editor appearance + clear-on-complete controls. Lives under the
  * Brain Dump settings section as a pure-Redux sibling of the IPC-backed note
- * card; toggling any control writes the `preferences` slice directly.
+ * card; toggling any control writes the `settings` slice directly.
  *
  * @returns The Brain Dump appearance control group.
  * @example

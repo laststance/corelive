@@ -7,7 +7,7 @@
  * After the Settings regroup the three `floatingPanels.*` booleans no longer
  * share a single card — the Spaces toggle lives under Application, and each
  * keep-on-top pin sits in its own window's section. Each row owns its own
- * `useFloatingPanelPreference` (per-method skew guard, Arch-2), so an outdated
+ * `useFloatingPanelSetting` (per-method skew guard, Arch-2), so an outdated
  * preload missing one setter hides only that row instead of the whole section.
  *
  * @module components/electron/FloatingPanelToggle
@@ -17,23 +17,22 @@ import { useId, type ReactElement, type ReactNode } from 'react'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
-  useFloatingPanelPreference,
-  type FloatingPanelPreferenceConfig,
-} from '@/hooks/useFloatingPanelPreference'
+  useFloatingPanelSetting,
+  type FloatingPanelSettingConfig,
+} from '@/hooks/useFloatingPanelSetting'
 
 /**
  * Floating Navigator keep-on-top pin (default ON — the navigator is a glanceable
  * companion meant to ride above other windows).
  */
-export const FLOATING_NAVIGATOR_PIN_PREFERENCE: FloatingPanelPreferenceConfig =
-  {
-    defaultValue: true,
-    get: async (api) => api.getFloatingNavigatorAlwaysOnTop(),
-    set: async (api, next) => api.setFloatingNavigatorAlwaysOnTop(next),
-    available: (api) =>
-      typeof api.getFloatingNavigatorAlwaysOnTop === 'function' &&
-      typeof api.setFloatingNavigatorAlwaysOnTop === 'function',
-  }
+export const FLOATING_NAVIGATOR_PIN_SETTING: FloatingPanelSettingConfig = {
+  defaultValue: true,
+  get: async (api) => api.getFloatingNavigatorAlwaysOnTop(),
+  set: async (api, next) => api.setFloatingNavigatorAlwaysOnTop(next),
+  available: (api) =>
+    typeof api.getFloatingNavigatorAlwaysOnTop === 'function' &&
+    typeof api.setFloatingNavigatorAlwaysOnTop === 'function',
+}
 
 /**
  * Brain Dump keep-on-top pin (default OFF — a dump surface you summon, not one
@@ -41,7 +40,7 @@ export const FLOATING_NAVIGATOR_PIN_PREFERENCE: FloatingPanelPreferenceConfig =
  * `brainDump` bridge, so this row degrades on a different preload axis than the
  * Brain Dump note card it sits beside.
  */
-export const BRAIN_DUMP_PIN_PREFERENCE: FloatingPanelPreferenceConfig = {
+export const BRAIN_DUMP_PIN_SETTING: FloatingPanelSettingConfig = {
   defaultValue: false,
   get: async (api) => api.getBrainDumpAlwaysOnTop(),
   set: async (api, next) => api.setBrainDumpAlwaysOnTop(next),
@@ -54,19 +53,18 @@ export const BRAIN_DUMP_PIN_PREFERENCE: FloatingPanelPreferenceConfig = {
  * Show-on-all-Spaces visibility (default OFF — one OS-level flag shared by both
  * panels), surfaced under the Application section since it is app-wide chrome.
  */
-export const VISIBLE_ON_ALL_WORKSPACES_PREFERENCE: FloatingPanelPreferenceConfig =
-  {
-    defaultValue: false,
-    get: async (api) => api.getVisibleOnAllWorkspaces(),
-    set: async (api, next) => api.setVisibleOnAllWorkspaces(next),
-    available: (api) =>
-      typeof api.getVisibleOnAllWorkspaces === 'function' &&
-      typeof api.setVisibleOnAllWorkspaces === 'function',
-  }
+export const VISIBLE_ON_ALL_WORKSPACES_SETTING: FloatingPanelSettingConfig = {
+  defaultValue: false,
+  get: async (api) => api.getVisibleOnAllWorkspaces(),
+  set: async (api, next) => api.setVisibleOnAllWorkspaces(next),
+  available: (api) =>
+    typeof api.getVisibleOnAllWorkspaces === 'function' &&
+    typeof api.setVisibleOnAllWorkspaces === 'function',
+}
 
 interface FloatingPanelToggleProps {
   /** Which `floatingPanels` boolean this row reads + writes. */
-  preference: FloatingPanelPreferenceConfig
+  setting: FloatingPanelSettingConfig
   /** Visible row label, also the accessible name unless `ariaLabel` overrides it. */
   label: string
   /** Optional helper copy under the label. */
@@ -85,17 +83,17 @@ interface FloatingPanelToggleProps {
 
 /**
  * A single labeled keep-on-top / visibility toggle backed by one floating-panel
- * preference. Renders nothing when the preference's preload methods are absent
+ * setting. Renders nothing when the setting's preload methods are absent
  * (web or an outdated desktop preload), so a skewed install simply omits the row
  * rather than showing a dead control or crashing the section.
  *
- * @param props - The preference descriptor plus its visible copy and disabled/note state.
- * @returns The toggle row, or null when the preference is unavailable on this preload.
+ * @param props - The setting descriptor plus its visible copy and disabled/note state.
+ * @returns The toggle row, or null when the setting is unavailable on this preload.
  * @example
- * <FloatingPanelToggle preference={FLOATING_NAVIGATOR_PIN_PREFERENCE} label="Keep Floating Navigator on top" />
+ * <FloatingPanelToggle setting={FLOATING_NAVIGATOR_PIN_SETTING} label="Keep Floating Navigator on top" />
  */
 export const FloatingPanelToggle = function FloatingPanelToggle({
-  preference,
+  setting,
   label,
   description,
   ariaLabel,
@@ -104,7 +102,7 @@ export const FloatingPanelToggle = function FloatingPanelToggle({
 }: FloatingPanelToggleProps): ReactElement | null {
   const switchId = useId()
   const { value, isReady, isSaving, error, available, apply } =
-    useFloatingPanelPreference(preference)
+    useFloatingPanelSetting(setting)
 
   // Hide the row entirely on web / an outdated preload (advisor: degrade a single
   // unavailable toggle by hiding it, never a per-toggle update card).

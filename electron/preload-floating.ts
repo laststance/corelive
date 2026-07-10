@@ -377,7 +377,7 @@ ipcRenderer.on(
 
 /**
  * Forward the main process's keep-on-top broadcast to a DOM CustomEvent so the
- * FloatingNavigator pin button live-updates when the preference changes from the
+ * FloatingNavigator pin button live-updates when the setting changes from the
  * Settings window. Mirrors the menu-action forward above; the payload is the
  * typed `{ alwaysOnTop: boolean }` from `WindowManager.setFloatingNavigatorAlwaysOnTop`.
  */

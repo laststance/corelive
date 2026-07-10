@@ -1,9 +1,9 @@
-import { type PreferencesState } from '@/lib/schemas/preferences'
+import { type UserSettingsState } from '@/lib/schemas/settings'
 
 /** The validated per-moment toggle map, reused from the schema SSoT so that
  * adding a moment to SOUND_MOMENT_IDS fails THIS file's compilation (the literal
  * below would be missing the new key) until the new moment is handled here. */
-type SoundMoments = PreferencesState['soundMoments']
+type SoundMoments = UserSettingsState['soundMoments']
 
 /** Coerces an untrusted persisted value to a boolean, or `undefined` when the
  * field was absent or stored as a non-boolean (malformed). */
@@ -21,7 +21,7 @@ function coerceBooleanOrUndefined(value: unknown): boolean | undefined {
  * persisted JSON, so it narrows from `unknown` and never throws (a throw would
  * make the storage middleware wipe ALL persisted state, window positions too).
  *
- * @param rawPreferences - The persisted `preferences` blob, untyped (untrusted JSON).
+ * @param rawSettings - The persisted `settings` blob, untyped (untrusted JSON).
  * @returns
  * - A full `soundMoments` map (legacy `complete` ON, other moments preserved or
  *   defaulted OFF) when the blob had `completionSound: true` and needs folding.
@@ -35,25 +35,24 @@ function coerceBooleanOrUndefined(value: unknown): boolean | undefined {
  * // => { 'task-create': false, complete: false, clear: false }  (explicit choice wins)
  */
 export function foldLegacyCompletionSoundIntoMoments(
-  rawPreferences: unknown,
+  rawSettings: unknown,
 ): SoundMoments | undefined {
-  // Narrow the untrusted blob to a readable object (mirrors isPreferencesSyncEnvelope).
-  if (typeof rawPreferences !== 'object' || rawPreferences === null) {
+  // Narrow the untrusted blob to a readable object (mirrors isSettingsSyncEnvelope).
+  if (typeof rawSettings !== 'object' || rawSettings === null) {
     return undefined
   }
   // Only fold when the legacy single-sound toggle was explicitly ON.
   const wasLegacyCompletionSoundOn =
-    'completionSound' in rawPreferences &&
-    rawPreferences.completionSound === true
+    'completionSound' in rawSettings && rawSettings.completionSound === true
   if (!wasLegacyCompletionSoundOn) {
     return undefined
   }
   // Read any moments the palette already persisted so explicit choices survive.
   const momentsSource =
-    'soundMoments' in rawPreferences &&
-    typeof rawPreferences.soundMoments === 'object' &&
-    rawPreferences.soundMoments !== null
-      ? rawPreferences.soundMoments
+    'soundMoments' in rawSettings &&
+    typeof rawSettings.soundMoments === 'object' &&
+    rawSettings.soundMoments !== null
+      ? rawSettings.soundMoments
       : undefined
   const existingTaskCreate = coerceBooleanOrUndefined(
     momentsSource && 'task-create' in momentsSource

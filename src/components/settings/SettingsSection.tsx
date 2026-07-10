@@ -50,7 +50,7 @@ function slugifySectionId(label: string): string {
  * @param id - Optional explicit id for the `<h2>`/`aria-labelledby` pair; defaults to a slug of `label`.
  * @returns A labelled `<section>` landmark.
  * @example
- * <SettingsSection label="Sound"><SoundPreferences /></SettingsSection>
+ * <SettingsSection label="Sound"><SoundSettings /></SettingsSection>
  */
 export const SettingsSection = function SettingsSection({
   label,

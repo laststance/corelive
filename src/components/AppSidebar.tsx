@@ -220,13 +220,13 @@ export const AppSidebar = function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {/* Preferences is web-reachable (D15): the shared Preferences
+                {/* Settings is web-reachable (D15): the shared Settings
                      section is shown to everyone; Electron window-chrome settings
                      self-gate to the desktop app. */}
                 <SidebarMenuItem>
                   <SidebarMenuButton onClick={handleOpenSettings}>
                     <Settings className="h-4 w-4" />
-                    <span>Preferences</span>
+                    <span>Settings</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>

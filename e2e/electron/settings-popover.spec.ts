@@ -3,7 +3,7 @@
  *
  * Tests the renderer→IPC→main-process round-trip for settings-related calls,
  * verifying the full stack is wired correctly across login-item, startup-config,
- * and app-visibility preferences. After main-window retirement the settings
+ * and app-visibility settings. After main-window retirement the settings
  * bridge is driven from the Settings window itself (`setupElectronTest`).
  */
 

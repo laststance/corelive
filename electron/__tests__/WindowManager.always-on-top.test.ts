@@ -2,14 +2,14 @@
  * @fileoverview FloatingNavigator + BrainDump always-on-top WindowManager tests.
  *
  * The crux sentinel: FloatingNavigator's always-on-top must persist to the
- * WindowStateManager, not just config — otherwise the preference is a silent
+ * WindowStateManager, not just config — otherwise the setting is a silent
  * no-op after the first launch, because `window-state.json` overrides config at
  * relaunch. A config-only setter would pass typecheck and look correct, yet
  * re-pin the window on the next boot. These tests fail if that regression
  * returns. They also lock the BrainDump window's constructor to a config read
  * (no hardcoded `alwaysOnTop: true` shadow) and the getters to the right source
  * of truth, plus the §6d cross-window broadcast: an open floating window must be
- * told when the preference changes from another surface so its own pin button
+ * told when the setting changes from another surface so its own pin button
  * live-updates (and must not throw when that window is closed).
  *
  * Triggered when: `pnpm test:electron` (Vitest).
@@ -301,7 +301,7 @@ describe('WindowManager always-on-top', () => {
         windowStateManager,
       )
 
-      // Act + Assert: changing the preference with no window must not throw on a
+      // Act + Assert: changing the setting with no window must not throw on a
       // null floating window; the closed window re-reads fresh state on next open.
       expect(() =>
         windowManager.setFloatingNavigatorAlwaysOnTop(false),

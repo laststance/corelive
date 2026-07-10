@@ -5,7 +5,7 @@
  *
  * Forwards persisted Electron settings from renderer-side localStorage to the
  * main process at startup. Both the `hideAppIcon` (dock policy) and
- * `showInMenuBar` (tray icon) preferences live in localStorage via
+ * `showInMenuBar` (tray icon) settings live in localStorage via
  * redux-storage-middleware, but their main-process effects are runtime-only and
  * reset on every launch: the macOS dock policy (`app.setActivationPolicy`)
  * resets to 'regular', and the tray is always (re)created at boot by

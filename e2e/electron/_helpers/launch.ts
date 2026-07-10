@@ -226,7 +226,7 @@ export async function waitForFloatingWindow(
  *
  * The hook (`__coreliveTestOpenSettings`, installed in `main.ts` right after
  * WindowManager is constructed) is platform-independent. We deliberately do NOT
- * click the app-menu "Preferences…" item: that menu is macOS-only, but this
+ * click the app-menu "Settings…" item: that menu is macOS-only, but this
  * suite runs on Linux+xvfb in CI where it is never built. The hook is set during
  * `criticalInit`, so retry until it is present after launch.
  *

@@ -34,7 +34,7 @@ describe('FloatingNavigatorSettings', () => {
   })
 
   it('reflects the saved keep-on-top state for the Floating Navigator', async () => {
-    // Arrange: the navigator is pinned in the saved preferences.
+    // Arrange: the navigator is pinned in the saved settings.
     installElectronAPI({
       floatingPanels: {
         getFloatingNavigatorAlwaysOnTop: vi.fn().mockResolvedValue(true),

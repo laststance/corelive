@@ -15,10 +15,12 @@ import {
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { getNotificationSettings } from '@/lib/utils/getNotificationSettings'
+import { updateNotificationSettings } from '@/lib/utils/updateNotificationSettings'
 
 import { log } from '../../lib/logger'
 
-interface NotificationPreferences {
+interface NotificationSettingsState {
   enabled: boolean
   taskCreated: boolean
   taskCompleted: boolean
@@ -27,8 +29,8 @@ interface NotificationPreferences {
   sound: boolean
 }
 
-/** Default notification preferences for UI state */
-const DEFAULT_PREFERENCES: NotificationPreferences = {
+/** Default notification settings for UI state */
+const DEFAULT_SETTINGS: NotificationSettingsState = {
   enabled: true,
   taskCreated: true,
   taskCompleted: true,
@@ -41,33 +43,33 @@ interface NotificationSettingsProps {
   className?: string
 }
 
-interface NotificationPreferenceSwitchProps {
+interface NotificationSettingSwitchProps {
   id: string
   checked: boolean
   disabled: boolean
-  preferenceKey: keyof NotificationPreferences
-  updatePreferences: (
-    newPreferences: Partial<NotificationPreferences>,
+  settingKey: keyof NotificationSettingsState
+  updateSettings: (
+    newSettings: Partial<NotificationSettingsState>,
   ) => Promise<void>
 }
 
 /**
- * Updates one notification preference without inline JSX handlers.
+ * Updates one notification setting without inline JSX handlers.
  *
- * @param props - Preference key, checked state, disabled state, and updater.
- * @returns A controlled Switch for notification preferences.
+ * @param props - Setting key, checked state, disabled state, and updater.
+ * @returns A controlled Switch for notification settings.
  * @example
- * <NotificationPreferenceSwitch id="task-created" preferenceKey="taskCreated" checked updatePreferences={updatePreferences} disabled={false} />
+ * <NotificationSettingSwitch id="task-created" settingKey="taskCreated" checked updateSettings={updateSettings} disabled={false} />
  */
-const NotificationPreferenceSwitch = function NotificationPreferenceSwitch({
+const NotificationSettingSwitch = function NotificationSettingSwitch({
   id,
   checked,
   disabled,
-  preferenceKey,
-  updatePreferences,
-}: NotificationPreferenceSwitchProps) {
+  settingKey,
+  updateSettings,
+}: NotificationSettingSwitchProps) {
   const handleCheckedChange = async (nextChecked: boolean) => {
-    await updatePreferences({ [preferenceKey]: nextChecked })
+    await updateSettings({ [settingKey]: nextChecked })
   }
 
   return (
@@ -83,7 +85,7 @@ const NotificationPreferenceSwitch = function NotificationPreferenceSwitch({
 export const NotificationSettings = function NotificationSettings({
   className,
 }: NotificationSettingsProps) {
-  const [preferences, setPreferences] = useState<NotificationPreferences>({
+  const [settings, setSettings] = useState<NotificationSettingsState>({
     enabled: true,
     taskCreated: true,
     taskCompleted: true,
@@ -99,31 +101,36 @@ export const NotificationSettings = function NotificationSettings({
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && window.electronAPI
 
-  const loadPreferences = async () => {
+  const loadSettings = async () => {
     if (!isElectron) return
 
     try {
       if (!window.electronAPI?.notifications) {
         throw new Error('Electron API not available')
       }
-      const prefs = await window.electronAPI.notifications.getPreferences()
+      const storedSettings = await getNotificationSettings(
+        window.electronAPI.notifications,
+      )
       const enabled = await window.electronAPI.notifications.isEnabled()
 
-      if (prefs) {
+      if (storedSettings) {
         // Transform API response to component's expected format
-        setPreferences({
-          enabled: prefs.enabled,
-          sound: prefs.sound,
-          taskCreated: prefs.taskCreated ?? DEFAULT_PREFERENCES.taskCreated,
+        setSettings({
+          enabled: storedSettings.enabled,
+          sound: storedSettings.sound,
+          taskCreated:
+            storedSettings.taskCreated ?? DEFAULT_SETTINGS.taskCreated,
           taskCompleted:
-            prefs.taskCompleted ?? DEFAULT_PREFERENCES.taskCompleted,
-          taskUpdated: prefs.taskUpdated ?? DEFAULT_PREFERENCES.taskUpdated,
-          taskDeleted: prefs.taskDeleted ?? DEFAULT_PREFERENCES.taskDeleted,
+            storedSettings.taskCompleted ?? DEFAULT_SETTINGS.taskCompleted,
+          taskUpdated:
+            storedSettings.taskUpdated ?? DEFAULT_SETTINGS.taskUpdated,
+          taskDeleted:
+            storedSettings.taskDeleted ?? DEFAULT_SETTINGS.taskDeleted,
         })
       }
       setIsSupported(enabled)
     } catch (error) {
-      log.error('Failed to load notification preferences:', error)
+      log.error('Failed to load notification settings:', error)
     } finally {
       setIsLoading(false)
     }
@@ -149,12 +156,12 @@ export const NotificationSettings = function NotificationSettings({
       return
     }
 
-    loadPreferences()
+    loadSettings()
     loadActiveCount()
-  }, [isElectron, loadActiveCount, loadPreferences])
+  }, [isElectron, loadActiveCount, loadSettings])
 
-  const updatePreferences = async (
-    newPreferences: Partial<NotificationPreferences>,
+  const updateSettings = async (
+    newSettings: Partial<NotificationSettingsState>,
   ) => {
     if (!isElectron) return
 
@@ -163,15 +170,17 @@ export const NotificationSettings = function NotificationSettings({
       if (!window.electronAPI?.notifications) {
         throw new Error('Electron API not available')
       }
-      const updatedPrefs = { ...preferences, ...newPreferences }
-      const success =
-        await window.electronAPI.notifications.updatePreferences(updatedPrefs)
+      const updatedSettings = { ...settings, ...newSettings }
+      const savedSettings = await updateNotificationSettings(
+        window.electronAPI.notifications,
+        updatedSettings,
+      )
 
-      if (success) {
-        setPreferences(updatedPrefs)
+      if (savedSettings) {
+        setSettings(updatedSettings)
       }
     } catch (error) {
-      log.error('Failed to update notification preferences:', error)
+      log.error('Failed to update notification settings:', error)
     } finally {
       setIsSaving(false)
     }
@@ -187,7 +196,7 @@ export const NotificationSettings = function NotificationSettings({
       await window.electronAPI.notifications.show(
         'Test Notification',
         'This is a test notification from your TODO app!',
-        { silent: !preferences.sound },
+        { silent: !settings.sound },
       )
     } catch (error) {
       log.error('Failed to show test notification:', error)
@@ -232,7 +241,7 @@ export const NotificationSettings = function NotificationSettings({
             <Bell className="h-5 w-5" />
             Notifications
           </CardTitle>
-          <CardDescription>Loading notification preferences...</CardDescription>
+          <CardDescription>Loading notification settings...</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -281,16 +290,16 @@ export const NotificationSettings = function NotificationSettings({
               Turn on desktop notifications for task updates
             </div>
           </div>
-          <NotificationPreferenceSwitch
+          <NotificationSettingSwitch
             id="notifications-enabled"
-            checked={preferences.enabled}
-            preferenceKey="enabled"
-            updatePreferences={updatePreferences}
+            checked={settings.enabled}
+            settingKey="enabled"
+            updateSettings={updateSettings}
             disabled={isSaving}
           />
         </div>
 
-        {preferences.enabled && (
+        {settings.enabled && (
           <>
             {/* Notification types */}
             <div className="space-y-4">
@@ -301,11 +310,11 @@ export const NotificationSettings = function NotificationSettings({
                   <Label htmlFor="task-created" className="text-sm">
                     Task Created
                   </Label>
-                  <NotificationPreferenceSwitch
+                  <NotificationSettingSwitch
                     id="task-created"
-                    checked={preferences.taskCreated}
-                    preferenceKey="taskCreated"
-                    updatePreferences={updatePreferences}
+                    checked={settings.taskCreated}
+                    settingKey="taskCreated"
+                    updateSettings={updateSettings}
                     disabled={isSaving}
                   />
                 </div>
@@ -314,11 +323,11 @@ export const NotificationSettings = function NotificationSettings({
                   <Label htmlFor="task-completed" className="text-sm">
                     Task Completed
                   </Label>
-                  <NotificationPreferenceSwitch
+                  <NotificationSettingSwitch
                     id="task-completed"
-                    checked={preferences.taskCompleted}
-                    preferenceKey="taskCompleted"
-                    updatePreferences={updatePreferences}
+                    checked={settings.taskCompleted}
+                    settingKey="taskCompleted"
+                    updateSettings={updateSettings}
                     disabled={isSaving}
                   />
                 </div>
@@ -327,11 +336,11 @@ export const NotificationSettings = function NotificationSettings({
                   <Label htmlFor="task-updated" className="text-sm">
                     Task Updated
                   </Label>
-                  <NotificationPreferenceSwitch
+                  <NotificationSettingSwitch
                     id="task-updated"
-                    checked={preferences.taskUpdated}
-                    preferenceKey="taskUpdated"
-                    updatePreferences={updatePreferences}
+                    checked={settings.taskUpdated}
+                    settingKey="taskUpdated"
+                    updateSettings={updateSettings}
                     disabled={isSaving}
                   />
                 </div>
@@ -340,11 +349,11 @@ export const NotificationSettings = function NotificationSettings({
                   <Label htmlFor="task-deleted" className="text-sm">
                     Task Deleted
                   </Label>
-                  <NotificationPreferenceSwitch
+                  <NotificationSettingSwitch
                     id="task-deleted"
-                    checked={preferences.taskDeleted}
-                    preferenceKey="taskDeleted"
-                    updatePreferences={updatePreferences}
+                    checked={settings.taskDeleted}
+                    settingKey="taskDeleted"
+                    updateSettings={updateSettings}
                     disabled={isSaving}
                   />
                 </div>
@@ -358,7 +367,7 @@ export const NotificationSettings = function NotificationSettings({
                   htmlFor="notification-sound"
                   className="flex items-center gap-2 text-base"
                 >
-                  {preferences.sound ? (
+                  {settings.sound ? (
                     <Volume2 className="h-4 w-4" />
                   ) : (
                     <VolumeX className="h-4 w-4" />
@@ -369,11 +378,11 @@ export const NotificationSettings = function NotificationSettings({
                   Play sound with notifications
                 </div>
               </div>
-              <NotificationPreferenceSwitch
+              <NotificationSettingSwitch
                 id="notification-sound"
-                checked={preferences.sound}
-                preferenceKey="sound"
-                updatePreferences={updatePreferences}
+                checked={settings.sound}
+                settingKey="sound"
+                updateSettings={updateSettings}
                 disabled={isSaving}
               />
             </div>

@@ -196,7 +196,7 @@ export const BRAINDUMP_CLEAR_DELAY_MIN_MS = 0
  * Slowest clear. Capped at {@link BRAINDUMP_TOAST_UNDO_MS} so the line can never
  * outlast its own Undo window — a longer linger would let the toast vanish while
  * the line is still on screen, stranding the user with no way to undo (#109 will
- * lift the toast duration into a pref; this ceiling then tracks it for free).
+ * lift the toast duration into a setting; this ceiling then tracks it for free).
  */
 export const BRAINDUMP_CLEAR_DELAY_MAX_MS = BRAINDUMP_TOAST_UNDO_MS
 
@@ -231,7 +231,7 @@ export type BrainDumpClearDelayMs = number
 /**
  * Default completion-toast display duration — aliases {@link BRAINDUMP_TOAST_UNDO_MS}
  * (5000 ms) so a fresh install keeps today's Undo-window behaviour exactly. #109
- * lifts this once-fixed window into a user pref; the #108 clear-delay ceiling now
+ * lifts this once-fixed window into a user setting; the #108 clear-delay ceiling now
  * tracks it at the consumption site via `min(clearDelay, toastDuration)` rather
  * than the old fixed constant, so a line can still never outlast its own Undo.
  */

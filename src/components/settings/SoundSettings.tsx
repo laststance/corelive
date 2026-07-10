@@ -20,7 +20,7 @@ import {
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
-} from '@/lib/redux/slices/preferencesSlice'
+} from '@/lib/redux/slices/settingsSlice'
 
 /** Volume slider increment (0–1 range) — fine enough to feel smooth, coarse enough to land round values. */
 const SOUND_VOLUME_SLIDER_STEP = 0.05
@@ -74,17 +74,17 @@ const SoundMomentRow = function SoundMomentRow({
 }
 
 /**
- * Web-common SOUND preferences — the opt-in earned-beat sound palette: per-moment
+ * Web-common SOUND settings — the opt-in earned-beat sound palette: per-moment
  * cue toggles, a timbre picker (auditioned on selection), and a master volume. The
  * DESIGN.md-sanctioned exception to the SFX ban (default OFF, a quiet companion).
  * Rendered under the `SOUND` section header (`src/app/settings/page.tsx`). Writes
- * the `preferences` Redux slice (persisted + synced across windows).
+ * the `settings` Redux slice (persisted + synced across windows).
  *
- * @returns The Sound preferences controls.
+ * @returns The Sound settings controls.
  * @example
- * <SettingsSection label="Sound"><SoundPreferences /></SettingsSection>
+ * <SettingsSection label="Sound"><SoundSettings /></SettingsSection>
  */
-export const SoundPreferences = function SoundPreferences() {
+export const SoundSettings = function SoundSettings() {
   const dispatch = useAppDispatch()
   // Each moment toggle is read as its own primitive boolean (not a fresh object)
   // so the panel only re-renders when a value it shows actually changes. Read at
@@ -243,4 +243,4 @@ export const SoundPreferences = function SoundPreferences() {
   )
 }
 
-export default SoundPreferences
+export default SoundSettings

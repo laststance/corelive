@@ -569,7 +569,7 @@ export class SystemTrayManager {
         },
         { type: 'separator' },
         {
-          label: 'Preferences',
+          label: 'Settings',
           click: () => {
             try {
               this.windowManager.openSettings()

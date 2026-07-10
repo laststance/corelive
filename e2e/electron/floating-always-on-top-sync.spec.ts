@@ -109,7 +109,7 @@ test('turning off always-on-top from Settings reaches the floating window as a D
 
 test('re-enabling always-on-top broadcasts the restored state to the floating window', async () => {
   // Arrange — the floating page is still listening from beforeAll; a second,
-  // distinct broadcast must arrive when we flip the preference back.
+  // distinct broadcast must arrive when we flip the setting back.
 
   // Act
   await setFloatingAlwaysOnTopFromSettings(true)

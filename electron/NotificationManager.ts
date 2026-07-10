@@ -12,9 +12,12 @@ import { Notification, nativeImage, type NativeImage } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
-import type { NotificationOptions, NotificationPreferences } from './types/ipc'
+import type {
+  NotificationOptions,
+  NotificationSettingsState,
+} from './types/ipc'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
-// NotificationPreferences and NotificationOptions are the canonical contract
+// NotificationSettingsState and NotificationOptions are the canonical contract
 // types from ./types/ipc.ts — imported here so the manager stays aligned with
 // the IPC boundary contract (single source of truth).
 
@@ -53,7 +56,7 @@ interface TaskChanges {
   dueDate?: boolean
 }
 
-export type { NotificationPreferences, NotificationOptions }
+export type { NotificationSettingsState, NotificationOptions }
 
 /** Permission result */
 interface PermissionResult {
@@ -95,8 +98,8 @@ export class NotificationManager {
   /** Active notifications */
   private activeNotifications: Map<string, Notification>
 
-  /** Notification preferences */
-  private preferences: NotificationPreferences
+  /** Notification settings */
+  private settings: NotificationSettingsState
 
   /** Fallback mode - stored for debugging/future use */
   // @ts-ignore - Intentionally unused, stored for debugging
@@ -115,8 +118,8 @@ export class NotificationManager {
     this.configManager = configManager
     this.activeNotifications = new Map()
 
-    this.preferences = this.getDefaultPreferences()
-    this.loadPreferences()
+    this.settings = this.getDefaultSettings()
+    this.loadSettings()
   }
 
   /**
@@ -129,9 +132,9 @@ export class NotificationManager {
   }
 
   /**
-   * Get default notification preferences.
+   * Get default notification settings.
    */
-  private getDefaultPreferences(): NotificationPreferences {
+  private getDefaultSettings(): NotificationSettingsState {
     return {
       enabled: true,
       taskCreated: true,
@@ -147,16 +150,16 @@ export class NotificationManager {
   }
 
   /**
-   * Loads notification preferences from user configuration.
+   * Loads notification settings from user configuration.
    */
-  loadPreferences(): void {
+  loadSettings(): void {
     if (this.configManager) {
-      const savedPrefs = this.configManager.getSection('notifications')
-      if (savedPrefs && typeof savedPrefs === 'object') {
-        this.preferences = {
-          ...this.preferences,
-          ...savedPrefs,
-        } as NotificationPreferences
+      const savedSettings = this.configManager.getSection('notifications')
+      if (savedSettings && typeof savedSettings === 'object') {
+        this.settings = {
+          ...this.settings,
+          ...savedSettings,
+        } as NotificationSettingsState
       }
     }
   }
@@ -280,7 +283,7 @@ export class NotificationManager {
    * Handle notification unavailable.
    */
   private handleNotificationUnavailable(_reason: string): void {
-    this.preferences.enabled = false
+    this.settings.enabled = false
     this._fallbackMode = 'unavailable'
   }
 
@@ -288,7 +291,7 @@ export class NotificationManager {
    * Handle notification permission denied.
    */
   private handleNotificationPermissionDenied(reason: string): void {
-    this.preferences.enabled = false
+    this.settings.enabled = false
     this._fallbackMode = 'permission_denied'
     this.showPermissionDeniedGuidance(reason)
   }
@@ -299,7 +302,7 @@ export class NotificationManager {
   private handleNotificationTestFailure(
     _error: string | Error | undefined,
   ): void {
-    this.preferences.enabled = false
+    this.settings.enabled = false
     this._fallbackMode = 'test_failed'
     this.enableFallbackNotificationMethods()
   }
@@ -308,7 +311,7 @@ export class NotificationManager {
    * Handle notification initialization failure.
    */
   private handleNotificationInitializationFailure(error: Error): void {
-    this.preferences.enabled = false
+    this.settings.enabled = false
     this._fallbackMode = 'init_failed'
     log.error('Notification initialization error details:', error)
   }
@@ -375,7 +378,7 @@ export class NotificationManager {
     const body = `"${task.title}" has been added to your TODO list`
 
     return this.showNotification(title, body, {
-      silent: !this.preferences.sound,
+      silent: !this.settings.sound,
       tag: `task-created-${task.id}`,
       onClick: async () => this.handleTaskNotificationClick(task.id),
       onAction: async (actionIndex) =>
@@ -397,7 +400,7 @@ export class NotificationManager {
       : `"${task.title}" has been reopened`
 
     return this.showNotification(title, body, {
-      silent: !this.preferences.sound,
+      silent: !this.settings.sound,
       tag: `task-completed-${task.id}`,
       onClick: async () => this.handleTaskNotificationClick(task.id),
       onAction: async (actionIndex) =>
@@ -428,7 +431,7 @@ export class NotificationManager {
     }
 
     return this.showNotification(title, body, {
-      silent: !this.preferences.sound,
+      silent: !this.settings.sound,
       tag: `task-updated-${task.id}`,
       onClick: async () => this.handleTaskNotificationClick(task.id),
       onAction: async () => this.handleTaskNotificationClick(task.id),
@@ -447,7 +450,7 @@ export class NotificationManager {
     const body = `"${task.title}" has been removed from your TODO list`
 
     return this.showNotification(title, body, {
-      silent: !this.preferences.sound,
+      silent: !this.settings.sound,
       tag: `task-deleted-${task.id}`,
     })
   }
@@ -460,7 +463,7 @@ export class NotificationManager {
     body: string,
     options: NotificationOptions = {},
   ): Notification | null {
-    if (!this.preferences.enabled || !Notification.isSupported()) {
+    if (!this.settings.enabled || !Notification.isSupported()) {
       this.showFallbackNotification(title, body, options)
       return null
     }
@@ -613,31 +616,33 @@ export class NotificationManager {
   /**
    * Check if notification should be shown.
    */
-  private shouldShowNotification(type: keyof NotificationPreferences): boolean {
-    return this.preferences.enabled && !!this.preferences[type]
+  private shouldShowNotification(
+    type: keyof NotificationSettingsState,
+  ): boolean {
+    return this.settings.enabled && !!this.settings[type]
   }
 
   /**
-   * Update notification preferences.
+   * Update notification settings.
    */
-  updatePreferences(newPreferences: Partial<NotificationPreferences>): void {
-    this.preferences = {
-      ...this.preferences,
-      ...newPreferences,
+  updateSettings(newSettings: Partial<NotificationSettingsState>): void {
+    this.settings = {
+      ...this.settings,
+      ...newSettings,
     }
 
     if (this.configManager) {
-      for (const [key, value] of Object.entries(newPreferences)) {
+      for (const [key, value] of Object.entries(newSettings)) {
         this.configManager.set(`notifications.${key}`, value)
       }
     }
   }
 
   /**
-   * Get current notification preferences.
+   * Get current notification settings.
    */
-  getPreferences(): NotificationPreferences {
-    return { ...this.preferences }
+  getSettings(): NotificationSettingsState {
+    return { ...this.settings }
   }
 
   /**
@@ -680,7 +685,7 @@ export class NotificationManager {
    * Check if notifications are enabled.
    */
   isEnabled(): boolean {
-    return this.preferences.enabled && Notification.isSupported()
+    return this.settings.enabled && Notification.isSupported()
   }
 
   /**

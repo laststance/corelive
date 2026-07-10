@@ -19,14 +19,14 @@ import {
 } from '@laststance/redux-storage-middleware'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
 
-import { createPreferencesSyncMiddleware } from '../preferences-sync-channel'
+import { createUserSettingsSyncMiddleware } from '../settings-sync-channel'
 
 import {
   migratePersistedState,
   STORAGE_SCHEMA_VERSION,
 } from './migratePersistedState'
 import electronSettingsReducer from './slices/electronSettingsSlice'
-import preferencesReducer from './slices/preferencesSlice'
+import userSettingsReducer from './slices/settingsSlice'
 
 /**
  * Root reducer combining all slice reducers.
@@ -34,7 +34,7 @@ import preferencesReducer from './slices/preferencesSlice'
  */
 const rootReducer = combineReducers({
   electronSettings: electronSettingsReducer,
-  preferences: preferencesReducer,
+  settings: userSettingsReducer,
 })
 
 /**
@@ -51,12 +51,12 @@ export const STORAGE_KEY = 'corelive-redux-state'
  *
  * Why `merge: deepMerge` and not the library default `shallowMerge`:
  * shallowMerge replaces each persisted slice wholesale (`{ ...current,
- * ...persisted }`), so any preference field ADDED in a newer app version is
+ * ...persisted }`), so any setting field ADDED in a newer app version is
  * simply absent for users who persisted before it existed — it reads back
  * `undefined` and the UI shows it "reverted to default" on version-up.
  * deepMerge recursively fills every missing field (at any depth) from the
  * current defaults while preserving all user-set values, so an update never
- * silently resets a preference and newer fields appear at their defaults. It is
+ * silently resets a setting and newer fields appear at their defaults. It is
  * also preferred over re-parsing through the Zod schema, which would reject the
  * WHOLE slice (resetting everything) on a single wrong-typed field — the wrong
  * trade-off for the user's own persisted data, where "preserve" beats "reject".
@@ -72,7 +72,7 @@ export const createPersistenceMiddleware = () =>
   createStorageMiddleware({
     rootReducer,
     key: STORAGE_KEY,
-    slices: ['electronSettings', 'preferences'], // Slices to persist to localStorage
+    slices: ['electronSettings', 'settings'], // Slices to persist to localStorage
     version: STORAGE_SCHEMA_VERSION,
     migrate: migratePersistedState,
     merge: deepMerge,
@@ -101,8 +101,8 @@ export const store = configureStore({
       serializableCheck: false,
     })
       .concat(storageMiddleware)
-      // Mirror preference toggles across windows (web / Electron / Floating).
-      .concat(createPreferencesSyncMiddleware()),
+      // Mirror setting toggles across windows (web / Electron / Floating).
+      .concat(createUserSettingsSyncMiddleware()),
   devTools: process.env.NODE_ENV !== 'production',
 })
 

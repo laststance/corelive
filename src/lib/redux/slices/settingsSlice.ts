@@ -1,21 +1,21 @@
 /**
- * Preferences Slice
+ * Settings Slice
  *
- * Redux slice for the core web/Electron user preferences that govern the todo
+ * Redux slice for the core web/Electron user settings that govern the todo
  * experience (not Electron window chrome — that lives in electronSettings).
  * Persisted to localStorage via redux-storage-middleware and synced live across
- * windows via the preferences BroadcastChannel. The state SHAPE is owned by
- * `PreferencesStateSchema` (the Zod SSoT); this slice only adds the reducers,
+ * windows via the settings BroadcastChannel. The state SHAPE is owned by
+ * `UserSettingsStateSchema` (the Zod SSoT); this slice only adds the reducers,
  * selectors, and the legacy→palette migration on read.
  *
- * @module lib/redux/slices/preferencesSlice
+ * @module lib/redux/slices/settingsSlice
  *
  * @example
  * import { useAppSelector, useAppDispatch } from '@/lib/redux/hooks'
  * import {
  *   selectSoundMoment,
  *   setSoundMoment,
- * } from '@/lib/redux/slices/preferencesSlice'
+ * } from '@/lib/redux/slices/settingsSlice'
  *
  * const completeEnabled = useAppSelector((s) => selectSoundMoment(s, 'complete'))
  * const dispatch = useAppDispatch()
@@ -34,29 +34,29 @@ import {
   BRAINDUMP_TOAST_DURATION_MIN_MS,
   type BrainDumpFontFamilyId,
 } from '@/lib/constants/braindump'
-import { DEFAULT_PREFERENCES } from '@/lib/constants/preferences'
+import { DEFAULT_SETTINGS } from '@/lib/constants/settings'
 import { type SoundMomentId, type TimbreId } from '@/lib/constants/sound'
-import { type PreferencesState } from '@/lib/schemas/preferences'
+import { type UserSettingsState } from '@/lib/schemas/settings'
 
 import type { RootState } from '../store'
 
-// The preferences SHAPE is the Zod schema's inferred type (D2 SSoT). Re-exported
-// so existing importers (sync-channel, tests) keep importing it from the slice.
-export type { PreferencesState }
+// The settings SHAPE is the Zod schema's inferred type (D2 SSoT). Re-exported
+// so sync and test callers share the same canonical type.
+export type { UserSettingsState }
 
 /**
- * Default preferences state. Used as initial state and for reset; sourced from
+ * Default settings state. Used as initial state and for reset; sourced from
  * the schema SSoT so every field defaults OFF/neutral and behavior is unchanged
  * for users who never touch the toggles.
  */
-export const initialState = { ...DEFAULT_PREFERENCES }
+export const initialState = { ...DEFAULT_SETTINGS }
 
 /**
- * Redux slice for core user preferences: the sound palette (per-moment toggles,
+ * Redux slice for core user settings: the sound palette (per-moment toggles,
  * timbre, master volume) plus 居残りモード, plus the legacy completionSound flag.
  */
-export const preferencesSlice = createSlice({
-  name: 'preferences',
+export const userSettingsSlice = createSlice({
+  name: 'settings',
   initialState,
   reducers: {
     /**
@@ -90,8 +90,7 @@ export const preferencesSlice = createSlice({
       state,
       action: PayloadAction<{ moment: SoundMomentId; enabled: boolean }>,
     ) => {
-      const currentMoments =
-        state.soundMoments ?? DEFAULT_PREFERENCES.soundMoments
+      const currentMoments = state.soundMoments ?? DEFAULT_SETTINGS.soundMoments
       state.soundMoments = {
         ...currentMoments,
         [action.payload.moment]: action.payload.enabled,
@@ -139,7 +138,7 @@ export const preferencesSlice = createSlice({
       const requestedVolume = action.payload
       state.soundVolume = Number.isFinite(requestedVolume)
         ? Math.min(1, Math.max(0, requestedVolume))
-        : DEFAULT_PREFERENCES.soundVolume
+        : DEFAULT_SETTINGS.soundVolume
     },
 
     /**
@@ -160,7 +159,7 @@ export const preferencesSlice = createSlice({
         requestedFamily,
       )
         ? requestedFamily
-        : DEFAULT_PREFERENCES.braindumpFontFamily
+        : DEFAULT_SETTINGS.braindumpFontFamily
     },
 
     /**
@@ -177,7 +176,7 @@ export const preferencesSlice = createSlice({
             BRAINDUMP_FONT_SIZE_MAX_PX,
             Math.max(BRAINDUMP_FONT_SIZE_MIN_PX, requestedSize),
           )
-        : DEFAULT_PREFERENCES.braindumpFontSize
+        : DEFAULT_SETTINGS.braindumpFontSize
     },
 
     /**
@@ -195,7 +194,7 @@ export const preferencesSlice = createSlice({
         requestedColor,
       )
         ? requestedColor
-        : DEFAULT_PREFERENCES.braindumpTextColor
+        : DEFAULT_SETTINGS.braindumpTextColor
     },
 
     /**
@@ -223,7 +222,7 @@ export const preferencesSlice = createSlice({
             BRAINDUMP_CLEAR_DELAY_MAX_MS,
             Math.max(BRAINDUMP_CLEAR_DELAY_MIN_MS, requestedDelay),
           )
-        : DEFAULT_PREFERENCES.braindumpClearDelayMs
+        : DEFAULT_SETTINGS.braindumpClearDelayMs
     },
 
     /**
@@ -241,24 +240,24 @@ export const preferencesSlice = createSlice({
             BRAINDUMP_TOAST_DURATION_MAX_MS,
             Math.max(BRAINDUMP_TOAST_DURATION_MIN_MS, requestedDuration),
           )
-        : DEFAULT_PREFERENCES.braindumpToastDurationMs
+        : DEFAULT_SETTINGS.braindumpToastDurationMs
     },
 
     /**
-     * Replaces the whole preferences state. Used by the cross-window sync to
-     * apply preferences received from another window without re-broadcasting.
+     * Replaces the whole settings state. Used by the cross-window sync to
+     * apply settings received from another window without re-broadcasting.
      * @param _state - Current state (unused, returns new state)
-     * @param action - Payload containing the full preferences snapshot
+     * @param action - Payload containing the full settings snapshot
      */
-    hydratePreferences: (_state, action: PayloadAction<PreferencesState>) => {
+    hydrateUserSettings: (_state, action: PayloadAction<UserSettingsState>) => {
       return { ...action.payload }
     },
 
     /**
-     * Resets all preferences to their default (OFF) values.
+     * Resets all settings to their default (OFF) values.
      * @param _state - Current state (unused, returns new state)
      */
-    resetPreferences: (_state) => {
+    resetUserSettings: (_state) => {
       return { ...initialState }
     },
   },
@@ -278,29 +277,28 @@ export const {
   setBraindumpClearOnComplete,
   setBraindumpClearDelayMs,
   setBraindumpToastDurationMs,
-  hydratePreferences,
-  resetPreferences,
-} = preferencesSlice.actions
+  hydrateUserSettings,
+  resetUserSettings,
+} = userSettingsSlice.actions
 
 // Selectors — read through `?? DEFAULT` as a read-time backstop: deepMerge
 // (store.ts) already fills any field a pre-field persisted blob lacks, so this
 // only guards the remaining edges instead of surfacing `undefined` (Finding 5).
 /**
- * Selects the LEGACY completion-sound preference.
+ * Selects the LEGACY completion-sound setting.
  * @param state - Root state
  * @returns Whether the legacy completion sound is enabled (default false)
  */
 export const selectCompletionSound = (state: RootState): boolean =>
-  state.preferences.completionSound ?? DEFAULT_PREFERENCES.completionSound
+  state.settings.completionSound ?? DEFAULT_SETTINGS.completionSound
 
 /**
- * Selects the 居残りモード (retain-completed-in-list) preference.
+ * Selects the 居残りモード (retain-completed-in-list) setting.
  * @param state - Root state
  * @returns Whether completed todos stay in the active list (default false)
  */
 export const selectRetainCompletedInList = (state: RootState): boolean =>
-  state.preferences.retainCompletedInList ??
-  DEFAULT_PREFERENCES.retainCompletedInList
+  state.settings.retainCompletedInList ?? DEFAULT_SETTINGS.retainCompletedInList
 
 /**
  * Selects whether a given sound moment should play, with legacy migration: a
@@ -324,16 +322,14 @@ export const selectSoundMoment = (
   // Annotated `| undefined` defensively: deepMerge normally fills soundMoments
   // from defaults on rehydrate, so the read only guards the residual edges where
   // it could still be absent.
-  const soundMoments: PreferencesState['soundMoments'] | undefined =
-    state.preferences.soundMoments
+  const soundMoments: UserSettingsState['soundMoments'] | undefined =
+    state.settings.soundMoments
   const explicit = soundMoments?.[moment]
   if (typeof explicit === 'boolean') return explicit
   if (moment === 'complete') {
-    return (
-      state.preferences.completionSound ?? DEFAULT_PREFERENCES.completionSound
-    )
+    return state.settings.completionSound ?? DEFAULT_SETTINGS.completionSound
   }
-  return DEFAULT_PREFERENCES.soundMoments[moment]
+  return DEFAULT_SETTINGS.soundMoments[moment]
 }
 
 /**
@@ -342,7 +338,7 @@ export const selectSoundMoment = (
  * @returns The selected timbre id (default felt)
  */
 export const selectSoundTimbre = (state: RootState): TimbreId =>
-  state.preferences.soundTimbre ?? DEFAULT_PREFERENCES.soundTimbre
+  state.settings.soundTimbre ?? DEFAULT_SETTINGS.soundTimbre
 
 /**
  * Selects the master sound volume.
@@ -350,7 +346,7 @@ export const selectSoundTimbre = (state: RootState): TimbreId =>
  * @returns The master volume, 0–1 (default 0.6)
  */
 export const selectSoundVolume = (state: RootState): number =>
-  state.preferences.soundVolume ?? DEFAULT_PREFERENCES.soundVolume
+  state.settings.soundVolume ?? DEFAULT_SETTINGS.soundVolume
 
 /**
  * Selects the BrainDump editor font family.
@@ -360,8 +356,7 @@ export const selectSoundVolume = (state: RootState): number =>
 export const selectBraindumpFontFamily = (
   state: RootState,
 ): BrainDumpFontFamilyId =>
-  state.preferences.braindumpFontFamily ??
-  DEFAULT_PREFERENCES.braindumpFontFamily
+  state.settings.braindumpFontFamily ?? DEFAULT_SETTINGS.braindumpFontFamily
 
 /**
  * Selects the BrainDump editor font size (px).
@@ -369,7 +364,7 @@ export const selectBraindumpFontFamily = (
  * @returns The font size in px (default 14)
  */
 export const selectBraindumpFontSize = (state: RootState): number =>
-  state.preferences.braindumpFontSize ?? DEFAULT_PREFERENCES.braindumpFontSize
+  state.settings.braindumpFontSize ?? DEFAULT_SETTINGS.braindumpFontSize
 
 /**
  * Selects the BrainDump editor text color (a theme var() token or a #hex).
@@ -377,16 +372,16 @@ export const selectBraindumpFontSize = (state: RootState): number =>
  * @returns The CSS color string (default var(--foreground))
  */
 export const selectBraindumpTextColor = (state: RootState): string =>
-  state.preferences.braindumpTextColor ?? DEFAULT_PREFERENCES.braindumpTextColor
+  state.settings.braindumpTextColor ?? DEFAULT_SETTINGS.braindumpTextColor
 
 /**
- * Selects the BrainDump clear-on-complete preference.
+ * Selects the BrainDump clear-on-complete setting.
  * @param state - Root state
  * @returns Whether finished BrainDump lines clear after the undo window (default false)
  */
 export const selectBraindumpClearOnComplete = (state: RootState): boolean =>
-  state.preferences.braindumpClearOnComplete ??
-  DEFAULT_PREFERENCES.braindumpClearOnComplete
+  state.settings.braindumpClearOnComplete ??
+  DEFAULT_SETTINGS.braindumpClearOnComplete
 
 /**
  * Selects the BrainDump clear-on-complete linger (ms).
@@ -394,8 +389,7 @@ export const selectBraindumpClearOnComplete = (state: RootState): boolean =>
  * @returns The clear delay in ms (default 500)
  */
 export const selectBraindumpClearDelayMs = (state: RootState): number =>
-  state.preferences.braindumpClearDelayMs ??
-  DEFAULT_PREFERENCES.braindumpClearDelayMs
+  state.settings.braindumpClearDelayMs ?? DEFAULT_SETTINGS.braindumpClearDelayMs
 
 /**
  * Selects the BrainDump completion-toast display duration (ms).
@@ -403,16 +397,16 @@ export const selectBraindumpClearDelayMs = (state: RootState): number =>
  * @returns The toast duration in ms (default 5000)
  */
 export const selectBraindumpToastDurationMs = (state: RootState): number =>
-  state.preferences.braindumpToastDurationMs ??
-  DEFAULT_PREFERENCES.braindumpToastDurationMs
+  state.settings.braindumpToastDurationMs ??
+  DEFAULT_SETTINGS.braindumpToastDurationMs
 
 /**
- * Selects the full preferences state (every field coalesced/migrated to its
+ * Selects the full settings state (every field coalesced/migrated to its
  * effective value) — the snapshot the cross-window sync broadcasts.
  * @param state - Root state
- * @returns The complete, effective preferences state
+ * @returns The complete, effective settings state
  */
-export const selectPreferences = (state: RootState): PreferencesState => ({
+export const selectUserSettings = (state: RootState): UserSettingsState => ({
   completionSound: selectCompletionSound(state),
   retainCompletedInList: selectRetainCompletedInList(state),
   soundMoments: {
@@ -430,4 +424,4 @@ export const selectPreferences = (state: RootState): PreferencesState => ({
   braindumpToastDurationMs: selectBraindumpToastDurationMs(state),
 })
 
-export default preferencesSlice.reducer
+export default userSettingsSlice.reducer

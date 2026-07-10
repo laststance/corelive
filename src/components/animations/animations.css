@@ -1048,7 +1048,7 @@
 
   /* ============================================
    * REDUCED MOTION SUPPORT
-   * Accessibility: Respects user preferences
+   * Accessibility: Respects user settings
    * ============================================ */
 
   @media (prefers-reduced-motion: reduce) {

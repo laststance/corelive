@@ -123,7 +123,7 @@ export class WindowManager {
   /** URL of the Next.js server */
   private serverUrl: string | null
 
-  /** Manages user preferences */
+  /** Manages user settings */
   private configManager: ConfigManager | null
 
   /** Handles window state persistence */
@@ -175,7 +175,7 @@ export class WindowManager {
    * Creates a new WindowManager instance.
    *
    * @param serverUrl - URL of the Next.js server (null uses default)
-   * @param configManager - Manages user preferences
+   * @param configManager - Manages user settings
    * @param windowStateManager - Handles window state persistence
    */
   constructor(
@@ -324,7 +324,7 @@ export class WindowManager {
   }
 
   /**
-   * Reads BrainDump's always-on-top preference (config-backed, default off).
+   * Reads BrainDump's always-on-top setting (config-backed, default off).
    * BrainDump has no in-window pin control, so config is the single source of truth.
    * @returns true when the BrainDump panel is pinned above other windows.
    */
@@ -335,7 +335,7 @@ export class WindowManager {
   }
 
   /**
-   * Persists + applies BrainDump's always-on-top preference.
+   * Persists + applies BrainDump's always-on-top setting.
    * @param enabled - true pins BrainDump above other windows; false unpins it.
    * @returns The applied value (echoed for optimistic-UI confirmation).
    */
@@ -368,7 +368,7 @@ export class WindowManager {
   }
 
   /**
-   * Persists + applies FloatingNavigator's always-on-top preference across all
+   * Persists + applies FloatingNavigator's always-on-top setting across all
    * three layers that decide its relaunch state — config seed, window-state.json,
    * and the live window — then broadcasts the change so the floating window's own
    * pin button live-updates (§6d). The window-state write is load-bearing:
@@ -533,7 +533,7 @@ export class WindowManager {
       },
       frame: floatingConfig.frame,
       // Sole pin-source for users upgrading from a build that predates this
-      // preference: their saved window-state has no isAlwaysOnTop field, so
+      // setting: their saved window-state has no isAlwaysOnTop field, so
       // applyWindowState's `typeof === 'boolean'` guard skips it and CANNOT
       // re-pin. This line must stay AFTER the ...windowOptions spread (which
       // carries getWindowOptions' `alwaysOnTop: undefined` on upgrade) and must
@@ -1602,7 +1602,7 @@ export class WindowManager {
       this.settingsWindow = null
     })
 
-    // Make the popover follow the active macOS Space so Preferences always opens
+    // Make the popover follow the active macOS Space so Settings always opens
     // on the CURRENT desktop. Without this, the window stays bound to the Space
     // it was last shown on, and reopening it after switching desktops yanks the
     // user over to that old Space (the reported "opens on another desktop" bug).

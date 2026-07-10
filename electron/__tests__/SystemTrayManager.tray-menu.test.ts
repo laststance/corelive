@@ -43,16 +43,18 @@ const fakeTray = {
  */
 function createManager(): {
   manager: SystemTrayManager
+  openSettings: ReturnType<typeof vi.fn>
   restoreFromTray: ReturnType<typeof vi.fn>
   toggleBrainDump: ReturnType<typeof vi.fn>
   toggleFloatingNavigator: ReturnType<typeof vi.fn>
 } {
+  const openSettings = vi.fn()
   const restoreFromTray = vi.fn()
   const toggleBrainDump = vi.fn()
   const toggleFloatingNavigator = vi.fn()
   const stubWindowManager = {
     restoreFromTray,
-    openSettings: vi.fn(),
+    openSettings,
     toggleBrainDump,
     toggleFloatingNavigator,
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
@@ -61,7 +63,13 @@ function createManager(): {
   // Mirror createTray's side effect so updateTrayMenu's `if (this.tray)` guard
   // passes without standing up the native Tray stack.
   ;(manager as unknown as { tray: Tray | null }).tray = fakeTray
-  return { manager, restoreFromTray, toggleBrainDump, toggleFloatingNavigator }
+  return {
+    manager,
+    openSettings,
+    restoreFromTray,
+    toggleBrainDump,
+    toggleFloatingNavigator,
+  }
 }
 
 /** Read the template array from the most recent Menu.buildFromTemplate call. */
@@ -126,6 +134,23 @@ describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () =
     // ...and it ONLY opens the browser — it must not also surface a native
     // window (Floating) via restoreFromTray.
     expect(restoreFromTray).not.toHaveBeenCalled()
+  })
+
+  it('opens Settings from the tray without exposing the retired Preferences label', () => {
+    // Arrange
+    const { manager, openSettings } = createManager()
+
+    // Act
+    manager.updateTrayMenu([])
+    const template = lastBuiltTemplate()
+    const settingsItem = findItem(template, 'Settings')
+    ;(settingsItem?.click as () => void)?.()
+
+    // Assert: users see only the renamed destination, and it opens the native
+    // Settings window rather than a retired Preferences route.
+    expect(settingsItem).toBeDefined()
+    expect(findItem(template, 'Preferences')).toBeUndefined()
+    expect(openSettings).toHaveBeenCalledTimes(1)
   })
 
   it('shows each toggle item’s live hotkey supplied by the accelerator provider', () => {

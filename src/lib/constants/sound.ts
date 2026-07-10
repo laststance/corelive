@@ -2,10 +2,10 @@
  * Sound-palette registry — the single source of truth for the opt-in earned-beat
  * sound feature. Declares the selectable timbres (bundled foley assets in
  * `public/sounds/`) and the task-life "earned beat" moments that may play a cue.
- * Imported by the sound engine, the preferences Zod schema, and the Settings UI.
+ * Imported by the sound engine, the settings Zod schema, and the Settings UI.
  *
  * The app ships SILENT — these describe WHAT can play, never WHETHER it does
- * (every moment defaults OFF; see the preferences schema). The id tuples are the
+ * (every moment defaults OFF; see the settings schema). The id tuples are the
  * SSoT: both the union types and the Zod enums derive from them, so there is no
  * drift between "valid timbre ids" in types and in runtime validation.
  *

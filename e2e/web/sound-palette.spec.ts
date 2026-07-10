@@ -18,28 +18,28 @@ declare global {
   }
 }
 
-/** localStorage key the Redux store persists preferences under (store.ts). */
+/** localStorage key the Redux store persists settings under (store.ts). */
 const STORAGE_KEY = 'corelive-redux-state'
 
 /**
  * Builds the persisted Redux blob the app rehydrates on load, with the complete
  * moment ON or OFF. Stored at the CURRENT schema version so the hydration
- * migration is a no-op and the preferences land verbatim — exactly what a user
+ * migration is a no-op and the settings land verbatim — exactly what a user
  * who toggled the setting would have on disk.
  * @param completeMomentEnabled - Whether the 'complete' cue should play.
  * @returns The JSON string to write into localStorage before the app boots.
  * @example
- * seedPreferences(true)  // complete cue plays on completion
- * seedPreferences(false) // app stays silent
+ * seedSettings(true)  // complete cue plays on completion
+ * seedSettings(false) // app stays silent
  */
-function seedPreferences(completeMomentEnabled: boolean): string {
+function seedSettings(completeMomentEnabled: boolean): string {
   return JSON.stringify({
     // Seed at the CURRENT schema version (imported, not hardcoded) so the
     // hydration migration is a no-op and soundMoments lands as written — and so
     // a future STORAGE_SCHEMA_VERSION bump can't silently desync this fixture.
     version: STORAGE_SCHEMA_VERSION,
     state: {
-      preferences: {
+      settings: {
         completionSound: false,
         retainCompletedInList: false,
         soundMoments: {
@@ -136,7 +136,7 @@ test.describe('Sound palette — fire on gesture', () => {
   test('plays the completion cue when the complete moment is enabled', async ({
     page,
   }, testInfo) => {
-    // Arrange — seed preferences with the complete cue ON, then boot the app.
+    // Arrange — seed settings with the complete cue ON, then boot the app.
     await page.addInitScript(
       ({ storageKey, blob }) => {
         try {
@@ -145,7 +145,7 @@ test.describe('Sound palette — fire on gesture', () => {
           // Sandboxed frame without storage access — ignore; main frame seeds.
         }
       },
-      { storageKey: STORAGE_KEY, blob: seedPreferences(true) },
+      { storageKey: STORAGE_KEY, blob: seedSettings(true) },
     )
     await page.goto('/home')
     await page.waitForLoadState('networkidle')
@@ -174,7 +174,7 @@ test.describe('Sound palette — fire on gesture', () => {
   test('stays silent when the complete moment is off', async ({
     page,
   }, testInfo) => {
-    // Arrange — seed preferences with every cue OFF (explicit, not relying on the
+    // Arrange — seed settings with every cue OFF (explicit, not relying on the
     // default), then boot the app.
     await page.addInitScript(
       ({ storageKey, blob }) => {
@@ -184,7 +184,7 @@ test.describe('Sound palette — fire on gesture', () => {
           // Sandboxed frame without storage access — ignore; main frame seeds.
         }
       },
-      { storageKey: STORAGE_KEY, blob: seedPreferences(false) },
+      { storageKey: STORAGE_KEY, blob: seedSettings(false) },
     )
     await page.goto('/home')
     await page.waitForLoadState('networkidle')

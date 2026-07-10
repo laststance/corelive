@@ -160,7 +160,7 @@ function that will pull it off the deferred list.
       `useUpdateEffect`), so D7 stays quiet; matching rows get a `motion-safe:`
       `tw-animate-css` fade-in. Verified on a live `pnpm dev` via Playwright (rAF
       opacity time-series + recorded video frames; OFF→ON toggle driven over the
-      preferences BroadcastChannel): the completed rows fade opacity 0→1 over
+      settings BroadcastChannel): the completed rows fade opacity 0→1 over
       ~200ms (`animationName: enter`) with **NO leading blink** — they paint at
       opacity 0 on the very first frame. The pending control row stays opacity 1 /
       `anim:none` (selectivity holds, D7). Reduced-motion run: opacity flat at 1,
@@ -174,7 +174,7 @@ function that will pull it off the deferred list.
       `localPendingTodos`, gating the disarm on `!isPlaceholderData` so the kept-previous
       placeholder render can't swallow the fade. Net visual: pending rows stay rock-stable
       (no blank), only the completed rows fade in. ✅ VIDEO RE-VERIFIED 2026-06-12 (post-#77
-      merge), live `pnpm dev` + Playwright, OFF→ON driven over the preferences BroadcastChannel,
+      merge), live `pnpm dev` + Playwright, OFF→ON driven over the settings BroadcastChannel,
       both motion AND reduced-motion. Precondition was DB-seeded (`UPDATE Todo SET completed`):
       UI completion clicks do NOT persist under the synthetic Clerk-test token — a HARNESS
       artifact, NOT a product issue (the fade only needs rows completed + newly-surfaced, not
@@ -235,7 +235,7 @@ function that will pull it off the deferred list.
 
 ## Electron floating windows
 
-- [ ] **Cross-window live sync for the Keep-on-top toggles.** (deferred — feat/keep-on-top-preference)
+- [ ] **Cross-window live sync for the Keep-on-top toggles.** (deferred — feat/keep-on-top-setting)
       Surfaced by `/ship` adversarial review (F1). When BOTH the Settings "Keep on
       top" card AND a floating panel's in-window pin button are open at the same
       time, toggling one does NOT live-update the other's displayed state (the
@@ -244,10 +244,10 @@ function that will pull it off the deferred list.
       live window) are written synchronously on every toggle; only the OTHER open
       surface's LABEL is stale. Accepted as T2-minimal (plan-approved): the realistic
       flow opens one surface at a time, and a cross-window broadcast is disproportionate
-      to a label refresh. Full fix: echo each pin write over the existing preferences
+      to a label refresh. Full fix: echo each pin write over the existing settings
       BroadcastChannel (or a main→renderer push) so every open surface re-reads.
       Forcing function: a user report of a stale toggle, or the next feature needing
-      main→all-renderers preference mirroring. Effort: ~1-2h CC + a multi-window E2E.
+      main→all-renderers setting mirroring. Effort: ~1-2h CC + a multi-window E2E.
 
 - [x] **error.tsx / global-error.tsx design sign-off + reset() escape hatch.** ✅ 2026-06-11 (feat/deferred-a11y-polish-and-tz)
       The two error boundaries shipped with placeholder copy/styling and only a

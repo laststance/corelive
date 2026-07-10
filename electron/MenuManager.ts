@@ -68,7 +68,7 @@ export class MenuManager {
    *   Window items are Electron roles that target the focused window, and New Task
    *   opens the browser, so a `null` main window leaves no dead menu items.
    * @param windowManager - For window-related menu actions
-   * @param configManager - For preference-related actions
+   * @param configManager - Provides configuration-backed menu actions
    */
   initialize(
     mainWindow: BrowserWindow | null,
@@ -144,8 +144,8 @@ export class MenuManager {
         },
         { type: 'separator' },
         {
-          label: 'Preferences...',
-          click: () => this.openPreferences(),
+          label: 'Settings...',
+          click: () => this.openSettings(),
         },
         {
           label: 'Check for Updates...',
@@ -469,8 +469,13 @@ export class MenuManager {
     }
   }
 
-  openPreferences(): void {
-    log.debug('📋 [MenuManager] openPreferences() called')
+  /** Opens the native Settings popover when the app menu or legacy menu bridge requests it.
+   * @returns Nothing; the WindowManager owns the popover lifecycle.
+   * @example
+   * menuManager.openSettings()
+   */
+  openSettings(): void {
+    log.debug('📋 [MenuManager] openSettings() called')
 
     // Open the dedicated Settings window
     if (this.windowManager) {
@@ -483,7 +488,7 @@ export class MenuManager {
       // Fallback: send IPC message if windowManager is not available
       if (this.mainWindow && this.mainWindow.webContents) {
         typedSend(this.mainWindow.webContents, 'menu-action', {
-          action: 'open-preferences',
+          action: 'open-settings',
         })
       }
     }
@@ -612,7 +617,7 @@ Copyright © 2025 CoreLive`,
       'Ctrl/Cmd + 3: Toggle Floating Navigator',
       'Alt/Option + Space: Toggle BrainDump',
       'Ctrl/Cmd + Q: Quit Application',
-      'Ctrl/Cmd + ,: Preferences',
+      'Ctrl/Cmd + ,: Settings',
       'Ctrl/Cmd + R: Reload',
       'Ctrl/Cmd + Shift + R: Force Reload',
       'Ctrl/Cmd + 0: Reset Zoom',
@@ -621,7 +626,7 @@ Copyright © 2025 CoreLive`,
       'Ctrl/Cmd + W: Close Window',
       'F11 (Ctrl+Cmd+F on Mac): Toggle Fullscreen',
       '',
-      '* Shortcut defaults can be changed from Preferences > Keyboard Shortcuts',
+      '* Shortcut defaults can be changed from Settings > Keyboard Shortcuts',
     ]
 
     this.showMenuMessageBox({
@@ -642,8 +647,9 @@ Copyright © 2025 CoreLive`,
       case 'focus-search':
         this.focusSearch()
         break
-      case 'open-preferences':
-        this.openPreferences()
+      case 'open-settings':
+      case 'open-preferences': // Legacy hosted renderer action.
+        this.openSettings()
         break
       case 'import-tasks':
         this.importTasks()

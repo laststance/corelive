@@ -33,7 +33,7 @@ vi.mock('../../../electron/utils/electron-client', () => ({
 
 // Sub-component stubs: focus on the folded Window size control, not the toggles.
 // (FloatingPanelToggle is left real — without a floatingPanels bridge it renders
-// null on its own, and ElectronSettingsPage imports its preference descriptors.)
+// null on its own, and ElectronSettingsPage imports its setting descriptors.)
 vi.mock('./AppUpdateSettings', () => ({
   AppUpdateSettings: () => null,
 }))

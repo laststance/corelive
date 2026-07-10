@@ -21,7 +21,7 @@ import { resetDatabase } from './_helpers/db'
  *   pnpm e2e:web -- todo-retain-archive
  */
 
-/** localStorage key the Redux store persists preferences under (store.ts). */
+/** localStorage key the Redux store persists settings under (store.ts). */
 const STORAGE_KEY = 'corelive-redux-state'
 
 const ORPC_PATHS = {
@@ -36,12 +36,12 @@ const ORPC_PATHS = {
  * defaults on hydration) — exactly what a user who flipped the switch has on disk.
  * @returns The JSON string to write into localStorage before the app boots.
  * @example
- * seedRetainModeOn() // => '{"version":1,"state":{"preferences":{"retainCompletedInList":true}}}'
+ * seedRetainModeOn() // => '{"version":2,"state":{"settings":{"retainCompletedInList":true}}}'
  */
 function seedRetainModeOn(): string {
   return JSON.stringify({
     version: STORAGE_SCHEMA_VERSION,
-    state: { preferences: { retainCompletedInList: true } },
+    state: { settings: { retainCompletedInList: true } },
   })
 }
 

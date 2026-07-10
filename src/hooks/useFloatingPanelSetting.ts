@@ -4,19 +4,19 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { log } from '@/lib/logger'
 
-/** The preload bridge these preferences drive (reused from the electron-api source of truth). */
+/** The preload bridge these settings drive (reused from the electron-api source of truth). */
 export type FloatingPanelsBridge = NonNullable<
   NonNullable<Window['electronAPI']>['floatingPanels']
 >
 
 /**
- * Describes ONE floating-panel boolean preference: its default, how to read it,
- * how to write it, and how to tell whether THIS preference's pair of methods
- * exists on the preload. `available` is per-preference (Arch-2) — an outdated
+ * Describes ONE floating-panel boolean setting: its default, how to read it,
+ * how to write it, and how to tell whether THIS setting's pair of methods
+ * exists on the preload. `available` is per-setting (Arch-2) — an outdated
  * preload missing one setter degrades only that toggle, never the whole section.
  * The single descriptor is the source of truth a consumer passes to the hook.
  */
-export interface FloatingPanelPreferenceConfig {
+export interface FloatingPanelSettingConfig {
   /** Shown until the mount load resolves (mirrors the main-process default). */
   defaultValue: boolean
   /** Reads the persisted value from the main process. */
@@ -28,7 +28,7 @@ export interface FloatingPanelPreferenceConfig {
 }
 
 /** What a consumer renders from: the current value plus load/save/skew status. */
-export interface FloatingPanelPreference {
+export interface FloatingPanelSetting {
   /** Current (optimistic) value. */
   value: boolean
   /** True once the mount-time load has resolved (or failed). */
@@ -37,14 +37,14 @@ export interface FloatingPanelPreference {
   isSaving: boolean
   /** Last load/save error, or null. */
   error: string | null
-  /** True when this preference's methods exist on the live preload (post-mount). */
+  /** True when this setting's methods exist on the live preload (post-mount). */
   available: boolean
   /** Optimistically apply `next`, persist it, and roll back on rejection. */
   apply: (next: boolean) => Promise<void>
 }
 
 /**
- * Manages one `floatingPanels.*` boolean preference (Spaces visibility or a
+ * Manages one `floatingPanels.*` boolean setting (Spaces visibility or a
  * per-window keep-on-top pin): loads it once on mount, applies optimistically with
  * rollback, and reports per-method availability so a single row can hide itself on
  * an outdated preload. Shared by the Floating Navigator pin, the Brain Dump pin,
@@ -54,15 +54,15 @@ export interface FloatingPanelPreference {
  * Intentionally load-once + apply-with-rollback only; §6d's cross-window pin sync
  * lives in the TARGET windows, not this Settings-side hook, so it grafts on later.
  *
- * @param config - The descriptor (default + get/set/available) for this preference.
- * @returns The preference's value + status + an `apply` setter.
+ * @param config - The descriptor (default + get/set/available) for this setting.
+ * @returns The setting's value + status + an `apply` setter.
  * @example
- * const pin = useFloatingPanelPreference(FLOATING_NAVIGATOR_PIN_PREFERENCE)
+ * const pin = useFloatingPanelSetting(FLOATING_NAVIGATOR_PIN_SETTING)
  * <Switch checked={pin.value} disabled={pin.isSaving} onCheckedChange={pin.apply} />
  */
-export function useFloatingPanelPreference(
-  config: FloatingPanelPreferenceConfig,
-): FloatingPanelPreference {
+export function useFloatingPanelSetting(
+  config: FloatingPanelSettingConfig,
+): FloatingPanelSetting {
   const hasMounted = useMounted()
   const [value, setValue] = useState(config.defaultValue)
   const [isReady, setIsReady] = useState(false)
@@ -91,7 +91,7 @@ export function useFloatingPanelPreference(
         lastGoodRef.current = loaded
       })
       .catch((loadError: unknown) => {
-        log.error('Failed to load floating panel preference:', loadError)
+        log.error('Failed to load floating panel setting:', loadError)
         if (!cancelled) setError('Failed to load setting')
       })
       .finally(() => {
@@ -117,7 +117,7 @@ export function useFloatingPanelPreference(
       setValue(applied)
       lastGoodRef.current = applied
     } catch (saveError: unknown) {
-      log.error('Failed to update floating panel preference:', saveError)
+      log.error('Failed to update floating panel setting:', saveError)
       setValue(previous)
       setError('Failed to update setting')
     } finally {
