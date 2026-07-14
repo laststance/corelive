@@ -26,6 +26,7 @@ import { useHeatmapData } from '@/hooks/useHeatmapData'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { buildDateSyncUrl } from '@/lib/buildDateSyncUrl'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
+import { HEATMAP_TOP_PAD_PX } from '@/lib/constants/heatmap'
 import {
   HEATMAP_CATHEDRAL_MIN,
   HEATMAP_FULL_DAY_MIN,
@@ -45,9 +46,6 @@ const DAYS_IN_WEEK = 7
 
 /** Reserved width for week-day labels inside the SVG. */
 const HEATMAP_LEFT_PAD = 28
-
-/** Reserved height for month labels inside the SVG. */
-const HEATMAP_TOP_PAD = 20
 
 /** Minimum cell size — DESIGN.md heatmap cell-sizing lock (Heatmap Cathedral D6). */
 const HEATMAP_MIN_RECT_SIZE = 12
@@ -484,7 +482,7 @@ export function calculateHeatmapLayout(
           HEATMAP_MAX_RECT_SIZE,
         )
   const width = HEATMAP_LEFT_PAD + weekCount * (rectSize + HEATMAP_SPACE)
-  const height = HEATMAP_TOP_PAD + DAYS_IN_WEEK * (rectSize + HEATMAP_SPACE)
+  const height = HEATMAP_TOP_PAD_PX + DAYS_IN_WEEK * (rectSize + HEATMAP_SPACE)
 
   return {
     height,
