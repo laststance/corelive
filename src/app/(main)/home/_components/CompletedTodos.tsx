@@ -20,6 +20,7 @@ import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
 import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { orpc } from '@/lib/orpc/client-query'
+import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
 import {
   type CompletedPeriod,
   resolveCompletedJournalDateRange,
@@ -113,8 +114,7 @@ export const CompletedTodos = function CompletedTodos({
   } = useInfiniteQuery(
     orpc.completed.journal.infiniteOptions({
       input: (pageParam) => ({
-        limit: COMPLETED_JOURNAL_PAGE_SIZE,
-        offset: pageParam ?? 0,
+        ...getUnfilteredCompletedJournalInput(pageParam),
         ...(categoryId === null ? {} : { categoryId }),
         ...dateRange,
       }),

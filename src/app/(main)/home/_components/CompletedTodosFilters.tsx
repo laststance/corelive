@@ -2,7 +2,7 @@
 
 import { format, startOfDay } from 'date-fns'
 import { ArrowLeft, Check, ChevronDown, RotateCcw } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 
 import { Button } from '@/components/ui/button'
@@ -20,8 +20,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { getColorDotClass } from '@/lib/category-colors'
 import { DECIMAL_RADIX } from '@/lib/constants/completed'
+import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { cn } from '@/lib/utils'
 import type { CompletedPeriod } from '@/lib/utils/resolveCompletedJournalDateRange'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -76,6 +78,12 @@ export function CompletedTodosFilters({
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const [draftCustomDateRange, setDraftCustomDateRange] =
     useState<DateRange | null>(null)
+  const localDayKey = useLocalDayKey()
+  // Keep Calendar boundaries deterministic during hydration and roll them forward at local midnight.
+  const today = useMemo(
+    () => startOfDay(new Date(`${localDayKey}${LOCAL_DAY_QUERY_ANCHOR_TIME}`)),
+    [localDayKey],
+  )
   const isFiltered = period !== 'all' || categoryId !== null
   const isMorePeriodSelected = MORE_PERIOD_OPTIONS.some(
     (periodOption) => periodOption === period,
@@ -226,11 +234,9 @@ export function CompletedTodosFilters({
               mode="range"
               selected={draftCustomDateRange ?? undefined}
               defaultMonth={
-                draftCustomDateRange?.from ??
-                customDateRange?.from ??
-                new Date()
+                draftCustomDateRange?.from ?? customDateRange?.from ?? today
               }
-              disabled={{ after: startOfDay(new Date()) }}
+              disabled={{ after: today }}
               excludeDisabled
               resetOnSelect
               onSelect={(nextDateRange) =>

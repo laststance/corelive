@@ -10,9 +10,9 @@ import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { clearedAffirmation } from '@/lib/clearedAffirmation'
-import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
+import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import type {
   CompletedJournalResponse,
@@ -126,10 +126,7 @@ export function useTodoMutations(
   // or category views until the server refetch corrected it.
   const journalBaseKey = orpc.completed.journal.key()
   const unfilteredJournalKey = orpc.completed.journal.infiniteKey({
-    input: (pageParam: number | undefined) => ({
-      limit: COMPLETED_JOURNAL_PAGE_SIZE,
-      offset: pageParam ?? 0,
-    }),
+    input: getUnfilteredCompletedJournalInput,
     initialPageParam: 0,
   })
   // ============================================
