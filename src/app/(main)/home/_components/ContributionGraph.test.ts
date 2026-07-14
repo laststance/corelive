@@ -28,6 +28,20 @@ describe('Activity heatmap sizing', () => {
     expect(layout.width).toBeLessThanOrEqual(containerWidth)
   })
 
+  it('keeps all seven weekday rows inside the SVG when desktop width enlarges the cells', () => {
+    // Arrange — 1180px grows each cell to 19px, taller than the SVG browser default allows.
+    const containerWidth = 1180
+
+    // Act
+    const layout = calculateHeatmapLayout(
+      containerWidth,
+      WEEKS_IN_TRAILING_YEAR,
+    )
+
+    // Assert — the explicit 167px height includes every row plus bottom breathing room.
+    expect(layout).toEqual({ rectSize: 19, width: 1141, height: 167 })
+  })
+
   it('never grows cells past the 32px Cathedral maximum even in an unusually wide card', () => {
     // Arrange — a very wide container that could otherwise over-grow the cells.
     const containerWidth = 3000
@@ -40,6 +54,7 @@ describe('Activity heatmap sizing', () => {
 
     // Assert — cells cap at the DESIGN.md D6 maximum.
     expect(layout.rectSize).toBe(32)
+    expect(layout.height).toBe(258)
   })
 
   it('holds the 12px minimum cell and lets the grid overflow when the card is narrower than a full year', () => {

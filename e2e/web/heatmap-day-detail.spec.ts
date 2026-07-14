@@ -82,6 +82,31 @@ test.describe('Heatmap Day Detail E2E', () => {
     await setupClerkTestingToken({ page })
   })
 
+  test('shows all seven weekday rows inside the Activity heatmap', async ({
+    page,
+  }) => {
+    // Arrange — a desktop-width card enlarges cells beyond the SVG browser default height.
+    await page.setViewportSize({ width: 1600, height: 900 })
+    await page.goto('/home')
+    await waitForAppReady(page)
+    const heatmap = page.locator('svg.w-heatmap')
+    const finalWeekdayRow = heatmap.locator('rect[data-row="6"]').first()
+    await expect(heatmap).toBeVisible()
+    await expect(finalWeekdayRow).toBeAttached()
+
+    // Act — measure actual rendered geometry because visibility ignores SVG clipping.
+    const heatmapBounds = await heatmap.boundingBox()
+    const finalWeekdayRowBounds = await finalWeekdayRow.boundingBox()
+
+    // Assert — missing geometry is itself a broken heatmap, so fail with a clear reason.
+    if (!heatmapBounds || !finalWeekdayRowBounds) {
+      throw new Error('Activity heatmap geometry was unavailable')
+    }
+    expect(
+      finalWeekdayRowBounds.y + finalWeekdayRowBounds.height,
+    ).toBeLessThanOrEqual(heatmapBounds.y + heatmapBounds.height)
+  })
+
   test.describe('Deep-link via ?date=', () => {
     test('opens dialog when date param is a valid calendar date', async ({
       page,

@@ -46,6 +46,9 @@ const DAYS_IN_WEEK = 7
 /** Reserved width for week-day labels inside the SVG. */
 const HEATMAP_LEFT_PAD = 28
 
+/** Reserved height for month labels inside the SVG. */
+const HEATMAP_TOP_PAD = 20
+
 /** Minimum cell size — DESIGN.md heatmap cell-sizing lock (Heatmap Cathedral D6). */
 const HEATMAP_MIN_RECT_SIZE = 12
 
@@ -363,6 +366,7 @@ export const ContributionGraph = function ContributionGraph() {
               legendCellSize={0}
               rectSize={heatmapLayout.rectSize}
               space={HEATMAP_SPACE}
+              height={heatmapLayout.height}
               width={heatmapLayout.width}
               style={heatmapStyle}
               rectRender={renderHeatmapRect}
@@ -445,20 +449,22 @@ function useObservedElementWidth<T extends HTMLElement>(
 }
 
 type HeatmapLayout = {
+  height: number
   rectSize: number
   width: number
 }
 
 /**
- * Calculates the heatmap dimensions needed to fill available space without clipping the year.
+ * Calculates the SVG dimensions whenever ContributionGraph resizes so every day remains visible.
  * @param containerWidth - Measured width of the card content area
  * @param weekCount - Number of week columns that must be rendered
  * @returns
+ * - `height`: SVG height containing month labels and all seven weekday rows
  * - `rectSize`: Cell size that best uses the current width
  * - `width`: SVG width, allowing horizontal scroll only when the card is too narrow
  * @example
- * calculateHeatmapLayout(720, 53) // => { rectSize: 11, width: 717 }
- * calculateHeatmapLayout(480, 53) // => { rectSize: 8, width: 558 }
+ * calculateHeatmapLayout(1180, 53) // => { height: 167, rectSize: 19, width: 1141 }
+ * calculateHeatmapLayout(578, 53) // => { height: 118, rectSize: 12, width: 770 }
  */
 export function calculateHeatmapLayout(
   containerWidth: number | null,
@@ -467,24 +473,23 @@ export function calculateHeatmapLayout(
   const minimumWidth =
     HEATMAP_LEFT_PAD + weekCount * (HEATMAP_MIN_RECT_SIZE + HEATMAP_SPACE)
 
-  if (!containerWidth || containerWidth <= minimumWidth) {
-    return {
-      rectSize: HEATMAP_MIN_RECT_SIZE,
-      width: minimumWidth,
-    }
-  }
-
-  const nextRectSize = clampNumber(
-    Math.floor((containerWidth - HEATMAP_LEFT_PAD) / weekCount) - HEATMAP_SPACE,
-    HEATMAP_MIN_RECT_SIZE,
-    HEATMAP_MAX_RECT_SIZE,
-  )
-  const nextWidth =
-    HEATMAP_LEFT_PAD + weekCount * (nextRectSize + HEATMAP_SPACE)
+  // Narrow or unmeasured cards hold the minimum; wider cards enlarge every cell evenly.
+  const rectSize =
+    !containerWidth || containerWidth <= minimumWidth
+      ? HEATMAP_MIN_RECT_SIZE
+      : clampNumber(
+          Math.floor((containerWidth - HEATMAP_LEFT_PAD) / weekCount) -
+            HEATMAP_SPACE,
+          HEATMAP_MIN_RECT_SIZE,
+          HEATMAP_MAX_RECT_SIZE,
+        )
+  const width = HEATMAP_LEFT_PAD + weekCount * (rectSize + HEATMAP_SPACE)
+  const height = HEATMAP_TOP_PAD + DAYS_IN_WEEK * (rectSize + HEATMAP_SPACE)
 
   return {
-    rectSize: nextRectSize,
-    width: nextWidth,
+    height,
+    rectSize,
+    width,
   }
 }
 
