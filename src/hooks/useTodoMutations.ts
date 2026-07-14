@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { clearedAffirmation } from '@/lib/clearedAffirmation'
+import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -119,11 +120,18 @@ export function useTodoMutations(
     },
   }).queryKey
   const completedBaseKey = orpc.todo.list.key({ input: { completed: true } })
-  // journalBaseKey: partial match for the permanent completion journal
-  // (useInfiniteQuery in CompletedTodos). The toggle writes optimistically here
-  // too so a Main-window completion lands in the Completed Tasks list instantly —
-  // CompletedTodos reads completed.journal, NOT the completed todo.list above.
+  // journalBaseKey invalidates/snapshots every filtered journal. The exact
+  // unfiltered key alone receives new optimistic entries: inserting into every
+  // partial-match cache would briefly leak a completion into mismatched period
+  // or category views until the server refetch corrected it.
   const journalBaseKey = orpc.completed.journal.key()
+  const unfilteredJournalKey = orpc.completed.journal.infiniteKey({
+    input: (pageParam: number | undefined) => ({
+      limit: COMPLETED_JOURNAL_PAGE_SIZE,
+      offset: pageParam ?? 0,
+    }),
+    initialPageParam: 0,
+  })
   // ============================================
   // CREATE MUTATION - Optimistic add to pending
   // ============================================
@@ -286,8 +294,8 @@ export function useTodoMutations(
             todoInPending.categoryId,
           ),
         }
-        queryClient.setQueriesData<InfiniteData<CompletedJournalResponse>>(
-          { queryKey: journalBaseKey },
+        queryClient.setQueryData<InfiniteData<CompletedJournalResponse>>(
+          unfilteredJournalKey,
           (old) => {
             if (!old || !old.pages[0]) return old
             return {

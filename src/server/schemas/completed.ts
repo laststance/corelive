@@ -253,16 +253,34 @@ export const DayDetailResponseSchema = z.object({
 
 /**
  * Input schema for the permanent completion journal (`completed.journal`).
- * Offset pagination, mirroring `todo.list`'s shape so the home Completed Tasks
- * list can stay an infinite query. The capped page size keeps each DB round-trip
- * bounded (the journal is unbounded in total size — see the procedure JSDoc).
+ * Offset pagination plus optional period/category predicates for the home
+ * Completed Tasks filters. Periods use a half-open `[from, before)` interval so
+ * adjacent calendar presets cannot overlap at midnight.
  * @example
- * { limit: 20, offset: 0 } // newest 20 completions
+ * { limit: 20, offset: 0, categoryId: 3, completedFrom: new Date('2026-07-01T00:00:00Z'), completedBefore: new Date('2026-08-01T00:00:00Z') }
  */
-export const CompletedJournalInputSchema = z.object({
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).default(0),
-})
+export const CompletedJournalInputSchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).default(20),
+    offset: z.number().int().min(0).default(0),
+    categoryId: z.number().int().positive().optional(),
+    completedFrom: z.date().optional(),
+    completedBefore: z.date().optional(),
+  })
+  .superRefine(({ completedFrom, completedBefore }, context) => {
+    // Reject empty/reversed windows before they can reach the raw SQL path.
+    if (
+      completedFrom !== undefined &&
+      completedBefore !== undefined &&
+      completedBefore.getTime() <= completedFrom.getTime()
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedBefore'],
+        message: 'completedBefore must be after completedFrom',
+      })
+    }
+  })
 
 /**
  * Response schema for `completed.journal` — one newest-first page of the merged

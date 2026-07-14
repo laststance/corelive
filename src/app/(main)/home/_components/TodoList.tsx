@@ -664,7 +664,12 @@ export const TodoList = function TodoList() {
 
         {/* In 居残りモード completed todos live in the active list above, so the
              separate Completed section is suppressed (no double display). */}
-        {!isRetaining && <CompletedTodos onToggleComplete={toggleComplete} />}
+        {!isRetaining && (
+          <CompletedTodos
+            categories={categoryData?.categories ?? []}
+            onToggleComplete={toggleComplete}
+          />
+        )}
       </div>
 
       {/* Retain-mode Clear confirmation — Clear is the only path to remove
