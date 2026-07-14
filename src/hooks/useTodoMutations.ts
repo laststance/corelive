@@ -12,6 +12,7 @@ import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { clearedAffirmation } from '@/lib/clearedAffirmation'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
+import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import type {
   CompletedJournalResponse,
@@ -119,11 +120,15 @@ export function useTodoMutations(
     },
   }).queryKey
   const completedBaseKey = orpc.todo.list.key({ input: { completed: true } })
-  // journalBaseKey: partial match for the permanent completion journal
-  // (useInfiniteQuery in CompletedTodos). The toggle writes optimistically here
-  // too so a Main-window completion lands in the Completed Tasks list instantly —
-  // CompletedTodos reads completed.journal, NOT the completed todo.list above.
+  // journalBaseKey invalidates/snapshots every filtered journal. The exact
+  // unfiltered key alone receives new optimistic entries: inserting into every
+  // partial-match cache would briefly leak a completion into mismatched period
+  // or category views until the server refetch corrected it.
   const journalBaseKey = orpc.completed.journal.key()
+  const unfilteredJournalKey = orpc.completed.journal.infiniteKey({
+    input: getUnfilteredCompletedJournalInput,
+    initialPageParam: 0,
+  })
   // ============================================
   // CREATE MUTATION - Optimistic add to pending
   // ============================================
@@ -286,8 +291,8 @@ export function useTodoMutations(
             todoInPending.categoryId,
           ),
         }
-        queryClient.setQueriesData<InfiniteData<CompletedJournalResponse>>(
-          { queryKey: journalBaseKey },
+        queryClient.setQueryData<InfiniteData<CompletedJournalResponse>>(
+          unfilteredJournalKey,
           (old) => {
             if (!old || !old.pages[0]) return old
             return {

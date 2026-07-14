@@ -60,28 +60,37 @@ async function seedCompletedRowAt(
 }
 
 /**
- * Seeds one completed `Todo` (the main/floating app surface) at a precise
- * instant. Writes the row directly rather than via `toggleTodo` because toggle
- * stamps `completedAt = now()`, which can't be ordered deterministically against
- * the other seeds. Requires the user + a category to already exist, so always
- * call {@link seedCompletedRowAt} first (it creates both).
+ * Seeds a completed Todo at a deterministic instant after `seedCompletedRowAt` creates its real user/category.
+ * This bypasses `toggleTodo` only because that production mutation always stamps the current time.
+ * @param clerkId - Clerk identity whose real DB user owns the completion.
+ * @param title - Observable row title asserted by the journal tests.
+ * @param completedAt - Exact semantic completion instant.
+ * @param categoryId - Optional category override; defaults to the first user category.
+ * @returns Nothing after the completed Todo row is persisted.
+ * @example
+ * await seedTodoCompletionAt(clerkId, 'ship filters', new Date('2026-07-14T09:00:00Z'), categoryId)
  */
 async function seedTodoCompletionAt(
   clerkId: string,
   title: string,
   completedAt: Date,
+  categoryId?: number,
 ): Promise<void> {
   const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
-  const category = await prisma.category.findFirstOrThrow({
-    where: { userId: user.id },
-  })
+  const resolvedCategoryId =
+    categoryId ??
+    (
+      await prisma.category.findFirstOrThrow({
+        where: { userId: user.id },
+      })
+    ).id
   await prisma.todo.create({
     data: {
       text: title,
       completed: true,
       completedAt,
       userId: user.id,
-      categoryId: category.id,
+      categoryId: resolvedCategoryId,
     },
   })
 }
@@ -214,6 +223,82 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(secondPage.entries.map((entry) => entry.title)).toEqual(['win 1'])
     expect(secondPage.hasMore).toBe(false)
     expect(secondPage.nextOffset).toBeUndefined()
+  })
+
+  it('filters both completion sources by a half-open period and category before pagination', async () => {
+    // Arrange — create the real user/default category through the import path,
+    // then add a second category with rows on each date boundary and source.
+    const clerkId = freshClerkId()
+    await seedCompletedRowAt(
+      clerkId,
+      'outside before period',
+      new Date('2026-05-31T23:59:59.999Z'),
+    )
+    const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
+    const focusCategory = await prisma.category.create({
+      data: {
+        name: 'Focus',
+        color: 'amber',
+        userId: user.id,
+      },
+    })
+    const generalCategory = await prisma.category.findFirstOrThrow({
+      where: { userId: user.id, isDefault: true },
+    })
+    await prisma.completed.createMany({
+      data: [
+        {
+          title: 'focus lower boundary',
+          completedAt: new Date('2026-06-01T00:00:00.000Z'),
+          categoryId: focusCategory.id,
+          userId: user.id,
+        },
+        {
+          title: 'other category inside period',
+          completedAt: new Date('2026-06-20T08:00:00.000Z'),
+          categoryId: generalCategory.id,
+          userId: user.id,
+        },
+        {
+          title: 'focus upper boundary',
+          completedAt: new Date('2026-07-01T00:00:00.000Z'),
+          categoryId: focusCategory.id,
+          userId: user.id,
+        },
+      ],
+    })
+    await seedTodoCompletionAt(
+      clerkId,
+      'focus todo inside period',
+      new Date('2026-06-25T12:00:00.000Z'),
+      focusCategory.id,
+    )
+
+    // Act — the upper bound is exclusive so adjacent presets never overlap.
+    const page = await call(
+      getJournal,
+      {
+        limit: 20,
+        offset: 0,
+        categoryId: focusCategory.id,
+        completedFrom: new Date('2026-06-01T00:00:00.000Z'),
+        completedBefore: new Date('2026-07-01T00:00:00.000Z'),
+      },
+      authContext(clerkId),
+    )
+
+    // Assert — list and count share the same pre-pagination predicates.
+    expect(page.total).toBe(2)
+    expect(page.entries.map((entry) => entry.title)).toEqual([
+      'focus todo inside period',
+      'focus lower boundary',
+    ])
+    expect(page.entries.map((entry) => entry.source)).toEqual([
+      'todo',
+      'completed',
+    ])
+    expect(page.hasMore).toBe(false)
+    expect(page.nextOffset).toBeUndefined()
   })
 
   it('agrees with fetchCompletedEntries (the heatmap source of truth) on what counts as a completion', async () => {
