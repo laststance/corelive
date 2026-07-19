@@ -17,6 +17,7 @@ import {
   getElectronSettings,
   upsertElectronSettings,
 } from './procedures/electronSettings'
+import { bootstrapHome } from './procedures/home'
 import {
   assignTask,
   getMyTree,
@@ -36,6 +37,9 @@ import {
 } from './procedures/todo'
 
 export const router = {
+  home: {
+    bootstrap: bootstrapHome,
+  },
   category: {
     list: listCategories,
     create: createCategory,

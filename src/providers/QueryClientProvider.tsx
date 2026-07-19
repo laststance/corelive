@@ -2,60 +2,16 @@
 
 import { useAuth } from '@clerk/nextjs'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
-import {
-  QueryClientProvider as TanstackQueryClientProvider,
-  defaultShouldDehydrateQuery,
-  QueryClient,
-} from '@tanstack/react-query'
+import { QueryClientProvider as TanstackQueryClientProvider } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import * as React from 'react'
 import { useRef, useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
-import { serializer } from '@/lib/orpc/serializer'
+import { PERSISTED_QUERY_MAX_AGE_MS } from '@/lib/constants/query'
+import { createQueryClient } from '@/lib/query/createQueryClient'
 
-/**
- * Builds a QueryClient configured for oRPC serialization and long-lived
- * persistence. Called once at mount and again on every sign-out transition
- * so that in-flight mutations from the previous session resolve into an
- * orphaned client nobody reads from.
- *
- * - queryKeyHashFn: uses the oRPC serializer so complex query keys hash stably
- * - staleTime: 1 minute — cuts immediate refetch storms on remount
- * - gcTime: 1 week — retained long enough that the persisted cache is useful
- * - dehydrate / hydrate: SSR and localStorage support via the oRPC serializer
- */
-function createQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        queryKeyHashFn(queryKey) {
-          const [json, meta] = serializer.serialize(queryKey)
-          return JSON.stringify({ json, meta })
-        },
-        staleTime: 60 * 1000,
-        gcTime: 1000 * 60 * 60 * 24 * 7,
-      },
-      dehydrate: {
-        shouldDehydrateQuery: defaultShouldDehydrateQuery,
-        serializeData(data) {
-          const [json, meta] = serializer.serialize(data)
-          return { json, meta }
-        },
-      },
-      hydrate: {
-        deserializeData(data) {
-          return serializer.deserialize(data.json, data.meta)
-        },
-      },
-    },
-  })
-}
-
-/**
- * SSR-safe persister factory — returns `undefined` on the server so the
- * provider can fall back to a non-persisting TanstackQueryClientProvider.
- */
+/** Creates browser persistence at provider initialization while SSR falls back to memory-only Query state. @returns A localStorage persister in the browser, or undefined on the server. @example `const persister = createPersister()` */
 function createPersister() {
   return typeof window !== 'undefined'
     ? createSyncStoragePersister({ storage: window.localStorage })
@@ -115,6 +71,8 @@ function PersisterSignOutGuard({
  * teardown of the persistence subscription so no stale writers survive.
  *
  * @param children - React child components
+ * @returns The isolated TanStack Query provider tree for the current Clerk session.
+ * @example `<QueryClientProvider><App /></QueryClientProvider>`
  */
 export const QueryClientProvider = function QueryClientProvider({
   children,
@@ -125,6 +83,7 @@ export const QueryClientProvider = function QueryClientProvider({
   const [queryClient, setQueryClient] = useState(createQueryClient)
   const [persister, setPersister] = useState(createPersister)
 
+  /** Wipes the prior user's persisted and live Query state only when the Clerk sign-out guard fires. @returns Nothing after replacing the provider generation. @example `handleSessionReset()` */
   const handleSessionReset = () => {
     // 1. Wipe the persisted localStorage entry first so the hydrate pass
     //    on the next mount cannot momentarily flash user A's data.
@@ -139,9 +98,8 @@ export const QueryClientProvider = function QueryClientProvider({
     //    orphaned instance and never reach the new session's cache.
     setQueryClient(createQueryClient())
     setPersister(createPersister())
-    setResetKey((k) => k + 1)
+    setResetKey((currentResetKey) => currentResetKey + 1)
   }
-  const persistOptions = persister ? { persister } : null
 
   if (!persister) {
     // SSR fallback: render without persistence
@@ -151,16 +109,18 @@ export const QueryClientProvider = function QueryClientProvider({
       </TanstackQueryClientProvider>
     )
   }
-  const requiredPersistOptions = persistOptions as Exclude<
-    typeof persistOptions,
-    null
-  >
+
+  // Match persistence lifetime to Query gcTime so restored Home data survives the documented seven-day window.
+  const persistOptions = {
+    persister,
+    maxAge: PERSISTED_QUERY_MAX_AGE_MS,
+  }
 
   return (
     <PersistQueryClientProvider
       key={resetKey}
       client={queryClient}
-      persistOptions={requiredPersistOptions}
+      persistOptions={persistOptions}
     >
       <PersisterSignOutGuard onSessionReset={handleSessionReset} />
       {children}

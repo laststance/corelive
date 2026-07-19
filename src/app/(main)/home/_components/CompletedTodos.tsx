@@ -16,8 +16,12 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useUpdateEffect } from '@/hooks/use-update-effect'
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useLocalDayKey } from '@/hooks/useLocalDayKey'
-import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
+import {
+  COMPLETED_JOURNAL_INITIAL_OFFSET,
+  COMPLETED_JOURNAL_PAGE_SIZE,
+} from '@/lib/constants/completed'
 import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { orpc } from '@/lib/orpc/client-query'
 import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
@@ -68,6 +72,7 @@ export const CompletedTodos = function CompletedTodos({
   onToggleComplete,
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
+  const isClerkQueryReady = useClerkQueryReady()
   const [filters, setFilters] = useState<CompletedTodosFilterState>(
     INITIAL_COMPLETED_TODOS_FILTERS,
   )
@@ -111,17 +116,21 @@ export const CompletedTodos = function CompletedTodos({
     isFetchingNextPage,
     isLoading,
     isError,
-  } = useInfiniteQuery(
-    orpc.completed.journal.infiniteOptions({
+  } = useInfiniteQuery({
+    ...orpc.completed.journal.infiniteOptions({
       input: (pageParam) => ({
         ...getUnfilteredCompletedJournalInput(pageParam),
         ...(categoryId === null ? {} : { categoryId }),
         ...dateRange,
       }),
-      initialPageParam: 0,
+      initialPageParam: COMPLETED_JOURNAL_INITIAL_OFFSET,
       getNextPageParam: (lastPage) => lastPage.nextOffset,
     }),
-  )
+    // Same pre-auth fetch guard as every sibling Home query: if a future
+    // mount path renders this panel before Clerk hydrates, the stale-refetch
+    // fires unauthenticated — hydrated/persisted journal data still displays.
+    enabled: isClerkQueryReady,
+  })
 
   // Flatten journal entries across all loaded pages (already newest-first).
   const allEntries: DayDetailTask[] =
