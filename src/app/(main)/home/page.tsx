@@ -1,27 +1,23 @@
-'use client'
+import { HydrationBoundary } from '@tanstack/react-query'
 
-import { SidebarTrigger } from '@/components/ui/sidebar'
+import { prefetchHomeBootstrap } from '@/server/prefetchHomeBootstrap'
 
-import { TodoList } from './_components/TodoList'
+import { HomeContent } from './_components/HomeContent'
 
 import './page.css'
 
 /**
- * Home page content. The sidebar is provided by `(main)/layout.tsx`.
+ * Home page Server Component. Prefetches every critical Home slice through one
+ * `home.bootstrap` call and hydrates it into the client query cache, so first
+ * paint after hydration needs zero `/api/orpc` requests (Issue #153).
  */
-const Home = function Home() {
+const Home = async function Home() {
+  const dehydratedHomeState = await prefetchHomeBootstrap()
+
   return (
-    <>
-      <header className="window-drag-region flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="no-drag -ml-1" />
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-medium">Tasks</h2>
-        </div>
-      </header>
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <TodoList />
-      </div>
-    </>
+    <HydrationBoundary state={dehydratedHomeState}>
+      <HomeContent />
+    </HydrationBoundary>
   )
 }
 

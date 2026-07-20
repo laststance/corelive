@@ -2,9 +2,43 @@
 
 import { useSyncExternalStore } from 'react'
 
+import {
+  HOME_SELECTED_CATEGORY_COOKIE_NAME,
+  HOME_SSR_HINT_COOKIE_MAX_AGE_SECONDS,
+} from '@/lib/constants/home'
+
 import { useCycleEffect } from './use-cycle-effect'
 
 const STORAGE_KEY = 'corelive-selected-category'
+
+/**
+ * Mirrors the localStorage selection into a cookie so the Home SSR prefetch
+ * can bootstrap the exact category-filtered todo key this browser will read
+ * (localStorage is invisible to the server). Null clears the cookie.
+ * @param id - Selected category ID, or null when selection is cleared.
+ * @returns Nothing after writing or expiring the cookie.
+ * @example
+ * persistSelectedCategoryCookie(3) // document.cookie gains "corelive-selected-category=3"
+ */
+function persistSelectedCategoryCookie(id: number | null): void {
+  const maxAge = id === null ? 0 : HOME_SSR_HINT_COOKIE_MAX_AGE_SECONDS
+  document.cookie = `${HOME_SELECTED_CATEGORY_COOKIE_NAME}=${id ?? ''}; path=/; max-age=${maxAge}; samesite=lax`
+}
+
+/**
+ * One-time cookie backfill for selections persisted before the cookie mirror
+ * existed (or after cookie expiry). Called on Home mount so the NEXT SSR
+ * prefetch sees the selection; a no-op when nothing is selected.
+ * @returns Nothing after mirroring the current localStorage selection.
+ * @example
+ * syncSelectedCategoryCookieFromStorage()
+ */
+export function syncSelectedCategoryCookieFromStorage(): void {
+  const selectedCategoryId = getSnapshot()
+  if (selectedCategoryId !== null) {
+    persistSelectedCategoryCookie(selectedCategoryId)
+  }
+}
 
 /**
  * Set of listeners that are notified when the selected category changes.
@@ -99,6 +133,9 @@ export function useSelectedCategory(): [
     } catch {
       // localStorage unavailable (e.g. private browsing quota exceeded)
     }
+    // Keep the SSR-hint cookie in lock-step so the next Home SSR prefetch
+    // bootstraps the todo key this selection makes the client read.
+    persistSelectedCategoryCookie(id)
     emitChange()
   }
 

@@ -34,6 +34,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useMounted } from '@/hooks/use-mounted'
 import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
@@ -42,6 +43,10 @@ import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { useTodoPasteImport } from '@/hooks/useTodoPasteImport'
+import {
+  HOME_TODO_QUERY_LIMIT,
+  HOME_TODO_QUERY_OFFSET,
+} from '@/lib/constants/home'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
@@ -64,8 +69,6 @@ import type { Todo } from './TodoItem'
 import { WeeklySummaryCard } from './WeeklySummaryCard'
 import { YearInReviewModal } from './YearInReviewModal'
 
-const TODO_QUERY_LIMIT = 100
-const TODO_QUERY_OFFSET = 0
 const DECIMAL_RADIX = 10
 
 /**
@@ -119,6 +122,10 @@ export const TodoList = function TodoList() {
   // Track if persister is still restoring cached data - prevents hydration mismatch
   const isRestoring = useIsRestoring()
   const isClerkQueryReady = useClerkQueryReady()
+  // Keeps SSR HTML and the hydration pass on the Loading gate below — the full
+  // tree renders locale-dependent dates (journal day grouping) that a UTC
+  // server pass would mismatch against the browser's zone.
+  const isMounted = useMounted()
 
   // Category filter state (persisted to localStorage)
   const [selectedCategoryId] = useSelectedCategory()
@@ -184,8 +191,8 @@ export const TodoList = function TodoList() {
         // ALL todos (pending + completed-since-clear); MUST mirror the
         // retain-aware pendingKey in useTodoMutations or optimistic updates miss.
         ...(isRetaining ? {} : { completed: false }),
-        limit: TODO_QUERY_LIMIT,
-        offset: TODO_QUERY_OFFSET,
+        limit: HOME_TODO_QUERY_LIMIT,
+        offset: HOME_TODO_QUERY_OFFSET,
         ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
       },
     }),
@@ -507,9 +514,13 @@ export const TodoList = function TodoList() {
     })
   }, [queryClient])
 
-  // Show loading during initial query OR while persister restores cached data
-  // This ensures server-rendered HTML matches client hydration (prevents hydration error)
-  if (!isClerkQueryReady || pendingLoading || isRestoring) {
+  // Show loading until mounted (so server HTML and the hydration pass always
+  // match), then during initial query / Clerk hydration / persister restore.
+  // Clerk readiness stays a display gate on purpose: every visible control can
+  // mutate, so content must never appear before mutations can authenticate.
+  // The Issue #153 win happens at reveal time instead — the SSR-bootstrap
+  // hydrated cache makes pendingLoading false with zero /api/orpc requests.
+  if (!isMounted || !isClerkQueryReady || pendingLoading || isRestoring) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>

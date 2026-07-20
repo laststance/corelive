@@ -10,6 +10,11 @@ import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { clearedAffirmation } from '@/lib/clearedAffirmation'
+import { COMPLETED_JOURNAL_INITIAL_OFFSET } from '@/lib/constants/completed'
+import {
+  HOME_TODO_QUERY_LIMIT,
+  HOME_TODO_QUERY_OFFSET,
+} from '@/lib/constants/home'
 import { orpc } from '@/lib/orpc/client-query'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
@@ -114,8 +119,8 @@ export function useTodoMutations(
   const pendingKey = orpc.todo.list.queryOptions({
     input: {
       ...(isRetaining ? {} : { completed: false }),
-      limit: 100,
-      offset: 0,
+      limit: HOME_TODO_QUERY_LIMIT,
+      offset: HOME_TODO_QUERY_OFFSET,
       ...(categoryId !== null && { categoryId }),
     },
   }).queryKey
@@ -127,7 +132,7 @@ export function useTodoMutations(
   const journalBaseKey = orpc.completed.journal.key()
   const unfilteredJournalKey = orpc.completed.journal.infiniteKey({
     input: getUnfilteredCompletedJournalInput,
-    initialPageParam: 0,
+    initialPageParam: COMPLETED_JOURNAL_INITIAL_OFFSET,
   })
   // ============================================
   // CREATE MUTATION - Optimistic add to pending
