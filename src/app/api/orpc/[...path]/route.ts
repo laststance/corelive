@@ -30,10 +30,6 @@ async function handleRequest(request: Request): Promise<Response> {
   const serverTiming = new ServerTiming()
 
   try {
-    // Consume a clone so malformed bodies fail inside this guarded route boundary.
-    const clonedRequest = request.clone()
-    await clonedRequest.text()
-
     const { response } = await handler.handle(request, {
       prefix: '/api/orpc',
       context: {
@@ -49,18 +45,14 @@ async function handleRequest(request: Request): Promise<Response> {
     )
   } catch (error) {
     log.error('❌ oPRC Handler Error:', error)
+    // Return a fixed generic payload — exception message/stack (DB internals,
+    // filesystem paths, dependency names) stay in the server log above and are
+    // never leaked to the browser.
     return withServerTiming(
-      new Response(
-        JSON.stringify({
-          error: 'Internal Server Error',
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
-        }),
-        {
-          status: 500,
-          headers: { 'content-type': 'application/json' },
-        },
-      ),
+      new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      }),
       serverTiming,
       startedAt,
     )

@@ -7,6 +7,7 @@ import { cookies, headers } from 'next/headers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  HOME_RETAIN_COMPLETED_COOKIE_NAME,
   HOME_SELECTED_CATEGORY_COOKIE_NAME,
   HOME_TIMEZONE_COOKIE_NAME,
 } from '@/lib/constants/home'
@@ -87,14 +88,16 @@ const BOOTSTRAP_FIXTURE: HomeBootstrapResponse = {
   },
 }
 
-/** Stubs the per-request cookie and header stores for one scenario, since the prefetch reads them to guess the viewer zone and category selection. @param requestState - Optional timezone cookie, category cookie, and Vercel geo header values. @returns Nothing after installing the mocks. @example `mockRequestState({ cookieTimeZone: 'Asia/Tokyo', cookieSelectedCategoryId: '3' })` */
+/** Stubs the per-request cookie and header stores for one scenario, since the prefetch reads them to guess the viewer zone, category selection, and 居残りモード. @param requestState - Optional timezone cookie, category cookie, retain cookie, and Vercel geo header values. @returns Nothing after installing the mocks. @example `mockRequestState({ cookieTimeZone: 'Asia/Tokyo', cookieSelectedCategoryId: '3' })` */
 function mockRequestState({
   cookieTimeZone,
   cookieSelectedCategoryId,
+  cookieRetainCompleted,
   geoTimeZone,
 }: {
   cookieTimeZone?: string
   cookieSelectedCategoryId?: string
+  cookieRetainCompleted?: string
   geoTimeZone?: string
 } = {}): void {
   const cookieValues = new Map<string, string>()
@@ -106,6 +109,9 @@ function mockRequestState({
       HOME_SELECTED_CATEGORY_COOKIE_NAME,
       cookieSelectedCategoryId,
     )
+  }
+  if (cookieRetainCompleted !== undefined) {
+    cookieValues.set(HOME_RETAIN_COMPLETED_COOKIE_NAME, cookieRetainCompleted)
   }
   mockedCookies.mockResolvedValue({
     get: (name: string) =>
@@ -284,5 +290,31 @@ describe('prefetchHomeBootstrap', () => {
       { todo: Record<string, unknown> },
     ]
     expect(input.todo).toEqual({ completed: false, limit: 100, offset: 0 })
+  })
+
+  it('hydrates the retain-mode todo key when the 居残りモード cookie is on', async () => {
+    // Arrange
+    mockRequestState({
+      cookieTimeZone: 'Asia/Tokyo',
+      cookieRetainCompleted: 'true',
+    })
+
+    // Act
+    const dehydratedState = await prefetchHomeBootstrap()
+
+    // Assert — the bootstrap dropped the completed filter…
+    const [, input] = mockedCall.mock.calls[0] as [
+      unknown,
+      { todo: Record<string, unknown> },
+    ]
+    expect(input.todo).toEqual({ limit: 100, offset: 0 })
+
+    // …and the todo slice landed on the retain-mode key, not the default key
+    const queryClient = createQueryClient()
+    hydrate(queryClient, JSON.parse(JSON.stringify(dehydratedState)))
+    expect(
+      queryClient.getQueryData(getHomeTodoListQueryKey(undefined, true)),
+    ).toEqual(BOOTSTRAP_FIXTURE.todo)
+    expect(queryClient.getQueryData(getHomeTodoListQueryKey())).toBeUndefined()
   })
 })

@@ -5,6 +5,7 @@ import { cookies, headers } from 'next/headers'
 
 import { COMPLETED_JOURNAL_INITIAL_OFFSET } from '@/lib/constants/completed'
 import {
+  HOME_RETAIN_COMPLETED_COOKIE_NAME,
   HOME_SELECTED_CATEGORY_COOKIE_NAME,
   HOME_TIMEZONE_COOKIE_NAME,
 } from '@/lib/constants/home'
@@ -78,6 +79,23 @@ async function resolveViewerSelectedCategoryId(): Promise<number | undefined> {
 }
 
 /**
+ * Resolves whether this browser has 居残りモード ON, from the cookie `HomeContent`
+ * mirrors alongside the Redux setting. Retain ON drops the todo `completed`
+ * filter, so the SSR key must match or retain-mode users miss todo hydration.
+ * Absent cookie means OFF (matching the default). A stale value only costs one
+ * client fetch — never wrong data, since the bootstrap forwards the same input
+ * to the same `listTodos` the client would call.
+ * @returns `true` when 居残りモード is ON, else `false`.
+ * @example `await resolveViewerRetainCompleted() // => true`
+ */
+async function resolveViewerRetainCompleted(): Promise<boolean> {
+  const cookieValue = (await cookies()).get(
+    HOME_RETAIN_COMPLETED_COOKIE_NAME,
+  )?.value
+  return cookieValue === 'true'
+}
+
+/**
  * Runs the one `home.bootstrap` call during the Home Server Component render and
  * dehydrates the four slices onto the exact client cache keys, so the browser
  * paints from hydrated data with zero initial `/api/orpc` requests.
@@ -100,12 +118,17 @@ export async function prefetchHomeBootstrap(): Promise<
 
   const viewerTimeZone = await resolveViewerTimeZone()
   const viewerSelectedCategoryId = await resolveViewerSelectedCategoryId()
+  const viewerRetainCompleted = await resolveViewerRetainCompleted()
   const serverTiming = new ServerTiming()
 
   try {
     const bootstrap = await call(
       bootstrapHome,
-      buildHomeBootstrapInput(viewerTimeZone, viewerSelectedCategoryId),
+      buildHomeBootstrapInput(
+        viewerTimeZone,
+        viewerSelectedCategoryId,
+        viewerRetainCompleted,
+      ),
       {
         context: {
           // Same Bearer contract the browser RPCLink sends; authMiddleware
@@ -119,7 +142,7 @@ export async function prefetchHomeBootstrap(): Promise<
     const queryClient = createQueryClient()
     queryClient.setQueryData(getHomeCategoryListQueryKey(), bootstrap.category)
     queryClient.setQueryData(
-      getHomeTodoListQueryKey(viewerSelectedCategoryId),
+      getHomeTodoListQueryKey(viewerSelectedCategoryId, viewerRetainCompleted),
       bootstrap.todo,
     )
     queryClient.setQueryData(

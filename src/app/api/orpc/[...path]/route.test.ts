@@ -57,4 +57,27 @@ describe('oRPC route Server-Timing response', () => {
       /^auth;dur=1\.00, db;dur=2\.00, user;dur=3\.00, sql;dur=4\.00, total;dur=\d+\.\d{2}$/,
     )
   })
+
+  it('keeps exception details out of the 500 body when the oRPC handler throws', async () => {
+    // Arrange — the handler throws an error carrying internal details
+    mockHandle.mockImplementation(async () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:5491 (postgres)')
+    })
+    const request = new Request(
+      'https://corelive.app/api/orpc/home/bootstrap',
+      {
+        method: 'POST',
+        body: '{}',
+      },
+    )
+
+    // Act
+    const response = await POST(request)
+    const body = await response.json()
+
+    // Assert — client sees only a generic error, never the message or stack
+    expect(response.status).toBe(500)
+    expect(body).toEqual({ error: 'Internal Server Error' })
+    expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|postgres|stack/i)
+  })
 })

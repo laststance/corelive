@@ -19,15 +19,20 @@ import type { HomeBootstrapInput } from '@/server/schemas/home'
  * character for character (e.g. `{ completed, limit, offset }` in TodoList).
  */
 
-/** Builds the pending-list input TodoList queries on first load (no retain mode; category filter appended only when selected — the same conditional-spread order TodoList uses), so SSR and client hash to one key. @param selectedCategoryId - Persisted sidebar selection, or null/undefined for the All view. @returns The canonical `{ completed, limit, offset[, categoryId] }` input in TodoList's property order. @example `buildHomeTodoListInput(3) // => { completed: false, limit: 100, offset: 0, categoryId: 3 }` */
-export function buildHomeTodoListInput(selectedCategoryId?: number | null): {
-  completed: boolean
+/** Builds the pending-list input TodoList queries on first load, mirroring TodoList's exact conditional-spread order: 居残りモード drops the `completed` filter (active list then holds ALL todos), category filter appended only when selected — so SSR and client hash to one key. @param selectedCategoryId - Persisted sidebar selection, or null/undefined for the All view. @param isRetaining - 居残りモード (keep completed in list); omits `completed` when true. @returns The canonical `{ [completed,] limit, offset[, categoryId] }` input in TodoList's property order. @example `buildHomeTodoListInput(3) // => { completed: false, limit: 100, offset: 0, categoryId: 3 }` @example `buildHomeTodoListInput(null, true) // => { limit: 100, offset: 0 }` */
+export function buildHomeTodoListInput(
+  selectedCategoryId?: number | null,
+  isRetaining = false,
+): {
+  completed?: boolean
   limit: number
   offset: number
   categoryId?: number
 } {
   return {
-    completed: false,
+    // 居残りモード ON drops the completed:false filter — MUST match TodoList's
+    // spread order (completed first) or the SSR key hashes differently.
+    ...(isRetaining ? {} : { completed: false }),
     limit: HOME_TODO_QUERY_LIMIT,
     offset: HOME_TODO_QUERY_OFFSET,
     ...(selectedCategoryId !== null &&
@@ -43,13 +48,14 @@ export function buildHomeHeatmapInput(timezone: string) {
   }
 }
 
-/** Assembles the one `home.bootstrap` input covering all four Home slices whenever the SSR prefetch runs. @param timezone - Viewer IANA zone for heatmap bucketing. @param selectedCategoryId - Cookie-mirrored sidebar selection, or undefined for the All view. @returns The raw (pre-Zod) bootstrap input. @example `buildHomeBootstrapInput('Asia/Tokyo', 3) // => { todo: {…, categoryId: 3}, heatmap: {…}, journal: { limit: 10, offset: 0 } }` */
+/** Assembles the one `home.bootstrap` input covering all four Home slices whenever the SSR prefetch runs. @param timezone - Viewer IANA zone for heatmap bucketing. @param selectedCategoryId - Cookie-mirrored sidebar selection, or undefined for the All view. @param isRetaining - Cookie-mirrored 居残りモード setting; drops the todo `completed` filter when true. @returns The raw (pre-Zod) bootstrap input. @example `buildHomeBootstrapInput('Asia/Tokyo', 3) // => { todo: {…, categoryId: 3}, heatmap: {…}, journal: { limit: 10, offset: 0 } }` */
 export function buildHomeBootstrapInput(
   timezone: string,
   selectedCategoryId?: number,
+  isRetaining = false,
 ): HomeBootstrapInput {
   return {
-    todo: buildHomeTodoListInput(selectedCategoryId),
+    todo: buildHomeTodoListInput(selectedCategoryId, isRetaining),
     heatmap: buildHomeHeatmapInput(timezone),
     journal: getUnfilteredCompletedJournalInput(
       COMPLETED_JOURNAL_INITIAL_OFFSET,
@@ -62,10 +68,13 @@ export function getHomeCategoryListQueryKey() {
   return orpc.category.list.queryOptions({}).queryKey
 }
 
-/** Returns the cache key TodoList's first-load pending query reads (All view or the persisted category view), for SSR hydration writes. @param selectedCategoryId - Cookie-mirrored sidebar selection, or undefined for the All view. @returns The `todo.list` query key for that first-load input. @example `getHomeTodoListQueryKey() // => [['todo','list'], { input: { completed: false, limit: 100, offset: 0 }, type: 'query' }]` */
-export function getHomeTodoListQueryKey(selectedCategoryId?: number) {
+/** Returns the cache key TodoList's first-load pending query reads (All view or the persisted category view, retain-aware), for SSR hydration writes. @param selectedCategoryId - Cookie-mirrored sidebar selection, or undefined for the All view. @param isRetaining - Cookie-mirrored 居残りモード setting; selects the retain-mode key (no `completed`) when true. @returns The `todo.list` query key for that first-load input. @example `getHomeTodoListQueryKey() // => [['todo','list'], { input: { completed: false, limit: 100, offset: 0 }, type: 'query' }]` */
+export function getHomeTodoListQueryKey(
+  selectedCategoryId?: number,
+  isRetaining = false,
+) {
   return orpc.todo.list.queryOptions({
-    input: buildHomeTodoListInput(selectedCategoryId),
+    input: buildHomeTodoListInput(selectedCategoryId, isRetaining),
   }).queryKey
 }
 

@@ -73,6 +73,33 @@ describe('home bootstrap query keys', () => {
     )
   })
 
+  it('hydrates todo data onto the exact retain-mode key TodoList reads when 居残りモード is on', () => {
+    // Arrange — mirror TodoList's input construction with retain mode ON
+    // (居残りモード spreads {} instead of { completed: false })
+    const isRetaining = true
+    const selectedCategoryId = null
+    const todoListClientKey = orpc.todo.list.queryOptions({
+      input: {
+        ...(isRetaining ? {} : { completed: false }),
+        limit: 100,
+        offset: 0,
+        ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
+      },
+    }).queryKey
+
+    // Act
+    const ssrKey = getHomeTodoListQueryKey(undefined, true)
+
+    // Assert
+    expect(ssrKey).toEqual([
+      ['todo', 'list'],
+      { input: { limit: 100, offset: 0 }, type: 'query' },
+    ])
+    expect(hashLikeAppQueryClient(ssrKey)).toBe(
+      hashLikeAppQueryClient(todoListClientKey),
+    )
+  })
+
   it('hydrates category data onto the key every category consumer queries with empty input', () => {
     // Arrange
     const categoryClientKey = orpc.category.list.queryOptions({}).queryKey
@@ -131,8 +158,11 @@ describe('home bootstrap query keys', () => {
   })
 
   it('sends the bootstrap procedure the same four inputs the client queries send individually', () => {
+    // Arrange
+    const timezone = 'Asia/Tokyo'
+
     // Act
-    const bootstrapInput = buildHomeBootstrapInput('Asia/Tokyo')
+    const bootstrapInput = buildHomeBootstrapInput(timezone)
 
     // Assert
     expect(bootstrapInput).toEqual({
@@ -143,8 +173,12 @@ describe('home bootstrap query keys', () => {
   })
 
   it('carries a persisted category selection into the bootstrap todo slice', () => {
+    // Arrange
+    const timezone = 'Asia/Tokyo'
+    const selectedCategoryId = 3
+
     // Act
-    const bootstrapInput = buildHomeBootstrapInput('Asia/Tokyo', 3)
+    const bootstrapInput = buildHomeBootstrapInput(timezone, selectedCategoryId)
 
     // Assert
     expect(bootstrapInput.todo).toEqual({
@@ -153,5 +187,22 @@ describe('home bootstrap query keys', () => {
       offset: 0,
       categoryId: 3,
     })
+  })
+
+  it('drops the completed filter in the bootstrap todo slice when 居残りモード is on', () => {
+    // Arrange
+    const timezone = 'Asia/Tokyo'
+    const selectedCategoryId = undefined
+    const isRetaining = true
+
+    // Act
+    const bootstrapInput = buildHomeBootstrapInput(
+      timezone,
+      selectedCategoryId,
+      isRetaining,
+    )
+
+    // Assert — 居残りモード omits completed so the active list holds ALL todos
+    expect(bootstrapInput.todo).toEqual({ limit: 100, offset: 0 })
   })
 })
