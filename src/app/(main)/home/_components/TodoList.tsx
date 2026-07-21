@@ -135,7 +135,7 @@ export const TodoList = function TodoList() {
 
   // Fetch categories first so a fresh browser and the SSR bootstrap resolve
   // the same default-category Todo query key before Clerk enables requests.
-  const { data: categoryData } = useQuery({
+  const { data: categoryData, isPending: isCategoryPending } = useQuery({
     ...orpc.category.list.queryOptions({}),
     enabled: isClerkQueryReady,
   })
@@ -144,6 +144,10 @@ export const TodoList = function TodoList() {
       selectedCategoryId,
       categoryData?.categories ?? [],
     ) ?? null
+  // A fresh browser must resolve its default category before the Todo request;
+  // explicit selections and a settled category fallback can proceed directly.
+  const isPendingTodoQueryReady =
+    isClerkQueryReady && (selectedCategoryId !== null || !isCategoryPending)
 
   // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
@@ -197,7 +201,7 @@ export const TodoList = function TodoList() {
       // same order-sensitive oRPC key.
       input: buildHomeTodoListInput(effectiveSelectedCategoryId, isRetaining),
     }),
-    enabled: isClerkQueryReady,
+    enabled: isPendingTodoQueryReady,
     // Keep the previous list painted while the toggle/category refetch is in
     // flight so the pending rows never blank-flash; the completed-since-clear
     // rows arrive with the settled result and fade IN over them (L1 + D8).

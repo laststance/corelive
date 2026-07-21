@@ -4,10 +4,11 @@ import {
   HOME_SELECTED_CATEGORY_COOKIE_NAME,
   HOME_TIMEZONE_COOKIE_NAME,
 } from '../../src/lib/constants/home'
-import { PERSISTED_QUERY_STORAGE_KEY } from '../../src/lib/constants/query'
 
 import { expect, test } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
+
+const EXPECTED_PERSISTED_QUERY_STORAGE_KEY = 'REACT_QUERY_OFFLINE_CACHE'
 
 test.describe('Home bootstrap', () => {
   test.beforeAll(resetDatabase)
@@ -27,7 +28,7 @@ test.describe('Home bootstrap', () => {
         localStorage.removeItem(selectedCategoryKey)
       },
       {
-        offlineCacheKey: PERSISTED_QUERY_STORAGE_KEY,
+        offlineCacheKey: EXPECTED_PERSISTED_QUERY_STORAGE_KEY,
         selectedCategoryKey: HOME_SELECTED_CATEGORY_COOKIE_NAME,
       },
     )
@@ -51,6 +52,12 @@ test.describe('Home bootstrap', () => {
     await expect(
       page.getByRole('region', { name: 'Completed Tasks' }),
     ).toBeVisible()
+    // The default-selection effect was the late trigger behind the duplicate
+    // request, so wait for its persisted write before asserting no fetch fired.
+    await page.waitForFunction(
+      (storageKey) => localStorage.getItem(storageKey) !== null,
+      HOME_SELECTED_CATEGORY_COOKIE_NAME,
+    )
     expect(browserOrpcRequests).toEqual([])
   })
 })
