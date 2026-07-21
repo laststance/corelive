@@ -2,6 +2,7 @@ import { setupClerkTestingToken } from '@clerk/testing/playwright'
 import { type Locator, type Page } from '@playwright/test'
 
 import { xpToLevel } from '../../src/app/(main)/skill-tree/lib/xp'
+import { PERSISTED_QUERY_STORAGE_KEY } from '../../src/lib/constants/query'
 
 import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
@@ -170,8 +171,9 @@ test.describe('Skill Tree E2E', () => {
     // so it won't re-fetch from the server. Drop only the persister's
     // own key — not all of localStorage — so Clerk session + misc app
     // state survive the reset.
-    await page.evaluate(() =>
-      window.localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE'),
+    await page.evaluate(
+      (storageKey) => window.localStorage.removeItem(storageKey),
+      PERSISTED_QUERY_STORAGE_KEY,
     )
     // Arm the response listener BEFORE triggering the reload. If we await
     // `page.reload()` first and then set up `waitForResponse`, the fresh

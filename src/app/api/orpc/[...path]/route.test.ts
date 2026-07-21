@@ -53,9 +53,11 @@ describe('oRPC route Server-Timing response', () => {
 
     // Assert
     expect(response.status).toBe(200)
-    expect(response.headers.get('server-timing')).toMatch(
+    const serverTiming = response.headers.get('server-timing')
+    expect(serverTiming).toMatch(
       /^auth;dur=1\.00, db;dur=2\.00, user;dur=3\.00, sql;dur=4\.00, total;dur=\d+\.\d{2}$/,
     )
+    expect(response.headers.get('x-corelive-server-timing')).toBe(serverTiming)
   })
 
   it('keeps exception details out of the 500 body when the oRPC handler throws', async () => {
@@ -79,5 +81,8 @@ describe('oRPC route Server-Timing response', () => {
     expect(response.status).toBe(500)
     expect(body).toEqual({ error: 'Internal Server Error' })
     expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|postgres|stack/i)
+    const serverTiming = response.headers.get('server-timing')
+    expect(serverTiming).toMatch(/^total;dur=\d+\.\d{2}$/)
+    expect(response.headers.get('x-corelive-server-timing')).toBe(serverTiming)
   })
 })

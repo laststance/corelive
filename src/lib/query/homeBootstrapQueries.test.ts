@@ -11,6 +11,7 @@ import {
   getHomeHeatmapQueryKey,
   getHomeJournalQueryKey,
   getHomeTodoListQueryKey,
+  resolveHomeSelectedCategoryId,
 } from './homeBootstrapQueries'
 
 /** Mirrors the app QueryClient's queryKeyHashFn so equality is asserted at the hash level the cache actually matches on (the oRPC serializer preserves property order, so `toEqual` alone would miss order drift). @param queryKey - Key produced by either the SSR builders or the client hooks. @returns The exact cache hash string. @example `hashLikeAppQueryClient([['todo','list']]) // => '{"json":[...],"meta":[]}'` */
@@ -20,24 +21,33 @@ function hashLikeAppQueryClient(queryKey: unknown): string {
 }
 
 describe('home bootstrap query keys', () => {
-  it('hydrates todo data onto the exact key TodoList reads on a default first load', () => {
-    // Arrange — mirror TodoList's inline input construction (retain OFF, no category)
+  it('hydrates todo data onto the exact default-category key TodoList reads on a first visit', () => {
+    // Arrange
     const isRetaining = false
+    const selectedCategoryId = resolveHomeSelectedCategoryId(undefined, [
+      { id: 3, isDefault: true },
+    ])
     const todoListClientKey = orpc.todo.list.queryOptions({
       input: {
         ...(isRetaining ? {} : { completed: false }),
         limit: 100,
         offset: 0,
+        ...(selectedCategoryId !== undefined && {
+          categoryId: selectedCategoryId,
+        }),
       },
     }).queryKey
 
     // Act
-    const ssrKey = getHomeTodoListQueryKey()
+    const ssrKey = getHomeTodoListQueryKey(selectedCategoryId)
 
     // Assert
     expect(ssrKey).toEqual([
       ['todo', 'list'],
-      { input: { completed: false, limit: 100, offset: 0 }, type: 'query' },
+      {
+        input: { completed: false, limit: 100, offset: 0, categoryId: 3 },
+        type: 'query',
+      },
     ])
     expect(hashLikeAppQueryClient(ssrKey)).toBe(
       hashLikeAppQueryClient(todoListClientKey),
@@ -77,7 +87,7 @@ describe('home bootstrap query keys', () => {
     // Arrange — mirror TodoList's input construction with retain mode ON
     // (居残りモード spreads {} instead of { completed: false })
     const isRetaining = true
-    const selectedCategoryId = null
+    const selectedCategoryId = 3
     const todoListClientKey = orpc.todo.list.queryOptions({
       input: {
         ...(isRetaining ? {} : { completed: false }),
@@ -88,12 +98,12 @@ describe('home bootstrap query keys', () => {
     }).queryKey
 
     // Act
-    const ssrKey = getHomeTodoListQueryKey(undefined, true)
+    const ssrKey = getHomeTodoListQueryKey(selectedCategoryId, true)
 
     // Assert
     expect(ssrKey).toEqual([
       ['todo', 'list'],
-      { input: { limit: 100, offset: 0 }, type: 'query' },
+      { input: { limit: 100, offset: 0, categoryId: 3 }, type: 'query' },
     ])
     expect(hashLikeAppQueryClient(ssrKey)).toBe(
       hashLikeAppQueryClient(todoListClientKey),
