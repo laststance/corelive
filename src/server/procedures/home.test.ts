@@ -156,4 +156,69 @@ describeIfDb('home.bootstrap', () => {
       'Visible on the first Home visit',
     ])
   })
+
+  it('shows todos from every category when a first Home visit has no default category', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+    const user = await prisma.user.create({ data: { clerkId } })
+    const workCategory = await prisma.category.create({
+      data: {
+        color: 'blue',
+        isDefault: false,
+        name: 'Work',
+        userId: user.id,
+      },
+    })
+    const personalCategory = await prisma.category.create({
+      data: {
+        color: 'green',
+        isDefault: false,
+        name: 'Personal',
+        userId: user.id,
+      },
+    })
+    await prisma.todo.createMany({
+      data: [
+        {
+          categoryId: workCategory.id,
+          completed: false,
+          order: 1,
+          text: 'Visible work without a default category',
+          userId: user.id,
+        },
+        {
+          categoryId: personalCategory.id,
+          completed: false,
+          order: 2,
+          text: 'Visible personal without a default category',
+          userId: user.id,
+        },
+      ],
+    })
+
+    // Act
+    const result = await call(
+      bootstrapHome,
+      {
+        heatmap: { days: HOME_HEATMAP_DAYS, timezone: 'UTC' },
+        journal: { limit: COMPLETED_JOURNAL_PAGE_SIZE, offset: 0 },
+        todo: {
+          completed: false,
+          limit: HOME_TODO_QUERY_LIMIT,
+          offset: 0,
+        },
+      },
+      {
+        context: {
+          headers: new Headers({ Authorization: `Bearer ${clerkId}` }),
+        },
+      },
+    )
+
+    // Assert
+    expect(result.todo.todos.map((entry) => entry.text)).toEqual([
+      'Visible work without a default category',
+      'Visible personal without a default category',
+    ])
+  })
 })

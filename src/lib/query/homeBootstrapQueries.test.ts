@@ -54,6 +54,46 @@ describe('home bootstrap query keys', () => {
     )
   })
 
+  it('keeps TodoList on the all-category key when no default category exists', () => {
+    // Arrange
+    const storedSelectedCategoryId = null
+    const isCategoryPending = false
+    const resolvedSelectedCategoryId = resolveHomeSelectedCategoryId(
+      storedSelectedCategoryId,
+      [
+        { id: 3, isDefault: false },
+        { id: 4, isDefault: false },
+      ],
+    )
+    const effectiveSelectedCategoryId = resolvedSelectedCategoryId ?? null
+
+    // Act — mirror TodoList's settled category gate and all-category query key.
+    const isPendingTodoQueryReady =
+      storedSelectedCategoryId !== null || !isCategoryPending
+    const todoListClientKey = orpc.todo.list.queryOptions({
+      input: {
+        completed: false,
+        limit: 100,
+        offset: 0,
+      },
+    }).queryKey
+    const ssrKey = getHomeTodoListQueryKey(resolvedSelectedCategoryId)
+
+    // Assert
+    expect(effectiveSelectedCategoryId).toBeNull()
+    expect(isPendingTodoQueryReady).toBe(true)
+    expect(ssrKey).toEqual([
+      ['todo', 'list'],
+      {
+        input: { completed: false, limit: 100, offset: 0 },
+        type: 'query',
+      },
+    ])
+    expect(hashLikeAppQueryClient(ssrKey)).toBe(
+      hashLikeAppQueryClient(todoListClientKey),
+    )
+  })
+
   it('hydrates todo data onto the exact category-filtered key TodoList reads when a sidebar selection is persisted', () => {
     // Arrange — mirror TodoList's inline construction with a selected category
     const isRetaining = false
