@@ -186,14 +186,16 @@ test.describe('TODO App E2E Tests', () => {
 
   test('should move completed TODO back to pending when clicking checkbox', async ({
     page,
-  }) => {
+  }, testInfo) => {
     // Arrange — seed a todo and wait for the server-confirmed positive ID
-    const todoText = 'Uncheck completion test todo'
+    const todoText = `Uncheck completion test todo retry ${testInfo.retry}`
     await page
       .getByPlaceholder('Type a todo, or paste a list...')
       .fill(todoText)
     await page.getByRole('button', { name: 'Add', exact: true }).click()
-    const todoCheckbox = page.getByRole('checkbox', { name: todoText })
+    const todoCheckbox = page
+      .getByRole('checkbox', { name: todoText })
+      .and(page.locator('[id^="todo-"]:not([id^="todo--"])'))
     await expect(todoCheckbox).toBeVisible()
     await expect(todoCheckbox).not.toBeChecked()
     await expect(todoCheckbox).toHaveAttribute('id', /^todo-[^-]/, {
@@ -201,23 +203,50 @@ test.describe('TODO App E2E Tests', () => {
     })
 
     // Act 1 — mark as completed (moves item to Completed Tasks section)
+    const completeResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/orpc/todo/toggle') &&
+        response.request().method() === 'POST',
+      { timeout: 10000 },
+    )
     await todoCheckbox.click()
+    expect((await completeResponsePromise).status()).toBe(200)
 
     // Assert 1 — item is in completed section (checked + line-through)
-    const completedCheckbox = page.getByRole('checkbox', { name: todoText })
+    const completedTasksRegion = page.getByRole('region', {
+      name: 'Completed Tasks',
+    })
+    const completedCheckbox = completedTasksRegion.getByRole('checkbox', {
+      name: todoText,
+    })
     await expect(completedCheckbox).toBeChecked({ timeout: 5000 })
-    await expect(page.getByText(todoText)).toHaveClass(/line-through/)
+    await expect(
+      completedTasksRegion.getByText(todoText, { exact: true }),
+    ).toHaveClass(/line-through/)
 
     // Act 2 — click the checkbox in Completed Tasks to move it back to pending
+    const uncompleteResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/orpc/todo/toggle') &&
+        response.request().method() === 'POST',
+      { timeout: 10000 },
+    )
     await completedCheckbox.click()
+    expect((await uncompleteResponsePromise).status()).toBe(200)
 
     // Assert 2 — item is back in pending (unchecked, no line-through, drag handle)
-    const pendingCheckbox = page.getByRole('checkbox', { name: todoText })
+    const pendingCheckbox = page
+      .getByRole('checkbox', { name: todoText })
+      .and(page.locator('[id^="todo-"]:not([id^="todo--"])'))
+    await expect(completedCheckbox).not.toBeVisible({ timeout: 5000 })
+    await expect(pendingCheckbox).toBeVisible({ timeout: 5000 })
     await expect(pendingCheckbox).not.toBeChecked({ timeout: 5000 })
-    await expect(page.getByText(todoText)).not.toHaveClass(/line-through/)
     const todoItem = page.locator('.rounded-lg.border').filter({
-      has: page.getByRole('checkbox', { name: todoText }),
+      has: pendingCheckbox,
     })
+    await expect(todoItem.getByText(todoText, { exact: true })).not.toHaveClass(
+      /line-through/,
+    )
     // Pending items have a drag handle (GripVertical icon); completed items don't.
     await expect(
       todoItem.getByRole('button', { name: 'Drag to reorder' }),

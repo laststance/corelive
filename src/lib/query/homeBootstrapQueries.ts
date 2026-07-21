@@ -6,6 +6,7 @@ import {
 } from '@/lib/constants/home'
 import { orpc } from '@/lib/orpc/client-query'
 import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
+import type { CategoryWithCount } from '@/server/schemas/category'
 import type { HomeBootstrapInput } from '@/server/schemas/home'
 
 /**
@@ -38,6 +39,16 @@ export function buildHomeTodoListInput(
     ...(selectedCategoryId !== null &&
       selectedCategoryId !== undefined && { categoryId: selectedCategoryId }),
   }
+}
+
+/** Resolves the Home category once for SSR, hydration, and the client query so a first visit cannot drift from the default-category cache key. @param selectedCategoryId - Persisted category selection, or null/undefined before the browser has one. @param categories - Hydrated category records containing the default marker. @returns The persisted ID, default category ID, or undefined when no category exists. @example `resolveHomeSelectedCategoryId(undefined, [{ id: 3, isDefault: true }]) // => 3` */
+export function resolveHomeSelectedCategoryId(
+  selectedCategoryId: number | null | undefined,
+  categories: ReadonlyArray<Pick<CategoryWithCount, 'id' | 'isDefault'>>,
+): number | undefined {
+  return (
+    selectedCategoryId ?? categories.find((category) => category.isDefault)?.id
+  )
 }
 
 /** Builds the heatmap input `useHeatmapData` sends for the given zone, keeping SSR writes aligned with the client's `{ days, timezone }` property order. @param timezone - IANA zone the viewer buckets local days by. @returns The canonical heatmap query input. @example `buildHomeHeatmapInput('Asia/Tokyo') // => { days: 365, timezone: 'Asia/Tokyo' }` */

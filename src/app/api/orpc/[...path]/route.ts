@@ -6,22 +6,23 @@ import { ServerTiming } from '@/server/timing/ServerTiming'
 import { log } from '../../../../lib/logger'
 
 const handler = new RPCHandler(router)
+const SERVER_TIMING_HEADER_NAME = 'server-timing'
+const SERVER_TIMING_MIRROR_HEADER_NAME = 'x-corelive-server-timing'
 
-/** Adds the completed request phases whenever the oRPC adapter returns or the fallback handles an error. @param response - Response produced by oRPC or the route fallback. @param serverTiming - Per-request phase collector. @param startedAt - Monotonic request start timestamp. @returns A response with the `Server-Timing` header attached. @example `withServerTiming(new Response('ok'), timing, performance.now())` */
+/** Attaches standard timing plus a Vercel-safe mirror so the same measurements remain observable when the platform filters `Server-Timing`. @param response - Mutable response produced by oRPC or the route fallback. @param serverTiming - Per-request phase collector. @param startedAt - Monotonic request start timestamp. @returns The same response with identical timing headers attached. @example `withServerTiming(new Response('ok'), timing, performance.now())` */
 function withServerTiming(
   response: Response,
   serverTiming: ServerTiming,
   startedAt: number,
 ): Response {
   serverTiming.record('total', performance.now() - startedAt)
-  const headers = new Headers(response.headers)
-  headers.set('server-timing', serverTiming.toHeaderValue())
+  const headerValue = serverTiming.toHeaderValue()
+  response.headers.set(SERVER_TIMING_HEADER_NAME, headerValue)
+  // Keep the standard name for local/self-hosted DevTools; Vercel currently
+  // filters it, so this custom mirror exposes the same production phases.
+  response.headers.set(SERVER_TIMING_MIRROR_HEADER_NAME, headerValue)
 
-  return new Response(response.body, {
-    headers,
-    status: response.status,
-    statusText: response.statusText,
-  })
+  return response
 }
 
 /** Handles every oRPC HTTP verb so production responses expose the measured Home/API latency split. @param request - Incoming browser or server request. @returns The oRPC response, 404 fallback, or instrumented 500 response. @example `await handleRequest(new Request('https://corelive.app/api/orpc/todo/list'))` */

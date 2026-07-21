@@ -187,9 +187,10 @@ describe('prefetchHomeBootstrap', () => {
     expect(queryClient.getQueryData(getHomeCategoryListQueryKey())).toEqual(
       BOOTSTRAP_FIXTURE.category,
     )
-    expect(queryClient.getQueryData(getHomeTodoListQueryKey())).toEqual(
+    expect(queryClient.getQueryData(getHomeTodoListQueryKey(1))).toEqual(
       BOOTSTRAP_FIXTURE.todo,
     )
+    expect(queryClient.getQueryData(getHomeTodoListQueryKey())).toBeUndefined()
     expect(
       queryClient.getQueryData(getHomeHeatmapQueryKey('Asia/Tokyo')),
     ).toEqual(BOOTSTRAP_FIXTURE.heatmap)
@@ -274,7 +275,7 @@ describe('prefetchHomeBootstrap', () => {
     expect(queryClient.getQueryData(getHomeTodoListQueryKey())).toBeUndefined()
   })
 
-  it('treats a garbage category cookie as the All view', async () => {
+  it('lets the bootstrap resolve the default category when the selection cookie is garbage', async () => {
     // Arrange
     mockRequestState({
       cookieTimeZone: 'Asia/Tokyo',
@@ -282,7 +283,7 @@ describe('prefetchHomeBootstrap', () => {
     })
 
     // Act
-    await prefetchHomeBootstrap()
+    const dehydratedState = await prefetchHomeBootstrap()
 
     // Assert
     const [, input] = mockedCall.mock.calls[0] as [
@@ -290,6 +291,13 @@ describe('prefetchHomeBootstrap', () => {
       { todo: Record<string, unknown> },
     ]
     expect(input.todo).toEqual({ completed: false, limit: 100, offset: 0 })
+
+    const queryClient = createQueryClient()
+    hydrate(queryClient, JSON.parse(JSON.stringify(dehydratedState)))
+    expect(queryClient.getQueryData(getHomeTodoListQueryKey(1))).toEqual(
+      BOOTSTRAP_FIXTURE.todo,
+    )
+    expect(queryClient.getQueryData(getHomeTodoListQueryKey())).toBeUndefined()
   })
 
   it('hydrates the retain-mode todo key when the 居残りモード cookie is on', async () => {
@@ -312,9 +320,9 @@ describe('prefetchHomeBootstrap', () => {
     // …and the todo slice landed on the retain-mode key, not the default key
     const queryClient = createQueryClient()
     hydrate(queryClient, JSON.parse(JSON.stringify(dehydratedState)))
-    expect(
-      queryClient.getQueryData(getHomeTodoListQueryKey(undefined, true)),
-    ).toEqual(BOOTSTRAP_FIXTURE.todo)
+    expect(queryClient.getQueryData(getHomeTodoListQueryKey(1, true))).toEqual(
+      BOOTSTRAP_FIXTURE.todo,
+    )
     expect(queryClient.getQueryData(getHomeTodoListQueryKey())).toBeUndefined()
   })
 })

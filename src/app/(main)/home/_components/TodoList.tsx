@@ -43,12 +43,12 @@ import { useSoundFeedback } from '@/hooks/useSoundFeedback'
 import { useStreakNotifications } from '@/hooks/useStreakNotifications'
 import { useTodoMutations } from '@/hooks/useTodoMutations'
 import { useTodoPasteImport } from '@/hooks/useTodoPasteImport'
-import {
-  HOME_TODO_QUERY_LIMIT,
-  HOME_TODO_QUERY_OFFSET,
-} from '@/lib/constants/home'
 import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { orpc } from '@/lib/orpc/client-query'
+import {
+  buildHomeTodoListInput,
+  resolveHomeSelectedCategoryId,
+} from '@/lib/query/homeBootstrapQueries'
 import { useAppSelector } from '@/lib/redux/hooks'
 import { selectRetainCompletedInList } from '@/lib/redux/slices/settingsSlice'
 import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
@@ -133,6 +133,22 @@ export const TodoList = function TodoList() {
   // retain-aware query input + cache keys below.
   const isRetaining = useAppSelector(selectRetainCompletedInList)
 
+  // Fetch categories first so a fresh browser and the SSR bootstrap resolve
+  // the same default-category Todo query key before Clerk enables requests.
+  const { data: categoryData, isPending: isCategoryPending } = useQuery({
+    ...orpc.category.list.queryOptions({}),
+    enabled: isClerkQueryReady,
+  })
+  const effectiveSelectedCategoryId =
+    resolveHomeSelectedCategoryId(
+      selectedCategoryId,
+      categoryData?.categories ?? [],
+    ) ?? null
+  // A fresh browser must resolve its default category before the Todo request;
+  // explicit selections and a settled category fallback can proceed directly.
+  const isPendingTodoQueryReady =
+    isClerkQueryReady && (selectedCategoryId !== null || !isCategoryPending)
+
   // Mutations with optimistic updates (pass categoryId for correct cache key)
   const {
     createMutation,
@@ -142,7 +158,7 @@ export const TodoList = function TodoList() {
     updateMutation,
     clearCompletedMutation,
     reorderMutation,
-  } = useTodoMutations(selectedCategoryId, isRetaining)
+  } = useTodoMutations(effectiveSelectedCategoryId, isRetaining)
 
   // Earned-beat sound cues (opt-in, default OFF) fired on the create + clear
   // gestures below. Each is a no-op unless its moment is enabled in Settings, so
@@ -154,11 +170,6 @@ export const TodoList = function TodoList() {
   // Local state for optimistic reordering
   const [localPendingTodos, setLocalPendingTodos] = useState<Todo[]>([])
 
-  // Fetch categories for name/color lookup
-  const { data: categoryData } = useQuery({
-    ...orpc.category.list.queryOptions({}),
-    enabled: isClerkQueryReady,
-  })
   // Memoized on the query data so the map reference only changes when the
   // categories actually change. A fresh Map every render would bust the
   // `pendingTodosFromQuery` memo below (it depends on this), re-opening the
@@ -186,17 +197,11 @@ export const TodoList = function TodoList() {
     isPlaceholderData: isPendingPlaceholderData,
   } = useQuery({
     ...orpc.todo.list.queryOptions({
-      input: {
-        // 居残りモード drops the completed:false filter so the active list holds
-        // ALL todos (pending + completed-since-clear); MUST mirror the
-        // retain-aware pendingKey in useTodoMutations or optimistic updates miss.
-        ...(isRetaining ? {} : { completed: false }),
-        limit: HOME_TODO_QUERY_LIMIT,
-        offset: HOME_TODO_QUERY_OFFSET,
-        ...(selectedCategoryId !== null && { categoryId: selectedCategoryId }),
-      },
+      // Shared builder keeps SSR, this query, and optimistic mutations on the
+      // same order-sensitive oRPC key.
+      input: buildHomeTodoListInput(effectiveSelectedCategoryId, isRetaining),
     }),
-    enabled: isClerkQueryReady,
+    enabled: isPendingTodoQueryReady,
     // Keep the previous list painted while the toggle/category refetch is in
     // flight so the pending rows never blank-flash; the completed-since-clear
     // rows arrive with the settled result and fade IN over them (L1 + D8).
@@ -233,11 +238,11 @@ export const TodoList = function TodoList() {
    * addTodo('Buy milk')
    */
   const addTodo = (text: string, notes?: string) => {
-    if (selectedCategoryId === null) return
+    if (effectiveSelectedCategoryId === null) return
     createMutation.mutate({
       text,
       notes,
-      categoryId: selectedCategoryId,
+      categoryId: effectiveSelectedCategoryId,
     })
     // Earned-beat cue on the add gesture (no-op unless the moment is enabled);
     // fired here, inside the user gesture, so the engine can resume audio.
@@ -593,7 +598,7 @@ export const TodoList = function TodoList() {
             <AddTodoForm
               onAddTodo={addTodo}
               onBulkPaste={pasteImport.openWithPaste}
-              disabled={selectedCategoryId === null}
+              disabled={effectiveSelectedCategoryId === null}
             />
 
             {/* Bulk paste-import (Issue #110): the Add form's multi-line paste

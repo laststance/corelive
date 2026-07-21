@@ -8,13 +8,19 @@ import * as React from 'react'
 import { useRef, useState } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
-import { PERSISTED_QUERY_MAX_AGE_MS } from '@/lib/constants/query'
+import {
+  PERSISTED_QUERY_MAX_AGE_MS,
+  PERSISTED_QUERY_STORAGE_KEY,
+} from '@/lib/constants/query'
 import { createQueryClient } from '@/lib/query/createQueryClient'
 
 /** Creates browser persistence at provider initialization while SSR falls back to memory-only Query state. @returns A localStorage persister in the browser, or undefined on the server. @example `const persister = createPersister()` */
 function createPersister() {
   return typeof window !== 'undefined'
-    ? createSyncStoragePersister({ storage: window.localStorage })
+    ? createSyncStoragePersister({
+        key: PERSISTED_QUERY_STORAGE_KEY,
+        storage: window.localStorage,
+      })
     : undefined
 }
 

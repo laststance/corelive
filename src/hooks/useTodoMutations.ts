@@ -11,11 +11,8 @@ import { toast } from 'sonner'
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { clearedAffirmation } from '@/lib/clearedAffirmation'
 import { COMPLETED_JOURNAL_INITIAL_OFFSET } from '@/lib/constants/completed'
-import {
-  HOME_TODO_QUERY_LIMIT,
-  HOME_TODO_QUERY_OFFSET,
-} from '@/lib/constants/home'
 import { orpc } from '@/lib/orpc/client-query'
+import { buildHomeTodoListInput } from '@/lib/query/homeBootstrapQueries'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -117,12 +114,7 @@ export function useTodoMutations(
   //   (infiniteOptions with function input generates unpredictable keys,
   //    so we use partial matching for completed list operations)
   const pendingKey = orpc.todo.list.queryOptions({
-    input: {
-      ...(isRetaining ? {} : { completed: false }),
-      limit: HOME_TODO_QUERY_LIMIT,
-      offset: HOME_TODO_QUERY_OFFSET,
-      ...(categoryId !== null && { categoryId }),
-    },
+    input: buildHomeTodoListInput(categoryId, isRetaining),
   }).queryKey
   const completedBaseKey = orpc.todo.list.key({ input: { completed: true } })
   // journalBaseKey invalidates/snapshots every filtered journal. The exact

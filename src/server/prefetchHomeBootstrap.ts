@@ -17,6 +17,7 @@ import {
   getHomeHeatmapQueryKey,
   getHomeJournalQueryKey,
   getHomeTodoListQueryKey,
+  resolveHomeSelectedCategoryId,
 } from '@/lib/query/homeBootstrapQueries'
 import { bootstrapHome } from '@/server/procedures/home'
 import { ServerTiming } from '@/server/timing/ServerTiming'
@@ -59,8 +60,8 @@ async function resolveViewerTimeZone(): Promise<string> {
 /**
  * Resolves the sidebar category selection this browser will query first, from
  * the cookie `useSelectedCategory` mirrors alongside its localStorage write.
- * Absent/garbage cookie means the All view (matching the hook's own fallback).
- * A deleted-category id only makes the todo slice miss hydration client-side.
+ * Absent/garbage cookie lets the bootstrap and client choose the same default
+ * category. A deleted-category id only makes the todo slice miss hydration.
  * @returns A positive category ID, or undefined for the All view.
  * @example `await resolveViewerSelectedCategoryId() // => 3`
  */
@@ -138,11 +139,15 @@ export async function prefetchHomeBootstrap(): Promise<
         },
       },
     )
+    const selectedCategoryId = resolveHomeSelectedCategoryId(
+      viewerSelectedCategoryId,
+      bootstrap.category.categories,
+    )
 
     const queryClient = createQueryClient()
     queryClient.setQueryData(getHomeCategoryListQueryKey(), bootstrap.category)
     queryClient.setQueryData(
-      getHomeTodoListQueryKey(viewerSelectedCategoryId, viewerRetainCompleted),
+      getHomeTodoListQueryKey(selectedCategoryId, viewerRetainCompleted),
       bootstrap.todo,
     )
     queryClient.setQueryData(
