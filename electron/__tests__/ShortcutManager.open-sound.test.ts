@@ -140,6 +140,36 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(1)
   })
 
+  it('does not crash after BrainDump becomes visible when opening sound playback fails', () => {
+    // Arrange
+    let onShown: (() => void) | undefined
+    const toggleBrainDump = vi.fn((nextOnShown?: () => void) => {
+      onShown = nextOnShown
+      return true
+    })
+    const soundController: ShortcutOpenSoundController = {
+      cleanup: vi.fn(),
+      play: vi.fn(() => {
+        throw new Error('Native sound playback failed')
+      }),
+    }
+    const shortcutManager = new ShortcutManager(
+      createWindowManager(
+        vi.fn(() => false),
+        toggleBrainDump,
+      ),
+      null,
+      createConfigManager(true),
+      undefined,
+      soundController,
+    )
+    shortcutManager.handleToggleBrainDump()
+
+    // Act / Assert
+    expect(() => onShown?.()).not.toThrow()
+    expect(soundController.play).toHaveBeenCalledTimes(1)
+  })
+
   it('opens both shortcut windows silently after the user turns the cue off', () => {
     // Arrange
     const toggleBrainDump = vi.fn((onShown?: () => void) => {

@@ -1091,7 +1091,12 @@ export class ShortcutManager {
   handleToggleBrainDump(): void {
     try {
       this.windowManager.toggleBrainDump(() => {
-        this.playShortcutOpenSoundIfEnabled()
+        // Window reveal finishes later, after this method's outer error guard has returned.
+        try {
+          this.playShortcutOpenSoundIfEnabled()
+        } catch (error) {
+          log.error('Error playing shortcut opening sound:', error)
+        }
       })
     } catch (error) {
       log.error('Error handling toggle BrainDump shortcut:', error)
