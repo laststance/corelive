@@ -22,6 +22,8 @@ import {
   setSoundVolume,
 } from '@/lib/redux/slices/settingsSlice'
 
+import { ShortcutOpeningSoundSetting } from './ShortcutOpeningSoundSetting'
+
 /** Volume slider increment (0–1 range) — fine enough to feel smooth, coarse enough to land round values. */
 const SOUND_VOLUME_SLIDER_STEP = 0.05
 /** Multiplier turning the 0–1 stored volume into the percentage shown beside the slider. */
@@ -156,8 +158,8 @@ export const SoundSettings = function SoundSettings() {
       {/* Intro copy under the SOUND header (the redundant "Sound" sub-label
            collapsed into the section `<h2>` per the design-review flatten). */}
       <p className="text-xs text-muted-foreground">
-        Off by default. Pick where a soft, warm cue plays — a quiet companion,
-        never a chime.
+        Task cues are off by default. Pick where a soft, warm cue plays — a
+        quiet companion, never a chime.
       </p>
 
       {/* Master toggle — flips all three cues together. Checked only when every
@@ -239,6 +241,10 @@ export const SoundSettings = function SoundSettings() {
           onValueChange={handleVolumeChange}
         />
       </div>
+
+      {/* The fixed typewriter cue is desktop utility feedback, separate from
+          the earned-moment palette and therefore not governed by All cues. */}
+      <ShortcutOpeningSoundSetting />
     </div>
   )
 }

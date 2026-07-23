@@ -120,6 +120,120 @@ export const SETTINGS_POPOVER_MAX_HEIGHT_PX = 900
 export const SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS = 200
 
 // ============================================================================
+// Shortcut opening sound
+// ============================================================================
+
+/** Config path shared by the main-process shortcut gate and the renderer setting. */
+export const SHORTCUT_OPEN_SOUND_CONFIG_PATH =
+  'behavior.shortcutOpenSoundEnabled'
+
+/** Config path shared by the main-process player and the renderer sound picker. */
+export const SHORTCUT_OPEN_SOUND_SELECTION_CONFIG_PATH =
+  'behavior.shortcutOpenSoundSelection'
+
+/** Fresh installs and legacy configs opt into the shortcut opening cue. */
+export const DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED = true
+
+/** Ten bundled cues available for fixed playback or the default shuffled rotation. */
+export const SHORTCUT_OPEN_SOUND_CUES = [
+  {
+    id: 'balanced-deep-thock',
+    label: 'Balanced deep thock',
+    description: 'A restrained Realforce-like thock with a clean finish.',
+    filename: '01-balanced-deep-thock.mp3',
+  },
+  {
+    id: 'soft-double-thock',
+    label: 'Soft double thock',
+    description: 'Two soft keys with a warm, cushioned return.',
+    filename: '02-soft-double-thock.mp3',
+  },
+  {
+    id: 'typebar-over-thock',
+    label: 'Typebar over thock',
+    description: 'A subtle typewriter strike layered over a deep key.',
+    filename: '03-typebar-over-thock.mp3',
+  },
+  {
+    id: 'velvet-capacitive-key',
+    label: 'Velvet capacitive key',
+    description: 'A muted electro-capacitive press with a velvety release.',
+    filename: '04-velvet-capacitive-key.mp3',
+  },
+  {
+    id: 'damped-enter-latch',
+    label: 'Damped Enter latch',
+    description: 'A weightier Enter-key latch with soft damping.',
+    filename: '05-damped-enter-latch.mp3',
+  },
+  {
+    id: 'pbt-thock-metal-tick',
+    label: 'PBT thock + metal tick',
+    description: 'A compact PBT thock with a faint metal accent.',
+    filename: '06-pbt-thock-metal-tick.mp3',
+  },
+  {
+    id: 'felted-office-thock',
+    label: 'Felted office thock',
+    description: 'A quiet office key softened with felt.',
+    filename: '07-felted-office-thock.mp3',
+  },
+  {
+    id: 'walnut-desk-thock',
+    label: 'Walnut desk thock',
+    description: 'A warm thock with a gentle wooden desk resonance.',
+    filename: '08-walnut-desk-thock.mp3',
+  },
+  {
+    id: 'three-key-flourish',
+    label: 'Three-key flourish',
+    description: 'A brief three-key cadence with restrained rhythm.',
+    filename: '09-three-key-flourish.mp3',
+  },
+  {
+    id: 'press-release-mechanism',
+    label: 'Press-release mechanism',
+    description: 'A detailed press-and-release mechanism in one compact cue.',
+    filename: '10-press-release-mechanism.mp3',
+  },
+] as const
+
+/** Stable persisted identifier for one bundled shortcut-opening cue. */
+export type ShortcutOpenSoundCueId =
+  (typeof SHORTCUT_OPEN_SOUND_CUES)[number]['id']
+
+/** Persisted picker value: rotate all cues or pin one exact sound. */
+export type ShortcutOpenSoundSelection = 'shuffle' | ShortcutOpenSoundCueId
+
+/** Fresh installs and legacy configs rotate all ten cues without an immediate repeat. */
+export const DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION: ShortcutOpenSoundSelection =
+  'shuffle'
+
+/**
+ * Accepts only persisted shortcut-sound values backed by the bundled cue registry.
+ * @param value - Untrusted config value loaded from disk or IPC.
+ * @returns Whether the value is `shuffle` or one of the ten stable cue identifiers.
+ * @example
+ * isShortcutOpenSoundSelection('balanced-deep-thock') // => true
+ * isShortcutOpenSoundSelection('legacy-cue') // => false
+ */
+export function isShortcutOpenSoundSelection(
+  value: unknown,
+): value is ShortcutOpenSoundSelection {
+  if (value === DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION) return true
+  return SHORTCUT_OPEN_SOUND_CUES.some((cue) => cue.id === value)
+}
+
+/** macOS system audio player used so global shortcuts are not blocked by browser autoplay policy. */
+export const MACOS_AUDIO_PLAYER_PATH = '/usr/bin/afplay'
+
+/** Gentle `afplay` gain for the typewriter cue, expressed as a 0–1 ratio. */
+export const SHORTCUT_OPEN_SOUND_VOLUME_RATIO = 0.55
+
+/** Public subdirectory copied into Electron resources for the ten bundled cue files. */
+export const SHORTCUT_OPEN_SOUND_ASSET_DIRECTORY = 'shortcut-opening'
+
+// ============================================================================
 // Native key-tap freeze-safety (#125)
 // ============================================================================
 

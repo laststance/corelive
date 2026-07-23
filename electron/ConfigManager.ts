@@ -21,8 +21,12 @@ import path from 'path'
 import { app } from 'electron'
 
 import {
+  DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED,
+  DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION,
+  isShortcutOpenSoundSelection,
   SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
   SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+  type ShortcutOpenSoundSelection,
 } from './constants'
 import { log } from './logger'
 import {
@@ -158,6 +162,10 @@ interface AppearanceConfig {
 /** Behavior configuration */
 interface BehaviorConfig {
   startOnLogin: boolean
+  /** Play a bundled cue after a shortcut actually reveals Floating or BrainDump. */
+  shortcutOpenSoundEnabled: boolean
+  /** Rotate all cues by default or pin one stable bundled sound identifier. */
+  shortcutOpenSoundSelection: ShortcutOpenSoundSelection
   /**
    * macOS: hide the Dock icon + Cmd+Tab entry (`setActivationPolicy('accessory')`).
    * Persisted here (not just renderer localStorage) so the main process can apply
@@ -375,6 +383,10 @@ export class ConfigManager {
 
       behavior: {
         startOnLogin: false,
+        // User-approved desktop exception: shortcut-open feedback starts enabled.
+        shortcutOpenSoundEnabled: DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED,
+        // Rotation keeps the feedback fresh while avoiding consecutive duplicates.
+        shortcutOpenSoundSelection: DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION,
         // Default OFF (icon shown) — matches the renderer default
         // (DEFAULT_ELECTRON_SETTINGS.hideAppIcon) so a fresh install never flashes.
         hideAppIcon: false,
@@ -447,6 +459,23 @@ export class ConfigManager {
 
         // Merge with defaults to ensure all properties exist
         const mergedConfig = this.mergeWithDefaults(loadedConfig)
+
+        // Removed or malformed cue ids safely rejoin the complete shuffled pack.
+        if (
+          !isShortcutOpenSoundSelection(
+            mergedConfig.behavior.shortcutOpenSoundSelection,
+          )
+        ) {
+          mergedConfig.behavior.shortcutOpenSoundSelection =
+            DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION
+        }
+
+        // Corrupt or hand-edited values fail silent instead of becoming truthy strings.
+        if (
+          typeof mergedConfig.behavior.shortcutOpenSoundEnabled !== 'boolean'
+        ) {
+          mergedConfig.behavior.shortcutOpenSoundEnabled = false
+        }
 
         // Perform migration if needed
         return this.migrateConfig(mergedConfig)

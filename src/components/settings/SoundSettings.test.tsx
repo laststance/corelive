@@ -1,8 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SoundSettings } from '@/components/settings/SoundSettings'
 import { previewTimbre } from '@/lib/audio/soundEngine'
@@ -10,6 +10,19 @@ import userSettingsReducer, {
   initialState,
 } from '@/lib/redux/slices/settingsSlice'
 import type { UserSettingsState } from '@/lib/schemas/settings'
+
+const getElectronConfigMock = vi.fn()
+const setElectronConfigMock = vi.fn()
+const previewAudioInstances: MockShortcutPreviewAudio[] = []
+
+class MockShortcutPreviewAudio {
+  currentTime = 0
+  pause = vi.fn()
+  play = vi.fn().mockResolvedValue(undefined)
+  volume = 1
+
+  constructor(public readonly src: string) {}
+}
 
 // The timbre picker auditions the chosen sound through the engine; mock it so the
 // test asserts the audition call (which timbre, at which volume) without real Web
@@ -41,8 +54,26 @@ function renderSoundSettings(overrides: Partial<UserSettingsState> = {}) {
 }
 
 describe('SoundSettings — sound palette', () => {
+  beforeEach(() => {
+    previewAudioInstances.length = 0
+    class MockAudioConstructor extends MockShortcutPreviewAudio {
+      constructor(src: string) {
+        super(src)
+        previewAudioInstances.push(this)
+      }
+    }
+
+    vi.stubGlobal('Audio', MockAudioConstructor)
+  })
+
   afterEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    })
   })
 
   it('makes no sound on a fresh install — every moment cue starts off', () => {
@@ -161,5 +192,150 @@ describe('SoundSettings — sound palette', () => {
     expect(
       screen.queryByLabelText('Custom BrainDump text color'),
     ).not.toBeInTheDocument()
+  })
+
+  it('shows the desktop shortcut opening cue on by default with shuffle selected and a preview button', async () => {
+    // Arrange
+    getElectronConfigMock.mockResolvedValue(true)
+    getElectronConfigMock.mockImplementation(async (configPath: string) =>
+      configPath === 'behavior.shortcutOpenSoundEnabled' ? true : undefined,
+    )
+    setElectronConfigMock.mockResolvedValue(true)
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        config: {
+          get: getElectronConfigMock,
+          set: setElectronConfigMock,
+        },
+      },
+      writable: true,
+    })
+    renderSoundSettings()
+    const openingSoundSwitch = await screen.findByRole('switch', {
+      name: 'Shortcut opening sound',
+    })
+    const openingSoundSelect = await screen.findByRole('combobox', {
+      name: 'Opening sound',
+    })
+    const previewButton = screen.getByRole('button', { name: 'Preview sound' })
+
+    // Assert
+    await waitFor(() => {
+      expect(getElectronConfigMock).toHaveBeenCalledWith(
+        'behavior.shortcutOpenSoundEnabled',
+      )
+    })
+    expect(openingSoundSwitch).toBeChecked()
+    expect(getElectronConfigMock).toHaveBeenCalledWith(
+      'behavior.shortcutOpenSoundSelection',
+    )
+    expect(openingSoundSelect).toHaveTextContent('Shuffle all')
+    expect(previewButton).toBeEnabled()
+  })
+
+  it('saves an explicit shortcut opening sound choice when a different option is picked', async () => {
+    // Arrange
+    getElectronConfigMock.mockResolvedValue(true)
+    getElectronConfigMock.mockImplementation(async (configPath: string) =>
+      configPath === 'behavior.shortcutOpenSoundEnabled' ? true : 'shuffle',
+    )
+    setElectronConfigMock.mockResolvedValue(true)
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        config: {
+          get: getElectronConfigMock,
+          set: setElectronConfigMock,
+        },
+      },
+      writable: true,
+    })
+    const { user } = renderSoundSettings()
+    const openingSoundSelect = await screen.findByRole('combobox', {
+      name: 'Opening sound',
+    })
+
+    // Act
+    await user.click(openingSoundSelect)
+    await user.click(
+      screen.getByRole('option', { name: 'Velvet capacitive key' }),
+    )
+
+    // Assert
+    await waitFor(() => {
+      expect(setElectronConfigMock).toHaveBeenCalledWith(
+        'behavior.shortcutOpenSoundSelection',
+        'velvet-capacitive-key',
+      )
+    })
+    expect(openingSoundSelect).toHaveTextContent('Velvet capacitive key')
+  })
+
+  it('previews the saved shortcut opening sound without changing the enabled switch', async () => {
+    // Arrange
+    getElectronConfigMock.mockImplementation(async (configPath: string) => {
+      if (configPath === 'behavior.shortcutOpenSoundEnabled') return true
+      if (configPath === 'behavior.shortcutOpenSoundSelection') {
+        return 'press-release-mechanism'
+      }
+      return undefined
+    })
+    setElectronConfigMock.mockResolvedValue(true)
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        config: {
+          get: getElectronConfigMock,
+          set: setElectronConfigMock,
+        },
+      },
+      writable: true,
+    })
+    const { user } = renderSoundSettings()
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Preview sound' }))
+
+    // Assert
+    expect(previewAudioInstances).toHaveLength(1)
+    expect(previewAudioInstances[0]?.src).toContain(
+      '/sounds/shortcut-opening/10-press-release-mechanism.mp3',
+    )
+    expect(previewAudioInstances[0]?.volume).toBe(0.55)
+    expect(previewAudioInstances[0]?.play).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('switch', { name: 'Shortcut opening sound' }),
+    ).toBeChecked()
+  })
+
+  it('falls back to Shuffle all when Electron returns an invalid saved shortcut sound choice', async () => {
+    // Arrange
+    getElectronConfigMock.mockImplementation(async (configPath: string) => {
+      if (configPath === 'behavior.shortcutOpenSoundEnabled') return true
+      if (configPath === 'behavior.shortcutOpenSoundSelection') {
+        return 'loud-typewriter'
+      }
+      return undefined
+    })
+    setElectronConfigMock.mockResolvedValue(true)
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        config: {
+          get: getElectronConfigMock,
+          set: setElectronConfigMock,
+        },
+      },
+      writable: true,
+    })
+
+    // Act
+    renderSoundSettings()
+
+    // Assert
+    expect(
+      await screen.findByRole('combobox', { name: 'Opening sound' }),
+    ).toHaveTextContent('Shuffle all')
   })
 })

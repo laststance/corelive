@@ -10,6 +10,13 @@
 import { BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
+import {
+  DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED,
+  DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION,
+  isShortcutOpenSoundSelection,
+  SHORTCUT_OPEN_SOUND_CONFIG_PATH,
+  SHORTCUT_OPEN_SOUND_SELECTION_CONFIG_PATH,
+} from './constants'
 import { log } from './logger'
 import { isNativeBinding, parseNativeBinding } from './nativeBinding'
 import {
@@ -18,6 +25,10 @@ import {
   type NativeTapStatus,
 } from './nativeShortcutEngine'
 import type { NotificationManager } from './NotificationManager'
+import {
+  ShortcutOpenSoundPlayer,
+  type ShortcutOpenSoundController,
+} from './ShortcutOpenSoundPlayer'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
@@ -123,6 +134,9 @@ export class ShortcutManager {
    */
   private nativeEngine: NativeShortcutEngine
 
+  /** Main-process cue player used only after a global shortcut actually opens a panel. */
+  private shortcutOpenSoundController: ShortcutOpenSoundController
+
   /**
    * One-shot guard so a latch-blocked launch notifies the user ONCE, not on
    * every `registerGlobalShortcuts()` retry while still blocked (codex #6). Reset
@@ -131,16 +145,29 @@ export class ShortcutManager {
    */
   private hasNotifiedLatchBlock = false
 
+  /**
+   * Creates the shortcut router and its injectable native engines.
+   * @param windowManager - Owns Floating and BrainDump visibility.
+   * @param notificationManager - Reports registration failures to the user.
+   * @param configManager - Supplies accelerators and shortcut-sound preference.
+   * @param nativeEngine - Handles lone-modifier key taps Electron cannot register.
+   * @param shortcutOpenSoundController - Plays the selected cue after a successful shortcut open.
+   * @returns A configured global shortcut manager.
+   * @example
+   * new ShortcutManager(windowManager, notificationManager, configManager)
+   */
   constructor(
     windowManager: WindowManager,
     notificationManager: NotificationManager | null,
     configManager: ConfigManager | null = null,
     nativeEngine: NativeShortcutEngine = createUnavailableNativeShortcutEngine(),
+    shortcutOpenSoundController: ShortcutOpenSoundController = new ShortcutOpenSoundPlayer(),
   ) {
     this.windowManager = windowManager
     this.notificationManager = notificationManager
     this.configManager = configManager
     this.nativeEngine = nativeEngine
+    this.shortcutOpenSoundController = shortcutOpenSoundController
 
     this.registeredShortcuts = new Map()
     this.failedShortcuts = null
@@ -1047,7 +1074,8 @@ export class ShortcutManager {
    */
   handleToggleFloatingNavigator(): void {
     try {
-      this.windowManager.toggleFloatingNavigator()
+      const didOpen = this.windowManager.toggleFloatingNavigator()
+      if (didOpen) this.playShortcutOpenSoundIfEnabled()
     } catch (error) {
       log.error('Error handling toggle floating navigator shortcut:', error)
     }
@@ -1062,10 +1090,44 @@ export class ShortcutManager {
    */
   handleToggleBrainDump(): void {
     try {
-      this.windowManager.toggleBrainDump()
+      this.windowManager.toggleBrainDump(() => {
+        // Window reveal finishes later, after this method's outer error guard has returned.
+        try {
+          this.playShortcutOpenSoundIfEnabled()
+        } catch (error) {
+          log.error('Error playing shortcut opening sound:', error)
+        }
+      })
     } catch (error) {
       log.error('Error handling toggle BrainDump shortcut:', error)
     }
+  }
+
+  /**
+   * Plays the shortcut cue only while the persisted desktop setting remains enabled.
+   * @returns Nothing.
+   * @example
+   * this.playShortcutOpenSoundIfEnabled()
+   */
+  private playShortcutOpenSoundIfEnabled(): void {
+    // Production always has ConfigManager; a missing seam stays silent in isolated tests.
+    if (!this.configManager) return
+
+    const isEnabled = this.configManager.get<unknown>(
+      SHORTCUT_OPEN_SOUND_CONFIG_PATH,
+      DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED,
+    )
+    // Only an explicit boolean true may cross the native-audio boundary.
+    if (isEnabled !== true) return
+
+    const savedSelection = this.configManager.get<unknown>(
+      SHORTCUT_OPEN_SOUND_SELECTION_CONFIG_PATH,
+      DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION,
+    )
+    const selection = isShortcutOpenSoundSelection(savedSelection)
+      ? savedSelection
+      : DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION
+    this.shortcutOpenSoundController.play(selection)
   }
 
   /**
@@ -1274,6 +1336,7 @@ export class ShortcutManager {
    */
   cleanup(): void {
     this.unregisterAllShortcuts()
+    this.shortcutOpenSoundController.cleanup()
 
     // Remove focus listeners from windows
     for (const [windowId, handlers] of this.focusHandlers) {

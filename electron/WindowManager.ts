@@ -892,14 +892,16 @@ export class WindowManager {
   }
 
   /**
-   * Toggle BrainDump visibility (creates the window on first call).
-   *
-   * @returns True when the window is now visible, false when hidden.
+   * Toggles BrainDump and reports its eventual authenticated reveal to shortcut-only callers.
+   * @param onShown - Optional callback fired only after the panel is visibly shown.
+   * @returns True when an open was requested, false when it was hidden or canceled.
+   * @example
+   * windowManager.toggleBrainDump(() => playOpeningCue())
    */
-  toggleBrainDump(): boolean {
+  toggleBrainDump(onShown?: () => void): boolean {
     if (!this.brainDumpWindow || this.brainDumpWindow.isDestroyed()) {
       this.createBrainDumpWindow()
-      this.showBrainDump()
+      this.showBrainDump(onShown)
       return true
     }
 
@@ -913,35 +915,38 @@ export class WindowManager {
       return false
     }
 
-    this.showBrainDump()
+    this.showBrainDump(onShown)
     return true
   }
 
   /**
    * Show BrainDump only after its protected route settles; signed-out redirects surface Floating Navigator instead.
-   *
+   * @param onShown - Optional callback fired after the authenticated panel appears.
    * @returns void.
    * @example
-   * windowManager.showBrainDump()
+   * windowManager.showBrainDump(() => playOpeningCue())
    */
-  showBrainDump(): void {
+  showBrainDump(onShown?: () => void): void {
     const brainDumpWindow =
       !this.brainDumpWindow || this.brainDumpWindow.isDestroyed()
         ? this.createBrainDumpWindow()
         : this.brainDumpWindow
 
-    this.revealBrainDumpAfterAuthGate(brainDumpWindow)
+    this.revealBrainDumpAfterAuthGate(brainDumpWindow, onShown)
   }
 
   /**
    * Reveal a manual BrainDump open only when it is on the editor route; auth pages are always re-homed to Floating.
-   *
    * @param panel - Hidden BrainDump window whose current navigation decides whether it can appear.
+   * @param onShown - Optional callback fired only after the panel is visibly shown.
    * @returns void.
    * @example
-   * this.revealBrainDumpAfterAuthGate(this.createBrainDumpWindow())
+   * this.revealBrainDumpAfterAuthGate(this.createBrainDumpWindow(), onShown)
    */
-  private revealBrainDumpAfterAuthGate(panel: BrowserWindow): void {
+  private revealBrainDumpAfterAuthGate(
+    panel: BrowserWindow,
+    onShown?: () => void,
+  ): void {
     if (panel.isDestroyed()) return
 
     const currentUrl = panel.webContents.getURL()
@@ -961,24 +966,28 @@ export class WindowManager {
     if (this.brainDumpHasLoadedOnce) {
       panel.show()
       panel.focus()
+      onShown?.()
       return
     }
 
     // A prior manual show is already waiting for the redirect/load decision.
     if (this.brainDumpRevealPending) return
 
-    this.watchManualBrainDumpLoad(panel)
+    this.watchManualBrainDumpLoad(panel, onShown)
   }
 
   /**
    * Watch a manual BrainDump open until it either reaches the editor or redirects to auth.
-   *
    * @param panel - BrainDump BrowserWindow that has started loading `/braindump`.
+   * @param onShown - Optional callback fired only after an authenticated reveal.
    * @returns void.
    * @example
-   * this.watchManualBrainDumpLoad(panel)
+   * this.watchManualBrainDumpLoad(panel, onShown)
    */
-  private watchManualBrainDumpLoad(panel: BrowserWindow): void {
+  private watchManualBrainDumpLoad(
+    panel: BrowserWindow,
+    onShown?: () => void,
+  ): void {
     const { webContents } = panel
     const removeListeners: Array<() => void> = []
     let decided = false
@@ -1019,6 +1028,7 @@ export class WindowManager {
         this.brainDumpNeedsReloadBeforeReveal = false
         panel.show()
         panel.focus()
+        onShown?.()
         return
       }
 
@@ -1152,28 +1162,36 @@ export class WindowManager {
   }
 
   /**
-   * Toggle floating navigator visibility.
+   * Toggles Floating Navigator and reports whether this call revealed it.
+   * @returns True after create/show, false after hide.
+   * @example
+   * const didOpen = windowManager.toggleFloatingNavigator()
    */
-  toggleFloatingNavigator(): void {
+  toggleFloatingNavigator(): boolean {
     log.debug('toggleFloatingNavigator called', {
       hasWindow: !!this.floatingNavigator,
       isVisible: this.floatingNavigator?.isVisible?.(),
     })
+
+    let didOpen = false
 
     if (!this.floatingNavigator) {
       log.info('Creating floating navigator...')
       const navigator = this.createFloatingNavigator()
       log.info('Showing floating navigator...')
       navigator.show()
+      didOpen = true
     } else if (this.floatingNavigator.isVisible()) {
       log.info('Hiding floating navigator')
       this.floatingNavigator.hide()
     } else {
       log.info('Showing floating navigator')
       this.floatingNavigator.show()
+      didOpen = true
     }
 
     this.saveWindowState()
+    return didOpen
   }
 
   /**
