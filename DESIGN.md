@@ -264,6 +264,17 @@ Intentional choreography. Most motion is in the 150–250ms range. The one motio
 > rather than layering (scoped per window). High-frequency UI manipulation
 > (reorder, category-switch) is deliberately excluded to keep these moments feeling
 > earned.
+>
+> **Shortcut opening cue (2026-07-23; user-approved default-ON exception).**
+> This Electron-only utility cue is separate from the earned-moment palette: one
+> of ten brief, non-melodic keyboard textures plays only when a global shortcut
+> actually transitions Floating Navigator or Brain Dump from hidden to shown.
+> The default `Shuffle all` mode avoids repeating the immediately previous texture;
+> people can instead pin any one cue and preview choices from Sound settings. It
+> does not play when the shortcut hides a window, targets an already-visible
+> window, or fails to open one. It defaults ON because an off-screen native
+> shortcut needs quiet spatial confirmation, remains independently configurable
+> under Sound, and never counts as a reward or completion celebration.
 
 ## Voice & Microcopy
 
@@ -328,6 +339,7 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 | 2026-06-13 | "Presets First, Then Options" codified as a cross-cutting principle — the concept owns every default/preset; an out-of-concept option is allowed only as an opt-in deviation layered on a sufficient on-concept default. Applies to design, features, and UX                                                                                                                                                 | Generalizes the opt-in sound palette's logic into a reusable governance rule, so future customization (themes, sound, motion, copy) follows one shape: ship the concept default, make it sufficient, then let options ride on top. The North Star itself stays non-deviable — style is optional, the emotional contract (self-affirmation, never judgment) is not                                                                                                                |
 | 2026-06-25 | "Presets First, Then Options" reframed away from "zero configuration" — the concept-faithful default is now an explicit **starting point, not a ceiling**, and **every aesthetic/UX item is configurable** (theme, sound, motion, copy, layout, density) as a first-class, discoverable capability rather than a buried opt-in deviation. Title kept (referenced by code + this log); body carries the shift | Direction change from "the app just works without config" to "great defaults AND everything is yours to tune" — the user wants to configure every item their way. The good-defaults discipline stays (ship the concept default first, make it sufficient, then expose the knob); the North Star stays non-deviable — total configurability covers style/UX only, never opting into judgment (no streak-shame, no KPI mode). Amends the 2026-06-13 opt-in-deviation framing above |
 | 2026-06-26 | BrainDump writing surface disables the native browser spellcheck red underlines (`spellCheck={false}` on the capture textarea, #128)                                                                                                                                                                                                                                                                         | Quick-capture must feel calm and un-graded; the red "misspelled" squiggles make unfinished / mixed-language fragments read as _corrected_, fighting the north-star calm-capture voice. Only the correction overlay is suppressed — typing / IME / save are untouched. One shared editor covers every BrainDump surface (web + Floating + BrainDump windows)                                                                                                                      |
+| 2026-07-23 | Electron shortcut opening cue offers ten brief keyboard textures (typewriter + electrostatic-capacitive / Realforce-inspired), defaults to non-repeating `Shuffle all`, plays only when Floating Navigator or Brain Dump actually opens, and defaults ON as an explicit exception to the earned-moment palette's default OFF                                                                                 | This is functional spatial confirmation for an otherwise off-screen global-shortcut result, not a reward. A quiet varied default plus fixed-choice and preview controls makes the texture genuinely configurable while keeping it independent, narrowly triggered, non-melodic, and subordinate to the work itself                                                                                                                                                               |
 
 ## Implementation Migration Notes
 

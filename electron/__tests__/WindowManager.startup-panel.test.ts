@@ -369,6 +369,50 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(restoreFromTray).toHaveBeenCalledTimes(1)
   })
 
+  it('reports a shortcut BrainDump open only after the authenticated panel is visible', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    const onShown = vi.fn()
+
+    // Act
+    windowManager.toggleBrainDump(onShown)
+    const brainDumpWindow = getWindow(0)
+
+    // Assert
+    expect(onShown).not.toHaveBeenCalled()
+
+    // Act
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/braindump`,
+    )
+    brainDumpWindow.fireWebContents('did-finish-load')
+
+    // Assert
+    expect(brainDumpWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(onShown).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not report a shortcut BrainDump open when auth keeps the panel hidden', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    const onShown = vi.fn()
+
+    // Act
+    windowManager.toggleBrainDump(onShown)
+    const brainDumpWindow = getWindow(0)
+    brainDumpWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/login?redirect_url=/braindump`,
+    )
+
+    // Assert
+    expect(brainDumpWindow.win.show).not.toHaveBeenCalled()
+    expect(onShown).not.toHaveBeenCalled()
+  })
+
   it('cancels a pending manual BrainDump reveal when toggled off before load settles', () => {
     // Arrange: the first toggle starts a hidden BrainDump load guarded by the
     // manual auth watcher, but the route has not settled yet.

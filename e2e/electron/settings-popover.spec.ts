@@ -80,6 +80,84 @@ test('updating the startup window flags persists successfully', async () => {
   expect(persisted.showFloating).toBe(true)
 })
 
+test('shortcut opening sound defaults to shuffle and round-trips explicit choices through config IPC', async () => {
+  // Arrange / Act: a fresh Electron user-data directory reads both product defaults.
+  const initialValues = await settingsWindow.evaluate(async () => {
+    const getConfig = window.electronAPI?.config?.get
+    if (!getConfig) throw new Error('config.get not in preload bridge')
+    return {
+      isEnabled: await getConfig<boolean>('behavior.shortcutOpenSoundEnabled'),
+      selection: await getConfig<string>('behavior.shortcutOpenSoundSelection'),
+    }
+  })
+
+  // Assert
+  expect(initialValues).toEqual({
+    isEnabled: true,
+    selection: 'shuffle',
+  })
+
+  try {
+    // Act: persist an opt-out and one representative fixed cue through renderer → IPC → main.
+    const fixedChoice = await settingsWindow.evaluate(async () => {
+      const setConfig = window.electronAPI?.config?.set
+      const getConfig = window.electronAPI?.config?.get
+      if (!setConfig) throw new Error('config.set not in preload bridge')
+      if (!getConfig) throw new Error('config.get not in preload bridge')
+      const didDisable = await setConfig(
+        'behavior.shortcutOpenSoundEnabled',
+        false,
+      )
+      const didSelectCue = await setConfig(
+        'behavior.shortcutOpenSoundSelection',
+        'three-key-flourish',
+      )
+      return {
+        didDisable,
+        didSelectCue,
+        isEnabled: await getConfig<boolean>(
+          'behavior.shortcutOpenSoundEnabled',
+        ),
+        selection: await getConfig<string>(
+          'behavior.shortcutOpenSoundSelection',
+        ),
+      }
+    })
+
+    // Assert: both writes and their subsequent reads reflect the explicit choices.
+    expect(fixedChoice).toEqual({
+      didDisable: true,
+      didSelectCue: true,
+      isEnabled: false,
+      selection: 'three-key-flourish',
+    })
+  } finally {
+    // Act: restore shipping defaults even when an assertion fails, protecting later specs.
+    const restoredValues = await settingsWindow.evaluate(async () => {
+      const setConfig = window.electronAPI?.config?.set
+      const getConfig = window.electronAPI?.config?.get
+      if (!setConfig) throw new Error('config.set not in preload bridge')
+      if (!getConfig) throw new Error('config.get not in preload bridge')
+      await setConfig('behavior.shortcutOpenSoundEnabled', true)
+      await setConfig('behavior.shortcutOpenSoundSelection', 'shuffle')
+      return {
+        isEnabled: await getConfig<boolean>(
+          'behavior.shortcutOpenSoundEnabled',
+        ),
+        selection: await getConfig<string>(
+          'behavior.shortcutOpenSoundSelection',
+        ),
+      }
+    })
+
+    // Assert
+    expect(restoredValues).toEqual({
+      isEnabled: true,
+      selection: 'shuffle',
+    })
+  }
+})
+
 test('toggling dock icon visibility reaches main process without error', async () => {
   // Arrange + Act: pass false — "show dock icon" is the safe non-destructive state
   const result = await settingsWindow.evaluate(async () => {
