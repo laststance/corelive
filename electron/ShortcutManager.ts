@@ -1201,6 +1201,19 @@ export class ShortcutManager {
       // that as an outside conflict and silently substitutes a fallback.
       for (const [id, accelerator] of Object.entries(newShortcuts)) {
         if (id === 'enabled' || typeof accelerator !== 'string') continue
+
+        // A full settings save carries EVERY id, contextual ones included, and
+        // pass 2 deliberately never re-registers those (they belong to a focus
+        // listener). Dropping one whose accelerator did not change would kill it
+        // until the next blur→focus. One that DID change still has to go, or the
+        // stale accelerator keeps firing until then.
+        if (
+          this.contextualShortcuts.has(id) &&
+          this.registeredShortcuts.get(id)?.accelerator === accelerator
+        ) {
+          continue
+        }
+
         if (this.registeredShortcuts.has(id)) {
           this.unregisterShortcut(id)
         }

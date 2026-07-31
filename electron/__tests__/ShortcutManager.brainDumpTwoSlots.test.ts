@@ -180,6 +180,39 @@ describe('BrainDump two-slot toggle shortcuts', () => {
     ).toBe('Alt+Space')
   })
 
+  it('keeps an already-registered contextual shortcut alive when only a global key changes', () => {
+    // Arrange: a settings save carries EVERY id, so the untouched contextual
+    // `newTask` rides along. Pass 2 never re-registers contextual shortcuts, so
+    // unregistering it here would leave Cmd+N dead until the next blur→focus.
+    const { windowManager } = createWindowManagerHarness()
+    const shortcutManager = new ShortcutManager(
+      windowManager,
+      null,
+      createConfigManagerStub({
+        newTask: 'CommandOrControl+N',
+        toggleBrainDump: 'Alt+Space',
+      }),
+    )
+    shortcutManager.registerContextualShortcuts()
+    expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(
+      'CommandOrControl+N',
+    )
+
+    // Act: rebind only the BrainDump key; newTask is resubmitted unchanged.
+    shortcutManager.updateShortcuts({
+      newTask: 'CommandOrControl+N',
+      toggleBrainDump: 'Control+Shift+B',
+    })
+
+    // Assert
+    expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(
+      'CommandOrControl+N',
+    )
+    expect(shortcutManager.getRegisteredShortcuts().toggleBrainDump).toBe(
+      'Control+Shift+B',
+    )
+  })
+
   it('leaves the second toggle key unbound until the user sets one', () => {
     // Arrange
     const { windowManager } = createWindowManagerHarness()
