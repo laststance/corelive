@@ -1193,14 +1193,22 @@ export class ShortcutManager {
       // like success to callers who use this return value to roll back.
       let allRegistered = true
 
+      // Pass 1 — drop the old registration of EVERY id in the batch before
+      // registering any of them, so the new accelerator (or empty string =
+      // disabled) takes effect. Doing this per-id inside the register loop made
+      // a batch collide with itself: swapping two accelerators would still find
+      // the second id holding the first's new key, and `registerShortcut` reads
+      // that as an outside conflict and silently substitutes a fallback.
       for (const [id, accelerator] of Object.entries(newShortcuts)) {
         if (id === 'enabled' || typeof accelerator !== 'string') continue
-
-        // Always drop the old registration first so the new accelerator
-        // (or empty string = disabled) takes effect.
         if (this.registeredShortcuts.has(id)) {
           this.unregisterShortcut(id)
         }
+      }
+
+      // Pass 2 — bind the new accelerators.
+      for (const [id, accelerator] of Object.entries(newShortcuts)) {
+        if (id === 'enabled' || typeof accelerator !== 'string') continue
 
         if (accelerator === '') continue
 

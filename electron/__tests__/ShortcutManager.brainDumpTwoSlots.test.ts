@@ -12,13 +12,31 @@ import type { WindowManager } from '../WindowManager'
  * stopped opening BrainDump" with nothing in the logs.
  */
 
+/**
+ * Accelerators currently held at the "OS" level. The mock is STATEFUL on
+ * purpose: a stateless `register: () => true` would report success for a batch
+ * that re-binds an accelerator the batch itself still holds, hiding exactly the
+ * self-collision these specs exist to catch.
+ */
+const heldAccelerators = vi.hoisted(() => new Set<string>())
+
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
   globalShortcut: {
-    isRegistered: vi.fn(() => false),
-    register: vi.fn(() => true),
-    unregister: vi.fn(),
-    unregisterAll: vi.fn(),
+    isRegistered: vi.fn((accelerator: string) =>
+      heldAccelerators.has(accelerator),
+    ),
+    register: vi.fn((accelerator: string) => {
+      if (heldAccelerators.has(accelerator)) return false
+      heldAccelerators.add(accelerator)
+      return true
+    }),
+    unregister: vi.fn((accelerator: string) => {
+      heldAccelerators.delete(accelerator)
+    }),
+    unregisterAll: vi.fn(() => {
+      heldAccelerators.clear()
+    }),
   },
 }))
 
@@ -62,6 +80,7 @@ function createConfigManagerStub(
 describe('BrainDump two-slot toggle shortcuts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    heldAccelerators.clear()
   })
 
   it('opens BrainDump from either of the two configured toggle keys', () => {
@@ -131,8 +150,9 @@ describe('BrainDump two-slot toggle shortcuts', () => {
   })
 
   it('still lets the two toggle keys swap accelerators in one save', () => {
-    // Arrange: a swap ends with two DIFFERENT keys, so the duplicate guard must
-    // not reject it just because each new value collides with the current other.
+    // Arrange: a swap ends with two DIFFERENT keys, so it must survive both the
+    // duplicate guard AND the batch's own live registrations — the key each slot
+    // moves onto is still held by the other slot when the batch starts.
     const { windowManager } = createWindowManagerHarness()
     const shortcutManager = new ShortcutManager(
       windowManager,
