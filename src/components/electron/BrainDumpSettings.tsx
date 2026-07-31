@@ -62,6 +62,7 @@ export const BrainDumpSettings = function BrainDumpSettings({
   const syncId = useId()
   const opacityId = useId()
   const shortcutId = useId()
+  const secondaryShortcutId = useId()
 
   const [isReady, setIsReady] = useState(false)
   // True after the first client-side render. Until then we render the same
@@ -88,6 +89,20 @@ export const BrainDumpSettings = function BrainDumpSettings({
       Promise.resolve(undefined),
     onError: setError,
   })
+  // Second, equally-live key for the same toggle. `setShortcutSecondary` is
+  // optional on the bridge (an installed app's preload is frozen while this web
+  // bundle updates), so the optional call resolves `undefined` on an old preload
+  // and the hook simply reverts instead of throwing.
+  const {
+    shortcut: secondaryShortcut,
+    setLoadedShortcut: setLoadedSecondaryShortcut,
+    capture: handleSecondaryShortcutCapture,
+  } = useShortcutCapture({
+    persist: async (accelerator) =>
+      window.electronAPI?.brainDump?.setShortcutSecondary?.(accelerator) ??
+      Promise.resolve(undefined),
+    onError: setError,
+  })
 
   // Compute inside the effect so the dependency array stays stable across
   // renders and the env check runs only once on mount.
@@ -110,12 +125,20 @@ export const BrainDumpSettings = function BrainDumpSettings({
 
     let cancelled = false
 
-    void Promise.all([api.getSyncMode(), api.getOpacity(), api.getShortcut()])
-      .then(([sync, op, sc]) => {
+    void Promise.all([
+      api.getSyncMode(),
+      api.getOpacity(),
+      api.getShortcut(),
+      // Newer than the three above — an older preload lacks it, so the optional
+      // call yields undefined and the second box stays hidden (see the render).
+      api.getShortcutSecondary?.() ?? '',
+    ])
+      .then(([sync, op, sc, secondarySc]) => {
         if (cancelled) return
         setSyncMode(sync)
         setOpacity(op)
         setLoadedShortcut(sc)
+        setLoadedSecondaryShortcut(secondarySc)
         lastGoodOpacityRef.current = op
       })
       .catch((loadError: unknown) => {
@@ -238,6 +261,10 @@ export const BrainDumpSettings = function BrainDumpSettings({
   }
 
   const opacityPercent = Math.round(opacity * 100)
+  // Second-slot support arrived after the first three getters, so an installed
+  // app running an older preload gets the single box it can actually persist.
+  const canBindSecondShortcut =
+    typeof window.electronAPI?.brainDump?.setShortcutSecondary === 'function'
 
   return (
     // The "BrainDump Note" card title collapsed into the Brain Dump section
@@ -320,6 +347,29 @@ export const BrainDumpSettings = function BrainDumpSettings({
           to disable the global shortcut.
         </p>
       </div>
+
+      {canBindSecondShortcut && (
+        <div className="space-y-2">
+          <Label
+            htmlFor={secondaryShortcutId}
+            className="flex items-center gap-2 text-sm font-medium"
+          >
+            <Keyboard className="h-4 w-4" />
+            Second toggle shortcut
+          </Label>
+          <KeybindingCaptureInput
+            id={secondaryShortcutId}
+            value={secondaryShortcut}
+            ariaLabel="Second toggle shortcut"
+            onChange={handleSecondaryShortcutCapture}
+          />
+
+          <p className="text-xs text-muted-foreground">
+            Optional — another key that opens the same BrainDump. It has to
+            differ from the one above.
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">

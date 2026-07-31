@@ -388,6 +388,10 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'braindump-config-set-shortcut': z.tuple([
     z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
   ]),
+  'braindump-config-get-shortcut-secondary': z.tuple([]),
+  'braindump-config-set-shortcut-secondary': z.tuple([
+    z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
+  ]),
   'braindump-config-get-last-category': z.tuple([]),
   'braindump-config-set-last-category': z.tuple([z.number().int().positive()]),
 }

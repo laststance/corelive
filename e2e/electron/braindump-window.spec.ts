@@ -131,3 +131,45 @@ test('updating braindump sync mode persists without error', async () => {
   // Assert: IPC handler returns true on success
   expect(result).toBe(true)
 })
+
+test('a second toggle key can be bound alongside the first', async () => {
+  // Arrange: a chord no other slot holds
+  const secondKey = 'Control+Shift+B'
+
+  // Act
+  const boundSecondKey = await settingsWindow.evaluate(async (accelerator) => {
+    const setFn = window.electronAPI?.brainDump?.setShortcutSecondary
+    const getFn = window.electronAPI?.brainDump?.getShortcutSecondary
+    if (!setFn || !getFn) {
+      throw new Error('brainDump second-slot methods not in preload bridge')
+    }
+    await setFn(accelerator)
+    return getFn()
+  }, secondKey)
+
+  // Assert: the second slot is live and reads back exactly what was requested
+  expect(boundSecondKey).toBe('Control+Shift+B')
+})
+
+test('the second toggle key cannot duplicate the first', async () => {
+  // Arrange: bind both slots to distinct keys, then aim the second at the first
+  const rebind = await settingsWindow.evaluate(async () => {
+    const brainDump = window.electronAPI?.brainDump
+    if (!brainDump?.setShortcutSecondary || !brainDump?.getShortcutSecondary) {
+      throw new Error('brainDump second-slot methods not in preload bridge')
+    }
+    await brainDump.setShortcut('Alt+Space')
+    await brainDump.setShortcutSecondary('Control+Shift+B')
+
+    // Act: ask the second slot for the key the first one already holds
+    const didAcceptDuplicate = await brainDump.setShortcutSecondary('Alt+Space')
+    return {
+      didAcceptDuplicate,
+      secondKeyAfterwards: await brainDump.getShortcutSecondary(),
+    }
+  })
+
+  // Assert: rejected, and the previously bound second key is left untouched
+  expect(rebind.didAcceptDuplicate).toBe(false)
+  expect(rebind.secondKeyAfterwards).toBe('Control+Shift+B')
+})

@@ -544,6 +544,14 @@ export interface IPCChannels {
     request: string
     response: boolean
   }
+  'braindump-config-get-shortcut-secondary': {
+    request: void
+    response: string
+  }
+  'braindump-config-set-shortcut-secondary': {
+    request: string
+    response: boolean
+  }
   'braindump-config-get-last-category': {
     request: void
     response: number | null

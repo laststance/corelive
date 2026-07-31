@@ -11,6 +11,7 @@ import { BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import {
+  BRAIN_DUMP_SHORTCUT_IDS,
   DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED,
   DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION,
   isShortcutOpenSoundSelection,
@@ -29,6 +30,7 @@ import {
   ShortcutOpenSoundPlayer,
   type ShortcutOpenSoundController,
 } from './ShortcutOpenSoundPlayer'
+import { isSameAccelerator } from './utils/isSameAccelerator'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
@@ -47,6 +49,8 @@ interface ShortcutConfig {
   toggleFloatingNavigator?: string
   /** BrainDump's global quick-open accelerator; empty string disables it. */
   toggleBrainDump?: string
+  /** Second, equally-live BrainDump accelerator; empty string (the default) disables it. */
+  toggleBrainDumpSecondary?: string
   [key: string]: string | boolean | undefined
 }
 
@@ -180,7 +184,7 @@ export class ShortcutManager {
     ])
     this._globalShortcuts = new Set([
       'toggleFloatingNavigator',
-      'toggleBrainDump',
+      ...BRAIN_DUMP_SHORTCUT_IDS,
     ])
     this.focusHandlers = new Map()
 
@@ -235,6 +239,9 @@ export class ShortcutManager {
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       toggleFloatingNavigator: 'CommandOrControl+3',
       toggleBrainDump: 'Alt+Space',
+      // Second BrainDump slot ships unbound — an opt-in extra key, not a
+      // preset that would silently claim a chord the user never chose.
+      toggleBrainDumpSecondary: '',
     }
   }
 
@@ -381,20 +388,19 @@ export class ShortcutManager {
       ),
     })
 
-    // Honor the persisted BrainDump accelerator on startup. Empty string is
-    // the "disabled" sentinel used by Settings, so skip registration in that
-    // case to avoid binding "" as an accelerator.
-    const brainDumpAccel = shortcuts.toggleBrainDump
-    if (typeof brainDumpAccel === 'string' && brainDumpAccel.trim() !== '') {
+    // Honor the persisted BrainDump accelerators on startup — both slots, same
+    // handler. Empty string is the "disabled" sentinel used by Settings (and the
+    // default for the second slot), so skip those to avoid binding "".
+    for (const id of BRAIN_DUMP_SHORTCUT_IDS) {
+      const brainDumpAccel = shortcuts[id]
+      if (typeof brainDumpAccel !== 'string' || brainDumpAccel.trim() === '') {
+        continue
+      }
       results.push({
-        id: 'toggleBrainDump',
-        success: this.registerShortcut(
-          brainDumpAccel,
-          'toggleBrainDump',
-          () => {
-            this.handleToggleBrainDump()
-          },
-        ),
+        id,
+        success: this.registerShortcut(brainDumpAccel, id, () => {
+          this.handleToggleBrainDump()
+        }),
       })
     }
 
@@ -901,6 +907,7 @@ export class ShortcutManager {
       focusFloatingNavigator: 'Focus Floating Navigator',
       toggleFloatingNavigator: 'Toggle Floating Navigator',
       toggleBrainDump: 'Toggle BrainDump',
+      toggleBrainDumpSecondary: 'Toggle BrainDump (second key)',
     }
 
     return displayNames[id] || id
@@ -1140,9 +1147,30 @@ export class ShortcutManager {
    *
    * Empty-string accelerators are treated as "disable this shortcut" — the
    * old binding is removed and nothing is registered in its place.
+   *
+   * Rejects (without applying anything) a batch that would leave both BrainDump
+   * toggle slots on one accelerator.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
+      // Guard the merged result, not the payload: the generic Shortcut Settings
+      // screen submits EVERY registered id — including the second BrainDump slot,
+      // which has no row there — so a user rebinding the visible "Toggle
+      // BrainDump" row onto the second slot's key would otherwise land both on
+      // one accelerator. Both registrars mishandle that: a chord trips
+      // handleShortcutConflict (silent fallback substitution), and the native tap
+      // keys bindings by keycode, so the second bind orphans the first. Checking
+      // the merge (rather than payload-vs-current) still allows swapping the two.
+      const [primarySlotId, secondarySlotId] = BRAIN_DUMP_SHORTCUT_IDS
+      const mergedShortcuts = { ...this.shortcuts, ...newShortcuts }
+      const mergedPrimary = mergedShortcuts[primarySlotId]
+      if (isSameAccelerator(mergedPrimary, mergedShortcuts[secondarySlotId])) {
+        log.warn(
+          `Rejected shortcut update: both BrainDump toggle slots would bind ${mergedPrimary}`,
+        )
+        return false
+      }
+
       const wasEnabled = this.isEnabled
       // Sync isEnabled if provided in newShortcuts
       if (typeof newShortcuts.enabled === 'boolean') {
@@ -1162,14 +1190,43 @@ export class ShortcutManager {
       // like success to callers who use this return value to roll back.
       let allRegistered = true
 
+      // Pass 1 — drop the old registration of EVERY id in the batch before
+      // registering any of them, so the new accelerator (or empty string =
+      // disabled) takes effect. Doing this per-id inside the register loop made
+      // a batch collide with itself: swapping two accelerators would still find
+      // the second id holding the first's new key, and `registerShortcut` reads
+      // that as an outside conflict and silently substitutes a fallback.
       for (const [id, accelerator] of Object.entries(newShortcuts)) {
         if (id === 'enabled' || typeof accelerator !== 'string') continue
 
-        // Always drop the old registration first so the new accelerator
-        // (or empty string = disabled) takes effect.
+        // A full settings save carries EVERY id, contextual ones included, and
+        // pass 2 deliberately never re-registers those (they belong to a focus
+        // listener). Dropping one whose accelerator did not change would kill it
+        // until the next blur→focus. One that DID change still has to go, or the
+        // stale accelerator keeps firing until then.
+        //
+        // "Unchanged" has to accept BOTH sides of a conflict substitution: the
+        // settings screen submits what is live (`accelerator`), while a caller
+        // reading persisted config submits what was asked for
+        // (`originalAccelerator`). Comparing against only one of them unregisters
+        // the shortcut on every save made by the other caller.
+        const registration = this.registeredShortcuts.get(id)
+        if (
+          this.contextualShortcuts.has(id) &&
+          (isSameAccelerator(accelerator, registration?.accelerator) ||
+            isSameAccelerator(accelerator, registration?.originalAccelerator))
+        ) {
+          continue
+        }
+
         if (this.registeredShortcuts.has(id)) {
           this.unregisterShortcut(id)
         }
+      }
+
+      // Pass 2 — bind the new accelerators.
+      for (const [id, accelerator] of Object.entries(newShortcuts)) {
+        if (id === 'enabled' || typeof accelerator !== 'string') continue
 
         if (accelerator === '') continue
 
@@ -1210,7 +1267,9 @@ export class ShortcutManager {
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
       focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),
       toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
+      // Both BrainDump slots route to the same toggle.
       toggleBrainDump: () => this.handleToggleBrainDump(),
+      toggleBrainDumpSecondary: () => this.handleToggleBrainDump(),
     }
 
     return handlers[id]

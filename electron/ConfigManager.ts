@@ -97,7 +97,11 @@ export interface BrainDumpConfig {
   opacity: number
   /** When true, BrainDump mirrors FloatingNavigator's selected category. */
   syncMode: boolean
-  /** Global accelerator string; empty disables the shortcut. */
+  /**
+   * @deprecated Legacy mirror with no readers — the live BrainDump toggle keys
+   * are `shortcuts.toggleBrainDump` / `shortcuts.toggleBrainDumpSecondary`.
+   * Kept only so existing config.json files keep validating.
+   */
   shortcut: string
   /**
    * Last category id BrainDump showed (used as the source of truth across
@@ -129,6 +133,8 @@ interface ShortcutsConfig {
   focusFloatingNavigator: string
   toggleFloatingNavigator: string
   toggleBrainDump: string
+  /** Optional second key for the same BrainDump toggle; empty disables it. */
+  toggleBrainDumpSecondary: string
 }
 
 /** Notifications configuration */
@@ -359,6 +365,7 @@ export class ConfigManager {
         focusFloatingNavigator: `${modifier}+Shift+N`,
         toggleFloatingNavigator: `${modifier}+3`,
         toggleBrainDump: 'Alt+Space',
+        toggleBrainDumpSecondary: '',
       },
 
       notifications: {
@@ -969,7 +976,11 @@ export class ConfigManager {
     // Validate shortcuts
     if (this.config.shortcuts) {
       const shortcutValues = Object.entries(this.config.shortcuts)
-        .filter(([, value]) => typeof value === 'string')
+        // An empty accelerator means "disabled", and any number of shortcuts
+        // may be disabled at once — counting those as duplicates of each other
+        // would reject a perfectly valid config on import. `toggleBrainDump-
+        // Secondary` ships empty, so a single other disabled key would trip it.
+        .filter(([, value]) => typeof value === 'string' && value !== '')
         .map(([, value]) => value as string)
 
       const duplicates = shortcutValues.filter(

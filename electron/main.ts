@@ -30,6 +30,7 @@ import type { WebContents, Event as ElectronEvent } from 'electron'
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
 import { getBrainDumpNote, setBrainDumpNote } from './BrainDumpNoteStore'
 import { ConfigManager } from './ConfigManager'
+import { BRAIN_DUMP_SHORTCUT_IDS, type BrainDumpShortcutId } from './constants'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
 import { typedHandle } from './ipc/typedHandle'
 import { typedSend } from './ipc/typedSend'
@@ -55,6 +56,7 @@ import {
 import { createUiohookShortcutEngine } from './uiohookEngine'
 import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
+import { isSameAccelerator } from './utils/isSameAccelerator'
 import { loadUiohook } from './utils/loadUiohook'
 import { isNativeTapLatchSet } from './utils/nativeTapLatch'
 import { openConfigFile } from './utils/openConfigFile'
@@ -1157,6 +1159,15 @@ function redactBrainDumpNotes(
   return { ...snapshot, braindump: rest }
 }
 
+/**
+ * Shortcut ids that stay bound while the app is unfocused — everything else is
+ * contextual. Reported to the keybind Settings UI as `isGlobal`.
+ */
+const GLOBAL_SHORTCUT_IDS: string[] = [
+  'toggleFloatingNavigator',
+  ...BRAIN_DUMP_SHORTCUT_IDS,
+]
+
 function setupIPCHandlers(): void {
   // Register IPC channels exactly once per process. A macOS re-launch via the
   // `activate` handler can call createWindow again, which would re-enter here
@@ -1504,35 +1515,47 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  typedHandle('braindump-config-get-shortcut', () => {
-    if (!configManager) return ''
-    return configManager.get<string>('braindump.shortcut', '') ?? ''
-  })
-
-  typedHandle('braindump-config-set-shortcut', (_event, accelerator) => {
+  /**
+   * Rebind ONE of the two BrainDump toggle slots — the shared body behind both
+   * set-shortcut handlers, so the cross-slot duplicate guard can't be
+   * implemented on one slot and forgotten on the other.
+   * @param slotId - Which slot to write: `'toggleBrainDump'` or `'toggleBrainDumpSecondary'`.
+   * @param accelerator - The requested accelerator, or `''` to disable that slot.
+   * @returns
+   * - `true` when the accelerator bound exactly as requested (or was an intentional `''` disable)
+   * - `false` on a conflict, a silent fallback substitution, or a duplicate of the other slot
+   * @example
+   * setBrainDumpShortcutSlot('toggleBrainDumpSecondary', 'lone-modifier:rightOption') // => true
+   */
+  const setBrainDumpShortcutSlot = (
+    slotId: BrainDumpShortcutId,
+    accelerator: string,
+  ): boolean => {
     if (!configManager) return false
+
+    // Reject a key already held by the OTHER slot. Two slots on one accelerator
+    // is never what the user meant, and both registrars mishandle it: a chord
+    // trips handleShortcutConflict (firing a misleading "Shortcut Changed" toast
+    // before the rollback), and the native tap keys bindings by keycode — the
+    // second bind would orphan the first, then unbinding either would kill both.
+    const otherSlotId = BRAIN_DUMP_SHORTCUT_IDS.find((id) => id !== slotId)
+    const otherAccelerator =
+      configManager.get<string>(`shortcuts.${otherSlotId}`, '') ?? ''
+    if (isSameAccelerator(accelerator, otherAccelerator)) return false
+
     // Try to register first; only persist on success so the renderer's
     // returned boolean accurately reflects whether the new accelerator is
-    // live.
-    // Source the rollback target from the CANONICAL store ShortcutManager
-    // registers from, not the `braindump.shortcut` mirror: the generic keybind
-    // UI can rebind `shortcuts.toggleBrainDump` without touching the mirror, so a
-    // conflict here must restore the real live binding, not a stale mirror value.
-    const previous =
-      configManager.get<string>('shortcuts.toggleBrainDump', '') ?? ''
+    // live. `shortcuts.*` is the single store both slots read and write —
+    // ShortcutManager registers from it, so a rollback here restores the
+    // genuinely live binding even when the generic keybind UI did the rebind.
+    const previous = configManager.get<string>(`shortcuts.${slotId}`, '') ?? ''
     if (shortcutManager) {
       try {
-        // Reject a hard failure OR a silently-substituted fallback as a conflict
-        // BEFORE the mirror write, so the renderer's boolean reflects the real
-        // binding and `braindump.shortcut` never records a key that isn't live
+        // Reject a hard failure OR a silently-substituted fallback as a
+        // conflict, so the renderer's boolean reflects the real binding
         // (§6e Design B; handleShortcutConflict itself is left untouched).
         if (
-          !applyShortcutRebind(
-            shortcutManager,
-            'toggleBrainDump',
-            accelerator,
-            previous,
-          )
+          !applyShortcutRebind(shortcutManager, slotId, accelerator, previous)
         ) {
           return false
         }
@@ -1540,12 +1563,45 @@ function setupIPCHandlers(): void {
         log.error('Failed to update BrainDump shortcut:', error)
         return false
       }
+    } else {
+      // No live registrar (system integration disabled, or the deferred stack
+      // hasn't loaded yet): `updateShortcuts` — which normally does this write —
+      // never ran, so persist the choice here or it would vanish on read-back
+      // and never reach the next registration pass.
+      configManager.set(`shortcuts.${slotId}`, accelerator)
     }
-    configManager.set('braindump.shortcut', accelerator)
     // Keep the tray's displayed BrainDump hotkey in sync with the rebind.
     systemTrayManager?.refreshTrayMenu()
     return true
+  }
+
+  typedHandle('braindump-config-get-shortcut', () => {
+    if (!configManager) return ''
+    // Read the CANONICAL store ShortcutManager registers from, like the floating
+    // and secondary-slot getters do. This used to read the legacy
+    // `braindump.shortcut` mirror, which only this UI ever wrote — so it stayed
+    // empty on every profile that never touched it and the box showed "unbound"
+    // while Alt+Space was live. That empty box beside the second slot would read
+    // as "slot 1 is free" right before the duplicate guard rejected it.
+    return configManager.get<string>('shortcuts.toggleBrainDump', '') ?? ''
   })
+
+  typedHandle('braindump-config-set-shortcut', (_event, accelerator) =>
+    setBrainDumpShortcutSlot('toggleBrainDump', accelerator),
+  )
+
+  typedHandle('braindump-config-get-shortcut-secondary', () => {
+    if (!configManager) return ''
+    return (
+      configManager.get<string>('shortcuts.toggleBrainDumpSecondary', '') ?? ''
+    )
+  })
+
+  typedHandle(
+    'braindump-config-set-shortcut-secondary',
+    (_event, accelerator) =>
+      setBrainDumpShortcutSlot('toggleBrainDumpSecondary', accelerator),
+  )
 
   typedHandle('floating-config-get-shortcut', () => {
     if (!configManager) return ''
@@ -2116,7 +2172,7 @@ function setupIPCHandlers(): void {
       accelerator,
       description: id,
       enabled: true,
-      isGlobal: ['toggleFloatingNavigator', 'toggleBrainDump'].includes(id),
+      isGlobal: GLOBAL_SHORTCUT_IDS.includes(id),
     }))
   })
 
@@ -2132,7 +2188,7 @@ function setupIPCHandlers(): void {
         accelerator: accelerator as string,
         description: id,
         enabled: true,
-        isGlobal: ['toggleFloatingNavigator', 'toggleBrainDump'].includes(id),
+        isGlobal: GLOBAL_SHORTCUT_IDS.includes(id),
       }))
   })
 
