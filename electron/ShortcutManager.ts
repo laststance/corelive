@@ -30,6 +30,7 @@ import {
   ShortcutOpenSoundPlayer,
   type ShortcutOpenSoundController,
 } from './ShortcutOpenSoundPlayer'
+import { isSameAccelerator } from './utils/isSameAccelerator'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
@@ -1163,11 +1164,7 @@ export class ShortcutManager {
       const [primarySlotId, secondarySlotId] = BRAIN_DUMP_SHORTCUT_IDS
       const mergedShortcuts = { ...this.shortcuts, ...newShortcuts }
       const mergedPrimary = mergedShortcuts[primarySlotId]
-      if (
-        typeof mergedPrimary === 'string' &&
-        mergedPrimary !== '' &&
-        mergedPrimary === mergedShortcuts[secondarySlotId]
-      ) {
+      if (isSameAccelerator(mergedPrimary, mergedShortcuts[secondarySlotId])) {
         log.warn(
           `Rejected shortcut update: both BrainDump toggle slots would bind ${mergedPrimary}`,
         )
@@ -1216,9 +1213,8 @@ export class ShortcutManager {
         const registration = this.registeredShortcuts.get(id)
         if (
           this.contextualShortcuts.has(id) &&
-          registration !== undefined &&
-          (accelerator === registration.accelerator ||
-            accelerator === registration.originalAccelerator)
+          (isSameAccelerator(accelerator, registration?.accelerator) ||
+            isSameAccelerator(accelerator, registration?.originalAccelerator))
         ) {
           continue
         }

@@ -229,9 +229,11 @@ describe('BrainDump two-slot toggle shortcuts', () => {
       }),
     )
     shortcutManager.registerContextualShortcuts()
-    const substituted = shortcutManager.getRegisteredShortcuts().newTask
-    expect(substituted).not.toBe('CommandOrControl+N')
-    expect(substituted).toBeDefined()
+    // Hard-coded so a change in the alternative-generation order is caught here
+    // rather than silently shifting which key the user ends up with.
+    expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(
+      'CommandOrControl+Alt+N',
+    )
 
     // Act: save an unrelated global key, resubmitting newTask's configured value.
     shortcutManager.updateShortcuts({
@@ -240,7 +242,33 @@ describe('BrainDump two-slot toggle shortcuts', () => {
     })
 
     // Assert: the fallback survives untouched.
-    expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(substituted)
+    expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(
+      'CommandOrControl+Alt+N',
+    )
+  })
+
+  it('refuses a duplicate toggle key typed in a different case', () => {
+    // Arrange: Electron accelerators are case-insensitive, so `alt+space` and
+    // `Alt+Space` are the same key — a config edited by hand must not sneak both
+    // slots onto it past the duplicate guard.
+    const { windowManager } = createWindowManagerHarness()
+    const shortcutManager = new ShortcutManager(
+      windowManager,
+      null,
+      createConfigManagerStub({ toggleBrainDump: 'Alt+Space' }),
+    )
+    shortcutManager.registerGlobalShortcuts()
+
+    // Act
+    const didUpdate = shortcutManager.updateShortcuts({
+      toggleBrainDumpSecondary: ' alt+space ',
+    })
+
+    // Assert
+    expect(didUpdate).toBe(false)
+    expect(
+      shortcutManager.getRegisteredShortcuts().toggleBrainDumpSecondary,
+    ).toBeUndefined()
   })
 
   it('leaves the second toggle key unbound until the user sets one', () => {

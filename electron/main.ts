@@ -56,6 +56,7 @@ import {
 import { createUiohookShortcutEngine } from './uiohookEngine'
 import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
+import { isSameAccelerator } from './utils/isSameAccelerator'
 import { loadUiohook } from './utils/loadUiohook'
 import { isNativeTapLatchSet } from './utils/nativeTapLatch'
 import { openConfigFile } from './utils/openConfigFile'
@@ -1540,7 +1541,7 @@ function setupIPCHandlers(): void {
     const otherSlotId = BRAIN_DUMP_SHORTCUT_IDS.find((id) => id !== slotId)
     const otherAccelerator =
       configManager.get<string>(`shortcuts.${otherSlotId}`, '') ?? ''
-    if (accelerator !== '' && accelerator === otherAccelerator) return false
+    if (isSameAccelerator(accelerator, otherAccelerator)) return false
 
     // Try to register first; only persist on success so the renderer's
     // returned boolean accurately reflects whether the new accelerator is
