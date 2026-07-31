@@ -1207,9 +1207,18 @@ export class ShortcutManager {
         // listener). Dropping one whose accelerator did not change would kill it
         // until the next blur→focus. One that DID change still has to go, or the
         // stale accelerator keeps firing until then.
+        //
+        // "Unchanged" has to accept BOTH sides of a conflict substitution: the
+        // settings screen submits what is live (`accelerator`), while a caller
+        // reading persisted config submits what was asked for
+        // (`originalAccelerator`). Comparing against only one of them unregisters
+        // the shortcut on every save made by the other caller.
+        const registration = this.registeredShortcuts.get(id)
         if (
           this.contextualShortcuts.has(id) &&
-          this.registeredShortcuts.get(id)?.accelerator === accelerator
+          registration !== undefined &&
+          (accelerator === registration.accelerator ||
+            accelerator === registration.originalAccelerator)
         ) {
           continue
         }

@@ -213,6 +213,36 @@ describe('BrainDump two-slot toggle shortcuts', () => {
     )
   })
 
+  it('keeps a conflict-substituted contextual shortcut alive across a global save', () => {
+    // Arrange: another app already owns Cmd+N, so newTask lands on a fallback
+    // accelerator. A caller that submits the CONFIGURED value (what the user
+    // asked for) must still read as "unchanged" — otherwise every unrelated save
+    // silently unregisters the fallback that is actually doing the work.
+    heldAccelerators.add('CommandOrControl+N')
+    const { windowManager } = createWindowManagerHarness()
+    const shortcutManager = new ShortcutManager(
+      windowManager,
+      null,
+      createConfigManagerStub({
+        newTask: 'CommandOrControl+N',
+        toggleBrainDump: 'Alt+Space',
+      }),
+    )
+    shortcutManager.registerContextualShortcuts()
+    const substituted = shortcutManager.getRegisteredShortcuts().newTask
+    expect(substituted).not.toBe('CommandOrControl+N')
+    expect(substituted).toBeDefined()
+
+    // Act: save an unrelated global key, resubmitting newTask's configured value.
+    shortcutManager.updateShortcuts({
+      newTask: 'CommandOrControl+N',
+      toggleBrainDump: 'Control+Shift+B',
+    })
+
+    // Assert: the fallback survives untouched.
+    expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(substituted)
+  })
+
   it('leaves the second toggle key unbound until the user sets one', () => {
     // Arrange
     const { windowManager } = createWindowManagerHarness()
