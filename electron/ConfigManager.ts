@@ -97,7 +97,11 @@ export interface BrainDumpConfig {
   opacity: number
   /** When true, BrainDump mirrors FloatingNavigator's selected category. */
   syncMode: boolean
-  /** Global accelerator string; empty disables the shortcut. */
+  /**
+   * @deprecated Legacy mirror with no readers — the live BrainDump toggle keys
+   * are `shortcuts.toggleBrainDump` / `shortcuts.toggleBrainDumpSecondary`.
+   * Kept only so existing config.json files keep validating.
+   */
   shortcut: string
   /**
    * Last category id BrainDump showed (used as the source of truth across
@@ -129,6 +133,8 @@ interface ShortcutsConfig {
   focusFloatingNavigator: string
   toggleFloatingNavigator: string
   toggleBrainDump: string
+  /** Optional second key for the same BrainDump toggle; empty disables it. */
+  toggleBrainDumpSecondary: string
 }
 
 /** Notifications configuration */
@@ -359,6 +365,7 @@ export class ConfigManager {
         focusFloatingNavigator: `${modifier}+Shift+N`,
         toggleFloatingNavigator: `${modifier}+3`,
         toggleBrainDump: 'Alt+Space',
+        toggleBrainDumpSecondary: '',
       },
 
       notifications: {

@@ -9,6 +9,8 @@ const getOpacityMock = vi.fn()
 const setOpacityMock = vi.fn()
 const getShortcutMock = vi.fn()
 const setShortcutMock = vi.fn()
+const getShortcutSecondaryMock = vi.fn()
+const setShortcutSecondaryMock = vi.fn()
 const toggleMock = vi.fn()
 const openConfigMock = vi.fn()
 
@@ -19,6 +21,8 @@ type BrainDumpBridge = {
   setOpacity: (value: number) => Promise<number>
   getShortcut: () => Promise<string>
   setShortcut: (accelerator: string) => Promise<boolean>
+  getShortcutSecondary: () => Promise<string>
+  setShortcutSecondary: (accelerator: string) => Promise<boolean>
   toggle: () => Promise<void>
 }
 
@@ -61,6 +65,11 @@ function installBrainDumpBridge(saved: {
   syncMode: boolean
   opacity: number
   shortcut: string
+  /**
+   * Second-slot accelerator. Omit to simulate an OLD preload that predates the
+   * two-slot bridge — the card must then render a single capture box.
+   */
+  secondaryShortcut?: string
 }): void {
   getSyncModeMock.mockResolvedValue(saved.syncMode)
   setSyncModeMock.mockResolvedValue(true)
@@ -80,11 +89,21 @@ function installBrainDumpBridge(saved: {
       getShortcut: getShortcutMock,
       setShortcut: setShortcutMock,
       toggle: toggleMock,
+      // Only a bridge that reports a second slot gets the second-slot methods.
+      ...(saved.secondaryShortcut === undefined
+        ? {}
+        : {
+            getShortcutSecondary: getShortcutSecondaryMock,
+            setShortcutSecondary: setShortcutSecondaryMock,
+          }),
     },
     config: {
       open: openConfigMock,
     },
   })
+
+  getShortcutSecondaryMock.mockResolvedValue(saved.secondaryShortcut ?? '')
+  setShortcutSecondaryMock.mockResolvedValue(true)
 }
 
 describe('BrainDumpSettings', () => {
@@ -95,6 +114,8 @@ describe('BrainDumpSettings', () => {
     setOpacityMock.mockReset()
     getShortcutMock.mockReset()
     setShortcutMock.mockReset()
+    getShortcutSecondaryMock.mockReset()
+    setShortcutSecondaryMock.mockReset()
     toggleMock.mockReset()
     openConfigMock.mockReset()
   })
@@ -128,6 +149,49 @@ describe('BrainDumpSettings', () => {
         'React has detected a change in the order of Hooks',
       ),
     )
+  })
+
+  it('binds a second key to the same toggle without disturbing the first', async () => {
+    // Arrange: a desktop app whose bridge carries both slots.
+    installBrainDumpBridge({
+      syncMode: false,
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+      secondaryShortcut: '',
+    })
+    render(<BrainDumpSettings />)
+    const secondBox = await screen.findByLabelText('Second toggle shortcut')
+
+    // Act: record ⌘3 into the SECOND box.
+    fireEvent.click(secondBox)
+    fireEvent.keyDown(secondBox, { code: 'Digit3', metaKey: true })
+
+    // Assert: the second slot took the new chord and the first kept its own.
+    expect(setShortcutSecondaryMock).toHaveBeenCalledWith('CommandOrControl+3')
+    expect(setShortcutMock).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+  })
+
+  it('hides the second shortcut box on a desktop app whose preload predates it', async () => {
+    // Arrange: an installed app updates its web bundle before its preload, so the
+    // bridge can carry the first slot only. Offering a box that cannot persist
+    // would silently swallow the user's chord.
+    installBrainDumpBridge({
+      syncMode: false,
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+
+    // Act
+    render(<BrainDumpSettings />)
+
+    // Assert: the first box still works; the second is not offered at all.
+    expect(await screen.findByLabelText('Toggle shortcut')).toHaveTextContent(
+      '⌥Space',
+    )
+    expect(
+      screen.queryByLabelText('Second toggle shortcut'),
+    ).not.toBeInTheDocument()
   })
 
   it('reverts the binding and explains why when the captured chord is already in use', async () => {

@@ -538,6 +538,14 @@ export interface ElectronAPI {
     getShortcut: () => Promise<string>
     /** Persist + register the global accelerator. */
     setShortcut: (accelerator: string) => Promise<boolean>
+    /**
+     * Read the optional SECOND accelerator for the same toggle (empty when
+     * unset). Optional on the type because an installed desktop app's preload is
+     * frozen while the web bundle updates — callers must feature-detect.
+     */
+    getShortcutSecondary?: () => Promise<string>
+    /** Persist + register the optional SECOND accelerator for the same toggle. */
+    setShortcutSecondary?: (accelerator: string) => Promise<boolean>
   }
 }
 

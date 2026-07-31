@@ -1613,6 +1613,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw error
       }
     },
+    /** Read the optional SECOND global accelerator (empty string when unset). */
+    getShortcutSecondary: async (): Promise<string> => {
+      try {
+        return await typedInvoke('braindump-config-get-shortcut-secondary')
+      } catch (error) {
+        log.error('Failed to get second BrainDump shortcut:', error)
+        return ''
+      }
+    },
+    /** Persist + register the optional SECOND global accelerator. */
+    setShortcutSecondary: async (accelerator: string): Promise<boolean> => {
+      if (typeof accelerator !== 'string') {
+        throw new Error('Shortcut must be a string')
+      }
+      try {
+        return await typedInvoke(
+          'braindump-config-set-shortcut-secondary',
+          accelerator,
+        )
+      } catch (error) {
+        log.error('Failed to set second BrainDump shortcut:', error)
+        throw error
+      }
+    },
   },
 
   // Secure event listener management.
