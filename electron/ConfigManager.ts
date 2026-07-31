@@ -976,7 +976,11 @@ export class ConfigManager {
     // Validate shortcuts
     if (this.config.shortcuts) {
       const shortcutValues = Object.entries(this.config.shortcuts)
-        .filter(([, value]) => typeof value === 'string')
+        // An empty accelerator means "disabled", and any number of shortcuts
+        // may be disabled at once — counting those as duplicates of each other
+        // would reject a perfectly valid config on import. `toggleBrainDump-
+        // Secondary` ships empty, so a single other disabled key would trip it.
+        .filter(([, value]) => typeof value === 'string' && value !== '')
         .map(([, value]) => value as string)
 
       const duplicates = shortcutValues.filter(

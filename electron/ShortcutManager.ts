@@ -1146,9 +1146,34 @@ export class ShortcutManager {
    *
    * Empty-string accelerators are treated as "disable this shortcut" — the
    * old binding is removed and nothing is registered in its place.
+   *
+   * Rejects (without applying anything) a batch that would leave both BrainDump
+   * toggle slots on one accelerator.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
+      // Guard the merged result, not the payload: the generic Shortcut Settings
+      // screen submits EVERY registered id — including the second BrainDump slot,
+      // which has no row there — so a user rebinding the visible "Toggle
+      // BrainDump" row onto the second slot's key would otherwise land both on
+      // one accelerator. Both registrars mishandle that: a chord trips
+      // handleShortcutConflict (silent fallback substitution), and the native tap
+      // keys bindings by keycode, so the second bind orphans the first. Checking
+      // the merge (rather than payload-vs-current) still allows swapping the two.
+      const [primarySlotId, secondarySlotId] = BRAIN_DUMP_SHORTCUT_IDS
+      const mergedShortcuts = { ...this.shortcuts, ...newShortcuts }
+      const mergedPrimary = mergedShortcuts[primarySlotId]
+      if (
+        typeof mergedPrimary === 'string' &&
+        mergedPrimary !== '' &&
+        mergedPrimary === mergedShortcuts[secondarySlotId]
+      ) {
+        log.warn(
+          `Rejected shortcut update: both BrainDump toggle slots would bind ${mergedPrimary}`,
+        )
+        return false
+      }
+
       const wasEnabled = this.isEnabled
       // Sync isEnabled if provided in newShortcuts
       if (typeof newShortcuts.enabled === 'boolean') {
