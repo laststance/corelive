@@ -4,6 +4,8 @@ import React from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { getColorDotClass } from '@/lib/category-colors'
 import { formatClockTime } from '@/lib/formatClockTime'
+import { useAppSelector } from '@/lib/redux/hooks'
+import { selectShowCompletedTaskStrikethrough } from '@/lib/redux/slices/settingsSlice'
 import { cn } from '@/lib/utils'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
@@ -39,6 +41,10 @@ export const CompletedJournalRow = function CompletedJournalRow({
   entry,
   onUncomplete,
 }: CompletedJournalRowProps) {
+  const showCompletedTaskStrikethrough = useAppSelector(
+    selectShowCompletedTaskStrikethrough,
+  )
+
   // Un-checking a todo-source win reverses the completion (true → false). It is
   // intentionally quiet (no completion cue) — only finishing a task celebrates.
   const handleUncomplete = () => {
@@ -65,9 +71,13 @@ export const CompletedJournalRow = function CompletedJournalRow({
         />
       )}
       <div className="min-w-0 flex-1">
-        {/* Completed wins read as done — line-through muted, matching the app's
-             established completed-task styling (TodoItem) this list replaces. */}
-        <div className="block break-words text-muted-foreground line-through">
+        {/* Keep the quieter completed tone while letting users remove the line decoration. */}
+        <div
+          className={cn(
+            'block break-words text-muted-foreground',
+            showCompletedTaskStrikethrough && 'line-through',
+          )}
+        >
           {entry.title}
         </div>
         {entry.category && (

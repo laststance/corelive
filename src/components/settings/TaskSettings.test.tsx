@@ -13,6 +13,10 @@ import type { UserSettingsState } from '@/lib/schemas/settings'
 /**
  * Renders the Task settings under a real settings store (so assertions read
  * the actual reducer result) with the given setting overrides.
+ * @param overrides - Settings values that differ from current defaults.
+ * @returns The store and user driver used by each observable-behavior test.
+ * @example
+ * renderTaskSettings({ showCompletedTaskStrikethrough: false })
  */
 function renderTaskSettings(overrides: Partial<UserSettingsState> = {}) {
   const store = configureStore({
@@ -28,7 +32,7 @@ function renderTaskSettings(overrides: Partial<UserSettingsState> = {}) {
   return { store, user }
 }
 
-describe('TaskSettings — 居残りモード', () => {
+describe('TaskSettings', () => {
   it('moves finished tasks to Completed by default — keep-in-list starts off', () => {
     // Arrange / Act — a fresh install.
     renderTaskSettings()
@@ -50,5 +54,32 @@ describe('TaskSettings — 居残りモード', () => {
 
     // Assert — 居残りモード is now enabled in the settings slice.
     expect(store.getState().settings.retainCompletedInList).toBe(true)
+  })
+
+  it('shows completed task strikethrough by default', () => {
+    // Arrange / Act — render a fresh install.
+    renderTaskSettings()
+
+    // Assert — the current completed-title treatment remains the default.
+    expect(
+      screen.getByRole('switch', {
+        name: 'Show strikethrough on completed tasks',
+      }),
+    ).toBeChecked()
+  })
+
+  it('removes completed task strikethrough when the switch is turned off', async () => {
+    // Arrange
+    const { store, user } = renderTaskSettings()
+
+    // Act — turn off the completed-title line decoration.
+    await user.click(
+      screen.getByRole('switch', {
+        name: 'Show strikethrough on completed tasks',
+      }),
+    )
+
+    // Assert — the persisted settings slice records the opt-out.
+    expect(store.getState().settings.showCompletedTaskStrikethrough).toBe(false)
   })
 })

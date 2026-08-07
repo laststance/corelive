@@ -19,7 +19,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { useCompletionFeedback } from '@/hooks/useCompletionFeedback'
 import { getColorDotClass } from '@/lib/category-colors'
 import { useAppSelector } from '@/lib/redux/hooks'
-import { selectRetainCompletedInList } from '@/lib/redux/slices/settingsSlice'
+import {
+  selectRetainCompletedInList,
+  selectShowCompletedTaskStrikethrough,
+} from '@/lib/redux/slices/settingsSlice'
+import { cn } from '@/lib/utils'
 
 export interface Todo {
   id: string
@@ -78,6 +82,9 @@ export const TodoItem = function TodoItem({
   // In the non-retain Completed section the trash stays (routed through the
   // Undo-toast delete). So hide only when this row is completed AND retain is on.
   const isRetaining = useAppSelector(selectRetainCompletedInList)
+  const showCompletedTaskStrikethrough = useAppSelector(
+    selectShowCompletedTaskStrikethrough,
+  )
   const showDeleteButton = !todo.completed || !isRetaining
   // #113: the new "Tuck into Completed" button takes the D14 slot the trash
   // vacates — the exact inverse condition, so the two are mutually exclusive.
@@ -151,11 +158,13 @@ export const TodoItem = function TodoItem({
 
         <div className="min-w-0 flex-1">
           <div
-            className={`block break-words ${
-              todo.completed
-                ? 'text-muted-foreground line-through'
-                : 'text-foreground'
-            }`}
+            className={cn(
+              'block break-words',
+              todo.completed ? 'text-muted-foreground' : 'text-foreground',
+              todo.completed &&
+                showCompletedTaskStrikethrough &&
+                'line-through',
+            )}
           >
             {todo.text}
           </div>

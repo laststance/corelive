@@ -72,6 +72,7 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
     expect(state.settings.soundTimbre).toBe('wood')
     expect(state.settings.soundVolume).toBe(0.3)
     expect(state.settings.retainCompletedInList).toBe(true)
+    expect(state.settings.showCompletedTaskStrikethrough).toBe(true)
     expect(state.settings.completionSound).toBe(false)
     expect(state.settings.soundMoments).toEqual({
       'task-create': true,

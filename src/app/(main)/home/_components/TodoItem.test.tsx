@@ -47,17 +47,26 @@ const PENDING_TODO: Todo = {
  * @param onDelete - Spy for the archive/delete callback (defaults to a noop spy).
  * @param isTogglePending - True while this row's completion toggle is still
  *   saving; gates the Tuck button so a not-yet-durable win can't be hard-deleted.
+ * @param showCompletedTaskStrikethrough - Whether finished titles show a line.
+ * @returns The delete callback used by archive/delete assertions.
+ * @example
+ * renderTodoItem(FINISHED_TODO, true, vi.fn(), false, false)
  */
 function renderTodoItem(
   todo: Todo,
   retainCompletedInList: boolean,
   onDelete = vi.fn(),
   isTogglePending = false,
+  showCompletedTaskStrikethrough = true,
 ) {
   const store = configureStore({
     reducer: { settings: userSettingsReducer },
     preloadedState: {
-      settings: { ...initialState, retainCompletedInList },
+      settings: {
+        ...initialState,
+        retainCompletedInList,
+        showCompletedTaskStrikethrough,
+      },
     },
   })
   render(
@@ -72,6 +81,16 @@ function renderTodoItem(
   )
   return { onDelete }
 }
+
+describe('TodoItem completed title presentation', () => {
+  it('shows a finished in-list task without a line when strikethrough is off', () => {
+    // Arrange / Act — render a retained win with the decoration disabled.
+    renderTodoItem(FINISHED_TODO, true, vi.fn(), false, false)
+
+    // Assert — completion tone remains, but the title has no line decoration.
+    expect(screen.getByText('Buy milk')).not.toHaveClass('line-through')
+  })
+})
 
 describe('TodoItem — Tuck into Completed (#113)', () => {
   it('offers the Tuck-into-Completed button on a finished row when keep-in-list is on', () => {

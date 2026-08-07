@@ -7,12 +7,14 @@ describe('UserSettingsStateSchema', () => {
     // Act
     const result = UserSettingsStateSchema.parse({})
 
-    // Assert — every moment OFF, default timbre + volume, both legacy flags OFF,
+    // Assert — every moment OFF, default timbre + volume, legacy flags OFF,
+    // completed-title strikethrough ON to preserve the established presentation,
     // the BrainDump editor at its prior look (mono / 14px / theme foreground),
     // and clear-on-complete OFF (finished lines stay put by default).
     expect(result).toEqual({
       completionSound: false,
       retainCompletedInList: false,
+      showCompletedTaskStrikethrough: true,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
@@ -25,17 +27,18 @@ describe('UserSettingsStateSchema', () => {
     })
   })
 
-  it('accepts a legacy payload of only the original two booleans, defaulting the new sound fields', () => {
+  it('accepts a legacy payload of only the original two booleans and defaults newer settings', () => {
     // Arrange — exactly the shape persisted before the sound palette existed.
     const legacyPayload = { completionSound: true, retainCompletedInList: true }
 
     // Act
     const result = UserSettingsStateSchema.parse(legacyPayload)
 
-    // Assert — the legacy values survive; the new fields fill with defaults.
+    // Assert — the legacy values survive; every newer field fills from defaults.
     expect(result).toEqual({
       completionSound: true,
       retainCompletedInList: true,
+      showCompletedTaskStrikethrough: true,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
