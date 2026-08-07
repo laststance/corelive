@@ -84,8 +84,11 @@ function renderTodoItem(
 
 describe('TodoItem completed title presentation', () => {
   it('shows a finished in-list task without a line when strikethrough is off', () => {
-    // Arrange / Act — render a retained win with the decoration disabled.
-    renderTodoItem(FINISHED_TODO, true, vi.fn(), false, false)
+    // Arrange
+    const completedTodo = FINISHED_TODO
+
+    // Act
+    renderTodoItem(completedTodo, true, vi.fn(), false, false)
 
     // Assert — completion tone remains, but the title has no line decoration.
     expect(screen.getByText('Buy milk')).not.toHaveClass('line-through')

@@ -43,16 +43,22 @@ function renderCompletedJournalRow(
 
 describe('CompletedJournalRow title presentation', () => {
   it('keeps the existing strikethrough on a fresh install', () => {
-    // Arrange / Act — render with current defaults.
-    renderCompletedJournalRow()
+    // Arrange
+    const settingsOverrides: Partial<UserSettingsState> = {}
+
+    // Act
+    renderCompletedJournalRow(settingsOverrides)
 
     // Assert — existing users keep the familiar completed-title treatment.
     expect(screen.getByText('Ship the update')).toHaveClass('line-through')
   })
 
   it('shows a completed journal title without a line when strikethrough is off', () => {
-    // Arrange / Act — render with the new presentation setting disabled.
-    renderCompletedJournalRow({ showCompletedTaskStrikethrough: false })
+    // Arrange
+    const settingsOverrides = { showCompletedTaskStrikethrough: false }
+
+    // Act
+    renderCompletedJournalRow(settingsOverrides)
 
     // Assert — the title remains muted but loses only the line decoration.
     const title = screen.getByText('Ship the update')

@@ -46,9 +46,8 @@ function stateWith(settings: Partial<UserSettingsState>): RootState {
 
 describe('settingsSlice', () => {
   it('preserves established task presentation while defaulting feedback settings to neutral', () => {
-    // Assert — all sound moments OFF, completed-title strikethrough ON, and the
-    // BrainDump editor at its prior look (mono / 14px / theme foreground).
-    expect(initialState).toEqual({
+    // Arrange — hard-code the established task, feedback, and BrainDump defaults.
+    const expectedSettings = {
       completionSound: false,
       retainCompletedInList: false,
       showCompletedTaskStrikethrough: true,
@@ -61,7 +60,13 @@ describe('settingsSlice', () => {
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
       braindumpToastDurationMs: 5000,
-    })
+    }
+
+    // Act — read the schema-owned initial state used by fresh installs.
+    const actualSettings = initialState
+
+    // Assert — completed titles retain their line while feedback stays neutral.
+    expect(actualSettings).toEqual(expectedSettings)
   })
 
   it('keeps shared nested sound defaults immutable across settings consumers', () => {
@@ -93,8 +98,11 @@ describe('settingsSlice', () => {
   })
 
   it('removes completed title lines when setShowCompletedTaskStrikethrough(false) is dispatched', () => {
+    // Arrange
+    const action = setShowCompletedTaskStrikethrough(false)
+
     // Act
-    const next = reducer(initialState, setShowCompletedTaskStrikethrough(false))
+    const next = reducer(initialState, action)
 
     // Assert
     expect(next.showCompletedTaskStrikethrough).toBe(false)
