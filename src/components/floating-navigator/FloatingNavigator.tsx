@@ -16,7 +16,9 @@ import { todoSortableSensors } from '@/lib/dnd-kit-sensors'
 import { interceptBulkPaste } from '@/lib/interceptBulkPaste'
 import { log } from '@/lib/logger'
 import { requestOpenCompletedImport } from '@/lib/paste-import-channel'
-import { isEnterKeyPress } from '@/lib/utils'
+import { useAppSelector } from '@/lib/redux/hooks'
+import { selectShowCompletedTaskStrikethrough } from '@/lib/redux/slices/settingsSlice'
+import { cn, isEnterKeyPress } from '@/lib/utils'
 import type {
   CategoryColor,
   CategoryWithCount,
@@ -325,6 +327,9 @@ const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
   isTogglePending = false,
 }: CompletedFloatingTodoRowProps): React.ReactNode {
   const { checkboxMotionClassName } = useCompletionFeedback()
+  const showCompletedTaskStrikethrough = useAppSelector(
+    selectShowCompletedTaskStrikethrough,
+  )
   const handleToggle = () => {
     onToggle(todo.id)
   }
@@ -346,7 +351,10 @@ const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
       />
 
       <span
-        className="flex-1 truncate text-xs line-through"
+        className={cn(
+          'flex-1 truncate text-xs',
+          showCompletedTaskStrikethrough && 'line-through',
+        )}
         title={todo.text}
         aria-label={`Completed: ${todo.text}`}
       >

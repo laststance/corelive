@@ -26,6 +26,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userSettingsReducer, {
   initialState,
 } from '@/lib/redux/slices/settingsSlice'
+import type { UserSettingsState } from '@/lib/schemas/settings'
 
 import { FloatingNavigator } from './FloatingNavigator'
 
@@ -33,14 +34,47 @@ import { FloatingNavigator } from './FloatingNavigator'
  * Wraps the FloatingNavigator in a real settings store — required once a
  * completed row renders, because its checkbox pulls in useCompletionFeedback →
  * useAppSelector (the empty-todos tests above never mount a row, so they don't).
+ * @param ui - FloatingNavigator element under test.
+ * @param settingsOverrides - Settings values that differ from current defaults.
+ * @returns The Testing Library render result.
+ * @example
+ * renderFloatingWithStore(<FloatingNavigator {...noopTaskProps} />)
  */
-function renderFloatingWithStore(ui: ReactElement) {
+function renderFloatingWithStore(
+  ui: ReactElement,
+  settingsOverrides: Partial<UserSettingsState> = {},
+) {
   const store = configureStore({
     reducer: { settings: userSettingsReducer },
-    preloadedState: { settings: { ...initialState } },
+    preloadedState: { settings: { ...initialState, ...settingsOverrides } },
   })
   return render(<Provider store={store}>{ui}</Provider>)
 }
+
+describe('FloatingNavigator completed title presentation', () => {
+  it('shows a finished task without a line when strikethrough is off', () => {
+    // Arrange / Act — render one completed task with the decoration disabled.
+    renderFloatingWithStore(
+      <FloatingNavigator
+        {...noopTaskProps}
+        todos={[
+          {
+            id: '17',
+            text: 'File taxes',
+            completed: true,
+            createdAt: new Date('2026-08-07T00:00:00Z'),
+          },
+        ]}
+      />,
+      { showCompletedTaskStrikethrough: false },
+    )
+
+    // Assert — the completed row remains visible without a line decoration.
+    expect(screen.getByLabelText('Completed: File taxes')).not.toHaveClass(
+      'line-through',
+    )
+  })
+})
 
 // Force the floating-navigator environment so the window-controls toolbar (and
 // its pin button) renders and the mount-init effect runs.

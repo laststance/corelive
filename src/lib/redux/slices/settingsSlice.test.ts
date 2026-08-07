@@ -15,6 +15,7 @@ import reducer, {
   selectBraindumpTextColor,
   selectBraindumpToastDurationMs,
   selectCompletionSound,
+  selectShowCompletedTaskStrikethrough,
   selectUserSettings,
   selectRetainCompletedInList,
   selectSoundMoment,
@@ -28,6 +29,7 @@ import reducer, {
   setBraindumpToastDurationMs,
   setCompletionSound,
   setRetainCompletedInList,
+  setShowCompletedTaskStrikethrough,
   setSoundMoment,
   setAllSoundMoments,
   setSoundTimbre,
@@ -43,12 +45,12 @@ function stateWith(settings: Partial<UserSettingsState>): RootState {
 }
 
 describe('settingsSlice', () => {
-  it('defaults every setting to silent/neutral so a fresh install makes no sound', () => {
-    // Assert — all sound moments OFF, default timbre + volume, both legacy flags OFF,
-    // and the BrainDump editor at its prior look (mono / 14px / theme foreground).
-    expect(initialState).toEqual({
+  it('preserves established task presentation while defaulting feedback settings to neutral', () => {
+    // Arrange — hard-code the established task, feedback, and BrainDump defaults.
+    const expectedSettings = {
       completionSound: false,
       retainCompletedInList: false,
+      showCompletedTaskStrikethrough: true,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
@@ -58,7 +60,13 @@ describe('settingsSlice', () => {
       braindumpClearOnComplete: false,
       braindumpClearDelayMs: 500,
       braindumpToastDurationMs: 5000,
-    })
+    }
+
+    // Act — read the schema-owned initial state used by fresh installs.
+    const actualSettings = initialState
+
+    // Assert — completed titles retain their line while feedback stays neutral.
+    expect(actualSettings).toEqual(expectedSettings)
   })
 
   it('keeps shared nested sound defaults immutable across settings consumers', () => {
@@ -87,6 +95,17 @@ describe('settingsSlice', () => {
     // Assert
     expect(next.retainCompletedInList).toBe(true)
     expect(next.completionSound).toBe(false)
+  })
+
+  it('removes completed title lines when setShowCompletedTaskStrikethrough(false) is dispatched', () => {
+    // Arrange
+    const action = setShowCompletedTaskStrikethrough(false)
+
+    // Act
+    const next = reducer(initialState, action)
+
+    // Assert
+    expect(next.showCompletedTaskStrikethrough).toBe(false)
   })
 
   it('turns on a single sound moment and leaves the other two untouched', () => {
@@ -183,6 +202,7 @@ describe('settingsSlice', () => {
     const incoming: UserSettingsState = {
       completionSound: true,
       retainCompletedInList: true,
+      showCompletedTaskStrikethrough: false,
       soundMoments: { 'task-create': true, complete: true, clear: true },
       soundTimbre: 'paper',
       soundVolume: 0.8,
@@ -206,6 +226,7 @@ describe('settingsSlice', () => {
     const enabled: UserSettingsState = {
       completionSound: true,
       retainCompletedInList: true,
+      showCompletedTaskStrikethrough: false,
       soundMoments: { 'task-create': true, complete: true, clear: true },
       soundTimbre: 'paper',
       soundVolume: 0.9,
@@ -224,6 +245,7 @@ describe('settingsSlice', () => {
     expect(next).toEqual({
       completionSound: false,
       retainCompletedInList: false,
+      showCompletedTaskStrikethrough: true,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
@@ -245,6 +267,7 @@ describe('settingsSlice', () => {
     expect(selectCompletionSound(legacyState)).toBe(
       DEFAULT_SETTINGS.completionSound,
     )
+    expect(selectShowCompletedTaskStrikethrough(legacyState)).toBe(true)
     expect(selectRetainCompletedInList(legacyState)).toBe(true)
   })
 
@@ -290,6 +313,7 @@ describe('settingsSlice', () => {
     expect(settings).toEqual({
       completionSound: false,
       retainCompletedInList: false,
+      showCompletedTaskStrikethrough: true,
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,

@@ -46,14 +46,14 @@ export type { UserSettingsState }
 
 /**
  * Default settings state. Used as initial state and for reset; sourced from
- * the schema SSoT so every field defaults OFF/neutral and behavior is unchanged
- * for users who never touch the toggles.
+ * the schema SSoT so every field preserves the established behavior for users
+ * who never touch the toggles.
  */
 export const initialState = { ...DEFAULT_SETTINGS }
 
 /**
- * Redux slice for core user settings: the sound palette (per-moment toggles,
- * timbre, master volume) plus 居残りモード, plus the legacy completionSound flag.
+ * Redux slice for core user settings: task presentation, sound feedback, and
+ * BrainDump appearance/behavior shared by web and Electron renderers.
  */
 export const userSettingsSlice = createSlice({
   name: 'settings',
@@ -76,6 +76,21 @@ export const userSettingsSlice = createSlice({
      */
     setRetainCompletedInList: (state, action: PayloadAction<boolean>) => {
       state.retainCompletedInList = action.payload
+    },
+
+    /**
+     * Controls whether completed task titles use a strikethrough across CoreLive.
+     * @param state - Current state.
+     * @param action - Payload containing the new strikethrough visibility.
+     * @returns Nothing; Redux Toolkit records the state mutation.
+     * @example
+     * dispatch(setShowCompletedTaskStrikethrough(false))
+     */
+    setShowCompletedTaskStrikethrough: (
+      state,
+      action: PayloadAction<boolean>,
+    ) => {
+      state.showCompletedTaskStrikethrough = action.payload
     },
 
     /**
@@ -254,7 +269,7 @@ export const userSettingsSlice = createSlice({
     },
 
     /**
-     * Resets all settings to their default (OFF) values.
+     * Resets all settings to the schema-owned defaults.
      * @param _state - Current state (unused, returns new state)
      */
     resetUserSettings: (_state) => {
@@ -267,6 +282,7 @@ export const userSettingsSlice = createSlice({
 export const {
   setCompletionSound,
   setRetainCompletedInList,
+  setShowCompletedTaskStrikethrough,
   setSoundMoment,
   setAllSoundMoments,
   setSoundTimbre,
@@ -299,6 +315,19 @@ export const selectCompletionSound = (state: RootState): boolean =>
  */
 export const selectRetainCompletedInList = (state: RootState): boolean =>
   state.settings.retainCompletedInList ?? DEFAULT_SETTINGS.retainCompletedInList
+
+/**
+ * Selects whether completed task titles use a strikethrough across CoreLive.
+ * @param state - Root state.
+ * @returns Whether the completed-title strikethrough is visible (default true).
+ * @example
+ * selectShowCompletedTaskStrikethrough(state) // => true
+ */
+export const selectShowCompletedTaskStrikethrough = (
+  state: RootState,
+): boolean =>
+  state.settings.showCompletedTaskStrikethrough ??
+  DEFAULT_SETTINGS.showCompletedTaskStrikethrough
 
 /**
  * Selects whether a given sound moment should play, with legacy migration: a
@@ -409,6 +438,7 @@ export const selectBraindumpToastDurationMs = (state: RootState): number =>
 export const selectUserSettings = (state: RootState): UserSettingsState => ({
   completionSound: selectCompletionSound(state),
   retainCompletedInList: selectRetainCompletedInList(state),
+  showCompletedTaskStrikethrough: selectShowCompletedTaskStrikethrough(state),
   soundMoments: {
     'task-create': selectSoundMoment(state, 'task-create'),
     complete: selectSoundMoment(state, 'complete'),
