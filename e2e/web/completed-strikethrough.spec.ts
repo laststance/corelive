@@ -4,9 +4,10 @@ import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
 
 const TOGGLE_TODO_PATH = '/api/orpc/todo/toggle'
+const SETTINGS_STORAGE_KEY = 'corelive-redux-state'
 
 test.describe('Completed task strikethrough setting', () => {
-  test.beforeEach(resetDatabase)
+  test.beforeAll(resetDatabase)
 
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page })
@@ -14,7 +15,7 @@ test.describe('Completed task strikethrough setting', () => {
 
   test('shows completed titles without a line after the setting is turned off', async ({
     page,
-  }) => {
+  }, testInfo) => {
     // Real Clerk + create/toggle mutations + reload can approach the 30s default on this Mac.
     test.slow()
 
@@ -26,9 +27,23 @@ test.describe('Completed task strikethrough setting', () => {
     await expect(strikethroughSwitch).toBeChecked()
     await strikethroughSwitch.click()
     await expect(strikethroughSwitch).not.toBeChecked()
+    // Persistence is debounced; leaving Settings before this write loses the change.
+    await expect
+      .poll(
+        async () =>
+          (
+            await page.evaluate(
+              (storageKey) => localStorage.getItem(storageKey),
+              SETTINGS_STORAGE_KEY,
+            )
+          )?.includes('"showCompletedTaskStrikethrough":false') ?? false,
+        { timeout: 5000 },
+      )
+      .toBe(true)
 
     await page.goto('/home')
-    const todoText = 'Readable completed win'
+    // A retry gets a fresh browser context but keeps database rows from the first attempt.
+    const todoText = `Readable completed win ${testInfo.retry}`
     await page
       .getByPlaceholder('Type a todo, or paste a list...')
       .fill(todoText)
