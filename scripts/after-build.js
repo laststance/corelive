@@ -13,8 +13,10 @@ export default async function afterBuild(context) {
     const filePath = path.join(outDir, file)
     const stats = fs.statSync(filePath)
 
+    // A checksum manifest cannot truthfully include its own final bytes.
     if (
       stats.isFile() &&
+      file !== 'checksums.json' &&
       !file.endsWith('.blockmap') &&
       !file.endsWith('.yml')
     ) {

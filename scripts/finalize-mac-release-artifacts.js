@@ -225,8 +225,10 @@ function rewriteChecksumsJson() {
     const filePath = path.join(distDir, file)
     const stats = fs.statSync(filePath)
 
+    // A checksum manifest cannot truthfully include its own final bytes.
     if (
       stats.isFile() &&
+      file !== 'checksums.json' &&
       !file.endsWith('.blockmap') &&
       !file.endsWith('.yml')
     ) {
