@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   test:
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Tokyo
@@ -58,7 +59,7 @@ jobs:
       - name: Generate Prisma Client 🗄️
         run: pnpm prisma generate
       - name: Install Playwright Browsers 🎭
-        run: pnpm exec playwright install --with-deps chromium
+        run: bash scripts/install-playwright-ci.sh
       - name: Generate Icons 🎨
         run: pnpm build:icons
       # Coverage now lives in the dedicated `coverage.yml` workflow (#127): it

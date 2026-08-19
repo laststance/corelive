@@ -41,7 +41,7 @@ concurrency:
 jobs:
   coverage:
     name: Unit + Web E2E coverage 📊
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -100,7 +100,7 @@ jobs:
         run: pnpm prisma generate
 
       - name: Install Playwright Browsers 🎭
-        run: pnpm exec playwright install --with-deps chromium
+        run: bash scripts/install-playwright-ci.sh
 
       # electron unit tests (icon-system.test.mjs) read the generated artifact
       # build/icons/icon-manifest.json — generate it before any electron vitest run

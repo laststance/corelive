@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   storybook-test:
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,7 +27,7 @@ jobs:
         uses: ./.github/actions/prepare
 
       - name: Install Playwright Browsers 🎭
-        run: pnpm exec playwright install --with-deps chromium
+        run: bash scripts/install-playwright-ci.sh
 
       - name: Build Storybook
         run: pnpm build-storybook

@@ -62,20 +62,20 @@ jobs:
   # ----------------------------------------------------------------------------
   # e2e-web
   # ----------------------------------------------------------------------------
-  # Runs ONE Playwright invocation per spec file in parallel. Each matrix job
-  # is a fresh ubuntu-latest runner with its own Postgres + Next.js process,
-  # so there is no shared-state contention between specs. `fail-fast: false`
-  # keeps every shard running even if one fails — we want the full picture
-  # for triage, not an early abort.
+  # Runs ONE Playwright invocation per spec file. Each matrix job is isolated,
+  # while the concurrency cap prevents browser installs from overwhelming the
+  # shared package mirrors. `fail-fast: false` keeps every shard running so
+  # failures still produce a complete triage picture.
   e2e-web:
     name: E2E Web (${{ matrix.spec }}) 🧪
     needs: detect-specs
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         spec: ${{ fromJson(needs.detect-specs.outputs.specs) }}
 
@@ -140,7 +140,7 @@ jobs:
         run: pnpm build
 
       - name: Install Playwright Browsers 🎭
-        run: pnpm exec playwright install --with-deps chromium
+        run: bash scripts/install-playwright-ci.sh
 
       - name: Run Web Playwright tests 🧪
         env:
