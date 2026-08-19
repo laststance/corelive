@@ -238,6 +238,15 @@ function remapTrackedLineIndex(
     }
   }
 
+  const trackedLineText = previousLines[lineIndex]
+  if (
+    trackedLineText !== undefined &&
+    nextLines.filter((line) => line === trackedLineText).length > 1
+  ) {
+    // Duplicate full rows are indistinguishable without an exact browser splice.
+    return null
+  }
+
   // Internal changes have no DOM selection; retain the conservative content fallback.
   let unchangedPrefixLength = 0
   while (
@@ -1222,7 +1231,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
     )
     // Keep both the note and Completed record intact when the exact row is gone.
     if (updatedLineIndex === null) {
-      if (memoryKey !== null && memoryBeforeUndo) {
+      if (
+        memoryKey !== null &&
+        memoryBeforeUndo &&
+        !checkedRowsRef.current.has(memoryKey)
+      ) {
         checkedRowsRef.current.set(memoryKey, memoryBeforeUndo)
       }
       return
@@ -1881,6 +1894,24 @@ export const BrainDumpEditor = function BrainDumpEditor({
         ref={textareaRef}
         id={noteInputId}
         value={noteText}
+        onPaste={(event) => {
+          // Context-menu paste has no keydown, so capture its replaced selection here.
+          pendingTextareaEditRef.current = {
+            start: event.currentTarget.selectionStart,
+            end: event.currentTarget.selectionEnd,
+          }
+        }}
+        onCut={(event) => {
+          // Context-menu cut also needs the selection before the browser deletes it.
+          pendingTextareaEditRef.current = {
+            start: event.currentTarget.selectionStart,
+            end: event.currentTarget.selectionEnd,
+          }
+        }}
+        onDrop={() => {
+          // A drop can land away from the caret, so discard any stale keyboard selection.
+          pendingTextareaEditRef.current = null
+        }}
         onBeforeInput={(event) => {
           // Capture the browser's exact splice before duplicate text makes content diff ambiguous.
           pendingTextareaEditRef.current = {

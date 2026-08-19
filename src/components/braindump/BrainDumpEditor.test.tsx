@@ -740,9 +740,22 @@ function replaceTextareaRange(
   end: number,
   value: string,
 ): void {
+  const previousValue = noteField.value
+  const insertedLength = value.length - (previousValue.length - (end - start))
+  const insertedText =
+    insertedLength >= 0 ? value.slice(start, start + insertedLength) : null
   noteField.selectionStart = start
   noteField.selectionEnd = end
   fireEvent.keyDown(noteField, { key: 'v', metaKey: true })
+  fireEvent(
+    noteField,
+    new InputEvent('beforeinput', {
+      bubbles: true,
+      cancelable: true,
+      data: insertedText,
+      inputType: 'insertFromPaste',
+    }),
+  )
   fireEvent.change(noteField, { target: { value } })
 }
 
@@ -979,10 +992,15 @@ describe('BrainDumpEditor complete command', () => {
       resolveCreate({ id: 1 })
       await pendingCreate
     })
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledTimes(1)
+    })
     const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
       ?.action as { onClick: () => void } | undefined
+    expect(undoAction).toBeDefined()
+    if (!undoAction) throw new Error('Undo action was not registered')
     await act(async () => {
-      undoAction?.onClick()
+      undoAction.onClick()
     })
 
     // Assert — a merged, non-checkbox row is not a safe Undo target, so nothing is deleted.
