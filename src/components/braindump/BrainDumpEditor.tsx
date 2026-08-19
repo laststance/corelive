@@ -158,6 +158,8 @@ type ClearedLineMemory = {
   removalTimerId: number | undefined
   /** Exact caret destination after instant removal; null preserves the live caret. */
   caretAfterClearOffset: number | null
+  /** Shared restore attempt so create-failure and Undo cannot insert the row twice. */
+  restorePromise: Promise<boolean> | null
 }
 
 /**
@@ -168,12 +170,32 @@ type ClearedLineMemory = {
  * orphaned in the DB.
  */
 type PendingCreate = {
+  /** Category owning this optimistic completion and any later restore retry. */
+  categoryId: Category['id']
   /** Current line index, re-indexed whenever edits shift the optimistic row. */
   lineIndex: BrainDumpLineIndex
   /** Exact checked row used to reject unsafe rollback targets. */
   completedLineText: string
   promise: Promise<Completed['id'] | null>
+  /** Keeps duplicate completion blocked until a failed rollback is retried successfully. */
+  restorePending: boolean
   title: BrainDumpCompletedTitle
+}
+
+type PendingCompletedDelete = {
+  /** Single in-flight delete shared by repeated Retry clicks. */
+  request: Promise<boolean> | null
+}
+
+/**
+ * Re-reads a mutable clear entry after awaits so concurrent Undo ownership is visible.
+ * @param entry - Completion lifecycle entry mutated by failure and Undo paths.
+ * @returns Whether Undo has taken ownership of restoration and cleanup.
+ * @example
+ * isClearedLineUndone(entry)
+ */
+function isClearedLineUndone(entry: ClearedLineMemory): boolean {
+  return entry.outcome === 'undone'
 }
 
 /**
@@ -477,6 +499,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const pendingCreatesRef = useRef<Map<BrainDumpLineIndex, PendingCreate>>(
     new Map(),
   )
+  const pendingCompletedDeletesRef = useRef<
+    Map<Completed['id'], PendingCompletedDelete>
+  >(new Map())
+  const failedPromotionRestoresRef = useRef<Set<PendingCreate>>(new Set())
   // Clear-on-complete ON path: token-keyed undo memory for lines removed the
   // instant they complete. Separate map from checkedRowsRef (which serves the
   // keep-the-[x] OFF path) so the two flows never share keys. Cleared on
@@ -544,6 +570,22 @@ export const BrainDumpEditor = function BrainDumpEditor({
         text,
         options.editRange,
       )
+      for (const entry of failedPromotionRestoresRef.current) {
+        // Only the origin category can move a failed rollback target.
+        if (entry.categoryId !== categoryId) continue
+        const nextLineIndex = remapTrackedLineIndex(
+          previousText,
+          text,
+          entry.lineIndex,
+          options.editRange,
+        )
+        if (nextLineIndex === null) {
+          // A user rewrite supersedes the stale optimistic row; no rollback remains.
+          failedPromotionRestoresRef.current.delete(entry)
+          continue
+        }
+        entry.lineIndex = nextLineIndex
+      }
       reindexTrackedCompletionMap(
         checkedRowsRef.current,
         previousText,
@@ -617,7 +659,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * @param lineIndex - Original/fallback line index for the completed row.
    * @param completedLineText - Exact optimistic checked row used as the identity guard.
    * @param rollbackLineText - Verbatim source row when failure must preserve its checked state or prose shape.
-   * @returns Promise that settles after visible or stored note restoration.
+   * @returns Whether the optimistic row was safely restored or no longer needs rollback.
    * @example
    * await restoreFailedPromotionToCategory(1, 0, '- [x] buy milk')
    */
@@ -626,7 +668,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     lineIndex: BrainDumpLineIndex,
     completedLineText: string,
     rollbackLineText?: string,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const restoreText = (text: string) =>
       rollbackPromotedLineText(
         text,
@@ -636,21 +678,24 @@ export const BrainDumpEditor = function BrainDumpEditor({
       )
 
     if (activeCategoryIdRef.current === categoryId) {
-      setNoteDraft(restoreText(noteTextRef.current), {
+      const restored = restoreText(noteTextRef.current)
+      setNoteDraft(restored, {
         categoryId,
         dirty: true,
       })
-      return
+      return true
     }
 
     const api = window.brainDumpAPI
-    if (!api) return
+    if (!api) return false
     try {
       const stored = await api.note.get(categoryId)
       const restored = restoreText(stored)
       if (restored !== stored) await api.note.set(categoryId, restored)
+      return true
     } catch (error) {
       log.error('BrainDump failed completion restore failed', error)
+      return false
     }
   }
 
@@ -1040,6 +1085,56 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   /**
+   * Deletes an undone completion with single-flight Retry state. Called after either Undo path restores the note.
+   * @param completedId - Server completion row that must disappear before the undo is consistent.
+   * @returns Whether deletion and cross-window synchronization succeeded.
+   * @example
+   * await deleteCompletedWithRetry(42)
+   */
+  const deleteCompletedWithRetry = async (
+    completedId: Completed['id'],
+  ): Promise<boolean> => {
+    let entry = pendingCompletedDeletesRef.current.get(completedId)
+    if (!entry) {
+      entry = { request: null }
+      pendingCompletedDeletesRef.current.set(completedId, entry)
+    }
+    if (entry.request) return entry.request
+
+    const request = (async (): Promise<boolean> => {
+      try {
+        await deleteCompletedMutation.mutateAsync({ id: completedId })
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to undo completion'
+        const currentEntry = pendingCompletedDeletesRef.current.get(completedId)
+        if (currentEntry === entry) currentEntry.request = null
+        toast.error(message, {
+          action: {
+            label: 'Retry',
+            onClick: () => {
+              void deleteCompletedWithRetry(completedId)
+            },
+          },
+        })
+        return false
+      }
+
+      // Deletion succeeded; never issue it twice merely because sibling refresh failed.
+      pendingCompletedDeletesRef.current.delete(completedId)
+      try {
+        await syncCompletedAcrossViews()
+      } catch (error) {
+        toast.error('Completion undone, but refresh failed')
+        log.error('BrainDump undo synchronization failed', error)
+      }
+      return true
+    })()
+    entry.request = request
+    return request
+  }
+
+  /**
    * Promote the caret line to `[x]`, create a Completed row, and arm the
    * 5-second undo toast. Called by the complete command (Cmd/Ctrl+Enter) for
    * both checkbox lines and — via `markPlainLineCompleted` — plain prose lines.
@@ -1071,10 +1166,17 @@ export const BrainDumpEditor = function BrainDumpEditor({
       noteTextRef.current.split('\n')[lineIndex] ?? rollbackLineText ?? ''
     const pendingCompletion = pendingCreatesRef.current.get(lineIndex)
     const recordedCompletion = checkedRowsRef.current.get(lineIndex)
+    const failedRestore = [...failedPromotionRestoresRef.current].some(
+      (entry) =>
+        entry.categoryId === categoryId &&
+        entry.lineIndex === lineIndex &&
+        entry.title === safeTitle,
+    )
     // Repeated shortcuts for the same visible task must not create duplicate Completed rows.
     if (
       pendingCompletion?.title === safeTitle ||
-      recordedCompletion?.title === safeTitle
+      recordedCompletion?.title === safeTitle ||
+      failedRestore
     ) {
       return
     }
@@ -1083,29 +1185,62 @@ export const BrainDumpEditor = function BrainDumpEditor({
       title: safeTitle,
     })
     const pendingEntry: PendingCreate = {
+      categoryId,
       lineIndex,
       completedLineText,
-      promise: createRequest.then(
-        (created) => created.id,
-        (error) => {
-          const message =
-            error instanceof Error
-              ? error.message
-              : 'Failed to record completion'
-          toast.error(message)
-          // Restore the origin category. If the user already switched away, this
-          // writes category A's stored note instead of touching category B's draft.
-          void restoreFailedPromotionToCategory(
-            categoryId,
-            pendingEntry.lineIndex,
-            pendingEntry.completedLineText,
-            rollbackLineText,
-          )
-          return null
-        },
-      ),
+      promise: Promise.resolve(null),
+      restorePending: false,
       title: safeTitle,
     }
+
+    /**
+     * Retries this failed optimistic row rollback and keeps duplicate completion blocked until it succeeds.
+     * @param message - User-facing create failure retained on each retry toast.
+     * @returns Whether the origin note is now consistent with the failed create.
+     * @example
+     * await retryFailedRestore('Failed to record completion')
+     */
+    const retryFailedRestore = async (message: string): Promise<boolean> => {
+      const restored = await restoreFailedPromotionToCategory(
+        categoryId,
+        pendingEntry.lineIndex,
+        pendingEntry.completedLineText,
+        rollbackLineText,
+      )
+      pendingEntry.restorePending = !restored
+      if (restored) {
+        failedPromotionRestoresRef.current.delete(pendingEntry)
+        if (
+          pendingCreatesRef.current.get(pendingEntry.lineIndex) === pendingEntry
+        ) {
+          pendingCreatesRef.current.delete(pendingEntry.lineIndex)
+        }
+        return true
+      }
+      failedPromotionRestoresRef.current.add(pendingEntry)
+      toast.error(message, {
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            void retryFailedRestore(message)
+          },
+        },
+      })
+      return false
+    }
+
+    pendingEntry.promise = createRequest.then(
+      (created) => created.id,
+      async (error) => {
+        const message =
+          error instanceof Error ? error.message : 'Failed to record completion'
+        // Restore the origin category. If the user already switched away, this
+        // writes category A's stored note instead of touching category B's draft.
+        const restored = await retryFailedRestore(message)
+        if (restored) toast.error(message)
+        return null
+      },
+    )
     pendingCreatesRef.current.set(lineIndex, pendingEntry)
 
     const completedId = await pendingEntry.promise
@@ -1113,7 +1248,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // tick on the same line would have replaced it.
     const completionStillTracked =
       pendingCreatesRef.current.get(pendingEntry.lineIndex) === pendingEntry
-    if (completionStillTracked) {
+    if (completionStillTracked && !pendingEntry.restorePending) {
       pendingCreatesRef.current.delete(pendingEntry.lineIndex)
     }
     if (completedId === null) return
@@ -1241,31 +1376,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
       return
     }
 
-    try {
-      await deleteCompletedMutation.mutateAsync({ id: completedId })
-      await syncCompletedAcrossViews()
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to undo completion'
-      toast.error(message)
-      // Roll back the optimistic uncheck so the checkbox state matches
-      // the still-existing Completed row. Re-resolve again from the
-      // latest text — drift may have continued during the await.
-      const rollbackLineIndex = await setCompletedCheckboxStateInCategory(
-        categoryId,
-        title,
-        updatedLineIndex,
-        true,
-      )
-      if (
-        rollbackLineIndex !== null &&
-        memoryBeforeUndo &&
-        activeCategoryIdRef.current === categoryId
-      ) {
-        memoryBeforeUndo.lineIndex = rollbackLineIndex
-        checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
-      }
-    }
+    // Keep the note visibly undone; a failed server delete gets its own Retry action.
+    await deleteCompletedWithRetry(completedId)
   }
 
   /**
@@ -1381,6 +1493,31 @@ export const BrainDumpEditor = function BrainDumpEditor({
       log.error('BrainDump lingering line restore failed', error)
       return false
     }
+  }
+
+  /**
+   * Shares one clear-line restore across create-failure and Undo races for the same entry.
+   * @param entry - Clear completion whose original row must be restored once.
+   * @param moveCaret - Whether a user-triggered Undo should move the caret after restore.
+   * @returns The shared restore result for every concurrent caller.
+   * @example
+   * await restoreClearedCompletionLine(entry, true)
+   */
+  const restoreClearedCompletionLine = async (
+    entry: ClearedLineMemory,
+    moveCaret: boolean,
+  ): Promise<boolean> => {
+    if (entry.restorePromise) return entry.restorePromise
+    entry.restorePromise = (async () => {
+      try {
+        return entry.lineCleared
+          ? await restoreClearedLineToCategory(entry, moveCaret)
+          : await restoreLingeringCompletedLine(entry, moveCaret)
+      } finally {
+        entry.restorePromise = null
+      }
+    })()
+    return entry.restorePromise
   }
 
   /**
@@ -1537,6 +1674,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
               lineIndex,
             )
           : null,
+      restorePromise: null,
     }
     clearedLinesRef.current.set(token, entry)
 
@@ -1587,9 +1725,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
           // move: a background failure must not yank a user typing elsewhere. If
           // the line is STILL on screen (linger not yet elapsed, timer just
           // cancelled above), there is nothing to restore — leave it.
-          const restored = entry.lineCleared
-            ? await restoreClearedLineToCategory(entry, false)
-            : await restoreLingeringCompletedLine(entry, false)
+          const restored = await restoreClearedCompletionLine(entry, false)
+          // Undo may have joined the same restore while IPC was pending; it now owns cleanup.
+          if (isClearedLineUndone(entry)) return null
           if (!restored) {
             // Keep the original Undo closure retryable when the note write fails.
             clearedLinesRef.current.set(token, entry)
@@ -1683,9 +1821,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // already removed it, re-insert; if it is still on screen as `[x]`, replace it.
     // Cross-category restore writes to the origin category's STORED note, never
     // category B's visible note.
-    const restored = entry.lineCleared
-      ? await restoreClearedLineToCategory(entry, true)
-      : await restoreLingeringCompletedLine(entry, true)
+    const restored = await restoreClearedCompletionLine(entry, true)
     if (!restored) {
       // Roll back the terminal marker so the same Undo action can retry safely.
       entry.outcome = outcomeBeforeUndo
@@ -1699,14 +1835,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // to null → nothing to delete.
     const completedId = await createPromise
     if (completedId === null) return
-    try {
-      await deleteCompletedMutation.mutateAsync({ id: completedId })
-      await syncCompletedAcrossViews()
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Failed to undo completion',
-      )
-    }
+    await deleteCompletedWithRetry(completedId)
   }
 
   /**
