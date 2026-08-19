@@ -1866,8 +1866,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     const api = window.brainDumpAPI
     if (!api) throw new Error('brainDumpAPI was not installed')
-    // Category 1 holds 'keep me'; every other category is empty.
-    api.note.get = vi.fn(async (id: number) => (id === 1 ? 'keep me' : ''))
+    // Category 1 has rows around the restore slot; every other category is empty.
+    api.note.get = vi.fn(async (id: number) => (id === 1 ? 'top\nbottom' : ''))
     const noteSet = vi.mocked(api.note.set)
 
     const store = configureStore({
@@ -1898,28 +1898,29 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     await waitForBrainDumpReady(noteField)
-    // Seed two lines and park the caret on the checkbox line (index 1).
-    const value = 'keep me\n- [ ] buy milk'
+    // Seed three lines and park the caret on the middle checkbox (index 1).
+    const value = 'top\n- [ ] buy milk\nbottom'
     fireEvent.change(noteField, { target: { value } })
-    const caret = value.length
+    const caret = 'top\n- [ ] buy milk'.length
     noteField.selectionStart = caret
     noteField.selectionEnd = caret
 
-    // Complete the checkbox line in category 1 → the line clears to 'keep me'.
+    // Complete the checkbox line in category 1 → its surrounding rows remain.
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
     await waitFor(() => {
-      expect(noteField).toHaveValue('keep me')
+      expect(noteField).toHaveValue('top\nbottom')
     })
 
     // Act — switch the active floating category to 2 (the live textarea now
     // shows category 2's empty note), THEN tap Undo. The toast's onClick still
-    // holds the category-1 completion via closure even though the swap cleared
-    // the in-memory map.
+    // holds the category-1 completion while category-scoped memory stays intact.
     selectedCategoryRef.current = 2
     rerender(tree())
     await waitFor(() => {
       expect(noteField).toHaveValue('') // category 2's empty note has loaded
     })
+    // Edit category 2 with a line-count change that must never re-index category 1's restore slot.
+    fireEvent.change(noteField, { target: { value: 'other\nrows' } })
     noteSet.mockClear() // drop the category-swap flush write; assert only the restore
     const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
       ?.action as { onClick: () => void } | undefined
@@ -1930,7 +1931,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Assert — the verbatim line is written back into category 1's STORED note
     // at its original index via IPC, so neither the line nor the win is lost…
     await waitFor(() => {
-      expect(noteSet).toHaveBeenCalledWith(1, 'keep me\n- [ ] buy milk')
+      expect(noteSet).toHaveBeenCalledWith(1, 'top\n- [ ] buy milk\nbottom')
     })
     // …and the restored line was NEVER persisted into the switched-to category 2:
     // a regression that wrote to both categories would corrupt category 2's stored
@@ -1940,7 +1941,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       expect.stringContaining('- [ ] buy milk'),
     )
     // …and category 2's visible note was never touched.
-    expect(noteField).toHaveValue('')
+    expect(noteField).toHaveValue('other\nrows')
   })
 
   it('offers Retry when Undo cannot restore a cleared origin row', async () => {

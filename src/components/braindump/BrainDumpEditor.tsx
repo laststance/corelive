@@ -624,6 +624,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
         ...pendingClearTimersRef.current.values(),
       ])
       for (const entry of trackedClearEntries) {
+        // Only edits in the origin category may move this row's restore position.
+        if (entry.categoryId !== categoryId) continue
         const nextLineIndex = remapTrackedLineIndex(
           previousText,
           text,
