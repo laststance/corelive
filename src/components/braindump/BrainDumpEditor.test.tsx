@@ -948,6 +948,80 @@ describe('BrainDumpEditor complete command', () => {
     })
   })
 
+  it('does not undo or delete a completion after removing the separator before its tracked row', async () => {
+    // Arrange — keep creation pending while the tracked checkbox still has its own line.
+    let resolveCreate!: (value: { id: number }) => void
+    const pendingCreate = new Promise<{ id: number }>((resolve) => {
+      resolveCreate = resolve
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const originalText = 'header\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: originalText } })
+    noteField.selectionStart = originalText.length
+    noteField.selectionEnd = originalText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Act — remove the row separator, finish creation, then invoke its stale Undo.
+    replaceTextareaRange(
+      noteField,
+      'header'.length,
+      'header\n'.length,
+      'header- [x] FooTask',
+    )
+    await act(async () => {
+      resolveCreate({ id: 1 })
+      await pendingCreate
+    })
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — a merged, non-checkbox row is not a safe Undo target, so nothing is deleted.
+    expect(noteField).toHaveValue('header- [x] FooTask')
+    expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('does not use another checked row with the same title after tracked identity is lost', async () => {
+    // Arrange — record one checked task and retain its Undo action.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const originalText = 'header\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: originalText } })
+    noteField.selectionStart = originalText.length
+    noteField.selectionEnd = originalText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledTimes(1)
+    })
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+
+    // Act — replace the tracked row and introduce a same-title checkbox elsewhere.
+    const ambiguousText = '- [x] FooTask\nheader\n- [x] Renamed'
+    replaceTextareaRange(noteField, 0, originalText.length, ambiguousText)
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — unsafe title lookup cannot uncheck the other row or delete the original record.
+    expect(noteField).toHaveValue(ambiguousText)
+    expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
+  })
+
   it('keeps an already checked checkbox line checked when completion recording fails', async () => {
     // Arrange — a manually checked task whose Completed create will fail.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))

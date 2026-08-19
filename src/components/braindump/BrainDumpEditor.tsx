@@ -53,7 +53,6 @@ import {
   lineStartOffset,
   markPlainLineCompleted,
   normalizeCompletedTitle,
-  parseAllCheckboxes,
   parseCheckboxLine,
   removeLineAtIndex,
   replaceLineAtIndex,
@@ -224,7 +223,7 @@ function remapTrackedLineIndex(
       if (editRange.end < rowStart) return lineIndex + newlineDelta
       if (editRange.end === rowStart) {
         const keepsRowBoundary =
-          insertedText.length === 0 || insertedText.endsWith('\n')
+          !removedText.endsWith('\n') || insertedText.endsWith('\n')
         return keepsRowBoundary ? lineIndex + newlineDelta : null
       }
 
@@ -301,31 +300,6 @@ function reindexTrackedCompletionMap<
   for (const [lineIndex, entry] of reindexedEntries) {
     entries.set(lineIndex, entry)
   }
-}
-
-/**
- * Find the first `[x]` line in the given text whose title matches.
- *
- * Why title-based lookup: line indices drift the moment the user inserts or
- * deletes a line above a checked item, so storing a stale lineIndex in the
- * undo memory is unsafe. Titles are the only stable handle we have between
- * the toggle and the Undo click.
- *
- * @param text - Current textarea contents.
- * @param title - Title to look for (already normalised).
- * @returns Zero-based line index, or null when no `[x]` line matches.
- * @example
- * findCheckedLineIndexByTitle('- [x] buy milk\n- [ ] dishes', 'buy milk') // → 0
- */
-function findCheckedLineIndexByTitle(
-  text: string,
-  title: BrainDumpCompletedTitle,
-): BrainDumpLineIndex | null {
-  const checkboxes = parseAllCheckboxes(text)
-  for (const box of checkboxes) {
-    if (box.checked && box.title === title) return box.lineIndex
-  }
-  return null
 }
 
 /**
@@ -674,11 +648,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
   /**
    * Writes an undo/rollback checkbox state to the category that owns it. Called by undoCompleted.
    * @param categoryId - Category that owns the completion row.
-   * @param title - Normalised completion title used to recover from line drift.
-   * @param fallbackLineIndex - Best-known line index when title lookup cannot find a checked row.
+   * @param title - Normalised title that the exact fallback checkbox must match.
+   * @param fallbackLineIndex - Tracked or captured line index; no global title search is allowed.
    * @param checked - Target checkbox state.
    * @param sourceText - Optional active-category snapshot for immediate visible updates.
-   * @returns Line index used for bookkeeping.
+   * @returns The exact updated line index, or null when no safe row remains.
    * @example
    * await setCompletedCheckboxStateInCategory(1, 'buy milk', 0, false)
    */
@@ -688,21 +662,19 @@ export const BrainDumpEditor = function BrainDumpEditor({
     fallbackLineIndex: BrainDumpLineIndex,
     checked: boolean,
     sourceText?: string,
-  ): Promise<BrainDumpLineIndex> => {
+  ): Promise<BrainDumpLineIndex | null> => {
     const updateText = (text: string) => {
       const fallbackLine = text.split('\n')[fallbackLineIndex]
       const fallbackCheckbox =
         fallbackLine === undefined
           ? null
           : parseCheckboxLine(fallbackLine, fallbackLineIndex)
-      // Prefer the re-indexed row when it still has this title; a global title search is ambiguous.
+      // Only the tracked fallback is safe; a same-title search can select another repeated task.
       const resolvedLineIndex =
-        fallbackCheckbox?.title === title
-          ? fallbackLineIndex
-          : findCheckedLineIndexByTitle(text, title)
+        fallbackCheckbox?.title === title ? fallbackLineIndex : null
       // A renamed or removed task has no safe checkbox target, so leave the note untouched.
       if (resolvedLineIndex === null) {
-        return { lineIndex: fallbackLineIndex, text }
+        return { lineIndex: null, text }
       }
       return {
         lineIndex: resolvedLineIndex,
@@ -712,12 +684,14 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
     if (activeCategoryIdRef.current === categoryId) {
       const updated = updateText(sourceText ?? noteTextRef.current)
-      setNoteDraft(updated.text, { categoryId, dirty: true })
+      if (updated.lineIndex !== null) {
+        setNoteDraft(updated.text, { categoryId, dirty: true })
+      }
       return updated.lineIndex
     }
 
     const api = window.brainDumpAPI
-    if (!api) return fallbackLineIndex
+    if (!api) return null
     try {
       const stored = await api.note.get(categoryId)
       const updated = updateText(stored)
@@ -725,7 +699,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       return updated.lineIndex
     } catch (error) {
       log.error('BrainDump cross-category checkbox restore failed', error)
-      return fallbackLineIndex
+      return null
     }
   }
 
@@ -1149,8 +1123,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
       title: safeTitle,
       durationMs: braindumpToastDurationMs,
       // Read latest text via ref so the user's keystrokes between creation and
-      // undo are preserved. Pass the captured title so undoCompleted can
-      // re-resolve the current line index even if lines have drifted.
+      // undo are preserved. The tracked map follows safe row shifts; the
+      // captured position is accepted only when its checkbox still matches.
       onUndo: () => {
         void undoCompleted(
           safeTitle,
@@ -1212,11 +1186,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * to `[ ]`. Called from the toast Undo action and from the manual-uncheck
    * keyboard path.
    *
-   * Drift handling: the `fallbackLineIndex` captured at toggle time may be
-   * stale by undo time (the user can edit text between the two events). We
-   * re-resolve the line by `title` against the latest text and walk the
-   * `checkedRowsRef` map by `completedId` so the cleanup targets the right
-   * entry no matter how the keys have shifted.
+   * Drift handling: `checkedRowsRef` follows safe row shifts by `completedId`.
+   * If edits destroy that identity, only an exact checkbox at the captured
+   * fallback index may be changed; repeated titles are never searched globally.
    *
    * @param categoryId - Origin category for cross-category undo and rollback writes.
    */
@@ -1237,18 +1209,24 @@ export const BrainDumpEditor = function BrainDumpEditor({
         break
       }
     }
-    const resolvedLineIndex =
-      memoryKey ??
-      findCheckedLineIndexByTitle(originalText, title) ??
-      fallbackLineIndex
+    // Without tracked memory, only the captured fallback position may be tried.
+    // A global title lookup is unsafe because repeated task titles are intentional.
+    const resolvedLineIndex = memoryKey ?? fallbackLineIndex
     if (memoryKey !== null) checkedRowsRef.current.delete(memoryKey)
-    await setCompletedCheckboxStateInCategory(
+    const updatedLineIndex = await setCompletedCheckboxStateInCategory(
       categoryId,
       title,
       resolvedLineIndex,
       false,
       originalText,
     )
+    // Keep both the note and Completed record intact when the exact row is gone.
+    if (updatedLineIndex === null) {
+      if (memoryKey !== null && memoryBeforeUndo) {
+        checkedRowsRef.current.set(memoryKey, memoryBeforeUndo)
+      }
+      return
+    }
 
     try {
       await deleteCompletedMutation.mutateAsync({ id: completedId })
@@ -1263,10 +1241,14 @@ export const BrainDumpEditor = function BrainDumpEditor({
       const rollbackLineIndex = await setCompletedCheckboxStateInCategory(
         categoryId,
         title,
-        resolvedLineIndex,
+        updatedLineIndex,
         true,
       )
-      if (memoryBeforeUndo && activeCategoryIdRef.current === categoryId) {
+      if (
+        rollbackLineIndex !== null &&
+        memoryBeforeUndo &&
+        activeCategoryIdRef.current === categoryId
+      ) {
         memoryBeforeUndo.lineIndex = rollbackLineIndex
         checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
       }
