@@ -725,6 +725,28 @@ function fireCompleteCommandOnFirstLine(
 }
 
 /**
+ * Replaces one textarea range as a single paste-like edit so row tracking sees the exact splice.
+ * @param noteField - The BrainDump textarea.
+ * @param start - Inclusive selection start before the edit.
+ * @param end - Exclusive selection end before the edit.
+ * @param value - Full textarea value after the edit.
+ * @returns Nothing; emits the keyboard prelude and controlled change used by the renderer.
+ * @example
+ * replaceTextareaRange(noteField, 0, 0, 'new\nold')
+ */
+function replaceTextareaRange(
+  noteField: HTMLTextAreaElement,
+  start: number,
+  end: number,
+  value: string,
+): void {
+  noteField.selectionStart = start
+  noteField.selectionEnd = end
+  fireEvent.keyDown(noteField, { key: 'v', metaKey: true })
+  fireEvent.change(noteField, { target: { value } })
+}
+
+/**
  * Waits for the config/note boot load to finish before tests type into BrainDump.
  * @param noteField - The BrainDump textarea rendered by the test.
  * @returns A promise that resolves once user input is accepted.
@@ -886,6 +908,43 @@ describe('BrainDumpEditor complete command', () => {
     await act(async () => {
       resolveCreate({ id: 1 })
       await pendingCreate
+    })
+  })
+
+  it('undoes the original checked task after an identical row is inserted immediately before it', async () => {
+    // Arrange — record the second row and retain its optimistic Undo action.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const originalText = 'header\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: originalText } })
+    noteField.selectionStart = originalText.length
+    noteField.selectionEnd = originalText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledTimes(1)
+    })
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+
+    // Act — paste an identical row at the tracked row's start, then Undo.
+    replaceTextareaRange(
+      noteField,
+      'header\n'.length,
+      'header\n'.length,
+      'header\n- [x] FooTask\n- [x] FooTask',
+    )
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the inserted duplicate stays checked; only the original row is undone.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('header\n- [x] FooTask\n- [ ] FooTask')
     })
   })
 
@@ -1207,6 +1266,34 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Assert — the verbatim line returns at index 1, not appended at the end.
     await waitFor(() => {
       expect(noteField).toHaveValue('keep me\n- [ ] buy milk')
+    })
+  })
+
+  it('undo restores a cleared task after an identical anchor row is inserted above its saved position', async () => {
+    // Arrange — complete the first row and wait for its instant clear to leave one anchor row.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    fireCompleteCommandOnFirstLine(noteField, '- [ ] FooTask\nkeep')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep')
+    })
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+
+    // Act — insert an identical anchor before the old gap while Undo remains available.
+    replaceTextareaRange(noteField, 0, 0, 'keep\nkeep')
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — the cleared task returns after the new row, at its shifted saved position.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep\n- [ ] FooTask\nkeep')
     })
   })
 

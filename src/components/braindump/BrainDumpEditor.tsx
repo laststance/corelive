@@ -87,11 +87,20 @@ type CheckedRowMemory = {
   title: BrainDumpCompletedTitle
 }
 
+type TextEditRange = Readonly<{
+  /** Inclusive character offset before the textarea edit. */
+  start: number
+  /** Exclusive character offset before the textarea edit. */
+  end: number
+}>
+
 type NoteDraftUpdateOptions = Readonly<{
   /** Category this draft belongs to; defaults to the active category ref. */
   categoryId?: Category['id'] | null
   /** True only after a user/internal edit that should be flushed to disk. */
   dirty: boolean
+  /** Exact pre-edit selection, used to distinguish identical inserted rows. */
+  editRange?: TextEditRange
 }>
 
 /**
@@ -173,6 +182,7 @@ type PendingCreate = {
  * @param previousText - Text whose line index the completion currently stores.
  * @param nextText - Text after the user or completion flow edits the textarea.
  * @param lineIndex - Previously tracked zero-based line index.
+ * @param editRange - Exact replaced range when the change came from textarea input.
  * @returns The shifted index, or null when the tracked row itself changed.
  * @example
  * remapTrackedLineIndex('header\n- [x] task', 'new\nheader\n- [x] task', 1) // => 2
@@ -181,11 +191,55 @@ function remapTrackedLineIndex(
   previousText: string,
   nextText: string,
   lineIndex: BrainDumpLineIndex,
+  editRange?: TextEditRange,
 ): BrainDumpLineIndex | null {
   if (previousText === nextText) return lineIndex
 
   const previousLines = previousText.split('\n')
   const nextLines = nextText.split('\n')
+  if (
+    editRange &&
+    editRange.start >= 0 &&
+    editRange.start <= editRange.end &&
+    editRange.end <= previousText.length
+  ) {
+    const replacedLength = editRange.end - editRange.start
+    const insertedLength =
+      nextText.length - (previousText.length - replacedLength)
+    const insertedEnd = editRange.start + insertedLength
+    const editMatchesText =
+      insertedLength >= 0 &&
+      previousText.slice(0, editRange.start) ===
+        nextText.slice(0, editRange.start) &&
+      previousText.slice(editRange.end) === nextText.slice(insertedEnd)
+    if (editMatchesText) {
+      const insertedText = nextText.slice(editRange.start, insertedEnd)
+      const removedText = previousText.slice(editRange.start, editRange.end)
+      const newlineDelta =
+        insertedText.split('\n').length - removedText.split('\n').length
+      const rowStart = lineStartOffset(previousText, lineIndex)
+      const rowEnd = rowStart + (previousLines[lineIndex]?.length ?? 0)
+
+      // A splice wholly before this row shifts it by exactly the newline delta.
+      if (editRange.end < rowStart) return lineIndex + newlineDelta
+      if (editRange.end === rowStart) {
+        const keepsRowBoundary =
+          insertedText.length === 0 || insertedText.endsWith('\n')
+        return keepsRowBoundary ? lineIndex + newlineDelta : null
+      }
+
+      // A splice wholly after this row cannot change its line identity.
+      if (editRange.start > rowEnd) return lineIndex
+      if (editRange.start === rowEnd) {
+        return insertedText.startsWith('\n') ? lineIndex : null
+      }
+
+      // Editing through the tracked row is ambiguous, so callers drop its identity.
+      return null
+    }
+  }
+
+  // Internal changes have no DOM selection; retain the conservative content fallback.
   let unchangedPrefixLength = 0
   while (
     unchangedPrefixLength < previousLines.length &&
@@ -216,6 +270,7 @@ function remapTrackedLineIndex(
  * @param entries - Pending or recorded completion memory keyed by current line index.
  * @param previousText - Text before the edit.
  * @param nextText - Text after the edit.
+ * @param editRange - Exact textarea splice when available.
  * @returns Nothing; mutates the ref-owned map and each surviving entry's index.
  * @example
  * reindexTrackedCompletionMap(entries, 'a\n- [x] task', 'new\na\n- [x] task')
@@ -226,6 +281,7 @@ function reindexTrackedCompletionMap<
   entries: Map<BrainDumpLineIndex, T>,
   previousText: string,
   nextText: string,
+  editRange?: TextEditRange,
 ): void {
   if (entries.size === 0 || previousText === nextText) return
   const reindexedEntries = new Map<BrainDumpLineIndex, T>()
@@ -234,6 +290,7 @@ function reindexTrackedCompletionMap<
       previousText,
       nextText,
       lineIndex,
+      editRange,
     )
     // Editing the tracked row ends its identity; unchanged rows keep following shifts.
     if (nextLineIndex === null) continue
@@ -444,11 +501,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const clearedLinesRef = useRef<Map<number, ClearedLineMemory>>(new Map())
   // Monotonic token source for clearedLinesRef keys (never reused → no collision).
   const nextTokenRef = useRef<number>(0)
-  // Deferred-clear timers still pending (token → entry). SEPARATE from
-  // clearedLinesRef, which the create-success path empties eagerly — this map
-  // must outlive that so a firing timer can (a) be cancelled in bulk on a
-  // category swap / unmount and (b) follow row shifts through setNoteDraft while
-  // several completions linger together.
+  // Deferred-clear timers still pending (token → entry). This separate map lets
+  // category swaps/unmount cancel timers in bulk while clearedLinesRef keeps the
+  // same entries available for row re-indexing until each Undo toast expires.
   const pendingClearTimersRef = useRef<Map<number, ClearedLineMemory>>(
     new Map(),
   )
@@ -461,6 +516,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const activeCategoryIdRef = useRef<Category['id'] | null>(activeCategoryId)
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
   const noteTextRef = useRef<string>('')
+  // Captured before browser input so identical inserted rows still have an unambiguous splice.
+  const pendingTextareaEditRef = useRef<TextEditRange | null>(null)
   // Category owning noteTextRef; prevents a category load from re-indexing old completion memory.
   const noteTextCategoryRef = useRef<Category['id'] | null>(null)
   // Synchronous guard because state-driven disabled UI applies after render.
@@ -498,8 +555,18 @@ export const BrainDumpEditor = function BrainDumpEditor({
     const previousText = noteTextRef.current
     // Only edits within one category may move its tracked rows; a category load is unrelated text.
     if (noteTextCategoryRef.current === categoryId) {
-      reindexTrackedCompletionMap(pendingCreatesRef.current, previousText, text)
-      reindexTrackedCompletionMap(checkedRowsRef.current, previousText, text)
+      reindexTrackedCompletionMap(
+        pendingCreatesRef.current,
+        previousText,
+        text,
+        options.editRange,
+      )
+      reindexTrackedCompletionMap(
+        checkedRowsRef.current,
+        previousText,
+        text,
+        options.editRange,
+      )
       // Token-keyed clear entries share objects across both maps, so update each only once.
       const trackedClearEntries = new Set([
         ...clearedLinesRef.current.values(),
@@ -510,6 +577,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           previousText,
           text,
           entry.originalLineIndex,
+          options.editRange,
         )
         // Never drop clear memory: its reinsertText may be the row's only copy.
         // If that row changed, its last index is a safer best-effort Undo position than losing it.
@@ -1489,14 +1557,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
       .then(
         (created): Completed['id'] | null => {
           entry.completedId = created.id
-          // The row is now persisted, so drop the map entry eagerly instead of
-          // waiting for onAutoClose. Sonner PAUSES the close timer while the
-          // window is hidden, and BrainDump windows are hidden (not destroyed)
-          // between toggles — so onAutoClose can be deferred indefinitely, which
-          // would leak this entry across a long session. Undo still works after
-          // this delete: undoClearedCompletion holds `entry` via closure, not
-          // via the map (the map only serves the category-swap bulk-clear).
-          clearedLinesRef.current.delete(token)
+          // Keep this entry while Undo remains actionable: later note edits must
+          // continue shifting its restore position even after persistence wins.
+          // Toast close/Undo/category cleanup owns the eventual map deletion.
           // Skip the sibling-view sync when the user already undid — the row is
           // about to be deleted by undoClearedCompletion's awaited delete.
           if (entry.outcome !== 'undone') void syncCompletedAcrossViews()
@@ -1640,7 +1703,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * deliberate UX; pointer-clicks would require a second editor mode.
    */
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
+    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
+      // Keyboard edits expose their pre-change selection here; beforeinput covers paste/IME.
+      pendingTextareaEditRef.current = {
+        start: event.currentTarget.selectionStart,
+        end: event.currentTarget.selectionEnd,
+      }
+      return
+    }
+    pendingTextareaEditRef.current = null
     // Skip while IME is composing — never hijack a CJK confirmation Enter.
     if (event.nativeEvent.isComposing) return
     const textarea = textareaRef.current
@@ -1828,7 +1899,16 @@ export const BrainDumpEditor = function BrainDumpEditor({
         ref={textareaRef}
         id={noteInputId}
         value={noteText}
+        onBeforeInput={(event) => {
+          // Capture the browser's exact splice before duplicate text makes content diff ambiguous.
+          pendingTextareaEditRef.current = {
+            start: event.currentTarget.selectionStart,
+            end: event.currentTarget.selectionEnd,
+          }
+        }}
         onChange={(event) => {
+          const editRange = pendingTextareaEditRef.current ?? undefined
+          pendingTextareaEditRef.current = null
           // A direct edit after a load failure is intentional new content, so it
           // can be saved even though no prior disk value was loaded.
           noteWritableCategoryRef.current = activeCategoryId
@@ -1836,6 +1916,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           setNoteDraft(event.target.value, {
             categoryId: activeCategoryId,
             dirty: true,
+            editRange,
           })
         }}
         onKeyDown={handleKeyDown}
