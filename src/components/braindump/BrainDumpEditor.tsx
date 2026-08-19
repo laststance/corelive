@@ -192,7 +192,7 @@ function findCheckedLineIndexByTitle(
  * @param text - Note text to repair.
  * @param lineIndex - Original/fallback line index for the optimistic completion.
  * @param title - Normalised completion title used to re-find a drifted checked row.
- * @param rollbackPlainText - Original prose for plain-line completions; omitted for checkbox rows.
+ * @param rollbackLineText - Verbatim source row for plain or pre-checked completions; omitted for unchecked rows.
  * @returns Text with the optimistic `[x]` row reverted, or the input when no safe target exists.
  * @example
  * rollbackPromotedLineText('- [x] buy milk', 0, 'buy milk') // => '- [ ] buy milk'
@@ -201,14 +201,14 @@ function rollbackPromotedLineText(
   text: string,
   lineIndex: BrainDumpLineIndex,
   title: BrainDumpCompletedTitle,
-  rollbackPlainText?: BrainDumpCompletedTitle,
+  rollbackLineText?: string,
 ): string {
   const resolvedLine = findCheckedLineIndexByTitle(text, title)
   const currentLine = resolvedLine ?? lineIndex
-  // Plain-line rollback is safe only when we can positively find the optimistic row.
-  if (rollbackPlainText !== undefined) {
+  // Verbatim rollback is safe only when we can positively find the optimistic row.
+  if (rollbackLineText !== undefined) {
     if (resolvedLine === null) return text
-    return replaceLineAtIndex(text, resolvedLine, rollbackPlainText)
+    return replaceLineAtIndex(text, resolvedLine, rollbackLineText)
   }
   return setCheckboxStateAtLine(text, currentLine, false)
 }
@@ -459,7 +459,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * @param categoryId - Category that owned the optimistic completion.
    * @param lineIndex - Original/fallback line index for the completed row.
    * @param title - Normalised completion title.
-   * @param rollbackPlainText - Original plain text when the source row was prose.
+   * @param rollbackLineText - Verbatim source row when failure must preserve its checked state or prose shape.
    * @returns Promise that settles after visible or stored note restoration.
    * @example
    * await restoreFailedPromotionToCategory(1, 0, 'buy milk')
@@ -468,10 +468,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
     categoryId: Category['id'],
     lineIndex: BrainDumpLineIndex,
     title: BrainDumpCompletedTitle,
-    rollbackPlainText?: BrainDumpCompletedTitle,
+    rollbackLineText?: string,
   ): Promise<void> => {
     const restoreText = (text: string) =>
-      rollbackPromotedLineText(text, lineIndex, title, rollbackPlainText)
+      rollbackPromotedLineText(text, lineIndex, title, rollbackLineText)
 
     if (activeCategoryIdRef.current === categoryId) {
       setNoteDraft(restoreText(noteTextRef.current), {
@@ -871,21 +871,21 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * both checkbox lines and — via `markPlainLineCompleted` — plain prose lines.
    *
    * Failure mode: when the create rejects, we roll the textarea back, drift-aware
-   * via `noteTextRef` so the user's concurrent edits survive. A checkbox line
-   * reverts to `[ ]`; a plain line (when `rollbackPlainText` is supplied) is
-   * restored to its original prose instead of being left as a `- [ ] <title>`
-   * skeleton the user never typed.
+   * via `noteTextRef` so the user's concurrent edits survive. An unchecked
+   * checkbox reverts to `[ ]`; a source row (when `rollbackLineText` is supplied)
+   * is restored verbatim instead of being left as a generated
+   * `- [ ] <title>` skeleton the user never typed.
    *
    * @param lineIndex - Zero-based index of the line being completed.
    * @param title - Title to persist (uncapped; normalised for the DB here).
-   * @param rollbackPlainText - When set, the plain prose to restore on failure
-   *   (plain-line completions); omit for checkbox lines so they revert to `[ ]`.
+   * @param rollbackLineText - When set, the verbatim source row to restore on
+   *   failure; omit for unchecked checkbox lines so they revert to `[ ]`.
    * @returns Promise<void>; the created row id is tracked internally for undo.
    */
   const promoteLineToCompleted = async (
     lineIndex: BrainDumpLineIndex,
     title: BrainDumpCompletedTitle,
-    rollbackPlainText?: BrainDumpCompletedTitle,
+    rollbackLineText?: string,
   ) => {
     if (activeCategoryId === null) {
       toast.error('Pick a category before checking items')
@@ -912,7 +912,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             categoryId,
             lineIndex,
             safeTitle,
-            rollbackPlainText,
+            rollbackLineText,
           )
           return null
         },
@@ -1476,9 +1476,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   /**
-   * Complete the line nearest the caret: toggle an existing `- [ ]`/`- [x]`
-   * checkbox, or finish a plain prose line by wrapping it as `- [x]` and
-   * promoting it (so users don't have to pre-type `- [ ]` to log a win).
+   * Complete the line nearest the caret: finish an existing `- [ ]`/`- [x]`
+   * checkbox, or wrap a plain prose line as `- [x]` before promoting it (so
+   * users don't have to pre-type `- [ ]` to log a win).
    * Triggered by Cmd/Ctrl+Enter inside the textarea — the keyboard path is the
    * deliberate UX; pointer-clicks would require a second editor mode.
    */
@@ -1498,16 +1498,17 @@ export const BrainDumpEditor = function BrainDumpEditor({
     if (line === undefined) return
     const parsed = parseCheckboxLine(line, lineIndex)
 
-    // Clear-on-complete ON + a COMPLETION (a plain line, or ticking an unchecked
-    // box) → show `[x]`, then tuck the line away and show the optimistic Undo toast.
-    // Un-ticking an existing `[x]` line (parsed.checked === true) and the OFF
-    // setting both fall through to the legacy keep-the-`[x]` path below.
-    if (clearOnComplete && parsed?.checked !== true) {
+    // Clear-on-complete treats plain, unchecked, and manually checked rows alike:
+    // record the win, show `[x]`, then tuck the source row away with Undo available.
+    if (clearOnComplete) {
       let completionTitle: BrainDumpCompletedTitle
       let completedText: string
       if (parsed) {
         completionTitle = parsed.title
-        completedText = setCheckboxStateAtLine(text, lineIndex, true)
+        // Preserve a manually checked row verbatim; only unchecked rows need rewriting.
+        completedText = parsed.checked
+          ? text
+          : setCheckboxStateAtLine(text, lineIndex, true)
       } else {
         // Plain prose line: wrap as `[x]` first so the eye sees the completion.
         const promoted = markPlainLineCompleted(text, lineIndex)
@@ -1530,69 +1531,21 @@ export const BrainDumpEditor = function BrainDumpEditor({
       setNoteDraft(promoted.text, { dirty: true })
       // Pass the plain prose as rollback text so a failed create restores the
       // original line instead of leaving the optimistic `- [x]` skeleton.
-      void promoteLineToCompleted(lineIndex, promoted.title, promoted.title)
+      void promoteLineToCompleted(lineIndex, promoted.title, line)
       return
     }
 
-    const categoryId = activeCategoryIdRef.current
-    if (categoryId === null) return
-    const nextChecked = !parsed.checked
-    const nextText = setCheckboxStateAtLine(text, lineIndex, nextChecked)
-    setNoteDraft(nextText, { dirty: true })
-
-    if (nextChecked) {
-      void promoteLineToCompleted(lineIndex, parsed.title)
-    } else {
-      // Look up the ref entry — first by current lineIndex, then by
-      // matching title (the lineIndex key may have drifted since the
-      // toggle if the user inserted/removed lines above it).
-      let memory = checkedRowsRef.current.get(lineIndex)
-      if (!memory) {
-        for (const value of checkedRowsRef.current.values()) {
-          if (value.title === parsed.title) {
-            memory = value
-            break
-          }
-        }
-      }
-      if (memory) {
-        void undoCompleted(
-          memory.title,
-          memory.completedId,
-          nextText,
-          lineIndex,
-          categoryId,
-        )
-        return
-      }
-      // No memory yet → the create is probably still in flight. Await it
-      // before issuing delete so the row is never orphaned in the DB.
-      // Cosmetic wart: the success toast from `promoteLineToCompleted`
-      // will still flash for an item the user already unchecked. The DB
-      // stays consistent because the awaited delete runs right after.
-      let pending = pendingCreatesRef.current.get(lineIndex)
-      if (!pending) {
-        for (const value of pendingCreatesRef.current.values()) {
-          if (value.title === parsed.title) {
-            pending = value
-            break
-          }
-        }
-      }
-      if (pending) {
-        const pendingTitle = pending.title
-        void pending.promise.then((completedId) => {
-          if (completedId === null) return
-          void undoCompleted(
-            pendingTitle,
-            completedId,
-            noteTextRef.current,
-            lineIndex,
-            categoryId,
-          )
-        })
-      }
+    if (activeCategoryIdRef.current === null) return
+    if (!parsed.checked) {
+      const completedText = setCheckboxStateAtLine(text, lineIndex, true)
+      setNoteDraft(completedText, { dirty: true })
     }
+    // A pre-checked row is still a completion command, not an uncheck command.
+    void promoteLineToCompleted(
+      lineIndex,
+      parsed.title,
+      parsed.checked ? line : undefined,
+    )
   }
 
   const closeWindow = () => {

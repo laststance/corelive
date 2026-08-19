@@ -793,6 +793,57 @@ describe('BrainDumpEditor complete command', () => {
     })
   })
 
+  it('completes an already checked checkbox line instead of unchecking it on Cmd+Enter', async () => {
+    // Arrange — a user manually checked the task before invoking the complete command.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+
+    // Act — complete the line while its markdown checkbox is already checked.
+    fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
+
+    // Assert — the win is recorded and the user's checked marker stays intact.
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'FooTask',
+    })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] FooTask')
+    })
+  })
+
+  it('keeps an already checked checkbox line checked when completion recording fails', async () => {
+    // Arrange — a manually checked task whose Completed create will fail.
+    completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+
+    // Act — try to record the already checked task as Completed.
+    fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
+
+    // Assert — failure does not erase the check the user added manually.
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] FooTask')
+    })
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'FooTask',
+    })
+  })
+
   it('toggles the nested checkbox line at the caret into a Completed row on Cmd+Enter', async () => {
     // Arrange — a parent task with one indented child checkbox under it.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -951,6 +1002,31 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
 
     // Assert: the user sees the box tick before the async clear tucks it away.
     expect(noteField).toHaveValue('- [x] buy milk')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+  })
+
+  it('records and clears an already checked checkbox line when instant clear is enabled', async () => {
+    // Arrange — clear-on-complete is enabled after the user checked the task manually.
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+
+    // Act — complete the line without first removing its existing check.
+    fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
+
+    // Assert — the win is recorded and the configured clear removes the source line.
+    expect(completedMutateAsync).toHaveBeenCalledWith({
+      categoryId: 1,
+      title: 'FooTask',
+    })
     await waitFor(() => {
       expect(noteField).toHaveValue('')
     })
