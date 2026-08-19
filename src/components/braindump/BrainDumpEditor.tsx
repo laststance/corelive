@@ -1510,14 +1510,51 @@ export const BrainDumpEditor = function BrainDumpEditor({
     if (entry.restorePromise) return entry.restorePromise
     entry.restorePromise = (async () => {
       try {
-        return entry.lineCleared
+        const restored = entry.lineCleared
           ? await restoreClearedLineToCategory(entry, moveCaret)
           : await restoreLingeringCompletedLine(entry, moveCaret)
-      } finally {
         entry.restorePromise = null
+        return restored
+      } catch (error) {
+        entry.restorePromise = null
+        throw error
       }
     })()
     return entry.restorePromise
+  }
+
+  /**
+   * Retries a failed create's cleared-line restore until the origin note is safe again.
+   * @param entry - Clear completion retaining the only copy of the removed row.
+   * @param message - Original create failure shown with the Retry action.
+   * @returns Whether restoration succeeded or concurrent Undo took ownership.
+   * @example
+   * await retryFailedClearedCompletionRestore(entry, 'network down')
+   */
+  const retryFailedClearedCompletionRestore = async (
+    entry: ClearedLineMemory,
+    message: string,
+  ): Promise<boolean> => {
+    const restored = await restoreClearedCompletionLine(entry, false)
+    // Undo may join the same IPC attempt and owns its own terminal cleanup.
+    if (isClearedLineUndone(entry)) return true
+    if (!restored) {
+      clearedLinesRef.current.set(entry.token, entry)
+      toast.error(message, {
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            void retryFailedClearedCompletionRestore(entry, message)
+          },
+        },
+      })
+      return false
+    }
+    entry.outcome = 'restored'
+    clearedLinesRef.current.delete(entry.token)
+    if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
+    toast.error(message)
+    return true
   }
 
   /**
@@ -1725,30 +1762,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
           // move: a background failure must not yank a user typing elsewhere. If
           // the line is STILL on screen (linger not yet elapsed, timer just
           // cancelled above), there is nothing to restore — leave it.
-          const restored = await restoreClearedCompletionLine(entry, false)
-          // Undo may have joined the same restore while IPC was pending; it now owns cleanup.
-          if (isClearedLineUndone(entry)) return null
-          if (!restored) {
-            // Keep the original Undo closure retryable when the note write fails.
-            clearedLinesRef.current.set(token, entry)
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : 'Failed to record completion',
-            )
-            return null
-          }
-          // Terminal NOW: a late Undo — the toast stays clickable through sonner's
-          // dismiss exit-animation — must not restore a SECOND copy (undo
-          // early-returns on 'restored'). Set before dismissing the toast.
-          entry.outcome = 'restored'
-          clearedLinesRef.current.delete(token)
-          if (entry.toastId !== undefined) toast.dismiss(entry.toastId)
-          toast.error(
+          const message =
             error instanceof Error
               ? error.message
-              : 'Failed to record completion',
-          )
+              : 'Failed to record completion'
+          await retryFailedClearedCompletionRestore(entry, message)
           return null
         },
       )
@@ -1826,7 +1844,14 @@ export const BrainDumpEditor = function BrainDumpEditor({
       // Roll back the terminal marker so the same Undo action can retry safely.
       entry.outcome = outcomeBeforeUndo
       clearedLinesRef.current.set(entry.token, entry)
-      toast.error('Failed to restore BrainDump line')
+      toast.error('Failed to restore BrainDump line', {
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            void undoClearedCompletion(entry, createPromise)
+          },
+        },
+      })
       return
     }
     clearedLinesRef.current.delete(entry.token)
