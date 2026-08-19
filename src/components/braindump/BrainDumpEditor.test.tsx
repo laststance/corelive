@@ -1304,6 +1304,58 @@ describe('BrainDumpEditor complete command', () => {
     expect(noteField).toHaveValue('- [ ] buy milk')
   })
 
+  it('records a pre-checked row only once after switching categories and back', async () => {
+    // Arrange — category 1 always reloads the same checked row; category 2 is empty.
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async (id: number) =>
+      id === 1 ? '- [x] buy milk' : '',
+    )
+    const store = configureStore({
+      reducer: { settings: userSettingsReducer },
+      preloadedState: { settings: userSettingsInitialState },
+    })
+    const [generalCategory] = categories
+    if (!generalCategory)
+      throw new Error('expected the seeded General category')
+    const twoCategories: CategoryWithCount[] = [
+      generalCategory,
+      { ...generalCategory, id: 2, name: 'Work', isDefault: false },
+    ]
+    const tree = (): ReactElement => (
+      <Provider store={store}>
+        <BrainDumpEditor categories={twoCategories} />
+      </Provider>
+    )
+    const { rerender } = render(tree())
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
+    await waitFor(() => {
+      expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+    })
+
+    // Act — leave category 1, return to its unchanged checked row, and repeat the command.
+    selectedCategoryRef.current = 2
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    selectedCategoryRef.current = 1
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk')
+    })
+    fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
+
+    // Assert — category reload preserved the original completion identity.
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+  })
+
   it('does nothing when the caret line is blank', async () => {
     // Arrange — an editor whose caret line is whitespace only.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -2481,6 +2533,72 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // edited line is preserved (the timer never blind-removes the wrong line).
     await new Promise((resolve) => setTimeout(resolve, LINGER_MS + 50))
     expect(noteField).toHaveValue('buy oat milk\nkeep me')
+  })
+
+  it('keeps a cancelled delayed-clear completion deduplicated after returning to its category', async () => {
+    // Arrange — keep create pending while category 1's checked row moves off-screen.
+    let resolveCreate: (value: { id: number }) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((resolve) => {
+      resolveCreate = resolve
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async (id: number) =>
+      id === 1 ? '- [x] buy milk' : '',
+    )
+    const store = configureStore({
+      reducer: { settings: userSettingsReducer },
+      preloadedState: {
+        settings: {
+          ...userSettingsInitialState,
+          braindumpClearOnComplete: true,
+          braindumpClearDelayMs: LINGER_MS,
+        },
+      },
+    })
+    const [generalCategory] = categories
+    if (!generalCategory)
+      throw new Error('expected the seeded General category')
+    const twoCategories: CategoryWithCount[] = [
+      generalCategory,
+      { ...generalCategory, id: 2, name: 'Work', isDefault: false },
+    ]
+    const tree = (): ReactElement => (
+      <Provider store={store}>
+        <BrainDumpEditor categories={twoCategories} />
+      </Provider>
+    )
+    const { rerender } = render(tree())
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
+    selectedCategoryRef.current = 2
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    selectedCategoryRef.current = 1
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('- [x] buy milk')
+    })
+
+    // Act — retry before and after the original create resolves.
+    fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
+    await act(async () => {
+      resolveCreate({ id: 1 })
+      await pendingCreate
+    })
+    fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
+
+    // Assert — both pending and persisted category-scoped memory block duplicates.
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+    expect(noteField).toHaveValue('- [x] buy milk')
   })
 
   it('cancels a pending removal on a category switch, never touching the switched-to category', async () => {
