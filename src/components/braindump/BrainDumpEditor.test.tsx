@@ -854,6 +854,41 @@ describe('BrainDumpEditor complete command', () => {
     expect(completedMutateAsync).toHaveBeenCalledTimes(1)
   })
 
+  it('records a checked task only once after earlier lines shift it during creation', async () => {
+    // Arrange — keep the create pending while an edit above moves the tracked task.
+    let resolveCreate!: (value: { id: number }) => void
+    const pendingCreate = new Promise<{ id: number }>((resolve) => {
+      resolveCreate = resolve
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const originalText = 'header\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: originalText } })
+    noteField.selectionStart = originalText.length
+    noteField.selectionEnd = originalText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Act — insert two earlier lines, then repeat completion on the shifted task.
+    const shiftedText = 'urgent\nheader\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: shiftedText } })
+    noteField.selectionStart = shiftedText.length
+    noteField.selectionEnd = shiftedText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Assert — the in-flight task identity follows its row instead of creating again.
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      resolveCreate({ id: 1 })
+      await pendingCreate
+    })
+  })
+
   it('keeps an already checked checkbox line checked when completion recording fails', async () => {
     // Arrange — a manually checked task whose Completed create will fail.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
@@ -966,6 +1001,35 @@ describe('BrainDumpEditor complete command', () => {
     expect(noteField).toHaveValue('urgent\n- [x] buy milk and eggs')
   })
 
+  it('restores the exact failed row when an earlier checked row has the same title', async () => {
+    // Arrange — hold a plain second row's create while an identical checked title sits above it.
+    let rejectCreate!: (reason: Error) => void
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const originalText = '- [x] FooTask\nFooTask'
+    fireEvent.change(noteField, { target: { value: originalText } })
+    noteField.selectionStart = originalText.length
+    noteField.selectionEnd = originalText.length
+
+    // Act — promote the second row, then reject its background create.
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+    })
+
+    // Assert — the first checked sibling is untouched and only the second row rolls back.
+    expect(noteField).toHaveValue('- [x] FooTask\nFooTask')
+  })
+
   it('does nothing when the caret line is blank', async () => {
     // Arrange — an editor whose caret line is whitespace only.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -1065,6 +1129,47 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     })
     await waitFor(() => {
       expect(noteField).toHaveValue('')
+    })
+  })
+
+  it('records a shifted lingering row only once across repeated Cmd+Enter commands', async () => {
+    // Arrange — keep the create pending while clear-on-complete leaves the checked row visible.
+    let resolveCreate!: (value: { id: number }) => void
+    const pendingCreate = new Promise<{ id: number }>((resolve) => {
+      resolveCreate = resolve
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    renderEditor({
+      braindumpClearOnComplete: true,
+      braindumpClearDelayMs: 500,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    const originalText = 'header\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: originalText } })
+    noteField.selectionStart = originalText.length
+    noteField.selectionEnd = originalText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Act — insert a line above, then repeat completion before the linger removes the task.
+    const shiftedText = 'urgent\nheader\n- [x] FooTask'
+    fireEvent.change(noteField, { target: { value: shiftedText } })
+    noteField.selectionStart = shiftedText.length
+    noteField.selectionEnd = shiftedText.length
+    fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
+
+    // Assert — both clear modes share one per-row completion guard.
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      resolveCreate({ id: 1 })
+      await pendingCreate
+    })
+    await waitFor(() => {
+      expect(noteField).toHaveValue('urgent\nheader')
     })
   })
 

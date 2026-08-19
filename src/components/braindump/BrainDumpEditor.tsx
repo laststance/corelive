@@ -78,12 +78,14 @@ const categoryChangedPayloadSchema = z.object({
   categoryId: z.number().int(),
 })
 
-type CheckedRowMemory = Readonly<{
+type CheckedRowMemory = {
+  /** Current line index, re-indexed whenever edits shift unchanged rows. */
+  lineIndex: BrainDumpLineIndex
   /** Server-side Completed.id used by undo to call `completed.delete`. */
   completedId: Completed['id']
   /** Verbatim title used to detect double-toggles on the same line. */
   title: BrainDumpCompletedTitle
-}>
+}
 
 type NoteDraftUpdateOptions = Readonly<{
   /** Category this draft belongs to; defaults to the active category ref. */
@@ -157,10 +159,92 @@ type ClearedLineMemory = {
  * even after lines drift. We await it before any delete so the row is never
  * orphaned in the DB.
  */
-type PendingCreate = Readonly<{
+type PendingCreate = {
+  /** Current line index, re-indexed whenever edits shift the optimistic row. */
+  lineIndex: BrainDumpLineIndex
+  /** Exact checked row used to reject unsafe rollback targets. */
+  completedLineText: string
   promise: Promise<Completed['id'] | null>
   title: BrainDumpCompletedTitle
-}>
+}
+
+/**
+ * Re-indexes an unchanged row across one contiguous textarea edit. Called before draft refs update.
+ * @param previousText - Text whose line index the completion currently stores.
+ * @param nextText - Text after the user or completion flow edits the textarea.
+ * @param lineIndex - Previously tracked zero-based line index.
+ * @returns The shifted index, or null when the tracked row itself changed.
+ * @example
+ * remapTrackedLineIndex('header\n- [x] task', 'new\nheader\n- [x] task', 1) // => 2
+ */
+function remapTrackedLineIndex(
+  previousText: string,
+  nextText: string,
+  lineIndex: BrainDumpLineIndex,
+): BrainDumpLineIndex | null {
+  if (previousText === nextText) return lineIndex
+
+  const previousLines = previousText.split('\n')
+  const nextLines = nextText.split('\n')
+  let unchangedPrefixLength = 0
+  while (
+    unchangedPrefixLength < previousLines.length &&
+    unchangedPrefixLength < nextLines.length &&
+    previousLines[unchangedPrefixLength] === nextLines[unchangedPrefixLength]
+  ) {
+    unchangedPrefixLength += 1
+  }
+
+  let unchangedSuffixLength = 0
+  while (
+    unchangedSuffixLength < previousLines.length - unchangedPrefixLength &&
+    unchangedSuffixLength < nextLines.length - unchangedPrefixLength &&
+    previousLines[previousLines.length - 1 - unchangedSuffixLength] ===
+      nextLines[nextLines.length - 1 - unchangedSuffixLength]
+  ) {
+    unchangedSuffixLength += 1
+  }
+
+  if (lineIndex < unchangedPrefixLength) return lineIndex
+  const previousSuffixStart = previousLines.length - unchangedSuffixLength
+  if (lineIndex < previousSuffixStart) return null
+  return lineIndex + nextLines.length - previousLines.length
+}
+
+/**
+ * Keeps line-index keyed completion memory aligned after rows above it move. Called by setNoteDraft.
+ * @param entries - Pending or recorded completion memory keyed by current line index.
+ * @param previousText - Text before the edit.
+ * @param nextText - Text after the edit.
+ * @returns Nothing; mutates the ref-owned map and each surviving entry's index.
+ * @example
+ * reindexTrackedCompletionMap(entries, 'a\n- [x] task', 'new\na\n- [x] task')
+ */
+function reindexTrackedCompletionMap<
+  T extends { lineIndex: BrainDumpLineIndex },
+>(
+  entries: Map<BrainDumpLineIndex, T>,
+  previousText: string,
+  nextText: string,
+): void {
+  if (entries.size === 0 || previousText === nextText) return
+  const reindexedEntries = new Map<BrainDumpLineIndex, T>()
+  for (const [lineIndex, entry] of entries) {
+    const nextLineIndex = remapTrackedLineIndex(
+      previousText,
+      nextText,
+      lineIndex,
+    )
+    // Editing the tracked row ends its identity; unchanged rows keep following shifts.
+    if (nextLineIndex === null) continue
+    entry.lineIndex = nextLineIndex
+    reindexedEntries.set(nextLineIndex, entry)
+  }
+  entries.clear()
+  for (const [lineIndex, entry] of reindexedEntries) {
+    entries.set(lineIndex, entry)
+  }
+}
 
 /**
  * Find the first `[x]` line in the given text whose title matches.
@@ -191,26 +275,25 @@ function findCheckedLineIndexByTitle(
  * Rebuilds a failed optimistic completion in the note it came from. Called by create rollback paths.
  * @param text - Note text to repair.
  * @param lineIndex - Original/fallback line index for the optimistic completion.
- * @param title - Normalised completion title used to re-find a drifted checked row.
+ * @param completedLineText - Exact optimistic checked row used as the identity guard.
  * @param rollbackLineText - Verbatim source row for plain or pre-checked completions; omitted for unchecked rows.
  * @returns Text with the optimistic `[x]` row reverted, or the input when no safe target exists.
  * @example
- * rollbackPromotedLineText('- [x] buy milk', 0, 'buy milk') // => '- [ ] buy milk'
+ * rollbackPromotedLineText('- [x] buy milk', 0, '- [x] buy milk') // => '- [ ] buy milk'
  */
 function rollbackPromotedLineText(
   text: string,
   lineIndex: BrainDumpLineIndex,
-  title: BrainDumpCompletedTitle,
+  completedLineText: string,
   rollbackLineText?: string,
 ): string {
-  const resolvedLine = findCheckedLineIndexByTitle(text, title)
-  const currentLine = resolvedLine ?? lineIndex
-  // Verbatim rollback is safe only when we can positively find the optimistic row.
+  const currentLine = text.split('\n')[lineIndex]
+  // Exact text plus the re-indexed position prevents duplicate titles from targeting a sibling row.
+  if (currentLine !== completedLineText) return text
   if (rollbackLineText !== undefined) {
-    if (resolvedLine === null) return text
-    return replaceLineAtIndex(text, resolvedLine, rollbackLineText)
+    return replaceLineAtIndex(text, lineIndex, rollbackLineText)
   }
-  return setCheckboxStateAtLine(text, currentLine, false)
+  return setCheckboxStateAtLine(text, lineIndex, false)
 }
 
 /**
@@ -364,9 +447,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // Deferred-clear timers still pending (token → entry). SEPARATE from
   // clearedLinesRef, which the create-success path empties eagerly — this map
   // must outlive that so a firing timer can (a) be cancelled in bulk on a
-  // category swap / unmount and (b) re-index its still-pending siblings after it
-  // removes a line (a sequential top-to-bottom burst of completions all shift up
-  // by one, so each later entry's tracked index must follow — finding G).
+  // category swap / unmount and (b) follow row shifts through setNoteDraft while
+  // several completions linger together.
   const pendingClearTimersRef = useRef<Map<number, ClearedLineMemory>>(
     new Map(),
   )
@@ -379,6 +461,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const activeCategoryIdRef = useRef<Category['id'] | null>(activeCategoryId)
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
   const noteTextRef = useRef<string>('')
+  // Category owning noteTextRef; prevents a category load from re-indexing old completion memory.
+  const noteTextCategoryRef = useRef<Category['id'] | null>(null)
   // Synchronous guard because state-driven disabled UI applies after render.
   const isUpdatingSpacesTrackingRef = useRef<boolean>(false)
   // Last value persisted via `note.set` — guards against the load effect
@@ -411,6 +495,26 @@ export const BrainDumpEditor = function BrainDumpEditor({
     options: NoteDraftUpdateOptions,
   ): void => {
     const categoryId = options.categoryId ?? activeCategoryIdRef.current
+    const previousText = noteTextRef.current
+    // Only edits within one category may move its tracked rows; a category load is unrelated text.
+    if (noteTextCategoryRef.current === categoryId) {
+      reindexTrackedCompletionMap(pendingCreatesRef.current, previousText, text)
+      reindexTrackedCompletionMap(checkedRowsRef.current, previousText, text)
+      // Token-keyed clear entries share objects across both maps, so update each only once.
+      const trackedClearEntries = new Set([
+        ...clearedLinesRef.current.values(),
+        ...pendingClearTimersRef.current.values(),
+      ])
+      for (const entry of trackedClearEntries) {
+        const nextLineIndex = remapTrackedLineIndex(
+          previousText,
+          text,
+          entry.originalLineIndex,
+        )
+        if (nextLineIndex !== null) entry.originalLineIndex = nextLineIndex
+      }
+    }
+    noteTextCategoryRef.current = categoryId
     noteTextRef.current = text
     dirtyNoteRef.current =
       options.dirty && categoryId !== null
@@ -458,20 +562,25 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * Restores a failed keep-visible completion in its origin category. Called by create rollback handlers.
    * @param categoryId - Category that owned the optimistic completion.
    * @param lineIndex - Original/fallback line index for the completed row.
-   * @param title - Normalised completion title.
+   * @param completedLineText - Exact optimistic checked row used as the identity guard.
    * @param rollbackLineText - Verbatim source row when failure must preserve its checked state or prose shape.
    * @returns Promise that settles after visible or stored note restoration.
    * @example
-   * await restoreFailedPromotionToCategory(1, 0, 'buy milk')
+   * await restoreFailedPromotionToCategory(1, 0, '- [x] buy milk')
    */
   const restoreFailedPromotionToCategory = async (
     categoryId: Category['id'],
     lineIndex: BrainDumpLineIndex,
-    title: BrainDumpCompletedTitle,
+    completedLineText: string,
     rollbackLineText?: string,
   ): Promise<void> => {
     const restoreText = (text: string) =>
-      rollbackPromotedLineText(text, lineIndex, title, rollbackLineText)
+      rollbackPromotedLineText(
+        text,
+        lineIndex,
+        completedLineText,
+        rollbackLineText,
+      )
 
     if (activeCategoryIdRef.current === categoryId) {
       setNoteDraft(restoreText(noteTextRef.current), {
@@ -511,8 +620,20 @@ export const BrainDumpEditor = function BrainDumpEditor({
     sourceText?: string,
   ): Promise<BrainDumpLineIndex> => {
     const updateText = (text: string) => {
+      const fallbackLine = text.split('\n')[fallbackLineIndex]
+      const fallbackCheckbox =
+        fallbackLine === undefined
+          ? null
+          : parseCheckboxLine(fallbackLine, fallbackLineIndex)
+      // Prefer the re-indexed row when it still has this title; a global title search is ambiguous.
       const resolvedLineIndex =
-        findCheckedLineIndexByTitle(text, title) ?? fallbackLineIndex
+        fallbackCheckbox?.title === title
+          ? fallbackLineIndex
+          : findCheckedLineIndexByTitle(text, title)
+      // A renamed or removed task has no safe checkbox target, so leave the note untouched.
+      if (resolvedLineIndex === null) {
+        return { lineIndex: fallbackLineIndex, text }
+      }
       return {
         lineIndex: resolvedLineIndex,
         text: setCheckboxStateAtLine(text, resolvedLineIndex, checked),
@@ -893,6 +1014,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
     }
     const categoryId = activeCategoryId
     const safeTitle = normalizeCompletedTitle(title)
+    const completedLineText =
+      noteTextRef.current.split('\n')[lineIndex] ?? rollbackLineText ?? ''
     const pendingCompletion = pendingCreatesRef.current.get(lineIndex)
     const recordedCompletion = checkedRowsRef.current.get(lineIndex)
     // Repeated shortcuts for the same visible task must not create duplicate Completed rows.
@@ -902,12 +1025,14 @@ export const BrainDumpEditor = function BrainDumpEditor({
     ) {
       return
     }
-    const promise = createCompletedMutation
-      .mutateAsync({
-        categoryId,
-        title: safeTitle,
-      })
-      .then(
+    const createRequest = createCompletedMutation.mutateAsync({
+      categoryId,
+      title: safeTitle,
+    })
+    const pendingEntry: PendingCreate = {
+      lineIndex,
+      completedLineText,
+      promise: createRequest.then(
         (created) => created.id,
         (error) => {
           const message =
@@ -919,28 +1044,35 @@ export const BrainDumpEditor = function BrainDumpEditor({
           // writes category A's stored note instead of touching category B's draft.
           void restoreFailedPromotionToCategory(
             categoryId,
-            lineIndex,
-            safeTitle,
+            pendingEntry.lineIndex,
+            pendingEntry.completedLineText,
             rollbackLineText,
           )
           return null
         },
-      )
-    const pendingEntry: PendingCreate = { promise, title: safeTitle }
+      ),
+      title: safeTitle,
+    }
     pendingCreatesRef.current.set(lineIndex, pendingEntry)
 
-    const completedId = await promise
+    const completedId = await pendingEntry.promise
     // Drop the pending entry only if it's still the same one — a fresh
     // tick on the same line would have replaced it.
-    if (pendingCreatesRef.current.get(lineIndex) === pendingEntry) {
-      pendingCreatesRef.current.delete(lineIndex)
+    const completionStillTracked =
+      pendingCreatesRef.current.get(pendingEntry.lineIndex) === pendingEntry
+    if (completionStillTracked) {
+      pendingCreatesRef.current.delete(pendingEntry.lineIndex)
     }
     if (completedId === null) return
 
-    checkedRowsRef.current.set(lineIndex, {
-      completedId,
-      title: safeTitle,
-    })
+    // A category switch or edit of this task drops its identity; never attach memory to another row.
+    if (completionStillTracked) {
+      checkedRowsRef.current.set(pendingEntry.lineIndex, {
+        lineIndex: pendingEntry.lineIndex,
+        completedId,
+        title: safeTitle,
+      })
+    }
     await syncCompletedAcrossViews()
 
     showCompletionToast({
@@ -954,7 +1086,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           safeTitle,
           completedId,
           noteTextRef.current,
-          lineIndex,
+          pendingEntry.lineIndex,
           categoryId,
         )
       },
@@ -986,15 +1118,18 @@ export const BrainDumpEditor = function BrainDumpEditor({
             // Completed row (titles repeat by design — repetition is a feature).
             checkedRowsRef.current.delete(memoryKey)
 
-            // Re-resolve by title against the freshest text (the index may have
-            // drifted) and remove ONLY a line that is STILL checked: a manual
-            // uncheck leaves it `- [ ]`, which won't match, so this self-suppresses.
-            const lineToClear = findCheckedLineIndexByTitle(
-              noteTextRef.current,
-              safeTitle,
+            // The ref key follows row shifts; verify that exact row is still this checked task.
+            const currentLine = noteTextRef.current.split('\n')[memoryKey]
+            const currentCheckbox =
+              currentLine === undefined
+                ? null
+                : parseCheckboxLine(currentLine, memoryKey)
+            if (
+              !currentCheckbox?.checked ||
+              currentCheckbox.title !== safeTitle
             )
-            if (lineToClear === null) return
-            setNoteDraft(removeLineAtIndex(noteTextRef.current, lineToClear), {
+              return
+            setNoteDraft(removeLineAtIndex(noteTextRef.current, memoryKey), {
               dirty: true,
             })
           }
@@ -1022,9 +1157,6 @@ export const BrainDumpEditor = function BrainDumpEditor({
     fallbackLineIndex: BrainDumpLineIndex,
     categoryId: Category['id'],
   ) => {
-    const resolvedLineIndex =
-      findCheckedLineIndexByTitle(originalText, title) ?? fallbackLineIndex
-
     // Find the ref entry by completedId (key may have drifted).
     let memoryKey: BrainDumpLineIndex | null = null
     let memoryBeforeUndo: CheckedRowMemory | undefined
@@ -1035,6 +1167,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
         break
       }
     }
+    const resolvedLineIndex =
+      memoryKey ??
+      findCheckedLineIndexByTitle(originalText, title) ??
+      fallbackLineIndex
     if (memoryKey !== null) checkedRowsRef.current.delete(memoryKey)
     await setCompletedCheckboxStateInCategory(
       categoryId,
@@ -1061,6 +1197,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         true,
       )
       if (memoryBeforeUndo && activeCategoryIdRef.current === categoryId) {
+        memoryBeforeUndo.lineIndex = rollbackLineIndex
         checkedRowsRef.current.set(rollbackLineIndex, memoryBeforeUndo)
       }
     }
@@ -1201,11 +1338,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * instant it completes; when the timer fires we remove it — but ONLY if the
    * tracked index STILL holds the checked line (finding A: a user edit, or an
    * unaccounted shift, self-suppresses to a no-op, leaving the line). The caret
-   * is preserved across the removal (finding B). After removing, every
-   * still-pending sibling below shifts up by one, so we decrement their tracked
-   * index (finding G) — without this a top-to-bottom burst of completions within
-   * one linger would leave all but the first un-cleared. Category swap / unmount
-   * cancel every pending timer synchronously (the layout effect above).
+   * is preserved across the removal (finding B). setNoteDraft re-indexes every
+   * unchanged sibling after row edits or removals, so each pending timer follows
+   * its own line. Category swap / unmount cancel every pending timer synchronously.
    *
    * @param entry - The completion's undo memory; its `removalTimerId` is set here.
    * @returns void — the timer drives the removal; nothing to await.
@@ -1255,13 +1390,6 @@ export const BrainDumpEditor = function BrainDumpEditor({
       pendingCaretRef.current = nextCaret
       setNoteDraft(clearedText, { categoryId: entry.categoryId, dirty: true })
       entry.lineCleared = true
-      // Finding G: our removal shifted every later still-pending line up by one,
-      // so decrement their tracked index to keep their own finding-A guard matching.
-      for (const pendingEntry of pendingClearTimersRef.current.values()) {
-        if (pendingEntry.originalLineIndex > entry.originalLineIndex) {
-          pendingEntry.originalLineIndex -= 1
-        }
-      }
     }, effectiveClearDelayMs)
     entry.removalTimerId = removalTimerId
     pendingClearTimersRef.current.set(entry.token, entry)
@@ -1297,6 +1425,24 @@ export const BrainDumpEditor = function BrainDumpEditor({
     }
     const safeTitle = normalizeCompletedTitle(title)
     const categoryId = activeCategoryId
+    const completedLineText =
+      completedText.split('\n')[lineIndex] ?? originalLine
+    const trackedClearEntries = new Set([
+      ...clearedLinesRef.current.values(),
+      ...pendingClearTimersRef.current.values(),
+    ])
+    // Both clear maps share the same token entry, which follows row shifts during edits.
+    for (const trackedEntry of trackedClearEntries) {
+      if (
+        trackedEntry.categoryId === categoryId &&
+        trackedEntry.originalLineIndex === lineIndex &&
+        trackedEntry.completedLineText === completedLineText &&
+        trackedEntry.outcome !== 'undone' &&
+        trackedEntry.outcome !== 'restored'
+      ) {
+        return
+      }
+    }
 
     // 1) Per-completion record (token-keyed; see ClearedLineMemory). Created
     //    BEFORE the removal so the deferred-clear timer can close over it.
@@ -1308,7 +1454,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       title: safeTitle,
       categoryId,
       originalLineIndex: lineIndex,
-      completedLineText: completedText.split('\n')[lineIndex] ?? originalLine,
+      completedLineText,
       reinsertText: originalLine,
       outcome: 'pending',
       toastId: undefined,
