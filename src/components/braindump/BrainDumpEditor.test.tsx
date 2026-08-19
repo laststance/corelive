@@ -1898,28 +1898,25 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     await waitForBrainDumpReady(noteField)
-    // Seed three lines and park the caret on the middle checkbox (index 1).
+    // The middle checkbox makes a wrong cross-category re-index observable.
     const value = 'top\n- [ ] buy milk\nbottom'
     fireEvent.change(noteField, { target: { value } })
     const caret = 'top\n- [ ] buy milk'.length
     noteField.selectionStart = caret
     noteField.selectionEnd = caret
 
-    // Complete the checkbox line in category 1 → its surrounding rows remain.
+    // Act — complete the middle row, edit category 2, then Undo from there.
     fireEvent.keyDown(noteField, { key: 'Enter', metaKey: true })
     await waitFor(() => {
       expect(noteField).toHaveValue('top\nbottom')
     })
 
-    // Act — switch the active floating category to 2 (the live textarea now
-    // shows category 2's empty note), THEN tap Undo. The toast's onClick still
-    // holds the category-1 completion while category-scoped memory stays intact.
     selectedCategoryRef.current = 2
     rerender(tree())
     await waitFor(() => {
       expect(noteField).toHaveValue('') // category 2's empty note has loaded
     })
-    // Edit category 2 with a line-count change that must never re-index category 1's restore slot.
+    // The line-count change must never re-index category 1's restore slot.
     fireEvent.change(noteField, { target: { value: 'other\nrows' } })
     noteSet.mockClear() // drop the category-swap flush write; assert only the restore
     const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
