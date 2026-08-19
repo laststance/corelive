@@ -130,7 +130,7 @@ jobs:
         # Chromium isn't strictly needed for `_electron`, but `--with-deps`
         # installs the Linux libs (libnss3, libatk-bridge2.0-0, libgtk-3-0,
         # libxss1, etc.) that Electron itself depends on under xvfb.
-        run: pnpm exec playwright install --with-deps chromium
+        run: bash scripts/install-playwright-ci.sh
 
       # NOTE: Next.js is started by the `webServer` block in
       # `playwright.config.ts` (inherited by `playwright.electron.config.ts`).

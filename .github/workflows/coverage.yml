@@ -100,7 +100,7 @@ jobs:
         run: pnpm prisma generate
 
       - name: Install Playwright Browsers 🎭
-        run: pnpm exec playwright install --with-deps chromium
+        run: bash scripts/install-playwright-ci.sh
 
       # electron unit tests (icon-system.test.mjs) read the generated artifact
       # build/icons/icon-manifest.json — generate it before any electron vitest run
