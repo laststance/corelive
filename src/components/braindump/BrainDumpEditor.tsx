@@ -1277,15 +1277,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
    *
    * @param entry - The completion's undo memory (line text, origin category, index).
    * @param moveCaret - Move the caret to the restored line (true for a user Undo; false for a background failure that must not yank a caret elsewhere).
-   * @returns Promise<void> — settles once the line is back: synchronously in-editor when still active, or after the IPC write when cross-category.
+   * @returns Whether the line is safely restored or no longer needs restoration.
    * @example
    * await restoreClearedLineToCategory(entry, true)  // user tapped Undo
-   * void restoreClearedLineToCategory(entry, false)  // background create failed
+   * await restoreClearedLineToCategory(entry, false) // background create failed
    */
   const restoreClearedLineToCategory = async (
     entry: ClearedLineMemory,
     moveCaret: boolean,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     // Still in the origin category → restore into the live editor; the textarea
     // shows this category's note, so an in-place re-insert is correct.
     if (activeCategoryIdRef.current === entry.categoryId) {
@@ -1301,7 +1301,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           entry.originalLineIndex,
         )
       }
-      return
+      return true
     }
     // Switched away → the live textarea now shows a DIFFERENT category's note, so
     // writing there would corrupt it. Persist the line into the origin category's
@@ -1311,15 +1311,17 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // them. (Worst case, if that category is re-opened mid-write, the line lands
     // on disk and surfaces on its next load — eventual consistency, never loss.)
     const api = window.brainDumpAPI
-    if (!api) return
+    if (!api) return false
     try {
       const stored = await api.note.get(entry.categoryId)
       await api.note.set(
         entry.categoryId,
         insertLineAtIndex(stored, entry.originalLineIndex, entry.reinsertText),
       )
+      return true
     } catch (error) {
       log.error('BrainDump cross-category line restore failed', error)
+      return false
     }
   }
 
@@ -1328,18 +1330,19 @@ export const BrainDumpEditor = function BrainDumpEditor({
    *
    * @param entry - Completion memory containing the checked row and original row.
    * @param moveCaret - Move the caret to the restored row for a user Undo.
-   * @returns Promise that settles after the visible/stored note is restored, or no-ops if edited.
+   * @returns Whether the row is safely restored or a user edit made restoration unnecessary.
    * @example
    * await restoreLingeringCompletedLine(entry, true)
    */
   const restoreLingeringCompletedLine = async (
     entry: ClearedLineMemory,
     moveCaret: boolean,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     if (activeCategoryIdRef.current === entry.categoryId) {
       const lines = noteTextRef.current.split('\n')
       // If the user edited the lingering row, do not overwrite their new text.
-      if (lines[entry.originalLineIndex] !== entry.completedLineText) return
+      if (lines[entry.originalLineIndex] !== entry.completedLineText)
+        return true
       const restored = replaceLineAtIndex(
         noteTextRef.current,
         entry.originalLineIndex,
@@ -1352,11 +1355,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
           entry.originalLineIndex,
         )
       }
-      return
+      return true
     }
 
     const api = window.brainDumpAPI
-    if (!api) return
+    if (!api) return false
     try {
       const stored = await api.note.get(entry.categoryId)
       const lines = stored.split('\n')
@@ -1367,14 +1370,16 @@ export const BrainDumpEditor = function BrainDumpEditor({
         currentLine !== entry.completedLineText &&
         currentLine !== entry.reinsertText
       ) {
-        return
+        return true
       }
       await api.note.set(
         entry.categoryId,
         replaceLineAtIndex(stored, entry.originalLineIndex, entry.reinsertText),
       )
+      return true
     } catch (error) {
       log.error('BrainDump lingering line restore failed', error)
+      return false
     }
   }
 
@@ -1560,7 +1565,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
           if (entry.outcome !== 'undone') void syncCompletedAcrossViews()
           return created.id
         },
-        (error): null => {
+        async (error): Promise<null> => {
           // Whatever happens next, this completion's deferred-clear timer (if one
           // is still pending) must NOT fire — cancel it up front so it can't drop
           // a line whose win never persisted.
@@ -1582,10 +1587,18 @@ export const BrainDumpEditor = function BrainDumpEditor({
           // move: a background failure must not yank a user typing elsewhere. If
           // the line is STILL on screen (linger not yet elapsed, timer just
           // cancelled above), there is nothing to restore — leave it.
-          if (entry.lineCleared) {
-            void restoreClearedLineToCategory(entry, false)
-          } else {
-            void restoreLingeringCompletedLine(entry, false)
+          const restored = entry.lineCleared
+            ? await restoreClearedLineToCategory(entry, false)
+            : await restoreLingeringCompletedLine(entry, false)
+          if (!restored) {
+            // Keep the original Undo closure retryable when the note write fails.
+            clearedLinesRef.current.set(token, entry)
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : 'Failed to record completion',
+            )
+            return null
           }
           // Terminal NOW: a late Undo — the toast stays clickable through sonner's
           // dismiss exit-animation — must not restore a SECOND copy (undo
@@ -1659,8 +1672,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // the failure handler's restore ('restored') — do nothing. Re-inserting
     // would duplicate the line; this is the failure→Undo double-insert guard.
     if (entry.outcome === 'undone' || entry.outcome === 'restored') return
+    const outcomeBeforeUndo = entry.outcome
     entry.outcome = 'undone'
-    clearedLinesRef.current.delete(entry.token)
     // Cancel a still-pending deferred removal: if the line never left the editor
     // (linger not yet elapsed), undo cancels the clear and restores `[x]` to
     // the original row; after removal, it re-inserts the original row.
@@ -1670,11 +1683,17 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // already removed it, re-insert; if it is still on screen as `[x]`, replace it.
     // Cross-category restore writes to the origin category's STORED note, never
     // category B's visible note.
-    if (entry.lineCleared) {
-      await restoreClearedLineToCategory(entry, true)
-    } else {
-      await restoreLingeringCompletedLine(entry, true)
+    const restored = entry.lineCleared
+      ? await restoreClearedLineToCategory(entry, true)
+      : await restoreLingeringCompletedLine(entry, true)
+    if (!restored) {
+      // Roll back the terminal marker so the same Undo action can retry safely.
+      entry.outcome = outcomeBeforeUndo
+      clearedLinesRef.current.set(entry.token, entry)
+      toast.error('Failed to restore BrainDump line')
+      return
     }
+    clearedLinesRef.current.delete(entry.token)
 
     // Delete the server row once the create resolves. A failed create resolves
     // to null → nothing to delete.
