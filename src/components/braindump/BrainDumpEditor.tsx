@@ -1535,6 +1535,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
     entry: ClearedLineMemory,
     message: string,
   ): Promise<boolean> => {
+    // A stale Retry toast must not insert a second row after Undo or a prior retry restored it.
+    if (isClearedLineUndone(entry) || entry.outcome === 'restored') return true
     const restored = await restoreClearedCompletionLine(entry, false)
     // Undo may join the same IPC attempt and owns its own terminal cleanup.
     if (isClearedLineUndone(entry)) return true

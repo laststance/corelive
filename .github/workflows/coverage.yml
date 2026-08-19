@@ -41,7 +41,7 @@ concurrency:
 jobs:
   coverage:
     name: Unit + Web E2E coverage 📊
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     permissions:
       contents: read

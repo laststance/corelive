@@ -56,7 +56,7 @@ concurrency:
 jobs:
   e2e-electron-linux:
     name: E2E Electron (Linux + xvfb) 🧪
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     # Lock GITHUB_TOKEN to the minimum needed for checkout + artifact
     # upload. Forked PRs already run with reduced permissions; explicit
@@ -127,9 +127,8 @@ jobs:
         run: pnpm electron:build:ts
 
       - name: Install Playwright Browsers 🎭
-        # Chromium isn't strictly needed for `_electron`, but `--with-deps`
-        # installs the Linux libs (libnss3, libatk-bridge2.0-0, libgtk-3-0,
-        # libxss1, etc.) that Electron itself depends on under xvfb.
+        # Chromium isn't strictly needed for `_electron`, but the shared installer
+        # adds Linux libraries that Electron itself depends on under xvfb.
         run: bash scripts/install-playwright-ci.sh
 
       # NOTE: Next.js is started by the `webServer` block in

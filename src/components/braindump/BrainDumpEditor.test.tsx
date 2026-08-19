@@ -2060,6 +2060,93 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
   })
 
+  it('does not duplicate a cleared row when stale create-failure Retry follows Undo', async () => {
+    // Arrange — fail creation and its automatic restore after the row leaves category 1.
+    let rejectCreate: (reason: Error) => void = () => undefined
+    const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
+      rejectCreate = reject
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.brainDumpAPI
+    if (!api) throw new Error('brainDumpAPI was not installed')
+    api.note.get = vi.fn(async (id: number) => (id === 1 ? 'keep me' : ''))
+    const noteSet = vi.mocked(api.note.set)
+    const store = configureStore({
+      reducer: { settings: userSettingsReducer },
+      preloadedState: {
+        settings: {
+          ...userSettingsInitialState,
+          braindumpClearOnComplete: true,
+          braindumpClearDelayMs: 0,
+        },
+      },
+    })
+    const [generalCategory] = categories
+    if (!generalCategory)
+      throw new Error('expected the seeded General category')
+    const twoCategories: CategoryWithCount[] = [
+      generalCategory,
+      { ...generalCategory, id: 2, name: 'Work', isDefault: false },
+    ]
+    const tree = (): ReactElement => (
+      <Provider store={store}>
+        <BrainDumpEditor categories={twoCategories} />
+      </Provider>
+    )
+    const { rerender } = render(tree())
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+    fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk\nkeep me')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('keep me')
+    })
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    expect(undoAction).toBeDefined()
+    if (!undoAction) throw new Error('Undo action was not registered')
+    selectedCategoryRef.current = 2
+    rerender(tree())
+    await waitFor(() => {
+      expect(noteField).toHaveValue('')
+    })
+    noteSet.mockClear()
+    noteSet.mockRejectedValueOnce(new Error('disk full'))
+    await act(async () => {
+      rejectCreate(new Error('network down'))
+      await pendingCreate.catch(() => undefined)
+    })
+    await waitFor(() => {
+      expect(noteSet).toHaveBeenCalledTimes(1)
+    })
+    const retryAction = vi.mocked(toast.error).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    expect(retryAction).toBeDefined()
+    if (!retryAction) throw new Error('Retry action was not registered')
+    noteSet.mockResolvedValue(undefined)
+
+    // Act — Undo restores first, then the older failure toast's Retry fires.
+    act(() => {
+      undoAction.onClick()
+    })
+    await waitFor(() => {
+      expect(noteSet).toHaveBeenCalledTimes(2)
+    })
+    await act(async () => {
+      retryAction.onClick()
+      await Promise.resolve()
+    })
+
+    // Assert — stale Retry performs no third write, so the origin gets one row only.
+    expect(noteSet).toHaveBeenCalledTimes(2)
+    expect(noteSet).toHaveBeenNthCalledWith(2, 1, '- [ ] buy milk\nkeep me')
+    expect(noteField).toHaveValue('')
+    expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
+  })
+
   it('serializes create-failure and Undo restoration of the same cleared row', async () => {
     // Arrange — pause the cross-category note read so failure and Undo overlap.
     let rejectCreate: (reason: Error) => void = () => undefined

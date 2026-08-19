@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   storybook-test:
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
