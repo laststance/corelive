@@ -818,6 +818,42 @@ describe('BrainDumpEditor complete command', () => {
     })
   })
 
+  it('records an already checked checkbox line only once across repeated Cmd+Enter commands', async () => {
+    // Arrange — keep the first Completed request pending so a rapid repeat exercises the in-flight guard.
+    let resolveCreate!: (value: { id: number }) => void
+    const pendingCreate = new Promise<{ id: number }>((resolve) => {
+      resolveCreate = resolve
+    })
+    completedMutateAsync.mockReturnValueOnce(pendingCreate)
+    const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
+    const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
+    installBrainDumpAPI({
+      getVisibleOnAllWorkspaces,
+      setVisibleOnAllWorkspaces,
+    })
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForBrainDumpReady(noteField)
+
+    // Act — invoke completion twice while the first request is still pending.
+    fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
+    fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
+
+    // Assert — rapid repetition creates one Completed row.
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveCreate({ id: 1 })
+      await pendingCreate
+    })
+
+    // Act — invoke completion again after the first request succeeds.
+    fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
+
+    // Assert — a recorded line remains idempotent until its text changes or it is undone.
+    expect(completedMutateAsync).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps an already checked checkbox line checked when completion recording fails', async () => {
     // Arrange — a manually checked task whose Completed create will fail.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))

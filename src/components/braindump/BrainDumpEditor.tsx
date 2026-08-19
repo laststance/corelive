@@ -893,6 +893,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
     }
     const categoryId = activeCategoryId
     const safeTitle = normalizeCompletedTitle(title)
+    const pendingCompletion = pendingCreatesRef.current.get(lineIndex)
+    const recordedCompletion = checkedRowsRef.current.get(lineIndex)
+    // Repeated shortcuts for the same visible task must not create duplicate Completed rows.
+    if (
+      pendingCompletion?.title === safeTitle ||
+      recordedCompletion?.title === safeTitle
+    ) {
+      return
+    }
     const promise = createCompletedMutation
       .mutateAsync({
         categoryId,
