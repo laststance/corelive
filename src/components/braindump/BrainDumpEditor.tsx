@@ -511,6 +511,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
           text,
           entry.originalLineIndex,
         )
+        // Never drop clear memory: its reinsertText may be the row's only copy.
+        // If that row changed, its last index is a safer best-effort Undo position than losing it.
         if (nextLineIndex !== null) entry.originalLineIndex = nextLineIndex
       }
     }
