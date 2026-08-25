@@ -505,6 +505,9 @@ export class ConfigManager {
         return this.migrateConfig(mergedConfig)
       }
     } catch (error) {
+      // A partially completed raw migration must never make fallback defaults
+      // overwrite the unreadable original config after this load aborts.
+      this.shouldSaveLoadedConfig = false
       log.error('Failed to load config:', error)
     }
 

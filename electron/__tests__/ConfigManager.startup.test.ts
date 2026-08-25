@@ -87,6 +87,24 @@ describe('ConfigManager startup-window config', () => {
     })
   })
 
+  it('keeps the original config file when a later migration rejects its version', () => {
+    // Arrange: the rename migration runs first, then the invalid numeric version
+    // makes compareVersions abort before the loaded config is accepted.
+    writeConfigFile({
+      version: 1,
+      window: { main: { width: 1337 } },
+      braindump: { notes: { '1': 'Never overwrite me' } },
+    })
+    const configPath = path.join(userDataDir.current, 'config.json')
+    const originalConfig = fs.readFileSync(configPath, 'utf8')
+
+    // Act
+    new ConfigManager()
+
+    // Assert: fallback defaults stay in memory only; user data remains byte-identical.
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(originalConfig)
+  })
+
   it('re-enables the Floating Navigator when update() turns every startup window off', () => {
     // Arrange
     const configManager = new ConfigManager()
