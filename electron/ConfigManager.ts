@@ -634,8 +634,8 @@ export class ConfigManager {
       Partial<StartupWindowConfig> | undefined
     const showFloatingAlreadySet = startup?.showFloating !== undefined
 
-    // Carry the legacy flag over only when the new field hasn't been set yet.
-    if (floating.startVisible === true && !showFloatingAlreadySet) {
+    // Carry either legacy boolean over only when the new field is still unset.
+    if (typeof floating.startVisible === 'boolean' && !showFloatingAlreadySet) {
       // `raw.behavior` may be a corrupt non-object (string/array) from a
       // hand-edited config; only reuse it when it is a real object. Assigning
       // `.startup` to a string/array primitive throws in strict mode, which
@@ -647,7 +647,7 @@ export class ConfigManager {
       // Partial startup is fine here — mergeWithDefaults fills showLiveEditor.
       behavior.startup = {
         ...(startup ?? {}),
-        showFloating: true,
+        showFloating: floating.startVisible,
       } as StartupWindowConfig
       raw.behavior = behavior
     }

@@ -262,24 +262,24 @@ describe('ConfigManager startup-window config', () => {
     )
   })
 
-  it('does not migrate a legacy startVisible:false flag into showFloating', () => {
-    // Arrange: a present-but-false legacy flag alongside a LiveEditor-only
-    // choice — the false flag must not flip floating on (LiveEditor keeps the
-    // invariant satisfied so the Floating default can't mask the migration).
+  it('keeps Floating Navigator disabled when the legacy LiveEditor starts instead', () => {
+    // Arrange: both startup choices use their pre-rename keys. LiveEditor keeps
+    // the startup invariant valid while Floating must preserve its explicit OFF.
     writeConfigFile({
       window: { floating: { startVisible: false } },
       behavior: {
-        startup: { showLiveEditor: true, showFloating: false },
+        startup: { showBraindump: true },
       },
     })
 
     // Act
     const configManager = new ConfigManager()
 
-    // Assert
-    expect(configManager.getSection('behavior').startup.showFloating).toBe(
-      false,
-    )
+    // Assert: defaults cannot turn Floating back on during the raw-config merge.
+    expect(configManager.getSection('behavior').startup).toEqual({
+      showLiveEditor: true,
+      showFloating: false,
+    })
   })
 
   it('repairs an all-false startup block persisted in config.json on load', () => {
