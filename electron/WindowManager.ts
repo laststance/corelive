@@ -1702,11 +1702,16 @@ export class WindowManager {
     })
   }
 
-  /**
-   * Cleanup and save state before app quit.
+  /** Saves window state and cancels pending reveals before app shutdown closes every auxiliary window.
+   * @returns Nothing.
+   * @example
+   * windowManager.cleanup()
    */
   cleanup(): void {
     this.saveWindowState()
+
+    // Shutdown must detach load listeners before late navigation can reveal LiveEditor.
+    this.cancelPendingLiveEditorReveal()
 
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
       this.settingsWindow.close()

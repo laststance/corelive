@@ -149,6 +149,32 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(2)
   })
 
+  it('plays once when a second LiveEditor toggle cancels its pending reveal', () => {
+    // Arrange
+    const toggleLiveEditor = vi
+      .fn()
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false)
+    const soundController = createSoundController()
+    const shortcutManager = new ShortcutManager(
+      createWindowManager(
+        vi.fn(() => false),
+        toggleLiveEditor,
+      ),
+      null,
+      createConfigManager(true),
+      undefined,
+      soundController,
+    )
+
+    // Act
+    shortcutManager.handleToggleLiveEditor()
+    shortcutManager.handleToggleLiveEditor()
+
+    // Assert
+    expect(soundController.play).toHaveBeenCalledTimes(1)
+  })
+
   it('does not crash after LiveEditor becomes visible when opening sound playback fails', () => {
     // Arrange
     let onShown: (() => void) | undefined
