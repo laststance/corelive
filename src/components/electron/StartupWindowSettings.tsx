@@ -3,7 +3,7 @@
 /**
  * @fileoverview Startup-window settings for the Electron Settings page.
  *
- * Lets the user choose which window(s) CoreLive opens on launch — Brain Dump
+ * Lets the user choose which window(s) CoreLive opens on launch — LiveEditor
  * and/or the Floating Navigator. The persisted choice lives in the main-process
  * config.json (read synchronously at boot, before auth/DB), so this component
  * reads and writes it through the typed `settings` preload API rather than
@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
   DEFAULT_STARTUP_WINDOW_CONFIG,
+  type LegacyStartupWindowConfig,
   type StartupWindowConfig,
 } from '@/electron/types/ipc'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
@@ -33,6 +34,20 @@ interface StartupWindowSettingsProps {
 }
 
 /**
+ * Normalizes startup settings returned by old and new installed preloads so the renamed toggle never renders undefined.
+ * @param config - Startup settings from the installed Electron bridge.
+ * @returns Canonical LiveEditor startup flags.
+ * @example normalizeStartupWindowConfig({ showBraindump: true, showFloating: false }) // => { showLiveEditor: true, showFloating: false }
+ */
+const normalizeStartupWindowConfig = (
+  config: StartupWindowConfig | LegacyStartupWindowConfig,
+): StartupWindowConfig => ({
+  showLiveEditor:
+    'showLiveEditor' in config ? config.showLiveEditor : config.showBraindump,
+  showFloating: config.showFloating,
+})
+
+/**
  * The startup-window choices, in the order they appear in the card. Kept
  * module-level (not rebuilt per render) since the labels/descriptions are
  * static; the live checked/disabled state is derived per row at render time.
@@ -43,8 +58,8 @@ const STARTUP_WINDOW_OPTIONS: ReadonlyArray<{
   description: string
 }> = [
   {
-    key: 'showBraindump',
-    label: 'Brain Dump',
+    key: 'showLiveEditor',
+    label: 'LiveEditor',
     description: 'A quiet space to empty your head.',
   },
   {
@@ -97,7 +112,7 @@ export const StartupWindowSettings = function StartupWindowSettings({
       .getStartupConfig()
       .then((saved) => {
         if (cancelled) return
-        setStartup(saved)
+        setStartup(normalizeStartupWindowConfig(saved))
       })
       .catch((loadError: unknown) => {
         log.error('Failed to load startup window settings:', loadError)
@@ -118,7 +133,7 @@ export const StartupWindowSettings = function StartupWindowSettings({
    * Persists a single startup-window toggle, applying it optimistically and
    * rolling back if the main process fails to save.
    *
-   * @param key - Which window's flag is changing (showBraindump / showFloating)
+   * @param key - Which window's flag is changing (showLiveEditor / showFloating)
    * @param next - true to open that window at launch, false to skip it
    * @returns Promise that resolves once the save settles (success or rollback)
    */
@@ -140,7 +155,17 @@ export const StartupWindowSettings = function StartupWindowSettings({
         throw new Error('Electron settings API is not available')
       }
 
-      const didSave = await api.setStartupConfig(optimistic)
+      const installedAppUsesLegacyName =
+        window.electronAPI?.liveEditor === undefined &&
+        window.electronAPI?.brainDump !== undefined
+      const compatibleConfig: StartupWindowConfig | LegacyStartupWindowConfig =
+        installedAppUsesLegacyName
+          ? {
+              showBraindump: optimistic.showLiveEditor,
+              showFloating: optimistic.showFloating,
+            }
+          : optimistic
+      const didSave = await api.setStartupConfig(compatibleConfig)
       if (!didSave) {
         throw new Error('Main process did not persist the startup config')
       }
@@ -195,7 +220,7 @@ export const StartupWindowSettings = function StartupWindowSettings({
   // The >=1-true invariant is enforced in the main process, but we mirror it
   // here so the last enabled toggle is visibly locked rather than silently
   // re-checked after a save (which would read as a glitch).
-  const enabledCount = [startup.showBraindump, startup.showFloating].filter(
+  const enabledCount = [startup.showLiveEditor, startup.showFloating].filter(
     Boolean,
   ).length
 

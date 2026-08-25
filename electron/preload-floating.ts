@@ -135,6 +135,19 @@ export function sanitizeData<T>(data: T): T {
 // ============================================================================
 
 /**
+ * Toggles LiveEditor from Floating Navigator while one function backs both canonical and transition namespaces.
+ * @returns A promise that settles after the main process handles the toggle request.
+ * @example await toggleLiveEditor()
+ */
+const toggleLiveEditor = async (): Promise<void> => {
+  try {
+    await typedInvoke('live-editor-window-toggle')
+  } catch (error) {
+    log.error('Floating Navigator: Failed to toggle LiveEditor:', error)
+  }
+}
+
+/**
  * Expose compact API surface for floating navigator window controls.
  *
  * Note: In WebView architecture, all data operations (todos, auth, etc.)
@@ -228,20 +241,19 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
   },
 
   /**
-   * BrainDump Note window controls — minimal surface so the floating navigator
-   * can offer a "show BrainDump" button without owning the rest of the
-   * BrainDump API. Window-internal config (opacity, sync, shortcut) lives on
-   * `window.brainDumpAPI` inside the BrainDump window itself.
+   * LiveEditor Note window controls — minimal surface so the floating navigator
+   * can offer a "show LiveEditor" button without owning the rest of the
+   * LiveEditor API. Window-internal config (opacity, sync, shortcut) lives on
+   * `window.liveEditorAPI` inside the LiveEditor window itself.
    */
+  liveEditor: {
+    /** Toggle LiveEditor window visibility from the floating navigator. */
+    toggle: toggleLiveEditor,
+  },
+
+  /** @deprecated Transition alias for a renderer loaded by a newly updated app. */
   brainDump: {
-    /** Toggle BrainDump window visibility from the floating navigator. */
-    toggle: async (): Promise<void> => {
-      try {
-        await typedInvoke('braindump-window-toggle')
-      } catch (error) {
-        log.error('Floating Navigator: Failed to toggle BrainDump:', error)
-      }
-    },
+    toggle: toggleLiveEditor,
   },
 
   /**

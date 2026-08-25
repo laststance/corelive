@@ -2,18 +2,48 @@ import { z } from 'zod'
 
 import type { IPCChannel } from '../types/ipc'
 
-// Mirror renderer-side caps (`COMPLETED_TITLE_MAX_LENGTH * BRAINDUMP_NOTE_LINES_PER_CAP`)
+// Mirror renderer-side caps (`COMPLETED_TITLE_MAX_LENGTH * LIVE_EDITOR_NOTE_LINES_PER_CAP`)
 // without importing from `src/` (Electron tsconfig excludes it). If the
-// renderer constants change, update both this and `src/lib/constants/braindump.ts`.
-const BRAINDUMP_NOTE_MAX_LENGTH = 255 * 200
+// renderer constants change, update both this and `src/lib/constants/live-editor.ts`.
+const LIVE_EDITOR_NOTE_MAX_LENGTH = 255 * 200
 // Electron accelerator strings are short tokens like "CommandOrControl+Shift+B".
 // 64 is generous and bounds memory/log noise from malformed payloads. Shared by
-// the BrainDump and Floating Navigator shortcut channels.
+// the LiveEditor and Floating Navigator shortcut channels.
 const SHORTCUT_ACCELERATOR_MAX_LENGTH = 64
 // Window dimension floor matches `WindowStateManager` minWidth/minHeight (320).
 // Ceiling is loose enough for 8K displays but rejects runaway values.
-const BRAINDUMP_WINDOW_DIMENSION_MIN = 320
-const BRAINDUMP_WINDOW_DIMENSION_MAX = 8192
+const LIVE_EDITOR_WINDOW_DIMENSION_MIN = 320
+const LIVE_EDITOR_WINDOW_DIMENSION_MAX = 8192
+
+const RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS = new Set([
+  'liveEditor.width',
+  'liveEditor.height',
+  'liveEditor.visibleOnAllWorkspaces',
+  'liveEditor.alwaysOnTop',
+  'liveEditor.opacity',
+  'liveEditor.syncMode',
+  'liveEditor.shortcut',
+  'liveEditor.lastCategoryId',
+])
+
+/** Allows generic renderer reads only for LiveEditor metadata so personal note text stays on its dedicated IPC channel.
+ * @param path - Dot-notation config path requested by the renderer.
+ * @returns Whether the generic `config-get` channel may read the path.
+ * @example
+ * isRendererReadableConfigPath('liveEditor.notes.1') // => false
+ */
+export function isRendererReadableConfigPath(path: string): boolean {
+  // Other config sections retain their existing generic getter behavior.
+  if (!path.startsWith('liveEditor.')) return true
+  return RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS.has(path)
+}
+
+const rendererReadableConfigPathSchema = z
+  .string()
+  .refine(
+    isRendererReadableConfigPath,
+    'LiveEditor note content requires its dedicated IPC channel',
+  )
 
 /**
  * Zod schemas for runtime validation of IPC `invoke` arguments at the main-process boundary.
@@ -153,7 +183,10 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // Configuration
   // ──────────────────────────────────────────────────────────────────────────
-  'config-get': z.tuple([z.string(), z.unknown().optional()]),
+  'config-get': z.tuple([
+    rendererReadableConfigPathSchema,
+    z.unknown().optional(),
+  ]),
   'config-set': z.tuple([z.string(), z.unknown()]),
   'config-get-all': z.tuple([]),
   'config-get-section': z.tuple([
@@ -166,7 +199,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'tray',
       'behavior',
       'advanced',
-      'braindump',
+      'liveEditor',
     ]),
   ]),
   'config-update': z.tuple([z.record(z.string(), z.unknown())]),
@@ -181,7 +214,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'tray',
       'behavior',
       'advanced',
-      'braindump',
+      'liveEditor',
     ]),
   ]),
   'config-validate': z.tuple([]),
@@ -252,7 +285,7 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // only guarantees the shape (two booleans) crossing the IPC boundary.
   'settings:setStartupConfig': z.tuple([
     z.object({
-      showBraindump: z.boolean(),
+      showLiveEditor: z.boolean(),
       showFloating: z.boolean(),
     }),
   ]),
@@ -302,9 +335,9 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // Window State Management
   // ──────────────────────────────────────────────────────────────────────────
-  'window-state-get': z.tuple([z.enum(['main', 'floating', 'braindump'])]),
+  'window-state-get': z.tuple([z.enum(['main', 'floating', 'liveEditor'])]),
   'window-state-set': z.tuple([
-    z.enum(['main', 'floating', 'braindump']),
+    z.enum(['main', 'floating', 'liveEditor']),
     z
       .object({
         x: z.number().optional(),
@@ -320,14 +353,14 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       })
       .passthrough(),
   ]),
-  'window-state-reset': z.tuple([z.enum(['main', 'floating', 'braindump'])]),
+  'window-state-reset': z.tuple([z.enum(['main', 'floating', 'liveEditor'])]),
   'window-state-get-stats': z.tuple([]),
   'window-state-move-to-display': z.tuple([
-    z.enum(['main', 'floating', 'braindump']),
+    z.enum(['main', 'floating', 'liveEditor']),
     z.number(),
   ]),
   'window-state-snap-to-edge': z.tuple([
-    z.enum(['main', 'floating', 'braindump']),
+    z.enum(['main', 'floating', 'liveEditor']),
     z.enum([
       'left',
       'right',
@@ -341,57 +374,59 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
     ]),
   ]),
   'window-state-get-display': z.tuple([
-    z.enum(['main', 'floating', 'braindump']),
+    z.enum(['main', 'floating', 'liveEditor']),
   ]),
   'window-state-get-all-displays': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
-  // BrainDump
+  // LiveEditor
   // ──────────────────────────────────────────────────────────────────────────
-  'window-toggle-braindump': z.tuple([]),
-  'braindump-window-toggle': z.tuple([]),
-  'braindump-window-show': z.tuple([]),
-  'braindump-window-hide': z.tuple([]),
+  'window-toggle-live-editor': z.tuple([]),
+  'live-editor-window-toggle': z.tuple([]),
+  'live-editor-window-show': z.tuple([]),
+  'live-editor-window-hide': z.tuple([]),
   // Opacity is clamped in main; we only validate the bounded range here.
-  'braindump-window-set-opacity': z.tuple([z.number().min(0).max(1)]),
-  'braindump-window-get-opacity': z.tuple([]),
-  'braindump-window-get-always-on-top': z.tuple([]),
-  'braindump-window-set-always-on-top': z.tuple([z.boolean()]),
-  'braindump-window-get-bounds': z.tuple([]),
-  'braindump-window-set-bounds': z.tuple([
+  'live-editor-window-set-opacity': z.tuple([z.number().min(0).max(1)]),
+  'live-editor-window-get-opacity': z.tuple([]),
+  'live-editor-window-get-always-on-top': z.tuple([]),
+  'live-editor-window-set-always-on-top': z.tuple([z.boolean()]),
+  'live-editor-window-get-bounds': z.tuple([]),
+  'live-editor-window-set-bounds': z.tuple([
     z.object({
       // x/y can be negative on multi-monitor setups (left/above primary display).
       x: z.number().finite(),
       y: z.number().finite(),
       width: z
         .number()
-        .min(BRAINDUMP_WINDOW_DIMENSION_MIN)
-        .max(BRAINDUMP_WINDOW_DIMENSION_MAX),
+        .min(LIVE_EDITOR_WINDOW_DIMENSION_MIN)
+        .max(LIVE_EDITOR_WINDOW_DIMENSION_MAX),
       height: z
         .number()
-        .min(BRAINDUMP_WINDOW_DIMENSION_MIN)
-        .max(BRAINDUMP_WINDOW_DIMENSION_MAX),
+        .min(LIVE_EDITOR_WINDOW_DIMENSION_MIN)
+        .max(LIVE_EDITOR_WINDOW_DIMENSION_MAX),
     }),
   ]),
 
-  'braindump-note-get': z.tuple([z.number().int().positive()]),
+  'live-editor-note-get': z.tuple([z.number().int().positive()]),
   // Cap text length to mirror the renderer textarea `maxLength`. A compromised
   // renderer cannot starve disk by sending megabytes of note text.
-  'braindump-note-set': z.tuple([
+  'live-editor-note-set': z.tuple([
     z.number().int().positive(),
-    z.string().max(BRAINDUMP_NOTE_MAX_LENGTH),
+    z.string().max(LIVE_EDITOR_NOTE_MAX_LENGTH),
   ]),
 
-  'braindump-config-get-sync': z.tuple([]),
-  'braindump-config-set-sync': z.tuple([z.boolean()]),
-  'braindump-config-get-shortcut': z.tuple([]),
-  'braindump-config-set-shortcut': z.tuple([
+  'live-editor-config-get-sync': z.tuple([]),
+  'live-editor-config-set-sync': z.tuple([z.boolean()]),
+  'live-editor-config-get-shortcut': z.tuple([]),
+  'live-editor-config-set-shortcut': z.tuple([
     z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
   ]),
-  'braindump-config-get-shortcut-secondary': z.tuple([]),
-  'braindump-config-set-shortcut-secondary': z.tuple([
+  'live-editor-config-get-shortcut-secondary': z.tuple([]),
+  'live-editor-config-set-shortcut-secondary': z.tuple([
     z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
   ]),
-  'braindump-config-get-last-category': z.tuple([]),
-  'braindump-config-set-last-category': z.tuple([z.number().int().positive()]),
+  'live-editor-config-get-last-category': z.tuple([]),
+  'live-editor-config-set-last-category': z.tuple([
+    z.number().int().positive(),
+  ]),
 }

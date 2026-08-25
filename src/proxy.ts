@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 const isProtectedRoute = createRouteMatcher([
   '/home(.*)',
   '/skill-tree(.*)',
-  '/braindump(.*)',
+  '/live-editor(.*)',
   // /settings is web-reachable (D15) but still requires auth like the rest of
   // the app — the settings it edits belong to a signed-in user's experience.
   '/settings(.*)',

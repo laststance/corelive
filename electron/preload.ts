@@ -39,6 +39,7 @@ import type {
   DeepLinkExamples,
   IPCEventChannel,
   IPCResponse,
+  LegacyStartupWindowConfig,
   NativeTapStatus,
   NotificationOptions,
   NotificationSettingsState,
@@ -145,7 +146,7 @@ const ALLOWED_CHANNELS = {
   // Consumed by the floating window's preload (§6d keep-on-top sync); listed
   // here too because AllowedChannelsMap is exhaustive over IPCEventChannels.
   'floating-window-always-on-top-changed': true,
-  'braindump-category-changed': true,
+  'live-editor-category-changed': true,
   'notification-permission-denied': true,
   'show-fallback-notification': true,
   'system-integration-status': true,
@@ -272,7 +273,7 @@ const writeNotificationSettings = async (
  * - Consistent error handling
  * - TypeScript-friendly structure
  */
-contextBridge.exposeInMainWorld('electronAPI', {
+const electronAPI = {
   /**
    * Note: Todo operations removed - WebView architecture uses oRPC via HTTP.
    * The web app (loaded in WebView) handles all data operations through
@@ -386,9 +387,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     /**
-     * Read which auxiliary windows (floating navigator, brain dump) are visible
+     * Read which auxiliary windows (floating navigator, LiveEditor) are visible
      * right now, so the settings UI can label a "Try it now" action correctly.
-     * @returns Live visibility flags; `{ floating: false, braindump: false }` on error.
+     * @returns Live visibility flags; `{ floating: false, liveEditor: false }` on error.
      * @example
      * const { floating } = await window.electronAPI.window.getAuxVisibility()
      */
@@ -397,7 +398,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return await typedInvoke('window-get-aux-visibility')
       } catch (error) {
         log.error('Failed to read auxiliary window visibility:', error)
-        return { floating: false, braindump: false }
+        return { floating: false, liveEditor: false }
       }
     },
   },
@@ -409,7 +410,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * process can persist the setting and update already-open BrowserWindows.
    */
   floatingPanels: {
-    /** Read whether Floating Navigator and BrainDump follow macOS Spaces. */
+    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces. */
     getVisibleOnAllWorkspaces: async (): Promise<boolean> => {
       try {
         return await typedInvoke(
@@ -462,25 +463,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw error
       }
     },
-    /** Read BrainDump's always-on-top setting (config-backed, default off). */
-    getBrainDumpAlwaysOnTop: async (): Promise<boolean> => {
+    /** Read LiveEditor's always-on-top setting (config-backed, default off). */
+    getLiveEditorAlwaysOnTop: async (): Promise<boolean> => {
       try {
-        return await typedInvoke('braindump-window-get-always-on-top')
+        return await typedInvoke('live-editor-window-get-always-on-top')
       } catch (error) {
-        log.error('Failed to get braindump always-on-top:', error)
-        // BrainDump defaults to unpinned.
+        log.error('Failed to get liveEditor always-on-top:', error)
+        // LiveEditor defaults to unpinned.
         return false
       }
     },
-    /** Persist and apply BrainDump's always-on-top setting. */
-    setBrainDumpAlwaysOnTop: async (enabled: boolean): Promise<boolean> => {
+    /** Persist and apply LiveEditor's always-on-top setting. */
+    setLiveEditorAlwaysOnTop: async (enabled: boolean): Promise<boolean> => {
       if (typeof enabled !== 'boolean') {
-        throw new Error('BrainDump alwaysOnTop must be a boolean')
+        throw new Error('LiveEditor alwaysOnTop must be a boolean')
       }
       try {
-        return await typedInvoke('braindump-window-set-always-on-top', enabled)
+        return await typedInvoke(
+          'live-editor-window-set-always-on-top',
+          enabled,
+        )
       } catch (error) {
-        log.error('Failed to set braindump always-on-top:', error)
+        log.error('Failed to set liveEditor always-on-top:', error)
         throw error
       }
     },
@@ -1453,29 +1457,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     /**
-     * Persist which window(s) open at Electron launch (brain dump / floating
+     * Persist which window(s) open at Electron launch (LiveEditor / floating
      * navigator). The >=1-true invariant is enforced in the main process, so an
      * all-false request is repaired (showFloating forced back on) before
      * saving — this call still resolves true in that case.
      * @param config - The two startup-window booleans.
      * @returns true when persisted; false on IPC/validation failure.
      * @example
-     * await window.electronAPI.settings.setStartupConfig({ showBraindump: true, showFloating: false })
+     * await window.electronAPI.settings.setStartupConfig({ showLiveEditor: true, showFloating: false })
      */
-    setStartupConfig: async (config: StartupWindowConfig): Promise<boolean> => {
+    setStartupConfig: async (
+      config: StartupWindowConfig | LegacyStartupWindowConfig,
+    ): Promise<boolean> => {
       try {
         // Defense-in-depth: strip forbidden keys / trim strings, then assert both
         // flags are real booleans before crossing the IPC boundary, so a
         // malformed renderer payload can never poison the persisted config.
-        const sanitized = sanitizeData(config) as Partial<StartupWindowConfig>
+        const sanitized = sanitizeData(config) as Partial<
+          StartupWindowConfig & LegacyStartupWindowConfig
+        >
+        const showLiveEditor =
+          sanitized.showLiveEditor ?? sanitized.showBraindump
         if (
-          typeof sanitized.showBraindump !== 'boolean' ||
+          typeof showLiveEditor !== 'boolean' ||
           typeof sanitized.showFloating !== 'boolean'
         ) {
           throw new Error('Startup config flags must be booleans')
         }
         return await typedInvoke('settings:setStartupConfig', {
-          showBraindump: sanitized.showBraindump,
+          showLiveEditor,
           showFloating: sanitized.showFloating,
         })
       } catch (error) {
@@ -1490,14 +1500,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * satisfies the >=1-true invariant), so the UI never renders an all-off state.
      * @returns The saved startup-window config, or the Floating-only default on failure.
      * @example
-     * const startup = await window.electronAPI.settings.getStartupConfig() // => { showBraindump: false, showFloating: true }
+     * const startup = await window.electronAPI.settings.getStartupConfig() // => { showLiveEditor: false, showFloating: true }
      */
-    getStartupConfig: async (): Promise<StartupWindowConfig> => {
+    getStartupConfig: async (): Promise<
+      StartupWindowConfig & LegacyStartupWindowConfig
+    > => {
       try {
-        return await typedInvoke('settings:getStartupConfig')
+        const startup = await typedInvoke('settings:getStartupConfig')
+        return { ...startup, showBraindump: startup.showLiveEditor }
       } catch (error) {
         log.error('Failed to read startup window config:', error)
-        return { ...DEFAULT_STARTUP_WINDOW_CONFIG }
+        return {
+          ...DEFAULT_STARTUP_WINDOW_CONFIG,
+          showBraindump: DEFAULT_STARTUP_WINDOW_CONFIG.showLiveEditor,
+        }
       }
     },
 
@@ -1519,41 +1535,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
-   * BrainDump Note window controls — exposed to the main window's Settings UI.
+   * LiveEditor Note window controls — exposed to the main window's Settings UI.
    *
-   * The BrainDump renderer has its own preload (`preload-braindump.ts`) for
+   * The LiveEditor renderer has its own preload (`preload-live-editor.ts`) for
    * window-local operations. These methods let the Settings page configure
-   * BrainDump from the *main* window without opening it.
+   * LiveEditor from the *main* window without opening it.
    */
-  brainDump: {
-    /** Toggle BrainDump window visibility. */
+  liveEditor: {
+    /** Toggle LiveEditor window visibility. */
     toggle: async (): Promise<void> => {
       try {
-        await typedInvoke('braindump-window-toggle')
+        await typedInvoke('live-editor-window-toggle')
       } catch (error) {
         // Re-throw so the renderer can react (toast, retry); a swallowed
         // failure leaves the user thinking the toggle worked.
-        log.error('Failed to toggle BrainDump:', error)
+        log.error('Failed to toggle LiveEditor:', error)
         throw error
       }
     },
-    /** Open the BrainDump window (additive — only shows, never hides). */
+    /** Open the LiveEditor window (additive — only shows, never hides). */
     show: async (): Promise<void> => {
       try {
-        await typedInvoke('braindump-window-show')
+        await typedInvoke('live-editor-window-show')
       } catch (error) {
         // Re-throw so a failed "Try it now" surfaces to the user instead of
         // silently doing nothing.
-        log.error('Failed to show BrainDump:', error)
+        log.error('Failed to show LiveEditor:', error)
         throw error
       }
     },
     /** Read window opacity (clamped 0.30–1.00 in main). */
     getOpacity: async (): Promise<number> => {
       try {
-        return await typedInvoke('braindump-window-get-opacity')
+        return await typedInvoke('live-editor-window-get-opacity')
       } catch (error) {
-        log.error('Failed to get BrainDump opacity:', error)
+        log.error('Failed to get LiveEditor opacity:', error)
         return 1.0
       }
     },
@@ -1563,20 +1579,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw new Error('Opacity must be a number')
       }
       try {
-        return await typedInvoke('braindump-window-set-opacity', value)
+        return await typedInvoke('live-editor-window-set-opacity', value)
       } catch (error) {
         // Re-throw — returning the requested value masks failure and the
         // Settings UI cannot roll back to the last good opacity.
-        log.error('Failed to set BrainDump opacity:', error)
+        log.error('Failed to set LiveEditor opacity:', error)
         throw error
       }
     },
     /** Read "follow FloatingNav category" toggle. */
     getSyncMode: async (): Promise<boolean> => {
       try {
-        return await typedInvoke('braindump-config-get-sync')
+        return await typedInvoke('live-editor-config-get-sync')
       } catch (error) {
-        log.error('Failed to get BrainDump sync mode:', error)
+        log.error('Failed to get LiveEditor sync mode:', error)
         return true
       }
     },
@@ -1586,18 +1602,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw new Error('SyncMode must be a boolean')
       }
       try {
-        return await typedInvoke('braindump-config-set-sync', enabled)
+        return await typedInvoke('live-editor-config-set-sync', enabled)
       } catch (error) {
-        log.error('Failed to set BrainDump sync mode:', error)
+        log.error('Failed to set LiveEditor sync mode:', error)
         throw error
       }
     },
     /** Read global accelerator (empty string disables the shortcut). */
     getShortcut: async (): Promise<string> => {
       try {
-        return await typedInvoke('braindump-config-get-shortcut')
+        return await typedInvoke('live-editor-config-get-shortcut')
       } catch (error) {
-        log.error('Failed to get BrainDump shortcut:', error)
+        log.error('Failed to get LiveEditor shortcut:', error)
         return ''
       }
     },
@@ -1607,18 +1623,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         throw new Error('Shortcut must be a string')
       }
       try {
-        return await typedInvoke('braindump-config-set-shortcut', accelerator)
+        return await typedInvoke('live-editor-config-set-shortcut', accelerator)
       } catch (error) {
-        log.error('Failed to set BrainDump shortcut:', error)
+        log.error('Failed to set LiveEditor shortcut:', error)
         throw error
       }
     },
     /** Read the optional SECOND global accelerator (empty string when unset). */
     getShortcutSecondary: async (): Promise<string> => {
       try {
-        return await typedInvoke('braindump-config-get-shortcut-secondary')
+        return await typedInvoke('live-editor-config-get-shortcut-secondary')
       } catch (error) {
-        log.error('Failed to get second BrainDump shortcut:', error)
+        log.error('Failed to get second LiveEditor shortcut:', error)
         return ''
       }
     },
@@ -1629,11 +1645,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
       try {
         return await typedInvoke(
-          'braindump-config-set-shortcut-secondary',
+          'live-editor-config-set-shortcut-secondary',
           accelerator,
         )
       } catch (error) {
-        log.error('Failed to set second BrainDump shortcut:', error)
+        log.error('Failed to set second LiveEditor shortcut:', error)
         throw error
       }
     },
@@ -1645,7 +1661,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // IpcRendererEvent argument is intentionally dropped so listeners can be
   // written as `(data) => …` to match the typed `on<C>()` contract in
   // `electron-api.d.ts` (`callback: (data: IPCEventData<C>) => void`). This
-  // also aligns with the BrainDump preload's behavior.
+  // also aligns with the LiveEditor preload's behavior.
   on: (
     channel: string,
     callback: (...args: unknown[]) => void,
@@ -1822,6 +1838,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     },
   },
+}
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  ...electronAPI,
+  floatingPanels: {
+    ...electronAPI.floatingPanels,
+    // Method aliases cover an older deployed renderer running immediately
+    // after the packaged app updates to the renamed preload.
+    getBrainDumpAlwaysOnTop:
+      electronAPI.floatingPanels.getLiveEditorAlwaysOnTop,
+    setBrainDumpAlwaysOnTop:
+      electronAPI.floatingPanels.setLiveEditorAlwaysOnTop,
+  },
+  // A deployed renderer and installed preload update independently; keep the
+  // previous namespace until every supported desktop version has crossed over.
+  brainDump: electronAPI.liveEditor,
 })
 
 /**

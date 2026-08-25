@@ -1,7 +1,7 @@
 /**
  * @fileoverview Pure, line-oriented parser for paste-to-import (Issue #53, PR1).
  *
- * Unlike `braindumpUtils` (checkbox-only grammar that returns `null` for plain
+ * Unlike `liveEditorUtils` (checkbox-only grammar that returns `null` for plain
  * lines and strips nothing), this parser treats EVERY non-blank line as one
  * task. It strips only a single leading list/checkbox prefix to derive the
  * title and preserves URLs, `# headings`, and arbitrary body text as legitimate
@@ -10,7 +10,7 @@
  * Why it lives in `src/lib/` (not a component): the same pure util runs in both
  * the PR2 client preview and the server normalization, so preview count ==
  * inserted count. No React/Electron deps; reuses `normalizeCompletedTitle` +
- * `parseCheckboxLine` from braindumpUtils as the single source of truth for
+ * `parseCheckboxLine` from liveEditorUtils as the single source of truth for
  * title clamping and checkbox detection.
  *
  * @module lib/parsePasteToTasks
@@ -19,7 +19,7 @@
 import {
   normalizeCompletedTitle,
   parseCheckboxLine,
-} from '@/components/braindump/braindumpUtils'
+} from '@/components/live-editor/liveEditorUtils'
 
 /**
  * One task parsed from a pasted line.

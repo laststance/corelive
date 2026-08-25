@@ -45,20 +45,20 @@ function createConfigManager(
 /**
  * Creates window toggles whose return/callback behavior is controlled per test.
  * @param toggleFloatingNavigator - Reports whether Floating opened or closed.
- * @param toggleBrainDump - Delivers the actual-shown callback for BrainDump.
+ * @param toggleLiveEditor - Delivers the actual-shown callback for LiveEditor.
  * @returns A WindowManager-compatible shortcut boundary.
  * @example
  * createWindowManager(vi.fn(() => true), vi.fn(() => true))
  */
 function createWindowManager(
   toggleFloatingNavigator: () => boolean,
-  toggleBrainDump: (onShown?: () => void) => boolean,
+  toggleLiveEditor: (onShown?: () => void) => boolean,
 ): WindowManager {
   return {
     getFloatingNavigator: vi.fn(() => null),
     getMainWindow: vi.fn(() => null),
     setOnFloatingNavigatorCreated: vi.fn(),
-    toggleBrainDump,
+    toggleLiveEditor,
     toggleFloatingNavigator,
   } as unknown as WindowManager
 }
@@ -108,10 +108,10 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledWith('walnut-desk-thock')
   })
 
-  it('waits for BrainDump to become visible before playing its opening cue', () => {
+  it('waits for LiveEditor to become visible before playing its opening cue', () => {
     // Arrange
     let onShown: (() => void) | undefined
-    const toggleBrainDump = vi.fn((nextOnShown?: () => void) => {
+    const toggleLiveEditor = vi.fn((nextOnShown?: () => void) => {
       onShown = nextOnShown
       return true
     })
@@ -119,7 +119,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     const shortcutManager = new ShortcutManager(
       createWindowManager(
         vi.fn(() => false),
-        toggleBrainDump,
+        toggleLiveEditor,
       ),
       null,
       createConfigManager(true),
@@ -128,7 +128,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     )
 
     // Act
-    shortcutManager.handleToggleBrainDump()
+    shortcutManager.handleToggleLiveEditor()
 
     // Assert
     expect(soundController.play).not.toHaveBeenCalled()
@@ -140,10 +140,10 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(1)
   })
 
-  it('does not crash after BrainDump becomes visible when opening sound playback fails', () => {
+  it('does not crash after LiveEditor becomes visible when opening sound playback fails', () => {
     // Arrange
     let onShown: (() => void) | undefined
-    const toggleBrainDump = vi.fn((nextOnShown?: () => void) => {
+    const toggleLiveEditor = vi.fn((nextOnShown?: () => void) => {
       onShown = nextOnShown
       return true
     })
@@ -156,14 +156,14 @@ describe('ShortcutManager shortcut opening sound', () => {
     const shortcutManager = new ShortcutManager(
       createWindowManager(
         vi.fn(() => false),
-        toggleBrainDump,
+        toggleLiveEditor,
       ),
       null,
       createConfigManager(true),
       undefined,
       soundController,
     )
-    shortcutManager.handleToggleBrainDump()
+    shortcutManager.handleToggleLiveEditor()
 
     // Act / Assert
     expect(() => onShown?.()).not.toThrow()
@@ -172,7 +172,7 @@ describe('ShortcutManager shortcut opening sound', () => {
 
   it('opens both shortcut windows silently after the user turns the cue off', () => {
     // Arrange
-    const toggleBrainDump = vi.fn((onShown?: () => void) => {
+    const toggleLiveEditor = vi.fn((onShown?: () => void) => {
       onShown?.()
       return true
     })
@@ -180,7 +180,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     const shortcutManager = new ShortcutManager(
       createWindowManager(
         vi.fn(() => true),
-        toggleBrainDump,
+        toggleLiveEditor,
       ),
       null,
       createConfigManager(false),
@@ -190,7 +190,7 @@ describe('ShortcutManager shortcut opening sound', () => {
 
     // Act
     shortcutManager.handleToggleFloatingNavigator()
-    shortcutManager.handleToggleBrainDump()
+    shortcutManager.handleToggleLiveEditor()
 
     // Assert
     expect(soundController.play).not.toHaveBeenCalled()
@@ -215,7 +215,7 @@ describe('ShortcutManager shortcut opening sound', () => {
 
     // Act
     shortcutManager.handleToggleFloatingNavigator()
-    shortcutManager.handleToggleBrainDump()
+    shortcutManager.handleToggleLiveEditor()
 
     // Assert
     expect(soundController.play).not.toHaveBeenCalled()

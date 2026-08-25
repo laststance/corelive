@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * @fileoverview Brain Dump editor look-and-behavior controls (font family, size,
+ * @fileoverview LiveEditor editor look-and-behavior controls (font family, size,
  * text color, clear-on-complete, and clear delay).
  *
  * Pure Redux — these write the `settings` slice (persisted to localStorage and
  * synced across windows), with no IPC. Split out of the old web-common
  * common settings card during the Settings regroup so they sit beside the rest of
- * the Brain Dump settings instead of on the web-common surface, and rendered as
+ * the LiveEditor settings instead of on the web-common surface, and rendered as
  * an independent sibling (not nested inside the IPC-gated note card) so a preload
- * skew on the `brainDump` bridge never hides these DOM-only controls.
+ * skew on the `liveEditor` bridge never hides these DOM-only controls.
  *
- * @module components/electron/BrainDumpAppearance
+ * @module components/electron/LiveEditorAppearance
  */
 import { type ReactElement } from 'react'
 
@@ -20,121 +20,123 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import {
-  BRAINDUMP_CLEAR_DELAY_MAX_MS,
-  BRAINDUMP_CLEAR_DELAY_MIN_MS,
-  BRAINDUMP_CLEAR_DELAY_STEP_MS,
-  BRAINDUMP_FONT_FAMILIES,
-  BRAINDUMP_FONT_FAMILY_CSS,
-  BRAINDUMP_FONT_SIZE_MAX_PX,
-  BRAINDUMP_FONT_SIZE_MIN_PX,
-  BRAINDUMP_FONT_SIZE_STEP_PX,
-  BRAINDUMP_TEXT_COLOR_PRESETS,
-  BRAINDUMP_TOAST_DURATION_MAX_MS,
-  BRAINDUMP_TOAST_DURATION_MIN_MS,
-  BRAINDUMP_TOAST_DURATION_STEP_MS,
-} from '@/lib/constants/braindump'
+  LIVE_EDITOR_CLEAR_DELAY_MAX_MS,
+  LIVE_EDITOR_CLEAR_DELAY_MIN_MS,
+  LIVE_EDITOR_CLEAR_DELAY_STEP_MS,
+  LIVE_EDITOR_FONT_FAMILIES,
+  LIVE_EDITOR_FONT_FAMILY_CSS,
+  LIVE_EDITOR_FONT_SIZE_MAX_PX,
+  LIVE_EDITOR_FONT_SIZE_MIN_PX,
+  LIVE_EDITOR_FONT_SIZE_STEP_PX,
+  LIVE_EDITOR_TEXT_COLOR_PRESETS,
+  LIVE_EDITOR_TOAST_DURATION_MAX_MS,
+  LIVE_EDITOR_TOAST_DURATION_MIN_MS,
+  LIVE_EDITOR_TOAST_DURATION_STEP_MS,
+} from '@/lib/constants/live-editor'
 import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import {
-  selectBraindumpClearDelayMs,
-  selectBraindumpClearOnComplete,
-  selectBraindumpFontFamily,
-  selectBraindumpFontSize,
-  selectBraindumpTextColor,
-  selectBraindumpToastDurationMs,
-  setBraindumpClearDelayMs,
-  setBraindumpClearOnComplete,
-  setBraindumpFontFamily,
-  setBraindumpFontSize,
-  setBraindumpTextColor,
-  setBraindumpToastDurationMs,
+  selectLiveEditorClearDelayMs,
+  selectLiveEditorClearOnComplete,
+  selectLiveEditorFontFamily,
+  selectLiveEditorFontSize,
+  selectLiveEditorTextColor,
+  selectLiveEditorToastDurationMs,
+  setLiveEditorClearDelayMs,
+  setLiveEditorClearOnComplete,
+  setLiveEditorFontFamily,
+  setLiveEditorFontSize,
+  setLiveEditorTextColor,
+  setLiveEditorToastDurationMs,
 } from '@/lib/redux/slices/settingsSlice'
 
 /** A 6-digit `#rrggbb` — the only shape a native `<input type="color">` accepts, so
  * a preset (theme `var()`) or a 3/8-digit hex can't seed the picker's swatch. */
 const SIX_DIGIT_HEX_PATTERN = /^#[0-9a-fA-F]{6}$/
 /** Picker swatch shown when the active color isn't a 6-digit hex (i.e. a preset is on). */
-const BRAINDUMP_CUSTOM_COLOR_FALLBACK = '#000000'
+const LIVE_EDITOR_CUSTOM_COLOR_FALLBACK = '#000000'
 
 /**
- * Brain Dump editor appearance + clear-on-complete controls. Lives under the
- * Brain Dump settings section as a pure-Redux sibling of the IPC-backed note
+ * LiveEditor editor appearance + clear-on-complete controls. Lives under the
+ * LiveEditor settings section as a pure-Redux sibling of the IPC-backed note
  * card; toggling any control writes the `settings` slice directly.
  *
- * @returns The Brain Dump appearance control group.
+ * @returns The LiveEditor appearance control group.
  * @example
- * <BrainDumpAppearance />
+ * <LiveEditorAppearance />
  */
-export const BrainDumpAppearance =
-  function BrainDumpAppearance(): ReactElement {
+export const LiveEditorAppearance =
+  function LiveEditorAppearance(): ReactElement {
     const dispatch = useAppDispatch()
-    const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
-    const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
-    const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
-    const braindumpClearOnComplete = useAppSelector(
-      selectBraindumpClearOnComplete,
+    const liveEditorFontFamily = useAppSelector(selectLiveEditorFontFamily)
+    const liveEditorFontSize = useAppSelector(selectLiveEditorFontSize)
+    const liveEditorTextColor = useAppSelector(selectLiveEditorTextColor)
+    const liveEditorClearOnComplete = useAppSelector(
+      selectLiveEditorClearOnComplete,
     )
-    const braindumpClearDelayMs = useAppSelector(selectBraindumpClearDelayMs)
-    const braindumpToastDurationMs = useAppSelector(
-      selectBraindumpToastDurationMs,
+    const liveEditorClearDelayMs = useAppSelector(selectLiveEditorClearDelayMs)
+    const liveEditorToastDurationMs = useAppSelector(
+      selectLiveEditorToastDurationMs,
     )
 
     // Radix Slider wants a stable single-thumb array; rebuild only on change.
-    const fontSizeSliderValue = [braindumpFontSize]
-    const clearDelaySliderValue = [braindumpClearDelayMs]
-    const toastDurationSliderValue = [braindumpToastDurationMs]
+    const fontSizeSliderValue = [liveEditorFontSize]
+    const clearDelaySliderValue = [liveEditorClearDelayMs]
+    const toastDurationSliderValue = [liveEditorToastDurationMs]
 
     // The active color is "custom" when it matches none of the themed presets —
     // then no preset radio is selected and the native picker owns the choice.
-    const isCustomBraindumpColor = !BRAINDUMP_TEXT_COLOR_PRESETS.some(
-      (preset) => preset.cssValue === braindumpTextColor,
+    const isCustomLiveEditorColor = !LIVE_EDITOR_TEXT_COLOR_PRESETS.some(
+      (preset) => preset.cssValue === liveEditorTextColor,
     )
     // `<input type="color">` can only display a 6-digit hex; fall back to a
     // neutral swatch while a (non-hex) preset is active so the control still renders.
-    const braindumpCustomColorValue = SIX_DIGIT_HEX_PATTERN.test(
-      braindumpTextColor,
+    const liveEditorCustomColorValue = SIX_DIGIT_HEX_PATTERN.test(
+      liveEditorTextColor,
     )
-      ? braindumpTextColor
-      : BRAINDUMP_CUSTOM_COLOR_FALLBACK
+      ? liveEditorTextColor
+      : LIVE_EDITOR_CUSTOM_COLOR_FALLBACK
 
-    const handleBraindumpClearOnCompleteChange = (checked: boolean): void => {
-      dispatch(setBraindumpClearOnComplete(checked))
+    const handleLiveEditorClearOnCompleteChange = (checked: boolean): void => {
+      dispatch(setLiveEditorClearOnComplete(checked))
     }
 
-    const handleBraindumpFontFamilyChange = (value: string): void => {
+    const handleLiveEditorFontFamilyChange = (value: string): void => {
       // RadioGroup yields a bare string; resolve it against the registry so the id
-      // narrows to a BrainDumpFontFamilyId without an unsafe cast.
-      const family = BRAINDUMP_FONT_FAMILIES.find((entry) => entry.id === value)
+      // narrows to a LiveEditorFontFamilyId without an unsafe cast.
+      const family = LIVE_EDITOR_FONT_FAMILIES.find(
+        (entry) => entry.id === value,
+      )
       if (!family) return
-      dispatch(setBraindumpFontFamily(family.id))
+      dispatch(setLiveEditorFontFamily(family.id))
     }
 
-    const handleBraindumpFontSizeChange = (values: number[]): void => {
+    const handleLiveEditorFontSizeChange = (values: number[]): void => {
       // Guard the first thumb value before dispatching.
       const nextSize = values[0]
       if (typeof nextSize === 'number') {
-        dispatch(setBraindumpFontSize(nextSize))
+        dispatch(setLiveEditorFontSize(nextSize))
       }
     }
 
-    const handleBraindumpClearDelayChange = (values: number[]): void => {
+    const handleLiveEditorClearDelayChange = (values: number[]): void => {
       // Guard the first thumb value before dispatching.
       const nextDelay = values[0]
       if (typeof nextDelay === 'number') {
-        dispatch(setBraindumpClearDelayMs(nextDelay))
+        dispatch(setLiveEditorClearDelayMs(nextDelay))
       }
     }
 
-    const handleBraindumpToastDurationChange = (values: number[]): void => {
+    const handleLiveEditorToastDurationChange = (values: number[]): void => {
       // Guard the first thumb value before dispatching.
       const nextDuration = values[0]
       if (typeof nextDuration === 'number') {
-        dispatch(setBraindumpToastDurationMs(nextDuration))
+        dispatch(setLiveEditorToastDurationMs(nextDuration))
       }
     }
 
-    const handleBraindumpTextColorPresetChange = (value: string): void => {
+    const handleLiveEditorTextColorPresetChange = (value: string): void => {
       // RadioGroup values ARE the preset cssValue strings, stored verbatim.
-      dispatch(setBraindumpTextColor(value))
+      dispatch(setLiveEditorTextColor(value))
     }
 
     return (
@@ -143,7 +145,7 @@ export const BrainDumpAppearance =
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label
-              htmlFor="braindump-clear-on-complete"
+              htmlFor="live-editor-clear-on-complete"
               className="text-sm font-medium"
             >
               Clear finished lines
@@ -154,9 +156,9 @@ export const BrainDumpAppearance =
             </p>
           </div>
           <Switch
-            id="braindump-clear-on-complete"
-            checked={braindumpClearOnComplete}
-            onCheckedChange={handleBraindumpClearOnCompleteChange}
+            id="live-editor-clear-on-complete"
+            checked={liveEditorClearOnComplete}
+            onCheckedChange={handleLiveEditorClearOnCompleteChange}
           />
         </div>
 
@@ -167,26 +169,26 @@ export const BrainDumpAppearance =
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label
-              htmlFor="braindump-clear-delay"
+              htmlFor="live-editor-clear-delay"
               className="text-sm font-medium"
             >
               Clear delay
             </Label>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {braindumpClearDelayMs === 0
+              {liveEditorClearDelayMs === 0
                 ? 'Instant'
-                : `${braindumpClearDelayMs} ms`}
+                : `${liveEditorClearDelayMs} ms`}
             </span>
           </div>
           <Slider
-            id="braindump-clear-delay"
-            aria-label="BrainDump clear delay"
-            min={BRAINDUMP_CLEAR_DELAY_MIN_MS}
-            max={BRAINDUMP_CLEAR_DELAY_MAX_MS}
-            step={BRAINDUMP_CLEAR_DELAY_STEP_MS}
+            id="live-editor-clear-delay"
+            aria-label="LiveEditor clear delay"
+            min={LIVE_EDITOR_CLEAR_DELAY_MIN_MS}
+            max={LIVE_EDITOR_CLEAR_DELAY_MAX_MS}
+            step={LIVE_EDITOR_CLEAR_DELAY_STEP_MS}
             value={clearDelaySliderValue}
-            onValueChange={handleBraindumpClearDelayChange}
-            disabled={!braindumpClearOnComplete}
+            onValueChange={handleLiveEditorClearDelayChange}
+            disabled={!liveEditorClearOnComplete}
           />
           {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
              medium, uppercase, 0.05em) — muted so the slider still leads. */}
@@ -194,7 +196,7 @@ export const BrainDumpAppearance =
             <span>Instant</span>
             <span>Linger</span>
           </div>
-          {!braindumpClearOnComplete ? (
+          {!liveEditorClearOnComplete ? (
             <p className="text-xs text-muted-foreground">
               Turn on “Clear finished lines” to use the delay.
             </p>
@@ -210,23 +212,23 @@ export const BrainDumpAppearance =
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label
-              htmlFor="braindump-toast-duration"
+              htmlFor="live-editor-toast-duration"
               className="text-sm font-medium"
             >
               Confirmation duration
             </Label>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {`${braindumpToastDurationMs} ms`}
+              {`${liveEditorToastDurationMs} ms`}
             </span>
           </div>
           <Slider
-            id="braindump-toast-duration"
-            aria-label="BrainDump completion toast duration"
-            min={BRAINDUMP_TOAST_DURATION_MIN_MS}
-            max={BRAINDUMP_TOAST_DURATION_MAX_MS}
-            step={BRAINDUMP_TOAST_DURATION_STEP_MS}
+            id="live-editor-toast-duration"
+            aria-label="LiveEditor completion toast duration"
+            min={LIVE_EDITOR_TOAST_DURATION_MIN_MS}
+            max={LIVE_EDITOR_TOAST_DURATION_MAX_MS}
+            step={LIVE_EDITOR_TOAST_DURATION_STEP_MS}
             value={toastDurationSliderValue}
-            onValueChange={handleBraindumpToastDurationChange}
+            onValueChange={handleLiveEditorToastDurationChange}
           />
           {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
              medium, uppercase, 0.05em) — muted so the slider still leads. "Quick"
@@ -245,20 +247,20 @@ export const BrainDumpAppearance =
         <div className="space-y-2">
           <span className="text-sm font-medium">Font</span>
           <RadioGroup
-            aria-label="BrainDump font family"
-            value={braindumpFontFamily}
-            onValueChange={handleBraindumpFontFamilyChange}
+            aria-label="LiveEditor font family"
+            value={liveEditorFontFamily}
+            onValueChange={handleLiveEditorFontFamilyChange}
             className="grid grid-cols-3 gap-2"
           >
-            {BRAINDUMP_FONT_FAMILIES.map((family) => (
+            {LIVE_EDITOR_FONT_FAMILIES.map((family) => (
               <div key={family.id} className="flex items-center gap-2">
                 <RadioGroupItem
-                  id={`braindump-font-${family.id}`}
+                  id={`live-editor-font-${family.id}`}
                   value={family.id}
                 />
 
                 <Label
-                  htmlFor={`braindump-font-${family.id}`}
+                  htmlFor={`live-editor-font-${family.id}`}
                   className="text-sm font-normal"
                 >
                   {/* Preview each option in its own face. Inline style sits on
@@ -266,7 +268,7 @@ export const BrainDumpAppearance =
                      object on a DOM element is free and needs no useMemo. */}
                   <span
                     style={{
-                      fontFamily: BRAINDUMP_FONT_FAMILY_CSS[family.id],
+                      fontFamily: LIVE_EDITOR_FONT_FAMILY_CSS[family.id],
                     }}
                   >
                     {family.label}
@@ -281,23 +283,23 @@ export const BrainDumpAppearance =
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label
-              htmlFor="braindump-font-size"
+              htmlFor="live-editor-font-size"
               className="text-sm font-medium"
             >
               Font size
             </Label>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {braindumpFontSize}px
+              {liveEditorFontSize}px
             </span>
           </div>
           <Slider
-            id="braindump-font-size"
-            aria-label="BrainDump font size"
-            min={BRAINDUMP_FONT_SIZE_MIN_PX}
-            max={BRAINDUMP_FONT_SIZE_MAX_PX}
-            step={BRAINDUMP_FONT_SIZE_STEP_PX}
+            id="live-editor-font-size"
+            aria-label="LiveEditor font size"
+            min={LIVE_EDITOR_FONT_SIZE_MIN_PX}
+            max={LIVE_EDITOR_FONT_SIZE_MAX_PX}
+            step={LIVE_EDITOR_FONT_SIZE_STEP_PX}
             value={fontSizeSliderValue}
-            onValueChange={handleBraindumpFontSizeChange}
+            onValueChange={handleLiveEditorFontSizeChange}
           />
         </div>
 
@@ -305,20 +307,20 @@ export const BrainDumpAppearance =
         <div className="space-y-2">
           <span className="text-sm font-medium">Text color</span>
           <RadioGroup
-            aria-label="BrainDump text color"
-            value={isCustomBraindumpColor ? '' : braindumpTextColor}
-            onValueChange={handleBraindumpTextColorPresetChange}
+            aria-label="LiveEditor text color"
+            value={isCustomLiveEditorColor ? '' : liveEditorTextColor}
+            onValueChange={handleLiveEditorTextColorPresetChange}
             className="grid grid-cols-3 gap-2"
           >
-            {BRAINDUMP_TEXT_COLOR_PRESETS.map((preset) => (
+            {LIVE_EDITOR_TEXT_COLOR_PRESETS.map((preset) => (
               <div key={preset.id} className="flex items-center gap-2">
                 <RadioGroupItem
-                  id={`braindump-text-color-${preset.id}`}
+                  id={`live-editor-text-color-${preset.id}`}
                   value={preset.cssValue}
                 />
 
                 <Label
-                  htmlFor={`braindump-text-color-${preset.id}`}
+                  htmlFor={`live-editor-text-color-${preset.id}`}
                   className="flex items-center gap-2 text-sm font-normal"
                 >
                   <span
@@ -335,21 +337,21 @@ export const BrainDumpAppearance =
           {/* Custom color — native picker; choosing one overrides the presets. */}
           <div className="flex items-center gap-2">
             <Label
-              htmlFor="braindump-text-color-custom"
+              htmlFor="live-editor-text-color-custom"
               className="text-sm font-normal"
             >
               Custom
             </Label>
             <input
-              id="braindump-text-color-custom"
+              id="live-editor-text-color-custom"
               type="color"
-              aria-label="Custom BrainDump text color"
-              value={braindumpCustomColorValue}
+              aria-label="Custom LiveEditor text color"
+              value={liveEditorCustomColorValue}
               // Inline (not useCallback) — a fresh handler on an intrinsic
               // element is free. The native picker emits a 6-digit hex; store it
               // verbatim as the (custom) color.
               onChange={(event) =>
-                dispatch(setBraindumpTextColor(event.target.value))
+                dispatch(setLiveEditorTextColor(event.target.value))
               }
               className="h-7 w-10 cursor-pointer rounded border bg-transparent"
             />
@@ -359,4 +361,4 @@ export const BrainDumpAppearance =
     )
   }
 
-export default BrainDumpAppearance
+export default LiveEditorAppearance

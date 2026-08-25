@@ -10,6 +10,7 @@ import type {
   NativeTapStatus,
   NotificationSettingsState,
   StartupWindowConfig,
+  LegacyStartupWindowConfig,
 } from '@/electron/types/ipc'
 
 interface ElectronAuthUser {
@@ -65,7 +66,7 @@ interface ElectronAPI {
     setFullScreen?: (flag: boolean) => void
     setAlwaysOnTop?: (flag: boolean) => void
     moveToDisplay?: (displayIndex: number) => void
-    /** Read which auxiliary windows (floating navigator, brain dump) are visible now */
+    /** Read which auxiliary windows (floating navigator, LiveEditor) are visible now */
     getAuxVisibility?: () => Promise<AuxWindowVisibility>
   }
 
@@ -207,7 +208,7 @@ interface ElectronAPI {
 
   // Shared floating panel behavior
   floatingPanels?: {
-    /** Read whether Floating Navigator and BrainDump follow macOS Spaces */
+    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
     /** Persist and apply whether both panels follow macOS Spaces */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
@@ -269,27 +270,36 @@ interface ElectronAPI {
       IPCResponse<'settings:getLoginItemSettings'>
     >
     /**
-     * Persist which window(s) open at Electron launch (brain dump / floating
+     * Persist which window(s) open at Electron launch (LiveEditor / floating
      * navigator). The >=1-true invariant is enforced in the main process;
      * resolves true even when an all-false request is repaired.
      */
-    setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
+    setStartupConfig: (
+      config: StartupWindowConfig | LegacyStartupWindowConfig,
+    ) => Promise<boolean>
     /**
      * Read the persisted startup-window config so the settings UI can show the
      * saved choice. Returns the Floating-only default on failure, never all-off.
      */
-    getStartupConfig: () => Promise<StartupWindowConfig>
+    getStartupConfig: () => Promise<
+      StartupWindowConfig | LegacyStartupWindowConfig
+    >
   }
 
   /**
-   * BrainDump window controls exposed to the main window's Settings UI.
+   * LiveEditor window controls exposed to the main window's Settings UI.
    *
    * Minimal renderer-side mirror; the canonical surface lives in
    * /electron/types/electron-api.d.ts. Only includes what the settings page
    * needs (e.g. a "Try it now" open action).
    */
+  liveEditor?: {
+    /** Open the LiveEditor window (additive — only shows, never hides). */
+    show: () => Promise<void>
+  }
+  /** @deprecated Pre-rename installed preload namespace; use `liveEditor`. */
   brainDump?: {
-    /** Open the BrainDump window (additive — only shows, never hides). */
+    /** Open the LiveEditor window (additive — only shows, never hides). */
     show: () => Promise<void>
   }
 }

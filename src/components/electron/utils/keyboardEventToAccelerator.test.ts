@@ -24,7 +24,7 @@ describe('keyboardEventToAccelerator', () => {
     expect(accelerator).toBe('CommandOrControl+3')
   })
 
-  it('maps Option + Space to the BrainDump-style accelerator', () => {
+  it('maps Option + Space to the LiveEditor-style accelerator', () => {
     // Arrange
     const event = keydown({ code: 'Space', altKey: true })
 

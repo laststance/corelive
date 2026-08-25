@@ -1,6 +1,6 @@
 /**
  * @fileoverview Re-register one global toggle accelerator, rejecting a silently
- * substituted fallback as a conflict (§6e Design B). Shared by the BrainDump and
+ * substituted fallback as a conflict (§6e Design B). Shared by the LiveEditor and
  * Floating Navigator set-shortcut IPC handlers in `main.ts`.
  *
  * @module electron/utils/applyShortcutRebind
@@ -29,7 +29,7 @@ export interface ShortcutRebinder {
  * read-back, since nothing is expected to be registered afterwards.
  *
  * @param rebinder - The ShortcutManager, or a structural stand-in in tests.
- * @param id - The toggle's shortcut id, e.g. `'toggleBrainDump'` or `'toggleFloatingNavigator'`.
+ * @param id - The toggle's shortcut id, e.g. `'toggleLiveEditor'` or `'toggleFloatingNavigator'`.
  * @param accelerator - The requested accelerator, or `''` to disable the shortcut.
  * @param previous - The accelerator to restore when the request cannot bind cleanly.
  * @returns
@@ -40,7 +40,7 @@ export interface ShortcutRebinder {
  *   (rather than silently returning `false` with the live registration out of sync).
  * @example
  * applyShortcutRebind(sm, 'toggleFloatingNavigator', 'CommandOrControl+3', 'CommandOrControl+3') // => true
- * applyShortcutRebind(sm, 'toggleBrainDump', 'Alt+Space', 'Alt+Shift+Space') // => false when Alt+Space is taken
+ * applyShortcutRebind(sm, 'toggleLiveEditor', 'Alt+Space', 'Alt+Shift+Space') // => false when Alt+Space is taken
  */
 export function applyShortcutRebind(
   rebinder: ShortcutRebinder,

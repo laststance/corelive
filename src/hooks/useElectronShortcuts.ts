@@ -84,7 +84,7 @@ export function useElectronShortcuts(): UseElectronShortcutsReturn {
    * positional (id, accelerator) args, so a per-shortcut loop would throw.
    * @param newShortcuts - Full `{ shortcutId: accelerator }` map to persist (`''` unbinds).
    * @returns Resolves to `true` when the batch persisted, `false` on failure or non-Electron.
-   * @example await updateShortcuts({ toggleBrainDump: 'Alt+Space' })
+   * @example await updateShortcuts({ toggleLiveEditor: 'Alt+Space' })
    */
   const updateShortcuts = async (newShortcuts: Record<string, string>) => {
     if (!isElectron || !window.electronAPI?.shortcuts) return false

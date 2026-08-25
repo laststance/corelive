@@ -105,7 +105,7 @@ describe('createUiohookShortcutEngine', () => {
     // Act
     const didRegister = engine.register(
       'rightOption',
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -141,7 +141,7 @@ describe('createUiohookShortcutEngine', () => {
     // Act
     const didRegister = engine.register(
       'rightOption',
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -157,7 +157,7 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: press and release the right Option key alone, then drain the deferral.
     fake.pressKey(RIGHT_OPTION_KEYCODE)
@@ -175,7 +175,7 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act
     fake.pressKey(RIGHT_OPTION_KEYCODE)
@@ -194,7 +194,7 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: Option down, a letter down (forms a chord), then Option up.
     fake.pressKey(RIGHT_OPTION_KEYCODE)
@@ -212,10 +212,10 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act
-    engine.unregister('toggleBrainDump')
+    engine.unregister('toggleLiveEditor')
     fake.pressKey(RIGHT_OPTION_KEYCODE)
     fake.releaseKey(RIGHT_OPTION_KEYCODE)
     await flushImmediate()
@@ -230,10 +230,10 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: rebind the same id to the LEFT Option, then press each key alone.
-    engine.register('leftOption', 'toggleBrainDump', callback)
+    engine.register('leftOption', 'toggleLiveEditor', callback)
     fake.pressKey(RIGHT_OPTION_KEYCODE)
     fake.releaseKey(RIGHT_OPTION_KEYCODE)
     fake.pressKey(LEFT_OPTION_KEYCODE)
@@ -251,12 +251,12 @@ describe('createUiohookShortcutEngine', () => {
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
 
     // Act + Assert: first bind starts the tap.
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
     expect(fake.start).toHaveBeenCalledTimes(1)
     expect(fake.stop).not.toHaveBeenCalled()
 
     // Removing the last binding stops it (the app releases the global hook).
-    engine.unregister('toggleBrainDump')
+    engine.unregister('toggleLiveEditor')
     expect(fake.stop).toHaveBeenCalledTimes(1)
   })
 
@@ -271,7 +271,7 @@ describe('createUiohookShortcutEngine', () => {
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
 
     // Act
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
 
     // Assert: the on-disk guard is persisted before the tap runs.
     expect(arm).toHaveBeenCalledTimes(1)
@@ -289,7 +289,7 @@ describe('createUiohookShortcutEngine', () => {
     // Act
     const didRegister = engine.register(
       'rightOption',
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -308,7 +308,7 @@ describe('createUiohookShortcutEngine', () => {
     // Act
     const didRegister = engine.register(
       'rightOption',
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -323,7 +323,7 @@ describe('createUiohookShortcutEngine', () => {
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch(true)
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
-    expect(engine.register('rightOption', 'toggleBrainDump', vi.fn())).toBe(
+    expect(engine.register('rightOption', 'toggleLiveEditor', vi.fn())).toBe(
       false,
     )
 
@@ -331,7 +331,7 @@ describe('createUiohookShortcutEngine', () => {
     engine.clearLatchBlock()
     const didRegister = engine.register(
       'rightOption',
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -348,7 +348,7 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: revive the tap ten times (as repeated resume/unlock events would).
     for (let i = 0; i < 10; i++) engine.reArm()
@@ -366,7 +366,7 @@ describe('createUiohookShortcutEngine', () => {
     const fake = createFakeUiohook()
     const { latch, arm } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
     expect(fake.start).toHaveBeenCalledTimes(1)
     expect(arm).toHaveBeenCalledTimes(1)
 
@@ -400,7 +400,7 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: press (arms it), reArm (wake), then the dangling release arrives.
     fake.pressKey(RIGHT_OPTION_KEYCODE)
@@ -418,7 +418,7 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: arm the modifier, reset state (suspend), then the dangling release.
     fake.pressKey(RIGHT_OPTION_KEYCODE)
@@ -436,10 +436,10 @@ describe('createUiohookShortcutEngine', () => {
     const fake = createFakeUiohook()
     const { latch, clear } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
 
     // Act: removing the last binding stops the tap cleanly.
-    engine.unregister('toggleBrainDump')
+    engine.unregister('toggleLiveEditor')
 
     // Assert: a clean stop drops the guard so the next launch isn't false-blocked.
     expect(fake.stop).toHaveBeenCalledTimes(1)
@@ -455,13 +455,13 @@ describe('createUiohookShortcutEngine', () => {
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
     const callback = vi.fn()
-    engine.register('rightOption', 'toggleBrainDump', callback)
+    engine.register('rightOption', 'toggleLiveEditor', callback)
 
     // Act: press+release SCHEDULES the deferred toggle, then unregister BEFORE
     // the macrotask queue drains.
     fake.pressKey(RIGHT_OPTION_KEYCODE)
     fake.releaseKey(RIGHT_OPTION_KEYCODE)
-    engine.unregister('toggleBrainDump')
+    engine.unregister('toggleLiveEditor')
     await flushImmediate()
 
     // Assert: the now-stale callback was cancelled.
@@ -481,7 +481,7 @@ describe('createUiohookShortcutEngine', () => {
     }
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => stopThrowingModule, latch)
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
     expect(start).toHaveBeenCalledTimes(1) // initial lazy start
 
     // Act: reArm — stop() throws.
@@ -506,13 +506,13 @@ describe('createUiohookShortcutEngine', () => {
     }
     const { latch, clear } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => stopThrowingModule, latch)
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
     expect(start).toHaveBeenCalledTimes(1) // initial lazy start
 
     // Act: remove the last binding (stop() throws), then bind again — a mistaken
     // "clean shutdown" would start() a second tap here.
-    engine.unregister('toggleBrainDump')
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.unregister('toggleLiveEditor')
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
 
     // Assert: the failed stop did NOT clear the guard, and no second start ran.
     expect(clear).not.toHaveBeenCalled()
@@ -526,7 +526,7 @@ describe('createUiohookShortcutEngine', () => {
     const engine = createUiohookShortcutEngine(() => fake.module, latch)
 
     // Act
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
 
     // Assert: a live tap with a binding is active (renderer hides recovery).
     expect(engine.isActive()).toBe(true)
@@ -549,7 +549,7 @@ describe('createUiohookShortcutEngine', () => {
     }
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => reArmFailingModule, latch)
-    engine.register('rightOption', 'toggleBrainDump', vi.fn())
+    engine.register('rightOption', 'toggleLiveEditor', vi.fn())
     expect(engine.isActive()).toBe(true) // live before the failed re-arm
 
     // Act: reArm stops cleanly then fails to restart.

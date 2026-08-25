@@ -132,7 +132,7 @@ export const PasteImportDialog = function PasteImportDialog({
     initialSharedCategory,
   )
   // Per-row overrides keyed by row index. Cleared whenever the parse changes
-  // (the BrainDump line-index-drift bug: an edit shifts rows, so a stale
+  // (the LiveEditor line-index-drift bug: an edit shifts rows, so a stale
   // index-keyed override would mis-apply). Calm-first for Slice 1.
   const [rowOverrides, setRowOverrides] = useState<Map<number, number>>(
     () => new Map(),

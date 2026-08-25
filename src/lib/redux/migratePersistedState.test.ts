@@ -159,7 +159,7 @@ describe('migratePersistedState (orchestrator)', () => {
     expect(migrated).not.toHaveProperty('preferences')
   })
 
-  it('moves every v1 user setting to the v2 root key without changing values', () => {
+  it('moves every v1 user setting to the current root key without changing values', () => {
     // Arrange
     const versionOneState = asPersistedState({
       electronSettings: {
@@ -193,6 +193,39 @@ describe('migratePersistedState (orchestrator)', () => {
       startAtLogin: true,
     })
     expect(migrated).not.toHaveProperty('preferences')
+  })
+
+  it('preserves every renderer preference across the LiveEditor field rename', () => {
+    // Arrange: v2 is the last release that persisted the previous field names.
+    const versionTwoState = asPersistedState({
+      settings: {
+        braindumpFontFamily: 'mono',
+        braindumpFontSize: 21,
+        braindumpTextColor: '#c2410c',
+        braindumpClearOnComplete: true,
+        braindumpClearDelayMs: 1200,
+        braindumpToastDurationMs: 6400,
+      },
+    })
+
+    // Act
+    const migrated = migratePersistedState(versionTwoState, 2)
+
+    // Assert: exact user values survive under the canonical v3 field names.
+    expect(migrated.settings).toMatchObject({
+      liveEditorFontFamily: 'mono',
+      liveEditorFontSize: 21,
+      liveEditorTextColor: '#c2410c',
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1200,
+      liveEditorToastDurationMs: 6400,
+    })
+    expect(migrated.settings).not.toHaveProperty('braindumpFontFamily')
+    expect(migrated.settings).not.toHaveProperty('braindumpFontSize')
+    expect(migrated.settings).not.toHaveProperty('braindumpTextColor')
+    expect(migrated.settings).not.toHaveProperty('braindumpClearOnComplete')
+    expect(migrated.settings).not.toHaveProperty('braindumpClearDelayMs')
+    expect(migrated.settings).not.toHaveProperty('braindumpToastDurationMs')
   })
 })
 
@@ -264,6 +297,37 @@ describe('storage rehydrate migration (integration)', () => {
       showInMenuBar: false,
       startAtLogin: true,
     })
+  })
+
+  it('rehydrates v2 LiveEditor preferences without resetting user choices', async () => {
+    // Arrange: seed the exact storage envelope written before the rename.
+    window.localStorage.setItem(
+      TEST_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        state: {
+          settings: {
+            braindumpFontFamily: 'mono',
+            braindumpFontSize: 21,
+            braindumpTextColor: '#c2410c',
+            braindumpClearOnComplete: true,
+            braindumpClearDelayMs: 1200,
+            braindumpToastDurationMs: 6400,
+          },
+        },
+      }),
+    )
+
+    // Act
+    const store = await buildAndRehydrateStore()
+
+    // Assert: rehydrated Redux state exposes the preserved canonical values.
+    expect(store.getState().settings.liveEditorFontFamily).toBe('mono')
+    expect(store.getState().settings.liveEditorFontSize).toBe(21)
+    expect(store.getState().settings.liveEditorTextColor).toBe('#c2410c')
+    expect(store.getState().settings.liveEditorClearOnComplete).toBe(true)
+    expect(store.getState().settings.liveEditorClearDelayMs).toBe(1200)
+    expect(store.getState().settings.liveEditorToastDurationMs).toBe(6400)
   })
 
   it('preserves an already-materialized blob (no completion sound) when bumping the version', async () => {

@@ -18,26 +18,26 @@ vi.mock('../logger', () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-import { getBrainDumpNote, setBrainDumpNote } from '../BrainDumpNoteStore'
 import { ConfigManager } from '../ConfigManager'
+import { getLiveEditorNote, setLiveEditorNote } from '../LiveEditorNoteStore'
 
 /**
- * Reads the persisted BrainDump notes from ConfigManager so assertions prove disk-shape compatibility.
+ * Reads the persisted LiveEditor notes from ConfigManager so assertions prove disk-shape compatibility.
  * @param configManager - The temp-directory-backed config manager under test.
  * @returns The persisted note map keyed by category id string.
  * @example
- * readBrainDumpNotes(configManager) // => { '1': 'note' }
+ * readLiveEditorNotes(configManager) // => { '1': 'note' }
  */
-const readBrainDumpNotes = (
+const readLiveEditorNotes = (
   configManager: ConfigManager,
 ): Record<string, string> =>
-  configManager.get<Record<string, string>>('braindump.notes', {})
+  configManager.get<Record<string, string>>('liveEditor.notes', {})
 
-describe('BrainDumpNoteStore', () => {
+describe('LiveEditorNoteStore', () => {
   beforeEach(() => {
     // Arrange: isolate config.json per test so note writes prove real shape.
     userDataDir.current = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'corelive-braindump-note-store-'),
+      path.join(os.tmpdir(), 'corelive-live-editor-note-store-'),
     )
   })
 
@@ -48,12 +48,12 @@ describe('BrainDumpNoteStore', () => {
   it('returns an empty string when a category has no persisted note', () => {
     // Arrange
     const configManager = new ConfigManager()
-    configManager.set('braindump.notes', {
+    configManager.set('liveEditor.notes', {
       '1': 'existing CoreLive note',
     })
 
     // Act
-    const noteText = getBrainDumpNote(configManager, 2)
+    const noteText = getLiveEditorNote(configManager, 2)
 
     // Assert
     expect(noteText).toBe('')
@@ -62,12 +62,12 @@ describe('BrainDumpNoteStore', () => {
   it('reads the persisted note for the requested category', () => {
     // Arrange
     const configManager = new ConfigManager()
-    configManager.set('braindump.notes', {
+    configManager.set('liveEditor.notes', {
       '1': 'existing CoreLive note',
     })
 
     // Act
-    const noteText = getBrainDumpNote(configManager, 1)
+    const noteText = getLiveEditorNote(configManager, 1)
 
     // Assert
     expect(noteText).toBe('existing CoreLive note')
@@ -76,16 +76,16 @@ describe('BrainDumpNoteStore', () => {
   it('updates one category note while preserving the other category notes', () => {
     // Arrange
     const configManager = new ConfigManager()
-    configManager.set('braindump.notes', {
+    configManager.set('liveEditor.notes', {
       '1': 'existing CoreLive note',
       '2': 'other category note',
     })
 
     // Act
-    setBrainDumpNote(configManager, 1, 'updated CoreLive note')
+    setLiveEditorNote(configManager, 1, 'updated CoreLive note')
 
     // Assert
-    expect(readBrainDumpNotes(configManager)).toEqual({
+    expect(readLiveEditorNotes(configManager)).toEqual({
       '1': 'updated CoreLive note',
       '2': 'other category note',
     })
@@ -96,10 +96,10 @@ describe('BrainDumpNoteStore', () => {
     const configManager = new ConfigManager()
 
     // Act
-    setBrainDumpNote(configManager, 3, 'first note')
+    setLiveEditorNote(configManager, 3, 'first note')
 
     // Assert
-    expect(readBrainDumpNotes(configManager)).toEqual({
+    expect(readLiveEditorNotes(configManager)).toEqual({
       '3': 'first note',
     })
   })

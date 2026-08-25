@@ -33,7 +33,7 @@ describe('isCoreliveDebugEnabled (the CORELIVE_DEBUG launch opt-in)', () => {
 })
 
 describe('isDevToolsEnabled (secure-by-default per-window DevTools gate)', () => {
-  // Shared by every production window (main, floating, braindump, settings).
+  // Shared by every production window (main, floating, liveEditor, settings).
   // Regression for Issue #61: a default packaged build must NOT expose DevTools
   // on any window, but each opt-in path must re-enable it.
 

@@ -529,7 +529,7 @@ export class SystemTrayManager {
       // so a rebound or unset shortcut never shows a stale or orphan glyph.
       const accelerators = this.getShortcutAccelerators?.() ?? {}
       const floatingNavigatorAccelerator = accelerators.toggleFloatingNavigator
-      const brainDumpAccelerator = accelerators.toggleBrainDump
+      const liveEditorAccelerator = accelerators.toggleLiveEditor
 
       const template: MenuItemConstructorOptions[] = [
         {
@@ -558,12 +558,12 @@ export class SystemTrayManager {
           },
         },
         {
-          ...trayShortcutMenuFields('Toggle BrainDump', brainDumpAccelerator),
+          ...trayShortcutMenuFields('Toggle LiveEditor', liveEditorAccelerator),
           click: () => {
             try {
-              this.windowManager.toggleBrainDump()
+              this.windowManager.toggleLiveEditor()
             } catch (error) {
-              log.error('Failed to toggle BrainDump:', error)
+              log.error('Failed to toggle LiveEditor:', error)
             }
           },
         },

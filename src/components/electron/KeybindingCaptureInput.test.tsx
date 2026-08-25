@@ -21,7 +21,7 @@ function renderCaptureBox(initialValue = ''): {
     return (
       <KeybindingCaptureInput
         value={value}
-        ariaLabel="Toggle BrainDump"
+        ariaLabel="Toggle LiveEditor"
         onChange={(accelerator) => {
           onChange(accelerator)
           setValue(accelerator)
@@ -30,7 +30,7 @@ function renderCaptureBox(initialValue = ''): {
     )
   }
   render(<Harness />)
-  return { onChange, button: screen.getByLabelText('Toggle BrainDump') }
+  return { onChange, button: screen.getByLabelText('Toggle LiveEditor') }
 }
 
 describe('KeybindingCaptureInput', () => {
@@ -235,12 +235,12 @@ describe('KeybindingCaptureInput', () => {
     render(
       <KeybindingCaptureInput
         value=""
-        ariaLabel="Toggle BrainDump"
+        ariaLabel="Toggle LiveEditor"
         disabled
         onChange={onChange}
       />,
     )
-    const button = screen.getByLabelText('Toggle BrainDump')
+    const button = screen.getByLabelText('Toggle LiveEditor')
 
     // Act
     fireEvent.click(button)

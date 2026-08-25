@@ -77,7 +77,7 @@ function getCaptureLabel(
  * VSCode-style keybinding capture: click (or focus + Enter/Space) to start
  * recording, then press a key combination to bind it. Exists so users set
  * shortcuts by pressing the keys instead of typing Electron accelerator syntax;
- * rendered in the Electron keyboard-shortcut and BrainDump settings panels.
+ * rendered in the Electron keyboard-shortcut and LiveEditor settings panels.
  * Built on the native-button primitive so a `<Label htmlFor>` still associates,
  * and reads `event.code` (physical key) so capture is keyboard-layout-independent.
  *
@@ -85,7 +85,7 @@ function getCaptureLabel(
  * @returns A button showing the bound keys as glyphs (`⌥Space`), `Click to set`
  *   when unbound, or `Press keys…` while recording.
  * @example
- * <KeybindingCaptureInput value="Alt+Space" ariaLabel="Toggle BrainDump" onChange={setAccel} />
+ * <KeybindingCaptureInput value="Alt+Space" ariaLabel="Toggle LiveEditor" onChange={setAccel} />
  */
 export const KeybindingCaptureInput = function KeybindingCaptureInput({
   value,

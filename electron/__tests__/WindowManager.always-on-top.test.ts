@@ -1,12 +1,12 @@
 /**
- * @fileoverview FloatingNavigator + BrainDump always-on-top WindowManager tests.
+ * @fileoverview FloatingNavigator + LiveEditor always-on-top WindowManager tests.
  *
  * The crux sentinel: FloatingNavigator's always-on-top must persist to the
  * WindowStateManager, not just config — otherwise the setting is a silent
  * no-op after the first launch, because `window-state.json` overrides config at
  * relaunch. A config-only setter would pass typecheck and look correct, yet
  * re-pin the window on the next boot. These tests fail if that regression
- * returns. They also lock the BrainDump window's constructor to a config read
+ * returns. They also lock the LiveEditor window's constructor to a config read
  * (no hardcoded `alwaysOnTop: true` shadow) and the getters to the right source
  * of truth, plus the §6d cross-window broadcast: an open floating window must be
  * told when the setting changes from another surface so its own pin button
@@ -310,46 +310,46 @@ describe('WindowManager always-on-top', () => {
     })
   })
 
-  describe('setBrainDumpAlwaysOnTop', () => {
-    it('persists to config and applies to the open BrainDump window', () => {
-      // Arrange: BrainDump starts unpinned, then is opened.
+  describe('setLiveEditorAlwaysOnTop', () => {
+    it('persists to config and applies to the open LiveEditor window', () => {
+      // Arrange: LiveEditor starts unpinned, then is opened.
       const { configManager, set } = createConfigStub({
-        'braindump.alwaysOnTop': false,
+        'liveEditor.alwaysOnTop': false,
       })
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
-      windowManager.createBrainDumpWindow()
-      const brainDumpWindow = createdWindows[0]
-      if (!brainDumpWindow) throw new Error('Expected a BrainDump window')
+      windowManager.createLiveEditorWindow()
+      const liveEditorWindow = createdWindows[0]
+      if (!liveEditorWindow) throw new Error('Expected a LiveEditor window')
 
-      // Act: the user pins BrainDump.
-      const applied = windowManager.setBrainDumpAlwaysOnTop(true)
+      // Act: the user pins LiveEditor.
+      const applied = windowManager.setLiveEditorAlwaysOnTop(true)
 
       // Assert: config is updated AND the live window is re-pinned immediately.
       expect(applied).toBe(true)
-      expect(set).toHaveBeenCalledWith('braindump.alwaysOnTop', true)
-      expect(brainDumpWindow.win.setAlwaysOnTop).toHaveBeenCalledWith(true)
+      expect(set).toHaveBeenCalledWith('liveEditor.alwaysOnTop', true)
+      expect(liveEditorWindow.win.setAlwaysOnTop).toHaveBeenCalledWith(true)
     })
   })
 
-  describe('getBrainDumpAlwaysOnTop', () => {
-    it('reads the persisted BrainDump pin from config', () => {
+  describe('getLiveEditorAlwaysOnTop', () => {
+    it('reads the persisted LiveEditor pin from config', () => {
       // Arrange: a user who opted in.
       const { configManager } = createConfigStub({
-        'braindump.alwaysOnTop': true,
+        'liveEditor.alwaysOnTop': true,
       })
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
 
       // Act + Assert
-      expect(windowManager.getBrainDumpAlwaysOnTop()).toBe(true)
+      expect(windowManager.getLiveEditorAlwaysOnTop()).toBe(true)
     })
 
-    it('defaults to unpinned when config has no BrainDump pin', () => {
+    it('defaults to unpinned when config has no LiveEditor pin', () => {
       // Arrange: a fresh install with no saved value.
       const { configManager } = createConfigStub()
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
 
       // Act + Assert: the false default serves the "unpinned by default" behavior.
-      expect(windowManager.getBrainDumpAlwaysOnTop()).toBe(false)
+      expect(windowManager.getLiveEditorAlwaysOnTop()).toBe(false)
     })
   })
 
@@ -428,17 +428,17 @@ describe('WindowManager always-on-top', () => {
     })
   })
 
-  describe('createBrainDumpWindow', () => {
-    it('constructs the BrainDump window unpinned when config is off (no hardcoded shadow)', () => {
-      // Arrange: BrainDump pin OFF in config; no WindowStateManager, so the
+  describe('createLiveEditorWindow', () => {
+    it('constructs the LiveEditor window unpinned when config is off (no hardcoded shadow)', () => {
+      // Arrange: LiveEditor pin OFF in config; no WindowStateManager, so the
       // constructor path (not getWindowOptions) decides alwaysOnTop.
       const { configManager } = createConfigStub({
-        'braindump.alwaysOnTop': false,
+        'liveEditor.alwaysOnTop': false,
       })
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
 
       // Act
-      windowManager.createBrainDumpWindow()
+      windowManager.createLiveEditorWindow()
 
       // Assert: the window was built unpinned — proving the constructor reads
       // config and the old hardcoded `alwaysOnTop: true` no longer shadows it.
@@ -446,15 +446,15 @@ describe('WindowManager always-on-top', () => {
       expect(createdWindows[0]?.options.alwaysOnTop).toBe(false)
     })
 
-    it('constructs the BrainDump window pinned when config opts in', () => {
-      // Arrange: BrainDump pin ON in config.
+    it('constructs the LiveEditor window pinned when config opts in', () => {
+      // Arrange: LiveEditor pin ON in config.
       const { configManager } = createConfigStub({
-        'braindump.alwaysOnTop': true,
+        'liveEditor.alwaysOnTop': true,
       })
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
 
       // Act
-      windowManager.createBrainDumpWindow()
+      windowManager.createLiveEditorWindow()
 
       // Assert: the opt-in flows through to the constructed window.
       expect(createdWindows).toHaveLength(1)

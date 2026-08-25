@@ -32,7 +32,7 @@ import { ConfigManager } from '../ConfigManager'
  *
  * @param rawConfig - Partial config object to persist verbatim.
  * @example
- * writeConfigFile({ behavior: { startup: { showBraindump: true, showFloating: false } } })
+ * writeConfigFile({ behavior: { startup: { showLiveEditor: true, showFloating: false } } })
  */
 function writeConfigFile(rawConfig: Record<string, unknown>): void {
   fs.writeFileSync(
@@ -82,9 +82,31 @@ describe('ConfigManager startup-window config', () => {
     // Assert: the Floating Navigator is the front door after main-window
     // retirement (T18), so it is the boot-safe default.
     expect(startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
+  })
+
+  it('keeps the original config file when a later migration rejects its version', () => {
+    // Arrange: the rename migration runs first, then the invalid numeric version
+    // makes compareVersions abort before the loaded config is accepted.
+    writeConfigFile({
+      version: 1,
+      window: { main: { width: 1337 } },
+      braindump: { notes: { '1': 'Never overwrite me' } },
+    })
+    const configPath = path.join(userDataDir.current, 'config.json')
+    const originalConfig = fs.readFileSync(configPath, 'utf8')
+
+    // Act: load the file, run migrations, and fall back after version rejection.
+    const configManager = new ConfigManager()
+
+    // Assert: runtime state uses pristine defaults while user data remains byte-identical.
+    expect(configManager.get('window.main.width', 0)).toBe(1200)
+    expect(configManager.get('liveEditor.notes', { unexpected: true })).toEqual(
+      {},
+    )
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(originalConfig)
   })
 
   it('re-enables the Floating Navigator when update() turns every startup window off', () => {
@@ -93,13 +115,13 @@ describe('ConfigManager startup-window config', () => {
 
     // Act: disable both panels at once, which would boot zero windows.
     configManager.update({
-      'behavior.startup.showBraindump': false,
+      'behavior.startup.showLiveEditor': false,
       'behavior.startup.showFloating': false,
     })
 
     // Assert: the invariant backstop restores the Floating Navigator.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
   })
@@ -110,7 +132,7 @@ describe('ConfigManager startup-window config', () => {
 
     // Act
     configManager.set('behavior.startup', {
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: false,
     })
 
@@ -122,8 +144,9 @@ describe('ConfigManager startup-window config', () => {
     // Arrange: a config persisted before main-window retirement — the factory
     // default every untouched install carried (main on, both panels off).
     writeConfigFile({
+      version: '1.0.0',
       behavior: {
-        startup: { showMain: true, showBraindump: false, showFloating: false },
+        startup: { showMain: true, showLiveEditor: false, showFloating: false },
       },
     })
 
@@ -135,18 +158,18 @@ describe('ConfigManager startup-window config', () => {
     // exact-shape match proves no stray `showMain` lingers in the saved config).
     const startup = configManager.getSection('behavior').startup
     expect(startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
     expect('showMain' in startup).toBe(false)
   })
 
-  it('honors a Brain-Dump-only choice from disk without forcing another window on', () => {
-    // Arrange: a legacy Brain-Dump-only launch already satisfies the >=1
+  it('honors a LiveEditor-only choice from disk without forcing another window on', () => {
+    // Arrange: a legacy LiveEditor-only launch already satisfies the >=1
     // invariant, so retiring main must not spuriously enable Floating too.
     writeConfigFile({
       behavior: {
-        startup: { showMain: false, showBraindump: true, showFloating: false },
+        startup: { showMain: false, showLiveEditor: true, showFloating: false },
       },
     })
 
@@ -155,8 +178,71 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert: the panel-only choice is honored and the retired key dropped.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showBraindump: true,
+      showLiveEditor: true,
       showFloating: false,
+    })
+  })
+
+  it('preserves panel notes, shortcuts, and startup choice across the LiveEditor rename', () => {
+    // Arrange: simulate the exact config shape written by the previous release.
+    writeConfigFile({
+      braindump: {
+        width: 620,
+        notes: { '7': 'Keep this note' },
+      },
+      shortcuts: {
+        toggleBrainDump: 'Alt+Space',
+        toggleBrainDumpSecondary: 'Control+Shift+B',
+      },
+      behavior: {
+        startup: { showBraindump: true, showFloating: false },
+      },
+    })
+
+    // Act
+    const configManager = new ConfigManager()
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(userDataDir.current, 'config.json'), 'utf8'),
+    ) as Record<string, unknown>
+
+    // Assert: user content and preferences move to one canonical shape on disk.
+    expect(configManager.get('liveEditor.notes', {})).toEqual({
+      '7': 'Keep this note',
+    })
+    expect(configManager.get('liveEditor.width', 0)).toBe(620)
+    expect(configManager.get('shortcuts.toggleLiveEditor', '')).toBe(
+      'Alt+Space',
+    )
+    expect(configManager.get('shortcuts.toggleLiveEditorSecondary', '')).toBe(
+      'Control+Shift+B',
+    )
+    expect(configManager.getSection('behavior').startup).toEqual({
+      showLiveEditor: true,
+      showFloating: false,
+    })
+    expect('braindump' in persisted).toBe(false)
+  })
+
+  it('keeps every category note when interrupted migration data contains both panel sections', () => {
+    // Arrange: the legacy and canonical sections each own a different category;
+    // the duplicate category proves canonical text wins deterministically.
+    writeConfigFile({
+      braindump: {
+        notes: { '1': 'Legacy-only note', '2': 'Older duplicate' },
+      },
+      liveEditor: {
+        notes: { '2': 'Canonical duplicate', '3': 'Canonical-only note' },
+      },
+    })
+
+    // Act
+    const configManager = new ConfigManager()
+
+    // Assert: no category disappears while the new section remains authoritative.
+    expect(configManager.get('liveEditor.notes', {})).toEqual({
+      '1': 'Legacy-only note',
+      '2': 'Canonical duplicate',
+      '3': 'Canonical-only note',
     })
   })
 
@@ -168,20 +254,25 @@ describe('ConfigManager startup-window config', () => {
 
     // Act
     const configManager = new ConfigManager()
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(userDataDir.current, 'config.json'), 'utf8'),
+    ) as Record<string, unknown>
 
-    // Assert: the legacy floating intent carries over to showFloating.
+    // Assert: the legacy floating intent carries over and the old disk key is removed.
     const startup = configManager.getSection('behavior').startup
     expect(startup.showFloating).toBe(true)
-    expect(startup.showBraindump).toBe(false)
+    expect(startup.showLiveEditor).toBe(false)
+    expect(persisted).not.toHaveProperty('window.floating.startVisible')
+    expect(persisted).toHaveProperty('behavior.startup.showFloating', true)
   })
 
   it('does not override an explicit showFloating:false even when legacy startVisible is true', () => {
-    // Arrange: user opted out of floating under the new model but kept Brain
-    // Dump on, so the >=1 invariant is satisfied without floating.
+    // Arrange: user opted out of floating under the new model but kept
+    // LiveEditor on, so the >=1 invariant is satisfied without floating.
     writeConfigFile({
       window: { floating: { startVisible: true } },
       behavior: {
-        startup: { showBraindump: true, showFloating: false },
+        startup: { showLiveEditor: true, showFloating: false },
       },
     })
 
@@ -194,39 +285,51 @@ describe('ConfigManager startup-window config', () => {
     )
   })
 
-  it('does not migrate a legacy startVisible:false flag into showFloating', () => {
-    // Arrange: a present-but-false legacy flag alongside a Brain-Dump-only
-    // choice — the false flag must not flip floating on (Brain Dump keeps the
-    // invariant satisfied so the Floating default can't mask the migration).
+  it('keeps Floating Navigator disabled when the legacy LiveEditor starts instead', () => {
+    // Arrange: both startup choices use their pre-rename keys. LiveEditor keeps
+    // the startup invariant valid while Floating must preserve its explicit OFF.
     writeConfigFile({
       window: { floating: { startVisible: false } },
       behavior: {
-        startup: { showBraindump: true, showFloating: false },
+        startup: { showBraindump: true },
       },
     })
 
     // Act
     const configManager = new ConfigManager()
 
-    // Assert
-    expect(configManager.getSection('behavior').startup.showFloating).toBe(
-      false,
-    )
+    // Assert: defaults cannot turn Floating back on during the raw-config merge.
+    expect(configManager.getSection('behavior').startup).toEqual({
+      showLiveEditor: true,
+      showFloating: false,
+    })
   })
 
   it('repairs an all-false startup block persisted in config.json on load', () => {
     // Arrange: a hand-edited file that would otherwise boot zero windows.
     writeConfigFile({
+      version: '1.0.0',
       behavior: {
-        startup: { showMain: false, showBraindump: false, showFloating: false },
+        startup: {
+          showMain: false,
+          showLiveEditor: false,
+          showFloating: false,
+        },
       },
     })
 
     // Act
     const configManager = new ConfigManager()
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(userDataDir.current, 'config.json'), 'utf8'),
+    ) as Record<string, unknown>
 
-    // Assert: the >=1 invariant repairs it to the Floating front door.
+    // Assert: the repair reaches both runtime state and the current-version file.
     expect(configManager.getSection('behavior').startup.showFloating).toBe(true)
+    expect(persisted).toHaveProperty('behavior.startup', {
+      showLiveEditor: false,
+      showFloating: true,
+    })
   })
 
   it('migrates a legacy startVisible:true file when imported, not only on disk load', () => {
@@ -248,7 +351,11 @@ describe('ConfigManager startup-window config', () => {
     const configManager = new ConfigManager()
     const importPath = writeImportFile({
       behavior: {
-        startup: { showMain: false, showBraindump: false, showFloating: false },
+        startup: {
+          showMain: false,
+          showLiveEditor: false,
+          showFloating: false,
+        },
       },
     })
 
@@ -269,7 +376,7 @@ describe('ConfigManager startup-window config', () => {
     // Assert: the whole behavior block is rebuilt so the boot-time
     // `behavior.startup` read can never throw or read garbage.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
   })
@@ -283,7 +390,7 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert
     expect(configManager.getSection('behavior').startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
   })
@@ -298,7 +405,7 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert: the array is rejected and the startup block rebuilt from defaults.
     expect(configManager.getSection('behavior').startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
   })
@@ -312,7 +419,7 @@ describe('ConfigManager startup-window config', () => {
 
     // Assert
     expect(configManager.getSection('behavior').startup).toEqual({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
   })
@@ -350,6 +457,6 @@ describe('ConfigManager startup-window config', () => {
     // Assert: legacy intent carried into showFloating.
     const startup = configManager.getSection('behavior').startup
     expect(startup.showFloating).toBe(true)
-    expect(startup.showBraindump).toBe(false)
+    expect(startup.showLiveEditor).toBe(false)
   })
 })

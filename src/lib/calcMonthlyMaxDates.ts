@@ -23,7 +23,7 @@ import type { HeatmapDay } from '@/hooks/useHeatmapData'
  *   A peak of zero is not a peak; rendering ◎ on a fully-rest month would
  *   read as a false accomplishment.
  * - **Source of truth:** `HeatmapDay.count` is the union of Todo+Completed,
- *   so the mark already accounts for BrainDump checkbox-tick completions.
+ *   so the mark already accounts for LiveEditor checkbox-tick completions.
  *
  * @param dataByDate - Map keyed by YYYY-MM-DD returned by `useHeatmapData`
  * @returns

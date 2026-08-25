@@ -77,15 +77,19 @@ describe('ConfigManager appearance config', () => {
       }),
     )
 
-    // Act: the constructor loads config.json from the mocked userData dir.
+    // Act: the constructor loads and rewrites config.json in the mocked userData dir.
     const appearance = new ConfigManager().getSection('appearance')
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(userDataDir.current, 'config.json'), 'utf8'),
+    ) as Record<string, unknown>
 
     // Assert: fontSize:'large' proves the fixture was loaded (defaults are
-    // 'medium'), and the dead native keys are gone — config converged to the
-    // new {fontSize, compactMode} shape instead of carrying them forever.
+    // 'medium'), and both memory and disk converge to the new shape.
     expect(appearance.fontSize).toBe('large')
     expect(appearance).not.toHaveProperty('theme')
     expect(appearance).not.toHaveProperty('accentColor')
+    expect(persisted).not.toHaveProperty('appearance.theme')
+    expect(persisted).not.toHaveProperty('appearance.accentColor')
   })
 
   it('strips legacy theme/accentColor from an imported config file', () => {

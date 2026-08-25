@@ -45,7 +45,11 @@ test('reading startup config exposes both window flags', async () => {
   })
 
   // Assert: both boolean fields are present
-  expect(typeof config.showBraindump).toBe('boolean')
+  expect('showLiveEditor' in config).toBe(true)
+  if (!('showLiveEditor' in config)) {
+    throw new Error('showLiveEditor not in current preload bridge')
+  }
+  expect(typeof config.showLiveEditor).toBe('boolean')
   expect(typeof config.showFloating).toBe('boolean')
   // Assert: the retired `showMain` flag is gone from the IPC payload (T18 main-window retirement)
   expect('showMain' in config).toBe(false)
@@ -54,7 +58,7 @@ test('reading startup config exposes both window flags', async () => {
 test('updating the startup window flags persists successfully', async () => {
   // Arrange
   const newConfig = {
-    showBraindump: false,
+    showLiveEditor: false,
     showFloating: true,
   }
 
@@ -76,7 +80,11 @@ test('updating the startup window flags persists successfully', async () => {
     if (!getFn) throw new Error('getStartupConfig not in preload bridge')
     return getFn()
   })
-  expect(persisted.showBraindump).toBe(false)
+  expect('showLiveEditor' in persisted).toBe(true)
+  if (!('showLiveEditor' in persisted)) {
+    throw new Error('showLiveEditor not in current preload bridge')
+  }
+  expect(persisted.showLiveEditor).toBe(false)
   expect(persisted.showFloating).toBe(true)
 })
 

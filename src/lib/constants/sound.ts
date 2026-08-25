@@ -23,7 +23,7 @@ export type TimbreId = (typeof TIMBRE_IDS)[number]
 
 /**
  * The task-life "earned beat" moments that may play a cue, ordered for Settings.
- * `braindump-capture` is deliberately absent (D1) — BrainDump persists on a 400ms
+ * `live-editor-capture` is deliberately absent (D1) — LiveEditor persists on a 400ms
  * debounce with no discrete capture gesture, so a cue there would be a silent
  * first-fire or a per-keystroke soundboard. Reorder / category-switch are excluded
  * by design (too high-frequency to feel "earned").

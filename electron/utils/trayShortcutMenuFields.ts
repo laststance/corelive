@@ -31,16 +31,16 @@ export interface TrayShortcutMenuFields {
  * right-aligned `accelerator`; a lone-modifier binding (which Electron can't
  * parse) is appended to the label as its glyph; an empty/unset value shows the
  * plain label with no hotkey.
- * @param label - The row's base text, e.g. `'Toggle BrainDump'`.
+ * @param label - The row's base text, e.g. `'Toggle LiveEditor'`.
  * @param accelerator - The live binding: a chord, a `lone-modifier:*` string, or `''`/undefined when unset.
  * @returns
  * - `{ label, accelerator }` for a chord (e.g. `'Alt+Space'`)
- * - `{ label: 'Toggle BrainDump  Right ⌥' }` for a lone-modifier binding (no `accelerator` field)
+ * - `{ label: 'Toggle LiveEditor  Right ⌥' }` for a lone-modifier binding (no `accelerator` field)
  * - `{ label }` when the binding is empty or undefined
  * @example
- * trayShortcutMenuFields('Toggle BrainDump', 'Alt+Space')               // { label: 'Toggle BrainDump', accelerator: 'Alt+Space' }
- * trayShortcutMenuFields('Toggle BrainDump', 'lone-modifier:rightOption') // { label: 'Toggle BrainDump  Right ⌥' }
- * trayShortcutMenuFields('Toggle BrainDump', '')                        // { label: 'Toggle BrainDump' }
+ * trayShortcutMenuFields('Toggle LiveEditor', 'Alt+Space')               // { label: 'Toggle LiveEditor', accelerator: 'Alt+Space' }
+ * trayShortcutMenuFields('Toggle LiveEditor', 'lone-modifier:rightOption') // { label: 'Toggle LiveEditor  Right ⌥' }
+ * trayShortcutMenuFields('Toggle LiveEditor', '')                        // { label: 'Toggle LiveEditor' }
  */
 export function trayShortcutMenuFields(
   label: string,

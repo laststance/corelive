@@ -23,7 +23,7 @@ export const SETTINGS_SUBGROUP_LABEL_CLASS =
 /**
  * Turns a human label into a stable DOM id (hook-free, so this wrapper renders in
  * BOTH the server `page.tsx` and client `ElectronSettingsPage` without a `useId`
- * client boundary). "Brain Dump" → "settings-section-brain-dump".
+ * client boundary). "LiveEditor" → "settings-section-live-editor".
  *
  * @param label - The section's display label.
  * @returns A slugified `settings-section-*` id.

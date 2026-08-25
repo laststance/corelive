@@ -5,12 +5,12 @@ import userSettingsReducer, {
   hydrateUserSettings,
   initialState,
   setAllSoundMoments,
-  setBraindumpClearDelayMs,
-  setBraindumpClearOnComplete,
-  setBraindumpFontFamily,
-  setBraindumpFontSize,
-  setBraindumpTextColor,
-  setBraindumpToastDurationMs,
+  setLiveEditorClearDelayMs,
+  setLiveEditorClearOnComplete,
+  setLiveEditorFontFamily,
+  setLiveEditorFontSize,
+  setLiveEditorTextColor,
+  setLiveEditorToastDurationMs,
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
@@ -155,83 +155,83 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.soundVolume).toBe(0.25)
   })
 
-  it('propagates a BrainDump font-family change to another window', () => {
+  it('propagates a LiveEditor font-family change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
     // Act — switch the editor face away from the default 'mono' in window A.
-    windowA.dispatch(setBraindumpFontFamily('serif'))
+    windowA.dispatch(setLiveEditorFontFamily('serif'))
 
     // Assert — window B reflects the chosen face without a reload (the action is
     // in the broadcast allowlist).
-    expect(windowB.getState().settings.braindumpFontFamily).toBe('serif')
+    expect(windowB.getState().settings.liveEditorFontFamily).toBe('serif')
   })
 
-  it('propagates a BrainDump font-size change to another window', () => {
+  it('propagates a LiveEditor font-size change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
     // Act — bump the editor size off the default 14px in window A.
-    windowA.dispatch(setBraindumpFontSize(20))
+    windowA.dispatch(setLiveEditorFontSize(20))
 
     // Assert — window B reflects the new size without a reload.
-    expect(windowB.getState().settings.braindumpFontSize).toBe(20)
+    expect(windowB.getState().settings.liveEditorFontSize).toBe(20)
   })
 
-  it('propagates a BrainDump text-color change to another window', () => {
+  it('propagates a LiveEditor text-color change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
     // Act — pick a non-default editor color in window A.
-    windowA.dispatch(setBraindumpTextColor('var(--primary)'))
+    windowA.dispatch(setLiveEditorTextColor('var(--primary)'))
 
     // Assert — window B reflects the new color without a reload.
-    expect(windowB.getState().settings.braindumpTextColor).toBe(
+    expect(windowB.getState().settings.liveEditorTextColor).toBe(
       'var(--primary)',
     )
   })
 
-  it('propagates a BrainDump clear-on-complete toggle to another window', () => {
+  it('propagates a LiveEditor clear-on-complete toggle to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
     // Act — opt into clearing finished lines in window A.
-    windowA.dispatch(setBraindumpClearOnComplete(true))
+    windowA.dispatch(setLiveEditorClearOnComplete(true))
 
     // Assert — window B reflects the toggle without a reload (the action is in
     // the broadcast allowlist; a NEW set* action would stay silent until added).
-    expect(windowB.getState().settings.braindumpClearOnComplete).toBe(true)
+    expect(windowB.getState().settings.liveEditorClearOnComplete).toBe(true)
   })
 
-  it('propagates a BrainDump clear-delay change to another window', () => {
+  it('propagates a LiveEditor clear-delay change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
     // Act — move the linger off the default 500 ms in window A.
-    windowA.dispatch(setBraindumpClearDelayMs(1500))
+    windowA.dispatch(setLiveEditorClearDelayMs(1500))
 
     // Assert — window B reflects the new delay without a reload (the action is in
     // the broadcast allowlist; a NEW set* action would stay silent until added).
-    expect(windowB.getState().settings.braindumpClearDelayMs).toBe(1500)
+    expect(windowB.getState().settings.liveEditorClearDelayMs).toBe(1500)
   })
 
-  it('propagates a BrainDump toast-duration change to another window', () => {
+  it('propagates a LiveEditor toast-duration change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
 
     // Act — move the completion-toast display time off the default 5000 ms in
     // window A.
-    windowA.dispatch(setBraindumpToastDurationMs(8000))
+    windowA.dispatch(setLiveEditorToastDurationMs(8000))
 
     // Assert — window B reflects the new duration without a reload (the action is
     // in the broadcast allowlist; a NEW set* action would stay silent until added).
-    expect(windowB.getState().settings.braindumpToastDurationMs).toBe(8000)
+    expect(windowB.getState().settings.liveEditorToastDurationMs).toBe(8000)
   })
 
   it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {
@@ -249,27 +249,27 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.soundVolume).toBe(1)
   })
 
-  it('clamps and heals out-of-range inbound BrainDump fields when applying a raw broadcast', () => {
+  it('clamps and heals out-of-range inbound LiveEditor fields when applying a raw broadcast', () => {
     // Arrange — a window plus a raw sender on the same wire protocol.
     const windowB = makeWindowStore()
     const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
 
-    // Act — push a payload whose BrainDump fields are out of range / off-shape.
+    // Act — push a payload whose LiveEditor fields are out of range / off-shape.
     sender.postMessage({
       type: SETTINGS_SYNC_EVENT_TYPE,
       state: {
-        braindumpFontFamily: 'comic-sans',
-        braindumpFontSize: 99,
-        braindumpTextColor: 'red',
+        liveEditorFontFamily: 'comic-sans',
+        liveEditorFontSize: 99,
+        liveEditorTextColor: 'red',
       },
     })
 
     // Assert — the receiver applies the HEALED family (the default 'mono'),
     // CLAMPED size (24, the max), and HEALED color (the default token), never
     // the raw 'comic-sans' / 99 / 'red'.
-    expect(windowB.getState().settings.braindumpFontFamily).toBe('mono')
-    expect(windowB.getState().settings.braindumpFontSize).toBe(24)
-    expect(windowB.getState().settings.braindumpTextColor).toBe(
+    expect(windowB.getState().settings.liveEditorFontFamily).toBe('mono')
+    expect(windowB.getState().settings.liveEditorFontSize).toBe(24)
+    expect(windowB.getState().settings.liveEditorTextColor).toBe(
       'var(--foreground)',
     )
   })
@@ -291,6 +291,35 @@ describe('settings cross-window sync', () => {
     // instead of being defaulted to false by the schema (the fold mirrors the
     // persisted migratePersistedState path).
     expect(windowB.getState().settings.soundMoments.complete).toBe(true)
+  })
+
+  it('preserves every pre-rename LiveEditor preference received from an older window', () => {
+    // Arrange — a current window plus a raw sender that still uses v2 keys.
+    const windowB = makeWindowStore()
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
+
+    // Act — push all six legacy fields exactly as an already-open old tab does.
+    sender.postMessage({
+      type: SETTINGS_SYNC_EVENT_TYPE,
+      state: {
+        braindumpFontFamily: 'serif',
+        braindumpFontSize: 21,
+        braindumpTextColor: '#c2410c',
+        braindumpClearOnComplete: true,
+        braindumpClearDelayMs: 1200,
+        braindumpToastDurationMs: 6400,
+      },
+    })
+
+    // Assert — the receiver exposes the exact choices under canonical keys.
+    expect(windowB.getState().settings).toMatchObject({
+      liveEditorFontFamily: 'serif',
+      liveEditorFontSize: 21,
+      liveEditorTextColor: '#c2410c',
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1200,
+      liveEditorToastDurationMs: 6400,
+    })
   })
 
   it('ignores a malformed inbound payload, leaving the receiver state unchanged', () => {

@@ -8,7 +8,7 @@ import { useEffect, useEffectEvent } from 'react'
  * handle dismiss.
  *
  * **Typing guard:** when the keydown target is `<input>`, `<textarea>`, or any
- * `contentEditable` element (e.g., BrainDump's editor), the shortcut is
+ * `contentEditable` element (e.g., LiveEditor's editor), the shortcut is
  * suppressed. Without this, pressing `j` would BOTH insert a literal character
  * AND step the dialog — confusing and destructive.
  *

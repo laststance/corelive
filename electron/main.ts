@@ -28,14 +28,18 @@ import {
 import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
-import { getBrainDumpNote, setBrainDumpNote } from './BrainDumpNoteStore'
 import { ConfigManager } from './ConfigManager'
-import { BRAIN_DUMP_SHORTCUT_IDS, type BrainDumpShortcutId } from './constants'
+import {
+  LIVE_EDITOR_SHORTCUT_IDS,
+  type LiveEditorShortcutId,
+} from './constants'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
+import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
 import { typedHandle } from './ipc/typedHandle'
 import { typedSend } from './ipc/typedSend'
 import { IPCErrorHandler } from './IPCErrorHandler'
 import { lazyLoadManager } from './LazyLoadManager'
+import { getLiveEditorNote, setLiveEditorNote } from './LiveEditorNoteStore'
 import { log } from './logger'
 import { memoryProfiler } from './MemoryProfiler'
 import type { MenuManager as MenuManagerType } from './MenuManager'
@@ -92,7 +96,7 @@ interface OptimizationConfig {
  * @returns Valid WindowType
  */
 function toWindowType(value: unknown): WindowType {
-  if (value === 'main' || value === 'floating' || value === 'braindump') {
+  if (value === 'main' || value === 'floating' || value === 'liveEditor') {
     return value
   }
   return 'main'
@@ -513,11 +517,11 @@ function getBrowserWindowForType(
     return null
   }
 
-  // Handle BrainDump panel — never auto-create from a state operation; the
+  // Handle LiveEditor panel — never auto-create from a state operation; the
   // panel is created on demand by user gesture (menu/tray/shortcut).
-  if (windowType === 'braindump') {
-    return windowManager.hasBrainDumpWindow?.()
-      ? (windowManager.getBrainDumpWindow?.() ?? null)
+  if (windowType === 'liveEditor') {
+    return windowManager.hasLiveEditorWindow?.()
+      ? (windowManager.getLiveEditorWindow?.() ?? null)
       : null
   }
 
@@ -889,8 +893,8 @@ async function loadSystemIntegrationStack(): Promise<void> {
     if (typeof current.toggleFloatingNavigator === 'string') {
       accelerators.toggleFloatingNavigator = current.toggleFloatingNavigator
     }
-    if (typeof current.toggleBrainDump === 'string') {
-      accelerators.toggleBrainDump = current.toggleBrainDump
+    if (typeof current.toggleLiveEditor === 'string') {
+      accelerators.toggleLiveEditor = current.toggleLiveEditor
     }
     return accelerators
   })
@@ -1021,8 +1025,8 @@ async function createWindow(): Promise<void> {
       windowManager.openStartupPanel('floating')
       startupPanelsOpened += 1
     }
-    if (startupConfig.showBraindump) {
-      windowManager.openStartupPanel('braindump')
+    if (startupConfig.showLiveEditor) {
+      windowManager.openStartupPanel('liveEditor')
       startupPanelsOpened += 1
     }
 
@@ -1086,7 +1090,7 @@ async function createWindow(): Promise<void> {
       }
 
       // No main-window close-to-tray wiring after T18 — the surviving panels own
-      // their own close behavior (Floating/BrainDump via floating-window-* IPC).
+      // their own close behavior (Floating/LiveEditor via floating-window-* IPC).
     } catch (error) {
       log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
@@ -1141,22 +1145,21 @@ async function createWindow(): Promise<void> {
  */
 
 /**
- * Strip user-authored BrainDump note text from a config snapshot before
- * exposing it via the generic `config-get-all` channel. The note map is
- * personal scratch content and only the dedicated `braindump-note-get`
- * channel should surface it. Any other window asking for the full config
- * sees only the BrainDump metadata (sync mode, opacity, shortcut, etc.).
+ * Strip user-authored LiveEditor note text from a config snapshot before
+ * exposing it via generic config snapshot channels. The note map is personal
+ * scratch content and only the dedicated `live-editor-note-get` channel should
+ * surface it. Any other window sees only LiveEditor metadata.
  *
  * @param snapshot - The full config object as returned by `ConfigManager.getAll()`.
- * @returns A shallow clone with `braindump.notes` removed.
+ * @returns A shallow clone with `liveEditor.notes` removed.
  */
-function redactBrainDumpNotes(
+function redactLiveEditorNotes(
   snapshot: Record<string, unknown>,
 ): Record<string, unknown> {
-  const braindump = snapshot.braindump
-  if (!braindump || typeof braindump !== 'object') return snapshot
-  const { notes: _notes, ...rest } = braindump as Record<string, unknown>
-  return { ...snapshot, braindump: rest }
+  const liveEditor = snapshot.liveEditor
+  if (!liveEditor || typeof liveEditor !== 'object') return snapshot
+  const { notes: _notes, ...rest } = liveEditor as Record<string, unknown>
+  return { ...snapshot, liveEditor: rest }
 }
 
 /**
@@ -1165,7 +1168,7 @@ function redactBrainDumpNotes(
  */
 const GLOBAL_SHORTCUT_IDS: string[] = [
   'toggleFloatingNavigator',
-  ...BRAIN_DUMP_SHORTCUT_IDS,
+  ...LIVE_EDITOR_SHORTCUT_IDS,
 ]
 
 function setupIPCHandlers(): void {
@@ -1316,14 +1319,14 @@ function setupIPCHandlers(): void {
     return windowManager.setFloatingNavigatorAlwaysOnTop(enabled)
   })
 
-  typedHandle('braindump-window-get-always-on-top', () => {
+  typedHandle('live-editor-window-get-always-on-top', () => {
     if (!windowManager) return false
-    return windowManager.getBrainDumpAlwaysOnTop()
+    return windowManager.getLiveEditorAlwaysOnTop()
   })
 
-  typedHandle('braindump-window-set-always-on-top', (_event, enabled) => {
+  typedHandle('live-editor-window-set-always-on-top', (_event, enabled) => {
     if (!windowManager) return false
-    return windowManager.setBrainDumpAlwaysOnTop(enabled)
+    return windowManager.setLiveEditorAlwaysOnTop(enabled)
   })
 
   // Floating window control IPC handlers (Zod-validated)
@@ -1421,114 +1424,114 @@ function setupIPCHandlers(): void {
   })
 
   // ────────────────────────────────────────────────────────────────────────
-  // BrainDump Window IPC handlers
+  // LiveEditor Window IPC handlers
   //
-  // Why a separate block: BrainDump is a frameless transparent panel with
+  // Why a separate block: LiveEditor is a frameless transparent panel with
   // its own preload; window/note/sync/category channels live together so the
-  // contract between preload-braindump.ts and main.ts is easy to audit.
+  // contract between preload-live-editor.ts and main.ts is easy to audit.
   // ────────────────────────────────────────────────────────────────────────
-  typedHandle('window-toggle-braindump', () => {
+  typedHandle('window-toggle-live-editor', () => {
     if (!windowManager) {
       throw new Error('Window manager not initialized')
     }
-    windowManager.toggleBrainDump()
+    windowManager.toggleLiveEditor()
     return true
   })
 
-  typedHandle('braindump-window-toggle', () => {
+  typedHandle('live-editor-window-toggle', () => {
     if (!windowManager) return false
-    windowManager.toggleBrainDump()
+    windowManager.toggleLiveEditor()
     return true
   })
 
-  typedHandle('braindump-window-show', () => {
+  typedHandle('live-editor-window-show', () => {
     if (!windowManager) return
-    windowManager.showBrainDump()
+    windowManager.showLiveEditor()
   })
 
-  typedHandle('braindump-window-hide', () => {
+  typedHandle('live-editor-window-hide', () => {
     if (!windowManager) return
-    windowManager.hideBrainDump()
+    windowManager.hideLiveEditor()
   })
 
-  typedHandle('braindump-window-set-opacity', (_event, value) => {
+  typedHandle('live-editor-window-set-opacity', (_event, value) => {
     if (!windowManager) return 1
-    return windowManager.setBrainDumpOpacity(value)
+    return windowManager.setLiveEditorOpacity(value)
   })
 
-  typedHandle('braindump-window-get-opacity', () => {
+  typedHandle('live-editor-window-get-opacity', () => {
     if (!windowManager) return 1
-    return windowManager.getBrainDumpOpacity()
+    return windowManager.getLiveEditorOpacity()
   })
 
-  typedHandle('braindump-window-get-bounds', () => {
+  typedHandle('live-editor-window-get-bounds', () => {
     try {
-      if (windowManager?.hasBrainDumpWindow()) {
-        const win = windowManager.getBrainDumpWindow()
+      if (windowManager?.hasLiveEditorWindow()) {
+        const win = windowManager.getLiveEditorWindow()
         if (win && !win.isDestroyed()) {
           return win.getBounds()
         }
       }
       return null
     } catch (error) {
-      log.error('Failed to get BrainDump window bounds:', error)
+      log.error('Failed to get LiveEditor window bounds:', error)
       return null
     }
   })
 
-  typedHandle('braindump-window-set-bounds', (_event, bounds) => {
+  typedHandle('live-editor-window-set-bounds', (_event, bounds) => {
     try {
-      if (windowManager?.hasBrainDumpWindow()) {
-        const win = windowManager.getBrainDumpWindow()
+      if (windowManager?.hasLiveEditorWindow()) {
+        const win = windowManager.getLiveEditorWindow()
         if (win && !win.isDestroyed()) {
           win.setBounds(bounds)
         }
       }
       return true
     } catch (error) {
-      log.error('Failed to set BrainDump window bounds:', error)
+      log.error('Failed to set LiveEditor window bounds:', error)
       return false
     }
   })
 
-  // Per-category note text (persisted in `braindump.notes[<categoryId>]`).
-  typedHandle('braindump-note-get', (_event, categoryId) => {
+  // Per-category note text (persisted in `liveEditor.notes[<categoryId>]`).
+  typedHandle('live-editor-note-get', (_event, categoryId) => {
     if (!configManager) return ''
-    return getBrainDumpNote(configManager, categoryId)
+    return getLiveEditorNote(configManager, categoryId)
   })
 
-  typedHandle('braindump-note-set', (_event, categoryId, text) => {
+  typedHandle('live-editor-note-set', (_event, categoryId, text) => {
     if (!configManager) return false
-    setBrainDumpNote(configManager, categoryId, text)
+    setLiveEditorNote(configManager, categoryId, text)
     return true
   })
 
   // Sync mode (mirror FloatingNav category selection).
-  typedHandle('braindump-config-get-sync', () => {
+  typedHandle('live-editor-config-get-sync', () => {
     if (!configManager) return true
-    return configManager.get<boolean>('braindump.syncMode', true) ?? true
+    return configManager.get<boolean>('liveEditor.syncMode', true) ?? true
   })
 
-  typedHandle('braindump-config-set-sync', (_event, enabled) => {
+  typedHandle('live-editor-config-set-sync', (_event, enabled) => {
     if (!configManager) return false
-    configManager.set('braindump.syncMode', enabled)
+    configManager.set('liveEditor.syncMode', enabled)
     return true
   })
 
   /**
-   * Rebind ONE of the two BrainDump toggle slots — the shared body behind both
+   * Rebind ONE of the two LiveEditor toggle slots — the shared body behind both
    * set-shortcut handlers, so the cross-slot duplicate guard can't be
    * implemented on one slot and forgotten on the other.
-   * @param slotId - Which slot to write: `'toggleBrainDump'` or `'toggleBrainDumpSecondary'`.
+   * @param slotId - Which slot to write: `'toggleLiveEditor'` or `'toggleLiveEditorSecondary'`.
    * @param accelerator - The requested accelerator, or `''` to disable that slot.
    * @returns
    * - `true` when the accelerator bound exactly as requested (or was an intentional `''` disable)
    * - `false` on a conflict, a silent fallback substitution, or a duplicate of the other slot
    * @example
-   * setBrainDumpShortcutSlot('toggleBrainDumpSecondary', 'lone-modifier:rightOption') // => true
+   * setLiveEditorShortcutSlot('toggleLiveEditorSecondary', 'lone-modifier:rightOption') // => true
    */
-  const setBrainDumpShortcutSlot = (
-    slotId: BrainDumpShortcutId,
+  const setLiveEditorShortcutSlot = (
+    slotId: LiveEditorShortcutId,
     accelerator: string,
   ): boolean => {
     if (!configManager) return false
@@ -1538,7 +1541,7 @@ function setupIPCHandlers(): void {
     // trips handleShortcutConflict (firing a misleading "Shortcut Changed" toast
     // before the rollback), and the native tap keys bindings by keycode — the
     // second bind would orphan the first, then unbinding either would kill both.
-    const otherSlotId = BRAIN_DUMP_SHORTCUT_IDS.find((id) => id !== slotId)
+    const otherSlotId = LIVE_EDITOR_SHORTCUT_IDS.find((id) => id !== slotId)
     const otherAccelerator =
       configManager.get<string>(`shortcuts.${otherSlotId}`, '') ?? ''
     if (isSameAccelerator(accelerator, otherAccelerator)) return false
@@ -1560,7 +1563,7 @@ function setupIPCHandlers(): void {
           return false
         }
       } catch (error) {
-        log.error('Failed to update BrainDump shortcut:', error)
+        log.error('Failed to update LiveEditor shortcut:', error)
         return false
       }
     } else {
@@ -1570,37 +1573,37 @@ function setupIPCHandlers(): void {
       // and never reach the next registration pass.
       configManager.set(`shortcuts.${slotId}`, accelerator)
     }
-    // Keep the tray's displayed BrainDump hotkey in sync with the rebind.
+    // Keep the tray's displayed LiveEditor hotkey in sync with the rebind.
     systemTrayManager?.refreshTrayMenu()
     return true
   }
 
-  typedHandle('braindump-config-get-shortcut', () => {
+  typedHandle('live-editor-config-get-shortcut', () => {
     if (!configManager) return ''
     // Read the CANONICAL store ShortcutManager registers from, like the floating
     // and secondary-slot getters do. This used to read the legacy
-    // `braindump.shortcut` mirror, which only this UI ever wrote — so it stayed
+    // `liveEditor.shortcut` mirror, which only this UI ever wrote — so it stayed
     // empty on every profile that never touched it and the box showed "unbound"
     // while Alt+Space was live. That empty box beside the second slot would read
     // as "slot 1 is free" right before the duplicate guard rejected it.
-    return configManager.get<string>('shortcuts.toggleBrainDump', '') ?? ''
+    return configManager.get<string>('shortcuts.toggleLiveEditor', '') ?? ''
   })
 
-  typedHandle('braindump-config-set-shortcut', (_event, accelerator) =>
-    setBrainDumpShortcutSlot('toggleBrainDump', accelerator),
+  typedHandle('live-editor-config-set-shortcut', (_event, accelerator) =>
+    setLiveEditorShortcutSlot('toggleLiveEditor', accelerator),
   )
 
-  typedHandle('braindump-config-get-shortcut-secondary', () => {
+  typedHandle('live-editor-config-get-shortcut-secondary', () => {
     if (!configManager) return ''
     return (
-      configManager.get<string>('shortcuts.toggleBrainDumpSecondary', '') ?? ''
+      configManager.get<string>('shortcuts.toggleLiveEditorSecondary', '') ?? ''
     )
   })
 
   typedHandle(
-    'braindump-config-set-shortcut-secondary',
+    'live-editor-config-set-shortcut-secondary',
     (_event, accelerator) =>
-      setBrainDumpShortcutSlot('toggleBrainDumpSecondary', accelerator),
+      setLiveEditorShortcutSlot('toggleLiveEditorSecondary', accelerator),
   )
 
   typedHandle('floating-config-get-shortcut', () => {
@@ -1617,7 +1620,7 @@ function setupIPCHandlers(): void {
   typedHandle('floating-config-set-shortcut', (_event, accelerator) => {
     if (!shortcutManager) return false
     // updateShortcuts persists `shortcuts.toggleFloatingNavigator` itself, so
-    // there is no separate config write here (unlike the BrainDump mirror above).
+    // there is no separate config write here (unlike the LiveEditor mirror above).
     const previous =
       configManager?.get<string>('shortcuts.toggleFloatingNavigator', '') ?? ''
     try {
@@ -1642,22 +1645,23 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  typedHandle('braindump-config-get-last-category', () => {
+  typedHandle('live-editor-config-get-last-category', () => {
     if (!configManager) return null
     return (
-      configManager.get<number | null>('braindump.lastCategoryId', null) ?? null
+      configManager.get<number | null>('liveEditor.lastCategoryId', null) ??
+      null
     )
   })
 
-  typedHandle('braindump-config-set-last-category', (_event, categoryId) => {
+  typedHandle('live-editor-config-set-last-category', (_event, categoryId) => {
     if (!configManager) return false
-    configManager.set('braindump.lastCategoryId', categoryId)
+    configManager.set('liveEditor.lastCategoryId', categoryId)
 
-    // Broadcast to BrainDump window so its `on('braindump-category-changed')`
+    // Broadcast to LiveEditor window so its `on('live-editor-category-changed')`
     // listener mirrors the new selection without round-tripping config.
-    const brainDumpWin = windowManager?.getBrainDumpWindow()
-    if (brainDumpWin && !brainDumpWin.isDestroyed()) {
-      typedSend(brainDumpWin.webContents, 'braindump-category-changed', {
+    const liveEditorWin = windowManager?.getLiveEditorWindow()
+    if (liveEditorWin && !liveEditorWin.isDestroyed()) {
+      typedSend(liveEditorWin.webContents, 'live-editor-category-changed', {
         categoryId,
       })
     }
@@ -1734,7 +1738,16 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       throw new Error('Configuration manager not initialized')
     }
-    return configManager.get(path, defaultValue)
+    // Defense in depth: typedHandle validates this first, but the handler also
+    // refuses unknown LiveEditor subpaths before ConfigManager can read notes.
+    if (!isRendererReadableConfigPath(path)) {
+      throw new Error('LiveEditor note content requires its dedicated channel')
+    }
+    const value = configManager.get(path, defaultValue)
+    if (path === 'liveEditor') {
+      return redactLiveEditorNotes({ liveEditor: value }).liveEditor
+    }
+    return value
   })
 
   typedHandle('config-set', (_event, path, value) => {
@@ -1748,7 +1761,7 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return {}
     }
-    return redactBrainDumpNotes(
+    return redactLiveEditorNotes(
       configManager.getAll() as Record<string, unknown>,
     )
   })
@@ -1760,9 +1773,9 @@ function setupIPCHandlers(): void {
     const result = configManager.getSection(
       section as keyof ReturnType<typeof configManager.getAll>,
     )
-    if (section === 'braindump' && result && typeof result === 'object') {
+    if (section === 'liveEditor' && result && typeof result === 'object') {
       // Strip free-text notes from the generic getter; anyone asking for the
-      // BrainDump section gets only metadata. The dedicated `braindump-note-get`
+      // LiveEditor section gets only metadata. The dedicated `live-editor-note-get`
       // channel is the single read path for note text.
       const { notes: _notes, ...rest } = result as Record<string, unknown>
       return rest as Record<string, unknown>
@@ -2036,7 +2049,7 @@ function setupIPCHandlers(): void {
         return false
       }
       const didSave = configManager.update({
-        'behavior.startup.showBraindump': startup.showBraindump,
+        'behavior.startup.showLiveEditor': startup.showLiveEditor,
         'behavior.startup.showFloating': startup.showFloating,
       })
       log.info(
@@ -2338,17 +2351,17 @@ function setupIPCHandlers(): void {
   // guards destroyed windows; isVisible() only runs on a live reference.
   typedHandle('window-get-aux-visibility', () => {
     if (!windowManager) {
-      return { floating: false, braindump: false }
+      return { floating: false, liveEditor: false }
     }
     const floatingWindow = windowManager.hasFloatingNavigator()
       ? windowManager.getFloatingNavigator()
       : null
-    const braindumpWindow = windowManager.hasBrainDumpWindow()
-      ? windowManager.getBrainDumpWindow()
+    const liveEditorWindow = windowManager.hasLiveEditorWindow()
+      ? windowManager.getLiveEditorWindow()
       : null
     return {
       floating: Boolean(floatingWindow?.isVisible()),
-      braindump: Boolean(braindumpWindow?.isVisible()),
+      liveEditor: Boolean(liveEditorWindow?.isVisible()),
     }
   })
 
@@ -2514,7 +2527,7 @@ if (!gotTheLock) {
  * Window close behavior for macOS.
  *
  * macOS convention: closing all windows keeps the app alive. With the main
- * window retired, CoreLive is a tray-resident companion (BrainDump / Floating /
+ * window retired, CoreLive is a tray-resident companion (LiveEditor / Floating /
  * Settings) — closing every panel leaves it running in the menu bar; the user
  * quits explicitly via Cmd+Q, the app menu, or the tray's Quit. (T10 / design
  * Open Question #6: stay tray-resident, never quit on the last panel close.)

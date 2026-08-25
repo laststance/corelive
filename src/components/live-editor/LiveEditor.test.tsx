@@ -13,7 +13,7 @@ import userSettingsReducer, {
 import type { UserSettingsState } from '@/lib/schemas/settings'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
-import { BrainDumpEditor } from './BrainDumpEditor'
+import { LiveEditor } from './LiveEditor'
 
 // Split create/delete mutations so completion specs can assert create calls
 // without counting undo cleanup deletes.
@@ -88,8 +88,14 @@ vi.mock('@/lib/todo-sync-channel', () => ({
   broadcastTodoSync: vi.fn(),
 }))
 
+const { liveEditorEnvironmentRef } = vi.hoisted(() => ({
+  liveEditorEnvironmentRef: { current: true },
+}))
+
 vi.mock('../../../electron/utils/electron-client', () => ({
-  isBrainDumpEnvironment: () => true,
+  getLiveEditorAPI: () => window.liveEditorAPI ?? window.brainDumpAPI,
+  getLiveEditorCategoryChangedChannel: () => 'live-editor-category-changed',
+  isLiveEditorEnvironment: () => liveEditorEnvironmentRef.current,
 }))
 
 const categories: CategoryWithCount[] = [
@@ -119,20 +125,20 @@ const categoriesWithCorelive: CategoryWithCount[] = [
   },
 ]
 
-type BrainDumpSpacesBridge = {
+type LiveEditorSpacesBridge = {
   getVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
   setVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
 }
 
 /**
- * Installs the BrainDump preload bridge used by the editor in renderer tests.
+ * Installs the LiveEditor preload bridge used by the editor in renderer tests.
  * @param spaces - Fake Spaces bridge methods for this scenario.
  * @returns Nothing; mutates the happy-dom window object.
  * @example
- * installBrainDumpAPI({ getVisibleOnAllWorkspaces, setVisibleOnAllWorkspaces })
+ * installLiveEditorAPI({ getVisibleOnAllWorkspaces, setVisibleOnAllWorkspaces })
  */
-function installBrainDumpAPI(spaces: BrainDumpSpacesBridge): void {
-  Object.defineProperty(window, 'brainDumpAPI', {
+function installLiveEditorAPI(spaces: LiveEditorSpacesBridge): void {
+  Object.defineProperty(window, 'liveEditorAPI', {
     configurable: true,
     writable: true,
     value: {
@@ -165,11 +171,11 @@ function installBrainDumpAPI(spaces: BrainDumpSpacesBridge): void {
 /**
  * Renders the editor under a real settings store (so its inline text styling
  * reads the actual slice) with the given setting overrides spread over the
- * slice defaults. Required now that BrainDumpEditor reads the settings slice.
+ * slice defaults. Required now that LiveEditor reads the settings slice.
  * @param settingOverrides - Fields to override on top of the slice defaults.
  * @returns The Testing Library render result.
  * @example
- * renderEditor({ braindumpFontSize: 20 })
+ * renderEditor({ liveEditorFontSize: 20 })
  */
 function renderEditor(settingOverrides: Partial<UserSettingsState> = {}) {
   return renderEditorWithCategories(categories, settingOverrides)
@@ -177,7 +183,7 @@ function renderEditor(settingOverrides: Partial<UserSettingsState> = {}) {
 
 /**
  * Renders the editor with custom categories for category-switching persistence specs.
- * @param editorCategories - Categories available in the BrainDump picker.
+ * @param editorCategories - Categories available in the LiveEditor picker.
  * @param settingOverrides - Fields to override on top of the slice defaults.
  * @returns The Testing Library render result.
  * @example
@@ -195,12 +201,32 @@ function renderEditorWithCategories(
   })
   return render(
     <Provider store={store}>
-      <BrainDumpEditor categories={editorCategories} />
+      <LiveEditor categories={editorCategories} />
     </Provider>,
   )
 }
 
-describe('BrainDumpEditor Spaces tracking switch', () => {
+beforeEach(() => {
+  liveEditorEnvironmentRef.current = true
+})
+
+describe('LiveEditor environment fallback', () => {
+  it('explains desktop availability in a browser without the preload API', () => {
+    // Arrange
+    liveEditorEnvironmentRef.current = false
+
+    // Act
+    renderEditor()
+
+    // Assert
+    expect(
+      screen.getByText('LiveEditor is available in the CoreLive desktop app.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Loading LiveEditor…')).not.toBeInTheDocument()
+  })
+})
+
+describe('LiveEditor Spaces tracking switch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -209,7 +235,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
@@ -217,7 +243,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     // Act
     renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
-      name: 'Show BrainDump on all Mac desktops',
+      name: 'Show LiveEditor on all Mac desktops',
     })
 
     // Assert
@@ -227,18 +253,18 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     })
   })
 
-  it('persists the header switch change through the BrainDump preload bridge', async () => {
+  it('persists the header switch change through the LiveEditor preload bridge', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     const user = userEvent.setup()
     renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
-      name: 'Show BrainDump on all Mac desktops',
+      name: 'Show LiveEditor on all Mac desktops',
     })
     await waitFor(() => {
       expect(spacesSwitch).toBeChecked()
@@ -260,14 +286,14 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     const setVisibleOnAllWorkspaces = vi
       .fn()
       .mockRejectedValue(new Error('main process unavailable'))
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     const user = userEvent.setup()
     renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
-      name: 'Show BrainDump on all Mac desktops',
+      name: 'Show LiveEditor on all Mac desktops',
     })
     await waitFor(() => {
       expect(spacesSwitch).not.toBeChecked()
@@ -293,13 +319,13 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
     })
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn(async () => pendingSpacesUpdate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const spacesSwitch = screen.getByRole('switch', {
-      name: 'Show BrainDump on all Mac desktops',
+      name: 'Show LiveEditor on all Mac desktops',
     })
     await waitFor(() => {
       expect(spacesSwitch).not.toBeChecked()
@@ -321,7 +347,7 @@ describe('BrainDumpEditor Spaces tracking switch', () => {
   })
 })
 
-describe('BrainDumpEditor text styling settings', () => {
+describe('LiveEditor text styling settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -330,7 +356,7 @@ describe('BrainDumpEditor text styling settings', () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
@@ -338,9 +364,9 @@ describe('BrainDumpEditor text styling settings', () => {
     // Act — open the editor with serif / 20px / amber text saved in settings.
     // findByRole settles the editor's async mount effects under act() before asserting.
     renderEditor({
-      braindumpFontFamily: 'serif',
-      braindumpFontSize: 20,
-      braindumpTextColor: 'var(--primary)',
+      liveEditorFontFamily: 'serif',
+      liveEditorFontSize: 20,
+      liveEditorTextColor: 'var(--primary)',
     })
     const noteField = await screen.findByRole('textbox')
 
@@ -354,7 +380,7 @@ describe('BrainDumpEditor text styling settings', () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
@@ -369,7 +395,7 @@ describe('BrainDumpEditor text styling settings', () => {
   })
 })
 
-describe('BrainDumpEditor writing surface', () => {
+describe('LiveEditor writing surface', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -378,12 +404,12 @@ describe('BrainDumpEditor writing surface', () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
 
-    // Act — open the braindump writing surface.
+    // Act — open the LiveEditor writing surface.
     renderEditor()
     const noteField = await screen.findByRole('textbox')
 
@@ -394,20 +420,20 @@ describe('BrainDumpEditor writing surface', () => {
   })
 })
 
-describe('BrainDumpEditor note persistence during reload', () => {
+describe('LiveEditor note persistence during reload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     selectedCategoryRef.current = 1
   })
 
-  it('does not read or write the temporary floating category before BrainDump config finishes loading', async () => {
+  it('does not read or write the temporary floating category before LiveEditor config finishes loading', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.sync.getEnabled = vi.fn(
       async () => new Promise<boolean>(() => undefined),
     )
@@ -427,14 +453,14 @@ describe('BrainDumpEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('loads only the saved local BrainDump category after config disables FloatingNav sync', async () => {
+  it('loads only the saved local LiveEditor category after config disables FloatingNav sync', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.sync.getEnabled = vi.fn().mockResolvedValue(false)
     api.category.getLast = vi.fn().mockResolvedValue(12)
     api.note.get = vi.fn(async (categoryId: number) =>
@@ -457,12 +483,12 @@ describe('BrainDumpEditor note persistence during reload', () => {
 
   it('does not flush a clean loaded note when the active category changes', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (categoryId: number) =>
       categoryId === 1 ? 'keep category one' : 'work category twelve',
     )
@@ -477,7 +503,7 @@ describe('BrainDumpEditor note persistence during reload', () => {
     // Act
     const { rerender } = render(
       <Provider store={store}>
-        <BrainDumpEditor categories={categoriesWithCorelive} />
+        <LiveEditor categories={categoriesWithCorelive} />
       </Provider>,
     )
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
@@ -488,7 +514,7 @@ describe('BrainDumpEditor note persistence during reload', () => {
     selectedCategoryRef.current = 12
     rerender(
       <Provider store={store}>
-        <BrainDumpEditor categories={categoriesWithCorelive} />
+        <LiveEditor categories={categoriesWithCorelive} />
       </Provider>,
     )
 
@@ -502,12 +528,12 @@ describe('BrainDumpEditor note persistence during reload', () => {
 
   it('persists an intentional full clear after the loaded category note is editable', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn().mockResolvedValue('keep me until the user clears it')
     const noteSet = vi.mocked(api.note.set)
     const user = userEvent.setup()
@@ -530,14 +556,14 @@ describe('BrainDumpEditor note persistence during reload', () => {
     )
   })
 
-  it('keeps the existing category note on disk when BrainDump reloads before the note finishes loading', async () => {
+  it('keeps the existing category note on disk when LiveEditor reloads before the note finishes loading', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async () => new Promise<string>(() => undefined))
     const noteSet = vi.mocked(api.note.set)
 
@@ -555,12 +581,12 @@ describe('BrainDumpEditor note persistence during reload', () => {
 
   it('blocks editing while the existing category note is still loading', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async () => new Promise<string>(() => undefined))
     const noteSet = vi.mocked(api.note.set)
     const user = userEvent.setup()
@@ -582,12 +608,12 @@ describe('BrainDumpEditor note persistence during reload', () => {
 
   it('keeps the existing category note on disk when loading that note fails', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi
       .fn()
       .mockRejectedValue(new Error('temporary disk read error'))
@@ -609,12 +635,12 @@ describe('BrainDumpEditor note persistence during reload', () => {
 
   it('persists a new user edit after the existing category note fails to load', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi
       .fn()
       .mockRejectedValue(new Error('temporary disk read error'))
@@ -639,16 +665,16 @@ describe('BrainDumpEditor note persistence during reload', () => {
   })
 })
 
-describe('BrainDumpEditor focus on window show', () => {
+describe('LiveEditor focus on window show', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('focuses the note editor when the BrainDump window first opens, so a quick capture can start typing right away', async () => {
+  it('focuses the note editor when the LiveEditor window first opens, so a quick capture can start typing right away', async () => {
     // Arrange — open the editor with an active category, so the note field is enabled.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
@@ -669,7 +695,7 @@ describe('BrainDumpEditor focus on window show', () => {
     // starting point by parking focus on the first focusable header control.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
@@ -679,7 +705,7 @@ describe('BrainDumpEditor focus on window show', () => {
       expect(noteField).toBeEnabled()
     })
     const spacesSwitch = screen.getByRole('switch', {
-      name: 'Show BrainDump on all Mac desktops',
+      name: 'Show LiveEditor on all Mac desktops',
     })
     act(() => {
       spacesSwitch.focus()
@@ -707,7 +733,7 @@ describe('BrainDumpEditor focus on window show', () => {
  * Types `value` into the note field, parks the caret at the end of the first
  * line, and fires the Cmd+Enter complete command. Shared mechanical setup so
  * each spec keeps its expected create args / textarea value hard-coded inline.
- * @param noteField - The BrainDump textarea.
+ * @param noteField - The LiveEditor textarea.
  * @param value - Full note contents to type before completing.
  * @returns Nothing; drives the editor via fireEvent.
  * @example
@@ -726,7 +752,7 @@ function fireCompleteCommandOnFirstLine(
 
 /**
  * Replaces one textarea range as a single paste-like edit so row tracking sees the exact splice.
- * @param noteField - The BrainDump textarea.
+ * @param noteField - The LiveEditor textarea.
  * @param start - Inclusive selection start before the edit.
  * @param end - Exclusive selection end before the edit.
  * @param value - Full textarea value after the edit.
@@ -760,19 +786,19 @@ function replaceTextareaRange(
 }
 
 /**
- * Waits for the config/note boot load to finish before tests type into BrainDump.
- * @param noteField - The BrainDump textarea rendered by the test.
+ * Waits for the config/note boot load to finish before tests type into LiveEditor.
+ * @param noteField - The LiveEditor textarea rendered by the test.
  * @returns A promise that resolves once user input is accepted.
  * @example
- * await waitForBrainDumpReady(noteField)
+ * await waitForLiveEditorReady(noteField)
  */
-async function waitForBrainDumpReady(noteField: HTMLTextAreaElement) {
+async function waitForLiveEditorReady(noteField: HTMLTextAreaElement) {
   await waitFor(() => {
     expect(noteField).toBeEnabled()
   })
 }
 
-describe('BrainDumpEditor complete command', () => {
+describe('LiveEditor complete command', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
@@ -783,13 +809,13 @@ describe('BrainDumpEditor complete command', () => {
     // Arrange — an editor with a category, holding one ordinary (non-checkbox) line.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — fire the complete command on the plain line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -808,13 +834,13 @@ describe('BrainDumpEditor complete command', () => {
     // Arrange — an editor holding a pre-formatted unchecked checkbox line.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, '- [ ] write tests')
@@ -833,13 +859,13 @@ describe('BrainDumpEditor complete command', () => {
     // Arrange — a user manually checked the task before invoking the complete command.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the line while its markdown checkbox is already checked.
     fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
@@ -863,13 +889,13 @@ describe('BrainDumpEditor complete command', () => {
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — invoke completion twice while the first request is still pending.
     fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
@@ -897,13 +923,13 @@ describe('BrainDumpEditor complete command', () => {
       resolveCreate = resolve
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const originalText = 'header\n- [x] FooTask'
     fireEvent.change(noteField, { target: { value: originalText } })
     noteField.selectionStart = originalText.length
@@ -927,13 +953,13 @@ describe('BrainDumpEditor complete command', () => {
 
   it('undoes the original checked task after an identical row is inserted immediately before it', async () => {
     // Arrange — record the second row and retain its optimistic Undo action.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const originalText = 'header\n- [x] FooTask'
     fireEvent.change(noteField, { target: { value: originalText } })
     noteField.selectionStart = originalText.length
@@ -969,13 +995,13 @@ describe('BrainDumpEditor complete command', () => {
       resolveCreate = resolve
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const originalText = 'header\n- [x] FooTask'
     fireEvent.change(noteField, { target: { value: originalText } })
     noteField.selectionStart = originalText.length
@@ -1011,13 +1037,13 @@ describe('BrainDumpEditor complete command', () => {
 
   it('does not use another checked row with the same title after tracked identity is lost', async () => {
     // Arrange — record one checked task and retain its Undo action.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const originalText = 'header\n- [x] FooTask'
     fireEvent.change(noteField, { target: { value: originalText } })
     noteField.selectionStart = originalText.length
@@ -1046,13 +1072,13 @@ describe('BrainDumpEditor complete command', () => {
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — try to record the already checked task as Completed.
     fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
@@ -1071,13 +1097,13 @@ describe('BrainDumpEditor complete command', () => {
     // Arrange — a parent task with one indented child checkbox under it.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = ['- [ ] parent task', '  - [ ] nested task'].join('\n')
     fireEvent.change(noteField, { target: { value } })
     noteField.selectionStart = value.length
@@ -1103,13 +1129,13 @@ describe('BrainDumpEditor complete command', () => {
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete a plain prose line whose create then fails.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1130,13 +1156,13 @@ describe('BrainDumpEditor complete command', () => {
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete 'buy milk', then (while the create is still pending) prepend
     // an unrelated line and rename the completed one so the title search misses.
@@ -1160,13 +1186,13 @@ describe('BrainDumpEditor complete command', () => {
       rejectCreate = reject
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const originalText = '- [x] FooTask\nFooTask'
     fireEvent.change(noteField, { target: { value: originalText } })
     noteField.selectionStart = originalText.length
@@ -1189,12 +1215,12 @@ describe('BrainDumpEditor complete command', () => {
       rejectCreate = reject
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) =>
       id === 1 ? '- [x] buy milk\nkeep me' : '',
     )
@@ -1212,12 +1238,12 @@ describe('BrainDumpEditor complete command', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk\nkeep me')
     selectedCategoryRef.current = 2
     rerender(tree())
@@ -1259,13 +1285,13 @@ describe('BrainDumpEditor complete command', () => {
 
   it('keeps an undone line visible while a failed Completed delete retries', async () => {
     // Arrange — complete one checkbox and make the first server delete fail.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk')
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledTimes(1)
@@ -1306,12 +1332,12 @@ describe('BrainDumpEditor complete command', () => {
 
   it('records a pre-checked row only once after switching categories and back', async () => {
     // Arrange — category 1 always reloads the same checked row; category 2 is empty.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) =>
       id === 1 ? '- [x] buy milk' : '',
     )
@@ -1328,12 +1354,12 @@ describe('BrainDumpEditor complete command', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
     await waitFor(() => {
       expect(completedMutateAsync).toHaveBeenCalledTimes(1)
@@ -1360,13 +1386,13 @@ describe('BrainDumpEditor complete command', () => {
     // Arrange — an editor whose caret line is whitespace only.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, '   ')
@@ -1376,7 +1402,7 @@ describe('BrainDumpEditor complete command', () => {
   })
 })
 
-describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
+describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
@@ -1388,13 +1414,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — the editor with clear-on-complete opted in.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the only line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1415,13 +1441,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // before the line leaves the scratchpad.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act: complete an unchecked checkbox line.
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk')
@@ -1437,13 +1463,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — clear-on-complete is enabled after the user checked the task manually.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the line without first removing its existing check.
     fireCompleteCommandOnFirstLine(noteField, '- [x] FooTask')
@@ -1465,16 +1491,16 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       resolveCreate = resolve
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 500,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 500,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const originalText = 'header\n- [x] FooTask'
     fireEvent.change(noteField, { target: { value: originalText } })
     noteField.selectionStart = originalText.length
@@ -1503,13 +1529,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — clear-on-complete on, two lines so the re-insert index matters.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
     const caret = value.length // caret at end of the second line
@@ -1538,13 +1564,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
 
   it('undo restores a cleared task after an identical anchor row is inserted above its saved position', async () => {
     // Arrange — complete the first row and wait for its instant clear to leave one anchor row.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] FooTask\nkeep')
     await waitFor(() => {
       expect(noteField).toHaveValue('keep')
@@ -1568,13 +1594,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — clear-on-complete on, with the caret parked on an indented child.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = ['- [ ] parent task', '  - [ ] nested task'].join('\n')
     fireEvent.change(noteField, { target: { value } })
     noteField.selectionStart = value.length
@@ -1607,13 +1633,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete a line whose background create then rejects.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1636,13 +1662,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete (line clears), let the undo window elapse with no Undo
     // (Sonner fires onAutoClose on the timeout), THEN the create rejects.
@@ -1680,13 +1706,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
     const caret = value.length // caret at end of the second line
@@ -1726,13 +1752,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete (line clears), Undo (line restored, create still pending),
     // THEN the held create rejects.
@@ -1764,13 +1790,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — a plain line the user indented with leading spaces.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the indented line, then undo it.
     fireCompleteCommandOnFirstLine(noteField, '   buy milk')
@@ -1801,13 +1827,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — three lines; completing the middle one shifts 'c' up into its slot.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
-    renderEditor({ braindumpClearOnComplete: true, braindumpClearDelayMs: 0 })
+    renderEditor({ liveEditorClearOnComplete: true, liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = 'a\n- [ ] buy milk\nc'
     fireEvent.change(noteField, { target: { value } })
     // Park the caret at the end of the middle line (offset 16) before completing.
@@ -1831,13 +1857,13 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // Arrange — a fresh install (clear-on-complete OFF) keeps the prior behavior.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces,
       setVisibleOnAllWorkspaces,
     })
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete a plain line under the default setting.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -1860,12 +1886,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // REAL content, not an empty stand-in. This is the cross-category data-loss
     // guard: completing in category 1, switching to 2, then Undo must put the
     // line back into category 1's STORED note — never category 2's visible one.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     // Category 1 has rows around the restore slot; every other category is empty.
     api.note.get = vi.fn(async (id: number) => (id === 1 ? 'top\nbottom' : ''))
     const noteSet = vi.mocked(api.note.set)
@@ -1875,8 +1901,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: 0,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: 0,
         },
       },
     })
@@ -1892,12 +1918,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     // controllable useSelectedCategory mock, so the category switch wouldn't take.
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     // The middle checkbox makes a wrong cross-category re-index observable.
     const value = 'top\n- [ ] buy milk\nbottom'
     fireEvent.change(noteField, { target: { value } })
@@ -1943,12 +1969,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
 
   it('offers Retry when Undo cannot restore a cleared origin row', async () => {
     // Arrange — complete in category 1, clear the row, then switch to category 2.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) => (id === 1 ? 'keep me' : ''))
     const noteSet = vi.mocked(api.note.set)
     const store = configureStore({
@@ -1956,8 +1982,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: 0,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: 0,
         },
       },
     })
@@ -1970,12 +1996,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk\nkeep me')
     await waitFor(() => {
       expect(noteField).toHaveValue('keep me')
@@ -2029,12 +2055,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       rejectCreate = reject
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) => (id === 1 ? 'keep me' : ''))
     const noteSet = vi.mocked(api.note.set)
     const store = configureStore({
@@ -2042,8 +2068,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: 0,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: 0,
         },
       },
     })
@@ -2056,12 +2082,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk\nkeep me')
     await waitFor(() => {
       expect(noteField).toHaveValue('keep me')
@@ -2117,12 +2143,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       rejectCreate = reject
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) => (id === 1 ? 'keep me' : ''))
     const noteSet = vi.mocked(api.note.set)
     const store = configureStore({
@@ -2130,8 +2156,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: 0,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: 0,
         },
       },
     })
@@ -2144,12 +2170,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk\nkeep me')
     await waitFor(() => {
       expect(noteField).toHaveValue('keep me')
@@ -2208,12 +2234,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       resolveRestoreRead = resolve
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) => {
       // Only the origin read after switching categories is intentionally blocked.
       if (id === 1 && selectedCategoryRef.current === 2) return restoreRead
@@ -2225,8 +2251,8 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: 0,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: 0,
         },
       },
     })
@@ -2239,12 +2265,12 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [ ] buy milk')
     await waitFor(() => {
       expect(noteField).toHaveValue('')
@@ -2285,7 +2311,7 @@ describe('BrainDumpEditor clear-on-complete (instant / zero delay)', () => {
   })
 })
 
-describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
+describe('LiveEditor clear-on-complete (deferred linger)', () => {
   // A short, REAL linger keeps these specs deterministic: a setTimeout always
   // fires AFTER the synchronous fireEvent and the create promise's microtask, so
   // "still on screen" / "timer cancelled" assertions are race-free. Fake timers
@@ -2301,16 +2327,16 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
 
   it('keeps the finished line on screen for the linger, then tucks it away once the delay elapses', async () => {
     // Arrange — clear-on-complete on with a 100 ms linger (not instant).
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: LINGER_MS,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the first of two lines.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
@@ -2334,7 +2360,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // shifts every later line up, so a still-pending sibling's tracked index must
     // be decremented — otherwise its content guard misses and that line is silently
     // never cleared. This is the regression that guard (finding G) exists for.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
@@ -2342,11 +2368,11 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // timer fires (both pending together); the ~100 ms human-paced gap between the
     // two completions lets the editor re-sync its text ref between the two firings.
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 500,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 500,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete line 0 ('buy milk'), then ~100 ms later complete line 1
     // ('dishes'); the checked lines stay present meanwhile, and both completions
@@ -2373,16 +2399,16 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
 
   it('cancels the pending removal when Undo is tapped during the linger, so the line never leaves', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: LINGER_MS,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete (the line is now lingering), then tap Undo before the linger
     // elapses. The optimistic toast is shown synchronously, so its Undo action is
@@ -2409,16 +2435,16 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // 100 ms removal timer could fire, so it cancels the pending timer: the line was
     // never cleared, so there is nothing to restore — it simply stays.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: LINGER_MS,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete a line whose background create then rejects during the linger.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk\nkeep me')
@@ -2443,12 +2469,12 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       rejectCreate = reject
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) =>
       id === 1 ? 'buy milk\nkeep me' : '',
     )
@@ -2459,8 +2485,8 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: LINGER_MS,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: LINGER_MS,
         },
       },
     })
@@ -2473,12 +2499,12 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = 'buy milk\nkeep me'
     fireEvent.change(noteField, { target: { value } })
     noteField.selectionStart = 'buy milk'.length
@@ -2511,16 +2537,16 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
 
   it('does not remove the tracked line if the user edited it during the linger', async () => {
     // Arrange
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: LINGER_MS,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: LINGER_MS,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the first line, then (still within the linger, before the
     // timer fires) edit that very line so it no longer matches what was completed.
@@ -2540,12 +2566,12 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       resolveCreate = resolve
     })
     completedMutateAsync.mockReturnValueOnce(pendingCreate)
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     api.note.get = vi.fn(async (id: number) =>
       id === 1 ? '- [x] buy milk' : '',
     )
@@ -2554,8 +2580,8 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: LINGER_MS,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: LINGER_MS,
         },
       },
     })
@@ -2568,12 +2594,12 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     fireCompleteCommandOnFirstLine(noteField, '- [x] buy milk')
     selectedCategoryRef.current = 2
     rerender(tree())
@@ -2604,12 +2630,12 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     // category 1 then switching to 2 before the linger elapses must cancel the
     // pending removal, so the timer can never fire against category 2's freshly
     // loaded note (which would corrupt it — the cross-category data-loss guard).
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    const api = window.brainDumpAPI
-    if (!api) throw new Error('brainDumpAPI was not installed')
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
     // Category 1 holds the seeded note; every other category is empty.
     api.note.get = vi.fn(async (id: number) =>
       id === 1 ? 'buy milk\nkeep me' : '',
@@ -2621,8 +2647,8 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
       preloadedState: {
         settings: {
           ...userSettingsInitialState,
-          braindumpClearOnComplete: true,
-          braindumpClearDelayMs: LINGER_MS,
+          liveEditorClearOnComplete: true,
+          liveEditorClearDelayMs: LINGER_MS,
         },
       },
     })
@@ -2635,12 +2661,12 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
     ]
     const tree = (): ReactElement => (
       <Provider store={store}>
-        <BrainDumpEditor categories={twoCategories} />
+        <LiveEditor categories={twoCategories} />
       </Provider>
     )
     const { rerender } = render(tree())
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = 'buy milk\nkeep me'
     fireEvent.change(noteField, { target: { value } })
     noteField.selectionStart = 'buy milk'.length
@@ -2669,7 +2695,7 @@ describe('BrainDumpEditor clear-on-complete (deferred linger)', () => {
   })
 })
 
-describe('BrainDumpEditor completion toast — close button + display duration (#109)', () => {
+describe('LiveEditor completion toast — close button + display duration (#109)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
@@ -2681,13 +2707,13 @@ describe('BrainDumpEditor completion toast — close button + display duration (
   it('shows the completion toast with a close button and the configured display duration', async () => {
     // Arrange — clear-on-complete OFF (the always-shown toast path), with an
     // 8 s display duration saved.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    renderEditor({ braindumpToastDurationMs: 8000 })
+    renderEditor({ liveEditorToastDurationMs: 8000 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete a plain line.
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -2704,13 +2730,13 @@ describe('BrainDumpEditor completion toast — close button + display duration (
 
   it('phrases the Undo-window copy for the configured display duration', async () => {
     // Arrange — an 8 s duration must read "8 s", not a hardcoded "5 s".
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    renderEditor({ braindumpToastDurationMs: 8000 })
+    renderEditor({ liveEditorToastDurationMs: 8000 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -2729,13 +2755,13 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     // Arrange — a half-step 2500 ms duration (reachable via the slider's 500 ms
     // step) must read "2 s" (floor), never "3 s" (round): the copy must never
     // claim more Undo time than actually remains (FINDING-001 regret-safe floor).
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    renderEditor({ braindumpToastDurationMs: 2500 })
+    renderEditor({ liveEditorToastDurationMs: 2500 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -2753,17 +2779,17 @@ describe('BrainDumpEditor completion toast — close button + display duration (
   it('keeps the close button and configured duration on the clear-on-complete toast', async () => {
     // Arrange — clear-on-complete ON with instant clear and a 6 s duration: the
     // SAME helper must wire the ✕ + duration on this second completion path too.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 0,
-      braindumpToastDurationMs: 6000,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 0,
+      liveEditorToastDurationMs: 6000,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     // Act — complete the only line (it clears instantly).
     fireCompleteCommandOnFirstLine(noteField, 'buy milk')
@@ -2781,17 +2807,17 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     // Arrange — clear-on-complete ON; the ✕ adds an onDismiss that BOTH a ✕ and an
     // Undo trigger. Undo must still revert, and the trailing onDismiss must NOT
     // confirm the win away (the call-site wasUndoCalled guard — CEO-D4).
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 0,
-      braindumpToastDurationMs: 6000,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 0,
+      liveEditorToastDurationMs: 6000,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
     const value = 'keep me\n- [ ] buy milk'
     fireEvent.change(noteField, { target: { value } })
     const caret = value.length // caret at end of the second line
@@ -2825,17 +2851,17 @@ describe('BrainDumpEditor completion toast — close button + display duration (
     // The runtime min() must remove the line when the toast (and its Undo) closes
     // at 100 ms, never letting it linger the full 300 ms (#109 replaces #108's
     // fixed ceiling). In production this is the clearDelay-5000 vs toast-2000 case.
-    installBrainDumpAPI({
+    installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     renderEditor({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 300,
-      braindumpToastDurationMs: 100,
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 300,
+      liveEditorToastDurationMs: 100,
     })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForBrainDumpReady(noteField)
+    await waitForLiveEditorReady(noteField)
 
     vi.useFakeTimers()
     try {

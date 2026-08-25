@@ -1,15 +1,16 @@
 import type { Middleware } from '@reduxjs/toolkit'
 
 import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
+import { migrateLegacyLiveEditorSettings } from '@/lib/redux/migratePersistedState'
 import {
   hydrateUserSettings,
   setAllSoundMoments,
-  setBraindumpClearDelayMs,
-  setBraindumpClearOnComplete,
-  setBraindumpFontFamily,
-  setBraindumpFontSize,
-  setBraindumpTextColor,
-  setBraindumpToastDurationMs,
+  setLiveEditorClearDelayMs,
+  setLiveEditorClearOnComplete,
+  setLiveEditorFontFamily,
+  setLiveEditorFontSize,
+  setLiveEditorTextColor,
+  setLiveEditorToastDurationMs,
   setCompletionSound,
   setRetainCompletedInList,
   setSoundMoment,
@@ -46,12 +47,12 @@ const BROADCASTABLE_ACTION_TYPES = new Set<string>([
   setAllSoundMoments.type,
   setSoundTimbre.type,
   setSoundVolume.type,
-  setBraindumpFontFamily.type,
-  setBraindumpFontSize.type,
-  setBraindumpTextColor.type,
-  setBraindumpClearOnComplete.type,
-  setBraindumpClearDelayMs.type,
-  setBraindumpToastDurationMs.type,
+  setLiveEditorFontFamily.type,
+  setLiveEditorFontSize.type,
+  setLiveEditorTextColor.type,
+  setLiveEditorClearOnComplete.type,
+  setLiveEditorClearDelayMs.type,
+  setLiveEditorToastDurationMs.type,
 ])
 
 /**
@@ -116,21 +117,28 @@ export const createUserSettingsSyncMiddleware = (): Middleware<
     // broadcastable action, so this never bounces back out (no echo loop).
     channel.addEventListener('message', (event: MessageEvent) => {
       if (!isUserSettingsSyncEnvelope(event.data)) return
+      // Rename pre-deploy LiveEditor fields before Zod drops unknown legacy keys.
+      const inboundState =
+        typeof event.data.state === 'object' &&
+        event.data.state !== null &&
+        !Array.isArray(event.data.state)
+          ? migrateLegacyLiveEditorSettings(
+              event.data.state as Record<string, unknown>,
+            )
+          : event.data.state
       // Validate + coalesce the inbound state through the Zod SSoT: a legacy
       // payload is accepted with new fields defaulted, an out-of-range
       // soundVolume is CLAMPED, and malformed junk (wrong types) is rejected
       // wholesale. Dispatch the PARSED snapshot so we never persist raw,
       // out-of-range, or partial data into Redux.
-      const parsed = UserSettingsStateSchema.safeParse(event.data.state)
+      const parsed = UserSettingsStateSchema.safeParse(inboundState)
       if (parsed.success) {
         // A cross-version inbound payload (e.g. an old cached web tab on the
         // same origin) may carry only the legacy `completionSound:true` with no
         // `soundMoments`; the schema would default `complete` to false and drop
         // that intent. Fold the legacy flag in first — mirrors the persisted
         // migratePersistedState path so inbound and on-disk legacy agree.
-        const foldedMoments = foldLegacyCompletionSoundIntoMoments(
-          event.data.state,
-        )
+        const foldedMoments = foldLegacyCompletionSoundIntoMoments(inboundState)
         const nextSettings =
           foldedMoments === undefined
             ? parsed.data

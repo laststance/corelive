@@ -5,12 +5,12 @@ import { test, expect } from './_helpers/coverage'
 import { resetDatabase } from './_helpers/db'
 
 /**
- * Installs the BrainDump preload seam so `/braindump` runs in browser E2E.
- * @param page - Playwright page that will navigate to the BrainDump route.
- * @returns Nothing; future navigations receive `window.brainDumpAPI`.
- * @example await installBrainDumpPreloadMock(page)
+ * Installs the LiveEditor preload seam so `/live-editor` runs in browser E2E.
+ * @param page - Playwright page that will navigate to the LiveEditor route.
+ * @returns Nothing; future navigations receive `window.liveEditorAPI`.
+ * @example await installLiveEditorPreloadMock(page)
  */
-async function installBrainDumpPreloadMock(page: Page): Promise<void> {
+async function installLiveEditorPreloadMock(page: Page): Promise<void> {
   await page.addInitScript(() => {
     let opacity = 0.85
     let syncEnabled = true
@@ -18,10 +18,10 @@ async function installBrainDumpPreloadMock(page: Page): Promise<void> {
     let visibleOnAllWorkspaces = false
     const notesByCategory = new Map<number, string>()
 
-    // BrainDump follows FloatingNav by default; seed the shared category store.
+    // LiveEditor follows FloatingNav by default; seed the shared category store.
     window.localStorage.setItem('corelive-selected-category', '1')
 
-    window.brainDumpAPI = {
+    window.liveEditorAPI = {
       window: {
         close: async () => undefined,
         toggle: async () => undefined,
@@ -66,22 +66,22 @@ async function installBrainDumpPreloadMock(page: Page): Promise<void> {
       },
     }
 
-    window.brainDumpEnv = {
+    window.liveEditorEnv = {
       isElectron: true,
-      isBrainDump: true,
+      isLiveEditor: true,
       platform: 'darwin',
     }
   })
 }
 
 /**
- * Opens `/braindump` and waits until the note textarea accepts input.
- * @param page - Playwright page with Clerk token and BrainDump preload ready.
- * @returns The enabled BrainDump textarea locator.
- * @example const noteField = await openBrainDump(page)
+ * Opens `/live-editor` and waits until the note textarea accepts input.
+ * @param page - Playwright page with Clerk token and LiveEditor preload ready.
+ * @returns The enabled LiveEditor textarea locator.
+ * @example const noteField = await openLiveEditor(page)
  */
-async function openBrainDump(page: Page) {
-  await page.goto('/braindump')
+async function openLiveEditor(page: Page) {
+  await page.goto('/live-editor')
   const noteField = page.getByRole('textbox')
   await expect(noteField).toBeEnabled({ timeout: 10000 })
   return noteField
@@ -89,33 +89,33 @@ async function openBrainDump(page: Page) {
 
 /**
  * Moves the textarea caret to the final character for caret-line completion.
- * @param noteField - The BrainDump textarea locator.
+ * @param noteField - The LiveEditor textarea locator.
  * @returns Nothing; the selection is updated in the browser context.
  * @example await moveCaretToEnd(noteField)
  */
 async function moveCaretToEnd(noteField: Locator): Promise<void> {
   await noteField.evaluate((element) => {
     if (!(element instanceof HTMLTextAreaElement)) {
-      throw new Error('BrainDump editor is not a textarea')
+      throw new Error('LiveEditor editor is not a textarea')
     }
     element.setSelectionRange(element.value.length, element.value.length)
   })
 }
 
-test.describe('BrainDump E2E', () => {
+test.describe('LiveEditor E2E', () => {
   test.beforeAll(resetDatabase)
 
   test.beforeEach(async ({ page }) => {
     // Arrange common auth + Electron preload boundary before the route loads.
     await setupClerkTestingToken({ page })
-    await installBrainDumpPreloadMock(page)
+    await installLiveEditorPreloadMock(page)
   })
 
   test('completes the nested checkbox at the caret with ControlOrMeta+Enter', async ({
     page,
   }) => {
     // Arrange
-    const noteField = await openBrainDump(page)
+    const noteField = await openLiveEditor(page)
     await noteField.fill(
       ['- [ ] parent task', '  - [ ] nested task'].join('\n'),
     )

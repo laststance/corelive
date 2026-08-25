@@ -12,20 +12,20 @@
 import { z } from 'zod'
 
 import {
-  BRAINDUMP_CLEAR_DELAY_MAX_MS,
-  BRAINDUMP_CLEAR_DELAY_MIN_MS,
-  BRAINDUMP_FONT_FAMILY_IDS,
-  BRAINDUMP_FONT_SIZE_MAX_PX,
-  BRAINDUMP_FONT_SIZE_MIN_PX,
-  BRAINDUMP_TEXT_COLOR_PATTERN,
-  BRAINDUMP_TOAST_DURATION_MAX_MS,
-  BRAINDUMP_TOAST_DURATION_MIN_MS,
-  DEFAULT_BRAINDUMP_CLEAR_DELAY_MS,
-  DEFAULT_BRAINDUMP_FONT_FAMILY,
-  DEFAULT_BRAINDUMP_FONT_SIZE_PX,
-  DEFAULT_BRAINDUMP_TEXT_COLOR,
-  DEFAULT_BRAINDUMP_TOAST_DURATION_MS,
-} from '@/lib/constants/braindump'
+  LIVE_EDITOR_CLEAR_DELAY_MAX_MS,
+  LIVE_EDITOR_CLEAR_DELAY_MIN_MS,
+  LIVE_EDITOR_FONT_FAMILY_IDS,
+  LIVE_EDITOR_FONT_SIZE_MAX_PX,
+  LIVE_EDITOR_FONT_SIZE_MIN_PX,
+  LIVE_EDITOR_TEXT_COLOR_PATTERN,
+  LIVE_EDITOR_TOAST_DURATION_MAX_MS,
+  LIVE_EDITOR_TOAST_DURATION_MIN_MS,
+  DEFAULT_LIVE_EDITOR_CLEAR_DELAY_MS,
+  DEFAULT_LIVE_EDITOR_FONT_FAMILY,
+  DEFAULT_LIVE_EDITOR_FONT_SIZE_PX,
+  DEFAULT_LIVE_EDITOR_TEXT_COLOR,
+  DEFAULT_LIVE_EDITOR_TOAST_DURATION_MS,
+} from '@/lib/constants/live-editor'
 import {
   DEFAULT_SOUND_VOLUME,
   DEFAULT_TIMBRE_ID,
@@ -77,63 +77,63 @@ export const UserSettingsStateSchema = z.object({
     .number()
     .transform((value) => Math.min(1, Math.max(0, value)))
     .default(DEFAULT_SOUND_VOLUME),
-  /** BrainDump editor font family. `.catch` (not `.default`) so a MISSING *or*
+  /** LiveEditor editor font family. `.catch` (not `.default`) so a MISSING *or*
    * unknown id self-heals to the default rather than rejecting the whole payload. */
-  braindumpFontFamily: z
-    .enum(BRAINDUMP_FONT_FAMILY_IDS)
-    .catch(DEFAULT_BRAINDUMP_FONT_FAMILY),
-  /** BrainDump editor font size (px). A finite number is clamped to the slider
+  liveEditorFontFamily: z
+    .enum(LIVE_EDITOR_FONT_FAMILY_IDS)
+    .catch(DEFAULT_LIVE_EDITOR_FONT_FAMILY),
+  /** LiveEditor editor font size (px). A finite number is clamped to the slider
    * range; a non-finite or non-number (corrupt blob, bad sync) self-heals to the
    * default via `.catch` instead of throwing the whole parse. */
-  braindumpFontSize: z
+  liveEditorFontSize: z
     .number()
     .finite()
     .transform((value) =>
       Math.min(
-        BRAINDUMP_FONT_SIZE_MAX_PX,
-        Math.max(BRAINDUMP_FONT_SIZE_MIN_PX, value),
+        LIVE_EDITOR_FONT_SIZE_MAX_PX,
+        Math.max(LIVE_EDITOR_FONT_SIZE_MIN_PX, value),
       ),
     )
-    .catch(DEFAULT_BRAINDUMP_FONT_SIZE_PX),
-  /** BrainDump editor text color — a theme `var(--token)` (preset) or a `#hex`
+    .catch(DEFAULT_LIVE_EDITOR_FONT_SIZE_PX),
+  /** LiveEditor editor text color — a theme `var(--token)` (preset) or a `#hex`
    * (custom). Anything outside those shapes self-heals to the default. */
-  braindumpTextColor: z
+  liveEditorTextColor: z
     .string()
-    .regex(BRAINDUMP_TEXT_COLOR_PATTERN)
-    .catch(DEFAULT_BRAINDUMP_TEXT_COLOR),
-  /** BrainDump clear-on-complete — when ON, a finished `- [x] <title>` line is
+    .regex(LIVE_EDITOR_TEXT_COLOR_PATTERN)
+    .catch(DEFAULT_LIVE_EDITOR_TEXT_COLOR),
+  /** LiveEditor clear-on-complete — when ON, a finished `- [x] <title>` line is
    * dropped once its undo window closes so the scratchpad clears as you go.
    * Default OFF keeps the on-concept behavior (every line stays in place); the
    * clear is the opt-in deviation ("Presets First, Then Options"). */
-  braindumpClearOnComplete: z.boolean().default(false),
-  /** BrainDump clear-on-complete linger (ms) before the finished line is removed.
+  liveEditorClearOnComplete: z.boolean().default(false),
+  /** LiveEditor clear-on-complete linger (ms) before the finished line is removed.
    * A finite number is clamped to the slider range; a non-finite or non-number
    * (corrupt blob, bad sync) self-heals to the default via `.catch` — mirroring
-   * `braindumpFontSize`. Only takes effect when `braindumpClearOnComplete` is ON. */
-  braindumpClearDelayMs: z
+   * `liveEditorFontSize`. Only takes effect when `liveEditorClearOnComplete` is ON. */
+  liveEditorClearDelayMs: z
     .number()
     .finite()
     .transform((value) =>
       Math.min(
-        BRAINDUMP_CLEAR_DELAY_MAX_MS,
-        Math.max(BRAINDUMP_CLEAR_DELAY_MIN_MS, value),
+        LIVE_EDITOR_CLEAR_DELAY_MAX_MS,
+        Math.max(LIVE_EDITOR_CLEAR_DELAY_MIN_MS, value),
       ),
     )
-    .catch(DEFAULT_BRAINDUMP_CLEAR_DELAY_MS),
-  /** BrainDump completion-toast display duration (ms) before it auto-dismisses.
+    .catch(DEFAULT_LIVE_EDITOR_CLEAR_DELAY_MS),
+  /** LiveEditor completion-toast display duration (ms) before it auto-dismisses.
    * A finite number is clamped to the slider range; a non-finite or non-number
    * (corrupt blob, bad sync) self-heals to the default via `.catch` — mirroring
-   * `braindumpClearDelayMs`. The toast also gains a close (✕) button (#109). */
-  braindumpToastDurationMs: z
+   * `liveEditorClearDelayMs`. The toast also gains a close (✕) button (#109). */
+  liveEditorToastDurationMs: z
     .number()
     .finite()
     .transform((value) =>
       Math.min(
-        BRAINDUMP_TOAST_DURATION_MAX_MS,
-        Math.max(BRAINDUMP_TOAST_DURATION_MIN_MS, value),
+        LIVE_EDITOR_TOAST_DURATION_MAX_MS,
+        Math.max(LIVE_EDITOR_TOAST_DURATION_MIN_MS, value),
       ),
     )
-    .catch(DEFAULT_BRAINDUMP_TOAST_DURATION_MS),
+    .catch(DEFAULT_LIVE_EDITOR_TOAST_DURATION_MS),
 })
 
 /** The validated core user-settings shape (inferred from the schema SSoT). */

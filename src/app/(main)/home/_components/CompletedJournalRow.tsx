@@ -15,7 +15,7 @@ interface CompletedJournalRowProps {
   /**
    * Uncomplete handler, wired only for `todo`-source rows (the correction path
    * that survives retiring per-item delete). `completed`-source rows are an
-   * immutable import/braindump record, so they render a static check instead.
+   * immutable import/live-editor record, so they render a static check instead.
    */
   onUncomplete?: (id: string) => void
 }
@@ -27,7 +27,7 @@ interface CompletedJournalRowProps {
  *
  * Source decides the left affordance: a `todo`-source win keeps an interactive
  * checkbox so an accidental completion can be reversed (un-checking re-opens the
- * task); a `completed`-source win (paste-import / braindump) is a permanent
+ * task); a `completed`-source win (paste-import / liveEditor) is a permanent
  * record and shows a static filled check. Rendered by {@link CompletedTodos} for
  * every entry of `completed.journal`.
  *
@@ -64,7 +64,7 @@ export const CompletedJournalRow = function CompletedJournalRow({
           className="tap-target-24"
         />
       ) : (
-        // Permanent import/braindump record: a static, display-only check.
+        // Permanent import/live-editor record: a static, display-only check.
         <CheckCircle2
           className="size-5 shrink-0 text-primary"
           aria-hidden="true"

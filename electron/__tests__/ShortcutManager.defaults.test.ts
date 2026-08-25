@@ -23,7 +23,7 @@ function createWindowManagerStub(): WindowManager {
   return {
     getFloatingNavigator: vi.fn(() => null),
     getMainWindow: vi.fn(() => null),
-    toggleBrainDump: vi.fn(() => true),
+    toggleLiveEditor: vi.fn(() => true),
     toggleFloatingNavigator: vi.fn(),
     setOnFloatingNavigatorCreated: vi.fn(),
   } as unknown as WindowManager
@@ -34,7 +34,7 @@ describe('ShortcutManager default shortcuts', () => {
     vi.clearAllMocks()
   })
 
-  it('uses Option+Space for BrainDump and Command+3 for Floating Navigator defaults', () => {
+  it('uses Option+Space for LiveEditor and Command+3 for Floating Navigator defaults', () => {
     // Arrange
     const shortcutManager = new ShortcutManager(createWindowManagerStub(), null)
 
@@ -42,7 +42,7 @@ describe('ShortcutManager default shortcuts', () => {
     const defaults = shortcutManager.getDefaultShortcuts()
 
     // Assert
-    expect(defaults.toggleBrainDump).toBe('Alt+Space')
+    expect(defaults.toggleLiveEditor).toBe('Alt+Space')
     expect(defaults.toggleFloatingNavigator).toBe('CommandOrControl+3')
   })
 })

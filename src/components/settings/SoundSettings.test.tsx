@@ -172,7 +172,7 @@ describe('SoundSettings — sound palette', () => {
     renderSoundSettings()
 
     // Assert — the volume slider reflects the saved fraction directly (not 0–100).
-    // The BrainDump font-size slider moved to the Electron Brain Dump card, so the
+    // The LiveEditor font-size slider moved to the Electron LiveEditor card, so the
     // Sound section now owns a single [0,1] slider.
     const volumeSlider = screen.getByRole('slider')
     expect(volumeSlider).toHaveAttribute('aria-valuenow', '0.6')
@@ -180,17 +180,17 @@ describe('SoundSettings — sound palette', () => {
     expect(volumeSlider).toHaveAttribute('aria-valuemax', '1')
   })
 
-  it('no longer renders the BrainDump appearance controls — they moved to the Brain Dump card', () => {
+  it('no longer renders the LiveEditor appearance controls — they moved to the LiveEditor card', () => {
     // Arrange / Act — the web-common Sound section.
     renderSoundSettings()
 
-    // Assert — BrainDump font/size/color/clear-on-complete controls are gone from
-    // the web-common surface (D2=A: BrainDump settings consolidated into the Electron card).
+    // Assert — LiveEditor font/size/color/clear-on-complete controls are gone from
+    // the web-common surface (D2=A: LiveEditor settings consolidated into the Electron card).
     expect(
       screen.queryByRole('switch', { name: 'Clear finished lines' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByLabelText('Custom BrainDump text color'),
+      screen.queryByLabelText('Custom LiveEditor text color'),
     ).not.toBeInTheDocument()
   })
 

@@ -5,12 +5,12 @@
  * page: the keep-on-top pin and the inline global-toggle shortcut.
  *
  * After the Settings regroup this is Floating-Navigator-ONLY — the shared Spaces
- * visibility moved to the Application section and the Brain Dump pin to the Brain
- * Dump section, so the old "shared behavior for Floating Navigator and BrainDump"
+ * visibility moved to the Application section and the LiveEditor pin to the
+ * LiveEditor section, so the old "shared behavior for Floating Navigator and LiveEditor"
  * framing no longer applies. Rendered bare under the Floating Navigator section
  * header (its old "Floating windows" card title collapsed into that `<h2>`).
  *
- * The shortcut box mirrors the BrainDump rebind UI (same `KeybindingCaptureInput`
+ * The shortcut box mirrors the LiveEditor rebind UI (same `KeybindingCaptureInput`
  * + `useShortcutCapture` optimistic/rollback), but persists over the
  * `floatingPanels.setFloatingNavigatorShortcut` bridge, which writes the canonical
  * `shortcuts.toggleFloatingNavigator` store (no separate mirror) so the box never
@@ -133,7 +133,7 @@ export const FloatingNavigatorSettings =
             <KeybindingCaptureInput
               id={shortcutId}
               value={shortcut}
-              // Same accessible name as the BrainDump box ("Toggle shortcut" =
+              // Same accessible name as the LiveEditor box ("Toggle shortcut" =
               // the visible Label, WCAG 2.5.3); the section <h2> disambiguates
               // the two, mirroring the keep-on-top pins' label=name approach.
               ariaLabel="Toggle shortcut"

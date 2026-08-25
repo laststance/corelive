@@ -60,7 +60,7 @@ export const isCoreliveDebugEnabled = (env: ProcessEnvLike): boolean => {
 
 /**
  * Whether a BrowserWindow should be created with DevTools available — the shared
- * gate for every production window (main, floating, braindump, settings) so they
+ * gate for every production window (main, floating, liveEditor, settings) so they
  * are uniformly debuggable or uniformly locked.
  *
  * True in local dev, when the persisted `advanced.enableDevTools` config is on,

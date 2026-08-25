@@ -171,7 +171,7 @@ tap activity. Harden it:
   a microtask still drains on the same tick), then returns. This **shrinks**, but does
   **not eliminate**, the main-thread wedge surface.
 - **Honest scope (codex #1) — AC#3 is RISK-REDUCED, NOT REMOVED.** `setImmediate` only
-  moves the toggle to the next main-loop tick; if `toggleBrainDump()` / window work itself
+  moves the toggle to the next main-loop tick; if `toggleLiveEditor()` / window work itself
   hangs, the app still freezes. We do **not** claim "main cannot wedge through the tap."
   What IS true and bounds the risk: the tap runs on its **own native thread** dispatching
   via a **non-blocking** threadsafe function (`addon.c:20`), so a tap-thread stall degrades

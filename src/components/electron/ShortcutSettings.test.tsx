@@ -58,9 +58,9 @@ describe('ShortcutSettings defaults', () => {
         isGlobal: true,
       },
       {
-        id: 'toggleBrainDump',
+        id: 'toggleLiveEditor',
         accelerator: 'Alt+Space',
-        description: 'toggleBrainDump',
+        description: 'toggleLiveEditor',
         enabled: true,
         isGlobal: true,
       },
@@ -93,21 +93,21 @@ describe('ShortcutSettings defaults', () => {
         screen.getByLabelText('Toggle floating navigator'),
       ).toHaveTextContent('⌘3')
     })
-    expect(screen.getByLabelText('Toggle BrainDump')).toHaveTextContent(
+    expect(screen.getByLabelText('Toggle LiveEditor')).toHaveTextContent(
       '⌥Space',
     )
   })
 
   it('enables a shortcut’s Test button once it is bound and disables it when cleared', async () => {
-    // Arrange: reset so BrainDump starts bound to its default accelerator.
+    // Arrange: reset so LiveEditor starts bound to its default accelerator.
     const user = userEvent.setup()
     render(<ShortcutSettings />)
     const resetButton = await screen.findByRole('button', {
       name: 'Reset to Defaults',
     })
     await user.click(resetButton)
-    const brainDumpBox = await screen.findByLabelText('Toggle BrainDump')
-    const controls = brainDumpBox.parentElement
+    const liveEditorBox = await screen.findByLabelText('Toggle LiveEditor')
+    const controls = liveEditorBox.parentElement
     if (!controls) throw new Error('expected the shortcut row controls wrapper')
     const testButton = within(controls).getByRole('button', { name: 'Test' })
 
@@ -115,11 +115,47 @@ describe('ShortcutSettings defaults', () => {
     expect(testButton).toBeEnabled()
 
     // Act: clear the binding by recording then pressing Delete.
-    fireEvent.click(brainDumpBox)
-    fireEvent.keyDown(brainDumpBox, { code: 'Delete' })
+    fireEvent.click(liveEditorBox)
+    fireEvent.keyDown(liveEditorBox, { code: 'Delete' })
 
     // Assert: with nothing bound there is nothing to test, so Test is disabled.
-    expect(brainDumpBox).toHaveTextContent('Click to set')
+    expect(liveEditorBox).toHaveTextContent('Click to set')
     expect(testButton).toBeDisabled()
+  })
+
+  it('renders LiveEditor but saves the previous shortcut id for an older installed app', async () => {
+    // Arrange: old Electron returns the previous identifier while the deployed renderer is current.
+    const legacyShortcut = {
+      id: 'toggleBrainDump',
+      accelerator: 'Alt+Space',
+      description: 'toggleBrainDump',
+      enabled: true,
+      isGlobal: true,
+    }
+    getRegisteredMock.mockResolvedValue([legacyShortcut])
+    getDefaultsMock.mockResolvedValue([
+      {
+        ...legacyShortcut,
+      },
+    ])
+    const user = userEvent.setup()
+    render(<ShortcutSettings />)
+    const resetButton = await screen.findByRole('button', {
+      name: 'Reset to Defaults',
+    })
+
+    // Act
+    await user.click(resetButton)
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    // Assert: UI is renamed while the compatibility write targets the installed API.
+    expect(screen.getByLabelText('Toggle LiveEditor')).toHaveTextContent(
+      '⌥Space',
+    )
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith({
+        toggleBrainDump: 'Alt+Space',
+      })
+    })
   })
 })

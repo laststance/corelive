@@ -3,7 +3,7 @@
  *
  * Locks the rule that an EMPTY accelerator means "disabled" and never counts as a
  * duplicate of another disabled shortcut — otherwise `importConfig()` rejects a
- * perfectly valid file. `toggleBrainDumpSecondary` ships empty, so one other
+ * perfectly valid file. `toggleLiveEditorSecondary` ships empty, so one other
  * disabled key would be enough to trip the false positive.
  *
  * Triggered when: `pnpm test:electron` (Vitest).
@@ -49,10 +49,10 @@ describe('ConfigManager shortcut validation', () => {
   })
 
   it('accepts a config where more than one shortcut is disabled', () => {
-    // Arrange: the second BrainDump slot ships disabled; the user disables one
+    // Arrange: the second LiveEditor slot ships disabled; the user disables one
     // more key. Two empty strings must not read as a duplicated accelerator.
     const configManager = new ConfigManager()
-    configManager.set('shortcuts.toggleBrainDumpSecondary', '')
+    configManager.set('shortcuts.toggleLiveEditorSecondary', '')
     configManager.set('shortcuts.toggleAlwaysOnTop', '')
 
     // Act
@@ -66,7 +66,7 @@ describe('ConfigManager shortcut validation', () => {
   it('still reports two shortcuts sharing one accelerator', () => {
     // Arrange
     const configManager = new ConfigManager()
-    configManager.set('shortcuts.toggleBrainDump', 'Alt+Space')
+    configManager.set('shortcuts.toggleLiveEditor', 'Alt+Space')
     configManager.set('shortcuts.toggleAlwaysOnTop', 'Alt+Space')
 
     // Act

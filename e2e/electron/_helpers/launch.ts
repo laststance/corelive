@@ -222,7 +222,7 @@ export async function waitForFloatingWindow(
  * Opens the Settings window via the main-process test hook, then waits for its
  * full-bridge renderer. The Settings window is the only post-retirement surface
  * that loads the complete `electronAPI` preload, so specs exercising privileged
- * IPC (settings / window / brainDump) drive it.
+ * IPC (settings / window / LiveEditor) drive it.
  *
  * The hook (`__coreliveTestOpenSettings`, installed in `main.ts` right after
  * WindowManager is constructed) is platform-independent. We deliberately do NOT
@@ -269,7 +269,7 @@ export async function openSettingsWindow(
 /**
  * Launch Electron, open the Settings window, and return its full-bridge page —
  * the setup every spec that exercises privileged IPC (`settings` / `window` /
- * `brainDump` namespaces) needs. The pre-retirement main window that hosted
+ * `liveEditor` namespaces) needs. The pre-retirement main window that hosted
  * this bridge is gone; the Settings window is its successor.
  *
  * `startup.spec.ts` and `window-controls.spec.ts` do NOT use this helper —

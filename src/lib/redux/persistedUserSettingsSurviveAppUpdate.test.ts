@@ -6,7 +6,7 @@
  * Regresses the hydration bug where the persistence middleware's default
  * `shallowMerge` replaced each persisted slice wholesale (`{ ...current,
  * ...persisted }`), so any field ADDED after a user first persisted was dropped:
- * Sound, BrainDump, and Electron settings read back as "reset to default"
+ * Sound, LiveEditor, and Electron settings read back as "reset to default"
  * after an update. The fix opts the store into `deepMerge`
  * (`createPersistenceMiddleware` in `./store`), which fills every missing field
  * from the current defaults while preserving all user-set values.
@@ -48,9 +48,9 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
   beforeEach(() => window.localStorage.clear())
   afterEach(() => window.localStorage.clear())
 
-  it('keeps saved Sound settings and fills new BrainDump fields with defaults', async () => {
-    // Arrange — a current-version blob from a user who set Sound + 居残りモード
-    // BEFORE the BrainDump editor fields (font / size / color / clear-on-complete)
+  it('keeps saved Sound settings and fills new LiveEditor fields with defaults', async () => {
+    // Arrange — a current-version blob from a user who set Sound + retain-completed mode
+    // BEFORE the LiveEditor editor fields (font / size / color / clear-on-complete)
     // shipped, so the persisted `settings` predates those fields entirely.
     const seed = {
       version: STORAGE_SCHEMA_VERSION,
@@ -81,10 +81,10 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
     })
     // …and the newer fields are MATERIALIZED at their defaults in raw state,
     // not left `undefined` (the shallow-merge drop this regresses).
-    expect(state.settings.braindumpFontFamily).toBe('mono')
-    expect(state.settings.braindumpFontSize).toBe(14)
-    expect(state.settings.braindumpTextColor).toBe('var(--foreground)')
-    expect(state.settings.braindumpClearOnComplete).toBe(false)
+    expect(state.settings.liveEditorFontFamily).toBe('mono')
+    expect(state.settings.liveEditorFontSize).toBe(14)
+    expect(state.settings.liveEditorTextColor).toBe('var(--foreground)')
+    expect(state.settings.liveEditorClearOnComplete).toBe(false)
   })
 
   it('restores the menu-bar default when an older blob predates that electron setting', async () => {

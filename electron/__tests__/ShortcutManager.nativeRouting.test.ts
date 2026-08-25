@@ -107,7 +107,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     // Act
     const didRegister = shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       callback,
     )
 
@@ -115,7 +115,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(didRegister).toBe(true)
     expect(register).toHaveBeenCalledWith(
       'rightOption',
-      'toggleBrainDump',
+      'toggleLiveEditor',
       callback,
     )
     expect(globalRegisterMock).not.toHaveBeenCalled()
@@ -137,7 +137,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     // Act
     const didRegister = shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -147,7 +147,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(register).not.toHaveBeenCalled()
     expect(globalRegisterMock).not.toHaveBeenCalled()
     expect(
-      shortcutManager.getRegisteredShortcuts()['toggleBrainDump'],
+      shortcutManager.getRegisteredShortcuts()['toggleLiveEditor'],
     ).toBeUndefined()
   })
 
@@ -164,12 +164,12 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     // Act
     shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
     // Assert
-    expect(shortcutManager.getRegisteredShortcuts()['toggleBrainDump']).toBe(
+    expect(shortcutManager.getRegisteredShortcuts()['toggleLiveEditor']).toBe(
       'lone-modifier:rightOption',
     )
   })
@@ -185,19 +185,19 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     )
     shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
     // Act
-    const didUnregister = shortcutManager.unregisterShortcut('toggleBrainDump')
+    const didUnregister = shortcutManager.unregisterShortcut('toggleLiveEditor')
 
     // Assert
     expect(didUnregister).toBe(true)
-    expect(unregister).toHaveBeenCalledWith('toggleBrainDump')
+    expect(unregister).toHaveBeenCalledWith('toggleLiveEditor')
     expect(globalUnregisterMock).not.toHaveBeenCalled()
     expect(
-      shortcutManager.getRegisteredShortcuts()['toggleBrainDump'],
+      shortcutManager.getRegisteredShortcuts()['toggleLiveEditor'],
     ).toBeUndefined()
   })
 
@@ -224,7 +224,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     // Act
     const didRegister = shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -232,7 +232,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(didRegister).toBe(false)
     expect(unavailableEngine.register).not.toHaveBeenCalled()
     expect(
-      shortcutManager.getRegisteredShortcuts()['toggleBrainDump'],
+      shortcutManager.getRegisteredShortcuts()['toggleLiveEditor'],
     ).toBeUndefined()
   })
 
@@ -354,7 +354,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     const configManager = {
       getSection: vi.fn((section: string) =>
         section === 'shortcuts'
-          ? { toggleBrainDump: 'lone-modifier:rightOption' }
+          ? { toggleLiveEditor: 'lone-modifier:rightOption' }
           : {},
       ),
       get: vi.fn(),
@@ -392,7 +392,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     // Act: a successful native registration with a live tap.
     shortcutManager.registerShortcut(
       RIGHT_OPTION_BINDING,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       vi.fn(),
     )
 
@@ -411,7 +411,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     const configManager = {
       getSection: vi.fn((section: string) =>
         section === 'shortcuts'
-          ? { toggleBrainDump: 'lone-modifier:rightOption' }
+          ? { toggleLiveEditor: 'lone-modifier:rightOption' }
           : {},
       ),
       get: vi.fn(),

@@ -8,12 +8,12 @@ import reducer, {
   hydrateUserSettings,
   initialState,
   resetUserSettings,
-  selectBraindumpClearDelayMs,
-  selectBraindumpClearOnComplete,
-  selectBraindumpFontFamily,
-  selectBraindumpFontSize,
-  selectBraindumpTextColor,
-  selectBraindumpToastDurationMs,
+  selectLiveEditorClearDelayMs,
+  selectLiveEditorClearOnComplete,
+  selectLiveEditorFontFamily,
+  selectLiveEditorFontSize,
+  selectLiveEditorTextColor,
+  selectLiveEditorToastDurationMs,
   selectCompletionSound,
   selectShowCompletedTaskStrikethrough,
   selectUserSettings,
@@ -21,12 +21,12 @@ import reducer, {
   selectSoundMoment,
   selectSoundTimbre,
   selectSoundVolume,
-  setBraindumpClearDelayMs,
-  setBraindumpClearOnComplete,
-  setBraindumpFontFamily,
-  setBraindumpFontSize,
-  setBraindumpTextColor,
-  setBraindumpToastDurationMs,
+  setLiveEditorClearDelayMs,
+  setLiveEditorClearOnComplete,
+  setLiveEditorFontFamily,
+  setLiveEditorFontSize,
+  setLiveEditorTextColor,
+  setLiveEditorToastDurationMs,
   setCompletionSound,
   setRetainCompletedInList,
   setShowCompletedTaskStrikethrough,
@@ -46,7 +46,7 @@ function stateWith(settings: Partial<UserSettingsState>): RootState {
 
 describe('settingsSlice', () => {
   it('preserves established task presentation while defaulting feedback settings to neutral', () => {
-    // Arrange — hard-code the established task, feedback, and BrainDump defaults.
+    // Arrange — hard-code the established task, feedback, and LiveEditor defaults.
     const expectedSettings = {
       completionSound: false,
       retainCompletedInList: false,
@@ -54,12 +54,12 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      braindumpFontFamily: 'mono',
-      braindumpFontSize: 14,
-      braindumpTextColor: 'var(--foreground)',
-      braindumpClearOnComplete: false,
-      braindumpClearDelayMs: 500,
-      braindumpToastDurationMs: 5000,
+      liveEditorFontFamily: 'mono',
+      liveEditorFontSize: 14,
+      liveEditorTextColor: 'var(--foreground)',
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 500,
+      liveEditorToastDurationMs: 5000,
     }
 
     // Act — read the schema-owned initial state used by fresh installs.
@@ -206,12 +206,12 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': true, complete: true, clear: true },
       soundTimbre: 'paper',
       soundVolume: 0.8,
-      braindumpFontFamily: 'serif',
-      braindumpFontSize: 20,
-      braindumpTextColor: 'var(--primary)',
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 1200,
-      braindumpToastDurationMs: 8000,
+      liveEditorFontFamily: 'serif',
+      liveEditorFontSize: 20,
+      liveEditorTextColor: 'var(--primary)',
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1200,
+      liveEditorToastDurationMs: 8000,
     }
 
     // Act
@@ -230,12 +230,12 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': true, complete: true, clear: true },
       soundTimbre: 'paper',
       soundVolume: 0.9,
-      braindumpFontFamily: 'serif',
-      braindumpFontSize: 24,
-      braindumpTextColor: '#abcdef',
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 2000,
-      braindumpToastDurationMs: 7000,
+      liveEditorFontFamily: 'serif',
+      liveEditorFontSize: 24,
+      liveEditorTextColor: '#abcdef',
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 2000,
+      liveEditorToastDurationMs: 7000,
     }
 
     // Act
@@ -249,12 +249,12 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      braindumpFontFamily: 'mono',
-      braindumpFontSize: 14,
-      braindumpTextColor: 'var(--foreground)',
-      braindumpClearOnComplete: false,
-      braindumpClearDelayMs: 500,
-      braindumpToastDurationMs: 5000,
+      liveEditorFontFamily: 'mono',
+      liveEditorFontSize: 14,
+      liveEditorTextColor: 'var(--foreground)',
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 500,
+      liveEditorToastDurationMs: 5000,
     })
   })
 
@@ -317,89 +317,89 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      braindumpFontFamily: 'mono',
-      braindumpFontSize: 14,
-      braindumpTextColor: 'var(--foreground)',
-      braindumpClearOnComplete: false,
-      braindumpClearDelayMs: 500,
-      braindumpToastDurationMs: 5000,
+      liveEditorFontFamily: 'mono',
+      liveEditorFontSize: 14,
+      liveEditorTextColor: 'var(--foreground)',
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 500,
+      liveEditorToastDurationMs: 5000,
     })
   })
 
-  it('sets the BrainDump editor font family when setBraindumpFontFamily is dispatched', () => {
+  it('stores the selected LiveEditor font family', () => {
     // Act
-    const next = reducer(initialState, setBraindumpFontFamily('serif'))
+    const next = reducer(initialState, setLiveEditorFontFamily('serif'))
 
     // Assert
-    expect(next.braindumpFontFamily).toBe('serif')
+    expect(next.liveEditorFontFamily).toBe('serif')
   })
 
-  it('self-heals an unknown BrainDump font family to the default instead of storing it', () => {
+  it('self-heals an unknown LiveEditor font family to the default instead of storing it', () => {
     // Act — a payload outside the known ids (a corrupt blob or stray dispatch)
     // must not poison the font-family key. A raw action bypasses the typed creator
     // to exercise the reducer's runtime guard the way malformed input would.
     const next = reducer(initialState, {
-      type: setBraindumpFontFamily.type,
+      type: setLiveEditorFontFamily.type,
       payload: 'comic-sans',
     })
 
     // Assert — the reducer falls back to the default face.
-    expect(next.braindumpFontFamily).toBe('mono')
+    expect(next.liveEditorFontFamily).toBe('mono')
   })
 
-  it('clamps an out-of-range BrainDump font size into the slider bounds [12,24]', () => {
+  it('clamps an out-of-range LiveEditor font size into the slider bounds [12,24]', () => {
     // Act — above-range clamps to the ceiling, below-range to the floor, in-range passes.
-    const tooBig = reducer(initialState, setBraindumpFontSize(99))
-    const tooSmall = reducer(initialState, setBraindumpFontSize(2))
-    const inRange = reducer(initialState, setBraindumpFontSize(18))
+    const tooBig = reducer(initialState, setLiveEditorFontSize(99))
+    const tooSmall = reducer(initialState, setLiveEditorFontSize(2))
+    const inRange = reducer(initialState, setLiveEditorFontSize(18))
 
     // Assert
-    expect(tooBig.braindumpFontSize).toBe(24)
-    expect(tooSmall.braindumpFontSize).toBe(12)
-    expect(inRange.braindumpFontSize).toBe(18)
+    expect(tooBig.liveEditorFontSize).toBe(24)
+    expect(tooSmall.liveEditorFontSize).toBe(12)
+    expect(inRange.liveEditorFontSize).toBe(18)
   })
 
-  it('guards a NaN BrainDump font size to the default instead of poisoning the slider', () => {
+  it('guards a NaN LiveEditor font size to the default instead of poisoning the slider', () => {
     // Act — a non-finite value (e.g. a stray empty slider event) must not stick.
-    const next = reducer(initialState, setBraindumpFontSize(Number.NaN))
+    const next = reducer(initialState, setLiveEditorFontSize(Number.NaN))
 
     // Assert
-    expect(next.braindumpFontSize).toBe(14)
+    expect(next.liveEditorFontSize).toBe(14)
   })
 
-  it('stores a custom BrainDump text color when setBraindumpTextColor is dispatched', () => {
+  it('stores the selected LiveEditor text color', () => {
     // Act — the native color picker emits a 6-digit hex.
-    const next = reducer(initialState, setBraindumpTextColor('#123abc'))
+    const next = reducer(initialState, setLiveEditorTextColor('#123abc'))
 
     // Assert
-    expect(next.braindumpTextColor).toBe('#123abc')
+    expect(next.liveEditorTextColor).toBe('#123abc')
   })
 
-  it('self-heals an off-shape BrainDump text color to the default instead of storing it', () => {
+  it('self-heals an off-shape LiveEditor text color to the default instead of storing it', () => {
     // Act — a value that is neither a theme token nor a hex (e.g. a corrupt
     // persisted blob or stray programmatic call) must not reach the inline style.
-    const next = reducer(initialState, setBraindumpTextColor('not-a-color'))
+    const next = reducer(initialState, setLiveEditorTextColor('not-a-color'))
 
     // Assert — the reducer shares the schema's validation boundary and falls back.
-    expect(next.braindumpTextColor).toBe('var(--foreground)')
+    expect(next.liveEditorTextColor).toBe('var(--foreground)')
   })
 
   it('falls back to the default font, size, and color for a slice that predates those fields', () => {
-    // Arrange — a persisted slice from before the BrainDump text-style fields existed.
+    // Arrange — a persisted slice from before the LiveEditor text-style fields existed.
     const legacyState = stateWith({ completionSound: false })
 
-    // Act / Assert — every BrainDump selector coalesces to its default (Finding 5).
-    expect(selectBraindumpFontFamily(legacyState)).toBe('mono')
-    expect(selectBraindumpFontSize(legacyState)).toBe(14)
-    expect(selectBraindumpTextColor(legacyState)).toBe('var(--foreground)')
+    // Act / Assert — every LiveEditor selector coalesces to its default (Finding 5).
+    expect(selectLiveEditorFontFamily(legacyState)).toBe('mono')
+    expect(selectLiveEditorFontSize(legacyState)).toBe(14)
+    expect(selectLiveEditorTextColor(legacyState)).toBe('var(--foreground)')
   })
 
-  it('turns on BrainDump clear-on-complete when setBraindumpClearOnComplete(true) is dispatched', () => {
+  it('stores LiveEditor clear-on-complete as enabled', () => {
     // Act
-    const next = reducer(initialState, setBraindumpClearOnComplete(true))
+    const next = reducer(initialState, setLiveEditorClearOnComplete(true))
 
     // Assert
-    expect(next.braindumpClearOnComplete).toBe(true)
+    expect(next.liveEditorClearOnComplete).toBe(true)
   })
 
   it('falls back to clear-on-complete OFF for a slice that predates the field', () => {
@@ -407,36 +407,36 @@ describe('settingsSlice', () => {
     const legacyState = stateWith({ completionSound: false })
 
     // Act / Assert — the selector coalesces to the default, never undefined (Finding 5).
-    expect(selectBraindumpClearOnComplete(legacyState)).toBe(false)
+    expect(selectLiveEditorClearOnComplete(legacyState)).toBe(false)
   })
 
-  it('sets the BrainDump clear delay when setBraindumpClearDelayMs is dispatched', () => {
+  it('stores the selected LiveEditor clear delay', () => {
     // Act
-    const next = reducer(initialState, setBraindumpClearDelayMs(1500))
+    const next = reducer(initialState, setLiveEditorClearDelayMs(1500))
 
     // Assert
-    expect(next.braindumpClearDelayMs).toBe(1500)
+    expect(next.liveEditorClearDelayMs).toBe(1500)
   })
 
-  it('clamps an out-of-range BrainDump clear delay into the bounds [0,5000]', () => {
+  it('clamps an out-of-range LiveEditor clear delay into the bounds [0,5000]', () => {
     // Act — above the 5 s undo window clamps to the ceiling, below 0 to the floor,
     // in-range passes through.
-    const tooLong = reducer(initialState, setBraindumpClearDelayMs(99000))
-    const negative = reducer(initialState, setBraindumpClearDelayMs(-200))
-    const inRange = reducer(initialState, setBraindumpClearDelayMs(800))
+    const tooLong = reducer(initialState, setLiveEditorClearDelayMs(99000))
+    const negative = reducer(initialState, setLiveEditorClearDelayMs(-200))
+    const inRange = reducer(initialState, setLiveEditorClearDelayMs(800))
 
     // Assert
-    expect(tooLong.braindumpClearDelayMs).toBe(5000)
-    expect(negative.braindumpClearDelayMs).toBe(0)
-    expect(inRange.braindumpClearDelayMs).toBe(800)
+    expect(tooLong.liveEditorClearDelayMs).toBe(5000)
+    expect(negative.liveEditorClearDelayMs).toBe(0)
+    expect(inRange.liveEditorClearDelayMs).toBe(800)
   })
 
-  it('guards a NaN BrainDump clear delay to the default instead of poisoning the slider', () => {
+  it('guards a NaN LiveEditor clear delay to the default instead of poisoning the slider', () => {
     // Act — a non-finite value (e.g. a stray empty slider event) must not stick.
-    const next = reducer(initialState, setBraindumpClearDelayMs(Number.NaN))
+    const next = reducer(initialState, setLiveEditorClearDelayMs(Number.NaN))
 
     // Assert
-    expect(next.braindumpClearDelayMs).toBe(500)
+    expect(next.liveEditorClearDelayMs).toBe(500)
   })
 
   it('falls back to the default clear delay for a slice that predates the field', () => {
@@ -444,36 +444,36 @@ describe('settingsSlice', () => {
     const legacyState = stateWith({ completionSound: false })
 
     // Act / Assert — the selector coalesces to the 500 ms default, never undefined.
-    expect(selectBraindumpClearDelayMs(legacyState)).toBe(500)
+    expect(selectLiveEditorClearDelayMs(legacyState)).toBe(500)
   })
 
-  it('sets the BrainDump toast duration when setBraindumpToastDurationMs is dispatched', () => {
+  it('stores the selected LiveEditor toast duration', () => {
     // Act
-    const next = reducer(initialState, setBraindumpToastDurationMs(6000))
+    const next = reducer(initialState, setLiveEditorToastDurationMs(6000))
 
     // Assert
-    expect(next.braindumpToastDurationMs).toBe(6000)
+    expect(next.liveEditorToastDurationMs).toBe(6000)
   })
 
-  it('clamps an out-of-range BrainDump toast duration into the bounds [2000,10000]', () => {
+  it('clamps an out-of-range LiveEditor toast duration into the bounds [2000,10000]', () => {
     // Act — above the 10 s ceiling clamps down, below the 2 s floor clamps up,
     // in-range passes through.
-    const tooLong = reducer(initialState, setBraindumpToastDurationMs(99000))
-    const tooShort = reducer(initialState, setBraindumpToastDurationMs(500))
-    const inRange = reducer(initialState, setBraindumpToastDurationMs(6000))
+    const tooLong = reducer(initialState, setLiveEditorToastDurationMs(99000))
+    const tooShort = reducer(initialState, setLiveEditorToastDurationMs(500))
+    const inRange = reducer(initialState, setLiveEditorToastDurationMs(6000))
 
     // Assert
-    expect(tooLong.braindumpToastDurationMs).toBe(10000)
-    expect(tooShort.braindumpToastDurationMs).toBe(2000)
-    expect(inRange.braindumpToastDurationMs).toBe(6000)
+    expect(tooLong.liveEditorToastDurationMs).toBe(10000)
+    expect(tooShort.liveEditorToastDurationMs).toBe(2000)
+    expect(inRange.liveEditorToastDurationMs).toBe(6000)
   })
 
-  it('guards a NaN BrainDump toast duration to the default instead of poisoning the slider', () => {
+  it('guards a NaN LiveEditor toast duration to the default instead of poisoning the slider', () => {
     // Act — a non-finite value (e.g. a stray empty slider event) must not stick.
-    const next = reducer(initialState, setBraindumpToastDurationMs(Number.NaN))
+    const next = reducer(initialState, setLiveEditorToastDurationMs(Number.NaN))
 
     // Assert
-    expect(next.braindumpToastDurationMs).toBe(5000)
+    expect(next.liveEditorToastDurationMs).toBe(5000)
   })
 
   it('falls back to the default toast duration for a slice that predates the field', () => {
@@ -481,6 +481,6 @@ describe('settingsSlice', () => {
     const legacyState = stateWith({ completionSound: false })
 
     // Act / Assert — the selector coalesces to the 5000 ms default, never undefined.
-    expect(selectBraindumpToastDurationMs(legacyState)).toBe(5000)
+    expect(selectLiveEditorToastDurationMs(legacyState)).toBe(5000)
   })
 })

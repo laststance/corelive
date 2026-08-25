@@ -2,7 +2,7 @@ import { ORPCError } from '@orpc/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
-import { normalizeCompletedTitle } from '@/components/braindump/braindumpUtils'
+import { normalizeCompletedTitle } from '@/components/live-editor/liveEditorUtils'
 import { COMPLETED_UNDO_WINDOW_MS } from '@/lib/constants/import'
 import { prisma } from '@/lib/prisma'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
@@ -32,7 +32,7 @@ import { resolveImportCategoryIds } from '../utils/resolveImportCategoryIds'
 /**
  * Fetches heatmap data for completed tasks, aggregated by the user's *local*
  * calendar day with a category breakdown. Reads the Todo+Completed UNION via
- * {@link fetchCompletedEntries} so BrainDump checkbox-tick completions (which
+ * {@link fetchCompletedEntries} so LiveEditor checkbox-tick completions (which
  * write directly to the `Completed` table) appear on the heatmap alongside
  * Todos completed through the TodoList lifecycle.
  *
@@ -162,7 +162,7 @@ export const getHeatmap = authMiddleware
  * exactly, so cell counts and dialog counts stay in lockstep.
  *
  * Reads the Todo+Completed UNION via {@link fetchCompletedEntries} so both
- * lifecycle paths (TodoList complete() and BrainDump checkbox-tick) surface
+ * lifecycle paths (TodoList complete() and LiveEditor checkbox-tick) surface
  * inside the dialog's task list.
  *
  * @param input.date - YYYY-MM-DD local day the user clicked on the heatmap
@@ -384,7 +384,7 @@ export const getJournal = authMiddleware
 
 /**
  * Inserts a row directly into the Completed table for the authenticated user.
- * Used by BrainDump's checkbox-tick flow which bypasses the Todo lifecycle —
+ * Used by LiveEditor's checkbox-tick flow which bypasses the Todo lifecycle —
  * the user has already decided the item is done at the moment of capture.
  *
  * @param input.categoryId - Target category (must belong to the caller)
@@ -433,7 +433,7 @@ export const createCompleted = authMiddleware
 
 /**
  * Hard-deletes a Completed row owned by the authenticated user, but only
- * within {@link COMPLETED_UNDO_WINDOW_MS} of creation. Used by BrainDump's
+ * within {@link COMPLETED_UNDO_WINDOW_MS} of creation. Used by LiveEditor's
  * 5-second toast-undo flow when the user retracts a checkbox tick — the
  * row is ephemeral and reversed before any archival semantics matter.
  *

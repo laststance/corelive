@@ -7,7 +7,7 @@
  * reopening Settings after switching desktops yanks the user back to that
  * old Space — the "opens on another desktop" bug these tests guard against.
  *
- * Unlike the Floating / BrainDump panels (opt-in, config-gated, default OFF),
+ * Unlike the Floating / LiveEditor panels (opt-in, config-gated, default OFF),
  * the settings popover follows the Space UNCONDITIONALLY (hardcoded `true`), so
  * a future refactor that copies the floating call-site's config-driven boolean
  * would re-introduce the bug — and fail the darwin test below. The non-darwin

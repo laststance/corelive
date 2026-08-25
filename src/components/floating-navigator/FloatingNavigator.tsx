@@ -640,13 +640,14 @@ export const FloatingNavigator = function FloatingNavigator({
     }
   }
 
-  // Toggle the BrainDump Note window via the floating navigator preload bridge.
-  const handleToggleBrainDump = async () => {
+  // Toggle the LiveEditor Note window via the floating navigator preload bridge.
+  const handleToggleLiveEditor = async () => {
     if (!isFloatingNavigatorEnvironment()) return
     try {
-      await window.floatingNavigatorAPI?.brainDump.toggle()
+      const floatingAPI = window.floatingNavigatorAPI
+      await (floatingAPI?.liveEditor ?? floatingAPI?.brainDump)?.toggle()
     } catch (error) {
-      log.error('Failed to toggle BrainDump:', error)
+      log.error('Failed to toggle LiveEditor:', error)
     }
   }
 
@@ -743,10 +744,10 @@ export const FloatingNavigator = function FloatingNavigator({
             <Button
               size="sm"
               variant="ghost"
-              onClick={handleToggleBrainDump}
+              onClick={handleToggleLiveEditor}
               className="h-6 w-6 p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              aria-label="Open BrainDump Note"
-              title="Open BrainDump Note"
+              aria-label="Open LiveEditor Note"
+              title="Open LiveEditor Note"
             >
               <Suspense fallback={<IconFallback />}>
                 <Brain className="h-3 w-3" aria-hidden="true" />

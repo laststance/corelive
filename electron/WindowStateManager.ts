@@ -56,12 +56,12 @@ export interface WindowState {
 interface WindowStates {
   main: WindowState
   floating: WindowState
-  braindump: WindowState
+  liveEditor: WindowState
   [key: string]: WindowState
 }
 
 /** Window type */
-export type WindowType = 'main' | 'floating' | 'braindump'
+export type WindowType = 'main' | 'floating' | 'liveEditor'
 
 /** Snap edge type */
 export type SnapEdge =
@@ -209,9 +209,9 @@ export class WindowStateManager {
     ) as AppConfig['window']
     const mainConfig = windowConfig.main
     const floatingConfig = windowConfig.floating
-    const brainDumpConfig = this.configManager.getSection(
-      'braindump',
-    ) as AppConfig['braindump']
+    const liveEditorConfig = this.configManager.getSection(
+      'liveEditor',
+    ) as AppConfig['liveEditor']
     // Floating startup visibility now lives in behavior.startup.showFloating
     // (migrated from the legacy window.floating.startVisible flag) so the
     // settings UI and cold-start path share a single source of truth.
@@ -246,19 +246,19 @@ export class WindowStateManager {
         workArea: primaryDisplay.workArea,
         lastSaved: Date.now(),
       },
-      braindump: {
-        width: brainDumpConfig.width,
-        height: brainDumpConfig.height,
+      liveEditor: {
+        width: liveEditorConfig.width,
+        height: liveEditorConfig.height,
         // Anchor against the primary display's workArea origin so multi-
         // monitor users get the panel on the right monitor instead of at
         // (-1280, …) or off-screen entirely.
         x:
           primaryDisplay.workArea.x +
-          (primaryDisplay.workArea.width - brainDumpConfig.width - 80),
+          (primaryDisplay.workArea.width - liveEditorConfig.width - 80),
         y:
           primaryDisplay.workArea.y +
           Math.round(
-            (primaryDisplay.workArea.height - brainDumpConfig.height) / 2,
+            (primaryDisplay.workArea.height - liveEditorConfig.height) / 2,
           ),
         isMaximized: false,
         isMinimized: false,
@@ -279,7 +279,7 @@ export class WindowStateManager {
     const validatedStates: WindowStates = {
       main: defaultStates.main,
       floating: defaultStates.floating,
-      braindump: defaultStates.braindump,
+      liveEditor: defaultStates.liveEditor,
     }
 
     if (states.main) {
@@ -305,11 +305,15 @@ export class WindowStateManager {
       validatedStates.floating.isVisible = defaultStates.floating.isVisible
     }
 
-    if (states.braindump) {
-      validatedStates.braindump = this.validateWindowState(
-        states.braindump,
-        defaultStates.braindump,
-        'braindump',
+    // Previous releases stored this panel under `braindump`; accept it once so
+    // an update keeps the user's size and position instead of resetting them.
+    const liveEditorState =
+      states.liveEditor ?? (states['braindump'] as WindowState | undefined)
+    if (liveEditorState) {
+      validatedStates.liveEditor = this.validateWindowState(
+        liveEditorState,
+        defaultStates.liveEditor,
+        'liveEditor',
       )
     }
 
@@ -319,8 +323,8 @@ export class WindowStateManager {
   /**
    * Validate individual window state.
    *
-   * BrainDump lives outside `windowConfig` because its dimensions are tracked
-   * in the dedicated `braindump` section (per BrainDump plan D1) — the window
+   * LiveEditor lives outside `windowConfig` because its dimensions are tracked
+   * in the dedicated `liveEditor` section (per LiveEditor plan D1) — the window
    * always remembers its bounds, so we still apply persisted x/y/w/h.
    */
   private validateWindowState(
@@ -335,8 +339,8 @@ export class WindowStateManager {
     let maxWidth: number
     let shouldRememberPosition: boolean
 
-    if (windowType === 'braindump') {
-      // BrainDump bounds are bounded by sensible UX limits, not config-driven.
+    if (windowType === 'liveEditor') {
+      // LiveEditor bounds are bounded by sensible UX limits, not config-driven.
       minWidth = 320
       minHeight = 320
       maxWidth = 1200
@@ -668,7 +672,7 @@ export class WindowStateManager {
   /**
    * Get window creation options for BrowserWindow.
    *
-   * BrainDump options come from `braindump` config (frameless transparent
+   * LiveEditor options come from `liveEditor` config (frameless transparent
    * panel) — main/floating come from `window` config as before.
    */
   getWindowOptions(windowType: WindowType): WindowOptions {
@@ -678,7 +682,7 @@ export class WindowStateManager {
       return {}
     }
 
-    if (windowType === 'braindump') {
+    if (windowType === 'liveEditor') {
       return {
         width: state.width,
         height: state.height,
@@ -689,11 +693,11 @@ export class WindowStateManager {
         y: state.y,
         show: false,
         frame: false,
-        // Honor the BrainDump always-on-top setting (default off) instead of
-        // hardcoding true — pairs with the createBrainDumpWindow ctor read so the
+        // Honor the LiveEditor always-on-top setting (default off) instead of
+        // hardcoding true — pairs with the createLiveEditorWindow ctor read so the
         // options path and the constructor agree.
         alwaysOnTop: this.configManager.get<boolean>(
-          'braindump.alwaysOnTop',
+          'liveEditor.alwaysOnTop',
           false,
         ),
         resizable: true,

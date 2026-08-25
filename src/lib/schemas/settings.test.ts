@@ -9,7 +9,7 @@ describe('UserSettingsStateSchema', () => {
 
     // Assert — every moment OFF, default timbre + volume, legacy flags OFF,
     // completed-title strikethrough ON to preserve the established presentation,
-    // the BrainDump editor at its prior look (mono / 14px / theme foreground),
+    // the LiveEditor editor at its prior look (mono / 14px / theme foreground),
     // and clear-on-complete OFF (finished lines stay put by default).
     expect(result).toEqual({
       completionSound: false,
@@ -18,12 +18,12 @@ describe('UserSettingsStateSchema', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      braindumpFontFamily: 'mono',
-      braindumpFontSize: 14,
-      braindumpTextColor: 'var(--foreground)',
-      braindumpClearOnComplete: false,
-      braindumpClearDelayMs: 500,
-      braindumpToastDurationMs: 5000,
+      liveEditorFontFamily: 'mono',
+      liveEditorFontSize: 14,
+      liveEditorTextColor: 'var(--foreground)',
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 500,
+      liveEditorToastDurationMs: 5000,
     })
   })
 
@@ -42,89 +42,89 @@ describe('UserSettingsStateSchema', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      braindumpFontFamily: 'mono',
-      braindumpFontSize: 14,
-      braindumpTextColor: 'var(--foreground)',
-      braindumpClearOnComplete: false,
-      braindumpClearDelayMs: 500,
-      braindumpToastDurationMs: 5000,
+      liveEditorFontFamily: 'mono',
+      liveEditorFontSize: 14,
+      liveEditorTextColor: 'var(--foreground)',
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 500,
+      liveEditorToastDurationMs: 5000,
     })
   })
 
-  it('keeps an explicit BrainDump clear-on-complete opt-in and defaults it OFF when absent', () => {
+  it('keeps an explicit LiveEditor clear-on-complete opt-in and defaults it OFF when absent', () => {
     // Act — an explicit true is preserved; a payload omitting it defaults to OFF.
     const optedIn = UserSettingsStateSchema.parse({
-      braindumpClearOnComplete: true,
+      liveEditorClearOnComplete: true,
     })
     const omitted = UserSettingsStateSchema.parse({})
 
     // Assert
-    expect(optedIn.braindumpClearOnComplete).toBe(true)
-    expect(omitted.braindumpClearOnComplete).toBe(false)
+    expect(optedIn.liveEditorClearOnComplete).toBe(true)
+    expect(omitted.liveEditorClearOnComplete).toBe(false)
   })
 
-  it('defaults the BrainDump clear delay to a gentle 500 ms when absent', () => {
+  it('defaults the LiveEditor clear delay to a gentle 500 ms when absent', () => {
     // Act
     const result = UserSettingsStateSchema.parse({})
 
     // Assert — a brief linger, not the abrupt 0 ms instant clear.
-    expect(result.braindumpClearDelayMs).toBe(500)
+    expect(result.liveEditorClearDelayMs).toBe(500)
   })
 
-  it('clamps an out-of-range BrainDump clear delay into the bounds [0,5000]', () => {
+  it('clamps an out-of-range LiveEditor clear delay into the bounds [0,5000]', () => {
     // Act — the ceiling is the 5 s undo window so a line never outlasts its Undo.
     const tooLong = UserSettingsStateSchema.parse({
-      braindumpClearDelayMs: 99000,
+      liveEditorClearDelayMs: 99000,
     })
     const negative = UserSettingsStateSchema.parse({
-      braindumpClearDelayMs: -200,
+      liveEditorClearDelayMs: -200,
     })
 
     // Assert
-    expect(tooLong.braindumpClearDelayMs).toBe(5000)
-    expect(negative.braindumpClearDelayMs).toBe(0)
+    expect(tooLong.liveEditorClearDelayMs).toBe(5000)
+    expect(negative.liveEditorClearDelayMs).toBe(0)
   })
 
-  it('self-heals a non-finite BrainDump clear delay to the default (no poisoned hydrate)', () => {
+  it('self-heals a non-finite LiveEditor clear delay to the default (no poisoned hydrate)', () => {
     // Act — a NaN that slipped into a persisted/synced blob must not survive.
     const result = UserSettingsStateSchema.parse({
-      braindumpClearDelayMs: Number.NaN,
+      liveEditorClearDelayMs: Number.NaN,
     })
 
     // Assert
-    expect(result.braindumpClearDelayMs).toBe(500)
+    expect(result.liveEditorClearDelayMs).toBe(500)
   })
 
-  it('defaults the BrainDump completion-toast duration to 5000 ms when absent', () => {
+  it('defaults the LiveEditor completion-toast duration to 5000 ms when absent', () => {
     // Act
     const result = UserSettingsStateSchema.parse({})
 
     // Assert — the same 5 s window the toast used before it was configurable.
-    expect(result.braindumpToastDurationMs).toBe(5000)
+    expect(result.liveEditorToastDurationMs).toBe(5000)
   })
 
-  it('clamps an out-of-range BrainDump toast duration into the bounds [2000,10000]', () => {
+  it('clamps an out-of-range LiveEditor toast duration into the bounds [2000,10000]', () => {
     // Act — above the 10 s ceiling clamps down, below the 2 s floor clamps up.
     const tooLong = UserSettingsStateSchema.parse({
-      braindumpToastDurationMs: 99000,
+      liveEditorToastDurationMs: 99000,
     })
     const tooShort = UserSettingsStateSchema.parse({
-      braindumpToastDurationMs: 500,
+      liveEditorToastDurationMs: 500,
     })
 
     // Assert
-    expect(tooLong.braindumpToastDurationMs).toBe(10000)
-    expect(tooShort.braindumpToastDurationMs).toBe(2000)
+    expect(tooLong.liveEditorToastDurationMs).toBe(10000)
+    expect(tooShort.liveEditorToastDurationMs).toBe(2000)
   })
 
-  it('self-heals a non-finite BrainDump toast duration to the default (no poisoned hydrate)', () => {
+  it('self-heals a non-finite LiveEditor toast duration to the default (no poisoned hydrate)', () => {
     // Act — a NaN that slipped into a persisted/synced blob must not survive.
     const result = UserSettingsStateSchema.parse({
-      braindumpToastDurationMs: Number.NaN,
+      liveEditorToastDurationMs: Number.NaN,
     })
 
     // Assert
-    expect(result.braindumpToastDurationMs).toBe(5000)
+    expect(result.liveEditorToastDurationMs).toBe(5000)
   })
 
   it('clamps an out-of-range master volume number into [0,1]', () => {
@@ -168,70 +168,72 @@ describe('UserSettingsStateSchema', () => {
     })
   })
 
-  it('clamps an out-of-range BrainDump font size into the slider bounds [12,24]', () => {
+  it('clamps an out-of-range LiveEditor font size into the slider bounds [12,24]', () => {
     // Act
-    const tooBig = UserSettingsStateSchema.parse({ braindumpFontSize: 99 })
-    const tooSmall = UserSettingsStateSchema.parse({ braindumpFontSize: 8 })
+    const tooBig = UserSettingsStateSchema.parse({ liveEditorFontSize: 99 })
+    const tooSmall = UserSettingsStateSchema.parse({ liveEditorFontSize: 8 })
 
     // Assert
-    expect(tooBig.braindumpFontSize).toBe(24)
-    expect(tooSmall.braindumpFontSize).toBe(12)
+    expect(tooBig.liveEditorFontSize).toBe(24)
+    expect(tooSmall.liveEditorFontSize).toBe(12)
   })
 
-  it('self-heals a non-finite BrainDump font size to the default (no poisoned hydrate)', () => {
+  it('self-heals a non-finite LiveEditor font size to the default (no poisoned hydrate)', () => {
     // Act — a NaN that slipped into a persisted/synced blob must not survive.
     const result = UserSettingsStateSchema.parse({
-      braindumpFontSize: Number.NaN,
+      liveEditorFontSize: Number.NaN,
     })
 
     // Assert
-    expect(result.braindumpFontSize).toBe(14)
+    expect(result.liveEditorFontSize).toBe(14)
   })
 
-  it('self-heals an unknown BrainDump font family to the default instead of rejecting', () => {
+  it('self-heals an unknown LiveEditor font family to the default instead of rejecting', () => {
     // Act
     const result = UserSettingsStateSchema.parse({
-      braindumpFontFamily: 'comic-sans',
+      liveEditorFontFamily: 'comic-sans',
     })
 
     // Assert
-    expect(result.braindumpFontFamily).toBe('mono')
+    expect(result.liveEditorFontFamily).toBe('mono')
   })
 
-  it('keeps a valid BrainDump text color (theme token or hex) and self-heals anything else', () => {
+  it('keeps a valid LiveEditor text color (theme token or hex) and self-heals anything else', () => {
     // Act — a themed preset and a custom hex both pass; an unsupported shape heals.
     const themed = UserSettingsStateSchema.parse({
-      braindumpTextColor: 'var(--primary)',
+      liveEditorTextColor: 'var(--primary)',
     })
     // A digit-bearing theme token (e.g. a future chart-color preset) must pass —
     // the narrow [a-z-] charset would have silently healed it away.
     const digitToken = UserSettingsStateSchema.parse({
-      braindumpTextColor: 'var(--chart-1)',
+      liveEditorTextColor: 'var(--chart-1)',
     })
-    const hex = UserSettingsStateSchema.parse({ braindumpTextColor: '#1A2B3C' })
+    const hex = UserSettingsStateSchema.parse({
+      liveEditorTextColor: '#1A2B3C',
+    })
     const bogus = UserSettingsStateSchema.parse({
-      braindumpTextColor: 'rgba(0,0,0,0.5)',
+      liveEditorTextColor: 'rgba(0,0,0,0.5)',
     })
 
     // Assert
-    expect(themed.braindumpTextColor).toBe('var(--primary)')
-    expect(digitToken.braindumpTextColor).toBe('var(--chart-1)')
-    expect(hex.braindumpTextColor).toBe('#1A2B3C')
-    expect(bogus.braindumpTextColor).toBe('var(--foreground)')
+    expect(themed.liveEditorTextColor).toBe('var(--primary)')
+    expect(digitToken.liveEditorTextColor).toBe('var(--chart-1)')
+    expect(hex.liveEditorTextColor).toBe('#1A2B3C')
+    expect(bogus.liveEditorTextColor).toBe('var(--foreground)')
   })
 
   it('accepts the 3-digit and 8-digit hex shapes the color pattern allows', () => {
     // Act — the pattern admits #rgb (shorthand) and #rrggbbaa (with alpha), not
     // only the 6-digit form the native picker emits.
     const shorthand = UserSettingsStateSchema.parse({
-      braindumpTextColor: '#abc',
+      liveEditorTextColor: '#abc',
     })
     const withAlpha = UserSettingsStateSchema.parse({
-      braindumpTextColor: '#1A2B3C80',
+      liveEditorTextColor: '#1A2B3C80',
     })
 
     // Assert — both are preserved verbatim, not healed away.
-    expect(shorthand.braindumpTextColor).toBe('#abc')
-    expect(withAlpha.braindumpTextColor).toBe('#1A2B3C80')
+    expect(shorthand.liveEditorTextColor).toBe('#abc')
+    expect(withAlpha.liveEditorTextColor).toBe('#1A2B3C80')
   })
 })

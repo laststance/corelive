@@ -4,17 +4,19 @@ import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { BrainDumpAppearance } from '@/components/electron/BrainDumpAppearance'
+import { LiveEditorAppearance } from '@/components/electron/LiveEditorAppearance'
 import userSettingsReducer, {
   initialState,
 } from '@/lib/redux/slices/settingsSlice'
 import type { UserSettingsState } from '@/lib/schemas/settings'
 
 /**
- * Renders the Brain Dump appearance controls under a real settings store (so
+ * Renders the LiveEditor appearance controls under a real settings store (so
  * assertions read the actual reducer result) with the given setting overrides.
  */
-function renderBrainDumpAppearance(overrides: Partial<UserSettingsState> = {}) {
+function renderLiveEditorAppearance(
+  overrides: Partial<UserSettingsState> = {},
+) {
   const store = configureStore({
     reducer: { settings: userSettingsReducer },
     preloadedState: { settings: { ...initialState, ...overrides } },
@@ -22,7 +24,7 @@ function renderBrainDumpAppearance(overrides: Partial<UserSettingsState> = {}) {
   const user = userEvent.setup()
   render(
     <Provider store={store}>
-      <BrainDumpAppearance />
+      <LiveEditorAppearance />
     </Provider>,
   )
   return { store, user }
@@ -49,25 +51,25 @@ function getSliderByMax(max: string): HTMLElement {
   return slider
 }
 
-describe('BrainDumpAppearance — editor presentation', () => {
+describe('LiveEditorAppearance — editor presentation', () => {
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('saves the chosen BrainDump font family when a face is picked', async () => {
+  it('saves the chosen LiveEditor font family when a face is picked', async () => {
     // Arrange — the default editor face is monospace.
-    const { store, user } = renderBrainDumpAppearance()
+    const { store, user } = renderLiveEditorAppearance()
 
     // Act — pick the Serif face.
     await user.click(screen.getByRole('radio', { name: 'Serif' }))
 
     // Assert — the serif font is saved to settings.
-    expect(store.getState().settings.braindumpFontFamily).toBe('serif')
+    expect(store.getState().settings.liveEditorFontFamily).toBe('serif')
   })
 
-  it('shows the BrainDump font-size slider at the saved size on its [12,24] track', () => {
+  it('shows the LiveEditor font-size slider at the saved size on its [12,24] track', () => {
     // Arrange / Act — a non-default saved size.
-    renderBrainDumpAppearance({ braindumpFontSize: 20 })
+    renderLiveEditorAppearance({ liveEditorFontSize: 20 })
 
     // Assert — pick the font-size slider by its [12,24] track (the clear-delay
     // slider shares the role but runs [0,5000]) and read the saved px.
@@ -77,37 +79,37 @@ describe('BrainDumpAppearance — editor presentation', () => {
     expect(fontSizeSlider).toHaveAttribute('aria-valuemax', '24')
   })
 
-  it('saves the chosen BrainDump text color when a preset is picked', async () => {
+  it('saves the chosen LiveEditor text color when a preset is picked', async () => {
     // Arrange — the default editor color is the theme foreground.
-    const { store, user } = renderBrainDumpAppearance()
+    const { store, user } = renderLiveEditorAppearance()
 
     // Act — pick the Amber preset.
     await user.click(screen.getByRole('radio', { name: 'Amber' }))
 
     // Assert — the amber theme token is saved.
-    expect(store.getState().settings.braindumpTextColor).toBe('var(--primary)')
+    expect(store.getState().settings.liveEditorTextColor).toBe('var(--primary)')
   })
 
-  it('saves a custom BrainDump text color chosen from the native color picker', () => {
+  it('saves a custom LiveEditor text color chosen from the native color picker', () => {
     // Arrange
-    const { store } = renderBrainDumpAppearance()
+    const { store } = renderLiveEditorAppearance()
     const customColorInput = screen.getByLabelText(
-      'Custom BrainDump text color',
+      'Custom LiveEditor text color',
     )
 
     // Act — the native picker emits a 6-digit hex.
     fireEvent.change(customColorInput, { target: { value: '#abcdef' } })
 
     // Assert — the hex is stored verbatim as the custom color.
-    expect(store.getState().settings.braindumpTextColor).toBe('#abcdef')
+    expect(store.getState().settings.liveEditorTextColor).toBe('#abcdef')
   })
 
-  it('shows a saved custom hex in the BrainDump color picker', () => {
+  it('shows a saved custom hex in the LiveEditor color picker', () => {
     // Arrange / Act — a saved 6-digit hex should populate the native picker.
-    renderBrainDumpAppearance({ braindumpTextColor: '#123456' })
+    renderLiveEditorAppearance({ liveEditorTextColor: '#123456' })
 
     // Assert — the picker reflects the saved hex, not the fallback.
-    expect(screen.getByLabelText('Custom BrainDump text color')).toHaveValue(
+    expect(screen.getByLabelText('Custom LiveEditor text color')).toHaveValue(
       '#123456',
     )
   })
@@ -116,21 +118,21 @@ describe('BrainDumpAppearance — editor presentation', () => {
     // Arrange / Act — a theme token that is NOT one of the presets makes the
     // selection "custom": no preset radio is active, and the native picker (which
     // can only display a hex) cannot render a var() token so it shows #000000.
-    renderBrainDumpAppearance({ braindumpTextColor: 'var(--accent)' })
+    renderLiveEditorAppearance({ liveEditorTextColor: 'var(--accent)' })
 
     // Assert — every preset radio is unselected...
     expect(screen.getByRole('radio', { name: 'Default' })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'Muted' })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'Amber' })).not.toBeChecked()
     // ...and the custom picker shows the #000000 fallback for the var() token.
-    expect(screen.getByLabelText('Custom BrainDump text color')).toHaveValue(
+    expect(screen.getByLabelText('Custom LiveEditor text color')).toHaveValue(
       '#000000',
     )
   })
 
-  it('keeps finished BrainDump lines in place by default — clear-on-complete starts off', () => {
+  it('keeps finished LiveEditor lines in place by default — clear-on-complete starts off', () => {
     // Arrange / Act — a fresh install keeps the on-concept behavior.
-    renderBrainDumpAppearance()
+    renderLiveEditorAppearance()
 
     // Assert — the clear-on-complete switch is off (lines stay put by default).
     expect(
@@ -138,9 +140,9 @@ describe('BrainDumpAppearance — editor presentation', () => {
     ).not.toBeChecked()
   })
 
-  it('opts into clearing finished BrainDump lines when its switch is turned on', async () => {
+  it('opts into clearing finished LiveEditor lines when its switch is turned on', async () => {
     // Arrange
-    const { store, user } = renderBrainDumpAppearance()
+    const { store, user } = renderLiveEditorAppearance()
 
     // Act — turn on "Clear finished lines".
     await user.click(
@@ -148,14 +150,14 @@ describe('BrainDumpAppearance — editor presentation', () => {
     )
 
     // Assert — the setting is now enabled in the slice.
-    expect(store.getState().settings.braindumpClearOnComplete).toBe(true)
+    expect(store.getState().settings.liveEditorClearOnComplete).toBe(true)
   })
 
-  it('shows the BrainDump clear-delay slider at the saved delay on its [0,5000] track', () => {
+  it('shows the LiveEditor clear-delay slider at the saved delay on its [0,5000] track', () => {
     // Arrange / Act — clearing is on, with a non-default saved linger.
-    renderBrainDumpAppearance({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 1500,
+    renderLiveEditorAppearance({
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1500,
     })
 
     // Assert — the clear-delay slider (the [0,5000] track) reflects the saved ms.
@@ -165,22 +167,22 @@ describe('BrainDumpAppearance — editor presentation', () => {
     expect(clearDelaySlider).toHaveAttribute('aria-valuemax', '5000')
   })
 
-  it('reads out the BrainDump clear delay in milliseconds when it is non-zero', () => {
+  it('reads out the LiveEditor clear delay in milliseconds when it is non-zero', () => {
     // Arrange / Act
-    renderBrainDumpAppearance({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 1500,
+    renderLiveEditorAppearance({
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1500,
     })
 
     // Assert — the numeric readout names the exact linger in ms.
     expect(screen.getByText('1500 ms')).toBeInTheDocument()
   })
 
-  it('reads out the BrainDump clear delay as Instant at zero', () => {
+  it('reads out the LiveEditor clear delay as Instant at zero', () => {
     // Arrange / Act — a 0 ms delay means remove the line the instant it completes.
-    renderBrainDumpAppearance({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 0,
+    renderLiveEditorAppearance({
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 0,
     })
 
     // Assert — "Instant" shows in BOTH the numeric readout and the left
@@ -190,7 +192,7 @@ describe('BrainDumpAppearance — editor presentation', () => {
 
   it('disables the clear-delay slider and nudges to enable it while clear-on-complete is off', () => {
     // Arrange / Act — the default: finished lines stay, so the delay is moot.
-    renderBrainDumpAppearance({ braindumpClearOnComplete: false })
+    renderLiveEditorAppearance({ liveEditorClearOnComplete: false })
 
     // Assert — the slider is disabled and a helper explains how to enable it.
     const clearDelaySlider = getSliderByMax('5000')
@@ -202,7 +204,7 @@ describe('BrainDumpAppearance — editor presentation', () => {
 
   it('enables the clear-delay slider and drops the nudge once clear-on-complete is on', () => {
     // Arrange / Act — opting into clearing makes the delay meaningful.
-    renderBrainDumpAppearance({ braindumpClearOnComplete: true })
+    renderLiveEditorAppearance({ liveEditorClearOnComplete: true })
 
     // Assert — the slider is interactive (no disabled marker) and the helper is gone.
     const clearDelaySlider = getSliderByMax('5000')
@@ -214,9 +216,9 @@ describe('BrainDumpAppearance — editor presentation', () => {
 
   it('raises the saved clear delay by one 100 ms step when the slider is nudged right', () => {
     // Arrange — clearing on, at a known 500 ms so a single step lands on 600.
-    const { store } = renderBrainDumpAppearance({
-      braindumpClearOnComplete: true,
-      braindumpClearDelayMs: 500,
+    const { store } = renderLiveEditorAppearance({
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 500,
     })
     const clearDelaySlider = getSliderByMax('5000')
 
@@ -226,12 +228,12 @@ describe('BrainDumpAppearance — editor presentation', () => {
     fireEvent.keyDown(clearDelaySlider, { key: 'ArrowRight' })
 
     // Assert — the delay rose by one 100 ms step in the slice.
-    expect(store.getState().settings.braindumpClearDelayMs).toBe(600)
+    expect(store.getState().settings.liveEditorClearDelayMs).toBe(600)
   })
 
-  it('shows the BrainDump toast-duration slider at the saved duration on its [2000,10000] track', () => {
+  it('shows the LiveEditor toast-duration slider at the saved duration on its [2000,10000] track', () => {
     // Arrange / Act — a non-default saved confirmation duration.
-    renderBrainDumpAppearance({ braindumpToastDurationMs: 6000 })
+    renderLiveEditorAppearance({ liveEditorToastDurationMs: 6000 })
 
     // Assert — the toast-duration slider (the [2000,10000] track) reflects the
     // saved ms.
@@ -241,9 +243,9 @@ describe('BrainDumpAppearance — editor presentation', () => {
     expect(toastDurationSlider).toHaveAttribute('aria-valuemax', '10000')
   })
 
-  it('reads out the BrainDump toast duration in milliseconds', () => {
+  it('reads out the LiveEditor toast duration in milliseconds', () => {
     // Arrange / Act
-    renderBrainDumpAppearance({ braindumpToastDurationMs: 6000 })
+    renderLiveEditorAppearance({ liveEditorToastDurationMs: 6000 })
 
     // Assert — the numeric readout names the exact duration in ms.
     expect(screen.getByText('6000 ms')).toBeInTheDocument()
@@ -252,7 +254,7 @@ describe('BrainDumpAppearance — editor presentation', () => {
   it('keeps the toast-duration slider enabled even when clear-on-complete is off', () => {
     // Arrange / Act — the toast shows on EVERY completion, so its duration is
     // always meaningful, unlike the clear delay which is moot when lines stay.
-    renderBrainDumpAppearance({ braindumpClearOnComplete: false })
+    renderLiveEditorAppearance({ liveEditorClearOnComplete: false })
 
     // Assert — the slider is interactive (no disabled marker) regardless.
     const toastDurationSlider = getSliderByMax('10000')
@@ -261,8 +263,8 @@ describe('BrainDumpAppearance — editor presentation', () => {
 
   it('raises the saved toast duration by one 500 ms step when the slider is nudged right', () => {
     // Arrange — a known 6000 ms so a single step lands on 6500.
-    const { store } = renderBrainDumpAppearance({
-      braindumpToastDurationMs: 6000,
+    const { store } = renderLiveEditorAppearance({
+      liveEditorToastDurationMs: 6000,
     })
     const toastDurationSlider = getSliderByMax('10000')
 
@@ -272,6 +274,6 @@ describe('BrainDumpAppearance — editor presentation', () => {
     fireEvent.keyDown(toastDurationSlider, { key: 'ArrowRight' })
 
     // Assert — the duration rose by one 500 ms step in the slice.
-    expect(store.getState().settings.braindumpToastDurationMs).toBe(6500)
+    expect(store.getState().settings.liveEditorToastDurationMs).toBe(6500)
   })
 })

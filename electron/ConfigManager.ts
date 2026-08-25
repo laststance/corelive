@@ -80,31 +80,31 @@ interface WindowConfig {
 }
 
 /**
- * BrainDump window/feature configuration.
+ * LiveEditor window/feature configuration.
  *
- * Persisted locally per-device (D1 decision in BrainDump plan). `notes` is a
+ * Persisted locally per-device (D1 decision in LiveEditor plan). `notes` is a
  * `Record<categoryId-as-string, text>` because JSON object keys must be
  * strings — the renderer stringifies the numeric categoryId before reading.
  */
-export interface BrainDumpConfig {
+export interface LiveEditorConfig {
   width: number
   height: number
-  /** Keep the BrainDump panel visible while macOS Spaces change. */
+  /** Keep the LiveEditor panel visible while macOS Spaces change. */
   visibleOnAllWorkspaces: boolean
-  /** Keep the BrainDump panel pinned above other windows (default off). */
+  /** Keep the LiveEditor panel pinned above other windows (default off). */
   alwaysOnTop: boolean
   /** Window opacity, clamped 0.30–1.00 to keep the window discoverable. */
   opacity: number
-  /** When true, BrainDump mirrors FloatingNavigator's selected category. */
+  /** When true, LiveEditor mirrors FloatingNavigator's selected category. */
   syncMode: boolean
   /**
-   * @deprecated Legacy mirror with no readers — the live BrainDump toggle keys
-   * are `shortcuts.toggleBrainDump` / `shortcuts.toggleBrainDumpSecondary`.
+   * @deprecated Legacy mirror with no readers — the live LiveEditor toggle keys
+   * are `shortcuts.toggleLiveEditor` / `shortcuts.toggleLiveEditorSecondary`.
    * Kept only so existing config.json files keep validating.
    */
   shortcut: string
   /**
-   * Last category id BrainDump showed (used as the source of truth across
+   * Last category id LiveEditor showed (used as the source of truth across
    * sync flips so the user never loses their selection).
    */
   lastCategoryId: number | null
@@ -132,9 +132,9 @@ interface ShortcutsConfig {
   toggleAlwaysOnTop: string
   focusFloatingNavigator: string
   toggleFloatingNavigator: string
-  toggleBrainDump: string
-  /** Optional second key for the same BrainDump toggle; empty disables it. */
-  toggleBrainDumpSecondary: string
+  toggleLiveEditor: string
+  /** Optional second key for the same LiveEditor toggle; empty disables it. */
+  toggleLiveEditorSecondary: string
 }
 
 /** Notifications configuration */
@@ -168,7 +168,7 @@ interface AppearanceConfig {
 /** Behavior configuration */
 interface BehaviorConfig {
   startOnLogin: boolean
-  /** Play a bundled cue after a shortcut actually reveals Floating or BrainDump. */
+  /** Play a bundled cue after a shortcut actually reveals Floating or LiveEditor. */
   shortcutOpenSoundEnabled: boolean
   /** Rotate all cues by default or pin one stable bundled sound identifier. */
   shortcutOpenSoundSelection: ShortcutOpenSoundSelection
@@ -214,7 +214,7 @@ export interface AppConfig {
   appearance: AppearanceConfig
   behavior: BehaviorConfig
   advanced: AdvancedConfig
-  braindump: BrainDumpConfig
+  liveEditor: LiveEditorConfig
   settingsPopover: SettingsPopoverConfig
   [key: string]: unknown
 }
@@ -290,6 +290,9 @@ export class ConfigManager {
   /** Current configuration */
   private config: AppConfig
 
+  /** Whether a raw on-disk rename migration must be persisted after load. */
+  private shouldSaveLoadedConfig = false
+
   constructor() {
     this.configDir = app.getPath('userData')
     this.configPath = path.join(this.configDir, 'config.json')
@@ -306,7 +309,14 @@ export class ConfigManager {
 
     // A hand-edited config.json (or a pre-startup-feature file) can carry an
     // all-false startup block; normalize before any window code reads it.
-    this.ensureAtLeastOneStartupWindow()
+    const didNormalizeStartup = this.ensureAtLeastOneStartupWindow()
+    this.shouldSaveLoadedConfig =
+      didNormalizeStartup || this.shouldSaveLoadedConfig
+
+    // Raw migrations run before `this.config` exists, so persist only now.
+    if (this.shouldSaveLoadedConfig) {
+      this.saveConfig()
+    }
   }
 
   /**
@@ -364,8 +374,8 @@ export class ConfigManager {
         toggleAlwaysOnTop: `${modifier}+Shift+A`,
         focusFloatingNavigator: `${modifier}+Shift+N`,
         toggleFloatingNavigator: `${modifier}+3`,
-        toggleBrainDump: 'Alt+Space',
-        toggleBrainDumpSecondary: '',
+        toggleLiveEditor: 'Alt+Space',
+        toggleLiveEditorSecondary: '',
       },
 
       notifications: {
@@ -416,11 +426,11 @@ export class ConfigManager {
         experimentalFeatures: false,
       },
 
-      braindump: {
+      liveEditor: {
         width: 480,
         height: 640,
         visibleOnAllWorkspaces: false,
-        // Default OFF: BrainDump stays unpinned unless the user opts in.
+        // Default OFF: LiveEditor stays unpinned unless the user opts in.
         alwaysOnTop: false,
         opacity: 0.95,
         syncMode: true,
@@ -461,8 +471,17 @@ export class ConfigManager {
         // Migrate legacy fields on the RAW config — must run before merge,
         // which would otherwise fill `showFloating` with its default and
         // erase the signal that it was never explicitly set.
-        this.pruneLegacyAppearanceKeys(loadedConfig)
-        this.migrateFloatingStartVisible(loadedConfig)
+        const didPruneLegacyAppearance =
+          this.pruneLegacyAppearanceKeys(loadedConfig)
+        const didMigrateFloatingStartup =
+          this.migrateFloatingStartVisible(loadedConfig)
+        const didMigrateLiveEditor =
+          this.migrateLegacyLiveEditorConfig(loadedConfig)
+        this.shouldSaveLoadedConfig =
+          didPruneLegacyAppearance ||
+          didMigrateFloatingStartup ||
+          didMigrateLiveEditor ||
+          this.shouldSaveLoadedConfig
 
         // Merge with defaults to ensure all properties exist
         const mergedConfig = this.mergeWithDefaults(loadedConfig)
@@ -488,11 +507,14 @@ export class ConfigManager {
         return this.migrateConfig(mergedConfig)
       }
     } catch (error) {
+      // A partially completed raw migration must never make fallback defaults
+      // overwrite the unreadable original config after this load aborts.
+      this.shouldSaveLoadedConfig = false
       log.error('Failed to load config:', error)
     }
 
     // Return default config if loading fails — deep clone so the runtime copy
-    // never aliases nested defaults like `braindump.notes`.
+    // never aliases nested defaults like `liveEditor.notes`.
     return structuredClone(this.defaultConfig)
   }
 
@@ -565,7 +587,7 @@ export class ConfigManager {
     }
 
     // Deep-clone the defaults before merging so the merged result never
-    // aliases nested objects (e.g., `braindump.notes` shared with the
+    // aliases nested objects (e.g., `liveEditor.notes` shared with the
     // factory defaults — mutating it would silently pollute reset()).
     return merge(
       structuredClone(this.defaultConfig) as unknown as Record<string, unknown>,
@@ -573,20 +595,6 @@ export class ConfigManager {
     ) as AppConfig
   }
 
-  /**
-   * One-time migration of the legacy `window.floating.startVisible` flag into
-   * the new `behavior.startup.showFloating` field. Runs on the RAW loaded
-   * config BEFORE default-merge so an unset `showFloating` is detectable
-   * (merge would otherwise fill it with the default `false` and erase intent).
-   * Idempotent: migrates only when `showFloating` is still unset, and always
-   * drops the legacy key afterward so it never lingers once superseded.
-   *
-   * @param raw - Config parsed from disk, before merge with defaults.
-   * @returns void — sets `raw.behavior.startup.showFloating` and deletes the legacy flag in place.
-   * @example
-   * // disk: { window: { floating: { startVisible: true } } }  (no behavior.startup)
-   * migrateFloatingStartVisible(raw) // => raw.behavior.startup.showFloating === true; startVisible removed
-   */
   /**
    * Strips the removed `appearance.theme` / `appearance.accentColor` keys (T9)
    * out of a persisted/imported config before merge. `mergeWithDefaults` copies
@@ -596,24 +604,33 @@ export class ConfigManager {
    * Runs on the RAW config so the keys are gone before they reach the merge.
    *
    * @param raw - Config parsed from disk, before merge with defaults.
-   * @returns void — deletes the legacy `appearance` keys in place (no-op if absent or non-object).
+   * @returns Whether at least one legacy appearance key was removed.
    * @example
    * // disk: { appearance: { fontSize: 'large', theme: 'dark', accentColor: '#f00' } }
    * pruneLegacyAppearanceKeys(raw) // => raw.appearance === { fontSize: 'large' }
    */
-  private pruneLegacyAppearanceKeys(raw: Partial<AppConfig>): void {
+  private pruneLegacyAppearanceKeys(raw: Partial<AppConfig>): boolean {
     // A hand-edited config may have a corrupt non-object `appearance`; only
     // touch a real object so deleting keys can't throw and abort the load.
-    if (!isPlainObject(raw.appearance)) return
+    if (!isPlainObject(raw.appearance)) return false
     const appearance = raw.appearance as Record<string, unknown>
+    const didPrune = 'theme' in appearance || 'accentColor' in appearance
     delete appearance.theme
     delete appearance.accentColor
+    return didPrune
   }
 
-  private migrateFloatingStartVisible(raw: Partial<AppConfig>): void {
+  /**
+   * Moves legacy `window.floating.startVisible` into startup settings before default merge so the old launch choice persists once.
+   * @param raw - Config parsed from disk, before merge with defaults.
+   * @returns Whether the superseded legacy key was removed.
+   * @example
+   * migrateFloatingStartVisible({ window: { floating: { startVisible: true } } }) // => true
+   */
+  private migrateFloatingStartVisible(raw: Partial<AppConfig>): boolean {
     const floating = raw.window?.floating
     // Nothing legacy to migrate or clean up.
-    if (!floating || floating.startVisible === undefined) return
+    if (!floating || floating.startVisible === undefined) return false
 
     // Partial<AppConfig> only marks top-level keys optional; nested objects are
     // typed as fully-required even though raw JSON may omit fields. Treat the
@@ -622,8 +639,8 @@ export class ConfigManager {
       Partial<StartupWindowConfig> | undefined
     const showFloatingAlreadySet = startup?.showFloating !== undefined
 
-    // Carry the legacy flag over only when the new field hasn't been set yet.
-    if (floating.startVisible === true && !showFloatingAlreadySet) {
+    // Carry either legacy boolean over only when the new field is still unset.
+    if (typeof floating.startVisible === 'boolean' && !showFloatingAlreadySet) {
       // `raw.behavior` may be a corrupt non-object (string/array) from a
       // hand-edited config; only reuse it when it is a real object. Assigning
       // `.startup` to a string/array primitive throws in strict mode, which
@@ -632,16 +649,105 @@ export class ConfigManager {
       const behavior = isPlainObject(raw.behavior)
         ? (raw.behavior as BehaviorConfig)
         : ({} as BehaviorConfig)
-      // Partial startup is fine here — mergeWithDefaults fills showBraindump.
+      // Partial startup is fine here — mergeWithDefaults fills showLiveEditor.
       behavior.startup = {
         ...(startup ?? {}),
-        showFloating: true,
+        showFloating: floating.startVisible,
       } as StartupWindowConfig
       raw.behavior = behavior
     }
 
     // Drop the superseded key regardless, so a migrated config stops carrying it.
     delete floating.startVisible
+    return true
+  }
+
+  /**
+   * Moves pre-rename panel data into canonical LiveEditor keys during config load/import so notes and preferences survive the product rename.
+   * @param raw - Config parsed from disk before defaults are merged.
+   * @returns True when at least one legacy key was moved or removed.
+   * @example
+   * migrateLegacyLiveEditorConfig({ braindump: { notes: { '1': 'Keep me' } } }) // => true; data moves to liveEditor
+   */
+  private migrateLegacyLiveEditorConfig(raw: Partial<AppConfig>): boolean {
+    let didMigrate = false
+    const legacySection = raw['braindump']
+
+    if (isPlainObject(legacySection)) {
+      // Canonical values win if an interrupted rollout left both sections.
+      const canonicalSection: Record<string, unknown> = isPlainObject(
+        raw.liveEditor,
+      )
+        ? raw.liveEditor
+        : {}
+      const mergedSection: Record<string, unknown> = {
+        ...legacySection,
+        ...canonicalSection,
+      }
+      const legacyNotes = isPlainObject(legacySection.notes)
+        ? legacySection.notes
+        : {}
+      const canonicalNotes = isPlainObject(canonicalSection.notes)
+        ? canonicalSection.notes
+        : {}
+
+      // Notes are a per-category map, so merge them one level deeper to keep
+      // every category if an interrupted rollout wrote both section names.
+      if (
+        Object.keys(legacyNotes).length > 0 ||
+        Object.keys(canonicalNotes).length > 0
+      ) {
+        mergedSection.notes = { ...legacyNotes, ...canonicalNotes }
+      }
+      raw.liveEditor = mergedSection as unknown as LiveEditorConfig
+      delete raw['braindump']
+      didMigrate = true
+    }
+
+    if (isPlainObject(raw.shortcuts)) {
+      const shortcuts = raw.shortcuts as Record<string, unknown>
+      const legacyPrimary = shortcuts['toggleBrainDump']
+      const legacySecondary = shortcuts['toggleBrainDumpSecondary']
+
+      // Copy only into absent canonical fields so repeated migration is safe.
+      if (
+        shortcuts['toggleLiveEditor'] === undefined &&
+        typeof legacyPrimary === 'string'
+      ) {
+        shortcuts['toggleLiveEditor'] = legacyPrimary
+      }
+      if (
+        shortcuts['toggleLiveEditorSecondary'] === undefined &&
+        typeof legacySecondary === 'string'
+      ) {
+        shortcuts['toggleLiveEditorSecondary'] = legacySecondary
+      }
+      if (
+        'toggleBrainDump' in shortcuts ||
+        'toggleBrainDumpSecondary' in shortcuts
+      ) {
+        delete shortcuts['toggleBrainDump']
+        delete shortcuts['toggleBrainDumpSecondary']
+        didMigrate = true
+      }
+    }
+
+    const startup = isPlainObject(raw.behavior)
+      ? raw.behavior['startup']
+      : undefined
+    if (isPlainObject(startup) && 'showBraindump' in startup) {
+      // Preserve an explicit new value when both versions exist.
+      if (
+        startup['showLiveEditor'] === undefined &&
+        typeof startup['showBraindump'] === 'boolean'
+      ) {
+        startup['showLiveEditor'] = startup['showBraindump']
+      }
+      delete startup['showBraindump']
+      didMigrate = true
+    }
+
+    return didMigrate
   }
 
   /**
@@ -654,12 +760,12 @@ export class ConfigManager {
    * synchronously at boot, so a non-object here would otherwise throw or boot a
    * blank desktop. Drops the retired `showMain` key (T18), coerces both surviving
    * fields to real booleans, and falls back to showFloating — the front door
-   * after main-window retirement. In-memory only; the corrupt file self-heals on
-   * the next config write (set/update/import all call this then saveConfig).
+   * after main-window retirement. The constructor persists any repair immediately;
+   * set/update/import also call this before their regular save.
    *
-   * @returns void — mutates `this.config.behavior(.startup)` in place.
+   * @returns Whether the in-memory startup configuration changed.
    * @example
-   * // this.config.behavior.startup = { showBraindump: false, showFloating: false }
+   * // this.config.behavior.startup = { showLiveEditor: false, showFloating: false }
    * ensureAtLeastOneStartupWindow() // => showFloating becomes true
    * @example
    * // this.config.behavior.startup = { showMain: true }  (legacy persisted config)
@@ -668,7 +774,7 @@ export class ConfigManager {
    * // this.config.behavior = 'corrupt'  (hand-edited config.json)
    * ensureAtLeastOneStartupWindow() // => behavior reset to defaults (showFloating: true)
    */
-  private ensureAtLeastOneStartupWindow(): void {
+  private ensureAtLeastOneStartupWindow(): boolean {
     const behavior = this.config.behavior
     // A hand-edited or corrupted config.json can make `behavior` a non-object
     // (string, null) OR an array — and `typeof [] === 'object'`, so a bare
@@ -681,7 +787,7 @@ export class ConfigManager {
         'Startup invariant: behavior config was not a plain object; resetting to defaults',
       )
       this.config.behavior = structuredClone(this.defaultConfig.behavior)
-      return
+      return true
     }
     let startup = behavior.startup
     // Same guard one level down: a non-plain-object `startup` block (including an
@@ -692,29 +798,45 @@ export class ConfigManager {
       )
       startup = structuredClone(this.defaultConfig.behavior.startup)
       behavior.startup = startup
-      return
+      return true
     }
+
+    let didNormalize = false
 
     // Drop the retired `showMain` key (T18). mergeWithDefaults copies unknown
     // persisted keys verbatim, so a config.json written before main-window
     // retirement still carries `showMain`; delete it here — the one chokepoint
     // every write path (construct/set/update/import) flows through — so the dead
     // key never lingers in the saved file.
-    delete (startup as Record<string, unknown>).showMain
+    if ('showMain' in startup) {
+      delete (startup as Record<string, unknown>).showMain
+      didNormalize = true
+    }
 
     // Coerce to strict booleans. A hand-edited config.json can carry a string
     // like "false", and `Boolean("false") === true` would wrongly arm a window.
     // `=== true` accepts only a real boolean true; any other value (string,
     // number, undefined) becomes false and is caught by the >=1 invariant below.
-    startup.showBraindump = startup.showBraindump === true
-    startup.showFloating = startup.showFloating === true
+    const showLiveEditor = startup.showLiveEditor === true
+    const showFloating = startup.showFloating === true
+    if (
+      startup.showLiveEditor !== showLiveEditor ||
+      startup.showFloating !== showFloating
+    ) {
+      didNormalize = true
+    }
+    startup.showLiveEditor = showLiveEditor
+    startup.showFloating = showFloating
 
     // Fall back to the Floating Navigator — the front door after main-window
     // retirement (T18) — when nothing is enabled, so a launch always surfaces a
     // window rather than a blank desktop.
-    if (!startup.showBraindump && !startup.showFloating) {
+    if (!startup.showLiveEditor && !startup.showFloating) {
       startup.showFloating = true
+      didNormalize = true
     }
+
+    return didNormalize
   }
 
   /**
@@ -736,7 +858,7 @@ export class ConfigManager {
     }
 
     config.version = targetVersion
-    this.saveConfig()
+    this.shouldSaveLoadedConfig = true
 
     return config
   }
@@ -908,7 +1030,7 @@ export class ConfigManager {
    */
   reset(): boolean {
     // Deep clone — a shallow spread keeps nested objects (e.g.,
-    // `braindump.notes`) aliased to the factory defaults, so subsequent
+    // `liveEditor.notes`) aliased to the factory defaults, so subsequent
     // writes would silently mutate the source-of-truth defaults.
     this.config = structuredClone(this.defaultConfig)
     return this.saveConfig()
@@ -978,7 +1100,7 @@ export class ConfigManager {
       const shortcutValues = Object.entries(this.config.shortcuts)
         // An empty accelerator means "disabled", and any number of shortcuts
         // may be disabled at once — counting those as duplicates of each other
-        // would reject a perfectly valid config on import. `toggleBrainDump-
+        // would reject a perfectly valid config on import. `toggleLiveEditor-
         // Secondary` ships empty, so a single other disabled key would trip it.
         .filter(([, value]) => typeof value === 'string' && value !== '')
         .map(([, value]) => value as string)
@@ -1035,6 +1157,7 @@ export class ConfigManager {
       // config before merge.
       this.pruneLegacyAppearanceKeys(importedConfig)
       this.migrateFloatingStartVisible(importedConfig)
+      this.migrateLegacyLiveEditorConfig(importedConfig)
 
       // Validate imported config
       const tempConfig = this.config

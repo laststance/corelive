@@ -55,7 +55,7 @@ export interface NativeShortcutEngine {
   /**
    * Binds a lone modifier to a callback under a stable shortcut id.
    * @param modifier - The canonical lone-modifier id to listen for.
-   * @param id - The shortcut id this binding belongs to (e.g. `toggleBrainDump`).
+   * @param id - The shortcut id this binding belongs to (e.g. `toggleLiveEditor`).
    * @param callback - Invoked when the modifier is pressed alone.
    * @returns
    * - `true` when the tap accepted the binding

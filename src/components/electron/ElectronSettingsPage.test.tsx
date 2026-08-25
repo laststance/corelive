@@ -4,7 +4,7 @@
  * Covers the "Restore default size" button and its version-skew guard, now
  * folded into the Application section (the standalone "Settings Window" card was
  * retired in the settings regroup, DR-D2). The application/startup-window/
- * floating/braindump toggle behaviours are tested in their own sub-component
+ * floating/live-editor toggle behaviours are tested in their own sub-component
  * test files — only the page-level composition is exercised here.
  *
  * Triggered when: `pnpm test` (Vitest, happy-dom environment).
@@ -43,11 +43,11 @@ vi.mock('./StartupWindowSettings', () => ({
 vi.mock('./FloatingNavigatorSettings', () => ({
   FloatingNavigatorSettings: () => null,
 }))
-vi.mock('./BrainDumpSettings', () => ({
-  BrainDumpSettings: () => null,
+vi.mock('./LiveEditorSettings', () => ({
+  LiveEditorSettings: () => null,
 }))
-vi.mock('./BrainDumpAppearance', () => ({
-  BrainDumpAppearance: () => null,
+vi.mock('./LiveEditorAppearance', () => ({
+  LiveEditorAppearance: () => null,
 }))
 
 // --- Redux store ----------------------------------------------------------

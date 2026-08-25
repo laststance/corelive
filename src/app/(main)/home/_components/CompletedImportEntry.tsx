@@ -61,7 +61,7 @@ export const CompletedImportEntry = function CompletedImportEntry() {
   // Invalidate everything the Completed import touches: heatmap (fill), the
   // day-detail dialog cache, the journal (the Completed Tasks list — imports
   // write the Completed table it reads), and the todo list; broadcast so the
-  // floating navigator + braindump windows stay in lockstep. The journal key is
+  // Floating Navigator + LiveEditor windows stay in lockstep. The journal key is
   // invalidated DIRECTLY here, not via broadcast, because the importing window
   // never receives its own BroadcastChannel message.
   const invalidateCompleted = () => {

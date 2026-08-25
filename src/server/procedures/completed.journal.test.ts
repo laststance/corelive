@@ -17,7 +17,7 @@ import { describeIfDb } from './describeIfDb'
  * real write paths do (paste-import → `Completed` table; the main/floating app →
  * a completed `Todo`) and asserts the merged, newest-first, paginated feed. The
  * bug this guards: before the journal, the list read only `todo.list` so
- * `Completed`-table wins (import + braindump) NEVER appeared. Several sequential
+ * `Completed`-table wins (import + liveEditor) NEVER appeared. Several sequential
  * DB round-trips per case → generous timeout so DB latency can't flake it.
  */
 vi.setConfig({ testTimeout: 30_000 })
@@ -42,7 +42,7 @@ function freshClerkId(): string {
 }
 
 /**
- * Seeds one `Completed`-table win (the paste-import / braindump surface) at a
+ * Seeds one `Completed`-table win (the paste-import / LiveEditor surface) at a
  * precise instant via the REAL import procedure, which lazily upserts the user +
  * default category on first call — so the read path sees a row written exactly
  * the way production writes it.

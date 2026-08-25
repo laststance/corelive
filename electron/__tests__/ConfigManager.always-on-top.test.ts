@@ -1,7 +1,7 @@
 /**
- * @fileoverview BrainDump always-on-top config default + migration tests.
+ * @fileoverview LiveEditor always-on-top config default + migration tests.
  *
- * Locks the contract that BrainDump ships UNPINNED (`alwaysOnTop=false`) and that
+ * Locks the contract that LiveEditor ships UNPINNED (`alwaysOnTop=false`) and that
  * a pre-feature `config.json` lacking the key migrates to false — never
  * resurrects a stale `true`. Guards the "off by default" (unpinned) behavior
  * this setting exists to deliver.
@@ -49,7 +49,7 @@ function writeConfigFile(rawConfig: Record<string, unknown>): void {
   )
 }
 
-describe('ConfigManager BrainDump always-on-top', () => {
+describe('ConfigManager LiveEditor always-on-top', () => {
   beforeEach(() => {
     // Arrange: isolate every test in its own temp userData directory.
     userDataDir.current = fs.mkdtempSync(
@@ -62,23 +62,23 @@ describe('ConfigManager BrainDump always-on-top', () => {
     vi.clearAllMocks()
   })
 
-  it('ships BrainDump unpinned by default', () => {
+  it('ships LiveEditor unpinned by default', () => {
     // Arrange
     const configManager = new ConfigManager()
 
     // Act
-    const braindump = configManager.getDefaultConfig().braindump
+    const liveEditor = configManager.getDefaultConfig().liveEditor
 
-    // Assert: a `true` default would pin BrainDump on a fresh install — the exact
+    // Assert: a `true` default would pin LiveEditor on a fresh install — the exact
     // behavior this setting was added to avoid.
-    expect(braindump.alwaysOnTop).toBe(false)
+    expect(liveEditor.alwaysOnTop).toBe(false)
   })
 
-  it('migrates a pre-feature config without braindump.alwaysOnTop to false, never stale-true', () => {
-    // Arrange: a config.json written before the field existed — its braindump
+  it('migrates a pre-feature config without liveEditor.alwaysOnTop to false, never stale-true', () => {
+    // Arrange: a config.json written before the field existed — its liveEditor
     // block carries every sibling key BUT alwaysOnTop.
     writeConfigFile({
-      braindump: {
+      liveEditor: {
         width: 480,
         height: 640,
         visibleOnAllWorkspaces: false,
@@ -96,17 +96,17 @@ describe('ConfigManager BrainDump always-on-top', () => {
     // Assert: the absent key resolves to the false default (passing `true` as the
     // lookup default proves the value is genuinely present-and-false, not falling
     // back) — the merge seeds from defaults and only overlays present keys.
-    expect(configManager.get('braindump.alwaysOnTop', true)).toBe(false)
+    expect(configManager.get('liveEditor.alwaysOnTop', true)).toBe(false)
   })
 
-  it('preserves an explicit braindump.alwaysOnTop=true opt-in from a saved config', () => {
-    // Arrange: a user who turned BrainDump pinning on persists true.
-    writeConfigFile({ braindump: { alwaysOnTop: true } })
+  it('preserves an explicit liveEditor.alwaysOnTop=true opt-in from a saved config', () => {
+    // Arrange: a user who turned LiveEditor pinning on persists true.
+    writeConfigFile({ liveEditor: { alwaysOnTop: true } })
 
     // Act
     const configManager = new ConfigManager()
 
     // Assert: the migration fills absences only — an explicit opt-in survives.
-    expect(configManager.get('braindump.alwaysOnTop', false)).toBe(true)
+    expect(configManager.get('liveEditor.alwaysOnTop', false)).toBe(true)
   })
 })
