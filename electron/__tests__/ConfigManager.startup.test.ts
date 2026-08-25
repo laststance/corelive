@@ -99,9 +99,13 @@ describe('ConfigManager startup-window config', () => {
     const originalConfig = fs.readFileSync(configPath, 'utf8')
 
     // Act
-    new ConfigManager()
+    const configManager = new ConfigManager()
 
-    // Assert: fallback defaults stay in memory only; user data remains byte-identical.
+    // Assert: runtime state uses pristine defaults while user data remains byte-identical.
+    expect(configManager.get('window.main.width', 0)).toBe(1200)
+    expect(configManager.get('liveEditor.notes', { unexpected: true })).toEqual(
+      {},
+    )
     expect(fs.readFileSync(configPath, 'utf8')).toBe(originalConfig)
   })
 
@@ -140,6 +144,7 @@ describe('ConfigManager startup-window config', () => {
     // Arrange: a config persisted before main-window retirement — the factory
     // default every untouched install carried (main on, both panels off).
     writeConfigFile({
+      version: '1.0.0',
       behavior: {
         startup: { showMain: true, showLiveEditor: false, showFloating: false },
       },
@@ -303,6 +308,7 @@ describe('ConfigManager startup-window config', () => {
   it('repairs an all-false startup block persisted in config.json on load', () => {
     // Arrange: a hand-edited file that would otherwise boot zero windows.
     writeConfigFile({
+      version: '1.0.0',
       behavior: {
         startup: {
           showMain: false,
@@ -314,9 +320,16 @@ describe('ConfigManager startup-window config', () => {
 
     // Act
     const configManager = new ConfigManager()
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(userDataDir.current, 'config.json'), 'utf8'),
+    ) as Record<string, unknown>
 
-    // Assert: the >=1 invariant repairs it to the Floating front door.
+    // Assert: the repair reaches both runtime state and the current-version file.
     expect(configManager.getSection('behavior').startup.showFloating).toBe(true)
+    expect(persisted).toHaveProperty('behavior.startup', {
+      showLiveEditor: false,
+      showFloating: true,
+    })
   })
 
   it('migrates a legacy startVisible:true file when imported, not only on disk load', () => {

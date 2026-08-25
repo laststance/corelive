@@ -309,7 +309,9 @@ export class ConfigManager {
 
     // A hand-edited config.json (or a pre-startup-feature file) can carry an
     // all-false startup block; normalize before any window code reads it.
-    this.ensureAtLeastOneStartupWindow()
+    const didNormalizeStartup = this.ensureAtLeastOneStartupWindow()
+    this.shouldSaveLoadedConfig =
+      didNormalizeStartup || this.shouldSaveLoadedConfig
 
     // Raw migrations run before `this.config` exists, so persist only now.
     if (this.shouldSaveLoadedConfig) {
@@ -758,10 +760,10 @@ export class ConfigManager {
    * synchronously at boot, so a non-object here would otherwise throw or boot a
    * blank desktop. Drops the retired `showMain` key (T18), coerces both surviving
    * fields to real booleans, and falls back to showFloating — the front door
-   * after main-window retirement. In-memory only; the corrupt file self-heals on
-   * the next config write (set/update/import all call this then saveConfig).
+   * after main-window retirement. The constructor persists any repair immediately;
+   * set/update/import also call this before their regular save.
    *
-   * @returns void — mutates `this.config.behavior(.startup)` in place.
+   * @returns Whether the in-memory startup configuration changed.
    * @example
    * // this.config.behavior.startup = { showLiveEditor: false, showFloating: false }
    * ensureAtLeastOneStartupWindow() // => showFloating becomes true
@@ -772,7 +774,7 @@ export class ConfigManager {
    * // this.config.behavior = 'corrupt'  (hand-edited config.json)
    * ensureAtLeastOneStartupWindow() // => behavior reset to defaults (showFloating: true)
    */
-  private ensureAtLeastOneStartupWindow(): void {
+  private ensureAtLeastOneStartupWindow(): boolean {
     const behavior = this.config.behavior
     // A hand-edited or corrupted config.json can make `behavior` a non-object
     // (string, null) OR an array — and `typeof [] === 'object'`, so a bare
@@ -785,7 +787,7 @@ export class ConfigManager {
         'Startup invariant: behavior config was not a plain object; resetting to defaults',
       )
       this.config.behavior = structuredClone(this.defaultConfig.behavior)
-      return
+      return true
     }
     let startup = behavior.startup
     // Same guard one level down: a non-plain-object `startup` block (including an
@@ -796,29 +798,45 @@ export class ConfigManager {
       )
       startup = structuredClone(this.defaultConfig.behavior.startup)
       behavior.startup = startup
-      return
+      return true
     }
+
+    let didNormalize = false
 
     // Drop the retired `showMain` key (T18). mergeWithDefaults copies unknown
     // persisted keys verbatim, so a config.json written before main-window
     // retirement still carries `showMain`; delete it here — the one chokepoint
     // every write path (construct/set/update/import) flows through — so the dead
     // key never lingers in the saved file.
-    delete (startup as Record<string, unknown>).showMain
+    if ('showMain' in startup) {
+      delete (startup as Record<string, unknown>).showMain
+      didNormalize = true
+    }
 
     // Coerce to strict booleans. A hand-edited config.json can carry a string
     // like "false", and `Boolean("false") === true` would wrongly arm a window.
     // `=== true` accepts only a real boolean true; any other value (string,
     // number, undefined) becomes false and is caught by the >=1 invariant below.
-    startup.showLiveEditor = startup.showLiveEditor === true
-    startup.showFloating = startup.showFloating === true
+    const showLiveEditor = startup.showLiveEditor === true
+    const showFloating = startup.showFloating === true
+    if (
+      startup.showLiveEditor !== showLiveEditor ||
+      startup.showFloating !== showFloating
+    ) {
+      didNormalize = true
+    }
+    startup.showLiveEditor = showLiveEditor
+    startup.showFloating = showFloating
 
     // Fall back to the Floating Navigator — the front door after main-window
     // retirement (T18) — when nothing is enabled, so a launch always surfaces a
     // window rather than a blank desktop.
     if (!startup.showLiveEditor && !startup.showFloating) {
       startup.showFloating = true
+      didNormalize = true
     }
+
+    return didNormalize
   }
 
   /**
