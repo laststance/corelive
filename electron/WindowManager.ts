@@ -158,6 +158,8 @@ export class WindowManager {
    * about this boot.
    */
   private startupAuthFallbacks: Set<StartupPanelKind>
+  /** Cancels startup-panel auth gates that have not reached a load decision yet. */
+  private startupPanelLoadCancellations: Set<() => void>
 
   /** 500 ms blur-guard timer set by `will-resize` to keep the window open during drag. */
   private settingsResizeDebounceTimer: ReturnType<typeof setTimeout> | null
@@ -198,6 +200,7 @@ export class WindowManager {
     this.getTrayBoundsProvider = null
     this.onFloatingNavigatorCreated = null
     this.startupAuthFallbacks = new Set()
+    this.startupPanelLoadCancellations = new Set()
     this.settingsResizeDebounceTimer = null
     this.settingsPersistDebounceTimer = null
     this.settingsWindowIsResizing = false
@@ -1394,10 +1397,17 @@ export class WindowManager {
     let decided = false
     let latestMainFrameUrl: string | null = null
 
-    const finish = (authenticated: boolean): void => {
-      if (decided) return
+    const stopWatching = (): boolean => {
+      if (decided) return false
       decided = true
       removeListeners.forEach((remove) => remove())
+      this.startupPanelLoadCancellations.delete(stopWatching)
+      return true
+    }
+    this.startupPanelLoadCancellations.add(stopWatching)
+
+    const finish = (authenticated: boolean): void => {
+      if (!stopWatching()) return
 
       if (authenticated) {
         // Authed: reveal the panel the user asked to start with.
@@ -1709,6 +1719,14 @@ export class WindowManager {
    */
   cleanup(): void {
     this.saveWindowState()
+
+    // Stop every startup auth gate before any window begins closing.
+    for (const cancelStartupPanelLoad of [
+      ...this.startupPanelLoadCancellations,
+    ]) {
+      cancelStartupPanelLoad()
+    }
+    this.startupPanelLoadCancellations.clear()
 
     // Shutdown must detach load listeners before late navigation can reveal LiveEditor.
     this.cancelPendingLiveEditorReveal()
