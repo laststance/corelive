@@ -98,7 +98,7 @@ describe('ConfigManager startup-window config', () => {
     const configPath = path.join(userDataDir.current, 'config.json')
     const originalConfig = fs.readFileSync(configPath, 'utf8')
 
-    // Act
+    // Act: load the file, run migrations, and fall back after version rejection.
     const configManager = new ConfigManager()
 
     // Assert: runtime state uses pristine defaults while user data remains byte-identical.
