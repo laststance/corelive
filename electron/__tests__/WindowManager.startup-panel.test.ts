@@ -438,6 +438,53 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
   })
 
+  it('keeps LiveEditor hidden when app cleanup interrupts a pending reveal', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    const onShown = vi.fn()
+    windowManager.toggleLiveEditor(onShown)
+    const liveEditorWindow = getWindow(0)
+
+    // Act
+    windowManager.cleanup()
+    liveEditorWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/live-editor`,
+    )
+    liveEditorWindow.fireWebContents('did-finish-load')
+
+    // Assert
+    expect(liveEditorWindow.win.close).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
+    expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
+    expect(onShown).not.toHaveBeenCalled()
+  })
+
+  it('does not reveal or restore panels when startup loads settle after cleanup', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    const restoreFromTray = vi
+      .spyOn(windowManager, 'restoreFromTray')
+      .mockImplementation(() => {})
+    windowManager.openStartupPanel('liveEditor')
+    const liveEditorWindow = getWindow(0)
+
+    // Act
+    windowManager.cleanup()
+    liveEditorWindow.fireWebContents(
+      'did-navigate',
+      {},
+      `${SERVER_URL}/login?redirect_url=/live-editor`,
+    )
+    liveEditorWindow.fireWebContents('did-finish-load')
+
+    // Assert
+    expect(liveEditorWindow.win.close).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
+    expect(restoreFromTray).not.toHaveBeenCalled()
+  })
+
   it('reloads LiveEditor on the next open after canceling a pending reveal', () => {
     // Arrange: a hidden LiveEditor load is canceled, then the old navigation
     // settles after its listeners were removed.

@@ -138,7 +138,7 @@ export class ShortcutManager {
    */
   private nativeEngine: NativeShortcutEngine
 
-  /** Main-process cue player used only after a global shortcut actually opens a panel. */
+  /** Main-process cue player used after a shortcut opens Floating or toggles LiveEditor. */
   private shortcutOpenSoundController: ShortcutOpenSoundController
 
   /**
@@ -155,7 +155,7 @@ export class ShortcutManager {
    * @param notificationManager - Reports registration failures to the user.
    * @param configManager - Supplies accelerators and shortcut-sound preference.
    * @param nativeEngine - Handles lone-modifier key taps Electron cannot register.
-   * @param shortcutOpenSoundController - Plays the selected cue after a successful shortcut open.
+   * @param shortcutOpenSoundController - Plays the selected cue after a successful shortcut action.
    * @returns A configured global shortcut manager.
    * @example
    * new ShortcutManager(windowManager, notificationManager, configManager)
@@ -1091,16 +1091,14 @@ export class ShortcutManager {
     }
   }
 
-  /**
-   * Handler for the optional LiveEditor toggle accelerator.
-   *
-   * Why a try/catch: the user's bound key may collide with another app at
-   * runtime, but we don't want a global-shortcut surprise to crash the main
-   * loop — log and let the next attempt go through.
+  /** Handles either LiveEditor toggle accelerator, deferring open audio until reveal and playing close audio immediately.
+   * @returns Nothing.
+   * @example
+   * this.handleToggleLiveEditor()
    */
   handleToggleLiveEditor(): void {
     try {
-      this.windowManager.toggleLiveEditor(() => {
+      const didRequestOpen = this.windowManager.toggleLiveEditor(() => {
         // Window reveal finishes later, after this method's outer error guard has returned.
         try {
           this.playShortcutOpenSoundIfEnabled()
@@ -1108,6 +1106,9 @@ export class ShortcutManager {
           log.error('Error playing shortcut opening sound:', error)
         }
       })
+
+      // Closing is synchronous, so acknowledge it as soon as the window is hidden.
+      if (!didRequestOpen) this.playShortcutOpenSoundIfEnabled()
     } catch (error) {
       log.error('Error handling toggle LiveEditor shortcut:', error)
     }
