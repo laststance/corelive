@@ -108,13 +108,16 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledWith('walnut-desk-thock')
   })
 
-  it('waits for LiveEditor to become visible before playing its opening cue', () => {
+  it('plays after LiveEditor becomes visible and again when the shortcut closes it', () => {
     // Arrange
     let onShown: (() => void) | undefined
-    const toggleLiveEditor = vi.fn((nextOnShown?: () => void) => {
-      onShown = nextOnShown
-      return true
-    })
+    const toggleLiveEditor = vi
+      .fn()
+      .mockImplementationOnce((nextOnShown?: () => void) => {
+        onShown = nextOnShown
+        return true
+      })
+      .mockReturnValueOnce(false)
     const soundController = createSoundController()
     const shortcutManager = new ShortcutManager(
       createWindowManager(
@@ -138,6 +141,12 @@ describe('ShortcutManager shortcut opening sound', () => {
 
     // Assert
     expect(soundController.play).toHaveBeenCalledTimes(1)
+
+    // Act: the next shortcut closes the visible LiveEditor.
+    shortcutManager.handleToggleLiveEditor()
+
+    // Assert: a completed close gets the same shortcut feedback.
+    expect(soundController.play).toHaveBeenCalledTimes(2)
   })
 
   it('does not crash after LiveEditor becomes visible when opening sound playback fails', () => {
