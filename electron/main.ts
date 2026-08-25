@@ -34,6 +34,7 @@ import {
   type LiveEditorShortcutId,
 } from './constants'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
+import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
 import { typedHandle } from './ipc/typedHandle'
 import { typedSend } from './ipc/typedSend'
 import { IPCErrorHandler } from './IPCErrorHandler'
@@ -1145,10 +1146,9 @@ async function createWindow(): Promise<void> {
 
 /**
  * Strip user-authored LiveEditor note text from a config snapshot before
- * exposing it via the generic `config-get-all` channel. The note map is
- * personal scratch content and only the dedicated `live-editor-note-get`
- * channel should surface it. Any other window asking for the full config
- * sees only the LiveEditor metadata (sync mode, opacity, shortcut, etc.).
+ * exposing it via generic config snapshot channels. The note map is personal
+ * scratch content and only the dedicated `live-editor-note-get` channel should
+ * surface it. Any other window sees only LiveEditor metadata.
  *
  * @param snapshot - The full config object as returned by `ConfigManager.getAll()`.
  * @returns A shallow clone with `liveEditor.notes` removed.
@@ -1738,7 +1738,16 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       throw new Error('Configuration manager not initialized')
     }
-    return configManager.get(path, defaultValue)
+    // Defense in depth: typedHandle validates this first, but the handler also
+    // refuses unknown LiveEditor subpaths before ConfigManager can read notes.
+    if (!isRendererReadableConfigPath(path)) {
+      throw new Error('LiveEditor note content requires its dedicated channel')
+    }
+    const value = configManager.get(path, defaultValue)
+    if (path === 'liveEditor') {
+      return redactLiveEditorNotes({ liveEditor: value }).liveEditor
+    }
+    return value
   })
 
   typedHandle('config-set', (_event, path, value) => {

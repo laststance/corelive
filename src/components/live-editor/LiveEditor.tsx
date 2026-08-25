@@ -2052,7 +2052,15 @@ export const LiveEditor = function LiveEditor({
 
   // Block oRPC calls until Clerk has loaded — otherwise the request 401s
   // before useUser hydrates.
-  const isReady = isMounted && isClerkReady && isLiveEditorEnvironment()
+  const hasLiveEditorAPI = isLiveEditorEnvironment()
+  const isReady = isMounted && isClerkReady && hasLiveEditorAPI
+  if (isMounted && isClerkReady && !hasLiveEditorAPI) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+        LiveEditor is available in the CoreLive desktop app.
+      </div>
+    )
+  }
   const opacityValue = [opacity]
   if (!isReady) {
     return (

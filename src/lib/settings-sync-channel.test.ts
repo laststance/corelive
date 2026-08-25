@@ -293,6 +293,35 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.soundMoments.complete).toBe(true)
   })
 
+  it('preserves every pre-rename LiveEditor preference received from an older window', () => {
+    // Arrange — a current window plus a raw sender that still uses v2 keys.
+    const windowB = makeWindowStore()
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
+
+    // Act — push all six legacy fields exactly as an already-open old tab does.
+    sender.postMessage({
+      type: SETTINGS_SYNC_EVENT_TYPE,
+      state: {
+        braindumpFontFamily: 'serif',
+        braindumpFontSize: 21,
+        braindumpTextColor: '#c2410c',
+        braindumpClearOnComplete: true,
+        braindumpClearDelayMs: 1200,
+        braindumpToastDurationMs: 6400,
+      },
+    })
+
+    // Assert — the receiver exposes the exact choices under canonical keys.
+    expect(windowB.getState().settings).toMatchObject({
+      liveEditorFontFamily: 'serif',
+      liveEditorFontSize: 21,
+      liveEditorTextColor: '#c2410c',
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1200,
+      liveEditorToastDurationMs: 6400,
+    })
+  })
+
   it('ignores a malformed inbound payload, leaving the receiver state unchanged', () => {
     // Arrange
     const windowB = makeWindowStore()

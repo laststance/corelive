@@ -469,10 +469,16 @@ export class ConfigManager {
         // Migrate legacy fields on the RAW config — must run before merge,
         // which would otherwise fill `showFloating` with its default and
         // erase the signal that it was never explicitly set.
-        this.pruneLegacyAppearanceKeys(loadedConfig)
-        this.migrateFloatingStartVisible(loadedConfig)
+        const didPruneLegacyAppearance =
+          this.pruneLegacyAppearanceKeys(loadedConfig)
+        const didMigrateFloatingStartup =
+          this.migrateFloatingStartVisible(loadedConfig)
+        const didMigrateLiveEditor =
+          this.migrateLegacyLiveEditorConfig(loadedConfig)
         this.shouldSaveLoadedConfig =
-          this.migrateLegacyLiveEditorConfig(loadedConfig) ||
+          didPruneLegacyAppearance ||
+          didMigrateFloatingStartup ||
+          didMigrateLiveEditor ||
           this.shouldSaveLoadedConfig
 
         // Merge with defaults to ensure all properties exist
@@ -585,20 +591,6 @@ export class ConfigManager {
   }
 
   /**
-   * One-time migration of the legacy `window.floating.startVisible` flag into
-   * the new `behavior.startup.showFloating` field. Runs on the RAW loaded
-   * config BEFORE default-merge so an unset `showFloating` is detectable
-   * (merge would otherwise fill it with the default `false` and erase intent).
-   * Idempotent: migrates only when `showFloating` is still unset, and always
-   * drops the legacy key afterward so it never lingers once superseded.
-   *
-   * @param raw - Config parsed from disk, before merge with defaults.
-   * @returns void — sets `raw.behavior.startup.showFloating` and deletes the legacy flag in place.
-   * @example
-   * // disk: { window: { floating: { startVisible: true } } }  (no behavior.startup)
-   * migrateFloatingStartVisible(raw) // => raw.behavior.startup.showFloating === true; startVisible removed
-   */
-  /**
    * Strips the removed `appearance.theme` / `appearance.accentColor` keys (T9)
    * out of a persisted/imported config before merge. `mergeWithDefaults` copies
    * every unknown source key verbatim, so without this an older `config.json`
@@ -607,24 +599,33 @@ export class ConfigManager {
    * Runs on the RAW config so the keys are gone before they reach the merge.
    *
    * @param raw - Config parsed from disk, before merge with defaults.
-   * @returns void — deletes the legacy `appearance` keys in place (no-op if absent or non-object).
+   * @returns Whether at least one legacy appearance key was removed.
    * @example
    * // disk: { appearance: { fontSize: 'large', theme: 'dark', accentColor: '#f00' } }
    * pruneLegacyAppearanceKeys(raw) // => raw.appearance === { fontSize: 'large' }
    */
-  private pruneLegacyAppearanceKeys(raw: Partial<AppConfig>): void {
+  private pruneLegacyAppearanceKeys(raw: Partial<AppConfig>): boolean {
     // A hand-edited config may have a corrupt non-object `appearance`; only
     // touch a real object so deleting keys can't throw and abort the load.
-    if (!isPlainObject(raw.appearance)) return
+    if (!isPlainObject(raw.appearance)) return false
     const appearance = raw.appearance as Record<string, unknown>
+    const didPrune = 'theme' in appearance || 'accentColor' in appearance
     delete appearance.theme
     delete appearance.accentColor
+    return didPrune
   }
 
-  private migrateFloatingStartVisible(raw: Partial<AppConfig>): void {
+  /**
+   * Moves legacy `window.floating.startVisible` into startup settings before default merge so the old launch choice persists once.
+   * @param raw - Config parsed from disk, before merge with defaults.
+   * @returns Whether the superseded legacy key was removed.
+   * @example
+   * migrateFloatingStartVisible({ window: { floating: { startVisible: true } } }) // => true
+   */
+  private migrateFloatingStartVisible(raw: Partial<AppConfig>): boolean {
     const floating = raw.window?.floating
     // Nothing legacy to migrate or clean up.
-    if (!floating || floating.startVisible === undefined) return
+    if (!floating || floating.startVisible === undefined) return false
 
     // Partial<AppConfig> only marks top-level keys optional; nested objects are
     // typed as fully-required even though raw JSON may omit fields. Treat the
@@ -653,6 +654,7 @@ export class ConfigManager {
 
     // Drop the superseded key regardless, so a migrated config stops carrying it.
     delete floating.startVisible
+    return true
   }
 
   /**

@@ -88,10 +88,14 @@ vi.mock('@/lib/todo-sync-channel', () => ({
   broadcastTodoSync: vi.fn(),
 }))
 
+const { liveEditorEnvironmentRef } = vi.hoisted(() => ({
+  liveEditorEnvironmentRef: { current: true },
+}))
+
 vi.mock('../../../electron/utils/electron-client', () => ({
   getLiveEditorAPI: () => window.liveEditorAPI ?? window.brainDumpAPI,
   getLiveEditorCategoryChangedChannel: () => 'live-editor-category-changed',
-  isLiveEditorEnvironment: () => true,
+  isLiveEditorEnvironment: () => liveEditorEnvironmentRef.current,
 }))
 
 const categories: CategoryWithCount[] = [
@@ -201,6 +205,26 @@ function renderEditorWithCategories(
     </Provider>,
   )
 }
+
+beforeEach(() => {
+  liveEditorEnvironmentRef.current = true
+})
+
+describe('LiveEditor environment fallback', () => {
+  it('explains desktop availability in a browser without the preload API', () => {
+    // Arrange
+    liveEditorEnvironmentRef.current = false
+
+    // Act
+    renderEditor()
+
+    // Assert
+    expect(
+      screen.getByText('LiveEditor is available in the CoreLive desktop app.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Loading LiveEditor…')).not.toBeInTheDocument()
+  })
+})
 
 describe('LiveEditor Spaces tracking switch', () => {
   beforeEach(() => {

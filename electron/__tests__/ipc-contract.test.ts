@@ -73,6 +73,21 @@ describe('IPC contract', () => {
       ).not.toThrow()
     })
 
+    it('keeps LiveEditor note text behind the dedicated IPC channel', () => {
+      // Arrange
+      const configGet = IPC_ARG_SCHEMAS['config-get']
+
+      // Act + Assert: metadata and the redacted section root remain readable.
+      expect(() => configGet.parse(['liveEditor'])).not.toThrow()
+      expect(() => configGet.parse(['liveEditor.opacity'])).not.toThrow()
+      // Direct, nested, and unknown LiveEditor paths cannot bypass the allowlist.
+      expect(() => configGet.parse(['liveEditor.notes'])).toThrow(ZodError)
+      expect(() => configGet.parse(['liveEditor.notes.1'])).toThrow(ZodError)
+      expect(() => configGet.parse(['liveEditor.futureSecret'])).toThrow(
+        ZodError,
+      )
+    })
+
     it('requires boolean for settings toggles', () => {
       const setHide = IPC_ARG_SCHEMAS['settings:setHideAppIcon']
       expect(() => setHide.parse([true])).not.toThrow()

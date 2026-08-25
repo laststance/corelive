@@ -15,6 +15,36 @@ const SHORTCUT_ACCELERATOR_MAX_LENGTH = 64
 const LIVE_EDITOR_WINDOW_DIMENSION_MIN = 320
 const LIVE_EDITOR_WINDOW_DIMENSION_MAX = 8192
 
+const RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS = new Set([
+  'liveEditor.width',
+  'liveEditor.height',
+  'liveEditor.visibleOnAllWorkspaces',
+  'liveEditor.alwaysOnTop',
+  'liveEditor.opacity',
+  'liveEditor.syncMode',
+  'liveEditor.shortcut',
+  'liveEditor.lastCategoryId',
+])
+
+/** Allows generic renderer reads only for LiveEditor metadata so personal note text stays on its dedicated IPC channel.
+ * @param path - Dot-notation config path requested by the renderer.
+ * @returns Whether the generic `config-get` channel may read the path.
+ * @example
+ * isRendererReadableConfigPath('liveEditor.notes.1') // => false
+ */
+export function isRendererReadableConfigPath(path: string): boolean {
+  // Other config sections retain their existing generic getter behavior.
+  if (!path.startsWith('liveEditor.')) return true
+  return RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS.has(path)
+}
+
+const rendererReadableConfigPathSchema = z
+  .string()
+  .refine(
+    isRendererReadableConfigPath,
+    'LiveEditor note content requires its dedicated IPC channel',
+  )
+
 /**
  * Zod schemas for runtime validation of IPC `invoke` arguments at the main-process boundary.
  *
@@ -153,7 +183,10 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // Configuration
   // ──────────────────────────────────────────────────────────────────────────
-  'config-get': z.tuple([z.string(), z.unknown().optional()]),
+  'config-get': z.tuple([
+    rendererReadableConfigPathSchema,
+    z.unknown().optional(),
+  ]),
   'config-set': z.tuple([z.string(), z.unknown()]),
   'config-get-all': z.tuple([]),
   'config-get-section': z.tuple([

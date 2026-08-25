@@ -231,11 +231,16 @@ describe('ConfigManager startup-window config', () => {
 
     // Act
     const configManager = new ConfigManager()
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(userDataDir.current, 'config.json'), 'utf8'),
+    ) as Record<string, unknown>
 
-    // Assert: the legacy floating intent carries over to showFloating.
+    // Assert: the legacy floating intent carries over and the old disk key is removed.
     const startup = configManager.getSection('behavior').startup
     expect(startup.showFloating).toBe(true)
     expect(startup.showLiveEditor).toBe(false)
+    expect(persisted).not.toHaveProperty('window.floating.startVisible')
+    expect(persisted).toHaveProperty('behavior.startup.showFloating', true)
   })
 
   it('does not override an explicit showFloating:false even when legacy startVisible is true', () => {

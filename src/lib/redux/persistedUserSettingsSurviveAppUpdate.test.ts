@@ -49,7 +49,7 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
   afterEach(() => window.localStorage.clear())
 
   it('keeps saved Sound settings and fills new LiveEditor fields with defaults', async () => {
-    // Arrange — a current-version blob from a user who set Sound + 居残りモード
+    // Arrange — a current-version blob from a user who set Sound + retain-completed mode
     // BEFORE the LiveEditor editor fields (font / size / color / clear-on-complete)
     // shipped, so the persisted `settings` predates those fields entirely.
     const seed = {

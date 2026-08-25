@@ -38,7 +38,7 @@ export const CreateCompletedSchema = z.object({
 })
 
 /**
- * Input schema for deleting a Completed row (used by LiveEditor's 5-second
+ * Input schema for deleting a Completed row (used by LiveEditor's configurable
  * toast-undo flow when the user retracts a checkbox tick).
  * @example
  * { id: 42 }

@@ -326,7 +326,7 @@ describe('settingsSlice', () => {
     })
   })
 
-  it('sets the LiveEditor editor font family when setLiveEditorFontFamily is dispatched', () => {
+  it('stores the selected LiveEditor font family', () => {
     // Act
     const next = reducer(initialState, setLiveEditorFontFamily('serif'))
 
@@ -367,7 +367,7 @@ describe('settingsSlice', () => {
     expect(next.liveEditorFontSize).toBe(14)
   })
 
-  it('stores a custom LiveEditor text color when setLiveEditorTextColor is dispatched', () => {
+  it('stores the selected LiveEditor text color', () => {
     // Act — the native color picker emits a 6-digit hex.
     const next = reducer(initialState, setLiveEditorTextColor('#123abc'))
 
@@ -394,7 +394,7 @@ describe('settingsSlice', () => {
     expect(selectLiveEditorTextColor(legacyState)).toBe('var(--foreground)')
   })
 
-  it('turns on LiveEditor clear-on-complete when setLiveEditorClearOnComplete(true) is dispatched', () => {
+  it('stores LiveEditor clear-on-complete as enabled', () => {
     // Act
     const next = reducer(initialState, setLiveEditorClearOnComplete(true))
 
@@ -410,7 +410,7 @@ describe('settingsSlice', () => {
     expect(selectLiveEditorClearOnComplete(legacyState)).toBe(false)
   })
 
-  it('sets the LiveEditor clear delay when setLiveEditorClearDelayMs is dispatched', () => {
+  it('stores the selected LiveEditor clear delay', () => {
     // Act
     const next = reducer(initialState, setLiveEditorClearDelayMs(1500))
 
@@ -447,7 +447,7 @@ describe('settingsSlice', () => {
     expect(selectLiveEditorClearDelayMs(legacyState)).toBe(500)
   })
 
-  it('sets the LiveEditor toast duration when setLiveEditorToastDurationMs is dispatched', () => {
+  it('stores the selected LiveEditor toast duration', () => {
     // Act
     const next = reducer(initialState, setLiveEditorToastDurationMs(6000))
 

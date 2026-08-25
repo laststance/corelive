@@ -56,7 +56,7 @@ const LEGACY_LIVE_EDITOR_SETTING_KEYS = {
  * @example
  * migrateLegacyLiveEditorSettings({ braindumpFontSize: 18 }) // => { liveEditorFontSize: 18 }
  */
-const migrateLegacyLiveEditorSettings = (
+export const migrateLegacyLiveEditorSettings = (
   persistedSettings: Record<string, unknown>,
 ): Record<string, unknown> => {
   const migratedSettings = { ...persistedSettings }
