@@ -24,16 +24,16 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 import {
-  BRAINDUMP_CLEAR_DELAY_MAX_MS,
-  BRAINDUMP_CLEAR_DELAY_MIN_MS,
-  BRAINDUMP_FONT_FAMILY_IDS,
-  BRAINDUMP_FONT_SIZE_MAX_PX,
-  BRAINDUMP_FONT_SIZE_MIN_PX,
-  BRAINDUMP_TEXT_COLOR_PATTERN,
-  BRAINDUMP_TOAST_DURATION_MAX_MS,
-  BRAINDUMP_TOAST_DURATION_MIN_MS,
-  type BrainDumpFontFamilyId,
-} from '@/lib/constants/braindump'
+  LIVE_EDITOR_CLEAR_DELAY_MAX_MS,
+  LIVE_EDITOR_CLEAR_DELAY_MIN_MS,
+  LIVE_EDITOR_FONT_FAMILY_IDS,
+  LIVE_EDITOR_FONT_SIZE_MAX_PX,
+  LIVE_EDITOR_FONT_SIZE_MIN_PX,
+  LIVE_EDITOR_TEXT_COLOR_PATTERN,
+  LIVE_EDITOR_TOAST_DURATION_MAX_MS,
+  LIVE_EDITOR_TOAST_DURATION_MIN_MS,
+  type LiveEditorFontFamilyId,
+} from '@/lib/constants/live-editor'
 import { DEFAULT_SETTINGS } from '@/lib/constants/settings'
 import { type SoundMomentId, type TimbreId } from '@/lib/constants/sound'
 import { type UserSettingsState } from '@/lib/schemas/settings'
@@ -53,7 +53,7 @@ export const initialState = { ...DEFAULT_SETTINGS }
 
 /**
  * Redux slice for core user settings: task presentation, sound feedback, and
- * BrainDump appearance/behavior shared by web and Electron renderers.
+ * LiveEditor appearance/behavior shared by web and Electron renderers.
  */
 export const userSettingsSlice = createSlice({
   name: 'settings',
@@ -157,105 +157,105 @@ export const userSettingsSlice = createSlice({
     },
 
     /**
-     * Sets the BrainDump editor font family, self-healing an unknown id to the
+     * Sets the LiveEditor editor font family, self-healing an unknown id to the
      * default face so the reducer shares the same validation boundary as the
-     * schema/cross-window path (mirrors the guards on the other BrainDump
+     * schema/cross-window path (mirrors the guards on the other LiveEditor
      * setters). The UI only ever emits valid ids; this hardens against a stray
      * programmatic/persisted value.
      * @param state - Current state
      * @param action - Payload containing the new font-family id.
      */
-    setBraindumpFontFamily: (
+    setLiveEditorFontFamily: (
       state,
-      action: PayloadAction<BrainDumpFontFamilyId>,
+      action: PayloadAction<LiveEditorFontFamilyId>,
     ) => {
       const requestedFamily = action.payload
-      state.braindumpFontFamily = BRAINDUMP_FONT_FAMILY_IDS.includes(
+      state.liveEditorFontFamily = LIVE_EDITOR_FONT_FAMILY_IDS.includes(
         requestedFamily,
       )
         ? requestedFamily
-        : DEFAULT_SETTINGS.braindumpFontFamily
+        : DEFAULT_SETTINGS.liveEditorFontFamily
     },
 
     /**
-     * Sets the BrainDump editor font size (px), clamped to the slider range so a
+     * Sets the LiveEditor editor font size (px), clamped to the slider range so a
      * stray programmatic value can't exceed it; guards NaN/±Infinity to the
      * default (mirrors setSoundVolume).
      * @param state - Current state
      * @param action - Payload containing the new font size in px.
      */
-    setBraindumpFontSize: (state, action: PayloadAction<number>) => {
+    setLiveEditorFontSize: (state, action: PayloadAction<number>) => {
       const requestedSize = action.payload
-      state.braindumpFontSize = Number.isFinite(requestedSize)
+      state.liveEditorFontSize = Number.isFinite(requestedSize)
         ? Math.min(
-            BRAINDUMP_FONT_SIZE_MAX_PX,
-            Math.max(BRAINDUMP_FONT_SIZE_MIN_PX, requestedSize),
+            LIVE_EDITOR_FONT_SIZE_MAX_PX,
+            Math.max(LIVE_EDITOR_FONT_SIZE_MIN_PX, requestedSize),
           )
-        : DEFAULT_SETTINGS.braindumpFontSize
+        : DEFAULT_SETTINGS.liveEditorFontSize
     },
 
     /**
-     * Sets the BrainDump editor text color (a theme `var(--token)` or a `#hex`),
+     * Sets the LiveEditor editor text color (a theme `var(--token)` or a `#hex`),
      * self-healing an off-shape value to the default so the reducer path shares
      * the same validation boundary as the schema/cross-window path (mirrors the
-     * in-reducer guard on setBraindumpFontSize). The UI only ever emits valid
+     * in-reducer guard on setLiveEditorFontSize). The UI only ever emits valid
      * values; this hardens against a stray programmatic/persisted string.
      * @param state - Current state
      * @param action - Payload containing the new CSS color string.
      */
-    setBraindumpTextColor: (state, action: PayloadAction<string>) => {
+    setLiveEditorTextColor: (state, action: PayloadAction<string>) => {
       const requestedColor = action.payload
-      state.braindumpTextColor = BRAINDUMP_TEXT_COLOR_PATTERN.test(
+      state.liveEditorTextColor = LIVE_EDITOR_TEXT_COLOR_PATTERN.test(
         requestedColor,
       )
         ? requestedColor
-        : DEFAULT_SETTINGS.braindumpTextColor
+        : DEFAULT_SETTINGS.liveEditorTextColor
     },
 
     /**
-     * Toggles BrainDump clear-on-complete (drop a finished line once its undo
+     * Toggles LiveEditor clear-on-complete (drop a finished line once its undo
      * window closes). Plain boolean, so no value-healing is needed.
      * @param state - Current state
-     * @param action - Payload containing the new braindumpClearOnComplete value
+     * @param action - Payload containing the new liveEditorClearOnComplete value
      */
-    setBraindumpClearOnComplete: (state, action: PayloadAction<boolean>) => {
-      state.braindumpClearOnComplete = action.payload
+    setLiveEditorClearOnComplete: (state, action: PayloadAction<boolean>) => {
+      state.liveEditorClearOnComplete = action.payload
     },
 
     /**
-     * Sets the BrainDump clear-on-complete linger (ms), clamped to the slider
+     * Sets the LiveEditor clear-on-complete linger (ms), clamped to the slider
      * range so a stray programmatic value can't exceed it; guards NaN/±Infinity
-     * to the default (mirrors setBraindumpFontSize). Only takes visible effect
-     * when braindumpClearOnComplete is ON.
+     * to the default (mirrors setLiveEditorFontSize). Only takes visible effect
+     * when liveEditorClearOnComplete is ON.
      * @param state - Current state
      * @param action - Payload containing the new clear delay in ms.
      */
-    setBraindumpClearDelayMs: (state, action: PayloadAction<number>) => {
+    setLiveEditorClearDelayMs: (state, action: PayloadAction<number>) => {
       const requestedDelay = action.payload
-      state.braindumpClearDelayMs = Number.isFinite(requestedDelay)
+      state.liveEditorClearDelayMs = Number.isFinite(requestedDelay)
         ? Math.min(
-            BRAINDUMP_CLEAR_DELAY_MAX_MS,
-            Math.max(BRAINDUMP_CLEAR_DELAY_MIN_MS, requestedDelay),
+            LIVE_EDITOR_CLEAR_DELAY_MAX_MS,
+            Math.max(LIVE_EDITOR_CLEAR_DELAY_MIN_MS, requestedDelay),
           )
-        : DEFAULT_SETTINGS.braindumpClearDelayMs
+        : DEFAULT_SETTINGS.liveEditorClearDelayMs
     },
 
     /**
-     * Sets the BrainDump completion-toast display duration (ms), clamped to the
+     * Sets the LiveEditor completion-toast display duration (ms), clamped to the
      * slider range so a stray programmatic value can't exceed it; guards
-     * NaN/±Infinity to the default (mirrors setBraindumpClearDelayMs). Governs how
+     * NaN/±Infinity to the default (mirrors setLiveEditorClearDelayMs). Governs how
      * long the completion toast (with its Undo + close ✕) stays before auto-close.
      * @param state - Current state
      * @param action - Payload containing the new toast duration in ms.
      */
-    setBraindumpToastDurationMs: (state, action: PayloadAction<number>) => {
+    setLiveEditorToastDurationMs: (state, action: PayloadAction<number>) => {
       const requestedDuration = action.payload
-      state.braindumpToastDurationMs = Number.isFinite(requestedDuration)
+      state.liveEditorToastDurationMs = Number.isFinite(requestedDuration)
         ? Math.min(
-            BRAINDUMP_TOAST_DURATION_MAX_MS,
-            Math.max(BRAINDUMP_TOAST_DURATION_MIN_MS, requestedDuration),
+            LIVE_EDITOR_TOAST_DURATION_MAX_MS,
+            Math.max(LIVE_EDITOR_TOAST_DURATION_MIN_MS, requestedDuration),
           )
-        : DEFAULT_SETTINGS.braindumpToastDurationMs
+        : DEFAULT_SETTINGS.liveEditorToastDurationMs
     },
 
     /**
@@ -287,12 +287,12 @@ export const {
   setAllSoundMoments,
   setSoundTimbre,
   setSoundVolume,
-  setBraindumpFontFamily,
-  setBraindumpFontSize,
-  setBraindumpTextColor,
-  setBraindumpClearOnComplete,
-  setBraindumpClearDelayMs,
-  setBraindumpToastDurationMs,
+  setLiveEditorFontFamily,
+  setLiveEditorFontSize,
+  setLiveEditorTextColor,
+  setLiveEditorClearOnComplete,
+  setLiveEditorClearDelayMs,
+  setLiveEditorToastDurationMs,
   hydrateUserSettings,
   resetUserSettings,
 } = userSettingsSlice.actions
@@ -378,56 +378,57 @@ export const selectSoundVolume = (state: RootState): number =>
   state.settings.soundVolume ?? DEFAULT_SETTINGS.soundVolume
 
 /**
- * Selects the BrainDump editor font family.
+ * Selects the LiveEditor editor font family.
  * @param state - Root state
  * @returns The selected font-family id (default mono)
  */
-export const selectBraindumpFontFamily = (
+export const selectLiveEditorFontFamily = (
   state: RootState,
-): BrainDumpFontFamilyId =>
-  state.settings.braindumpFontFamily ?? DEFAULT_SETTINGS.braindumpFontFamily
+): LiveEditorFontFamilyId =>
+  state.settings.liveEditorFontFamily ?? DEFAULT_SETTINGS.liveEditorFontFamily
 
 /**
- * Selects the BrainDump editor font size (px).
+ * Selects the LiveEditor editor font size (px).
  * @param state - Root state
  * @returns The font size in px (default 14)
  */
-export const selectBraindumpFontSize = (state: RootState): number =>
-  state.settings.braindumpFontSize ?? DEFAULT_SETTINGS.braindumpFontSize
+export const selectLiveEditorFontSize = (state: RootState): number =>
+  state.settings.liveEditorFontSize ?? DEFAULT_SETTINGS.liveEditorFontSize
 
 /**
- * Selects the BrainDump editor text color (a theme var() token or a #hex).
+ * Selects the LiveEditor editor text color (a theme var() token or a #hex).
  * @param state - Root state
  * @returns The CSS color string (default var(--foreground))
  */
-export const selectBraindumpTextColor = (state: RootState): string =>
-  state.settings.braindumpTextColor ?? DEFAULT_SETTINGS.braindumpTextColor
+export const selectLiveEditorTextColor = (state: RootState): string =>
+  state.settings.liveEditorTextColor ?? DEFAULT_SETTINGS.liveEditorTextColor
 
 /**
- * Selects the BrainDump clear-on-complete setting.
+ * Selects the LiveEditor clear-on-complete setting.
  * @param state - Root state
- * @returns Whether finished BrainDump lines clear after the undo window (default false)
+ * @returns Whether finished LiveEditor lines clear after the undo window (default false)
  */
-export const selectBraindumpClearOnComplete = (state: RootState): boolean =>
-  state.settings.braindumpClearOnComplete ??
-  DEFAULT_SETTINGS.braindumpClearOnComplete
+export const selectLiveEditorClearOnComplete = (state: RootState): boolean =>
+  state.settings.liveEditorClearOnComplete ??
+  DEFAULT_SETTINGS.liveEditorClearOnComplete
 
 /**
- * Selects the BrainDump clear-on-complete linger (ms).
+ * Selects the LiveEditor clear-on-complete linger (ms).
  * @param state - Root state
  * @returns The clear delay in ms (default 500)
  */
-export const selectBraindumpClearDelayMs = (state: RootState): number =>
-  state.settings.braindumpClearDelayMs ?? DEFAULT_SETTINGS.braindumpClearDelayMs
+export const selectLiveEditorClearDelayMs = (state: RootState): number =>
+  state.settings.liveEditorClearDelayMs ??
+  DEFAULT_SETTINGS.liveEditorClearDelayMs
 
 /**
- * Selects the BrainDump completion-toast display duration (ms).
+ * Selects the LiveEditor completion-toast display duration (ms).
  * @param state - Root state
  * @returns The toast duration in ms (default 5000)
  */
-export const selectBraindumpToastDurationMs = (state: RootState): number =>
-  state.settings.braindumpToastDurationMs ??
-  DEFAULT_SETTINGS.braindumpToastDurationMs
+export const selectLiveEditorToastDurationMs = (state: RootState): number =>
+  state.settings.liveEditorToastDurationMs ??
+  DEFAULT_SETTINGS.liveEditorToastDurationMs
 
 /**
  * Selects the full settings state (every field coalesced/migrated to its
@@ -446,12 +447,12 @@ export const selectUserSettings = (state: RootState): UserSettingsState => ({
   },
   soundTimbre: selectSoundTimbre(state),
   soundVolume: selectSoundVolume(state),
-  braindumpFontFamily: selectBraindumpFontFamily(state),
-  braindumpFontSize: selectBraindumpFontSize(state),
-  braindumpTextColor: selectBraindumpTextColor(state),
-  braindumpClearOnComplete: selectBraindumpClearOnComplete(state),
-  braindumpClearDelayMs: selectBraindumpClearDelayMs(state),
-  braindumpToastDurationMs: selectBraindumpToastDurationMs(state),
+  liveEditorFontFamily: selectLiveEditorFontFamily(state),
+  liveEditorFontSize: selectLiveEditorFontSize(state),
+  liveEditorTextColor: selectLiveEditorTextColor(state),
+  liveEditorClearOnComplete: selectLiveEditorClearOnComplete(state),
+  liveEditorClearDelayMs: selectLiveEditorClearDelayMs(state),
+  liveEditorToastDurationMs: selectLiveEditorToastDurationMs(state),
 })
 
 export default userSettingsSlice.reducer

@@ -38,10 +38,72 @@ const SHORTCUT_DESCRIPTIONS: Record<string, string> = {
   newTask: 'Create new task',
   search: 'Focus search',
   toggleFloatingNavigator: 'Toggle floating navigator',
-  toggleBrainDump: 'Toggle BrainDump',
+  toggleLiveEditor: 'Toggle LiveEditor',
   minimize: 'Minimize window',
   toggleAlwaysOnTop: 'Toggle always on top',
   focusFloatingNavigator: 'Focus floating navigator',
+}
+
+const LIVE_EDITOR_SHORTCUT_ID = 'toggleLiveEditor'
+const LIVE_EDITOR_SECONDARY_SHORTCUT_ID = 'toggleLiveEditorSecondary'
+const LEGACY_LIVE_EDITOR_SHORTCUT_ID = 'toggleBrainDump'
+const LEGACY_LIVE_EDITOR_SECONDARY_SHORTCUT_ID = 'toggleBrainDumpSecondary'
+
+/**
+ * Converts an installed preload's shortcut identifier to the canonical LiveEditor identifier used by the current renderer.
+ * @param shortcutId - Shortcut identifier returned by Electron.
+ * @returns The canonical identifier rendered by this settings page.
+ * @example toCanonicalShortcutId('toggleBrainDump') // => 'toggleLiveEditor'
+ */
+const toCanonicalShortcutId = (shortcutId: string): string => {
+  if (shortcutId === LEGACY_LIVE_EDITOR_SHORTCUT_ID) {
+    return LIVE_EDITOR_SHORTCUT_ID
+  }
+  if (shortcutId === LEGACY_LIVE_EDITOR_SECONDARY_SHORTCUT_ID) {
+    return LIVE_EDITOR_SECONDARY_SHORTCUT_ID
+  }
+  return shortcutId
+}
+
+/**
+ * Selects the shortcut identifier understood by the installed main process for one canonical renderer id.
+ * @param shortcutId - Canonical shortcut identifier.
+ * @param usesLegacyLiveEditorId - Whether the installed preload returned pre-rename identifiers.
+ * @returns The identifier safe to send to the installed app.
+ * @example toInstalledShortcutId('toggleLiveEditor', true) // => 'toggleBrainDump'
+ */
+const toInstalledShortcutId = (
+  shortcutId: string,
+  usesLegacyLiveEditorId: boolean,
+): string => {
+  if (!usesLegacyLiveEditorId) return shortcutId
+  if (shortcutId === LIVE_EDITOR_SHORTCUT_ID) {
+    return LEGACY_LIVE_EDITOR_SHORTCUT_ID
+  }
+  if (shortcutId === LIVE_EDITOR_SECONDARY_SHORTCUT_ID) {
+    return LEGACY_LIVE_EDITOR_SECONDARY_SHORTCUT_ID
+  }
+  return shortcutId
+}
+
+/**
+ * Converts the current renderer's shortcut record back to the identifier understood by an older installed main process.
+ * @param shortcuts - Canonical shortcut record being saved.
+ * @param usesLegacyLiveEditorId - Whether the installed preload returned the previous identifier.
+ * @returns A cloned record whose LiveEditor key matches the installed app version.
+ * @example toInstalledShortcutConfig({ toggleLiveEditor: 'Alt+Space' }, true) // => { toggleBrainDump: 'Alt+Space' }
+ */
+const toInstalledShortcutConfig = (
+  shortcuts: ShortcutConfig,
+  usesLegacyLiveEditorId: boolean,
+): ShortcutConfig => {
+  const installedShortcuts: ShortcutConfig = {}
+  for (const [shortcutId, accelerator] of Object.entries(shortcuts)) {
+    installedShortcuts[
+      toInstalledShortcutId(shortcutId, usesLegacyLiveEditorId)
+    ] = accelerator
+  }
+  return installedShortcuts
 }
 
 export const ShortcutSettings = function ShortcutSettings({
@@ -54,6 +116,7 @@ export const ShortcutSettings = function ShortcutSettings({
   const [isSaving, setIsSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [usesLegacyLiveEditorId, setUsesLegacyLiveEditorId] = useState(false)
 
   // Check if we're in Electron environment
   const isElectron =
@@ -71,16 +134,23 @@ export const ShortcutSettings = function ShortcutSettings({
         window.electronAPI.shortcuts.getDefaults(),
         window.electronAPI.shortcuts.getStats(),
       ])
+      const didLoadLegacyLiveEditorId = [...registered, ...defaults].some(
+        (shortcut) =>
+          shortcut.id === LEGACY_LIVE_EDITOR_SHORTCUT_ID ||
+          shortcut.id === LEGACY_LIVE_EDITOR_SECONDARY_SHORTCUT_ID,
+      )
 
       // Transform ShortcutDefinition[] to ShortcutConfig (key-value pairs)
       const registeredConfig: ShortcutConfig = {}
       for (const shortcut of registered) {
-        registeredConfig[shortcut.id] = shortcut.accelerator
+        registeredConfig[toCanonicalShortcutId(shortcut.id)] =
+          shortcut.accelerator
       }
 
       const defaultsConfig: ShortcutConfig = {}
       for (const shortcut of defaults) {
-        defaultsConfig[shortcut.id] = shortcut.accelerator
+        defaultsConfig[toCanonicalShortcutId(shortcut.id)] =
+          shortcut.accelerator
       }
 
       // Use stats directly from main process
@@ -95,6 +165,7 @@ export const ShortcutSettings = function ShortcutSettings({
       setShortcuts(registeredConfig)
       setDefaultShortcuts(defaultsConfig)
       setStats(statsFormatted)
+      setUsesLegacyLiveEditorId(didLoadLegacyLiveEditorId)
       setHasChanges(false)
       setError(null)
     } catch (error) {
@@ -143,7 +214,9 @@ export const ShortcutSettings = function ShortcutSettings({
       // Persist every shortcut in one batch — the preload bridge takes the full
       // id→accelerator record. A per-shortcut loop calling update(id, accel)
       // throws in preload, which expects a Record, not positional args.
-      const allSuccess = await window.electronAPI.shortcuts.update(shortcuts)
+      const allSuccess = await window.electronAPI.shortcuts.update(
+        toInstalledShortcutConfig(shortcuts, usesLegacyLiveEditorId),
+      )
 
       if (allSuccess) {
         setHasChanges(false)
@@ -177,10 +250,11 @@ export const ShortcutSettings = function ShortcutSettings({
       // Toggle each shortcut individually
       const shortcutIds = Object.keys(shortcuts)
       for (const id of shortcutIds) {
+        const installedId = toInstalledShortcutId(id, usesLegacyLiveEditorId)
         if (stats.isEnabled) {
-          await window.electronAPI.shortcuts.disable(id)
+          await window.electronAPI.shortcuts.disable(installedId)
         } else {
-          await window.electronAPI.shortcuts.enable(id)
+          await window.electronAPI.shortcuts.enable(installedId)
         }
       }
       await loadShortcuts()
@@ -394,7 +468,7 @@ interface ShortcutRowProps {
  * function every render and trip the prefer-usecallback lint.
  * @param props - See {@link ShortcutRowProps}.
  * @returns The shortcut's settings row.
- * @example <ShortcutRow id="toggleBrainDump" description="Toggle BrainDump" value="Alt+Space" platform="darwin" disabled={false} onChange={updateShortcut} onTest={handleTestShortcutClick} />
+ * @example <ShortcutRow id="toggleLiveEditor" description="Toggle LiveEditor" value="Alt+Space" platform="darwin" disabled={false} onChange={updateShortcut} onTest={handleTestShortcutClick} />
  */
 const ShortcutRow = function ShortcutRow({
   id,

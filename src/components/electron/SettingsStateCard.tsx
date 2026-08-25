@@ -3,7 +3,7 @@
 /**
  * @fileoverview Shared status-card scaffold for the Electron Settings page.
  *
- * The Startup / Floating / BrainDump settings cards each render the SAME small
+ * The Startup / Floating / LiveEditor settings cards each render the SAME small
  * header-only Card in three non-interactive states — desktop-app-only, an
  * "update CoreLive" version-skew notice, and a loading placeholder. This extracts
  * that repeated `<Card><CardHeader>` scaffold so the three components stay in
@@ -25,7 +25,7 @@ import {
 interface SettingsStateCardProps {
   /** Lucide icon shown beside the title (the same glyph the live card uses). */
   icon: LucideIcon
-  /** Card title — the feature name (e.g. "On launch", "BrainDump Note"). */
+  /** Card title — the feature name (e.g. "On launch", "LiveEditor Note"). */
   title: string
   /** One-line status message (desktop-only / update-prompt / loading). */
   description: string

@@ -34,7 +34,13 @@ vi.mock('electron', () => ({
       workAreaSize: { width: 1920, height: 1080 },
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     })),
-    getAllDisplays: vi.fn(() => []),
+    getAllDisplays: vi.fn(() => [
+      {
+        id: 1,
+        workAreaSize: { width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      },
+    ]),
     on: vi.fn(),
   },
 }))
@@ -63,9 +69,9 @@ function createConfigManager(showFloating: boolean): ConfigManager {
       main: { width: 1200, height: 800, startMaximized: false },
       floating: { width: 360, height: 600, alwaysOnTop: true },
     },
-    braindump: { width: 480, height: 640 },
+    liveEditor: { width: 480, height: 640 },
     behavior: {
-      startup: { showBraindump: false, showFloating },
+      startup: { showLiveEditor: false, showFloating },
     },
   }
   const configManager = {
@@ -195,6 +201,23 @@ describe('WindowStateManager persisted floating visibility', () => {
     expect(floating?.width).toBe(480)
     expect(floating?.height).toBe(720)
     expect(floating?.isVisible).toBe(false)
+  })
+
+  it('preserves saved LiveEditor geometry written before the panel rename', () => {
+    // Arrange: previous releases stored the panel under this legacy wire key.
+    writeWindowStateFile({
+      braindump: { x: 120, y: 90, width: 620, height: 710 },
+    })
+    const manager = new WindowStateManager(createConfigManager(false))
+
+    // Act
+    const liveEditor = manager.getWindowState('liveEditor')
+
+    // Assert: the rename does not reset the user's window placement or size.
+    expect(liveEditor?.x).toBe(120)
+    expect(liveEditor?.y).toBe(90)
+    expect(liveEditor?.width).toBe(620)
+    expect(liveEditor?.height).toBe(710)
   })
 
   it('does not show the floating window while applying persisted state', () => {

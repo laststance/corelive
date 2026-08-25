@@ -21,33 +21,37 @@ import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useSelectedCategory } from '@/hooks/useSelectedCategory'
 import {
-  BRAINDUMP_FONT_FAMILY_CSS,
-  BRAINDUMP_LINE_HEIGHT,
-  BRAINDUMP_NOTE_LINES_PER_CAP,
-  BRAINDUMP_OPACITY_MAX,
-  BRAINDUMP_OPACITY_MIN,
-  BRAINDUMP_OPACITY_STEP,
-} from '@/lib/constants/braindump'
+  LIVE_EDITOR_FONT_FAMILY_CSS,
+  LIVE_EDITOR_LINE_HEIGHT,
+  LIVE_EDITOR_NOTE_LINES_PER_CAP,
+  LIVE_EDITOR_OPACITY_MAX,
+  LIVE_EDITOR_OPACITY_MIN,
+  LIVE_EDITOR_OPACITY_STEP,
+} from '@/lib/constants/live-editor'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
 import {
-  selectBraindumpClearDelayMs,
-  selectBraindumpClearOnComplete,
-  selectBraindumpFontFamily,
-  selectBraindumpFontSize,
-  selectBraindumpTextColor,
-  selectBraindumpToastDurationMs,
+  selectLiveEditorClearDelayMs,
+  selectLiveEditorClearOnComplete,
+  selectLiveEditorFontFamily,
+  selectLiveEditorFontSize,
+  selectLiveEditorTextColor,
+  selectLiveEditorToastDurationMs,
 } from '@/lib/redux/slices/settingsSlice'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
 import type { Completed } from '@/server/schemas/completed'
 
-import { isBrainDumpEnvironment } from '../../../electron/utils/electron-client'
+import {
+  getLiveEditorAPI,
+  getLiveEditorCategoryChangedChannel,
+  isLiveEditorEnvironment,
+} from '../../../electron/utils/electron-client'
 
 import {
-  type BrainDumpCompletedTitle,
-  type BrainDumpLineIndex,
+  type LiveEditorCompletedTitle,
+  type LiveEditorLineIndex,
   COMPLETED_TITLE_MAX_LENGTH,
   insertLineAtIndex,
   lineStartOffset,
@@ -57,12 +61,12 @@ import {
   removeLineAtIndex,
   replaceLineAtIndex,
   setCheckboxStateAtLine,
-} from './braindumpUtils'
+} from './liveEditorUtils'
 
 const NOTE_DEBOUNCE_MS = 400
 
 const NOTE_MAX_LENGTH =
-  COMPLETED_TITLE_MAX_LENGTH * BRAINDUMP_NOTE_LINES_PER_CAP
+  COMPLETED_TITLE_MAX_LENGTH * LIVE_EDITOR_NOTE_LINES_PER_CAP
 
 // `WebkitAppRegion` is an Electron-only CSS property not declared on the
 // React/TS DOM types — cast through Record so the cast lives in one place.
@@ -81,11 +85,11 @@ type CheckedRowMemory = {
   /** Category owning the checked row across category switches. */
   categoryId: Category['id']
   /** Current line index, re-indexed whenever edits shift unchanged rows. */
-  lineIndex: BrainDumpLineIndex
+  lineIndex: LiveEditorLineIndex
   /** Server-side Completed.id used by undo to call `completed.delete`. */
   completedId: Completed['id']
   /** Verbatim title used to detect double-toggles on the same line. */
-  title: BrainDumpCompletedTitle
+  title: LiveEditorCompletedTitle
 }
 
 type TextEditRange = Readonly<{
@@ -121,11 +125,11 @@ type ClearedLineMemory = {
   /** Created row id; null until the background create resolves. */
   completedId: Completed['id'] | null
   /** Normalised title persisted for this completion. */
-  title: BrainDumpCompletedTitle
+  title: LiveEditorCompletedTitle
   /** Category the line belonged to — guards cross-category re-insertion. */
   categoryId: Category['id']
   /** Index the line sat at when removed (best-effort re-insert position). */
-  originalLineIndex: BrainDumpLineIndex
+  originalLineIndex: LiveEditorLineIndex
   /** Checked row shown before removal; guards delayed clears from edited lines. */
   completedLineText: string
   /** Verbatim removed line, restored as-is on undo/failure (preserves spacing). */
@@ -175,13 +179,13 @@ type PendingCreate = {
   /** Category owning this optimistic completion and any later restore retry. */
   categoryId: Category['id']
   /** Current line index, re-indexed whenever edits shift the optimistic row. */
-  lineIndex: BrainDumpLineIndex
+  lineIndex: LiveEditorLineIndex
   /** Exact checked row used to reject unsafe rollback targets. */
   completedLineText: string
   promise: Promise<Completed['id'] | null>
   /** Keeps duplicate completion blocked until a failed rollback is retried successfully. */
   restorePending: boolean
-  title: BrainDumpCompletedTitle
+  title: LiveEditorCompletedTitle
 }
 
 type PendingCompletedDelete = {
@@ -189,9 +193,9 @@ type PendingCompletedDelete = {
   request: Promise<boolean> | null
 }
 
-type TrackedRowsByCategory<T extends { lineIndex: BrainDumpLineIndex }> = Map<
+type TrackedRowsByCategory<T extends { lineIndex: LiveEditorLineIndex }> = Map<
   Category['id'],
-  Map<BrainDumpLineIndex, T>
+  Map<LiveEditorLineIndex, T>
 >
 
 /**
@@ -218,9 +222,9 @@ function isClearedLineUndone(entry: ClearedLineMemory): boolean {
 function remapTrackedLineIndex(
   previousText: string,
   nextText: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
   editRange?: TextEditRange,
-): BrainDumpLineIndex | null {
+): LiveEditorLineIndex | null {
   if (previousText === nextText) return lineIndex
 
   const previousLines = previousText.split('\n')
@@ -313,15 +317,15 @@ function remapTrackedLineIndex(
  * reindexTrackedCompletionMap(entries, 'a\n- [x] task', 'new\na\n- [x] task')
  */
 function reindexTrackedCompletionMap<
-  T extends { lineIndex: BrainDumpLineIndex },
+  T extends { lineIndex: LiveEditorLineIndex },
 >(
-  entries: Map<BrainDumpLineIndex, T>,
+  entries: Map<LiveEditorLineIndex, T>,
   previousText: string,
   nextText: string,
   editRange?: TextEditRange,
 ): void {
   if (entries.size === 0 || previousText === nextText) return
-  const reindexedEntries = new Map<BrainDumpLineIndex, T>()
+  const reindexedEntries = new Map<LiveEditorLineIndex, T>()
   for (const [lineIndex, entry] of entries) {
     const nextLineIndex = remapTrackedLineIndex(
       previousText,
@@ -348,13 +352,15 @@ function reindexTrackedCompletionMap<
  * @example
  * getTrackedRowsForCategory(rowsByCategory, 1).set(0, entry)
  */
-function getTrackedRowsForCategory<T extends { lineIndex: BrainDumpLineIndex }>(
+function getTrackedRowsForCategory<
+  T extends { lineIndex: LiveEditorLineIndex },
+>(
   entriesByCategory: TrackedRowsByCategory<T>,
   categoryId: Category['id'],
-): Map<BrainDumpLineIndex, T> {
+): Map<LiveEditorLineIndex, T> {
   const existing = entriesByCategory.get(categoryId)
   if (existing) return existing
-  const entries = new Map<BrainDumpLineIndex, T>()
+  const entries = new Map<LiveEditorLineIndex, T>()
   entriesByCategory.set(categoryId, entries)
   return entries
 }
@@ -371,7 +377,7 @@ function getTrackedRowsForCategory<T extends { lineIndex: BrainDumpLineIndex }>(
  */
 function rollbackPromotedLineText(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
   completedLineText: string,
   rollbackLineText?: string,
 ): string {
@@ -385,7 +391,7 @@ function rollbackPromotedLineText(
 }
 
 /**
- * Build the BrainDump completion toast — the `Completed: <title>` success toast
+ * Build the LiveEditor completion toast — the `Completed: <title>` success toast
  * with an Undo action AND a close (✕) button. Both completion paths
  * (`promoteLineToCompleted`, `completeAndClearLine`) call this so the ✕, the
  * configurable display duration, the dynamic Undo-window copy, and the Undo
@@ -415,7 +421,7 @@ function showCompletionToast({
   onAutoClose,
   onDismiss,
 }: {
-  title: BrainDumpCompletedTitle
+  title: LiveEditorCompletedTitle
   durationMs: number
   onUndo: () => void
   onAutoClose?: () => void
@@ -444,7 +450,7 @@ function showCompletionToast({
 }
 
 /**
- * BrainDumpEditor — frameless transparent panel that pairs a category picker
+ * LiveEditor — frameless transparent panel that pairs a category picker
  * with a freeform textarea using markdown checkboxes.
  *
  * UX contract:
@@ -461,7 +467,7 @@ function showCompletionToast({
  * textarea state first, then fire the IPC + oRPC writes. Failure rollback
  * is handled by the toast cleanup path.
  */
-export const BrainDumpEditor = function BrainDumpEditor({
+export const LiveEditor = function LiveEditor({
   categories,
 }: {
   categories: CategoryWithCount[]
@@ -471,7 +477,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const isClerkReady = useClerkQueryReady()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const [opacity, setOpacity] = useState<number>(BRAINDUMP_OPACITY_MAX)
+  const [opacity, setOpacity] = useState<number>(LIVE_EDITOR_OPACITY_MAX)
   const [syncEnabled, setSyncEnabled] = useState<boolean>(true)
   const [floatingCategoryId] = useSelectedCategory()
   const [localCategoryId, setLocalCategoryId] = useState<Category['id'] | null>(
@@ -482,7 +488,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const [noteReadyCategoryId, setNoteReadyCategoryId] = useState<
     Category['id'] | null
   >(null)
-  const [isBrainDumpConfigReady, setIsBrainDumpConfigReady] =
+  const [isLiveEditorConfigReady, setIsLiveEditorConfigReady] =
     useState<boolean>(false)
   const [spacesTrackingEnabled, setSpacesTrackingEnabled] =
     useState<boolean>(false)
@@ -494,25 +500,25 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const categoryInputId = useId()
   const spacesInputId = useId()
 
-  // BrainDump text-presentation settings (shared via the settings slice,
+  // LiveEditor text-presentation settings (shared via the settings slice,
   // hydrated from localStorage + live-synced across windows by the settings sync
   // middleware). Read here and applied inline to the editor surface.
-  const braindumpFontFamily = useAppSelector(selectBraindumpFontFamily)
-  const braindumpFontSize = useAppSelector(selectBraindumpFontSize)
-  const braindumpTextColor = useAppSelector(selectBraindumpTextColor)
+  const liveEditorFontFamily = useAppSelector(selectLiveEditorFontFamily)
+  const liveEditorFontSize = useAppSelector(selectLiveEditorFontSize)
+  const liveEditorTextColor = useAppSelector(selectLiveEditorTextColor)
   // When ON, a finished line is dropped once its undo window closes (see the
   // toast's onAutoClose in promoteLineToCompleted). Default OFF keeps every line.
-  const clearOnComplete = useAppSelector(selectBraindumpClearOnComplete)
-  const braindumpToastDurationMs = useAppSelector(
-    selectBraindumpToastDurationMs,
+  const clearOnComplete = useAppSelector(selectLiveEditorClearOnComplete)
+  const liveEditorToastDurationMs = useAppSelector(
+    selectLiveEditorToastDurationMs,
   )
   // How long the checked finished line lingers before it's removed
   // (clear-on-complete ON path). 0 = remove on the next timer turn after `[x]`
   // renders; >0 defers the removal so the eye registers the completion first.
   // Clamped ≤ the Undo window by the schema, so the line never outlasts Undo.
-  const clearDelayMs = useAppSelector(selectBraindumpClearDelayMs)
+  const clearDelayMs = useAppSelector(selectLiveEditorClearDelayMs)
 
-  const activeCategoryId = isBrainDumpConfigReady
+  const activeCategoryId = isLiveEditorConfigReady
     ? syncEnabled
       ? floatingCategoryId
       : localCategoryId
@@ -575,7 +581,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }>({ categoryId: null, dirty: false })
 
   /**
-   * Updates the visible BrainDump draft and marks whether it may flush to disk.
+   * Updates the visible LiveEditor draft and marks whether it may flush to disk.
    * @param text - Next textarea value.
    * @param options - Category ownership plus whether the change is user/internal dirty.
    * @returns Nothing; synchronizes React state and the callback ref in one tick.
@@ -674,13 +680,13 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * @param api - Electron preload API used for note storage.
    * @returns void; completion updates refs only when the visible draft still matches.
    * @example
-   * persistNoteDraft(1, '- [ ] buy milk', window.brainDumpAPI!)
+   * persistNoteDraft(1, '- [ ] buy milk', getLiveEditorAPI()!)
    */
   const persistNoteDraft = React.useCallback(
     (
       categoryId: Category['id'],
       text: string,
-      api: NonNullable<typeof window.brainDumpAPI>,
+      api: NonNullable<ReturnType<typeof getLiveEditorAPI>>,
     ): void => {
       void api.note.set(categoryId, text).then(
         () => {
@@ -694,8 +700,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
           }
         },
         (error: unknown) => {
-          toast.error('Failed to save BrainDump note')
-          log.error('BrainDump note save failed', error)
+          toast.error('Failed to save LiveEditor note')
+          log.error('LiveEditor note save failed', error)
         },
       )
     },
@@ -714,7 +720,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
    */
   const restoreFailedPromotionToCategory = async (
     categoryId: Category['id'],
-    lineIndex: BrainDumpLineIndex,
+    lineIndex: LiveEditorLineIndex,
     completedLineText: string,
     rollbackLineText?: string,
   ): Promise<boolean> => {
@@ -735,7 +741,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       return true
     }
 
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return false
     try {
       const stored = await api.note.get(categoryId)
@@ -743,7 +749,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       if (restored !== stored) await api.note.set(categoryId, restored)
       return true
     } catch (error) {
-      log.error('BrainDump failed completion restore failed', error)
+      log.error('LiveEditor failed completion restore failed', error)
       return false
     }
   }
@@ -761,11 +767,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
    */
   const setCompletedCheckboxStateInCategory = async (
     categoryId: Category['id'],
-    title: BrainDumpCompletedTitle,
-    fallbackLineIndex: BrainDumpLineIndex,
+    title: LiveEditorCompletedTitle,
+    fallbackLineIndex: LiveEditorLineIndex,
     checked: boolean,
     sourceText?: string,
-  ): Promise<BrainDumpLineIndex | null> => {
+  ): Promise<LiveEditorLineIndex | null> => {
     const updateText = (text: string) => {
       const fallbackLine = text.split('\n')[fallbackLineIndex]
       const fallbackCheckbox =
@@ -793,7 +799,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       return updated.lineIndex
     }
 
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return null
     try {
       const stored = await api.note.get(categoryId)
@@ -801,7 +807,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       if (updated.text !== stored) await api.note.set(categoryId, updated.text)
       return updated.lineIndex
     } catch (error) {
-      log.error('BrainDump cross-category checkbox restore failed', error)
+      log.error('LiveEditor cross-category checkbox restore failed', error)
       return null
     }
   }
@@ -863,9 +869,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
   // Initial pull of opacity + sync mode + Spaces tracking from the main process.
   useCycleEffect(() => {
-    if (!isMounted || !isBrainDumpEnvironment()) return
+    if (!isMounted || !isLiveEditorEnvironment()) return
     let cancelled = false
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return
     void Promise.all([
       api.window.getOpacity(),
@@ -879,15 +885,15 @@ export const BrainDumpEditor = function BrainDumpEditor({
         setSyncEnabled(enabled)
         setLocalCategoryId(lastCategoryId)
         setSpacesTrackingEnabled(followsSpaces)
-        setIsBrainDumpConfigReady(true)
+        setIsLiveEditorConfigReady(true)
       })
       .catch((error) => {
         // Failures here keep the safe defaults seeded by useState; surface
         // a toast so the user knows their persisted settings didn't load.
         if (cancelled) return
-        toast.error('Failed to load BrainDump settings')
-        log.error('BrainDump settings load failed', error)
-        setIsBrainDumpConfigReady(true)
+        toast.error('Failed to load LiveEditor settings')
+        log.error('LiveEditor settings load failed', error)
+        setIsLiveEditorConfigReady(true)
       })
     return () => {
       cancelled = true
@@ -895,12 +901,12 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }, [isMounted])
 
   // Subscribe to main-process category broadcasts (e.g., when another window
-  // changes the active category and main updates the BrainDump config).
+  // changes the active category and main updates the LiveEditor config).
   useCycleEffect(() => {
-    if (!isMounted || !isBrainDumpEnvironment()) return
-    const api = window.brainDumpAPI
+    if (!isMounted || !isLiveEditorEnvironment()) return
+    const api = getLiveEditorAPI()
     if (!api) return
-    return api.on('braindump-category-changed', (payload) => {
+    return api.on(getLiveEditorCategoryChangedChannel(), (payload) => {
       // Preload sanitizes args and strips the IpcRendererEvent — payload is
       // the first user arg.
       const parsed = categoryChangedPayloadSchema.safeParse(payload)
@@ -908,7 +914,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     })
   }, [isMounted])
 
-  // Move keyboard focus into the note editor whenever the BrainDump window is
+  // Move keyboard focus into the note editor whenever the LiveEditor window is
   // shown, so a quick global-shortcut capture lands in the textarea instead of
   // the first focusable control (the "Follow Spaces" switch). The window is
   // hidden — not destroyed — between toggles, so the textarea can't lean on a
@@ -918,7 +924,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // focus() is a no-op while the textarea is disabled (no active category) —
   // picking a category first is the expected flow there.
   useCycleEffect(() => {
-    if (!isMounted || !isBrainDumpEnvironment()) return
+    if (!isMounted || !isLiveEditorEnvironment()) return
     const canFocusNoteEditor =
       activeCategoryId !== null &&
       noteReadyCategoryId === activeCategoryId &&
@@ -949,16 +955,16 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
   // Whenever the active category flips, load that category's note text.
   useCycleEffect(() => {
-    if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null) {
+    if (!isMounted || !isLiveEditorEnvironment() || activeCategoryId === null) {
       setNoteDraft('', { categoryId: null, dirty: false })
       lastPersistedRef.current = { categoryId: null, text: '' }
       noteWritableCategoryRef.current = null
       setNoteReadyCategoryId(null)
       return
     }
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     // Guard before flipping the spinner so the editor doesn't get stuck
-    // loading when the preload hasn't injected `brainDumpAPI` yet.
+    // loading when the preload hasn't injected `liveEditorAPI` yet.
     if (!api) return
     let cancelled = false
     setIsLoadingNote(true)
@@ -979,7 +985,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       .catch((error) => {
         if (cancelled) return
         toast.error('Failed to load note for this category')
-        log.error('BrainDump note load failed', error)
+        log.error('LiveEditor note load failed', error)
         // Reset editor state BEFORE clearing the loading flag so the
         // category swap doesn't briefly show stale text from category A
         // while we render category B's failure.
@@ -1002,10 +1008,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // the debounce because cleanup runs on every keystroke (noteText is a dep).
   // The companion effect below handles category-swap/unmount flushes.
   useCycleEffect(() => {
-    if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
+    if (!isMounted || !isLiveEditorEnvironment() || activeCategoryId === null)
       return
     if (isLoadingNote) return
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return
     const persisted = lastPersistedRef.current
     // Never persist the initial empty textarea before this category's note has
@@ -1030,9 +1036,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
   // Final flush: runs on category swap and unmount only (not on every keystroke).
   // Reads the latest text via ref so we never persist a stale snapshot.
   useCycleEffect(() => {
-    if (!isMounted || !isBrainDumpEnvironment() || activeCategoryId === null)
+    if (!isMounted || !isLiveEditorEnvironment() || activeCategoryId === null)
       return
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return
     const flushCategoryId = activeCategoryId
     return () => {
@@ -1052,21 +1058,21 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
   const handleToggleSync = (enabled: boolean) => {
     setSyncEnabled(enabled)
-    void window.brainDumpAPI?.sync.setEnabled(enabled)
+    void getLiveEditorAPI()?.sync.setEnabled(enabled)
   }
 
   const handleManualCategoryChange = (id: Category['id']) => {
     setLocalCategoryId(id)
-    void window.brainDumpAPI?.category.setLast(id)
+    void getLiveEditorAPI()?.category.setLast(id)
   }
 
   const handleOpacityChange = (next: number) => {
     const clamped = Math.max(
-      BRAINDUMP_OPACITY_MIN,
-      Math.min(BRAINDUMP_OPACITY_MAX, next),
+      LIVE_EDITOR_OPACITY_MIN,
+      Math.min(LIVE_EDITOR_OPACITY_MAX, next),
     )
     setOpacity(clamped)
-    void window.brainDumpAPI?.window.setOpacity(clamped)
+    void getLiveEditorAPI()?.window.setOpacity(clamped)
   }
 
   const handleCategoryValueChange = (value: string) => {
@@ -1079,7 +1085,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   /**
-   * Applies the Mac Spaces tracking switch from the BrainDump header.
+   * Applies the Mac Spaces tracking switch from the LiveEditor header.
    *
    * @param enabled - true keeps both utility panels visible across Spaces.
    * @returns Promise that settles after the main process confirms or rolls back.
@@ -1098,12 +1104,12 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
     try {
       const applied =
-        await window.brainDumpAPI?.spaces?.setVisibleOnAllWorkspaces(enabled)
+        await getLiveEditorAPI()?.spaces?.setVisibleOnAllWorkspaces(enabled)
       setSpacesTrackingEnabled(applied ?? enabled)
     } catch (error) {
       setSpacesTrackingEnabled(previous)
       toast.error('Failed to update desktop tracking')
-      log.error('BrainDump Spaces tracking update failed', error)
+      log.error('LiveEditor Spaces tracking update failed', error)
     } finally {
       isUpdatingSpacesTrackingRef.current = false
       setIsUpdatingSpacesTracking(false)
@@ -1170,7 +1176,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
         await syncCompletedAcrossViews()
       } catch (error) {
         toast.error('Completion undone, but refresh failed')
-        log.error('BrainDump undo synchronization failed', error)
+        log.error('LiveEditor undo synchronization failed', error)
       }
       return true
     })()
@@ -1196,8 +1202,8 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * @returns Promise<void>; the created row id is tracked internally for undo.
    */
   const promoteLineToCompleted = async (
-    lineIndex: BrainDumpLineIndex,
-    title: BrainDumpCompletedTitle,
+    lineIndex: LiveEditorLineIndex,
+    title: LiveEditorCompletedTitle,
     rollbackLineText?: string,
   ) => {
     if (activeCategoryId === null) {
@@ -1316,7 +1322,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
 
     showCompletionToast({
       title: safeTitle,
-      durationMs: braindumpToastDurationMs,
+      durationMs: liveEditorToastDurationMs,
       // Read latest text via ref so the user's keystrokes between creation and
       // undo are preserved. The tracked map follows safe row shifts; the
       // captured position is accepted only when its checkbox still matches.
@@ -1341,7 +1347,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             // checkedRowsRef. If the entry is gone, the completion was already
             // reverted or edited — skip, so we never strip a same-title line
             // belonging to a different completion or category.
-            let memoryKey: BrainDumpLineIndex | null = null
+            let memoryKey: LiveEditorLineIndex | null = null
             for (const [key, value] of checkedRows.entries()) {
               if (value.completedId === completedId) {
                 memoryKey = key
@@ -1388,10 +1394,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
    * @param categoryId - Origin category for cross-category undo and rollback writes.
    */
   const undoCompleted = async (
-    title: BrainDumpCompletedTitle,
+    title: LiveEditorCompletedTitle,
     completedId: Completed['id'],
     originalText: string,
-    fallbackLineIndex: BrainDumpLineIndex,
+    fallbackLineIndex: LiveEditorLineIndex,
     categoryId: Category['id'],
   ) => {
     const checkedRows = getTrackedRowsForCategory(
@@ -1399,7 +1405,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       categoryId,
     )
     // Find the ref entry by completedId (key may have drifted).
-    let memoryKey: BrainDumpLineIndex | null = null
+    let memoryKey: LiveEditorLineIndex | null = null
     let memoryBeforeUndo: CheckedRowMemory | undefined
     for (const [key, value] of checkedRows.entries()) {
       if (value.completedId === completedId) {
@@ -1477,7 +1483,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // *active* note, so this out-of-band write to an inactive category can't race
     // them. (Worst case, if that category is re-opened mid-write, the line lands
     // on disk and surfaces on its next load — eventual consistency, never loss.)
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return false
     try {
       const stored = await api.note.get(entry.categoryId)
@@ -1487,7 +1493,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       )
       return true
     } catch (error) {
-      log.error('BrainDump cross-category line restore failed', error)
+      log.error('LiveEditor cross-category line restore failed', error)
       return false
     }
   }
@@ -1525,7 +1531,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       return true
     }
 
-    const api = window.brainDumpAPI
+    const api = getLiveEditorAPI()
     if (!api) return false
     try {
       const stored = await api.note.get(entry.categoryId)
@@ -1545,7 +1551,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       )
       return true
     } catch (error) {
-      log.error('BrainDump lingering line restore failed', error)
+      log.error('LiveEditor lingering line restore failed', error)
       return false
     }
   }
@@ -1651,12 +1657,12 @@ export const BrainDumpEditor = function BrainDumpEditor({
   const scheduleDeferredClear = (entry: ClearedLineMemory): void => {
     // Clamp the linger to the toast duration so a finished line can never outlast
     // its own Undo: once the toast (carrying that Undo) auto-closes, the line must
-    // already be gone. #108 used a FIXED ceiling (BRAINDUMP_CLEAR_DELAY_MAX_MS);
+    // already be gone. #108 used a FIXED ceiling (LIVE_EDITOR_CLEAR_DELAY_MAX_MS);
     // now that the toast duration is user-configurable (#109) this live `min()`
     // does that job — the clear-delay slider keeps its own fixed [0,5000] bounds.
     const effectiveClearDelayMs = Math.min(
       clearDelayMs,
-      braindumpToastDurationMs,
+      liveEditorToastDurationMs,
     )
     const removalTimerId = window.setTimeout(() => {
       // No longer pending — drop it from tracking before doing anything else.
@@ -1724,9 +1730,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
    */
   const completeAndClearLine = (
     completedText: string,
-    lineIndex: BrainDumpLineIndex,
+    lineIndex: LiveEditorLineIndex,
     originalLine: string,
-    title: BrainDumpCompletedTitle,
+    title: LiveEditorCompletedTitle,
   ): void => {
     if (activeCategoryId === null) {
       toast.error('Pick a category before checking items')
@@ -1884,7 +1890,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     let wasUndoCalled = false
     entry.toastId = showCompletionToast({
       title: safeTitle,
-      durationMs: braindumpToastDurationMs,
+      durationMs: liveEditorToastDurationMs,
       onUndo: () => {
         wasUndoCalled = true
         void undoClearedCompletion(entry, createPromise)
@@ -1937,7 +1943,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
       // Roll back the terminal marker so the same Undo action can retry safely.
       entry.outcome = outcomeBeforeUndo
       clearedLinesRef.current.set(entry.token, entry)
-      toast.error('Failed to restore BrainDump line', {
+      toast.error('Failed to restore LiveEditor line', {
         action: {
           label: 'Retry',
           onClick: () => {
@@ -1993,7 +1999,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
     // Clear-on-complete treats plain, unchecked, and manually checked rows alike:
     // record the win, show `[x]`, then tuck the source row away with Undo available.
     if (clearOnComplete) {
-      let completionTitle: BrainDumpCompletedTitle
+      let completionTitle: LiveEditorCompletedTitle
       let completedText: string
       if (parsed) {
         completionTitle = parsed.title
@@ -2041,17 +2047,17 @@ export const BrainDumpEditor = function BrainDumpEditor({
   }
 
   const closeWindow = () => {
-    void window.brainDumpAPI?.window.close()
+    void getLiveEditorAPI()?.window.close()
   }
 
   // Block oRPC calls until Clerk has loaded — otherwise the request 401s
   // before useUser hydrates.
-  const isReady = isMounted && isClerkReady && isBrainDumpEnvironment()
+  const isReady = isMounted && isClerkReady && isLiveEditorEnvironment()
   const opacityValue = [opacity]
   if (!isReady) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-        Loading BrainDump…
+        Loading LiveEditor…
       </div>
     )
   }
@@ -2065,7 +2071,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
   return (
     <div
       className="flex h-screen w-full flex-col gap-2 p-3"
-      data-braindump-root
+      data-live-editor-root
     >
       <header
         className="flex items-center justify-between gap-2"
@@ -2078,7 +2084,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             checked={spacesTrackingEnabled}
             onCheckedChange={handleSpacesTrackingChange}
             disabled={isUpdatingSpacesTracking}
-            aria-label="Show BrainDump on all Mac desktops"
+            aria-label="Show LiveEditor on all Mac desktops"
           />
 
           <Label
@@ -2091,7 +2097,7 @@ export const BrainDumpEditor = function BrainDumpEditor({
             type="button"
             onClick={closeWindow}
             className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Close BrainDump"
+            aria-label="Close LiveEditor"
           >
             ✕
           </button>
@@ -2144,9 +2150,9 @@ export const BrainDumpEditor = function BrainDumpEditor({
           </Label>
           <Slider
             id={opacityInputId}
-            min={BRAINDUMP_OPACITY_MIN}
-            max={BRAINDUMP_OPACITY_MAX}
-            step={BRAINDUMP_OPACITY_STEP}
+            min={LIVE_EDITOR_OPACITY_MIN}
+            max={LIVE_EDITOR_OPACITY_MAX}
+            step={LIVE_EDITOR_OPACITY_STEP}
             value={opacityValue}
             onValueChange={handleOpacityValueChange}
             className="flex-1"
@@ -2205,11 +2211,11 @@ export const BrainDumpEditor = function BrainDumpEditor({
         placeholder={
           activeCategoryId === null
             ? 'Pick a category to start writing'
-            : '- [ ] braindump anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
+            : '- [ ] capture anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
         }
         disabled={isNoteFieldDisabled}
         maxLength={NOTE_MAX_LENGTH}
-        // Braindump is messy quick-capture — the native red spellcheck underlines
+        // LiveEditor is messy quick-capture — the native red spellcheck underlines
         // make unfinished / mixed-language fragments feel "corrected" and noisy, so
         // we keep the writing surface calm by disabling them. Only the correction
         // overlay is suppressed; typing / IME / save are unaffected (#128).
@@ -2221,10 +2227,10 @@ export const BrainDumpEditor = function BrainDumpEditor({
         // presentation. lineHeight is unitless so spacing scales with the size.
         style={{
           ...NO_DRAG_REGION_STYLE,
-          fontFamily: BRAINDUMP_FONT_FAMILY_CSS[braindumpFontFamily],
-          fontSize: `${braindumpFontSize}px`,
-          lineHeight: BRAINDUMP_LINE_HEIGHT,
-          color: braindumpTextColor,
+          fontFamily: LIVE_EDITOR_FONT_FAMILY_CSS[liveEditorFontFamily],
+          fontSize: `${liveEditorFontSize}px`,
+          lineHeight: LIVE_EDITOR_LINE_HEIGHT,
+          color: liveEditorTextColor,
         }}
       />
     </div>

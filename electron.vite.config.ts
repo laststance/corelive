@@ -68,9 +68,9 @@ export default defineConfig({
             __dirname,
             'electron/preload-floating.ts',
           ),
-          'preload-braindump': resolve(
+          'preload-live-editor': resolve(
             __dirname,
-            'electron/preload-braindump.ts',
+            'electron/preload-live-editor.ts',
           ),
         },
         output: {

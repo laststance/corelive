@@ -24,7 +24,7 @@ export const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
  * Hard cap on lines accepted per paste-import batch. Enforced on the server via
  * Zod `.max(MAX_IMPORT_LINES_PER_BATCH)` and mirrored in the PR2 client preview
  * ("N lines exceeded — importing the first 1000"). Precedent:
- * `BRAINDUMP_NOTE_LINES_PER_CAP = 200`; a paste import is bulkier, so the cap is
+ * `LIVE_EDITOR_NOTE_LINES_PER_CAP = 200`; a paste import is bulkier, so the cap is
  * higher. Overflow is shown, never silently dropped.
  */
 export const MAX_IMPORT_LINES_PER_BATCH = 1000

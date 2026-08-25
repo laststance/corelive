@@ -148,7 +148,7 @@ const SERVER_URL = 'https://corelive.app'
  * the `| undefined` that `noUncheckedIndexedAccess` adds to array indexing.
  *
  * @param index - Zero-based creation order. With the main window retired (T18),
- * [0] = the startup panel the gate opens (the floating / braindump window).
+ * [0] = the startup panel the gate opens (the Floating / LiveEditor window).
  */
 function getWindow(index: number): CapturedMockWindow {
   const capturedWindow = createdWindows[index]
@@ -260,15 +260,15 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
-  it('surfaces the Floating front door when a braindump panel fails to load (offline/5xx)', () => {
-    // Arrange: braindump has no load-failure recovery of its own, so a failed
+  it('surfaces the Floating front door when a LiveEditor panel fails to load (offline/5xx)', () => {
+    // Arrange: LiveEditor has no load-failure recovery of its own, so a failed
     // load falls back to the Floating front door (the Floating window owns DT7).
     const windowManager = new WindowManager(SERVER_URL)
     // T18: signed-out / load-fail → Floating front door via restoreFromTray (stubbed).
     const restoreFromTray = vi
       .spyOn(windowManager, 'restoreFromTray')
       .mockImplementation(() => {})
-    windowManager.openStartupPanel('braindump')
+    windowManager.openStartupPanel('liveEditor')
     const panelWindow = getWindow(0)
 
     // Act: main-frame load failure, e.g. net::ERR_NAME_NOT_RESOLVED (-105).
@@ -277,14 +277,14 @@ describe('WindowManager startup panel nav-watch', () => {
       {},
       -105,
       'ERR_NAME_NOT_RESOLVED',
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
       true,
     )
 
     // Assert: failed panel stays hidden, the Floating front door is surfaced, fallback recorded.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
     expect(restoreFromTray).toHaveBeenCalledTimes(1)
-    expect(windowManager.getStartupAuthFallbacks().has('braindump')).toBe(true)
+    expect(windowManager.getStartupAuthFallbacks().has('liveEditor')).toBe(true)
   })
 
   it('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
@@ -329,187 +329,187 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.getStartupAuthFallbacks().size).toBe(0)
   })
 
-  it('opens the brain dump panel at its own route when requested', () => {
+  it('opens the LiveEditor panel at its own route when requested', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
-    // Act: dispatch by kind creates the brain dump window and watches its load.
-    windowManager.openStartupPanel('braindump')
+    // Act: dispatch by kind creates the LiveEditor window and watches its load.
+    windowManager.openStartupPanel('liveEditor')
     const panelWindow = getWindow(0)
-    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/braindump`)
+    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/live-editor`)
     panelWindow.fireWebContents('did-finish-load')
 
-    // Assert: brain dump loaded its route and was revealed once authenticated.
+    // Assert: LiveEditor loaded its route and was revealed once authenticated.
     expect(panelWindow.win.loadURL).toHaveBeenCalledWith(
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps a signed-out manual BrainDump open hidden and surfaces the Floating front door', () => {
-    // Arrange: a menu/shortcut/manual BrainDump open does not go through the
+  it('keeps a signed-out manual LiveEditor open hidden and surfaces the Floating front door', () => {
+    // Arrange: a menu/shortcut/manual LiveEditor open does not go through the
     // startup-only gate, so WindowManager must guard this path itself.
     const windowManager = new WindowManager(SERVER_URL)
     const restoreFromTray = vi
       .spyOn(windowManager, 'restoreFromTray')
       .mockImplementation(() => {})
 
-    // Act: proxy.ts redirected the protected BrainDump route to /login.
-    windowManager.showBrainDump()
-    const brainDumpWindow = getWindow(0)
-    brainDumpWindow.fireWebContents(
+    // Act: proxy.ts redirected the protected LiveEditor route to /login.
+    windowManager.showLiveEditor()
+    const liveEditorWindow = getWindow(0)
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/login?redirect_url=/braindump`,
+      `${SERVER_URL}/login?redirect_url=/live-editor`,
     )
 
-    // Assert: login never renders in BrainDump; Floating becomes the sign-in front door.
-    expect(brainDumpWindow.win.show).not.toHaveBeenCalled()
-    expect(brainDumpWindow.win.focus).not.toHaveBeenCalled()
+    // Assert: login never renders in LiveEditor; Floating becomes the sign-in front door.
+    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
+    expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
     expect(restoreFromTray).toHaveBeenCalledTimes(1)
   })
 
-  it('reports a shortcut BrainDump open only after the authenticated panel is visible', () => {
+  it('reports a shortcut LiveEditor open only after the authenticated panel is visible', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const onShown = vi.fn()
 
     // Act
-    windowManager.toggleBrainDump(onShown)
-    const brainDumpWindow = getWindow(0)
+    windowManager.toggleLiveEditor(onShown)
+    const liveEditorWindow = getWindow(0)
 
     // Assert
     expect(onShown).not.toHaveBeenCalled()
 
     // Act
-    brainDumpWindow.fireWebContents(
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    brainDumpWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.fireWebContents('did-finish-load')
 
     // Assert
-    expect(brainDumpWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
     expect(onShown).toHaveBeenCalledTimes(1)
   })
 
-  it('does not report a shortcut BrainDump open when auth keeps the panel hidden', () => {
+  it('does not report a shortcut LiveEditor open when auth keeps the panel hidden', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const onShown = vi.fn()
 
     // Act
-    windowManager.toggleBrainDump(onShown)
-    const brainDumpWindow = getWindow(0)
-    brainDumpWindow.fireWebContents(
+    windowManager.toggleLiveEditor(onShown)
+    const liveEditorWindow = getWindow(0)
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/login?redirect_url=/braindump`,
+      `${SERVER_URL}/login?redirect_url=/live-editor`,
     )
 
     // Assert
-    expect(brainDumpWindow.win.show).not.toHaveBeenCalled()
+    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
     expect(onShown).not.toHaveBeenCalled()
   })
 
-  it('cancels a pending manual BrainDump reveal when toggled off before load settles', () => {
-    // Arrange: the first toggle starts a hidden BrainDump load guarded by the
+  it('cancels a pending manual LiveEditor reveal when toggled off before load settles', () => {
+    // Arrange: the first toggle starts a hidden LiveEditor load guarded by the
     // manual auth watcher, but the route has not settled yet.
     const windowManager = new WindowManager(SERVER_URL)
-    const firstToggleResult = windowManager.toggleBrainDump()
-    const brainDumpWindow = getWindow(0)
+    const firstToggleResult = windowManager.toggleLiveEditor()
+    const liveEditorWindow = getWindow(0)
 
     // Act: a second toggle before did-finish-load means the caller intended to
     // close the pending reveal, then the original load completes successfully.
-    const secondToggleResult = windowManager.toggleBrainDump()
-    brainDumpWindow.fireWebContents(
+    const secondToggleResult = windowManager.toggleLiveEditor()
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    brainDumpWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.fireWebContents('did-finish-load')
 
-    // Assert: the stale load callback cannot show/focus BrainDump after cancel.
+    // Assert: the stale load callback cannot show/focus LiveEditor after cancel.
     expect(firstToggleResult).toBe(true)
     expect(secondToggleResult).toBe(false)
-    expect(brainDumpWindow.win.hide).toHaveBeenCalledTimes(1)
-    expect(brainDumpWindow.win.show).not.toHaveBeenCalled()
-    expect(brainDumpWindow.win.focus).not.toHaveBeenCalled()
+    expect(liveEditorWindow.win.hide).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
+    expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
   })
 
-  it('reloads BrainDump on the next open after canceling a pending reveal', () => {
-    // Arrange: a hidden BrainDump load is canceled, then the old navigation
+  it('reloads LiveEditor on the next open after canceling a pending reveal', () => {
+    // Arrange: a hidden LiveEditor load is canceled, then the old navigation
     // settles after its listeners were removed.
     const windowManager = new WindowManager(SERVER_URL)
-    windowManager.toggleBrainDump()
-    const brainDumpWindow = getWindow(0)
-    windowManager.toggleBrainDump()
-    brainDumpWindow.fireWebContents(
+    windowManager.toggleLiveEditor()
+    const liveEditorWindow = getWindow(0)
+    windowManager.toggleLiveEditor()
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    brainDumpWindow.fireWebContents('did-finish-load')
-    brainDumpWindow.win.show.mockClear()
-    brainDumpWindow.win.focus.mockClear()
+    liveEditorWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.win.show.mockClear()
+    liveEditorWindow.win.focus.mockClear()
 
     // Act: the next open must start a fresh protected-route load before reveal.
-    windowManager.showBrainDump()
-    brainDumpWindow.fireWebContents(
+    windowManager.showLiveEditor()
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    brainDumpWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.fireWebContents('did-finish-load')
 
     // Assert: the canceled settled page was reloaded, then safely revealed.
-    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+    expect(liveEditorWindow.win.loadURL).toHaveBeenNthCalledWith(
       1,
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+    expect(liveEditorWindow.win.loadURL).toHaveBeenNthCalledWith(
       2,
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    expect(brainDumpWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(brainDumpWindow.win.focus).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
   })
 
-  it('reloads a suppressed BrainDump back to its route before revealing it after sign-in', () => {
-    // Arrange: the first open is signed out, leaving the hidden BrainDump window
+  it('reloads a suppressed LiveEditor back to its route before revealing it after sign-in', () => {
+    // Arrange: the first open is signed out, leaving the hidden LiveEditor window
     // sitting on /login until the user signs in from Floating Navigator.
     const windowManager = new WindowManager(SERVER_URL)
     vi.spyOn(windowManager, 'restoreFromTray').mockImplementation(() => {})
-    windowManager.showBrainDump()
-    const brainDumpWindow = getWindow(0)
-    brainDumpWindow.fireWebContents(
+    windowManager.showLiveEditor()
+    const liveEditorWindow = getWindow(0)
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/login?redirect_url=/braindump`,
+      `${SERVER_URL}/login?redirect_url=/live-editor`,
     )
 
-    // Act: after sign-in, opening BrainDump again reloads /braindump and waits
+    // Act: after sign-in, opening LiveEditor again reloads /live-editor and waits
     // for that protected route to settle before showing the panel.
-    windowManager.showBrainDump()
-    brainDumpWindow.fireWebContents(
+    windowManager.showLiveEditor()
+    liveEditorWindow.fireWebContents(
       'did-navigate',
       {},
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    brainDumpWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.fireWebContents('did-finish-load')
 
     // Assert: the stale /login host was not shown; the real editor route was.
-    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+    expect(liveEditorWindow.win.loadURL).toHaveBeenNthCalledWith(
       1,
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    expect(brainDumpWindow.win.loadURL).toHaveBeenNthCalledWith(
+    expect(liveEditorWindow.win.loadURL).toHaveBeenNthCalledWith(
       2,
-      `${SERVER_URL}/braindump`,
+      `${SERVER_URL}/live-editor`,
     )
-    expect(brainDumpWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(brainDumpWindow.win.focus).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
   })
 
   it('locks in the first navigation decision and ignores a later load failure', () => {
@@ -544,7 +544,7 @@ describe('WindowManager startup panel nav-watch', () => {
   // DT7: the Floating window is the signed-out front door, so a never-loaded
   // window must self-heal (retry, then a native recovery dialog) instead of
   // stranding the user on a blank panel. These exercise the recovery machine in
-  // `createFloatingNavigator` plus the asymmetry vs. braindump's fallback.
+  // `createFloatingNavigator` plus the asymmetry vs. LiveEditor's fallback.
   describe('Floating load-failure recovery (DT7)', () => {
     // Fake timers so the backoff reload retries can be driven deterministically;
     // clear any pending timer between cases so a scheduled retry never leaks.
@@ -670,7 +670,7 @@ describe('WindowManager startup panel nav-watch', () => {
       // Act: the floating panel's first load fails.
       fireFloatingLoadFailure(panelWindow)
 
-      // Assert: unlike braindump, the floating startup gate defers to DT7 — it
+      // Assert: unlike LiveEditor, the floating startup gate defers to DT7 — it
       // does not force the panel open or record an auth fallback; recovery is
       // the Floating window's own job (retry, then native dialog).
       expect(panelWindow.win.show).not.toHaveBeenCalled()

@@ -234,24 +234,24 @@ export const SHORTCUT_OPEN_SOUND_VOLUME_RATIO = 0.55
 export const SHORTCUT_OPEN_SOUND_ASSET_DIRECTORY = 'shortcut-opening'
 
 // ============================================================================
-// BrainDump toggle shortcut slots
+// LiveEditor toggle shortcut slots
 // ============================================================================
 
 /**
- * Both BrainDump toggle slots, in display order. Two shortcut ids share ONE
- * handler so BrainDump is reachable from two different keys (e.g. a chord plus a
+ * Both LiveEditor toggle slots, in display order. Two shortcut ids share ONE
+ * handler so LiveEditor is reachable from two different keys (e.g. a chord plus a
  * lone modifier); everything else — registration, conflict rollback, unregister
  * — is the existing per-id machinery. Lives here (not in `ShortcutManager`) so
  * `main.ts` can import it as a VALUE without eagerly loading the deferred
  * ShortcutManager module.
  */
-export const BRAIN_DUMP_SHORTCUT_IDS = [
-  'toggleBrainDump',
-  'toggleBrainDumpSecondary',
+export const LIVE_EDITOR_SHORTCUT_IDS = [
+  'toggleLiveEditor',
+  'toggleLiveEditorSecondary',
 ] as const
 
-/** One of the two BrainDump toggle slot ids. */
-export type BrainDumpShortcutId = (typeof BRAIN_DUMP_SHORTCUT_IDS)[number]
+/** One of the two LiveEditor toggle slot ids. */
+export type LiveEditorShortcutId = (typeof LIVE_EDITOR_SHORTCUT_IDS)[number]
 
 // ============================================================================
 // Native key-tap freeze-safety (#125)

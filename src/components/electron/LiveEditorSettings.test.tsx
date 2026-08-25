@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { BrainDumpSettings } from './BrainDumpSettings'
+import { LiveEditorSettings } from './LiveEditorSettings'
 
 const getSyncModeMock = vi.fn()
 const setSyncModeMock = vi.fn()
@@ -14,7 +14,7 @@ const setShortcutSecondaryMock = vi.fn()
 const toggleMock = vi.fn()
 const openConfigMock = vi.fn()
 
-type BrainDumpBridge = {
+type LiveEditorBridge = {
   getSyncMode: () => Promise<boolean>
   setSyncMode: (enabled: boolean) => Promise<boolean>
   getOpacity: () => Promise<number>
@@ -36,12 +36,12 @@ type ConfigBridge = {
  * @param api - Fake Electron preload API, or undefined for a web renderer.
  * @returns Nothing; mutates the happy-dom window object for this test.
  * @example
- * installElectronAPI({ brainDump: fakeBridge })
+ * installElectronAPI({ liveEditor: fakeBridge })
  */
 function installElectronAPI(
   api:
     | {
-        brainDump?: Partial<BrainDumpBridge>
+        liveEditor?: Partial<LiveEditorBridge>
         config?: Partial<ConfigBridge>
       }
     | undefined,
@@ -54,14 +54,14 @@ function installElectronAPI(
 }
 
 /**
- * Installs a successful BrainDump preload bridge so loading can advance to ready state.
+ * Installs a successful LiveEditor preload bridge so loading can advance to ready state.
  *
  * @param saved - Persisted settings returned by the main process mocks.
- * @returns Nothing; prepares all BrainDump mocks for a component render.
+ * @returns Nothing; prepares all LiveEditor mocks for a component render.
  * @example
- * installBrainDumpBridge({ syncMode: false, opacity: 0.7, shortcut: 'CommandOrControl+Shift+B' })
+ * installLiveEditorBridge({ syncMode: false, opacity: 0.7, shortcut: 'CommandOrControl+Shift+B' })
  */
-function installBrainDumpBridge(saved: {
+function installLiveEditorBridge(saved: {
   syncMode: boolean
   opacity: number
   shortcut: string
@@ -81,7 +81,7 @@ function installBrainDumpBridge(saved: {
   openConfigMock.mockResolvedValue(true)
 
   installElectronAPI({
-    brainDump: {
+    liveEditor: {
       getSyncMode: getSyncModeMock,
       setSyncMode: setSyncModeMock,
       getOpacity: getOpacityMock,
@@ -106,7 +106,7 @@ function installBrainDumpBridge(saved: {
   setShortcutSecondaryMock.mockResolvedValue(true)
 }
 
-describe('BrainDumpSettings', () => {
+describe('LiveEditorSettings', () => {
   beforeEach(() => {
     getSyncModeMock.mockReset()
     setSyncModeMock.mockReset()
@@ -124,9 +124,9 @@ describe('BrainDumpSettings', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows saved BrainDump settings after loading without changing hook order', async () => {
+  it('shows saved LiveEditor settings after loading without changing hook order', async () => {
     // Arrange: the preload bridge resolves and flips the card from loading to ready.
-    installBrainDumpBridge({
+    installLiveEditorBridge({
       syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
@@ -136,7 +136,7 @@ describe('BrainDumpSettings', () => {
       .mockImplementation(() => {})
 
     // Act
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
 
     // Assert: the ready UI renders; the old conditional useMemo crash would abort here.
     expect(await screen.findByText('Window opacity')).toBeInTheDocument()
@@ -153,13 +153,13 @@ describe('BrainDumpSettings', () => {
 
   it('binds a second key to the same toggle without disturbing the first', async () => {
     // Arrange: a desktop app whose bridge carries both slots.
-    installBrainDumpBridge({
+    installLiveEditorBridge({
       syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
       secondaryShortcut: '',
     })
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
     const secondBox = await screen.findByLabelText('Second toggle shortcut')
 
     // Act: record ⌘3 into the SECOND box.
@@ -176,14 +176,14 @@ describe('BrainDumpSettings', () => {
     // Arrange: an installed app updates its web bundle before its preload, so the
     // bridge can carry the first slot only. Offering a box that cannot persist
     // would silently swallow the user's chord.
-    installBrainDumpBridge({
+    installLiveEditorBridge({
       syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
 
     // Act
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
 
     // Assert: the first box still works; the second is not offered at all.
     expect(await screen.findByLabelText('Toggle shortcut')).toHaveTextContent(
@@ -196,12 +196,12 @@ describe('BrainDumpSettings', () => {
 
   it('reverts the binding and explains why when the captured chord is already in use', async () => {
     // Arrange: load with Alt+Space bound, then make the next register attempt fail.
-    installBrainDumpBridge({
+    installLiveEditorBridge({
       syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
     const box = await screen.findByLabelText('Toggle shortcut')
     expect(box).toHaveTextContent('⌥Space')
     // The main process rejects the next accelerator as already registered.
@@ -219,45 +219,45 @@ describe('BrainDumpSettings', () => {
     expect(box).toHaveTextContent('⌥Space')
   })
 
-  it('degrades gracefully when an old preload exposes brainDump but not the settings getters', async () => {
-    // Arrange: an OUTDATED desktop app exposes the brainDump window-toggle bridge
+  it('degrades gracefully when an old preload exposes liveEditor but not the settings getters', async () => {
+    // Arrange: an OUTDATED desktop app exposes the `liveEditor` window-toggle bridge
     // but predates the getSyncMode/getOpacity/getShortcut settings getters that
     // the load effect's Promise.all calls.
-    installElectronAPI({ brainDump: { toggle: toggleMock } })
+    installElectronAPI({ liveEditor: { toggle: toggleMock } })
 
     // Act + Assert: mounting must NOT throw a synchronous TypeError from the
     // Promise.all (which would bubble out of useEffect to Next.js global-error
     // and blank the whole page). A graceful update card must render instead.
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
     expect(
       await screen.findByText(/Update CoreLive to the latest version/i),
     ).toBeInTheDocument()
   })
 
-  it('shows a desktop-only message when the brainDump bridge is absent', async () => {
+  it('shows a desktop-only message when the LiveEditor bridge is absent', async () => {
     // Arrange: a web renderer has no electronAPI at all.
     installElectronAPI(undefined)
 
     // Act
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
 
     // Assert: the fallback copy renders and no toggles are offered.
     expect(
       await screen.findByText(
-        'BrainDump Note is only available in the desktop application.',
+        'LiveEditor Note is only available in the desktop application.',
       ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
-  it('shows a loading state until the saved BrainDump settings arrive', async () => {
+  it('shows a loading state until the saved LiveEditor settings arrive', async () => {
     // Arrange: getSyncMode never resolves, so the load Promise.all keeps the
     // card in its loading state (all three getters exist, so the guards pass).
     getSyncModeMock.mockReturnValue(new Promise<boolean>(() => {}))
     getOpacityMock.mockResolvedValue(0.7)
     getShortcutMock.mockResolvedValue('CommandOrControl+Shift+B')
     installElectronAPI({
-      brainDump: {
+      liveEditor: {
         getSyncMode: getSyncModeMock,
         setSyncMode: setSyncModeMock,
         getOpacity: getOpacityMock,
@@ -272,23 +272,23 @@ describe('BrainDumpSettings', () => {
     })
 
     // Act
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
 
     // Assert: the loading copy shows and no toggles have rendered yet.
     expect(
-      await screen.findByText('Loading BrainDump settings…'),
+      await screen.findByText('Loading LiveEditor settings…'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
   it('opens config.json via the main-process config bridge when the button is clicked', async () => {
     // Arrange
-    installBrainDumpBridge({
+    installLiveEditorBridge({
       syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
     const openButton = await screen.findByRole('button', {
       name: 'Open config.json',
     })
@@ -302,13 +302,13 @@ describe('BrainDumpSettings', () => {
 
   it('shows an error banner when opening config.json fails', async () => {
     // Arrange
-    installBrainDumpBridge({
+    installLiveEditorBridge({
       syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
     openConfigMock.mockResolvedValueOnce(false)
-    render(<BrainDumpSettings />)
+    render(<LiveEditorSettings />)
     const openButton = await screen.findByRole('button', {
       name: 'Open config.json',
     })

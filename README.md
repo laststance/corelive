@@ -8,7 +8,7 @@
 
 # 🚧 It is a work in progress 🚧
 
-CoreLive is a personal task tracker and BrainDump archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. Built with [Next.js](https://nextjs.org/), available as a web app and a macOS desktop app (Electron).
+CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. Built with [Next.js](https://nextjs.org/), available as a web app and a macOS desktop app (Electron).
 
 > **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Prisma schema, APIs, or any other element freely and abruptly — there is **no need to write or preserve migrations, keep existing data, or maintain backward compatibility**. When the schema changes, just reset the database (`pnpm db:reset`).
 
@@ -153,7 +153,7 @@ This project includes an Electron desktop application that wraps the Next.js web
 Beyond the web app, the macOS build adds native surfaces:
 
 - **Floating Navigator** — a compact, always-available quick-capture window
-- **BrainDump** — a distraction-light freeform capture window
+- **LiveEditor** — a distraction-light freeform capture window
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — per-window keep-on-top setting (Floating on by default)

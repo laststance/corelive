@@ -43,7 +43,7 @@ export type CompletedEntry = {
  * forcing function for the migration).
  *
  * Dedup: Todo and Completed are disjoint surfaces by construction —
- * BrainDump's checkbox-tick bypasses the Todo lifecycle (writes Completed
+ * LiveEditor's checkbox-tick bypasses the Todo lifecycle (writes Completed
  * directly), while TodoList's complete() flow never writes Completed.
  * Therefore no row-level dedup is needed; this invariant is asserted by a
  * unit test.

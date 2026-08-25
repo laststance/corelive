@@ -22,6 +22,7 @@ import type {
   PendingSignInToken,
   ShortcutDefinition,
   StartupWindowConfig,
+  LegacyStartupWindowConfig,
   ConfigSection,
   DeepLinkExamples,
   UpdaterStatus,
@@ -59,7 +60,7 @@ export interface ElectronAPI {
     isAlwaysOnTop: () => Promise<boolean>
     /** Move window to specific display */
     moveToDisplay: (displayIndex: number) => Promise<void>
-    /** Read which auxiliary windows (floating navigator, brain dump) are visible now */
+    /** Read which auxiliary windows (floating navigator, LiveEditor) are visible now */
     getAuxVisibility: () => Promise<AuxWindowVisibility>
   }
 
@@ -315,7 +316,7 @@ export interface ElectronAPI {
    * Shared settings for floating utility panels.
    */
   floatingPanels?: {
-    /** Read whether Floating Navigator and BrainDump follow macOS Spaces. */
+    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces. */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
     /** Persist and apply whether both panels follow macOS Spaces. */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
@@ -323,10 +324,14 @@ export interface ElectronAPI {
     getFloatingNavigatorAlwaysOnTop: () => Promise<boolean>
     /** Persist and apply FloatingNavigator's always-on-top setting. */
     setFloatingNavigatorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
-    /** Read BrainDump's always-on-top setting (config-backed, default off). */
-    getBrainDumpAlwaysOnTop: () => Promise<boolean>
-    /** Persist and apply BrainDump's always-on-top setting. */
-    setBrainDumpAlwaysOnTop: (enabled: boolean) => Promise<boolean>
+    /** Read LiveEditor's always-on-top setting (config-backed, default off). */
+    getLiveEditorAlwaysOnTop: () => Promise<boolean>
+    /** Persist and apply LiveEditor's always-on-top setting. */
+    setLiveEditorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
+    /** @deprecated Pre-rename installed preload method; use `getLiveEditorAlwaysOnTop`. */
+    getBrainDumpAlwaysOnTop?: () => Promise<boolean>
+    /** @deprecated Pre-rename installed preload method; use `setLiveEditorAlwaysOnTop`. */
+    setBrainDumpAlwaysOnTop?: (enabled: boolean) => Promise<boolean>
     /** Read FloatingNavigator's global toggle accelerator (empty when disabled). */
     getFloatingNavigatorShortcut: () => Promise<string>
     /** Persist + register the accelerator; resolves false on conflict. */
@@ -495,16 +500,20 @@ export interface ElectronAPI {
      * Persist which window(s) open at Electron launch. The >=1-true invariant is
      * enforced in the main process, so an all-false request is repaired before
      * saving and this still resolves true.
-     * @param config - The two startup-window booleans (brain dump / floating).
+     * @param config - The two startup-window booleans (LiveEditor / floating).
      * @returns Promise resolving to success status
      */
-    setStartupConfig: (config: StartupWindowConfig) => Promise<boolean>
+    setStartupConfig: (
+      config: StartupWindowConfig | LegacyStartupWindowConfig,
+    ) => Promise<boolean>
     /**
      * Read the persisted startup-window config so the settings UI can show the
      * saved choice without consuming the untyped `config.getSection` surface.
      * @returns Promise resolving to the saved config (Floating-only default on failure).
      */
-    getStartupConfig: () => Promise<StartupWindowConfig>
+    getStartupConfig: () => Promise<
+      StartupWindowConfig | LegacyStartupWindowConfig
+    >
     /**
      * Resets the Settings popover window to default size (360×380) and
      * re-anchors it to the tray icon.
@@ -514,39 +523,40 @@ export interface ElectronAPI {
   }
 
   /**
-   * BrainDump Note window configuration from the main window's Settings UI.
+   * LiveEditor Note window configuration from the main window's Settings UI.
    *
-   * Mirrors the `BrainDumpAPI` exposed inside the BrainDump window itself
-   * (`preload-braindump.ts`), but only includes the surface a settings page
+   * Mirrors the `LiveEditorAPI` exposed inside the LiveEditor window itself
+   * (`preload-live-editor.ts`), but only includes the surface a settings page
    * needs (no per-category note CRUD). All methods log + return safe defaults
    * on failure rather than throwing.
    */
-  brainDump?: {
-    /** Toggle BrainDump window visibility. */
-    toggle: () => Promise<void>
-    /** Open the BrainDump window (additive — only shows, never hides). */
-    show: () => Promise<void>
-    /** Read current opacity (already clamped to [0.30, 1.00]). */
-    getOpacity: () => Promise<number>
-    /** Persist + apply opacity; returns the clamped value the main applied. */
-    setOpacity: (value: number) => Promise<number>
-    /** Read the "follow FloatingNav category" toggle. */
-    getSyncMode: () => Promise<boolean>
-    /** Update the "follow FloatingNav category" toggle. */
-    setSyncMode: (enabled: boolean) => Promise<boolean>
-    /** Read the global accelerator (empty string when disabled). */
-    getShortcut: () => Promise<string>
-    /** Persist + register the global accelerator. */
-    setShortcut: (accelerator: string) => Promise<boolean>
-    /**
-     * Read the optional SECOND accelerator for the same toggle (empty when
-     * unset). Optional on the type because an installed desktop app's preload is
-     * frozen while the web bundle updates — callers must feature-detect.
-     */
-    getShortcutSecondary?: () => Promise<string>
-    /** Persist + register the optional SECOND accelerator for the same toggle. */
-    setShortcutSecondary?: (accelerator: string) => Promise<boolean>
-  }
+  liveEditor?: LiveEditorSettingsAPI
+  /** @deprecated Pre-rename installed clients expose this namespace; use `liveEditor`. */
+  brainDump?: LiveEditorSettingsAPI
+}
+
+/** LiveEditor configuration controls exposed to the main Settings renderer. */
+export interface LiveEditorSettingsAPI {
+  /** Toggle LiveEditor window visibility. */
+  toggle: () => Promise<void>
+  /** Open the LiveEditor window (additive — only shows, never hides). */
+  show: () => Promise<void>
+  /** Read current opacity (already clamped to [0.30, 1.00]). */
+  getOpacity: () => Promise<number>
+  /** Persist + apply opacity; returns the clamped value the main applied. */
+  setOpacity: (value: number) => Promise<number>
+  /** Read the "follow FloatingNav category" toggle. */
+  getSyncMode: () => Promise<boolean>
+  /** Update the "follow FloatingNav category" toggle. */
+  setSyncMode: (enabled: boolean) => Promise<boolean>
+  /** Read the global accelerator (empty string when disabled). */
+  getShortcut: () => Promise<string>
+  /** Persist + register the global accelerator. */
+  setShortcut: (accelerator: string) => Promise<boolean>
+  /** Read the optional second accelerator; callers must feature-detect for preload skew. */
+  getShortcutSecondary?: () => Promise<string>
+  /** Persist + register the optional second accelerator. */
+  setShortcutSecondary?: (accelerator: string) => Promise<boolean>
 }
 
 /**
@@ -598,17 +608,16 @@ export interface FloatingNavigatorAPI {
     isAlwaysOnTop: () => Promise<boolean>
   }
   /**
-   * BrainDump controls reachable from the floating navigator. Intentionally
-   * minimal — only `toggle`, since other BrainDump operations are owned by
-   * the BrainDump window itself (`window.brainDumpAPI`).
+   * LiveEditor controls reachable from the floating navigator. Intentionally
+   * minimal — only `toggle`, since other LiveEditor operations are owned by
+   * the LiveEditor window itself (`window.liveEditorAPI`).
    */
-  brainDump: {
-    /** Toggle BrainDump window visibility. */
-    toggle: () => Promise<void>
-  }
+  liveEditor?: LiveEditorToggleAPI
+  /** @deprecated Pre-rename installed clients expose this namespace; use `liveEditor`. */
+  brainDump?: LiveEditorToggleAPI
   /**
    * Open the task app's Completed paste-import surface (`/home`) in the user's
-   * browser (T14). Added after the original window/brainDump surface, so a
+   * browser (T14). Added after the original window/LiveEditor surface, so a
    * renderer must method-guard before calling it (older installed preloads
    * predate it — see the preload-skew fallback in FloatingNavigator). Optional
    * because an older installed preload may not expose it: callers MUST
@@ -624,6 +633,12 @@ export interface FloatingNavigatorAPI {
   ) => void
 }
 
+/** Minimal LiveEditor toggle surface exposed inside Floating Navigator. */
+export interface LiveEditorToggleAPI {
+  /** Toggle LiveEditor window visibility. */
+  toggle: () => Promise<void>
+}
+
 /**
  * Floating Navigator environment information exposed via preload-floating.ts.
  */
@@ -637,7 +652,7 @@ export interface FloatingNavigatorEnv {
 }
 
 /**
- * BrainDump API exposed via contextBridge in preload-braindump.ts.
+ * LiveEditor API exposed via contextBridge in preload-live-editor.ts.
  *
  * Provides:
  * - `window.*` — frameless panel controls (close/toggle/opacity/bounds)
@@ -647,11 +662,11 @@ export interface FloatingNavigatorEnv {
  * - `spaces.*` — shared macOS Spaces tracking for utility panels
  * - `on(channel, cb)` — subscribe to whitelisted main-process events
  */
-export interface BrainDumpAPI {
+export interface LiveEditorAPI {
   window: {
-    /** Hide the BrainDump window (kept in memory for fast re-show). */
+    /** Hide the LiveEditor window (kept in memory for fast re-show). */
     close: () => Promise<void>
-    /** Toggle BrainDump visibility (mirror of the global accelerator). */
+    /** Toggle LiveEditor visibility (mirror of the global accelerator). */
     toggle: () => Promise<void>
     /**
      * Set window opacity. Main process clamps to [0.30, 1.00].
@@ -693,7 +708,7 @@ export interface BrainDumpAPI {
     setLast: (categoryId: number) => Promise<void>
   }
   spaces: {
-    /** Read whether BrainDump and Floating Navigator follow macOS Spaces. */
+    /** Read whether LiveEditor and Floating Navigator follow macOS Spaces. */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
     /** Persist and apply whether both utility panels follow macOS Spaces. */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
@@ -706,13 +721,13 @@ export interface BrainDumpAPI {
 }
 
 /**
- * BrainDump environment information exposed via preload-braindump.ts.
+ * LiveEditor environment information exposed via preload-live-editor.ts.
  */
-export interface BrainDumpEnv {
+export interface LiveEditorEnv {
   /** Whether running in Electron */
   isElectron: boolean
-  /** Whether this is the BrainDump Note window */
-  isBrainDump: boolean
+  /** Whether this is the LiveEditor Note window */
+  isLiveEditor: boolean
   /** Platform identifier */
   platform: string
 }
@@ -748,16 +763,26 @@ declare global {
     floatingNavigatorEnv?: FloatingNavigatorEnv
 
     /**
-     * BrainDump API exposed via contextBridge.
-     * Only available when running in the BrainDump window.
+     * LiveEditor API exposed via contextBridge.
+     * Only available when running in the LiveEditor window.
      */
-    brainDumpAPI?: BrainDumpAPI
+    liveEditorAPI?: LiveEditorAPI
+
+    /** @deprecated Pre-rename installed preload alias; use `liveEditorAPI`. */
+    brainDumpAPI?: LiveEditorAPI
 
     /**
-     * BrainDump environment information.
-     * Only available when running in the BrainDump window.
+     * LiveEditor environment information.
+     * Only available when running in the LiveEditor window.
      */
-    brainDumpEnv?: BrainDumpEnv
+    liveEditorEnv?: LiveEditorEnv
+
+    /** @deprecated Pre-rename installed preload hint; use `liveEditorEnv`. */
+    brainDumpEnv?: {
+      isElectron: boolean
+      isBrainDump: boolean
+      platform: string
+    }
   }
 }
 

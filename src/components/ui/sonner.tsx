@@ -29,7 +29,7 @@ function Toaster({ toastOptions, ...props }: ToasterProps) {
       }
       // The close ✕ is a per-toast opt-in (`closeButton: true`), but its aria-label
       // is a Toaster-level setting in sonner v2 (not a per-toast option), so it
-      // lives here. Only the BrainDump completion toast opts into the ✕ today, so
+      // lives here. Only the LiveEditor completion toast opts into the ✕ today, so
       // this label applies just to it (#109). A caller's own toastOptions win.
       toastOptions={{ closeButtonAriaLabel: 'Dismiss', ...toastOptions }}
       {...props}

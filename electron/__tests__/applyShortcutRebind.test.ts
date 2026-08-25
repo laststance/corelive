@@ -62,7 +62,7 @@ describe('applyShortcutRebind', () => {
     // Act
     const didApply = applyShortcutRebind(
       rebinder,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       'Alt+Space',
       'Alt+Shift+Space',
     )
@@ -70,7 +70,7 @@ describe('applyShortcutRebind', () => {
     // Assert — reports conflict and re-applies the previous accelerator.
     expect(didApply).toBe(false)
     expect(rebinder.updateShortcuts).toHaveBeenNthCalledWith(2, {
-      toggleBrainDump: 'Alt+Shift+Space',
+      toggleLiveEditor: 'Alt+Shift+Space',
     })
   })
 
@@ -86,11 +86,11 @@ describe('applyShortcutRebind', () => {
     expect(() =>
       applyShortcutRebind(
         rebinder,
-        'toggleBrainDump',
+        'toggleLiveEditor',
         'Alt+Space',
         'Alt+Shift+Space',
       ),
-    ).toThrow('Failed to restore previous shortcut for toggleBrainDump')
+    ).toThrow('Failed to restore previous shortcut for toggleLiveEditor')
   })
 
   it('rejects a silently substituted fallback and restores the previous binding', () => {
@@ -98,13 +98,13 @@ describe('applyShortcutRebind', () => {
     // DIFFERENT accelerator because the requested one was already taken.
     const rebinder = createRebinder({
       updateResult: true,
-      effective: { toggleBrainDump: 'Alt+CommandOrControl+Space' },
+      effective: { toggleLiveEditor: 'Alt+CommandOrControl+Space' },
     })
 
     // Act — the user asked for Alt+Space.
     const didApply = applyShortcutRebind(
       rebinder,
-      'toggleBrainDump',
+      'toggleLiveEditor',
       'Alt+Space',
       'Alt+Shift+Space',
     )
@@ -113,7 +113,7 @@ describe('applyShortcutRebind', () => {
     // never shows the substituted key the user never chose.
     expect(didApply).toBe(false)
     expect(rebinder.updateShortcuts).toHaveBeenNthCalledWith(2, {
-      toggleBrainDump: 'Alt+Shift+Space',
+      toggleLiveEditor: 'Alt+Shift+Space',
     })
   })
 

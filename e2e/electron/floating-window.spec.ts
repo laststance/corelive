@@ -35,7 +35,7 @@ let settingsWindow: Page
  */
 const readAuxVisibility = async (): Promise<{
   floating: boolean
-  braindump: boolean
+  liveEditor: boolean
 }> =>
   settingsWindow.evaluate(async () => {
     const getFn = window.electronAPI?.window?.getAuxVisibility
@@ -64,9 +64,9 @@ test('the floating navigator is shown as the front door on a fresh launch', asyn
     .poll(readFloatingVisible, { timeout: LOAD_TIMEOUT_MS })
     .toBe(true)
 
-  // Braindump was never opened in this spec, so it stays hidden.
-  const { braindump } = await readAuxVisibility()
-  expect(braindump).toBe(false)
+  // LiveEditor was never opened in this spec, so it stays hidden.
+  const { liveEditor } = await readAuxVisibility()
+  expect(liveEditor).toBe(false)
 })
 
 test('toggling the floating navigator hides the front-door window', async () => {

@@ -103,16 +103,16 @@ export class WindowManager {
    */
   private floatingLoadFailedPendingFinish: boolean = false
 
-  /** Frameless transparent BrainDump Note panel */
-  private brainDumpWindow: BrowserWindow | null
-  /** True after BrainDump has loaded its protected editor route in this window. */
-  private brainDumpHasLoadedOnce: boolean
-  /** True while a manual BrainDump show waits for auth redirect/load settlement. */
-  private brainDumpRevealPending: boolean
-  /** Cancels the current delayed BrainDump reveal watcher, if one is active. */
-  private cancelBrainDumpReveal: (() => void) | null
-  /** True after BrainDump was suppressed and must reload `/braindump` before reveal. */
-  private brainDumpNeedsReloadBeforeReveal: boolean
+  /** Frameless transparent LiveEditor Note panel */
+  private liveEditorWindow: BrowserWindow | null
+  /** True after LiveEditor has loaded its protected editor route in this window. */
+  private liveEditorHasLoadedOnce: boolean
+  /** True while a manual LiveEditor show waits for auth redirect/load settlement. */
+  private liveEditorRevealPending: boolean
+  /** Cancels the current delayed LiveEditor reveal watcher, if one is active. */
+  private cancelLiveEditorReveal: (() => void) | null
+  /** True after LiveEditor was suppressed and must reload `/live-editor` before reveal. */
+  private liveEditorNeedsReloadBeforeReveal: boolean
 
   /** Settings window */
   private settingsWindow: BrowserWindow | null
@@ -140,7 +140,7 @@ export class WindowManager {
    * dependents can rebind to the fresh BrowserWindow. ShortcutManager uses it to
    * re-attach its focus/blur contextual-shortcut listeners: T18 retired the main
    * window and moved those listeners onto Floating, but Floating can be absent at
-   * setup (BrainDump-only startup) or replaced (closed then reopened via Cmd+3 /
+   * setup (LiveEditor-only startup) or replaced (closed then reopened via Cmd+3 /
    * tray / restoreFromTray with a NEW window id). Without this hook such a
    * later-created Floating would carry no listeners and its contextual shortcuts
    * would never fire. `createFloatingNavigator` is their single chokepoint, so
@@ -184,11 +184,11 @@ export class WindowManager {
     windowStateManager: WindowStateManager | null = null,
   ) {
     this.floatingNavigator = null
-    this.brainDumpWindow = null
-    this.brainDumpHasLoadedOnce = false
-    this.brainDumpRevealPending = false
-    this.cancelBrainDumpReveal = null
-    this.brainDumpNeedsReloadBeforeReveal = false
+    this.liveEditorWindow = null
+    this.liveEditorHasLoadedOnce = false
+    this.liveEditorRevealPending = false
+    this.cancelLiveEditorReveal = null
+    this.liveEditorNeedsReloadBeforeReveal = false
     this.settingsWindow = null
     this.isDev = process.env.NODE_ENV === 'development'
     this.serverUrl = serverUrl
@@ -279,7 +279,7 @@ export class WindowManager {
    * values beside each window's own settings so future per-window controls can
    * split cleanly without a migration.
    *
-   * @returns true only when both Floating Navigator and BrainDump are enabled
+   * @returns true only when both Floating Navigator and LiveEditor are enabled
    * @example
    * const enabled = windowManager.getFloatingPanelsVisibleOnAllWorkspaces()
    */
@@ -289,13 +289,13 @@ export class WindowManager {
         'window.floating.visibleOnAllWorkspaces',
         false,
       ) ?? false
-    const brainDumpEnabled =
+    const liveEditorEnabled =
       this.configManager?.get<boolean>(
-        'braindump.visibleOnAllWorkspaces',
+        'liveEditor.visibleOnAllWorkspaces',
         floatingEnabled,
       ) ?? floatingEnabled
 
-    return Boolean(floatingEnabled && brainDumpEnabled)
+    return Boolean(floatingEnabled && liveEditorEnabled)
   }
 
   /**
@@ -313,37 +313,37 @@ export class WindowManager {
     if (this.configManager) {
       this.configManager.update({
         'window.floating.visibleOnAllWorkspaces': enabled,
-        'braindump.visibleOnAllWorkspaces': enabled,
+        'liveEditor.visibleOnAllWorkspaces': enabled,
       })
     }
 
     this.applyVisibleOnAllWorkspaces(this.floatingNavigator, enabled)
-    this.applyVisibleOnAllWorkspaces(this.brainDumpWindow, enabled)
+    this.applyVisibleOnAllWorkspaces(this.liveEditorWindow, enabled)
 
     return enabled
   }
 
   /**
-   * Reads BrainDump's always-on-top setting (config-backed, default off).
-   * BrainDump has no in-window pin control, so config is the single source of truth.
-   * @returns true when the BrainDump panel is pinned above other windows.
+   * Reads LiveEditor's always-on-top setting (config-backed, default off).
+   * LiveEditor has no in-window pin control, so config is the single source of truth.
+   * @returns true when the LiveEditor panel is pinned above other windows.
    */
-  getBrainDumpAlwaysOnTop(): boolean {
+  getLiveEditorAlwaysOnTop(): boolean {
     return (
-      this.configManager?.get<boolean>('braindump.alwaysOnTop', false) ?? false
+      this.configManager?.get<boolean>('liveEditor.alwaysOnTop', false) ?? false
     )
   }
 
   /**
-   * Persists + applies BrainDump's always-on-top setting.
-   * @param enabled - true pins BrainDump above other windows; false unpins it.
+   * Persists + applies LiveEditor's always-on-top setting.
+   * @param enabled - true pins LiveEditor above other windows; false unpins it.
    * @returns The applied value (echoed for optimistic-UI confirmation).
    */
-  setBrainDumpAlwaysOnTop(enabled: boolean): boolean {
+  setLiveEditorAlwaysOnTop(enabled: boolean): boolean {
     if (this.configManager) {
-      this.configManager.set('braindump.alwaysOnTop', enabled)
+      this.configManager.set('liveEditor.alwaysOnTop', enabled)
     }
-    this.applyAlwaysOnTop(this.brainDumpWindow, enabled)
+    this.applyAlwaysOnTop(this.liveEditorWindow, enabled)
     return enabled
   }
 
@@ -469,10 +469,10 @@ export class WindowManager {
           this.floatingNavigator,
         )
       }
-      if (this.brainDumpWindow) {
+      if (this.liveEditorWindow) {
         this.windowStateManager.updateWindowState(
-          'braindump',
-          this.brainDumpWindow,
+          'liveEditor',
+          this.liveEditorWindow,
         )
       }
     }
@@ -749,8 +749,8 @@ export class WindowManager {
   }
 
   /**
-   * Create the BrainDump Note window — a frameless, transparent, always-on-top
-   * panel that loads `${baseUrl}/braindump`.
+   * Create the LiveEditor Note window — a frameless, transparent, always-on-top
+   * panel that loads `${baseUrl}/live-editor`.
    *
    * Why frameless + transparent: the panel sits over other apps as a calm
    * scratchpad; the renderer paints its own chrome (titlebar, opacity slider).
@@ -758,15 +758,15 @@ export class WindowManager {
    * Why we cap opacity 0.30–1.00: lower than 0.30 makes the window
    * undiscoverable; the cap is enforced both here and at config persist time.
    *
-   * @returns The (possibly already-existing) BrainDump BrowserWindow.
+   * @returns The (possibly already-existing) LiveEditor BrowserWindow.
    */
-  createBrainDumpWindow(): BrowserWindow {
-    if (this.brainDumpWindow) {
-      return this.brainDumpWindow
+  createLiveEditorWindow(): BrowserWindow {
+    if (this.liveEditorWindow) {
+      return this.liveEditorWindow
     }
 
     const windowOptions: WindowOptions = this.windowStateManager
-      ? this.windowStateManager.getWindowOptions('braindump')
+      ? this.windowStateManager.getWindowOptions('liveEditor')
       : {
           width: 480,
           height: 640,
@@ -774,32 +774,32 @@ export class WindowManager {
           minHeight: 320,
           maxWidth: 1200,
           frame: false,
-          alwaysOnTop: this.getBrainDumpAlwaysOnTop(),
+          alwaysOnTop: this.getLiveEditorAlwaysOnTop(),
           resizable: true,
           skipTaskbar: true,
         }
 
-    const initialOpacity = this.getBrainDumpOpacity()
+    const initialOpacity = this.getLiveEditorOpacity()
 
-    log.debug('Creating BrainDump window...', {
+    log.debug('Creating LiveEditor window...', {
       windowOptions,
       initialOpacity,
       isDev: this.isDev,
     })
 
-    const brainDumpPreloadPath = path.join(
+    const liveEditorPreloadPath = path.join(
       __dirname,
       '..',
       'preload',
-      'preload-braindump.cjs',
+      'preload-live-editor.cjs',
     )
 
-    this.brainDumpWindow = new BrowserWindow({
+    this.liveEditorWindow = new BrowserWindow({
       ...windowOptions,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: brainDumpPreloadPath,
+        preload: liveEditorPreloadPath,
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,
@@ -810,7 +810,7 @@ export class WindowManager {
         ),
       },
       frame: false,
-      alwaysOnTop: this.getBrainDumpAlwaysOnTop(),
+      alwaysOnTop: this.getLiveEditorAlwaysOnTop(),
       skipTaskbar: true,
       resizable: true,
       show: false,
@@ -822,128 +822,128 @@ export class WindowManager {
       trafficLightPosition: { x: -100, y: -100 },
     })
 
-    this.brainDumpWindow.setOpacity(initialOpacity)
+    this.liveEditorWindow.setOpacity(initialOpacity)
 
-    const brainDumpUrl = this.getPanelUrl('braindump')
+    const liveEditorUrl = this.getPanelUrl('liveEditor')
 
-    log.debug('Loading BrainDump URL:', brainDumpUrl)
-    this.brainDumpHasLoadedOnce = false
-    this.brainDumpRevealPending = false
-    this.cancelBrainDumpReveal = null
-    this.brainDumpNeedsReloadBeforeReveal = false
-    this.brainDumpWindow.loadURL(brainDumpUrl)
+    log.debug('Loading LiveEditor URL:', liveEditorUrl)
+    this.liveEditorHasLoadedOnce = false
+    this.liveEditorRevealPending = false
+    this.cancelLiveEditorReveal = null
+    this.liveEditorNeedsReloadBeforeReveal = false
+    this.liveEditorWindow.loadURL(liveEditorUrl)
 
-    this.brainDumpWindow.on('resize', () => {
-      if (this.windowStateManager && this.brainDumpWindow) {
+    this.liveEditorWindow.on('resize', () => {
+      if (this.windowStateManager && this.liveEditorWindow) {
         this.windowStateManager.updateWindowStateDebounced(
-          'braindump',
-          this.brainDumpWindow,
+          'liveEditor',
+          this.liveEditorWindow,
         )
       }
     })
 
-    this.brainDumpWindow.on('move', () => {
-      if (this.windowStateManager && this.brainDumpWindow) {
+    this.liveEditorWindow.on('move', () => {
+      if (this.windowStateManager && this.liveEditorWindow) {
         this.windowStateManager.updateWindowStateDebounced(
-          'braindump',
-          this.brainDumpWindow,
+          'liveEditor',
+          this.liveEditorWindow,
         )
       }
     })
 
     // 'close' fires before destruction — capture bounds while the window
     // is still alive (matches the main window pattern).
-    this.brainDumpWindow.on('close', () => {
+    this.liveEditorWindow.on('close', () => {
       this.saveWindowState()
     })
 
-    this.brainDumpWindow.on('closed', () => {
-      log.debug('BrainDump window closed')
-      this.brainDumpWindow = null
-      this.brainDumpHasLoadedOnce = false
-      this.brainDumpRevealPending = false
-      this.cancelBrainDumpReveal = null
-      this.brainDumpNeedsReloadBeforeReveal = false
+    this.liveEditorWindow.on('closed', () => {
+      log.debug('LiveEditor window closed')
+      this.liveEditorWindow = null
+      this.liveEditorHasLoadedOnce = false
+      this.liveEditorRevealPending = false
+      this.cancelLiveEditorReveal = null
+      this.liveEditorNeedsReloadBeforeReveal = false
     })
 
-    this.brainDumpWindow.webContents.on(
+    this.liveEditorWindow.webContents.on(
       'render-process-gone',
       (_event, details) => {
-        log.error('BrainDump process gone:', { reason: details.reason })
+        log.error('LiveEditor process gone:', { reason: details.reason })
       },
     )
 
     if (this.windowStateManager) {
       this.windowStateManager.applyWindowState(
-        'braindump',
-        this.brainDumpWindow,
+        'liveEditor',
+        this.liveEditorWindow,
       )
     }
 
     this.applyVisibleOnAllWorkspaces(
-      this.brainDumpWindow,
+      this.liveEditorWindow,
       this.configManager?.get<boolean>(
-        'braindump.visibleOnAllWorkspaces',
+        'liveEditor.visibleOnAllWorkspaces',
         false,
       ) ?? false,
     )
 
-    return this.brainDumpWindow
+    return this.liveEditorWindow
   }
 
   /**
-   * Toggles BrainDump and reports its eventual authenticated reveal to shortcut-only callers.
+   * Toggles LiveEditor and reports its eventual authenticated reveal to shortcut-only callers.
    * @param onShown - Optional callback fired only after the panel is visibly shown.
    * @returns True when an open was requested, false when it was hidden or canceled.
    * @example
-   * windowManager.toggleBrainDump(() => playOpeningCue())
+   * windowManager.toggleLiveEditor(() => playOpeningCue())
    */
-  toggleBrainDump(onShown?: () => void): boolean {
-    if (!this.brainDumpWindow || this.brainDumpWindow.isDestroyed()) {
-      this.createBrainDumpWindow()
-      this.showBrainDump(onShown)
+  toggleLiveEditor(onShown?: () => void): boolean {
+    if (!this.liveEditorWindow || this.liveEditorWindow.isDestroyed()) {
+      this.createLiveEditorWindow()
+      this.showLiveEditor(onShown)
       return true
     }
 
-    if (this.brainDumpWindow.isVisible()) {
-      this.hideBrainDump()
+    if (this.liveEditorWindow.isVisible()) {
+      this.hideLiveEditor()
       return false
     }
 
-    if (this.brainDumpRevealPending) {
-      this.cancelPendingBrainDumpReveal()
+    if (this.liveEditorRevealPending) {
+      this.cancelPendingLiveEditorReveal()
       return false
     }
 
-    this.showBrainDump(onShown)
+    this.showLiveEditor(onShown)
     return true
   }
 
   /**
-   * Show BrainDump only after its protected route settles; signed-out redirects surface Floating Navigator instead.
+   * Show LiveEditor only after its protected route settles; signed-out redirects surface Floating Navigator instead.
    * @param onShown - Optional callback fired after the authenticated panel appears.
    * @returns void.
    * @example
-   * windowManager.showBrainDump(() => playOpeningCue())
+   * windowManager.showLiveEditor(() => playOpeningCue())
    */
-  showBrainDump(onShown?: () => void): void {
-    const brainDumpWindow =
-      !this.brainDumpWindow || this.brainDumpWindow.isDestroyed()
-        ? this.createBrainDumpWindow()
-        : this.brainDumpWindow
+  showLiveEditor(onShown?: () => void): void {
+    const liveEditorWindow =
+      !this.liveEditorWindow || this.liveEditorWindow.isDestroyed()
+        ? this.createLiveEditorWindow()
+        : this.liveEditorWindow
 
-    this.revealBrainDumpAfterAuthGate(brainDumpWindow, onShown)
+    this.revealLiveEditorAfterAuthGate(liveEditorWindow, onShown)
   }
 
   /**
-   * Reveal a manual BrainDump open only when it is on the editor route; auth pages are always re-homed to Floating.
-   * @param panel - Hidden BrainDump window whose current navigation decides whether it can appear.
+   * Reveal a manual LiveEditor open only when it is on the editor route; auth pages are always re-homed to Floating.
+   * @param panel - Hidden LiveEditor window whose current navigation decides whether it can appear.
    * @param onShown - Optional callback fired only after the panel is visibly shown.
    * @returns void.
    * @example
-   * this.revealBrainDumpAfterAuthGate(this.createBrainDumpWindow(), onShown)
+   * this.revealLiveEditorAfterAuthGate(this.createLiveEditorWindow(), onShown)
    */
-  private revealBrainDumpAfterAuthGate(
+  private revealLiveEditorAfterAuthGate(
     panel: BrowserWindow,
     onShown?: () => void,
   ): void {
@@ -952,18 +952,18 @@ export class WindowManager {
     const currentUrl = panel.webContents.getURL()
 
     if (
-      this.brainDumpNeedsReloadBeforeReveal ||
+      this.liveEditorNeedsReloadBeforeReveal ||
       (currentUrl && this.isAuthPathname(currentUrl))
     ) {
       // The old hidden window is parked on /login; reload the protected editor
-      // route so a later signed-in open can reach BrainDump instead of stale auth/error.
-      this.brainDumpHasLoadedOnce = false
-      this.cancelPendingBrainDumpReveal()
-      this.brainDumpNeedsReloadBeforeReveal = false
-      panel.loadURL(this.getPanelUrl('braindump'))
+      // route so a later signed-in open can reach LiveEditor instead of stale auth/error.
+      this.liveEditorHasLoadedOnce = false
+      this.cancelPendingLiveEditorReveal()
+      this.liveEditorNeedsReloadBeforeReveal = false
+      panel.loadURL(this.getPanelUrl('liveEditor'))
     }
 
-    if (this.brainDumpHasLoadedOnce) {
+    if (this.liveEditorHasLoadedOnce) {
       panel.show()
       panel.focus()
       onShown?.()
@@ -971,20 +971,20 @@ export class WindowManager {
     }
 
     // A prior manual show is already waiting for the redirect/load decision.
-    if (this.brainDumpRevealPending) return
+    if (this.liveEditorRevealPending) return
 
-    this.watchManualBrainDumpLoad(panel, onShown)
+    this.watchManualLiveEditorLoad(panel, onShown)
   }
 
   /**
-   * Watch a manual BrainDump open until it either reaches the editor or redirects to auth.
-   * @param panel - BrainDump BrowserWindow that has started loading `/braindump`.
+   * Watch a manual LiveEditor open until it either reaches the editor or redirects to auth.
+   * @param panel - LiveEditor BrowserWindow that has started loading `/live-editor`.
    * @param onShown - Optional callback fired only after an authenticated reveal.
    * @returns void.
    * @example
-   * this.watchManualBrainDumpLoad(panel, onShown)
+   * this.watchManualLiveEditorLoad(panel, onShown)
    */
-  private watchManualBrainDumpLoad(
+  private watchManualLiveEditorLoad(
     panel: BrowserWindow,
     onShown?: () => void,
   ): void {
@@ -993,57 +993,57 @@ export class WindowManager {
     let decided = false
     let latestMainFrameUrl = webContents.getURL() || null
 
-    this.brainDumpRevealPending = true
+    this.liveEditorRevealPending = true
 
     const cancelReveal = (): void => {
       if (decided) return
       decided = true
-      this.brainDumpRevealPending = false
-      this.brainDumpHasLoadedOnce = false
-      this.brainDumpNeedsReloadBeforeReveal = true
-      if (this.cancelBrainDumpReveal === cancelReveal) {
-        this.cancelBrainDumpReveal = null
+      this.liveEditorRevealPending = false
+      this.liveEditorHasLoadedOnce = false
+      this.liveEditorNeedsReloadBeforeReveal = true
+      if (this.cancelLiveEditorReveal === cancelReveal) {
+        this.cancelLiveEditorReveal = null
       }
       removeListeners.forEach((remove) => remove())
 
-      // A toggle-off before load settlement must keep BrainDump hidden.
+      // A toggle-off before load settlement must keep LiveEditor hidden.
       if (!panel.isDestroyed()) panel.hide()
     }
-    this.cancelBrainDumpReveal = cancelReveal
+    this.cancelLiveEditorReveal = cancelReveal
 
     const finish = (authenticated: boolean): void => {
       if (decided) return
       decided = true
-      this.brainDumpRevealPending = false
-      if (this.cancelBrainDumpReveal === cancelReveal) {
-        this.cancelBrainDumpReveal = null
+      this.liveEditorRevealPending = false
+      if (this.cancelLiveEditorReveal === cancelReveal) {
+        this.cancelLiveEditorReveal = null
       }
       removeListeners.forEach((remove) => remove())
 
       if (panel.isDestroyed()) return
 
       if (authenticated) {
-        // Authenticated: now the editor route is safe to expose in BrainDump.
-        this.brainDumpHasLoadedOnce = true
-        this.brainDumpNeedsReloadBeforeReveal = false
+        // Authenticated: now the editor route is safe to expose in LiveEditor.
+        this.liveEditorHasLoadedOnce = true
+        this.liveEditorNeedsReloadBeforeReveal = false
         panel.show()
         panel.focus()
         onShown?.()
         return
       }
 
-      this.suppressBrainDumpAuthRedirect(panel)
+      this.suppressLiveEditorAuthRedirect(panel)
     }
 
     const onDidNavigate = (_event: Electron.Event, url: string): void => {
       latestMainFrameUrl = url
-      // Auth redirects are terminal: do not let /login render inside BrainDump.
+      // Auth redirects are terminal: do not let /login render inside LiveEditor.
       if (this.isAuthPathname(url)) finish(false)
     }
 
     const onDidFinishLoad = (): void => {
       // Trust the route only after load settles; unauthenticated redirects can
-      // report the requested /braindump URL before landing on /login.
+      // report the requested /live-editor URL before landing on /login.
       const currentSettledUrl = webContents.getURL() || latestMainFrameUrl
       finish(
         currentSettledUrl === null
@@ -1075,90 +1075,92 @@ export class WindowManager {
   }
 
   /**
-   * Hide BrainDump when it hits auth and show Floating Navigator as the only sign-in surface.
+   * Hide LiveEditor when it hits auth and show Floating Navigator as the only sign-in surface.
    *
-   * @param panel - BrainDump BrowserWindow that attempted to host an auth page.
+   * @param panel - LiveEditor BrowserWindow that attempted to host an auth page.
    * @returns void.
    * @example
-   * this.suppressBrainDumpAuthRedirect(panel)
+   * this.suppressLiveEditorAuthRedirect(panel)
    */
-  private suppressBrainDumpAuthRedirect(panel: BrowserWindow): void {
-    this.brainDumpHasLoadedOnce = false
-    this.brainDumpRevealPending = false
-    this.cancelBrainDumpReveal = null
-    this.brainDumpNeedsReloadBeforeReveal = true
+  private suppressLiveEditorAuthRedirect(panel: BrowserWindow): void {
+    this.liveEditorHasLoadedOnce = false
+    this.liveEditorRevealPending = false
+    this.cancelLiveEditorReveal = null
+    this.liveEditorNeedsReloadBeforeReveal = true
     panel.hide()
     this.restoreFromTray()
   }
 
   /**
-   * Cancels a pending manual BrainDump reveal when callers toggle it off before navigation settles.
+   * Cancels a pending manual LiveEditor reveal when callers toggle it off before navigation settles.
    *
    * @returns void.
    * @example
-   * this.cancelPendingBrainDumpReveal()
+   * this.cancelPendingLiveEditorReveal()
    */
-  private cancelPendingBrainDumpReveal(): void {
-    if (this.cancelBrainDumpReveal) {
-      this.cancelBrainDumpReveal()
+  private cancelPendingLiveEditorReveal(): void {
+    if (this.cancelLiveEditorReveal) {
+      this.cancelLiveEditorReveal()
       return
     }
 
-    this.brainDumpRevealPending = false
+    this.liveEditorRevealPending = false
   }
 
-  /** Hide the BrainDump window without destroying it (instant re-show). */
-  hideBrainDump(): void {
-    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
-      this.brainDumpWindow.hide()
+  /** Hide the LiveEditor window without destroying it (instant re-show). */
+  hideLiveEditor(): void {
+    if (this.liveEditorWindow && !this.liveEditorWindow.isDestroyed()) {
+      this.liveEditorWindow.hide()
     }
   }
 
   /**
-   * Set BrainDump opacity, clamped to [0.30, 1.00] and persisted to config.
+   * Set LiveEditor opacity, clamped to [0.30, 1.00] and persisted to config.
    *
    * @param value - Desired opacity (out-of-band values are clamped silently).
    * @returns The opacity actually applied (post-clamp).
    * @example
-   * windowManager.setBrainDumpOpacity(0.85) // → 0.85
-   * windowManager.setBrainDumpOpacity(0.10) // → 0.30 (clamped)
+   * windowManager.setLiveEditorOpacity(0.85) // → 0.85
+   * windowManager.setLiveEditorOpacity(0.10) // → 0.30 (clamped)
    */
-  setBrainDumpOpacity(value: number): number {
+  setLiveEditorOpacity(value: number): number {
     const clamped = Math.max(0.3, Math.min(1, value))
 
-    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
-      this.brainDumpWindow.setOpacity(clamped)
+    if (this.liveEditorWindow && !this.liveEditorWindow.isDestroyed()) {
+      this.liveEditorWindow.setOpacity(clamped)
     }
 
     if (this.configManager) {
-      this.configManager.set('braindump.opacity', clamped)
+      this.configManager.set('liveEditor.opacity', clamped)
     }
 
     return clamped
   }
 
-  /** Read current BrainDump opacity (live window value, else config, else 1). */
-  getBrainDumpOpacity(): number {
-    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
-      return this.brainDumpWindow.getOpacity()
+  /** Read current LiveEditor opacity (live window value, else config, else 1). */
+  getLiveEditorOpacity(): number {
+    if (this.liveEditorWindow && !this.liveEditorWindow.isDestroyed()) {
+      return this.liveEditorWindow.getOpacity()
     }
     // Coerce + clamp the persisted value: a hand-edited config or a stale
     // value from before the clamp was introduced could otherwise hand the
     // renderer something out of [0.30, 1.00].
-    const raw = this.configManager?.get('braindump.opacity', 1) ?? 1
+    const raw = this.configManager?.get('liveEditor.opacity', 1) ?? 1
     const numeric = typeof raw === 'number' ? raw : Number(raw)
     if (!Number.isFinite(numeric)) return 1
     return Math.max(0.3, Math.min(1, numeric))
   }
 
-  /** Get the BrainDump BrowserWindow (or null if not yet created). */
-  getBrainDumpWindow(): BrowserWindow | null {
-    return this.brainDumpWindow
+  /** Get the LiveEditor BrowserWindow (or null if not yet created). */
+  getLiveEditorWindow(): BrowserWindow | null {
+    return this.liveEditorWindow
   }
 
-  /** Whether the BrainDump window currently exists (and is not destroyed). */
-  hasBrainDumpWindow(): boolean {
-    return Boolean(this.brainDumpWindow && !this.brainDumpWindow.isDestroyed())
+  /** Whether the LiveEditor window currently exists (and is not destroyed). */
+  hasLiveEditorWindow(): boolean {
+    return Boolean(
+      this.liveEditorWindow && !this.liveEditorWindow.isDestroyed(),
+    )
   }
 
   /**
@@ -1282,13 +1284,13 @@ export class WindowManager {
    * @returns The fully-qualified panel URL.
    * @example
    * this.getPanelUrl('floating')  // => 'https://corelive.app/floating-navigator'
-   * this.getPanelUrl('braindump') // => 'https://corelive.app/braindump'
+   * this.getPanelUrl('liveEditor') // => 'https://corelive.app/live-editor'
    */
   private getPanelUrl(kind: StartupPanelKind): string {
     const baseUrl = this.serverUrl || 'https://corelive.app'
     return kind === 'floating'
       ? `${baseUrl}/floating-navigator`
-      : `${baseUrl}/braindump`
+      : `${baseUrl}/live-editor`
   }
 
   /**
@@ -1319,7 +1321,7 @@ export class WindowManager {
    * @param rawUrl - Full URL from a `did-navigate` event.
    * @returns true when the pathname is `/login` or `/sign-up`.
    * @example
-   * this.isAuthPathname('https://corelive.app/login?redirect_url=/braindump') // true
+   * this.isAuthPathname('https://corelive.app/login?redirect_url=/live-editor') // true
    * this.isAuthPathname('https://corelive.app/floating-navigator')            // false
    */
   private isAuthPathname(rawUrl: string): boolean {
@@ -1340,7 +1342,7 @@ export class WindowManager {
    * and only `show()` it once it actually renders the panel route (not /login).
    * Called from `main.ts` for each panel enabled in `behavior.startup`.
    *
-   * @param kind - 'floating' | 'braindump' — which startup panel to open.
+   * @param kind - 'floating' | 'liveEditor' — which startup panel to open.
    * @example
    * windowManager.openStartupPanel('floating')
    */
@@ -1348,7 +1350,7 @@ export class WindowManager {
     const panel =
       kind === 'floating'
         ? this.createFloatingNavigator()
-        : this.createBrainDumpWindow()
+        : this.createLiveEditorWindow()
     this.watchStartupPanelLoad(panel, kind)
   }
 
@@ -1360,7 +1362,7 @@ export class WindowManager {
    *
    * @returns A read-only view of the suppressed-panel set.
    * @example
-   * if (windowManager.getStartupAuthFallbacks().has('braindump')) { ... }
+   * if (windowManager.getStartupAuthFallbacks().has('liveEditor')) { ... }
    */
   getStartupAuthFallbacks(): ReadonlySet<StartupPanelKind> {
     return this.startupAuthFallbacks
@@ -1371,7 +1373,7 @@ export class WindowManager {
    * lands on the panel route, or suppress it + surface main if the load
    * redirects to an auth page or fails (offline/timeout/5xx).
    *
-   * Ordering note: `createFloatingNavigator`/`createBrainDumpWindow` call
+   * Ordering note: `createFloatingNavigator`/`createLiveEditorWindow` call
    * `loadURL` synchronously *before* this runs. That is safe — `did-navigate`
    * is async, so these listeners register in the same tick, before the network
    * response arrives. Do NOT "fix" it by moving `loadURL`.
@@ -1399,9 +1401,9 @@ export class WindowManager {
 
       if (authenticated) {
         // Authed: reveal the panel the user asked to start with.
-        if (kind === 'braindump') {
-          this.brainDumpHasLoadedOnce = true
-          this.brainDumpNeedsReloadBeforeReveal = false
+        if (kind === 'liveEditor') {
+          this.liveEditorHasLoadedOnce = true
+          this.liveEditorNeedsReloadBeforeReveal = false
         }
         panel.show()
         return
@@ -1413,11 +1415,11 @@ export class WindowManager {
       // signed-out launch always leaves one visible, interactive window to sign in
       // from. The suppressed panel reopens from the tray after sign-in; main's
       // post-login auto-reshow is retired with the window.
-      if (kind === 'braindump') {
-        this.brainDumpHasLoadedOnce = false
-        this.brainDumpRevealPending = false
-        this.cancelBrainDumpReveal = null
-        this.brainDumpNeedsReloadBeforeReveal = true
+      if (kind === 'liveEditor') {
+        this.liveEditorHasLoadedOnce = false
+        this.liveEditorRevealPending = false
+        this.cancelLiveEditorReveal = null
+        this.liveEditorNeedsReloadBeforeReveal = true
       }
       this.startupAuthFallbacks.add(kind)
       this.restoreFromTray()
@@ -1451,7 +1453,7 @@ export class WindowManager {
       if (!isMainFrame || errorCode === ERR_ABORTED) return
       // Phase 1 / DT7: the Floating window owns its own load-failure recovery
       // (retry + native dialog in `createFloatingNavigator`), so the startup
-      // gate must NOT suppress it and surface main on a network blip. Braindump
+      // gate must NOT suppress it and surface main on a network blip. LiveEditor
       // is still main-deferred in Phase 1, so it keeps the surface-main path.
       if (kind === 'floating') return
       finish(false)
@@ -1710,8 +1712,8 @@ export class WindowManager {
       this.settingsWindow.close()
     }
 
-    if (this.brainDumpWindow && !this.brainDumpWindow.isDestroyed()) {
-      this.brainDumpWindow.close()
+    if (this.liveEditorWindow && !this.liveEditorWindow.isDestroyed()) {
+      this.liveEditorWindow.close()
     }
 
     if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {

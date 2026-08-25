@@ -1,5 +1,5 @@
 /**
- * @fileoverview Pure helpers for the BrainDump editor.
+ * @fileoverview Pure helpers for the LiveEditor editor.
  *
  * The editor uses a single-line markdown checkbox grammar:
  *
@@ -17,7 +17,7 @@
  * Why a separate utils file: parsing/serialization stays pure so the editor
  * component can stay focused on UI/IPC orchestration and is easy to unit-test.
  *
- * @module components/braindump/braindumpUtils
+ * @module components/live-editor/liveEditorUtils
  */
 
 import type { Completed } from '@/server/schemas/completed'
@@ -34,34 +34,34 @@ export const CHECKBOX_LINE_REGEX = /^([ \t]*)- \[([ x])\] (.+)$/
 export const COMPLETED_TITLE_MAX_LENGTH = 255
 
 /**
- * Zero-based line index inside the BrainDump textarea. Reused as the key for
+ * Zero-based line index inside the LiveEditor textarea. Reused as the key for
  * `checkedRowsRef` so a line and its persisted Completed row stay associated.
  *
  * @example
- * const lineIndex: BrainDumpLineIndex = 3 // 4th line of the textarea
+ * const lineIndex: LiveEditorLineIndex = 3 // 4th line of the textarea
  */
-export type BrainDumpLineIndex = number
+export type LiveEditorLineIndex = number
 
 /**
- * Title of a Completed row created from a BrainDump checkbox line. Aliased to
+ * Title of a Completed row created from a LiveEditor checkbox line. Aliased to
  * `Completed['title']` so any future schema-level constraint (e.g. branding)
  * propagates here without hand-editing.
  *
  * @example
- * const title: BrainDumpCompletedTitle = "buy milk"
+ * const title: LiveEditorCompletedTitle = "buy milk"
  */
-export type BrainDumpCompletedTitle = Completed['title']
+export type LiveEditorCompletedTitle = Completed['title']
 
 /** A single parsed checkbox line. */
 export type ParsedCheckbox = Readonly<{
   /** Zero-based line index in the original text. */
-  lineIndex: BrainDumpLineIndex
+  lineIndex: LiveEditorLineIndex
   /** Original spaces/tabs before `-`, preserved when toggling nested tasks. */
   leadingWhitespace: string
   /** True when the box is `[x]`, false when `[ ]`. */
   checked: boolean
   /** The text after `- [x] ` / `- [ ] ` (already trimmed). */
-  title: BrainDumpCompletedTitle
+  title: LiveEditorCompletedTitle
 }>
 
 /**
@@ -78,7 +78,7 @@ export type ParsedCheckbox = Readonly<{
  */
 export function parseCheckboxLine(
   line: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
 ): ParsedCheckbox | null {
   const match = CHECKBOX_LINE_REGEX.exec(line)
   if (!match) return null
@@ -133,7 +133,7 @@ export function parseAllCheckboxes(text: string): ParsedCheckbox[] {
  */
 export function setCheckboxStateAtLine(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
   checked: boolean,
 ): string {
   const lines = text.split('\n')
@@ -166,7 +166,7 @@ export function setCheckboxStateAtLine(
  */
 export function replaceLineAtIndex(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
   newLine: string,
 ): string {
   const lines = text.split('\n')
@@ -178,7 +178,7 @@ export function replaceLineAtIndex(
 /**
  * Remove one line entirely, joining the surrounding lines. Used by the
  * clear-on-complete setting: once a finished line's undo window closes, the
- * `- [x] <title>` line is dropped so the BrainDump scratchpad stays clean.
+ * `- [x] <title>` line is dropped so the LiveEditor scratchpad stays clean.
  * Returns the original text for out-of-range indices, mirroring
  * `replaceLineAtIndex`.
  *
@@ -191,7 +191,7 @@ export function replaceLineAtIndex(
  */
 export function removeLineAtIndex(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
 ): string {
   const lines = text.split('\n')
   if (lineIndex < 0 || lineIndex >= lines.length) return text
@@ -218,7 +218,7 @@ export function removeLineAtIndex(
  */
 export function insertLineAtIndex(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
   newLine: string,
 ): string {
   // Empty document: return just the line so remove('x')→insert restores 'x'
@@ -248,7 +248,7 @@ export function insertLineAtIndex(
  */
 export function lineStartOffset(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
 ): number {
   const lines = text.split('\n')
   if (lineIndex >= lines.length) return text.length
@@ -278,13 +278,13 @@ export type PlainLineCompletion = Readonly<{
   /** Full note text with the caret line rewritten as `- [x] <title>`. */
   text: string
   /** Trimmed line content to persist (uncapped; promote caps it for the DB). */
-  title: BrainDumpCompletedTitle
+  title: LiveEditorCompletedTitle
 }>
 
 /**
  * Wrap a plain (non-checkbox) line as a checked checkbox so the complete
  * command (Cmd/Ctrl+Enter) can finish an ordinary prose line, not only a
- * pre-formatted `- [ ]` box. Called from `BrainDumpEditor.handleKeyDown` when
+ * pre-formatted `- [ ]` box. Called from `LiveEditor.handleKeyDown` when
  * `parseCheckboxLine` returns null for the caret line.
  *
  * @param text - The editor's full text contents.
@@ -304,7 +304,7 @@ export type PlainLineCompletion = Readonly<{
  */
 export function markPlainLineCompleted(
   text: string,
-  lineIndex: BrainDumpLineIndex,
+  lineIndex: LiveEditorLineIndex,
 ): PlainLineCompletion | null {
   const lines = text.split('\n')
   if (lineIndex < 0 || lineIndex >= lines.length) return null
@@ -334,7 +334,7 @@ export function markPlainLineCompleted(
  * @example
  * normalizeCompletedTitle('  hello world  ') // → 'hello world'
  */
-export function normalizeCompletedTitle(raw: string): BrainDumpCompletedTitle {
+export function normalizeCompletedTitle(raw: string): LiveEditorCompletedTitle {
   const trimmed = raw.trim()
   if (trimmed.length <= COMPLETED_TITLE_MAX_LENGTH) return trimmed
   return trimmed.slice(0, COMPLETED_TITLE_MAX_LENGTH)

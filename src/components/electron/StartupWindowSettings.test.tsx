@@ -2,7 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { StartupWindowConfig } from '@/electron/types/ipc'
+import type {
+  LegacyStartupWindowConfig,
+  StartupWindowConfig,
+} from '@/electron/types/ipc'
 
 import { StartupWindowSettings } from './StartupWindowSettings'
 
@@ -29,7 +32,9 @@ function installElectronAPI(api: unknown): void {
  *
  * @param saved - The startup config getStartupConfig should resolve with.
  */
-function installSettingsWithConfig(saved: StartupWindowConfig): void {
+function installSettingsWithConfig(
+  saved: StartupWindowConfig | LegacyStartupWindowConfig,
+): void {
   getStartupConfigMock.mockResolvedValue(saved)
   installElectronAPI({
     settings: {
@@ -48,29 +53,62 @@ describe('StartupWindowSettings', () => {
   })
 
   it('reflects the saved startup config once the main process responds', async () => {
-    // Arrange: brain-dump-only is the persisted choice.
+    // Arrange: live-editor-only is the persisted choice.
     installSettingsWithConfig({
-      showBraindump: true,
+      showLiveEditor: true,
       showFloating: false,
     })
 
     // Act
     render(<StartupWindowSettings />)
 
-    // Assert: the Brain Dump toggle reads on; Floating reads off.
-    const brainDumpSwitch = await screen.findByRole('switch', {
-      name: 'Brain Dump',
+    // Assert: the LiveEditor toggle reads on; Floating reads off.
+    const liveEditorSwitch = await screen.findByRole('switch', {
+      name: 'LiveEditor',
     })
-    expect(brainDumpSwitch).toBeChecked()
+    expect(liveEditorSwitch).toBeChecked()
     expect(
       screen.getByRole('switch', { name: 'Floating Navigator' }),
     ).not.toBeChecked()
   })
 
+  it('reads and writes the pre-rename startup field used by an older installed app', async () => {
+    // Arrange: the deployed renderer is new while Electron still exposes the
+    // previous namespace and startup payload shape.
+    getStartupConfigMock.mockResolvedValue({
+      showBraindump: true,
+      showFloating: false,
+    })
+    installElectronAPI({
+      brainDump: {},
+      settings: {
+        getStartupConfig: getStartupConfigMock,
+        setStartupConfig: setStartupConfigMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<StartupWindowSettings />)
+    const floatingSwitch = await screen.findByRole('switch', {
+      name: 'Floating Navigator',
+    })
+
+    // Act
+    await user.click(floatingSwitch)
+
+    // Assert: LiveEditor renders correctly and the save uses the installed API's field name.
+    expect(screen.getByRole('switch', { name: 'LiveEditor' })).toBeChecked()
+    await waitFor(() => {
+      expect(setStartupConfigMock).toHaveBeenCalledWith({
+        showBraindump: true,
+        showFloating: true,
+      })
+    })
+  })
+
   it('locks the only enabled window so a launch never opens nothing', async () => {
     // Arrange: the Floating Navigator is the sole enabled startup window.
     installSettingsWithConfig({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
 
@@ -82,38 +120,38 @@ describe('StartupWindowSettings', () => {
       name: 'Floating Navigator',
     })
     expect(floatingSwitch).toBeDisabled()
-    expect(screen.getByRole('switch', { name: 'Brain Dump' })).toBeEnabled()
+    expect(screen.getByRole('switch', { name: 'LiveEditor' })).toBeEnabled()
   })
 
   it('persists the new config when a window is toggled on', async () => {
     // Arrange: only the Floating Navigator opens at launch.
     installSettingsWithConfig({
-      showBraindump: false,
+      showLiveEditor: false,
       showFloating: true,
     })
     const user = userEvent.setup()
     render(<StartupWindowSettings />)
-    const brainDumpSwitch = await screen.findByRole('switch', {
-      name: 'Brain Dump',
+    const liveEditorSwitch = await screen.findByRole('switch', {
+      name: 'LiveEditor',
     })
 
-    // Act: also open Brain Dump at launch.
-    await user.click(brainDumpSwitch)
+    // Act: also open LiveEditor at launch.
+    await user.click(liveEditorSwitch)
 
-    // Assert: the full config (floating + brain dump) is sent to the main process.
+    // Assert: the full config (floating + LiveEditor) is sent to the main process.
     await waitFor(() => {
       expect(setStartupConfigMock).toHaveBeenCalledWith({
-        showBraindump: true,
+        showLiveEditor: true,
         showFloating: true,
       })
     })
-    expect(screen.getByRole('switch', { name: 'Brain Dump' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'LiveEditor' })).toBeChecked()
   })
 
   it('rolls the toggle back when the main process fails to persist it', async () => {
-    // Arrange: Brain Dump enabled (so Floating is interactive, not locked).
+    // Arrange: LiveEditor enabled (so Floating is interactive, not locked).
     installSettingsWithConfig({
-      showBraindump: true,
+      showLiveEditor: true,
       showFloating: false,
     })
     setStartupConfigMock.mockResolvedValue(false) // the save reports failure

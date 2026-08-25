@@ -35,18 +35,36 @@ export const FLOATING_NAVIGATOR_PIN_SETTING: FloatingPanelSettingConfig = {
 }
 
 /**
- * Brain Dump keep-on-top pin (default OFF — a dump surface you summon, not one
+ * LiveEditor keep-on-top pin (default OFF — a dump surface you summon, not one
  * that hovers permanently). NB: these methods live on `floatingPanels`, NOT the
- * `brainDump` bridge, so this row degrades on a different preload axis than the
- * Brain Dump note card it sits beside.
+ * `liveEditor` bridge, so this row degrades on a different preload axis than the
+ * LiveEditor note card it sits beside.
  */
-export const BRAIN_DUMP_PIN_SETTING: FloatingPanelSettingConfig = {
+export const LIVE_EDITOR_PIN_SETTING: FloatingPanelSettingConfig = {
   defaultValue: false,
-  get: async (api) => api.getBrainDumpAlwaysOnTop(),
-  set: async (api, next) => api.setBrainDumpAlwaysOnTop(next),
+  get: async (api) => {
+    if (typeof api.getLiveEditorAlwaysOnTop === 'function') {
+      return api.getLiveEditorAlwaysOnTop()
+    }
+    if (typeof api.getBrainDumpAlwaysOnTop === 'function') {
+      return api.getBrainDumpAlwaysOnTop()
+    }
+    return false
+  },
+  set: async (api, next) => {
+    if (typeof api.setLiveEditorAlwaysOnTop === 'function') {
+      return api.setLiveEditorAlwaysOnTop(next)
+    }
+    if (typeof api.setBrainDumpAlwaysOnTop === 'function') {
+      return api.setBrainDumpAlwaysOnTop(next)
+    }
+    return next
+  },
   available: (api) =>
-    typeof api.getBrainDumpAlwaysOnTop === 'function' &&
-    typeof api.setBrainDumpAlwaysOnTop === 'function',
+    (typeof api.getLiveEditorAlwaysOnTop === 'function' &&
+      typeof api.setLiveEditorAlwaysOnTop === 'function') ||
+    (typeof api.getBrainDumpAlwaysOnTop === 'function' &&
+      typeof api.setBrainDumpAlwaysOnTop === 'function'),
 }
 
 /**

@@ -6,10 +6,10 @@ import ShortcutManager from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
 /**
- * BrainDump can be bound to TWO keys at once (`toggleBrainDump` +
- * `toggleBrainDumpSecondary`, one shared handler). These specs fail if the
+ * LiveEditor can be bound to TWO keys at once (`toggleLiveEditor` +
+ * `toggleLiveEditorSecondary`, one shared handler). These specs fail if the
  * registration loop ever drops a slot — which would look like "my second key
- * stopped opening BrainDump" with nothing in the logs.
+ * stopped opening LiveEditor" with nothing in the logs.
  */
 
 /**
@@ -43,21 +43,21 @@ vi.mock('electron', () => ({
 const globalRegisterMock = vi.mocked(globalShortcut.register)
 
 /**
- * Builds a WindowManager stand-in whose BrainDump toggle is a spy, so a test can
- * prove a registered accelerator actually reaches the BrainDump window.
- * @returns The stub plus its `toggleBrainDump` spy.
+ * Builds a WindowManager stand-in whose LiveEditor toggle is a spy, so a test can
+ * prove a registered accelerator actually reaches the LiveEditor window.
+ * @returns The stub plus its `toggleLiveEditor` spy.
  * @example
- * const { windowManager, toggleBrainDump } = createWindowManagerHarness()
+ * const { windowManager, toggleLiveEditor } = createWindowManagerHarness()
  */
 function createWindowManagerHarness() {
-  const toggleBrainDump = vi.fn(() => true)
+  const toggleLiveEditor = vi.fn(() => true)
   const windowManager = {
     getFloatingNavigator: vi.fn(() => null),
-    toggleBrainDump,
+    toggleLiveEditor,
     toggleFloatingNavigator: vi.fn(),
     setOnFloatingNavigatorCreated: vi.fn(),
   } as unknown as WindowManager
-  return { windowManager, toggleBrainDump }
+  return { windowManager, toggleLiveEditor }
 }
 
 /**
@@ -65,7 +65,7 @@ function createWindowManagerHarness() {
  * @param shortcuts - The persisted `shortcuts.*` values the manager should load.
  * @returns A ConfigManager-compatible stub.
  * @example
- * createConfigManagerStub({ toggleBrainDump: 'Alt+Space' })
+ * createConfigManagerStub({ toggleLiveEditor: 'Alt+Space' })
  */
 function createConfigManagerStub(
   shortcuts: Record<string, string | boolean>,
@@ -77,21 +77,21 @@ function createConfigManagerStub(
   } as unknown as ConfigManager
 }
 
-describe('BrainDump two-slot toggle shortcuts', () => {
+describe('LiveEditor two-slot toggle shortcuts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     heldAccelerators.clear()
   })
 
-  it('opens BrainDump from either of the two configured toggle keys', () => {
+  it('opens LiveEditor from either of the two configured toggle keys', () => {
     // Arrange
-    const { windowManager, toggleBrainDump } = createWindowManagerHarness()
+    const { windowManager, toggleLiveEditor } = createWindowManagerHarness()
     const shortcutManager = new ShortcutManager(
       windowManager,
       null,
       createConfigManagerStub({
-        toggleBrainDump: 'Alt+Space',
-        toggleBrainDumpSecondary: 'Control+Shift+B',
+        toggleLiveEditor: 'Alt+Space',
+        toggleLiveEditorSecondary: 'Control+Shift+B',
       }),
     )
 
@@ -108,28 +108,28 @@ describe('BrainDump two-slot toggle shortcuts', () => {
       expect.any(Function),
     )
 
-    // …and both fire the same BrainDump toggle.
+    // …and both fire the same LiveEditor toggle.
     for (const accelerator of ['Alt+Space', 'Control+Shift+B']) {
       const call = globalRegisterMock.mock.calls.find(
         ([registered]) => registered === accelerator,
       )
       call?.[1]()
     }
-    expect(toggleBrainDump).toHaveBeenCalledTimes(2)
+    expect(toggleLiveEditor).toHaveBeenCalledTimes(2)
   })
 
   it('refuses a settings save that would point both toggle keys at one key', () => {
     // Arrange: the generic Shortcut Settings screen submits every registered id,
     // including the second slot (which has no row there), so a user rebinding the
-    // visible "Toggle BrainDump" row onto the second slot's key arrives as a
+    // visible "Toggle LiveEditor" row onto the second slot's key arrives as a
     // duplicate batch. Accepting it would orphan one of the two bindings.
     const { windowManager } = createWindowManagerHarness()
     const shortcutManager = new ShortcutManager(
       windowManager,
       null,
       createConfigManagerStub({
-        toggleBrainDump: 'Alt+Space',
-        toggleBrainDumpSecondary: 'Control+Shift+B',
+        toggleLiveEditor: 'Alt+Space',
+        toggleLiveEditorSecondary: 'Control+Shift+B',
       }),
     )
     shortcutManager.registerGlobalShortcuts()
@@ -137,14 +137,14 @@ describe('BrainDump two-slot toggle shortcuts', () => {
 
     // Act
     const didUpdate = shortcutManager.updateShortcuts({
-      toggleBrainDump: 'Control+Shift+B',
-      toggleBrainDumpSecondary: 'Control+Shift+B',
+      toggleLiveEditor: 'Control+Shift+B',
+      toggleLiveEditorSecondary: 'Control+Shift+B',
     })
 
     // Assert: rejected outright, and nothing was re-registered along the way.
     expect(didUpdate).toBe(false)
     expect(globalRegisterMock).not.toHaveBeenCalled()
-    expect(shortcutManager.getRegisteredShortcuts().toggleBrainDump).toBe(
+    expect(shortcutManager.getRegisteredShortcuts().toggleLiveEditor).toBe(
       'Alt+Space',
     )
   })
@@ -158,25 +158,25 @@ describe('BrainDump two-slot toggle shortcuts', () => {
       windowManager,
       null,
       createConfigManagerStub({
-        toggleBrainDump: 'Alt+Space',
-        toggleBrainDumpSecondary: 'Control+Shift+B',
+        toggleLiveEditor: 'Alt+Space',
+        toggleLiveEditorSecondary: 'Control+Shift+B',
       }),
     )
     shortcutManager.registerGlobalShortcuts()
 
     // Act
     const didUpdate = shortcutManager.updateShortcuts({
-      toggleBrainDump: 'Control+Shift+B',
-      toggleBrainDumpSecondary: 'Alt+Space',
+      toggleLiveEditor: 'Control+Shift+B',
+      toggleLiveEditorSecondary: 'Alt+Space',
     })
 
     // Assert
     expect(didUpdate).toBe(true)
-    expect(shortcutManager.getRegisteredShortcuts().toggleBrainDump).toBe(
+    expect(shortcutManager.getRegisteredShortcuts().toggleLiveEditor).toBe(
       'Control+Shift+B',
     )
     expect(
-      shortcutManager.getRegisteredShortcuts().toggleBrainDumpSecondary,
+      shortcutManager.getRegisteredShortcuts().toggleLiveEditorSecondary,
     ).toBe('Alt+Space')
   })
 
@@ -190,7 +190,7 @@ describe('BrainDump two-slot toggle shortcuts', () => {
       null,
       createConfigManagerStub({
         newTask: 'CommandOrControl+N',
-        toggleBrainDump: 'Alt+Space',
+        toggleLiveEditor: 'Alt+Space',
       }),
     )
     shortcutManager.registerContextualShortcuts()
@@ -198,17 +198,17 @@ describe('BrainDump two-slot toggle shortcuts', () => {
       'CommandOrControl+N',
     )
 
-    // Act: rebind only the BrainDump key; newTask is resubmitted unchanged.
+    // Act: rebind only the LiveEditor key; newTask is resubmitted unchanged.
     shortcutManager.updateShortcuts({
       newTask: 'CommandOrControl+N',
-      toggleBrainDump: 'Control+Shift+B',
+      toggleLiveEditor: 'Control+Shift+B',
     })
 
     // Assert
     expect(shortcutManager.getRegisteredShortcuts().newTask).toBe(
       'CommandOrControl+N',
     )
-    expect(shortcutManager.getRegisteredShortcuts().toggleBrainDump).toBe(
+    expect(shortcutManager.getRegisteredShortcuts().toggleLiveEditor).toBe(
       'Control+Shift+B',
     )
   })
@@ -225,7 +225,7 @@ describe('BrainDump two-slot toggle shortcuts', () => {
       null,
       createConfigManagerStub({
         newTask: 'CommandOrControl+N',
-        toggleBrainDump: 'Alt+Space',
+        toggleLiveEditor: 'Alt+Space',
       }),
     )
     shortcutManager.registerContextualShortcuts()
@@ -238,7 +238,7 @@ describe('BrainDump two-slot toggle shortcuts', () => {
     // Act: save an unrelated global key, resubmitting newTask's configured value.
     shortcutManager.updateShortcuts({
       newTask: 'CommandOrControl+N',
-      toggleBrainDump: 'Control+Shift+B',
+      toggleLiveEditor: 'Control+Shift+B',
     })
 
     // Assert: the fallback survives untouched.
@@ -255,19 +255,19 @@ describe('BrainDump two-slot toggle shortcuts', () => {
     const shortcutManager = new ShortcutManager(
       windowManager,
       null,
-      createConfigManagerStub({ toggleBrainDump: 'Alt+Space' }),
+      createConfigManagerStub({ toggleLiveEditor: 'Alt+Space' }),
     )
     shortcutManager.registerGlobalShortcuts()
 
     // Act
     const didUpdate = shortcutManager.updateShortcuts({
-      toggleBrainDumpSecondary: ' alt+space ',
+      toggleLiveEditorSecondary: ' alt+space ',
     })
 
     // Assert
     expect(didUpdate).toBe(false)
     expect(
-      shortcutManager.getRegisteredShortcuts().toggleBrainDumpSecondary,
+      shortcutManager.getRegisteredShortcuts().toggleLiveEditorSecondary,
     ).toBeUndefined()
   })
 
@@ -277,19 +277,19 @@ describe('BrainDump two-slot toggle shortcuts', () => {
     const shortcutManager = new ShortcutManager(
       windowManager,
       null,
-      createConfigManagerStub({ toggleBrainDump: 'Alt+Space' }),
+      createConfigManagerStub({ toggleLiveEditor: 'Alt+Space' }),
     )
 
     // Act
     shortcutManager.registerGlobalShortcuts()
 
     // Assert — the empty second slot must never reach globalShortcut as ''
-    expect(shortcutManager.getDefaultShortcuts().toggleBrainDumpSecondary).toBe(
-      '',
-    )
+    expect(
+      shortcutManager.getDefaultShortcuts().toggleLiveEditorSecondary,
+    ).toBe('')
     expect(globalRegisterMock).not.toHaveBeenCalledWith('', expect.anything())
     expect(shortcutManager.getRegisteredShortcuts()).not.toHaveProperty(
-      'toggleBrainDumpSecondary',
+      'toggleLiveEditorSecondary',
     )
   })
 })

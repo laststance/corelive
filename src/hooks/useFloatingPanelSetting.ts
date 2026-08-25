@@ -47,7 +47,7 @@ export interface FloatingPanelSetting {
  * Manages one `floatingPanels.*` boolean setting (Spaces visibility or a
  * per-window keep-on-top pin): loads it once on mount, applies optimistically with
  * rollback, and reports per-method availability so a single row can hide itself on
- * an outdated preload. Shared by the Floating Navigator pin, the Brain Dump pin,
+ * an outdated preload. Shared by the Floating Navigator pin, the LiveEditor pin,
  * and the Application "show on all desktops" toggle — each previously duplicated in
  * the monolithic FloatingWindowSettings before the settings regroup.
  *

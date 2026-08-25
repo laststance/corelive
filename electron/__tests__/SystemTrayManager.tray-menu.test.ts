@@ -39,23 +39,23 @@ const fakeTray = {
  * Build a SystemTrayManager over a stub WindowManager exposing spies for the
  * window actions the tray menu items invoke, with a live tray already primed.
  * @returns The manager plus the WindowManager action spies.
- * @example const { manager, toggleBrainDump } = createManager()
+ * @example const { manager, toggleLiveEditor } = createManager()
  */
 function createManager(): {
   manager: SystemTrayManager
   openSettings: ReturnType<typeof vi.fn>
   restoreFromTray: ReturnType<typeof vi.fn>
-  toggleBrainDump: ReturnType<typeof vi.fn>
+  toggleLiveEditor: ReturnType<typeof vi.fn>
   toggleFloatingNavigator: ReturnType<typeof vi.fn>
 } {
   const openSettings = vi.fn()
   const restoreFromTray = vi.fn()
-  const toggleBrainDump = vi.fn()
+  const toggleLiveEditor = vi.fn()
   const toggleFloatingNavigator = vi.fn()
   const stubWindowManager = {
     restoreFromTray,
     openSettings,
-    toggleBrainDump,
+    toggleLiveEditor,
     toggleFloatingNavigator,
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
@@ -67,7 +67,7 @@ function createManager(): {
     manager,
     openSettings,
     restoreFromTray,
-    toggleBrainDump,
+    toggleLiveEditor,
     toggleFloatingNavigator,
   }
 }
@@ -86,7 +86,7 @@ function findItem(
   return template.find((item) => item.label === label)
 }
 
-describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () => {
+describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () => {
   beforeEach(() => {
     vi.mocked(Menu.buildFromTemplate).mockClear()
   })
@@ -96,20 +96,20 @@ describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () =
     fakeTray.setContextMenu = vi.fn()
   })
 
-  it('toggles the BrainDump window when its tray item is clicked', () => {
+  it('toggles the LiveEditor window when its tray item is clicked', () => {
     // Arrange
-    const { manager, toggleBrainDump } = createManager()
+    const { manager, toggleLiveEditor } = createManager()
 
     // Act
     manager.updateTrayMenu([])
-    const brainDumpItem = findItem(lastBuiltTemplate(), 'Toggle BrainDump')
-    ;(brainDumpItem?.click as () => void)?.()
+    const liveEditorItem = findItem(lastBuiltTemplate(), 'Toggle LiveEditor')
+    ;(liveEditorItem?.click as () => void)?.()
 
-    // Assert: the item is the toggle (not the old one-way "Open BrainDump")
+    // Assert: the item is the toggle (not the old one-way "Open LiveEditor")
     // and it routes to the window toggle, matching Floating Navigator.
-    expect(brainDumpItem).toBeDefined()
-    expect(findItem(lastBuiltTemplate(), 'Open BrainDump')).toBeUndefined()
-    expect(toggleBrainDump).toHaveBeenCalledTimes(1)
+    expect(liveEditorItem).toBeDefined()
+    expect(findItem(lastBuiltTemplate(), 'Open LiveEditor')).toBeUndefined()
+    expect(toggleLiveEditor).toHaveBeenCalledTimes(1)
   })
 
   it('opens the full app in the browser — never a native window — from its tray item', () => {
@@ -158,7 +158,7 @@ describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () =
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
       toggleFloatingNavigator: 'CommandOrControl+3',
-      toggleBrainDump: 'Alt+Space',
+      toggleLiveEditor: 'Alt+Space',
     }))
 
     // Act
@@ -169,26 +169,26 @@ describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () =
     expect(findItem(template, 'Toggle Floating Navigator')?.accelerator).toBe(
       'CommandOrControl+3',
     )
-    expect(findItem(template, 'Toggle BrainDump')?.accelerator).toBe(
+    expect(findItem(template, 'Toggle LiveEditor')?.accelerator).toBe(
       'Alt+Space',
     )
   })
 
   it('omits the accelerator entirely when a shortcut is unbound', () => {
-    // Arrange: provider reports no BrainDump binding (empty string disables it).
+    // Arrange: provider reports no LiveEditor binding (empty string disables it).
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
       toggleFloatingNavigator: 'CommandOrControl+3',
-      toggleBrainDump: '',
+      toggleLiveEditor: '',
     }))
 
     // Act
     manager.updateTrayMenu([])
-    const brainDumpItem = findItem(lastBuiltTemplate(), 'Toggle BrainDump')
+    const liveEditorItem = findItem(lastBuiltTemplate(), 'Toggle LiveEditor')
 
     // Assert: no orphan accelerator glyph for an unbound shortcut.
-    expect(brainDumpItem).toBeDefined()
-    expect('accelerator' in brainDumpItem!).toBe(false)
+    expect(liveEditorItem).toBeDefined()
+    expect('accelerator' in liveEditorItem!).toBe(false)
   })
 
   it('falls back to no hotkey when no accelerator provider is injected', () => {
@@ -203,28 +203,30 @@ describe('SystemTrayManager tray menu — BrainDump toggle + live hotkeys', () =
     expect(
       'accelerator' in findItem(template, 'Toggle Floating Navigator')!,
     ).toBe(false)
-    expect('accelerator' in findItem(template, 'Toggle BrainDump')!).toBe(false)
+    expect('accelerator' in findItem(template, 'Toggle LiveEditor')!).toBe(
+      false,
+    )
   })
 
   it('refreshes the displayed hotkey after a rebind without losing recent tasks', () => {
-    // Arrange: first render shows the default BrainDump hotkey with one task.
+    // Arrange: first render shows the default LiveEditor hotkey with one task.
     const { manager } = createManager()
-    let brainDumpAccelerator = 'Alt+Space'
+    let liveEditorAccelerator = 'Alt+Space'
     manager.setShortcutAcceleratorProvider(() => ({
-      toggleBrainDump: brainDumpAccelerator,
+      toggleLiveEditor: liveEditorAccelerator,
     }))
     const tasks: TaskItem[] = [
       { title: 'Write the release notes', completed: false },
     ]
     manager.updateTrayMenu(tasks)
 
-    // Act: the user rebinds BrainDump, then a refresh re-renders the tray.
-    brainDumpAccelerator = 'CommandOrControl+Shift+B'
+    // Act: the user rebinds LiveEditor, then a refresh re-renders the tray.
+    liveEditorAccelerator = 'CommandOrControl+Shift+B'
     manager.refreshTrayMenu()
     const template = lastBuiltTemplate()
 
     // Assert: the new hotkey shows AND the cached task survived the refresh.
-    expect(findItem(template, 'Toggle BrainDump')?.accelerator).toBe(
+    expect(findItem(template, 'Toggle LiveEditor')?.accelerator).toBe(
       'CommandOrControl+Shift+B',
     )
     expect(

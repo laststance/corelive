@@ -2,7 +2,7 @@ import { ORPCError } from '@orpc/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
-import { normalizeCompletedTitle } from '@/components/braindump/braindumpUtils'
+import { normalizeCompletedTitle } from '@/components/live-editor/liveEditorUtils'
 import { COMPLETED_UNDO_WINDOW_MS } from '@/lib/constants/import'
 import { prisma } from '@/lib/prisma'
 

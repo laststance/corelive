@@ -4,7 +4,7 @@
  * @fileoverview Shared optimistic-capture state for an inline single-accelerator
  * rebind box (`KeybindingCaptureInput`).
  *
- * Both the BrainDump and Floating Navigator Settings rows let the user press a
+ * Both the LiveEditor and Floating Navigator Settings rows let the user press a
  * key combo to rebind one global toggle. The capture box commits immediately (no
  * blur step), so each row needs the same dance: show the new combo optimistically,
  * push it over IPC, then roll back to the last accepted value when the main
@@ -55,7 +55,7 @@ interface UseShortcutCapture {
  *   capture handler to wire to `KeybindingCaptureInput.onChange`.
  * @example
  * const { shortcut, setLoadedShortcut, capture } = useShortcutCapture({
- *   persist: (a) => window.electronAPI?.brainDump?.setShortcut(a) ?? Promise.resolve(undefined),
+ *   persist: (a) => window.electronAPI?.liveEditor?.setShortcut(a) ?? Promise.resolve(undefined),
  *   onError: setError,
  * })
  * // load effect: setLoadedShortcut(await api.getShortcut())

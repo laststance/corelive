@@ -1,60 +1,60 @@
 import type { ConfigManager } from './ConfigManager'
 
-const BRAINDUMP_NOTES_CONFIG_PATH = 'braindump.notes'
+const LIVE_EDITOR_NOTES_CONFIG_PATH = 'liveEditor.notes'
 
-type BrainDumpNoteReader = Pick<ConfigManager, 'get'>
-type BrainDumpNoteWriter = Pick<ConfigManager, 'get' | 'set'>
+type LiveEditorNoteReader = Pick<ConfigManager, 'get'>
+type LiveEditorNoteWriter = Pick<ConfigManager, 'get' | 'set'>
 
 /**
  * Converts the category id into the persisted note-map key used by Electron IPC callers.
  * @param categoryId - The positive category id from the typed IPC contract.
- * @returns The string key used in `braindump.notes`.
+ * @returns The string key used in `liveEditor.notes`.
  * @example
- * toBrainDumpNoteKey(42) // => '42'
+ * toLiveEditorNoteKey(42) // => '42'
  */
-const toBrainDumpNoteKey = (categoryId: number): string => String(categoryId)
+const toLiveEditorNoteKey = (categoryId: number): string => String(categoryId)
 
 /**
- * Reads one persisted BrainDump note for IPC without exposing the whole notes map.
+ * Reads one persisted LiveEditor note for IPC without exposing the whole notes map.
  * @param configManager - The Electron config manager that owns `config.json`.
  * @param categoryId - The category whose note text should be read.
  * @returns The stored note text, or an empty string when no note exists.
  * @example
- * getBrainDumpNote(configManager, 42) // => 'today I shipped'
+ * getLiveEditorNote(configManager, 42) // => 'today I shipped'
  */
-export const getBrainDumpNote = (
-  configManager: BrainDumpNoteReader,
+export const getLiveEditorNote = (
+  configManager: LiveEditorNoteReader,
   categoryId: number,
 ): string => {
   const notes = configManager.get<Record<string, string>>(
-    BRAINDUMP_NOTES_CONFIG_PATH,
+    LIVE_EDITOR_NOTES_CONFIG_PATH,
     {},
   )
 
-  return notes?.[toBrainDumpNoteKey(categoryId)] ?? ''
+  return notes?.[toLiveEditorNoteKey(categoryId)] ?? ''
 }
 
 /**
- * Writes one BrainDump note while preserving every other category note in config.
+ * Writes one LiveEditor note while preserving every other category note in config.
  * @param configManager - The Electron config manager that owns `config.json`.
  * @param categoryId - The category whose note text should be updated.
  * @param text - The note text to persist for the category.
  * @returns Nothing; the config manager performs the disk write.
  * @example
- * setBrainDumpNote(configManager, 42, 'today I shipped')
+ * setLiveEditorNote(configManager, 42, 'today I shipped')
  */
-export const setBrainDumpNote = (
-  configManager: BrainDumpNoteWriter,
+export const setLiveEditorNote = (
+  configManager: LiveEditorNoteWriter,
   categoryId: number,
   text: string,
 ): void => {
   const notes = configManager.get<Record<string, string>>(
-    BRAINDUMP_NOTES_CONFIG_PATH,
+    LIVE_EDITOR_NOTES_CONFIG_PATH,
     {},
   )
 
-  configManager.set(BRAINDUMP_NOTES_CONFIG_PATH, {
+  configManager.set(LIVE_EDITOR_NOTES_CONFIG_PATH, {
     ...(notes ?? {}),
-    [toBrainDumpNoteKey(categoryId)]: text,
+    [toLiveEditorNoteKey(categoryId)]: text,
   })
 }

@@ -1,14 +1,14 @@
 /**
- * @fileoverview Preload script for BrainDump Note window.
+ * @fileoverview Preload script for LiveEditor Note window.
  *
- * The BrainDump window loads `https://corelive.app/braindump` and uses oRPC
+ * The LiveEditor window loads `https://corelive.app/live-editor` and uses oRPC
  * (via the web app) for promoting the note to a `Completed` row. This preload
  * exposes only:
  * - Window controls (close/minimize/opacity/bounds) for the frameless panel
- * - Per-category note text persistence (`braindump-note-*`)
+ * - Per-category note text persistence (`live-editor-note-*`)
  * - Local config (sync mode, shortcut, last-category) used by Settings UI
- * - Shared Spaces tracking for BrainDump + Floating Navigator utility panels
- * - One inbound event (`braindump-category-changed`) to mirror FloatingNav
+ * - Shared Spaces tracking for LiveEditor + Floating Navigator utility panels
+ * - One inbound event (`live-editor-category-changed`) to mirror FloatingNav
  *
  * Why a separate preload:
  *   - The window is frameless + transparent + always-on-top; it ships its own
@@ -17,7 +17,7 @@
  *   - Channel whitelist is intentionally narrow (defense-in-depth alongside
  *     `IPC_ARG_SCHEMAS` validation in the main process).
  *
- * @module electron/preload-braindump
+ * @module electron/preload-live-editor
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -49,12 +49,13 @@ type SanitizedValue =
 // ============================================================================
 
 /**
- * Inbound event whitelist for the BrainDump window.
+ * Inbound event whitelist for the LiveEditor window.
  *
  * Why narrow: the only push the renderer needs is the FloatingNav category
  * change broadcast — everything else is pull-based via `typedInvoke`.
  */
 const ALLOWED_CHANNELS: AllowedChannelsMap = {
+  'live-editor-category-changed': true,
   'braindump-category-changed': true,
 }
 
@@ -111,32 +112,32 @@ function sanitizeData<T>(data: T): T {
 // ============================================================================
 
 /**
- * BrainDump-only API surface, exposed at `window.brainDumpAPI`.
+ * LiveEditor-only API surface, exposed at `window.liveEditorAPI`.
  *
  * Renderer usage:
  * @example
- * await window.brainDumpAPI.window.setOpacity(0.85)
- * const followsSpaces = await window.brainDumpAPI.spaces.getVisibleOnAllWorkspaces()
- * const text = await window.brainDumpAPI.note.get(42)
- * const cleanup = window.brainDumpAPI.on('braindump-category-changed', handler)
+ * await window.liveEditorAPI.window.setOpacity(0.85)
+ * const followsSpaces = await window.liveEditorAPI.spaces.getVisibleOnAllWorkspaces()
+ * const text = await window.liveEditorAPI.note.get(42)
+ * const cleanup = window.liveEditorAPI.on('live-editor-category-changed', handler)
  */
-contextBridge.exposeInMainWorld('brainDumpAPI', {
+const liveEditorAPI = {
   window: {
-    /** Hide the BrainDump window (it stays in memory for fast re-show). */
+    /** Hide the LiveEditor window (it stays in memory for fast re-show). */
     close: async (): Promise<void> => {
       try {
-        await typedInvoke('braindump-window-hide')
+        await typedInvoke('live-editor-window-hide')
       } catch (error) {
-        log.error('BrainDump: Failed to close window:', error)
+        log.error('LiveEditor: Failed to close window:', error)
       }
     },
 
-    /** Toggle BrainDump visibility (mirror of the global accelerator). */
+    /** Toggle LiveEditor visibility (mirror of the global accelerator). */
     toggle: async (): Promise<void> => {
       try {
-        await typedInvoke('braindump-window-toggle')
+        await typedInvoke('live-editor-window-toggle')
       } catch (error) {
-        log.error('BrainDump: Failed to toggle window:', error)
+        log.error('LiveEditor: Failed to toggle window:', error)
       }
     },
 
@@ -147,18 +148,18 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
      */
     setOpacity: async (value: number): Promise<void> => {
       try {
-        await typedInvoke('braindump-window-set-opacity', value)
+        await typedInvoke('live-editor-window-set-opacity', value)
       } catch (error) {
-        log.error('BrainDump: Failed to set opacity:', error)
+        log.error('LiveEditor: Failed to set opacity:', error)
       }
     },
 
     /** Get current window opacity (already clamped). */
     getOpacity: async (): Promise<number> => {
       try {
-        return await typedInvoke('braindump-window-get-opacity')
+        return await typedInvoke('live-editor-window-get-opacity')
       } catch (error) {
-        log.error('BrainDump: Failed to get opacity:', error)
+        log.error('LiveEditor: Failed to get opacity:', error)
         return 1
       }
     },
@@ -166,9 +167,9 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
     /** Get current window bounds, or null if window is gone. */
     getBounds: async (): Promise<IPCWindowBounds | null> => {
       try {
-        return await typedInvoke('braindump-window-get-bounds')
+        return await typedInvoke('live-editor-window-get-bounds')
       } catch (error) {
-        log.error('BrainDump: Failed to get window bounds:', error)
+        log.error('LiveEditor: Failed to get window bounds:', error)
         return null
       }
     },
@@ -176,9 +177,9 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
     /** Set window bounds (also persisted via WindowStateManager). */
     setBounds: async (bounds: IPCWindowBounds): Promise<void> => {
       try {
-        await typedInvoke('braindump-window-set-bounds', bounds)
+        await typedInvoke('live-editor-window-set-bounds', bounds)
       } catch (error) {
-        log.error('BrainDump: Failed to set window bounds:', error)
+        log.error('LiveEditor: Failed to set window bounds:', error)
       }
     },
   },
@@ -192,11 +193,11 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
      */
     get: async (categoryId: number): Promise<string> => {
       try {
-        return await typedInvoke('braindump-note-get', categoryId)
+        return await typedInvoke('live-editor-note-get', categoryId)
       } catch (error) {
         // Re-throw so the renderer can avoid treating a failed disk read as an
         // intentionally empty note; swallowing this can overwrite real content.
-        log.error('BrainDump: Failed to read note:', error)
+        log.error('LiveEditor: Failed to read note:', error)
         throw error
       }
     },
@@ -209,11 +210,11 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
      */
     set: async (categoryId: number, text: string): Promise<void> => {
       try {
-        await typedInvoke('braindump-note-set', categoryId, text)
+        await typedInvoke('live-editor-note-set', categoryId, text)
       } catch (error) {
         // Re-throw so the renderer can detect persistence failure and
         // surface it (toast/retry); silent resolution would mask data loss.
-        log.error('BrainDump: Failed to write note:', error)
+        log.error('LiveEditor: Failed to write note:', error)
         throw error
       }
     },
@@ -223,9 +224,9 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
     /** Read the "follow FloatingNav category" toggle. */
     getEnabled: async (): Promise<boolean> => {
       try {
-        return await typedInvoke('braindump-config-get-sync')
+        return await typedInvoke('live-editor-config-get-sync')
       } catch (error) {
-        log.error('BrainDump: Failed to get sync mode:', error)
+        log.error('LiveEditor: Failed to get sync mode:', error)
         return true
       }
     },
@@ -233,9 +234,9 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
     /** Update the "follow FloatingNav category" toggle. */
     setEnabled: async (enabled: boolean): Promise<void> => {
       try {
-        await typedInvoke('braindump-config-set-sync', enabled)
+        await typedInvoke('live-editor-config-set-sync', enabled)
       } catch (error) {
-        log.error('BrainDump: Failed to set sync mode:', error)
+        log.error('LiveEditor: Failed to set sync mode:', error)
       }
     },
   },
@@ -248,22 +249,22 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
      */
     getLast: async (): Promise<number | null> => {
       try {
-        return await typedInvoke('braindump-config-get-last-category')
+        return await typedInvoke('live-editor-config-get-last-category')
       } catch (error) {
-        log.error('BrainDump: Failed to get last category:', error)
+        log.error('LiveEditor: Failed to get last category:', error)
         return null
       }
     },
 
     /**
      * Persist the active category id (called when the user picks a category
-     * inside BrainDump or when sync mode mirrors a FloatingNav change).
+     * inside LiveEditor or when sync mode mirrors a FloatingNav change).
      */
     setLast: async (categoryId: number): Promise<void> => {
       try {
-        await typedInvoke('braindump-config-set-last-category', categoryId)
+        await typedInvoke('live-editor-config-set-last-category', categoryId)
       } catch (error) {
-        log.error('BrainDump: Failed to set last category:', error)
+        log.error('LiveEditor: Failed to set last category:', error)
       }
     },
   },
@@ -272,9 +273,9 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
     /**
      * Read whether utility panels stay visible while switching macOS Spaces.
      *
-     * @returns True when BrainDump and Floating Navigator follow all Spaces.
+     * @returns True when LiveEditor and Floating Navigator follow all Spaces.
      * @example
-     * const enabled = await window.brainDumpAPI.spaces.getVisibleOnAllWorkspaces()
+     * const enabled = await window.liveEditorAPI.spaces.getVisibleOnAllWorkspaces()
      */
     getVisibleOnAllWorkspaces: async (): Promise<boolean> => {
       try {
@@ -282,7 +283,7 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
           'floating-window-get-visible-on-all-workspaces',
         )
       } catch (error) {
-        log.error('BrainDump: Failed to get Spaces tracking:', error)
+        log.error('LiveEditor: Failed to get Spaces tracking:', error)
         return false
       }
     },
@@ -290,10 +291,10 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
     /**
      * Persist and apply whether utility panels follow macOS Spaces.
      *
-     * @param enabled - true keeps BrainDump and Floating Navigator visible across Spaces.
+     * @param enabled - true keeps LiveEditor and Floating Navigator visible across Spaces.
      * @returns The value confirmed by the main process.
      * @example
-     * await window.brainDumpAPI.spaces.setVisibleOnAllWorkspaces(true)
+     * await window.liveEditorAPI.spaces.setVisibleOnAllWorkspaces(true)
      */
     setVisibleOnAllWorkspaces: async (enabled: boolean): Promise<boolean> => {
       try {
@@ -302,7 +303,7 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
           enabled,
         )
       } catch (error) {
-        log.error('BrainDump: Failed to set Spaces tracking:', error)
+        log.error('LiveEditor: Failed to set Spaces tracking:', error)
         throw error
       }
     },
@@ -321,13 +322,13 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
   ): (() => void) | undefined => {
     if (!validateChannel(channel)) {
       log.error(
-        `BrainDump: Attempted to listen to unauthorized channel: ${channel}`,
+        `LiveEditor: Attempted to listen to unauthorized channel: ${channel}`,
       )
       return
     }
 
     if (typeof callback !== 'function') {
-      log.error('BrainDump: Callback must be a function')
+      log.error('LiveEditor: Callback must be a function')
       return
     }
 
@@ -342,24 +343,42 @@ contextBridge.exposeInMainWorld('brainDumpAPI', {
         const sanitizedArgs = args.map((arg) => sanitizeData(arg))
         callback(...sanitizedArgs)
       } catch (error) {
-        log.error('BrainDump: Error in event callback:', error)
+        log.error('LiveEditor: Error in event callback:', error)
       }
     }
 
-    ipcRenderer.on(channel, wrappedCallback)
+    // Old renderers ask for the previous event while this updated preload and
+    // main process emit the canonical event; route both requests to one source.
+    const resolvedChannel =
+      channel === 'braindump-category-changed'
+        ? 'live-editor-category-changed'
+        : channel
+    ipcRenderer.on(resolvedChannel, wrappedCallback)
 
     return () => {
-      ipcRenderer.removeListener(channel, wrappedCallback)
+      ipcRenderer.removeListener(resolvedChannel, wrappedCallback)
     }
   },
-})
+}
+
+contextBridge.exposeInMainWorld('liveEditorAPI', liveEditorAPI)
+// Renderer deploys can lead app updates, so keep the previous global available
+// for the old web bundle during the cross-version window.
+contextBridge.exposeInMainWorld('brainDumpAPI', liveEditorAPI)
 
 /**
- * Environment hint for the renderer to detect the BrainDump host context.
+ * Environment hint for the renderer to detect the LiveEditor host context.
  *
  * Why: the same React route is reachable from a browser tab during dev — the
- * renderer reads this flag to avoid calling `brainDumpAPI` when undefined.
+ * renderer reads this flag to avoid calling `liveEditorAPI` when undefined.
  */
+const liveEditorEnv = {
+  isElectron: true,
+  isLiveEditor: true,
+  platform: process.platform,
+}
+
+contextBridge.exposeInMainWorld('liveEditorEnv', liveEditorEnv)
 contextBridge.exposeInMainWorld('brainDumpEnv', {
   isElectron: true,
   isBrainDump: true,

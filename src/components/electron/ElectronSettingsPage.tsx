@@ -22,14 +22,14 @@ import { useTransition } from 'react'
  */
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
-import { BrainDumpAppearance } from '@/components/electron/BrainDumpAppearance'
-import { BrainDumpSettings } from '@/components/electron/BrainDumpSettings'
 import { FloatingNavigatorSettings } from '@/components/electron/FloatingNavigatorSettings'
 import {
-  BRAIN_DUMP_PIN_SETTING,
+  LIVE_EDITOR_PIN_SETTING,
   FloatingPanelToggle,
   VISIBLE_ON_ALL_WORKSPACES_SETTING,
 } from '@/components/electron/FloatingPanelToggle'
+import { LiveEditorAppearance } from '@/components/electron/LiveEditorAppearance'
+import { LiveEditorSettings } from '@/components/electron/LiveEditorSettings'
 import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/button'
@@ -219,18 +219,18 @@ export const ElectronSettingsPage =
       // siblings of the web-common sections in page.tsx's `space-y-12` flow, so
       // all seven settings sections share one 48px rhythm (DESIGN.md 2xl).
       <>
-        {/* BRAIN DUMP — note behavior, look-and-feel, and its keep-on-top pin.
+        {/* LIVEEDITOR — note behavior, look-and-feel, and its keep-on-top pin.
             Three independent siblings (advisor): the note card degrades on the
-            `brainDump` preload, the appearance is pure Redux, and the pin lives
+            `liveEditor` preload, the appearance is pure Redux, and the pin lives
             on `floatingPanels` — nesting the pin in the card would let a stale
-            `brainDump` preload hide a working pin. */}
-        <SettingsSection label="Brain Dump">
-          <BrainDumpSettings />
-          <BrainDumpAppearance />
+            `liveEditor` preload hide a working pin. */}
+        <SettingsSection label="LiveEditor">
+          <LiveEditorSettings />
+          <LiveEditorAppearance />
           <FloatingPanelToggle
-            setting={BRAIN_DUMP_PIN_SETTING}
+            setting={LIVE_EDITOR_PIN_SETTING}
             label="Keep on top"
-            description="Pin Brain Dump above your other windows so it stays visible."
+            description="Pin LiveEditor above your other windows so it stays visible."
           />
         </SettingsSection>
 

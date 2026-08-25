@@ -34,6 +34,20 @@ function createCodeInspectorOptions(bundler) {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /**
+   * Redirects installed pre-rename Electron clients to the canonical LiveEditor route when they request the retired URL.
+   * @returns {Promise<Array<{source: string, destination: string, permanent: boolean}>>} Permanent compatibility redirects.
+   * @example await nextConfig.redirects() // => [{ source: '/braindump', destination: '/live-editor', permanent: true }]
+   */
+  async redirects() {
+    return [
+      {
+        source: '/braindump',
+        destination: '/live-editor',
+        permanent: true,
+      },
+    ]
+  },
   // Stable in Next.js 16 — auto-memoizes components via babel-plugin-react-compiler.
   reactCompiler: true,
   // #127 Phase 1 (codex #1): emit browser source maps ONLY under COVERAGE=1 so

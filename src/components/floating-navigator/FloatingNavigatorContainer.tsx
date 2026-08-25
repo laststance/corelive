@@ -302,7 +302,7 @@ export const FloatingNavigatorContainer =
     const todos = [...pendingTodos, ...completedTodos]
 
     useCycleEffect(() => {
-      // Cross-window sync: BrainDump + Home todo completions also write to the
+      // Cross-window sync: LiveEditor + Home todo completions also write to the
       // Completed table, so the heatmap + day-detail caches must invalidate
       // alongside the todo list. Mirrors TodoList.tsx — without these two keys,
       // the floating navigator would silently miss completion deltas after a

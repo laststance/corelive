@@ -9,41 +9,42 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { getLiveEditorSettingsAPI } from '@/electron/utils/electron-client'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import {
-  type BrainDumpOpacity,
-  type BrainDumpSyncMode,
-  BRAINDUMP_OPACITY_MAX,
-  BRAINDUMP_OPACITY_MIN,
-  BRAINDUMP_OPACITY_STEP,
-} from '@/lib/constants/braindump'
+  type LiveEditorOpacity,
+  type LiveEditorSyncMode,
+  LIVE_EDITOR_OPACITY_MAX,
+  LIVE_EDITOR_OPACITY_MIN,
+  LIVE_EDITOR_OPACITY_STEP,
+} from '@/lib/constants/live-editor'
 import { log } from '@/lib/logger'
 import { cn } from '@/lib/utils'
 
 /**
- * @fileoverview BrainDump Note settings panel for the Electron Settings page.
+ * @fileoverview LiveEditor Note settings panel for the Electron Settings page.
  *
- * Surfaces the per-device BrainDump configuration that is persisted in
- * `electron-store` (`braindump.*`):
+ * Surfaces the per-device LiveEditor configuration that is persisted in
+ * `electron-store` (`liveEditor.*`):
  *
- * - `syncMode`  — when on, BrainDump follows the FloatingNavigator category
+ * - `syncMode`  — when on, LiveEditor follows the FloatingNavigator category
  * - `opacity`   — frameless window opacity, 30%–100%
  * - `shortcut`  — global accelerator (empty string disables)
  *
  * The component is rendered inside the main Electron window's Settings page,
- * so it talks to the main process via `window.electronAPI.brainDump.*`. The
- * BrainDump window itself uses its own preload (`window.brainDumpAPI`).
+ * so it talks to the main process via `window.electronAPI.liveEditor.*`. The
+ * LiveEditor window itself uses its own preload (`window.liveEditorAPI`).
  *
- * @module components/electron/BrainDumpSettings
+ * @module components/electron/LiveEditorSettings
  */
-interface BrainDumpSettingsProps {
+interface LiveEditorSettingsProps {
   className?: string
 }
 
 /**
- * BrainDump Note settings card.
+ * LiveEditor Note settings card.
  *
  * Reads initial state from the main process on mount and pushes each change
  * back via IPC. The Settings UI updates optimistically — on IPC failure the
@@ -54,11 +55,11 @@ interface BrainDumpSettingsProps {
  *   short fallback in non-Electron environments.
  *
  * @example
- * <BrainDumpSettings />
+ * <LiveEditorSettings />
  */
-export const BrainDumpSettings = function BrainDumpSettings({
+export const LiveEditorSettings = function LiveEditorSettings({
   className,
-}: BrainDumpSettingsProps): React.ReactElement {
+}: LiveEditorSettingsProps): React.ReactElement {
   const syncId = useId()
   const opacityId = useId()
   const shortcutId = useId()
@@ -71,21 +72,21 @@ export const BrainDumpSettings = function BrainDumpSettings({
   // exist without `electronAPI` in non-Electron browsers). Uses
   // useSyncExternalStore under the hood for tear-free SSR semantics.
   const hasMounted = useMounted()
-  const [syncMode, setSyncMode] = useState<BrainDumpSyncMode>(true)
-  const [opacity, setOpacity] = useState<BrainDumpOpacity>(1.0)
+  const [syncMode, setSyncMode] = useState<LiveEditorSyncMode>(true)
+  const [opacity, setOpacity] = useState<LiveEditorOpacity>(1.0)
   const [error, setError] = useState<string | null>(null)
   // Last successfully persisted opacity — a rollback target so we don't restore
   // the in-flight optimistic value (held in `opacity`) while the IPC call pends.
-  const lastGoodOpacityRef = useRef<BrainDumpOpacity>(1.0)
+  const lastGoodOpacityRef = useRef<LiveEditorOpacity>(1.0)
   // Shortcut capture (optimistic set + conflict rollback) shared with the
-  // Floating Navigator row via the hook; persists over the `brainDump` bridge.
+  // Floating Navigator row via the hook; persists over the `liveEditor` bridge.
   const {
     shortcut,
     setLoadedShortcut,
     capture: handleShortcutCapture,
   } = useShortcutCapture({
     persist: async (accelerator) =>
-      window.electronAPI?.brainDump?.setShortcut(accelerator) ??
+      getLiveEditorSettingsAPI()?.setShortcut(accelerator) ??
       Promise.resolve(undefined),
     onError: setError,
   })
@@ -99,7 +100,7 @@ export const BrainDumpSettings = function BrainDumpSettings({
     capture: handleSecondaryShortcutCapture,
   } = useShortcutCapture({
     persist: async (accelerator) =>
-      window.electronAPI?.brainDump?.setShortcutSecondary?.(accelerator) ??
+      getLiveEditorSettingsAPI()?.setShortcutSecondary?.(accelerator) ??
       Promise.resolve(undefined),
     onError: setError,
   })
@@ -110,9 +111,9 @@ export const BrainDumpSettings = function BrainDumpSettings({
   // never observes `isReady`; we only flip it after the IPC fetch resolves.
   useCycleEffect(() => {
     const api =
-      typeof window === 'undefined' ? undefined : window.electronAPI?.brainDump
+      typeof window === 'undefined' ? undefined : getLiveEditorSettingsAPI()
     // Guard on the METHODS, not just the namespace: an outdated desktop preload
-    // can expose `brainDump` (the window toggle) without the newer settings
+    // can expose `liveEditor` (the window toggle) without the newer settings
     // getters. A missing method in this Promise.all throws synchronously inside
     // the effect and bubbles to global-error, so bail out and let the
     // fallback card render instead.
@@ -142,9 +143,9 @@ export const BrainDumpSettings = function BrainDumpSettings({
         lastGoodOpacityRef.current = op
       })
       .catch((loadError: unknown) => {
-        log.error('Failed to load BrainDump settings:', loadError)
+        log.error('Failed to load LiveEditor settings:', loadError)
         if (!cancelled) {
-          setError('Failed to load BrainDump settings')
+          setError('Failed to load LiveEditor settings')
         }
       })
       .finally(() => {
@@ -156,14 +157,14 @@ export const BrainDumpSettings = function BrainDumpSettings({
     }
   }, [])
 
-  const handleSyncChange = async (next: BrainDumpSyncMode): Promise<void> => {
+  const handleSyncChange = async (next: LiveEditorSyncMode): Promise<void> => {
     const previous = syncMode
     setSyncMode(next)
     setError(null)
     try {
-      await window.electronAPI?.brainDump?.setSyncMode(next)
+      await getLiveEditorSettingsAPI()?.setSyncMode(next)
     } catch (err) {
-      log.error('Failed to update BrainDump sync mode:', err)
+      log.error('Failed to update LiveEditor sync mode:', err)
       setSyncMode(previous)
       setError('Failed to update sync setting')
     }
@@ -180,12 +181,12 @@ export const BrainDumpSettings = function BrainDumpSettings({
     if (next === undefined) return
     setError(null)
     try {
-      const applied = await window.electronAPI?.brainDump?.setOpacity(next)
+      const applied = await getLiveEditorSettingsAPI()?.setOpacity(next)
       const persisted = typeof applied === 'number' ? applied : next
       setOpacity(persisted)
       lastGoodOpacityRef.current = persisted
     } catch (err) {
-      log.error('Failed to update BrainDump opacity:', err)
+      log.error('Failed to update LiveEditor opacity:', err)
       // Roll back to the last value the main process confirmed, not the
       // in-flight optimistic value held in `opacity` state.
       setOpacity(lastGoodOpacityRef.current)
@@ -193,12 +194,12 @@ export const BrainDumpSettings = function BrainDumpSettings({
     }
   }
 
-  const handleOpenBrainDump = async (): Promise<void> => {
+  const handleOpenLiveEditor = async (): Promise<void> => {
     try {
-      await window.electronAPI?.brainDump?.toggle()
+      await getLiveEditorSettingsAPI()?.toggle()
     } catch (err) {
-      log.error('Failed to toggle BrainDump window:', err)
-      setError('Failed to toggle BrainDump window')
+      log.error('Failed to toggle LiveEditor window:', err)
+      setError('Failed to toggle LiveEditor window')
     }
   }
 
@@ -220,30 +221,30 @@ export const BrainDumpSettings = function BrainDumpSettings({
   // Defer the non-Electron fallback until after hydration so server and
   // first client render produce the same markup. Until `hasMounted` is
   // true we keep rendering the "Loading" branch below.
-  if (hasMounted && !window.electronAPI?.brainDump) {
+  if (hasMounted && !getLiveEditorSettingsAPI()) {
     return (
       <SettingsStateCard
         icon={Brain}
-        title="BrainDump Note"
-        description="BrainDump Note is only available in the desktop application."
+        title="LiveEditor Note"
+        description="LiveEditor Note is only available in the desktop application."
         className={className}
       />
     )
   }
 
-  // Outdated desktop app: the brainDump bridge exists but predates the settings
+  // Outdated desktop app: the `liveEditor` bridge exists but predates the settings
   // getters. Invite an update instead of crashing the page.
   if (
     hasMounted &&
-    (typeof window.electronAPI?.brainDump?.getSyncMode !== 'function' ||
-      typeof window.electronAPI?.brainDump?.getOpacity !== 'function' ||
-      typeof window.electronAPI?.brainDump?.getShortcut !== 'function')
+    (typeof getLiveEditorSettingsAPI()?.getSyncMode !== 'function' ||
+      typeof getLiveEditorSettingsAPI()?.getOpacity !== 'function' ||
+      typeof getLiveEditorSettingsAPI()?.getShortcut !== 'function')
   ) {
     return (
       <SettingsStateCard
         icon={Brain}
-        title="BrainDump Note"
-        description="Update CoreLive to the latest version to manage BrainDump Note."
+        title="LiveEditor Note"
+        description="Update CoreLive to the latest version to manage LiveEditor Note."
         className={className}
       />
     )
@@ -253,8 +254,8 @@ export const BrainDumpSettings = function BrainDumpSettings({
     return (
       <SettingsStateCard
         icon={Brain}
-        title="BrainDump Note"
-        description="Loading BrainDump settings…"
+        title="LiveEditor Note"
+        description="Loading LiveEditor settings…"
         className={className}
       />
     )
@@ -264,10 +265,10 @@ export const BrainDumpSettings = function BrainDumpSettings({
   // Second-slot support arrived after the first three getters, so an installed
   // app running an older preload gets the single box it can actually persist.
   const canBindSecondShortcut =
-    typeof window.electronAPI?.brainDump?.setShortcutSecondary === 'function'
+    typeof getLiveEditorSettingsAPI()?.setShortcutSecondary === 'function'
 
   return (
-    // The "BrainDump Note" card title collapsed into the Brain Dump section
+    // The "LiveEditor Note" card title collapsed into the LiveEditor section
     // <h2> (design-review D1 flatten); the behavior copy stays as a lead-in.
     <div className={cn('space-y-6', className)}>
       <p className="text-sm text-muted-foreground">
@@ -286,7 +287,7 @@ export const BrainDumpSettings = function BrainDumpSettings({
             Follow Floating Navigator category
           </Label>
           <p className="text-xs text-muted-foreground">
-            When on, BrainDump always shows the same category as the floating
+            When on, LiveEditor always shows the same category as the floating
             navigator. Turn off to keep its own selection.
           </p>
         </div>
@@ -312,17 +313,17 @@ export const BrainDumpSettings = function BrainDumpSettings({
         </div>
         <Slider
           id={opacityId}
-          min={BRAINDUMP_OPACITY_MIN}
-          max={BRAINDUMP_OPACITY_MAX}
-          step={BRAINDUMP_OPACITY_STEP}
+          min={LIVE_EDITOR_OPACITY_MIN}
+          max={LIVE_EDITOR_OPACITY_MAX}
+          step={LIVE_EDITOR_OPACITY_STEP}
           value={opacityValue}
           onValueChange={handleOpacityChange}
           onValueCommit={handleOpacityCommit}
-          aria-label="BrainDump window opacity"
+          aria-label="LiveEditor window opacity"
         />
 
         <p className="text-xs text-muted-foreground">
-          {Math.round(BRAINDUMP_OPACITY_MIN * 100)}% is the minimum so the
+          {Math.round(LIVE_EDITOR_OPACITY_MIN * 100)}% is the minimum so the
           window stays discoverable.
         </p>
       </div>
@@ -365,7 +366,7 @@ export const BrainDumpSettings = function BrainDumpSettings({
           />
 
           <p className="text-xs text-muted-foreground">
-            Optional — another key that opens the same BrainDump. It has to
+            Optional — another key that opens the same LiveEditor. It has to
             differ from the one above.
           </p>
         </div>
@@ -375,7 +376,7 @@ export const BrainDumpSettings = function BrainDumpSettings({
         <div className="space-y-0.5">
           <p className="text-sm font-medium">Open config file</p>
           <p className="text-xs text-muted-foreground">
-            BrainDump text is saved per category in config.json on this device.
+            LiveEditor text is saved per category in config.json on this device.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleOpenConfigFile}>
@@ -384,12 +385,12 @@ export const BrainDumpSettings = function BrainDumpSettings({
       </div>
 
       <div className="flex justify-end">
-        <Button variant="outline" onClick={handleOpenBrainDump}>
-          Toggle BrainDump window
+        <Button variant="outline" onClick={handleOpenLiveEditor}>
+          Toggle LiveEditor window
         </Button>
       </div>
     </div>
   )
 }
 
-export default BrainDumpSettings
+export default LiveEditorSettings

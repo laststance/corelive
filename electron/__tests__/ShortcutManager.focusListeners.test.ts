@@ -65,7 +65,7 @@ function createWindowManagerHarness() {
   const windowManager = {
     getFloatingNavigator: vi.fn(() => floatingWindow),
     getMainWindow: vi.fn(() => null),
-    toggleBrainDump: vi.fn(() => true),
+    toggleLiveEditor: vi.fn(() => true),
     toggleFloatingNavigator: vi.fn(),
     setOnFloatingNavigatorCreated: vi.fn((handler: () => void) => {
       onFloatingCreated = handler
@@ -97,7 +97,7 @@ describe('ShortcutManager contextual shortcuts on a later-created Floating windo
     vi.clearAllMocks()
   })
 
-  it('registers contextual shortcuts when Floating opens after a no-Floating startup (BrainDump-only)', () => {
+  it('registers contextual shortcuts when Floating opens after a no-Floating startup (LiveEditor-only)', () => {
     // Arrange: startup with no Floating window (showFloating:false); the initial
     // focus-listener setup runs with Floating absent — the old sticky flag locked here.
     const harness = createWindowManagerHarness()

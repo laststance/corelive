@@ -27,7 +27,7 @@ export const HeatmapInputSchema = z.object({
 })
 
 /**
- * Input schema for creating a Completed row directly (used by BrainDump
+ * Input schema for creating a Completed row directly (used by LiveEditor
  * checkbox flow that bypasses the Todo lifecycle).
  * @example
  * { categoryId: 1, title: "buy milk" }
@@ -38,7 +38,7 @@ export const CreateCompletedSchema = z.object({
 })
 
 /**
- * Input schema for deleting a Completed row (used by BrainDump's 5-second
+ * Input schema for deleting a Completed row (used by LiveEditor's 5-second
  * toast-undo flow when the user retracts a checkbox tick).
  * @example
  * { id: 42 }

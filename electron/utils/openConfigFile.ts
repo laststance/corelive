@@ -4,7 +4,7 @@ import { log } from '../logger'
 
 /**
  * Opens the CoreLive config file in the user's default application for `.json`.
- * Triggered from Settings → Brain Dump → "Open config.json".
+ * Triggered from Settings → LiveEditor → "Open config.json".
  *
  * @param configPath - Absolute path from `ConfigManager.getConfigPaths().config`.
  * @returns `true` when the OS accepts the open request; `false` on failure.

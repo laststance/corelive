@@ -98,7 +98,7 @@ const COMPLETED_TODO_COUNT = 360
 /** Target count of still-active (incomplete) `Todo` rows so the list isn't empty. */
 const ACTIVE_TODO_COUNT = 40
 
-/** Target count of `Completed`-table rows (the separate import/braindump store). */
+/** Target count of `Completed`-table rows (the separate import/live-editor store). */
 const COMPLETED_TABLE_COUNT = 200
 
 /**
@@ -131,7 +131,7 @@ const MAX_COMPLETIONS_PER_DAY = 6
 /**
  * Number of paste-import batches to simulate in the `Completed` table. Each
  * batch groups 10..40 rows under a shared `importBatchId` (the rest are
- * braindump-style singles with a null batch id).
+ * live-editor-style singles with a null batch id).
  */
 const IMPORT_BATCH_COUNT = 6
 
@@ -531,9 +531,9 @@ async function seedDev(): Promise<void> {
   )
   await prisma.todo.createMany({ data: activeTodoRows })
 
-  // ── 6. ~200 Completed-table rows (the import/braindump store) ──
+  // ── 6. ~200 Completed-table rows (the import/live-editor store) ──
   // First create the ImportBatch parent rows, then tag a slice of Completed rows
-  // with those batch ids (paste-import groups); the remainder are braindump
+  // with those batch ids (paste-import groups); the remainder are liveEditor
   // singles with a null importBatchId.
   const batchIds: string[] = Array.from(
     { length: IMPORT_BATCH_COUNT },
@@ -578,7 +578,7 @@ async function seedDev(): Promise<void> {
     remaining -= size
   }
 
-  // Fill the rest as braindump-style singles (null batch id).
+  // Fill the rest as live-editor-style singles (null batch id).
   for (let i = 0; i < remaining; i++) {
     const category = pickOne(categories)
     const titlePool = titlePoolFor(category.name)
@@ -587,7 +587,7 @@ async function seedDev(): Promise<void> {
       title: pickOne(titlePool),
       archived: false,
       completedAt,
-      // Braindump singles: createdAt tracks the (near-) completion moment.
+      // LiveEditor singles: createdAt tracks the (near-) completion moment.
       createdAt: completedAt,
       importBatchId: null,
       userId: user.id,
@@ -683,7 +683,7 @@ async function seedDev(): Promise<void> {
   )
   console.warn(`   • ${activeTodoRows.length} active Todos`)
   console.warn(
-    `   • ${completedTableRows.length} Completed rows (${batchIds.length} import batches + braindump singles)`,
+    `   • ${completedTableRows.length} Completed rows (${batchIds.length} import batches + LiveEditor singles)`,
   )
   console.warn(
     `   • 1 skill tree · ${createdNodes.length} nodes · ${edgeRows.length} edges · ${totalXp} XP assignments across all level bands`,

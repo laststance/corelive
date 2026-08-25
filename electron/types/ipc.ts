@@ -82,9 +82,17 @@ export interface WindowState extends WindowBounds {
  * never the IPC handler, so generic config writes can't break it).
  */
 export interface StartupWindowConfig {
-  /** Open the Brain Dump panel (`/braindump`) at launch. */
-  showBraindump: boolean
+  /** Open the LiveEditor panel (`/live-editor`) at launch. */
+  showLiveEditor: boolean
   /** Open the Floating Navigator (`/floating-navigator`) at launch. */
+  showFloating: boolean
+}
+
+/** Pre-rename startup wire shape accepted only while installed Electron versions roll forward. */
+export interface LegacyStartupWindowConfig {
+  /** Legacy name for the LiveEditor startup choice. */
+  showBraindump: boolean
+  /** Open the Floating Navigator at launch. */
   showFloating: boolean
 }
 
@@ -97,10 +105,10 @@ export interface StartupWindowConfig {
  * that need a mutable copy.
  *
  * @example
- * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showBraindump: false, showFloating: true }
+ * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showLiveEditor: false, showFloating: true }
  */
 export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
-  showBraindump: false,
+  showLiveEditor: false,
   showFloating: true,
 }
 
@@ -115,8 +123,8 @@ export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
 export interface AuxWindowVisibility {
   /** The Floating Navigator window exists and is currently visible. */
   floating: boolean
-  /** The Brain Dump window exists and is currently visible. */
-  braindump: boolean
+  /** The LiveEditor window exists and is currently visible. */
+  liveEditor: boolean
 }
 
 /** Display information (richer version from WindowStateManager) */
@@ -206,10 +214,10 @@ export type ConfigSection =
   | 'tray'
   | 'behavior'
   | 'advanced'
-  | 'braindump'
+  | 'liveEditor'
 
 /** Window-state-managed window kinds (must mirror WindowStateManager support). */
-export type ManagedWindowKind = 'main' | 'floating' | 'braindump'
+export type ManagedWindowKind = 'main' | 'floating' | 'liveEditor'
 
 /** Deep link examples */
 export interface DeepLinkExamples {
@@ -325,10 +333,10 @@ export interface IPCChannels {
     response: void
   }
   /**
-   * Toggle the BrainDump window. Available from any renderer (FloatingNav,
+   * Toggle the LiveEditor window. Available from any renderer (FloatingNav,
    * Main) — mirrors `window-toggle-floating-navigator`.
    */
-  'window-toggle-braindump': {
+  'window-toggle-live-editor': {
     request: void
     response: boolean
   }
@@ -451,7 +459,7 @@ export interface IPCChannels {
     response: boolean
   }
   /**
-   * Floating Navigator global toggle accelerator. Mirrors the BrainDump shortcut
+   * Floating Navigator global toggle accelerator. Mirrors the LiveEditor shortcut
    * channels, but reads/writes the canonical `shortcuts.toggleFloatingNavigator`
    * config key (no separate mirror), so the inline box never drifts from a rebind
    * made via the generic keybind settings. `get` returns the configured
@@ -469,94 +477,94 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // BrainDump Window
+  // LiveEditor Window
   // ──────────────────────────────────────────────────────────────────────────
-  /** Toggle BrainDump window visibility (callable from BrainDump itself). */
-  'braindump-window-toggle': {
+  /** Toggle LiveEditor window visibility (callable from LiveEditor itself). */
+  'live-editor-window-toggle': {
     request: void
     response: boolean
   }
-  'braindump-window-show': {
+  'live-editor-window-show': {
     request: void
     response: void
   }
-  'braindump-window-hide': {
+  'live-editor-window-hide': {
     request: void
     response: void
   }
-  /** Set BrainDump window opacity. Value is clamped to [0.30, 1.00] in main. */
-  'braindump-window-set-opacity': {
+  /** Set LiveEditor window opacity. Value is clamped to [0.30, 1.00] in main. */
+  'live-editor-window-set-opacity': {
     request: number
     response: number
   }
-  'braindump-window-get-opacity': {
+  'live-editor-window-get-opacity': {
     request: void
     response: number
   }
-  /** Persisted Settings value: keep BrainDump pinned above other windows. */
-  'braindump-window-get-always-on-top': {
+  /** Persisted Settings value: keep LiveEditor pinned above other windows. */
+  'live-editor-window-get-always-on-top': {
     request: void
     response: boolean
   }
-  'braindump-window-set-always-on-top': {
+  'live-editor-window-set-always-on-top': {
     request: boolean
     response: boolean
   }
-  'braindump-window-get-bounds': {
+  'live-editor-window-get-bounds': {
     request: void
     response: WindowBounds | null
   }
-  'braindump-window-set-bounds': {
+  'live-editor-window-set-bounds': {
     request: WindowBounds
     response: boolean
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // BrainDump Notes (per-category text persistence)
+  // LiveEditor Notes (per-category text persistence)
   // ──────────────────────────────────────────────────────────────────────────
   /** Read the persisted note text for a categoryId (empty string if none). */
-  'braindump-note-get': {
+  'live-editor-note-get': {
     request: number
     response: string
   }
   /** Persist the note text for a categoryId. */
-  'braindump-note-set': {
+  'live-editor-note-set': {
     request: [categoryId: number, text: string]
     response: boolean
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // BrainDump Configuration (sync mode, shortcut, last category)
+  // LiveEditor Configuration (sync mode, shortcut, last category)
   // ──────────────────────────────────────────────────────────────────────────
-  'braindump-config-get-sync': {
+  'live-editor-config-get-sync': {
     request: void
     response: boolean
   }
-  'braindump-config-set-sync': {
+  'live-editor-config-set-sync': {
     request: boolean
     response: boolean
   }
-  'braindump-config-get-shortcut': {
+  'live-editor-config-get-shortcut': {
     request: void
     response: string
   }
-  'braindump-config-set-shortcut': {
+  'live-editor-config-set-shortcut': {
     request: string
     response: boolean
   }
-  'braindump-config-get-shortcut-secondary': {
+  'live-editor-config-get-shortcut-secondary': {
     request: void
     response: string
   }
-  'braindump-config-set-shortcut-secondary': {
+  'live-editor-config-set-shortcut-secondary': {
     request: string
     response: boolean
   }
-  'braindump-config-get-last-category': {
+  'live-editor-config-get-last-category': {
     request: void
     response: number | null
   }
-  'braindump-config-set-last-category': {
+  'live-editor-config-set-last-category': {
     request: number
     response: boolean
   }
@@ -903,9 +911,9 @@ export interface IPCEventChannels {
    */
   'floating-window-always-on-top-changed': { alwaysOnTop: boolean }
 
-  // BrainDump events (main → braindump renderer)
+  // LiveEditor events (main → liveEditor renderer)
   /** Sent when the active category changes (via FloatingNav sync, etc.). */
-  'braindump-category-changed': { categoryId: number }
+  'live-editor-category-changed': { categoryId: number }
 
   // Notification fallback events (renderer hook-up pending)
   'notification-permission-denied': { reason?: string; guidance?: string }

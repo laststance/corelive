@@ -258,7 +258,7 @@ export class MenuManager {
    */
   createViewMenu(): MenuItemConstructorOptions {
     // Standard view chrome uses Electron roles so each item targets whatever
-    // window is focused (main, Floating, BrainDump or Settings) — no main-window
+    // window is focused (main, Floating, LiveEditor or Settings) — no main-window
     // reference needed, so these stay correct after main retirement. Explicit
     // accelerators are kept so the bindings don't shift from the previous build.
     const submenu: MenuItemConstructorOptions[] = [
@@ -308,19 +308,19 @@ export class MenuManager {
   /**
    * Creates the Window menu for window management.
    *
-   * Adds a "BrainDump Note" entry that toggles the frameless panel via
+   * Adds a "LiveEditor Note" entry that toggles the frameless panel via
    * WindowManager; the global accelerator is owned by ShortcutManager.
    */
   createWindowMenu(): MenuItemConstructorOptions {
     // Minimize/Close are Electron roles so they act on the focused window — they
-    // work for Floating/BrainDump/Settings, not just a main window that may not exist.
+    // work for Floating/LiveEditor/Settings, not just a main window that may not exist.
     const submenu: MenuItemConstructorOptions[] = [
       { label: 'Minimize', accelerator: 'CmdOrCtrl+M', role: 'minimize' },
       { label: 'Close', accelerator: 'CmdOrCtrl+W', role: 'close' },
       { type: 'separator' },
       {
-        label: 'BrainDump Note',
-        click: () => this.toggleBrainDump(),
+        label: 'LiveEditor Note',
+        click: () => this.toggleLiveEditor(),
       },
     ]
 
@@ -429,12 +429,12 @@ export class MenuManager {
     }
   }
 
-  /** Toggle the BrainDump Note window via WindowManager. */
-  toggleBrainDump(): void {
-    log.debug('[MenuManager] toggleBrainDump() called')
+  /** Toggle the LiveEditor Note window via WindowManager. */
+  toggleLiveEditor(): void {
+    log.debug('[MenuManager] toggleLiveEditor() called')
 
     if (this.windowManager) {
-      this.windowManager.toggleBrainDump()
+      this.windowManager.toggleLiveEditor()
     } else {
       console.error('[MenuManager] windowManager is not available!')
     }
@@ -615,7 +615,7 @@ Copyright © 2025 CoreLive`,
       'Ctrl/Cmd + Shift + A: Toggle Always on Top',
       'Ctrl/Cmd + Shift + N: Focus Floating Navigator',
       'Ctrl/Cmd + 3: Toggle Floating Navigator',
-      'Alt/Option + Space: Toggle BrainDump',
+      'Alt/Option + Space: Toggle LiveEditor',
       'Ctrl/Cmd + Q: Quit Application',
       'Ctrl/Cmd + ,: Settings',
       'Ctrl/Cmd + R: Reload',

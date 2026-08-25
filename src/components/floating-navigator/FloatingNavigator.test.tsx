@@ -104,7 +104,7 @@ function installFloatingNavigatorAPI(
         close: vi.fn(),
         focusMainWindow: vi.fn(),
       },
-      brainDump: { toggle: vi.fn() },
+      liveEditor: { toggle: vi.fn() },
       openCompletedImport: vi.fn(),
     },
   })
@@ -176,7 +176,7 @@ describe('FloatingNavigator pin button', () => {
           close: vi.fn(),
           focusMainWindow: vi.fn(),
         },
-        brainDump: { toggle: vi.fn() },
+        liveEditor: { toggle: vi.fn() },
       },
     })
 

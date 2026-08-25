@@ -49,7 +49,7 @@ export type LastImport = {
 
 /**
  * Props for the paste-import container. The caller supplies the `trigger`, the
- * `categories` list (injected, never fetched here — matches BrainDumpEditor),
+ * `categories` list (injected, never fetched here — matches LiveEditor),
  * and `onImported` (where the caller invalidates the right react-query keys so
  * the heatmap fill / list update happens). `open`/`onOpenChange` are optional:
  * pass them to make the dialog controllable (D7 opens it without a trigger).

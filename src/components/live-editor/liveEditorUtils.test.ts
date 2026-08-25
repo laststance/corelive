@@ -1,11 +1,11 @@
 /**
- * @fileoverview Unit tests for the BrainDump checkbox grammar helpers.
+ * @fileoverview Unit tests for the LiveEditor checkbox grammar helpers.
  *
  * These tests pin the parser/serializer behavior the editor relies on for the
  * "tap a `- [ ]` line to mark a Completed" flow. Locking it down here means
- * future refactors of `BrainDumpEditor.tsx` can't silently change the grammar.
+ * future refactors of `LiveEditor.tsx` can't silently change the grammar.
  *
- * @module components/braindump/braindumpUtils.test
+ * @module components/live-editor/liveEditorUtils.test
  */
 
 import { describe, expect, it } from 'vitest'
@@ -21,7 +21,7 @@ import {
   removeLineAtIndex,
   replaceLineAtIndex,
   setCheckboxStateAtLine,
-} from './braindumpUtils'
+} from './liveEditorUtils'
 
 describe('parseCheckboxLine', () => {
   it('parses an unchecked checkbox line', () => {

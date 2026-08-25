@@ -11,7 +11,7 @@ import { BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import {
-  BRAIN_DUMP_SHORTCUT_IDS,
+  LIVE_EDITOR_SHORTCUT_IDS,
   DEFAULT_SHORTCUT_OPEN_SOUND_ENABLED,
   DEFAULT_SHORTCUT_OPEN_SOUND_SELECTION,
   isShortcutOpenSoundSelection,
@@ -47,10 +47,10 @@ interface ShortcutConfig {
   toggleAlwaysOnTop?: string
   focusFloatingNavigator?: string
   toggleFloatingNavigator?: string
-  /** BrainDump's global quick-open accelerator; empty string disables it. */
-  toggleBrainDump?: string
-  /** Second, equally-live BrainDump accelerator; empty string (the default) disables it. */
-  toggleBrainDumpSecondary?: string
+  /** LiveEditor's global quick-open accelerator; empty string disables it. */
+  toggleLiveEditor?: string
+  /** Second, equally-live LiveEditor accelerator; empty string (the default) disables it. */
+  toggleLiveEditorSecondary?: string
   [key: string]: string | boolean | undefined
 }
 
@@ -151,7 +151,7 @@ export class ShortcutManager {
 
   /**
    * Creates the shortcut router and its injectable native engines.
-   * @param windowManager - Owns Floating and BrainDump visibility.
+   * @param windowManager - Owns Floating and LiveEditor visibility.
    * @param notificationManager - Reports registration failures to the user.
    * @param configManager - Supplies accelerators and shortcut-sound preference.
    * @param nativeEngine - Handles lone-modifier key taps Electron cannot register.
@@ -184,13 +184,13 @@ export class ShortcutManager {
     ])
     this._globalShortcuts = new Set([
       'toggleFloatingNavigator',
-      ...BRAIN_DUMP_SHORTCUT_IDS,
+      ...LIVE_EDITOR_SHORTCUT_IDS,
     ])
     this.focusHandlers = new Map()
 
     // Rebind contextual-shortcut focus/blur listeners to EVERY Floating window
     // the WindowManager (re)creates — Cmd+3 reopen, tray, restoreFromTray, or a
-    // BrainDump-only startup that opens Floating later. T18 moved these listeners
+    // LiveEditor-only startup that opens Floating later. T18 moved these listeners
     // off the retired main window onto Floating; without rebinding, a Floating
     // created after the initial setup would carry no listeners and its contextual
     // shortcuts would never fire. createFloatingNavigator is the single chokepoint.
@@ -238,10 +238,10 @@ export class ShortcutManager {
       minimize: 'CommandOrControl+M',
       toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
       toggleFloatingNavigator: 'CommandOrControl+3',
-      toggleBrainDump: 'Alt+Space',
-      // Second BrainDump slot ships unbound — an opt-in extra key, not a
+      toggleLiveEditor: 'Alt+Space',
+      // Second LiveEditor slot ships unbound — an opt-in extra key, not a
       // preset that would silently claim a chord the user never chose.
-      toggleBrainDumpSecondary: '',
+      toggleLiveEditorSecondary: '',
     }
   }
 
@@ -301,7 +301,7 @@ export class ShortcutManager {
   setupFocusListeners(): void {
     try {
       // Main window retired (T18): contextual shortcuts hang off the Floating
-      // navigator's focus/blur only. Floating may be absent here (BrainDump-only
+      // navigator's focus/blur only. Floating may be absent here (LiveEditor-only
       // startup) or a fresh replacement (closed then reopened via Cmd+3 / tray /
       // restoreFromTray with a new window id), so this runs again on every
       // Floating (re)creation via WindowManager.setOnFloatingNavigatorCreated.
@@ -388,18 +388,21 @@ export class ShortcutManager {
       ),
     })
 
-    // Honor the persisted BrainDump accelerators on startup — both slots, same
+    // Honor the persisted LiveEditor accelerators on startup — both slots, same
     // handler. Empty string is the "disabled" sentinel used by Settings (and the
     // default for the second slot), so skip those to avoid binding "".
-    for (const id of BRAIN_DUMP_SHORTCUT_IDS) {
-      const brainDumpAccel = shortcuts[id]
-      if (typeof brainDumpAccel !== 'string' || brainDumpAccel.trim() === '') {
+    for (const id of LIVE_EDITOR_SHORTCUT_IDS) {
+      const liveEditorAccel = shortcuts[id]
+      if (
+        typeof liveEditorAccel !== 'string' ||
+        liveEditorAccel.trim() === ''
+      ) {
         continue
       }
       results.push({
         id,
-        success: this.registerShortcut(brainDumpAccel, id, () => {
-          this.handleToggleBrainDump()
+        success: this.registerShortcut(liveEditorAccel, id, () => {
+          this.handleToggleLiveEditor()
         }),
       })
     }
@@ -604,7 +607,7 @@ export class ShortcutManager {
    * - `true` when the native engine accepted the binding
    * - `false` for a malformed binding or an unavailable engine
    * @example
-   * registerNativeShortcut('lone-modifier:rightOption', 'toggleBrainDump', openBrainDump) // => true | false
+   * registerNativeShortcut('lone-modifier:rightOption', 'toggleLiveEditor', openLiveEditor) // => true | false
    */
   private registerNativeShortcut(
     nativeBinding: string,
@@ -851,7 +854,7 @@ export class ShortcutManager {
       toggleAlwaysOnTop: ['T', 'Up', 'P'],
       focusFloatingNavigator: ['W', 'Space', 'F'],
       toggleFloatingNavigator: ['F12', 'Backquote', 'F'],
-      toggleBrainDump: ['B', 'F13', 'Backquote'],
+      toggleLiveEditor: ['B', 'F13', 'Backquote'],
     }
 
     return alternatives[id] || []
@@ -906,8 +909,8 @@ export class ShortcutManager {
       toggleAlwaysOnTop: 'Toggle Always On Top',
       focusFloatingNavigator: 'Focus Floating Navigator',
       toggleFloatingNavigator: 'Toggle Floating Navigator',
-      toggleBrainDump: 'Toggle BrainDump',
-      toggleBrainDumpSecondary: 'Toggle BrainDump (second key)',
+      toggleLiveEditor: 'Toggle LiveEditor',
+      toggleLiveEditorSecondary: 'Toggle LiveEditor (second key)',
     }
 
     return displayNames[id] || id
@@ -1089,15 +1092,15 @@ export class ShortcutManager {
   }
 
   /**
-   * Handler for the optional BrainDump toggle accelerator.
+   * Handler for the optional LiveEditor toggle accelerator.
    *
    * Why a try/catch: the user's bound key may collide with another app at
    * runtime, but we don't want a global-shortcut surprise to crash the main
    * loop — log and let the next attempt go through.
    */
-  handleToggleBrainDump(): void {
+  handleToggleLiveEditor(): void {
     try {
-      this.windowManager.toggleBrainDump(() => {
+      this.windowManager.toggleLiveEditor(() => {
         // Window reveal finishes later, after this method's outer error guard has returned.
         try {
           this.playShortcutOpenSoundIfEnabled()
@@ -1106,7 +1109,7 @@ export class ShortcutManager {
         }
       })
     } catch (error) {
-      log.error('Error handling toggle BrainDump shortcut:', error)
+      log.error('Error handling toggle LiveEditor shortcut:', error)
     }
   }
 
@@ -1148,25 +1151,25 @@ export class ShortcutManager {
    * Empty-string accelerators are treated as "disable this shortcut" — the
    * old binding is removed and nothing is registered in its place.
    *
-   * Rejects (without applying anything) a batch that would leave both BrainDump
+   * Rejects (without applying anything) a batch that would leave both LiveEditor
    * toggle slots on one accelerator.
    */
   updateShortcuts(newShortcuts: ShortcutConfig): boolean {
     try {
       // Guard the merged result, not the payload: the generic Shortcut Settings
-      // screen submits EVERY registered id — including the second BrainDump slot,
+      // screen submits EVERY registered id — including the second LiveEditor slot,
       // which has no row there — so a user rebinding the visible "Toggle
-      // BrainDump" row onto the second slot's key would otherwise land both on
+      // LiveEditor" row onto the second slot's key would otherwise land both on
       // one accelerator. Both registrars mishandle that: a chord trips
       // handleShortcutConflict (silent fallback substitution), and the native tap
       // keys bindings by keycode, so the second bind orphans the first. Checking
       // the merge (rather than payload-vs-current) still allows swapping the two.
-      const [primarySlotId, secondarySlotId] = BRAIN_DUMP_SHORTCUT_IDS
+      const [primarySlotId, secondarySlotId] = LIVE_EDITOR_SHORTCUT_IDS
       const mergedShortcuts = { ...this.shortcuts, ...newShortcuts }
       const mergedPrimary = mergedShortcuts[primarySlotId]
       if (isSameAccelerator(mergedPrimary, mergedShortcuts[secondarySlotId])) {
         log.warn(
-          `Rejected shortcut update: both BrainDump toggle slots would bind ${mergedPrimary}`,
+          `Rejected shortcut update: both LiveEditor toggle slots would bind ${mergedPrimary}`,
         )
         return false
       }
@@ -1267,9 +1270,9 @@ export class ShortcutManager {
       toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
       focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),
       toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
-      // Both BrainDump slots route to the same toggle.
-      toggleBrainDump: () => this.handleToggleBrainDump(),
-      toggleBrainDumpSecondary: () => this.handleToggleBrainDump(),
+      // Both LiveEditor slots route to the same toggle.
+      toggleLiveEditor: () => this.handleToggleLiveEditor(),
+      toggleLiveEditorSecondary: () => this.handleToggleLiveEditor(),
     }
 
     return handlers[id]
