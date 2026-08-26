@@ -213,29 +213,22 @@ function rewriteLatestMacYaml(artifactPaths) {
   fs.writeFileSync(latestMacPath, yaml)
 }
 
-/**
- * Rewrite `checksums.json` after stapling so manual-download hashes stay truthful.
+/** Rewrite `checksums.json` from the exact publishable files after stapling changes their bytes.
+ * @param {string[]} releaseArtifactPaths - ZIP/DMG paths uploaded to the GitHub Release.
  * @returns {void}
- * @example rewriteChecksumsJson()
+ * @example rewriteChecksumsJson(['/tmp/CoreLive-0.20.2.dmg'])
  */
-function rewriteChecksumsJson() {
+function rewriteChecksumsJson(releaseArtifactPaths) {
   const checksums = {}
 
-  for (const file of fs.readdirSync(distDir)) {
-    const filePath = path.join(distDir, file)
+  // Hash only the four files the release job uploads as app distributions.
+  for (const filePath of releaseArtifactPaths) {
+    const file = path.basename(filePath)
     const stats = fs.statSync(filePath)
 
-    // A checksum manifest cannot truthfully include its own final bytes.
-    if (
-      stats.isFile() &&
-      file !== 'checksums.json' &&
-      !file.endsWith('.blockmap') &&
-      !file.endsWith('.yml')
-    ) {
-      checksums[file] = {
-        sha256: getSha256Hex(filePath),
-        size: stats.size,
-      }
+    checksums[file] = {
+      sha256: getSha256Hex(filePath),
+      size: stats.size,
     }
   }
 
@@ -281,7 +274,7 @@ function main() {
 
   removeDmgBlockmaps(dmgPaths)
   rewriteLatestMacYaml(releaseArtifactPaths)
-  rewriteChecksumsJson()
+  rewriteChecksumsJson(releaseArtifactPaths)
 
   writeInfo(
     '\n[finalize-mac] Finalized signed + notarized macOS release artifacts.',

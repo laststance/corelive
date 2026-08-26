@@ -2,6 +2,12 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
+/** Generates provisional checksums for publishable ZIP/DMG artifacts after electron-builder completes.
+ * @param {{ outDir: string, electronPlatformName: string }} context - Completed electron-builder output context.
+ * @returns {Promise<void>} Resolves after writing the checksum manifest.
+ * @example
+ * await afterBuild({ outDir: 'dist', electronPlatformName: 'darwin' })
+ */
 export default async function afterBuild(context) {
   const { outDir, electronPlatformName } = context
 
@@ -13,13 +19,8 @@ export default async function afterBuild(context) {
     const filePath = path.join(outDir, file)
     const stats = fs.statSync(filePath)
 
-    // A checksum manifest cannot truthfully include its own final bytes.
-    if (
-      stats.isFile() &&
-      file !== 'checksums.json' &&
-      !file.endsWith('.blockmap') &&
-      !file.endsWith('.yml')
-    ) {
+    // Only files uploaded as installers or updater payloads belong in the manifest.
+    if (stats.isFile() && (file.endsWith('.zip') || file.endsWith('.dmg'))) {
       const fileBuffer = fs.readFileSync(filePath)
       const hashSum = crypto.createHash('sha256')
       hashSum.update(fileBuffer)
