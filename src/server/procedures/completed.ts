@@ -23,11 +23,19 @@ import { calculateStreaks } from '../utils/calculateStreaks'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
 
 /**
+ * Window during which a Completed row may be hard-deleted via {@link deleteCompleted}.
+ * Covers LiveEditor's undo toast plus slack for slow networks; older rows must go
+ * through archival so the destructive endpoint cannot be aimed at real history.
+ * Keyed off `createdAt` (the real insert time), never the semantic `completedAt`.
+ */
+const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
+
+/**
  * Fetches heatmap data for completed tasks, aggregated by the user's *local*
  * calendar day with a category breakdown. Reads the Todo+Completed UNION via
  * {@link fetchCompletedEntries} so LiveEditor checkbox-tick completions (which
  * write directly to the `Completed` table) appear on the heatmap alongside
- * Todos completed through the TodoList lifecycle.
+ * the legacy `Todo` rows completed before the Todo UI was retired.
  *
  * Local-day bucketing (L3): the client reports its IANA `timezone`; each
  * completion is keyed by {@link toLocalDayKey} so a late-night completion
@@ -45,14 +53,6 @@ import { fetchCompletedEntries } from '../utils/completedAggregation'
  * getHeatmap({ days: 365, timezone: 'Asia/Tokyo' })
  * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89 }
  */
-/**
- * Window during which a Completed row may be hard-deleted via {@link deleteCompleted}.
- * Covers LiveEditor's undo toast plus slack for slow networks; older rows must go
- * through archival so the destructive endpoint cannot be aimed at real history.
- * Keyed off `createdAt` (the real insert time), never the semantic `completedAt`.
- */
-const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
-
 export const getHeatmap = authMiddleware
   .input(HeatmapInputSchema)
   .output(HeatmapResponseSchema)
@@ -162,9 +162,9 @@ export const getHeatmap = authMiddleware
  * {@link toLocalDayKey} === `date` — matching the heatmap's local bucketing
  * exactly, so cell counts and dialog counts stay in lockstep.
  *
- * Reads the Todo+Completed UNION via {@link fetchCompletedEntries} so both
- * lifecycle paths (TodoList complete() and LiveEditor checkbox-tick) surface
- * inside the dialog's task list.
+ * Reads the Todo+Completed UNION via {@link fetchCompletedEntries} so
+ * LiveEditor check-offs and the legacy `Todo` history both surface inside
+ * the dialog's task list.
  *
  * @param input.date - YYYY-MM-DD local day the user clicked on the heatmap
  * @param input.timezone - Optional IANA zone; omitted → UTC day boundaries

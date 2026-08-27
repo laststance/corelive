@@ -93,7 +93,7 @@ async function seedCompletedTableRow(
 
 /**
  * Seeds a completed Todo at a deterministic instant after `seedCompletedRowAt` creates its real user/category.
- * This bypasses `toggleTodo` only because that production mutation always stamps the current time.
+ * Writes the row directly because no production path stamps an arbitrary past completion instant.
  * @param clerkId - Clerk identity whose real DB user owns the completion.
  * @param title - Observable row title asserted by the journal tests.
  * @param completedAt - Exact semantic completion instant.

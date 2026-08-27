@@ -144,7 +144,8 @@ export function useCategoryMutations() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: categoryKey })
-      // Also invalidate todos since deleted category's todos are reassigned to default
+      // Other windows hold their own category list; the delete reassigns
+      // rows to the default category, so their copy is stale until told.
       broadcastCategorySync()
     },
   })

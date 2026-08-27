@@ -31,7 +31,7 @@ export type CompletedEntry = {
  * Both halves FILTER and BUCKET by `completedAt`, with a null-coalescing
  * fallback (Todo → updatedAt, Completed → createdAt) for any row whose
  * completedAt is null. Migration 20260603235155 added Todo.completedAt and
- * backfilled it from updatedAt; toggleTodo writes it on each false→true
+ * backfilled it from updatedAt; the now-removed toggleTodo wrote it on each false→true
  * completion. Migration 20260529164052 added Completed.completedAt and
  * backfilled it from createdAt. Because the filter and the bucket now use the
  * SAME field, a completion always lands on its real day's range — this fixes
@@ -43,8 +43,8 @@ export type CompletedEntry = {
  * forcing function for the migration).
  *
  * Dedup: Todo and Completed are disjoint surfaces by construction —
- * LiveEditor's checkbox-tick bypasses the Todo lifecycle (writes Completed
- * directly), while TodoList's complete() flow never writes Completed.
+ * LiveEditor's checkbox-tick writes Completed directly, and the legacy
+ * `Todo` branch is now read-only history (no code path writes it).
  * Therefore no row-level dedup is needed; this invariant is asserted by a
  * unit test.
  *
@@ -93,9 +93,10 @@ export async function fetchCompletedEntries(
     prisma.completed.findMany({
       where: {
         userId,
-        // archived rows are excluded from the heatmap surface. The archive flow
-        // (archiveCompletedTodos) writes every row archived:false, so cleared
-        // todos still count; an archived:true row would silently drop its day.
+        // archived rows are excluded from the heatmap surface. Nothing writes
+        // `archived` any more (the archive flow went with the Todo vertical),
+        // so every live row is archived:false — but the filter stays: an
+        // archived:true row would silently erase its whole day.
         archived: false,
         // Filter by the semantic completion day, falling back to `createdAt`
         // (insert time) only for rows whose `completedAt` is null. This lands

@@ -34,17 +34,6 @@ interface ElectronAPI {
   removeListener: (channel: string, callback: Function) => void
   removeAllListeners: (channel: string) => void
 
-  // Todo operations
-  todos?: {
-    getTodos: (options?: any) => Promise<any>
-    getTodoById: (id: string | number) => Promise<any>
-    createTodo: (todoData: any) => Promise<any>
-    updateTodo: (id: string | number, updates: any) => Promise<any>
-    deleteTodo: (id: string | number) => Promise<void>
-    toggleTodo: (id: string | number) => Promise<any>
-    clearCompleted: () => Promise<{ deletedCount: number }>
-  }
-
   // Window operations
   window?: {
     toggleFloatingNavigator: () => Promise<void>

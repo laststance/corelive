@@ -2,7 +2,6 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { useInitialEffect } from '@/hooks/use-initial-effect'
-import { syncSelectedCategoryCookieFromStorage } from '@/hooks/useSelectedCategory'
 import {
   HOME_SSR_HINT_COOKIE_MAX_AGE_SECONDS,
   HOME_TIMEZONE_COOKIE_NAME,
@@ -22,12 +21,9 @@ function persistViewerTimeZoneCookie(): void {
  * `(main)/layout.tsx`.
  */
 export const HomeContent = function HomeContent() {
-  // Persist both SSR-hint cookies (viewer zone + category selection) so the
-  // next server prefetch hydrates the exact keys this browser reads.
-  useInitialEffect(() => {
-    persistViewerTimeZoneCookie()
-    syncSelectedCategoryCookieFromStorage()
-  })
+  // Persist the viewer's zone so the next server prefetch hydrates the exact
+  // heatmap key this browser reads.
+  useInitialEffect(persistViewerTimeZoneCookie)
 
   return (
     <>
