@@ -5,6 +5,7 @@ import {
   Search,
   Home as HomeIcon,
   Sparkles,
+  PenLine,
   Plus,
   Settings,
   ChevronDown,
@@ -193,6 +194,19 @@ export const AppSidebar = function AppSidebar() {
                     <Link href="/home">
                       <HomeIcon className="h-4 w-4" />
                       <span>Home</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  {/* LiveEditor is the only surface that creates tasks, so the
+                       web needs a way in — Home is a read-only dashboard. */}
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === '/live-editor'}
+                  >
+                    <Link href="/live-editor">
+                      <PenLine className="h-4 w-4" />
+                      <span>LiveEditor</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

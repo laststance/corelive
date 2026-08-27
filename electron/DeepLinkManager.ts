@@ -399,26 +399,17 @@ export class DeepLinkManager {
   }
 
   /**
-   * Handle create task action.
+   * Handle create task action — opens LiveEditor, the only task-creation
+   * surface left after the Todo write vertical was retired. NO task is created
+   * here (the user types it in LiveEditor), so this stays a navigation, not a
+   * mutation. The link's `title`/`description`/`priority`/`dueDate` params are
+   * intentionally dropped: they pre-filled a create form that no longer exists,
+   * and LiveEditor is a free-text editor with no fields to seed.
    *
-   * @param params - URL parameters
+   * @param _params - Pre-decoded URL parameters; unused, see above.
    */
-  async handleCreateAction(params: Record<string, string>): Promise<void> {
-    // Open the create form in the browser, pre-filled from the deep link —
-    // mirrors the renderer's default `deep-link-create-task` route
-    // (`/home?create=true&<prefill>`). NO task is created here (the user
-    // confirms in the browser), so this stays a navigation, not a mutation;
-    // `apiBridge.createTodo` was already a null no-op before T15. `params` are
-    // pre-decoded by `parseDeepLinkUrl`, and `URLSearchParams` re-encodes them.
-    const { title, description, priority, dueDate } = params
-
-    const search = new URLSearchParams({ create: 'true' })
-    if (title) search.set('title', title)
-    if (description) search.set('description', description)
-    if (priority) search.set('priority', priority)
-    if (dueDate) search.set('dueDate', dueDate)
-
-    this.openInBrowser(`/home?${search.toString()}`)
+  async handleCreateAction(_params: Record<string, string>): Promise<void> {
+    this.openInBrowser('/live-editor')
   }
 
   /**

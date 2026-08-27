@@ -375,27 +375,22 @@ export class MenuManager {
   // Menu action handlers
 
   /**
-   * Opens the full web app's new-task flow in the browser — the File ▸ New Task
-   * item, post-main-retirement. No `restoreFromTray` (unlike the global new-task
-   * shortcut in ShortcutManager): a menu click already comes from a focused
-   * window, so there's no tray-resident state to surface.
-   *
-   * The `menu-action` channel stays live — focus-search / import / export still
-   * send it — so only its `'new-task'` variant is now unused (left in place, not
-   * pruned, so the handler/types stay symmetric for the T18/T19 cleanup).
+   * Opens LiveEditor in the browser — the File ▸ New Task item. Targets
+   * `/live-editor` because it is the only surface that creates tasks now; Home
+   * became a read-only completion dashboard when the Todo write vertical was
+   * retired. No `restoreFromTray` (unlike the global new-task shortcut in
+   * ShortcutManager): a menu click already comes from a focused window, so
+   * there's no tray-resident state to surface.
    * @returns Nothing; logs and no-ops if the WindowManager (origin source) is absent.
    * @example
-   * this.createNewTask() // opens https://corelive.app/home?create=true
+   * this.createNewTask() // opens https://corelive.app/live-editor
    */
   createNewTask(): void {
     if (!this.windowManager) {
       log.warn('[MenuManager] windowManager unavailable; cannot open New Task')
       return
     }
-    openWebAppInBrowser(
-      this.windowManager.getWebAppOrigin(),
-      '/home?create=true',
-    )
+    openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
   }
 
   // FOLLOW-UP (T14/T18): Find / Import Tasks / Export Tasks still drive the main
