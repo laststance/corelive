@@ -24,9 +24,9 @@ import type { Completed } from '@/server/schemas/completed'
 
 /**
  * Regex for a markdown checkbox line. Captures leading indentation in group 1,
- * the `[ ]`/`[x]` state in group 2, and the title in group 3. Exported so the paste-import parser
- * (`src/lib/parsePasteToTasks.ts`) reuses one source of truth for checkbox
- * detection instead of redefining the grammar.
+ * the `[ ]`/`[x]` state in group 2, and the title in group 3. Exported so every
+ * LiveEditor caller shares one source of truth for checkbox detection instead
+ * of redefining the grammar.
  */
 export const CHECKBOX_LINE_REGEX = /^([ \t]*)- \[([ x])\] (.+)$/
 

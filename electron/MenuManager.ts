@@ -285,11 +285,6 @@ export class MenuManager {
             label: 'Toggle Floating Navigator',
             click: () => this.toggleFloatingNavigator(),
           },
-          { type: 'separator' },
-          {
-            label: 'Focus New Task Input',
-            click: () => this.sendFloatingNavigatorAction('focus-new-task'),
-          },
         ],
       },
       {
@@ -437,35 +432,6 @@ export class MenuManager {
       this.windowManager.toggleLiveEditor()
     } else {
       console.error('[MenuManager] windowManager is not available!')
-    }
-  }
-
-  sendFloatingNavigatorAction(action: string): void {
-    if (!this.windowManager) {
-      log.warn('[MenuManager] windowManager not available')
-      return
-    }
-
-    if (!this.windowManager.hasFloatingNavigator()) {
-      log.warn('[MenuManager] Floating navigator window not available')
-      return
-    }
-
-    try {
-      const floatingWindow = this.windowManager.getFloatingNavigator()
-      if (floatingWindow && !floatingWindow.isDestroyed()) {
-        typedSend(
-          floatingWindow.webContents,
-          'floating-navigator-menu-action',
-          action,
-        )
-        log.debug('[MenuManager] Sent action to floating navigator:', action)
-      }
-    } catch (error) {
-      log.error(
-        '[MenuManager] Failed to send action to floating navigator:',
-        error,
-      )
     }
   }
 

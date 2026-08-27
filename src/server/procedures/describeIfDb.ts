@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { describe } from 'vitest'
 
 /**
- * Shared gate for the real-DB integration suites (`*.createMany.test.ts`,
- * `todo.archive.test.ts`). They opt in via `RUN_DB_INTEGRATION_TESTS=1` (CI's
+ * Shared gate for the real-DB integration suites (`completed.journal.test.ts`,
+ * `completed.dayDetail.test.ts`). They opt in via `RUN_DB_INTEGRATION_TESTS=1` (CI's
  * `test` job sets it once Postgres is up; locally set it with `docker compose
  * up`) and run per-user-scoped `deleteMany` teardown against whatever
  * `POSTGRES_PRISMA_URL` points at — so when enabled, this re-runs the SAME
