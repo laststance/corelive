@@ -944,16 +944,21 @@ async function createWindow(): Promise<void> {
 
       await loadSystemIntegrationStack()
 
-      // Keep updater startup isolated so a failure cannot block the app.
-      try {
-        const AutoUpdaterCls = (await lazyLoadManager.loadComponent(
-          'AutoUpdater',
-        )) as new (...args: unknown[]) => AutoUpdaterType
-        autoUpdater = new AutoUpdaterCls()
-        // No main window to bind dialogs to after T18; the updater surfaces
-        // through its own notifications.
-      } catch (autoUpdaterError) {
-        log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
+      // Only packaged apps have an update target; development and unit-test processes must not create updater timers.
+      if (app.isPackaged) {
+        // Keep updater startup isolated so a failure cannot block the app.
+        try {
+          const AutoUpdaterCls = (await lazyLoadManager.loadComponent(
+            'AutoUpdater',
+          )) as new (...args: unknown[]) => AutoUpdaterType
+          autoUpdater = new AutoUpdaterCls()
+          // No main window to bind dialogs to after T18; the updater surfaces
+          // through its own notifications.
+        } catch (autoUpdaterError) {
+          log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
+        }
+      } else {
+        log.info('AutoUpdater initialization skipped outside packaged builds')
       }
 
       await loadDeepLinkStack()
