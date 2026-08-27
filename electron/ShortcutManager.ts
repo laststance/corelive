@@ -990,23 +990,18 @@ export class ShortcutManager {
    */
   handleNewTaskShortcut(): void {
     try {
-      // Surface the Floating quick-navigator, then open the new-task flow in the
-      // browser — the full task app is web-only now, and restoreFromTray surfaces
-      // Floating (not the hidden main) so a `shortcut-new-task` IPC to main would
-      // land in an unsurfaced window. Mirrors the deep-link create-task route
-      // (/home?create=true). The renderer listener still lives in
-      // useElectronShortcuts but loses its only sender here — orphaned channel
-      // tracked for T18/T19 cleanup.
+      // Surface the Floating quick-navigator, then open LiveEditor in the
+      // browser — it is the only task-creation surface left, and restoreFromTray
+      // surfaces Floating (not the hidden main) so a `shortcut-new-task` IPC to
+      // main would land in an unsurfaced window. Mirrors the deep-link
+      // create-task route (/live-editor).
       this.windowManager.restoreFromTray()
-      openWebAppInBrowser(
-        this.windowManager.getWebAppOrigin(),
-        '/home?create=true',
-      )
+      openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
 
       if (this.notificationManager) {
         this.notificationManager.showNotification(
           'New Task',
-          'Create a new task shortcut activated',
+          'Opening LiveEditor',
           { silent: true },
         )
       }

@@ -95,7 +95,8 @@ model Todo {
   // drift its heatmap day). NULLABLE with NO @default: a non-null default would
   // stamp every historical row with the migration timestamp, jumping all old
   // rows to migration-day. The migration backfills existing completed rows with
-  // completedAt = updatedAt; toggleTodo writes it on each false→true completion.
+  // completedAt = updatedAt; the now-removed toggleTodo wrote it on each
+  // false→true completion, so `Todo` is read-only history from here on.
   // The heatmap buckets the Todo half by `completedAt ?? updatedAt` (coalesced
   // in JS), so a null (un-converted write path) still lands on a day.
   completedAt DateTime?

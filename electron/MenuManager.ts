@@ -285,11 +285,6 @@ export class MenuManager {
             label: 'Toggle Floating Navigator',
             click: () => this.toggleFloatingNavigator(),
           },
-          { type: 'separator' },
-          {
-            label: 'Focus New Task Input',
-            click: () => this.sendFloatingNavigatorAction('focus-new-task'),
-          },
         ],
       },
       {
@@ -380,27 +375,22 @@ export class MenuManager {
   // Menu action handlers
 
   /**
-   * Opens the full web app's new-task flow in the browser — the File ▸ New Task
-   * item, post-main-retirement. No `restoreFromTray` (unlike the global new-task
-   * shortcut in ShortcutManager): a menu click already comes from a focused
-   * window, so there's no tray-resident state to surface.
-   *
-   * The `menu-action` channel stays live — focus-search / import / export still
-   * send it — so only its `'new-task'` variant is now unused (left in place, not
-   * pruned, so the handler/types stay symmetric for the T18/T19 cleanup).
+   * Opens LiveEditor in the browser — the File ▸ New Task item. Targets
+   * `/live-editor` because it is the only surface that creates tasks now; Home
+   * became a read-only completion dashboard when the Todo write vertical was
+   * retired. No `restoreFromTray` (unlike the global new-task shortcut in
+   * ShortcutManager): a menu click already comes from a focused window, so
+   * there's no tray-resident state to surface.
    * @returns Nothing; logs and no-ops if the WindowManager (origin source) is absent.
    * @example
-   * this.createNewTask() // opens https://corelive.app/home?create=true
+   * this.createNewTask() // opens https://corelive.app/live-editor
    */
   createNewTask(): void {
     if (!this.windowManager) {
       log.warn('[MenuManager] windowManager unavailable; cannot open New Task')
       return
     }
-    openWebAppInBrowser(
-      this.windowManager.getWebAppOrigin(),
-      '/home?create=true',
-    )
+    openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
   }
 
   // FOLLOW-UP (T14/T18): Find / Import Tasks / Export Tasks still drive the main
@@ -437,35 +427,6 @@ export class MenuManager {
       this.windowManager.toggleLiveEditor()
     } else {
       console.error('[MenuManager] windowManager is not available!')
-    }
-  }
-
-  sendFloatingNavigatorAction(action: string): void {
-    if (!this.windowManager) {
-      log.warn('[MenuManager] windowManager not available')
-      return
-    }
-
-    if (!this.windowManager.hasFloatingNavigator()) {
-      log.warn('[MenuManager] Floating navigator window not available')
-      return
-    }
-
-    try {
-      const floatingWindow = this.windowManager.getFloatingNavigator()
-      if (floatingWindow && !floatingWindow.isDestroyed()) {
-        typedSend(
-          floatingWindow.webContents,
-          'floating-navigator-menu-action',
-          action,
-        )
-        log.debug('[MenuManager] Sent action to floating navigator:', action)
-      }
-    } catch (error) {
-      log.error(
-        '[MenuManager] Failed to send action to floating navigator:',
-        error,
-      )
     }
   }
 

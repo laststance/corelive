@@ -63,7 +63,6 @@ import { isSameAccelerator } from './utils/isSameAccelerator'
 import { loadUiohook } from './utils/loadUiohook'
 import { isNativeTapLatchSet } from './utils/nativeTapLatch'
 import { openConfigFile } from './utils/openConfigFile'
-import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import {
   HIDE_APP_ICON_CONFIG_PATH,
   resolveHideAppIcon,
@@ -2206,17 +2205,6 @@ function setupIPCHandlers(): void {
   typedHandle('window-show-main', () => {
     if (windowManager) {
       windowManager.restoreFromTray()
-    }
-  })
-
-  // T14: the Floating Navigator's Import button opens the Completed import
-  // surface in the user's browser (/home) rather than broadcasting an open-intent
-  // to the main window's dialog. The full task app is web-only, so import (a
-  // wide flow the narrow floating window can't host) lives in the browser. The
-  // path is hard-coded here so the renderer cannot drive the opened URL.
-  typedHandle('floating-open-import', () => {
-    if (windowManager) {
-      openWebAppInBrowser(windowManager.getWebAppOrigin(), '/home')
     }
   })
 

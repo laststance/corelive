@@ -418,16 +418,6 @@ export interface IPCChannels {
     request: void
     response: boolean
   }
-  /**
-   * Floating Navigator → open the task app's Completed import surface (`/home`)
-   * in the user's browser (T14). The full task app is web-only, so importing
-   * happens in the browser, not a main-window dialog. No request payload: the
-   * path is hard-coded in the main handler so the renderer cannot drive the URL.
-   */
-  'floating-open-import': {
-    request: void
-    response: void
-  }
   'floating-window-toggle-always-on-top': {
     request: void
     response: boolean
@@ -901,9 +891,6 @@ export interface IPCEventChannels {
 
   // Menu events
   'menu-action': { action: string; filePath?: string }
-
-  // Floating navigator events (main → floating renderer)
-  'floating-navigator-menu-action': string
   /**
    * Broadcast when the Floating Navigator's keep-on-top setting changes from
    * ANY surface (the Settings toggle or the in-window pin). Lets the floating

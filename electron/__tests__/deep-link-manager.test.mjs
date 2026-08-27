@@ -210,7 +210,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('opens the create form in the browser pre-filled from the deep link', async () => {
+    it('opens LiveEditor in the browser, never a Home page that cannot create tasks', async () => {
       // Arrange: a `corelive://create?title=...&description=...` deep link.
 
       // Act
@@ -219,24 +219,25 @@ describe('DeepLinkManager', () => {
         description: 'Task description',
       })
 
-      // Assert: the create form opens in the web app, pre-filled. No task is
-      // created here — the user confirms in the browser — so a deep link never
+      // Assert: LiveEditor opens — Home is a read-only dashboard, so routing
+      // there would dead-end the user. Prefill fields are dropped because
+      // LiveEditor is free text. No task is created, so a deep link never
       // mutates the database.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/home?create=true&title=New+Task&description=Task+description',
+        'https://corelive.app/live-editor',
       )
       expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
 
-    it('opens the empty create form in the browser when no fields are provided', async () => {
+    it('opens LiveEditor in the browser when the deep link carries no fields', async () => {
       // Arrange: a bare `corelive://create` deep link (no params).
 
       // Act
       await deepLinkManager.handleCreateAction({})
 
-      // Assert: still opens the create form, just without pre-fill.
+      // Assert: same destination as the pre-filled case.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/home?create=true',
+        'https://corelive.app/live-editor',
       )
       expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })

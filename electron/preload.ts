@@ -142,7 +142,6 @@ const ALLOWED_CHANNELS = {
   'deep-link-task-created': true,
   'deep-link-navigate': true,
   'deep-link-search': true,
-  'floating-navigator-menu-action': true,
   // Consumed by the floating window's preload (§6d keep-on-top sync); listed
   // here too because AllowedChannelsMap is exhaustive over IPCEventChannels.
   'floating-window-always-on-top-changed': true,

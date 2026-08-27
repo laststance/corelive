@@ -6,9 +6,7 @@ import {
 } from './procedures/category'
 import {
   createCompleted,
-  createManyCompleted,
   deleteCompleted,
-  deleteManyCompleted,
   getDayDetail,
   getHeatmap,
   getJournal,
@@ -24,17 +22,6 @@ import {
   getUnassignedPool,
   unassignTask,
 } from './procedures/skillTree'
-import {
-  listTodos,
-  createTodo,
-  createManyTodo,
-  deleteManyTodo,
-  updateTodo,
-  deleteTodo,
-  toggleTodo,
-  clearCompleted,
-  reorderTodos,
-} from './procedures/todo'
 
 export const router = {
   home: {
@@ -46,25 +33,12 @@ export const router = {
     update: updateCategory,
     delete: deleteCategory,
   },
-  todo: {
-    list: listTodos,
-    create: createTodo,
-    createMany: createManyTodo,
-    update: updateTodo,
-    delete: deleteTodo,
-    deleteMany: deleteManyTodo,
-    toggle: toggleTodo,
-    clearCompleted: clearCompleted,
-    reorder: reorderTodos,
-  },
   completed: {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     journal: getJournal,
     create: createCompleted,
-    createMany: createManyCompleted,
     delete: deleteCompleted,
-    deleteMany: deleteManyCompleted,
   },
   electronSettings: {
     get: getElectronSettings,

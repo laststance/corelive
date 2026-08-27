@@ -60,10 +60,10 @@ export function useHeatmapData(days: number = 365) {
   // `calcMonthlyMaxDates(dataByDate)`, WeeklySummaryCard's `aggregateLastSevenDays`,
   // and especially YearInReviewModal's auto-open effect (which lists `dataByDate`
   // in its dep array) would otherwise see a fresh Map every render. We do NOT
-  // rely on the React Compiler for this: it provably BAILED on the sibling
-  // TodoList component that had the identical fresh-Map/Array-every-render shape,
-  // letting an unstable effect dep drive a render loop that starved App Router
-  // navigation (the "Settings does nothing" bug, fixed 2026-06-24). TanStack
+  // rely on the React Compiler for this: it provably BAILED on the since-deleted
+  // sibling that had the identical fresh-Map/Array-every-render shape, letting an
+  // unstable effect dep drive a render loop that starved App Router navigation
+  // (the "Settings does nothing" bug, fixed 2026-06-24). TanStack
   // Query keeps `data` referentially stable via structural sharing, so this memo
   // recomputes only on a real data change.
   const { heatmapValues, dataByDate } = useMemo(

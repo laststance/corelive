@@ -31,7 +31,6 @@ import {
 } from '@/lib/utils/resolveCompletedJournalDateRange'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
-import { CompletedImportEntry } from './CompletedImportEntry'
 import { CompletedJournalRow } from './CompletedJournalRow'
 import {
   CompletedTodosFilters,
@@ -39,10 +38,8 @@ import {
 } from './CompletedTodosFilters'
 
 interface CompletedTodosProps {
-  /** Categories already loaded by TodoList, reused without coupling to its active-category selection. */
+  /** Categories already loaded by Dashboard, reused without coupling to its active-category selection. */
   categories: readonly CompletedFilterCategory[]
-  /** Reverses a `todo`-source completion; permanent `completed` rows ignore it. */
-  onToggleComplete: (id: string) => void
 }
 
 interface GroupedEntries {
@@ -62,14 +59,13 @@ const INITIAL_COMPLETED_TODOS_FILTERS: CompletedTodosFilterState = {
 
 /**
  * Renders the permanent win journal with an independent Warm Preset Bar whenever Home shows the Completed Tasks panel.
- * @param props - Loaded categories plus the Todo completion-reversal callback.
+ * @param props - Loaded categories for the filter bar.
  * @returns The stable Completed Tasks card across loading, error, empty, filtered-empty, and populated states.
  * @example
- * <CompletedTodos categories={categories} onToggleComplete={toggleComplete} />
+ * <CompletedTodos categories={categories} />
  */
 export const CompletedTodos = function CompletedTodos({
   categories,
-  onToggleComplete,
 }: CompletedTodosProps) {
   const observerRef = useRef<HTMLDivElement>(null)
   const isClerkQueryReady = useClerkQueryReady()
@@ -189,7 +185,6 @@ export const CompletedTodos = function CompletedTodos({
   }
 
   const total = data?.pages[0]?.total ?? 0
-  const isTrueEmpty = !isLoading && !isError && !isFiltered && total === 0
   const journalContent = match({
     hasEntries: allEntries.length > 0,
     isError,
@@ -221,10 +216,8 @@ export const CompletedTodos = function CompletedTodos({
         ) : (
           <>
             <p>No wins logged yet</p>
-            {/* Day-one discoverability: surface the Import affordance inline. */}
-            <CompletedImportEntry />
             <p className="text-xs">
-              Finish a task or import past wins — they&apos;ll appear here
+              Check a line off in LiveEditor — it&apos;ll appear here
             </p>
           </>
         )}
@@ -245,7 +238,6 @@ export const CompletedTodos = function CompletedTodos({
                   <CompletedJournalRow
                     key={`${entry.source}-${entry.id}`}
                     entry={entry}
-                    onUncomplete={onToggleComplete}
                   />
                 ))}
               </div>
@@ -319,8 +311,6 @@ export const CompletedTodos = function CompletedTodos({
             }
             onClear={clearFilters}
           />
-          {/* Empty history keeps the Import entry in the centered onboarding state. */}
-          {!isTrueEmpty ? <CompletedImportEntry /> : null}
         </div>
       </CardHeader>
 

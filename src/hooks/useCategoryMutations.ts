@@ -39,9 +39,6 @@ export function useCategoryMutations() {
   // Query key for category list cache operations
   const categoryKey = orpc.category.list.queryOptions({}).queryKey
 
-  // Also invalidate todo queries when categories change (counts may differ)
-  const todoBaseKey = orpc.todo.list.key()
-
   // ============================================
   // CREATE MUTATION - Optimistic add to list
   // ============================================
@@ -147,8 +144,8 @@ export function useCategoryMutations() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: categoryKey })
-      // Also invalidate todos since deleted category's todos are reassigned to default
-      queryClient.invalidateQueries({ queryKey: todoBaseKey })
+      // Other windows hold their own category list; the delete reassigns
+      // rows to the default category, so their copy is stale until told.
       broadcastCategorySync()
     },
   })

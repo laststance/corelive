@@ -25,7 +25,7 @@ function withServerTiming(
   return response
 }
 
-/** Handles every oRPC HTTP verb so production responses expose the measured Home/API latency split. @param request - Incoming browser or server request. @returns The oRPC response, 404 fallback, or instrumented 500 response. @example `await handleRequest(new Request('https://corelive.app/api/orpc/todo/list'))` */
+/** Handles every oRPC HTTP verb so production responses expose the measured Home/API latency split. @param request - Incoming browser or server request. @returns The oRPC response, 404 fallback, or instrumented 500 response. @example `await handleRequest(new Request('https://corelive.app/api/orpc/completed/heatmap'))` */
 async function handleRequest(request: Request): Promise<Response> {
   const startedAt = performance.now()
   const serverTiming = new ServerTiming()

@@ -8,7 +8,8 @@ import { prisma } from '@/lib/prisma'
 
 import { fetchCompletedEntries } from '../utils/completedAggregation'
 
-import { createManyCompleted, getJournal } from './completed'
+import { listCategories } from './category'
+import { getJournal } from './completed'
 import { describeIfDb } from './describeIfDb'
 
 /**
@@ -42,26 +43,57 @@ function freshClerkId(): string {
 }
 
 /**
- * Seeds one `Completed`-table win (the paste-import / LiveEditor surface) at a
- * precise instant via the REAL import procedure, which lazily upserts the user +
- * default category on first call — so the read path sees a row written exactly
- * the way production writes it.
+ * Seeds one `Completed`-table win (the LiveEditor check-off surface) at a
+ * precise instant, lazily upserting the user + default category on first call —
+ * so the read path sees a row written exactly the way production writes it.
  */
 async function seedCompletedRowAt(
   clerkId: string,
   title: string,
   completedAt: Date,
 ): Promise<void> {
-  await call(
-    createManyCompleted,
-    { items: [{ title, completedAt }], importBatchId: randomUUID() },
-    authContext(clerkId),
-  )
+  await seedCompletedTableRow(clerkId, title, completedAt)
+}
+
+/**
+ * Writes one `Completed` row for `clerkId` at an exact instant, lazily creating
+ * the DB user (via the real auth middleware) and the default "General" category
+ * the way the Clerk webhook / seed do.
+ *
+ * @param clerkId - Clerk identity whose real DB user owns the completion.
+ * @param title - Observable row title the assertions look for.
+ * @param completedAt - Exact semantic completion instant.
+ * @returns Nothing once the row is persisted.
+ * @example
+ * await seedCompletedTableRow('test_x', 'gym', new Date('2026-05-10T09:00:00Z'))
+ */
+async function seedCompletedTableRow(
+  clerkId: string,
+  title: string,
+  completedAt: Date,
+): Promise<void> {
+  // Any authed procedure triggers authMiddleware's lazy user upsert; list is
+  // the cheapest read-only one.
+  await call(listCategories, undefined, authContext(clerkId))
+  const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
+  const category = await prisma.category.upsert({
+    where: { name_userId: { name: 'General', userId: user.id } },
+    update: {},
+    create: {
+      name: 'General',
+      color: 'blue',
+      isDefault: true,
+      userId: user.id,
+    },
+  })
+  await prisma.completed.create({
+    data: { title, completedAt, userId: user.id, categoryId: category.id },
+  })
 }
 
 /**
  * Seeds a completed Todo at a deterministic instant after `seedCompletedRowAt` creates its real user/category.
- * This bypasses `toggleTodo` only because that production mutation always stamps the current time.
+ * Writes the row directly because no production path stamps an arbitrary past completion instant.
  * @param clerkId - Clerk identity whose real DB user owns the completion.
  * @param title - Observable row title asserted by the journal tests.
  * @param completedAt - Exact semantic completion instant.

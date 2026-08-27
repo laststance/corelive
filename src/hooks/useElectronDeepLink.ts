@@ -82,13 +82,9 @@ export function useElectronDeepLink(options: UseElectronDeepLinkOptions = {}) {
           dueDate: data.dueDate,
         })
       } else {
-        const params = new URLSearchParams()
-        if (data.title) params.set('title', data.title)
-        if (data.description) params.set('description', data.description)
-        if (data.priority) params.set('priority', data.priority)
-        if (data.dueDate) params.set('dueDate', data.dueDate)
-
-        router.push(`/home?create=true&${params.toString()}`)
+        // LiveEditor is the only task-creation surface left, and it is a
+        // free-text editor — the deep link's prefill fields have nowhere to go.
+        router.push('/live-editor')
       }
     }
 

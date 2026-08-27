@@ -6,14 +6,14 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
-import { createManyCompleted, getDayDetail } from './completed'
+import { listCategories } from './category'
+import { getDayDetail } from './completed'
 import { describeIfDb } from './describeIfDb'
 
 /**
  * Real-DB harness for the L3 local-day bucketing of `getDayDetail`. Each test
- * seeds completions at a precise UTC instant through the REAL import procedure
- * (which lazily upserts the user via `authMiddleware` and get-or-creates the
- * default category), then asserts which LOCAL calendar day they surface on
+ * seeds completions at a precise UTC instant (lazily upserting the user via the
+ * REAL `authMiddleware` and get-or-creating the default category), then asserts which LOCAL calendar day they surface on
  * under different IANA zones. Several sequential round-trips per case, so the
  * suite gets a generous timeout to never flake on DB latency.
  */
@@ -39,20 +39,53 @@ function freshClerkId(): string {
 }
 
 /**
- * Seeds exactly one Completed row at `completedAt` via the real paste-import
- * procedure (auto-creates the user + default category on first call), so the
- * read path under test sees a row written exactly the way production writes it.
+ * Seeds exactly one Completed row at `completedAt`. `listCategories` runs the
+ * REAL `authMiddleware`, which lazily upserts the DB user for a fresh clerkId —
+ * the same bootstrap production does — then the row is written directly so the
+ * test can pin an exact instant (no production mutation accepts one).
  */
 async function seedCompletionAt(
   clerkId: string,
   title: string,
   completedAt: Date,
 ): Promise<void> {
-  await call(
-    createManyCompleted,
-    { items: [{ title, completedAt }], importBatchId: randomUUID() },
-    authContext(clerkId),
-  )
+  await seedCompletedTableRow(clerkId, title, completedAt)
+}
+
+/**
+ * Writes one `Completed` row for `clerkId` at an exact instant, lazily creating
+ * the DB user (via the real auth middleware) and the default "General" category
+ * the way the Clerk webhook / seed do.
+ *
+ * @param clerkId - Clerk identity whose real DB user owns the completion.
+ * @param title - Observable row title the assertions look for.
+ * @param completedAt - Exact semantic completion instant.
+ * @returns Nothing once the row is persisted.
+ * @example
+ * await seedCompletedTableRow('test_x', 'gym', new Date('2026-05-10T09:00:00Z'))
+ */
+async function seedCompletedTableRow(
+  clerkId: string,
+  title: string,
+  completedAt: Date,
+): Promise<void> {
+  // Any authed procedure triggers authMiddleware's lazy user upsert; list is
+  // the cheapest read-only one.
+  await call(listCategories, undefined, authContext(clerkId))
+  const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
+  const category = await prisma.category.upsert({
+    where: { name_userId: { name: 'General', userId: user.id } },
+    update: {},
+    create: {
+      name: 'General',
+      color: 'blue',
+      isDefault: true,
+      userId: user.id,
+    },
+  })
+  await prisma.completed.create({
+    data: { title, completedAt, userId: user.id, categoryId: category.id },
+  })
 }
 
 afterEach(async () => {

@@ -64,9 +64,6 @@ const ALLOWED_CHANNELS: AllowedChannelsMap = {
   'floating-window-focus': true,
   'floating-window-blur': true,
 
-  // Menu action events (from MenuManager)
-  'floating-navigator-menu-action': true,
-
   // Show main window
   'window-show-main': true,
 }
@@ -256,20 +253,6 @@ contextBridge.exposeInMainWorld('floatingNavigatorAPI', {
     toggle: toggleLiveEditor,
   },
 
-  /**
-   * Open the task app's Completed paste-import surface (`/home`) in the user's
-   * browser (T14). The full task app is web-only, so importing happens in the
-   * browser rather than a main-window dialog. Mirrors the tray/menu/shortcut
-   * browser reroutes; the destination path is fixed in the main handler.
-   */
-  openCompletedImport: async (): Promise<void> => {
-    try {
-      await typedInvoke('floating-open-import')
-    } catch (error) {
-      log.error('Floating Navigator: Failed to open import in browser:', error)
-    }
-  },
-
   // Secure event listener management (restricted set for floating navigator)
   on: (
     channel: string,
@@ -363,25 +346,6 @@ contextBridge.exposeInMainWorld('floatingNavigatorEnv', {
   isFloatingNavigator: true,
   platform: process.platform,
 })
-
-// ============================================================================
-// Menu Action Event Dispatch
-// ============================================================================
-
-/**
- * Listen for menu actions from main process and dispatch custom events.
- */
-ipcRenderer.on(
-  'floating-navigator-menu-action',
-  (_event: IpcRendererEvent, action: string): void => {
-    // Dispatch custom event that FloatingNavigator component can listen to
-    window.dispatchEvent(
-      new CustomEvent('floating-navigator-menu-action', {
-        detail: { action },
-      }),
-    )
-  },
-)
 
 // ============================================================================
 // Keep-On-Top Cross-Window Sync (§6d)

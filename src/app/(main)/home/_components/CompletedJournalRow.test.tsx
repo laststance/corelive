@@ -1,7 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { render, screen } from '@testing-library/react'
 import { Provider } from 'react-redux'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import userSettingsReducer, {
   initialState,
@@ -36,7 +36,7 @@ function renderCompletedJournalRow(
 
   return render(
     <Provider store={store}>
-      <CompletedJournalRow entry={COMPLETED_ENTRY} onUncomplete={vi.fn()} />
+      <CompletedJournalRow entry={COMPLETED_ENTRY} />
     </Provider>,
   )
 }
