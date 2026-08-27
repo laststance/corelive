@@ -76,7 +76,7 @@ export const Dashboard = function Dashboard() {
   }
 
   return (
-    <Grid className="h-full grid-cols-1 gap-6 lg:grid-cols-2">
+    <Grid className="grid-cols-1 content-start gap-6 lg:grid-cols-2">
       {/* Activity heatmap spans both columns so the centerpiece gets the full
            content width DESIGN.md mandates. */}
       <div className="lg:col-span-2">
