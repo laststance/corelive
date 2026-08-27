@@ -123,7 +123,7 @@ describe('prefetchHomeBootstrap', () => {
     expect(mockedCall).not.toHaveBeenCalled()
   })
 
-  it('hydrates all three Home slices onto the exact client cache keys through one bootstrap call', async () => {
+  it('hands Home its category, heatmap and journal caches already filled, so the first paint fetches nothing', async () => {
     // Act
     const dehydratedState = await prefetchHomeBootstrap()
 
