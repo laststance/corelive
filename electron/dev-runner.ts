@@ -145,7 +145,8 @@ async function startElectron(): Promise<void> {
           ...process.env,
           NODE_ENV: 'development',
           ELECTRON_DEV_MODE: 'true', // Dev mode flag
-          PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9222', // For E2E tests/MCP
+          CORELIVE_DEBUG: '1', // Enable DevTools and CDP for local tooling
+          CORELIVE_REMOTE_DEBUGGING_PORT: '9222',
         },
       },
     )

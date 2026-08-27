@@ -1781,20 +1781,6 @@ const electronAPI = {
     },
   },
 
-  // System tray APIs (for testing)
-  tray: {
-    /**
-     * Click tray icon (for testing).
-     */
-    click: async (): Promise<void> => {
-      try {
-        await typedInvoke('tray-show-notification', 'Test', 'Tray clicked')
-      } catch (error) {
-        log.error('Failed to click tray:', error)
-      }
-    },
-  },
-
   // Display management APIs
   display: {
     /**
@@ -1806,35 +1792,6 @@ const electronAPI = {
       } catch (error) {
         log.error('Failed to get all displays:', error)
         return []
-      }
-    },
-  },
-
-  // Test utilities (for E2E testing)
-  test: {
-    /**
-     * Simulate network error.
-     */
-    simulateError: async (errorType: string): Promise<boolean> => {
-      try {
-        log.info(`Simulating ${errorType} error for testing`)
-        return true
-      } catch (error) {
-        log.error('Failed to simulate error:', error)
-        return false
-      }
-    },
-
-    /**
-     * Clear test errors.
-     */
-    clearErrors: async (): Promise<boolean> => {
-      try {
-        log.info('Clearing test errors')
-        return true
-      } catch (error) {
-        log.error('Failed to clear errors:', error)
-        return false
       }
     },
   },

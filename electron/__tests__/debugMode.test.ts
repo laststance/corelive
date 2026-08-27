@@ -79,28 +79,6 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
   // Drives whether main.ts opens a --remote-debugging-port. The persisted config
   // can NEVER reach here; only env levers open the port.
 
-  it('passes the Playwright E2E port through unchanged (highest precedence)', () => {
-    // Arrange: the existing E2E lever set by the dev-runner.
-
-    // Act + Assert: preserved verbatim so the Electron E2E suite is unaffected.
-    expect(
-      resolveRemoteDebuggingPort({ PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9222' }),
-    ).toBe('9222')
-  })
-
-  it('prefers the Playwright port over a CORELIVE_DEBUG override', () => {
-    // Arrange: both levers set; the E2E lever wins.
-
-    // Act + Assert
-    expect(
-      resolveRemoteDebuggingPort({
-        PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9000',
-        CORELIVE_DEBUG: '1',
-        CORELIVE_REMOTE_DEBUGGING_PORT: '9333',
-      }),
-    ).toBe('9000')
-  })
-
   it('opens the default port 9222 under CORELIVE_DEBUG=1', () => {
     // Arrange: prod debug opt-in with no explicit port.
 
@@ -143,7 +121,7 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
   it('throws on an out-of-range custom port', () => {
     // Arrange: CORELIVE_DEBUG on, but the override is above the TCP max.
 
-    // Act + Assert: surfaced loudly (mirrors the strict ELECTRON_RENDERER_URL guard).
+    // Act + Assert: surface invalid configuration instead of opening a bad port.
     expect(() =>
       resolveRemoteDebuggingPort({
         CORELIVE_DEBUG: '1',

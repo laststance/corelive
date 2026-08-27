@@ -50,18 +50,10 @@ storybook-static
 
 .serena
 examples-with-next
-test-results
-playwright-report
 screenshots
 .claude
 !.cursor
-clerk-playwright-nextjs
 .playwright-mcp
-# Playwright authentication state
-e2e/.auth
-
-# Playwright Electron test artifacts
-.playwright-electron/
 
 # Electron
 dist/
@@ -97,6 +89,3 @@ _trials/
 .claude/auto.json
 .claude/auto-notes.md
 .gbrain-source
-
-# monocart-reporter default output (generated)
-/monocart-report

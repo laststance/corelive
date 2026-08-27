@@ -224,9 +224,8 @@ describe('FloatingNavigator pin button', () => {
 
 describe('FloatingNavigator bulk paste (Issue #110 AC#2)', () => {
   /**
-   * Fires a paste carrying `text` into the floating task input. Mirrors the web
-   * E2E's synthetic ClipboardEvent but stubs `clipboardData.getData` directly, so
-   * the assertion never rides on happy-dom's DataTransfer fidelity.
+   * Fires a paste carrying `text` into the floating task input while stubbing
+   * `clipboardData.getData` so the assertion avoids happy-dom DataTransfer gaps.
    *
    * @param input - The task input node (paste event target).
    * @param text - The clipboard payload the handler reads as `text/plain`.
@@ -236,9 +235,8 @@ describe('FloatingNavigator bulk paste (Issue #110 AC#2)', () => {
   }
 
   it('opens the bulk import dialog when a multi-line list is pasted into the empty task input', () => {
-    // Arrange: a floating window with the bulk-paste callback wired. This is the
-    // genuinely new AC#2 path — a web E2E can't reach it because the floating route
-    // renders a desktop-only fallback in a plain browser (no window.floatingNavigatorAPI).
+    // Arrange: a floating window with the bulk-paste callback wired. The route
+    // requires the desktop preload API, so this unit harness installs that boundary.
     const onBulkPaste = vi.fn()
     installFloatingNavigatorAPI(vi.fn().mockResolvedValue(true))
     render(<FloatingNavigator {...noopTaskProps} onBulkPaste={onBulkPaste} />)

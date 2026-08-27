@@ -42,7 +42,6 @@ export const CompletedDropZone = function CompletedDropZone({
   return (
     <div
       ref={ref}
-      data-testid="completed-dropzone"
       // Communicate the temporarily-inert state to assistive tech (absent, not
       // ="false", in the normal case so it stays quiet).
       aria-disabled={isTogglePending || undefined}

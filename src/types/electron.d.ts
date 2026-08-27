@@ -240,17 +240,6 @@ interface ElectronAPI {
     getDisplayMatching?: (rect: any) => any
   }
 
-  // Test utilities (for testing only)
-  tray?: {
-    click?: () => void
-  }
-  test?: {
-    simulateError?: (type: string) => void
-    getTestData?: () => any
-    resetTestState?: () => void
-    clearErrors?: () => void
-  }
-
   /**
    * Electron-specific settings management.
    * Controls app behavior like dock visibility and startup settings.

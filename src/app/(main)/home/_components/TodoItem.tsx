@@ -169,9 +169,7 @@ export const TodoItem = function TodoItem({
             {todo.text}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-            <span data-testid="todo-created-at">
-              {todo.createdAt.toLocaleDateString('en-US')}
-            </span>
+            <span>{todo.createdAt.toLocaleDateString('en-US')}</span>
             {todo.categoryName && (
               <span className="flex items-center gap-1">
                 <span
@@ -216,9 +214,8 @@ export const TodoItem = function TodoItem({
               // commits would hard-delete the win instead of archiving it (#113).
               disabled={isMovingToCompleted || isTogglePending}
               className="text-muted-foreground hover:text-foreground"
-              // Distinct accessible name: must NOT contain "Move to Completed"
-              // (ImportUndoBanner owns that, substring-matched in e2e) nor start
-              // with "completed task" (skill-tree e2e). Quiet-companion voice.
+              // Keep the row action distinct from the import banner and completed
+              // task labels while preserving the quiet-companion voice.
               aria-label={`Tuck "${todo.text}" into Completed`}
               title="Tuck into Completed"
             >

@@ -26,8 +26,8 @@ jobs:
       - name: Prepare environment
         uses: ./.github/actions/prepare
 
-      - name: Install Playwright Browsers 🎭
-        run: bash scripts/install-playwright-ci.sh
+      - name: Install Storybook browser provider 🎭
+        run: bash scripts/install-storybook-browser-ci.sh
 
       - name: Build Storybook
         run: pnpm build-storybook

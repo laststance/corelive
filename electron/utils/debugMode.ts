@@ -108,12 +108,8 @@ const isValidRemoteDebuggingPort = (value: string): boolean => {
  * Resolve the Chrome DevTools Protocol `remote-debugging-port` to open, or null
  * — drives main.ts's decision to expose a CDP port at launch.
  *
- * Precedence:
- * 1. `PLAYWRIGHT_REMOTE_DEBUGGING_PORT` — the existing E2E lever, passed through
- *    unchanged (the dev-runner always sets a valid port), so E2E is unaffected.
- * 2. `CORELIVE_DEBUG` opt-in — opens the default port
- *    (`DEFAULT_REMOTE_DEBUGGING_PORT`) unless `CORELIVE_REMOTE_DEBUGGING_PORT`
- *    overrides it.
+ * `CORELIVE_DEBUG` opens the default port (`DEFAULT_REMOTE_DEBUGGING_PORT`)
+ * unless `CORELIVE_REMOTE_DEBUGGING_PORT` overrides it.
  * Otherwise null: a default packaged build opens no port (Issue #61).
  *
  * @param env - Process env (the main-process launch environment)
@@ -121,38 +117,30 @@ const isValidRemoteDebuggingPort = (value: string): boolean => {
  * - port string: the CDP port to pass to `--remote-debugging-port`
  * - null: no debug opt-in set — open no port (the packaged default)
  * @throws Error if `CORELIVE_REMOTE_DEBUGGING_PORT` is set but is not a valid
- *   integer in [MIN_TCP_PORT, MAX_TCP_PORT] (mirrors the strict
- *   ELECTRON_RENDERER_URL guard — surface the typo loudly instead of silently
- *   opening the wrong/no port)
+ *   integer in [MIN_TCP_PORT, MAX_TCP_PORT]
  * @example
- * resolveRemoteDebuggingPort({ PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9222' }) // => '9222'
- * resolveRemoteDebuggingPort({ CORELIVE_DEBUG: '1' })                      // => '9222'
+ * resolveRemoteDebuggingPort({ CORELIVE_DEBUG: '1' }) // => '9222'
  * resolveRemoteDebuggingPort({ CORELIVE_DEBUG: '1', CORELIVE_REMOTE_DEBUGGING_PORT: '9333' }) // => '9333'
- * resolveRemoteDebuggingPort({})                                          // => null (packaged default)
+ * resolveRemoteDebuggingPort({})                     // => null (packaged default)
  */
 export const resolveRemoteDebuggingPort = (
   env: ProcessEnvLike,
 ): string | null => {
-  // Existing E2E lever: preserve verbatim, highest precedence, zero behavior
-  // change for the Playwright Electron suite.
-  if (env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT) {
-    return env.PLAYWRIGHT_REMOTE_DEBUGGING_PORT
+  // A remote-debugging port requires the explicit debug opt-in.
+  if (!isCoreliveDebugEnabled(env)) {
+    return null
   }
-  // Prod debug opt-in: CORELIVE_DEBUG opens the CDP port on the default port,
-  // overridable with CORELIVE_REMOTE_DEBUGGING_PORT.
-  if (isCoreliveDebugEnabled(env)) {
-    const customPort = env.CORELIVE_REMOTE_DEBUGGING_PORT
-    if (customPort !== undefined && customPort !== '') {
-      if (!isValidRemoteDebuggingPort(customPort)) {
-        throw new Error(
-          `CORELIVE_REMOTE_DEBUGGING_PORT must be an integer in ` +
-            `${MIN_TCP_PORT}-${MAX_TCP_PORT} — got "${customPort}".`,
-        )
-      }
-      return customPort
+
+  const customPort = env.CORELIVE_REMOTE_DEBUGGING_PORT
+  if (customPort !== undefined && customPort !== '') {
+    if (!isValidRemoteDebuggingPort(customPort)) {
+      throw new Error(
+        `CORELIVE_REMOTE_DEBUGGING_PORT must be an integer in ` +
+          `${MIN_TCP_PORT}-${MAX_TCP_PORT} — got "${customPort}".`,
+      )
     }
-    return String(DEFAULT_REMOTE_DEBUGGING_PORT)
+    return customPort
   }
-  // No debug opt-in: a default packaged build exposes no remote-debugging port.
-  return null
+
+  return String(DEFAULT_REMOTE_DEBUGGING_PORT)
 }

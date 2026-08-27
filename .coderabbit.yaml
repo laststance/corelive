@@ -70,13 +70,9 @@ reviews:
     - '!**/*.tsbuildinfo'
 
     # Test and coverage artifacts
-    - '!**/test-results/**'
-    - '!**/playwright-report/**'
     - '!**/coverage/**'
-    - '!**/monocart-report/**'
     - '!**/.playwright-mcp/**'
     - '!**/.playwright-cli/**'
-    - '!**/.playwright-electron/**'
 
     # Logs and temp
     - '!**/*.log'
@@ -132,14 +128,8 @@ reviews:
 
     - path: '**/*.{test,spec}.{ts,tsx,mjs}'
       instructions: |
-        Tests use Vitest (unit) and Playwright (e2e). Prefer DAMP over DRY; use AAA comments.
+        Tests use Vitest. Prefer DAMP over DRY; use AAA comments.
         Name tests by observable behavior, not implementation. Hard-code expected values.
-        E2E must use real Clerk Dev credentials—never mock auth/DB in e2e specs.
-
-    - path: 'e2e/**'
-      instructions: |
-        Playwright E2E: web specs under `e2e/web`, Electron under `e2e/electron`.
-        Do not mock auth or database. Flag flaky waits; prefer deterministic selectors and fixtures.
 
     - path: '**/*.{stories,mdx}.{ts,tsx,mdx}'
       instructions: |
@@ -148,8 +138,8 @@ reviews:
 
     - path: '*.{config,config.*}.{js,ts,mjs}'
       instructions: |
-        Build/tooling config (Next, Vitest, Playwright, Electron Vite, ESLint flat config).
-        Changes here affect CI (`pnpm validate`, E2E, electron build). Flag breaking path or env assumptions.
+        Build/tooling config (Next, Vitest, Electron Vite, ESLint flat config).
+        Changes here affect CI (`pnpm validate`, Storybook, electron build). Flag breaking path or env assumptions.
 
     - path: 'scripts/**'
       instructions: |

@@ -21,8 +21,7 @@ const log = createModuleLogger('skillTree')
  * Explicit `orderBy: { id: 'asc' }` on every relation keeps SVG DOM order and
  * keyboard focus order deterministic across environments. Without it, Postgres
  * is free to hand back rows in any order (typically insertion order, but not
- * guaranteed), which makes the tab-through experience drift between dev and
- * CI and causes intermittent E2E failures that key off positional selectors.
+ * guaranteed), which makes the tab-through experience drift between environments.
  *
  * The assignment `where` filter surfaces orphaned rows (`todoId = null`) as
  * well as assignments whose source todo is still completed — orphans are the

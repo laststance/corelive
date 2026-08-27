@@ -1,10 +1,8 @@
 /**
- * 破壊的DB操作（prisma migrate reset --force / migrate dev）の直前ゲート。接続先がローカルDocker以外なら問答無用で停止する。
+ * Blocks destructive Prisma commands unless the connection is proven local; package database scripts invoke it before resets or migrations.
  *
- * なぜ存在する: dev の POSTGRES_PRISMA_URL が本番(Neon)を指し得るため、E2E や手打ちの `pnpm db:reset` / `pnpm prisma:migrate` が
- *   本番URLを継承して走ると本番DBを一発で全消しする事故が起きうる。その単一チョークポイント。
- * いつ発火: package.json の `db:reset` / `db:truncate` / `prisma:migrate` の先頭で `node scripts/assert-local-db.cjs && ...` として実行される。
- * 何が呼ぶ: E2E global-setup / global-teardown / db.ts(resetDatabase) / そして人間が打つ手動コマンド、すべてがここを通る。
+ * Development may point POSTGRES_PRISMA_URL at production, so this file is the
+ * fail-closed choke point for both automated and manually invoked DB commands.
  *
  * 方針は allowlist（fail closed）: 「本番っぽければ止める」ではなく「ローカルだと証明できた時だけ通す」。
  * prod のURL書式が変わっても、ローカルと確証できなければ exit(1) する。
