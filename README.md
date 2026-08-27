@@ -2,8 +2,6 @@
 [![Lint](https://github.com/laststance/corelive/actions/workflows/lint.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/lint.yml)
 [![Test](https://github.com/laststance/corelive/actions/workflows/test.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/test.yml)
 [![Typecheck](https://github.com/laststance/corelive/actions/workflows/typecheck.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/typecheck.yml)
-[![E2E Tests (Web)](https://github.com/laststance/corelive/actions/workflows/e2e.web.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/e2e.web.yml)
-[![E2E Tests (Electron)](https://github.com/laststance/corelive/actions/workflows/e2e.electron.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/e2e.electron.yml)
 [![Storybook Testing](https://github.com/laststance/corelive/actions/workflows/storybook-test.yml/badge.svg)](https://github.com/laststance/corelive/actions/workflows/storybook-test.yml)
 
 # 🚧 It is a work in progress 🚧
@@ -67,16 +65,6 @@ All Next.js environment variables are loaded and validated via `src/env.mjs` usi
 | `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization      |
 | `APPLE_TEAM_ID`               | Apple Developer Team ID                     |
 | `GH_TOKEN`                    | GitHub token for release uploads (optional) |
-
-#### E2E Testing (Required)
-
-| Variable                  | Description                                  |
-| ------------------------- | -------------------------------------------- |
-| `E2E_CLERK_USER_USERNAME` | Test user username (registered in Clerk Dev) |
-| `E2E_CLERK_USER_PASSWORD` | Test user password                           |
-| `E2E_CLERK_USER_EMAIL`    | Test user email                              |
-
-> **Note**: E2E tests communicate with the real Clerk Dev instance (not mocked). Test credentials must be registered in Clerk Dashboard.
 
 ### Database Setup
 

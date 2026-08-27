@@ -78,8 +78,8 @@ app.setActivationPolicy(hide ? 'accessory' : 'regular')
 if (configManager) configManager.set('behavior.hideAppIcon', hide)
 ```
 
-Stays inside the existing `process.platform === 'darwin'` guard (the field is only
-meaningful on macOS; the Linux+xvfb E2E path remains a pure no-op). `configManager`
+Stays inside the existing `process.platform === 'darwin'` guard because the field
+is meaningful only on macOS. `configManager`
 is guarded like the sibling `settings:setStartupConfig` handler.
 
 ### 3. Apply at boot, before any window (`createWindow` → `criticalInit`)

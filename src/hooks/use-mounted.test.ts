@@ -70,12 +70,8 @@ describe('useMounted', () => {
 
   describe('SSR simulation', () => {
     /**
-     * Note: Testing SSR behavior in happy-dom is limited.
-     * The real SSR test is done in e2e/unauthenticated/ssr-hydration.spec.ts
-     * which checks for console hydration errors in a real browser.
-     *
-     * These tests verify the hook works correctly on the client side,
-     * which is the post-hydration behavior.
+     * Happy DOM cannot reproduce a server hydration cycle, so this suite verifies
+     * the client-side post-hydration contract.
      */
     it('should handle initial render without errors', () => {
       // Simulates that the hook can be called without errors

@@ -440,7 +440,7 @@ async function seedDev(): Promise<void> {
       clerkId: SEED_USER_CLERK_ID,
       email: SEED_USER_EMAIL,
       name: 'test01',
-      bio: 'Test account for development and E2E testing',
+      bio: 'Test account for local development',
     },
   })
 

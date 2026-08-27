@@ -65,11 +65,6 @@ export const SkillNodeCircle = function SkillNodeCircle({
       role="button"
       aria-label={ariaLabel}
       tabIndex={0}
-      // data-* E2E fallback: Chromium's SVG a11y tree is inconsistent about
-      // exposing aria-label on <g> while a sibling Radix Dialog is open.
-      data-testid="skill-node"
-      data-level={level}
-      data-node-id={id}
       onClick={() => onClick?.(id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

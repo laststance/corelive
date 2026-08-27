@@ -444,29 +444,6 @@ export interface ElectronAPI {
   }
 
   /**
-   * Test utilities (for E2E testing only).
-   * These APIs are only available in test builds.
-   */
-  tray?: {
-    /** Simulate tray icon click */
-    click?: () => void
-  }
-
-  /**
-   * Test utilities (for testing only).
-   */
-  test?: {
-    /** Simulate an error for testing */
-    simulateError?: (type: string) => void
-    /** Get test data */
-    getTestData?: () => unknown
-    /** Reset test state */
-    resetTestState?: () => void
-    /** Clear errors */
-    clearErrors?: () => void
-  }
-
-  /**
    * Electron-specific settings management.
    * Controls app behavior like dock visibility and startup settings.
    */

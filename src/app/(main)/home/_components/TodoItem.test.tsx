@@ -145,12 +145,11 @@ describe('TodoItem — Tuck into Completed (#113)', () => {
     expect(onDelete).toHaveBeenCalledWith('7')
   })
 
-  it('uses an accessible name that avoids the ImportUndoBanner and skill-tree collisions', () => {
+  it('labels the row archive action distinctly from banners and completed task labels', () => {
     // Arrange / Act
     renderTodoItem(FINISHED_TODO, true)
 
-    // Assert — distinct from "Move to Completed" (ImportUndoBanner, substring-
-    // matched in e2e) and never starting with "completed task" (skill-tree e2e).
+    // Assert — distinct from the import banner and completed task labels.
     const moveButton = screen.getByRole('button', {
       name: 'Tuck "Buy milk" into Completed',
     })

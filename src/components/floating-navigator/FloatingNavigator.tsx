@@ -363,7 +363,7 @@ const CompletedFloatingTodoRow = function CompletedFloatingTodoRow({
       {/* #113: filing a finished task is a win, not a deletion — so this is the
           neutral Archive affordance, never the destructive (clay-red Trash2)
           skin. Behaviour is unchanged (onDelete archives the completed row); the
-          accessible name avoids "Move to Completed"/"completed task:" e2e clashes. */}
+          accessible name stays distinct from the banner and completed-task label. */}
       <Button
         size="sm"
         variant="ghost"

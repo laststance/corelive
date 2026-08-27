@@ -15,7 +15,6 @@ The production version keeps all history as the default, applies filters on the 
 - `src/lib/utils/resolveCompletedJournalDateRange.ts`
 - `src/hooks/useLocalDayKey.ts`
 - `src/server/procedures/completed.ts`
-- `e2e/web/completed-filters.spec.ts`
 
 ## Post-Selection Tasks
 
@@ -23,8 +22,8 @@ The production version keeps all history as the default, applies filters on the 
 - [x] Apply period/category predicates to list and count before pagination.
 - [x] Add an inclusive Custom calendar range with Apply/Cancel behavior.
 - [x] Preserve reassuring true-empty and filtered-empty states.
-- [x] Add unit, real-database integration, and authenticated Playwright E2E coverage.
-- [x] Run `pnpm validate` and focused E2E.
+- [x] Add unit and real-database integration coverage.
+- [x] Run `pnpm validate` and focused integration tests.
 
 ## Comparison Summary
 

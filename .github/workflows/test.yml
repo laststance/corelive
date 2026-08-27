@@ -39,10 +39,8 @@ jobs:
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
             printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive?schema=public'
           } > .env
-      # Provision Postgres for the real-DB integration suites (paste-import
-      # procedures). Mirrors e2e.web.yml. Those tests are gated behind
-      # RUN_DB_INTEGRATION_TESTS (set on the unit-test step below); mocked/pure
-      # unit tests are unaffected.
+      # Provision Postgres for real-DB integration tests. They are gated behind
+      # RUN_DB_INTEGRATION_TESTS; mocked and pure unit tests are unaffected.
       - name: Start Postgres via Docker Compose 🐳
         run: |
           docker compose -f compose.yml -p corelive up -d postgres --wait
@@ -58,16 +56,10 @@ jobs:
         run: pnpm prisma migrate deploy
       - name: Generate Prisma Client 🗄️
         run: pnpm prisma generate
-      - name: Install Playwright Browsers 🎭
-        run: bash scripts/install-playwright-ci.sh
       - name: Generate Icons 🎨
         run: pnpm build:icons
-      # Coverage now lives in the dedicated `coverage.yml` workflow (#127): it
-      # measures unit + web E2E and uploads ONE merged report to Codecov. This
-      # gate stays coverage-free and fast — its old `--coverage` + Codecov step
-      # uploaded `./coverage/lcov.info`, which the Phase 0 vitest config no longer
-      # emits (it writes `coverage/unit-web/`), so the upload silently matched
-      # nothing. Dropped here rather than repointed, to keep one Codecov source.
+      # Coverage lives in the dedicated `coverage.yml` workflow so this gate
+      # stays coverage-free and fast.
       - name: Run unit tests
         env:
           RUN_DB_INTEGRATION_TESTS: '1'

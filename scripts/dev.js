@@ -167,7 +167,8 @@ async function startDevelopment() {
         env: {
           ...process.env,
           NODE_ENV: 'development',
-          PLAYWRIGHT_REMOTE_DEBUGGING_PORT: '9222', // Enable remote debugging for MCP tools
+          CORELIVE_DEBUG: '1', // Enable DevTools and CDP for local tooling
+          CORELIVE_REMOTE_DEBUGGING_PORT: '9222',
         },
       },
     )

@@ -21,7 +21,6 @@ import {
   BrowserWindow,
   dialog,
   session,
-  Notification,
   powerMonitor,
   screen,
 } from 'electron'
@@ -103,16 +102,14 @@ function toWindowType(value: unknown): WindowType {
 }
 
 // ============================================================================
-// Remote Debugging (Playwright E2E + opt-in prod debug — Issue #61)
+// Remote Debugging (opt-in debug — Issue #61)
 // ============================================================================
 
 /**
  * Open a Chrome DevTools Protocol port only when a debug opt-in is set.
  *
- * Two independent levers, both resolved by `resolveRemoteDebuggingPort`:
- * - `PLAYWRIGHT_REMOTE_DEBUGGING_PORT` — the E2E suite's lever (unchanged).
- * - `CORELIVE_DEBUG=1` — the prod debug opt-in; opens the default port (9222)
- *   unless `CORELIVE_REMOTE_DEBUGGING_PORT` overrides it.
+ * `CORELIVE_DEBUG=1` opens the default port (9222) unless
+ * `CORELIVE_REMOTE_DEBUGGING_PORT` overrides it.
  * A default packaged build sets neither, so no port is opened — the production
  * app exposes no remote-debugging surface unless deliberately launched in debug
  * mode. (DevTools availability is gated separately in WindowManager.)
@@ -125,9 +122,6 @@ function toWindowType(value: unknown): WindowType {
 // uncaught throw would crash startup outside the friendly fatal-error path.
 // Since this is an opt-in *debug* lever, fail soft: warn loudly (the debug user
 // who set the var needs to know it was rejected) and boot without the CDP port.
-// (The `ELECTRON_RENDERER_URL` block below also throws at module scope but is
-// left fail-loud on purpose: it's an E2E-only knob, so a typo there should abort
-// the test run rather than silently load production.)
 let remoteDebuggingPort: string | null = null
 try {
   remoteDebuggingPort = resolveRemoteDebuggingPort(process.env)
@@ -141,46 +135,6 @@ if (remoteDebuggingPort) {
   app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
 }
 
-/**
- * E2E renderer URL override.
- *
- * The Playwright Electron E2E suite (`e2e/electron/*.spec.ts`) loads the
- * renderer from a local Next.js server (`http://localhost:4991`) so tests
- * never hit production. To swap the URL without flipping the rest of the
- * dev/prod surface (CSP `'unsafe-eval'`, optimization level), we accept a
- * dedicated `ELECTRON_RENDERER_URL` env var. Production runs leave this
- * unset and continue to use `https://corelive.app`.
- *
- * Validation: hostname must be exactly `localhost` or `127.0.0.1` and the
- * protocol must be `http:`. We parse with `URL` (instead of `startsWith`)
- * so that subdomain tricks like `http://localhost.attacker.com` cannot
- * slip past the guard. This is defense-in-depth before the value reaches
- * the WindowManager panel builders (`createFloatingNavigator` /
- * `createSettingsWindow`).
- */
-if (process.env.ELECTRON_RENDERER_URL) {
-  let parsedRendererUrl: URL
-  try {
-    parsedRendererUrl = new URL(process.env.ELECTRON_RENDERER_URL)
-  } catch {
-    throw new Error(
-      `ELECTRON_RENDERER_URL must be a valid URL — got ` +
-        `"${process.env.ELECTRON_RENDERER_URL}".`,
-    )
-  }
-  if (
-    parsedRendererUrl.protocol !== 'http:' ||
-    (parsedRendererUrl.hostname !== 'localhost' &&
-      parsedRendererUrl.hostname !== '127.0.0.1')
-  ) {
-    throw new Error(
-      `ELECTRON_RENDERER_URL must use http: with hostname "localhost" or ` +
-        `"127.0.0.1" — got "${parsedRendererUrl.protocol}//${parsedRendererUrl.hostname}". ` +
-        `This guard prevents accidental production renderer load during E2E.`,
-    )
-  }
-}
-
 // ============================================================================
 // Environment Flags
 // ============================================================================
@@ -190,42 +144,6 @@ if (process.env.ELECTRON_RENDERER_URL) {
  * These affect security policies, performance optimizations, and debugging features.
  */
 const isDev = process.env.NODE_ENV === 'development'
-const isTestEnvironment = process.env.NODE_ENV === 'test'
-
-/**
- * Test-only userData override for Playwright Electron E2E isolation.
- */
-if (isTestEnvironment && process.env.ELECTRON_E2E_USER_DATA_DIR) {
-  app.setPath('userData', process.env.ELECTRON_E2E_USER_DATA_DIR)
-}
-
-/**
- * E2E system-integration kill switch.
- *
- * Linux CI runs Electron under `xvfb` (virtual display). Several lazy-loaded
- * managers are unsuitable in that environment:
- * - `SystemTrayManager` — no system tray on a headless display
- * - `NotificationManager` — DBus / libnotify is flaky/absent
- * - `ShortcutManager` — `globalShortcut` races on Linux WMs
- * - `DeepLinkManager` — protocol handlers can't register without a desktop
- *
- * When this flag is `'true'`, `deferredInit` skips all four. The renderer
- * still loads, IPC for window controls still works, and tests can exercise
- * the integrated startup path without flake from the system surface.
- *
- * Auto-coupling: setting `ELECTRON_RENDERER_URL` (E2E renderer override)
- * implies the kill switch. Pointing the renderer at a local URL while
- * still registering the tray icon and `corelive://` protocol handler
- * against the host OS would leak real OS state from a test run — so the
- * two flags are coupled by default. Setting both explicitly is also fine.
- *
- * Defaults to `false` (production behavior). Humans can override locally
- * via `ELECTRON_E2E_DISABLE_SYSTEM_INTEGRATION=true` to repro a tray bug
- * without the URL flag.
- */
-const disableSystemIntegration =
-  process.env.ELECTRON_E2E_DISABLE_SYSTEM_INTEGRATION === 'true' ||
-  Boolean(process.env.ELECTRON_RENDERER_URL)
 
 /**
  * Performance optimization level selection.
@@ -811,12 +729,8 @@ function setupSecurity(): void {
 /**
  * Load the system-integration manager stack (tray, notifications, shortcuts,
  * and the error handler that orchestrates them).
- *
- * Skipped entirely under `disableSystemIntegration` (E2E kill switch). The
- * `systemIntegrationErrorHandler` is also constructed inside this helper so
- * that the kill-switch path leaves NO partially-initialized handler — every
- * `if (systemIntegrationErrorHandler)` call site downstream becomes a clean
- * no-op rather than a half-wired surface.
+ * The error handler is constructed here with the managers it orchestrates so
+ * system integration initializes as one coherent stack.
  */
 async function loadSystemIntegrationStack(): Promise<void> {
   log.info('🔧 [DEFERRED] Loading SystemIntegrationErrorHandler...')
@@ -912,9 +826,6 @@ async function loadSystemIntegrationStack(): Promise<void> {
 /**
  * Load the deep-link stack: registers `corelive://` protocol handler with
  * the OS and drains any URLs that arrived before the handler was ready.
- *
- * Skipped under `disableSystemIntegration` since protocol registration
- * requires a real desktop session.
  */
 async function loadDeepLinkStack(): Promise<void> {
   log.info('🔧 [DEFERRED] Initializing DeepLinkManager...')
@@ -975,14 +886,8 @@ async function createWindow(): Promise<void> {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // Development uses local Next.js server, production uses web app.
-    // The `ELECTRON_RENDERER_URL` env var (validated near the top of this
-    // file) lets the Playwright E2E suite point the renderer at the local
-    // Next.js server WITHOUT also flipping `isDev` — keeping CSP and
-    // optimization level identical to production for high-fidelity tests.
-    const serverUrl =
-      process.env.ELECTRON_RENDERER_URL ??
-      (isDev ? 'http://localhost:4991' : 'https://corelive.app')
+    // Development uses the local Next.js server; packaged builds use the web app.
+    const serverUrl = isDev ? 'http://localhost:4991' : 'https://corelive.app'
 
     // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
 
@@ -992,23 +897,6 @@ async function createWindow(): Promise<void> {
       configManager,
       windowStateManager,
     )
-
-    // E2E-only: expose a hook so the Playwright Electron suite can open the
-    // Settings window — the only renderer that still carries the full
-    // `electronAPI` bridge after main-window retirement (T18). The app menu's
-    // "Settings…" item lives in the macOS-only app menu, but the Electron
-    // E2E suite runs on Linux+xvfb where that menu is never built, so specs
-    // cannot drive Settings open through the menu. Gated on `isTestEnvironment`
-    // (NODE_ENV==='test'), so it is absent from every production build.
-    if (isTestEnvironment) {
-      ;(
-        globalThis as typeof globalThis & {
-          __coreliveTestOpenSettings?: () => void
-        }
-      ).__coreliveTestOpenSettings = () => {
-        windowManager.openSettings()
-      }
-    }
 
     // The Electron main window is retired (T18). CoreLive is now a thin native
     // companion: the full task app runs browser-only at corelive.app, and
@@ -1054,40 +942,21 @@ async function createWindow(): Promise<void> {
       }
       log.info('✅ [DEFERRED] MenuManager loaded')
 
-      // System-integration stack (tray, notifications, shortcuts, error
-      // handler) and deep-link stack are gated by the E2E kill switch.
-      // Both are unreliable on a Linux xvfb display.
-      if (disableSystemIntegration) {
-        log.info(
-          '🧪 [DEFERRED] disableSystemIntegration=true — skipping ' +
-            'SystemIntegrationErrorHandler, tray, notifications, shortcuts, ' +
-            'and deep link.',
-        )
-      } else {
-        await loadSystemIntegrationStack()
+      await loadSystemIntegrationStack()
+
+      // Keep updater startup isolated so a failure cannot block the app.
+      try {
+        const AutoUpdaterCls = (await lazyLoadManager.loadComponent(
+          'AutoUpdater',
+        )) as new (...args: unknown[]) => AutoUpdaterType
+        autoUpdater = new AutoUpdaterCls()
+        // No main window to bind dialogs to after T18; the updater surfaces
+        // through its own notifications.
+      } catch (autoUpdaterError) {
+        log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
       }
 
-      // AutoUpdater is gated by NODE_ENV=test (NOT the kill switch) so the
-      // production-build smoke run can still exercise the updater path.
-      // Wrapped in its own try/catch so failure doesn't block startup.
-      if (!isTestEnvironment) {
-        try {
-          const AutoUpdaterCls = (await lazyLoadManager.loadComponent(
-            'AutoUpdater',
-          )) as new (...args: unknown[]) => AutoUpdaterType
-          autoUpdater = new AutoUpdaterCls()
-          // No main window to bind dialogs to after T18; the updater surfaces
-          // through its own notifications.
-        } catch (autoUpdaterError) {
-          log.error('❌ Failed to initialize AutoUpdater:', autoUpdaterError)
-        }
-      } else {
-        log.info('AutoUpdater initialization skipped in test environment')
-      }
-
-      if (!disableSystemIntegration) {
-        await loadDeepLinkStack()
-      }
+      await loadDeepLinkStack()
 
       // No main-window close-to-tray wiring after T18 — the surviving panels own
       // their own close behavior (Floating/LiveEditor via floating-window-* IPC).
@@ -2420,10 +2289,8 @@ function setupIPCHandlers(): void {
  * - Port conflicts (Next.js server)
  * - Confusing UX with duplicate windows
  * - Resource waste
- *
- * Exception: Disabled in test environment for parallel test execution
  */
-const gotTheLock = isTestEnvironment ? true : app.requestSingleInstanceLock()
+const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   // Another instance is running, quit this one
@@ -2444,19 +2311,6 @@ if (!gotTheLock) {
 
       // Boot the Electron companion (auxiliary panels only; main is retired).
       await createWindow()
-
-      /**
-       * Test environment special handling.
-       * Makes the app behave differently during automated testing:
-       * - Shows notification for debugging
-       * - Window doesn't steal focus (better for parallel tests)
-       * - Can be hidden from dock to reduce visual noise
-       */
-      if (isTestEnvironment) {
-        new Notification({ title: 'Electron is Testing' }).show()
-        // The main window is retired (T18); there is nothing to reveal here. The
-        // panels the user opted into surface themselves once they resolve.
-      }
 
       /**
        * macOS-specific: 'activate' event.
@@ -2508,18 +2362,14 @@ if (!gotTheLock) {
     .catch((bootError: unknown) => {
       // Last-resort backstop: a throw anywhere in the boot chain (corrupt config
       // read, window creation, security setup) would otherwise be an unhandled
-      // rejection that leaves the user staring at nothing. Fail loud — log always,
-      // and in production surface a dialog + quit rather than a silent blank boot.
-      // Stays quiet under test so a genuine boot failure surfaces via assertions,
-      // not a modal that wedges the headless runner.
+      // rejection that leaves the user staring at nothing. Fail loud — log,
+      // surface a dialog, and quit rather than leaving a silent blank boot.
       log.error('Fatal error during app startup:', bootError)
-      if (!isTestEnvironment) {
-        dialog.showErrorBox(
-          'CoreLive failed to start',
-          `An unexpected error occurred during startup:\n\n${String(bootError)}`,
-        )
-        app.quit()
-      }
+      dialog.showErrorBox(
+        'CoreLive failed to start',
+        `An unexpected error occurred during startup:\n\n${String(bootError)}`,
+      )
+      app.quit()
     })
 }
 

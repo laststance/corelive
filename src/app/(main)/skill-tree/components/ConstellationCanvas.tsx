@@ -112,7 +112,7 @@ export const ConstellationCanvas = function ConstellationCanvas({
   return (
     // NOTE: no explicit role="img" here — that would atomize the SVG into a
     // single a11y leaf and hide the inner <SkillNodeCircle> buttons from the
-    // accessibility tree (and from Playwright's getByRole). The SVG still
+    // accessibility tree. The SVG still
     // exposes itself as `graphics-document` / `img` via SVG-AAM based on the
     // aria-label below, so screen readers still announce it. See the matching
     // comment in SkillNodeCircle.tsx (the <title> child there is the

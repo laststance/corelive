@@ -127,7 +127,7 @@ describe('WindowManager settings popover Spaces-following', () => {
     setPlatform('linux')
     const windowManager = new WindowManager(SERVER_URL)
 
-    // Act: build the same popover on Linux (e.g. the xvfb E2E runner).
+    // Act: build the same popover on Linux, where macOS workspace APIs are unavailable.
     windowManager.createSettingsWindow()
     const settingsWindow = createdWindows[0]
     if (!settingsWindow) throw new Error('Expected a settings popover window')

@@ -55,9 +55,9 @@ acceptance criterion by construction.
 - **Unit (regression):** extend `LiveEditor.test.tsx` to assert the writing textarea
   renders with spellcheck disabled (`spellcheck="false"` in the DOM), so a future refactor
   can't silently re-enable the red underlines. Hard-coded expected value, AAA, behavior-named.
-- **Renderer E2E:** existing LiveEditor specs continue to prove typing / completing / saving
-  still work (no behavior change to input). The spellcheck overlay itself is a browser-native
-  rendering with no DOM hook for E2E — the unit DOM-attribute assertion is the right gate.
+- **Unit interaction:** existing LiveEditor tests continue to prove typing / completing /
+  saving still work. The browser-native spellcheck overlay has no DOM hook, so the
+  unit DOM-attribute assertion is the right automated gate.
 
 ## Local QA
 

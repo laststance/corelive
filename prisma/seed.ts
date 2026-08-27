@@ -19,8 +19,7 @@ const prisma = new PrismaClient({ adapter })
  * - Test User (linked to the Clerk dev tenant's `test@test.com` account)
  * - Default "General" category
  * - A representative real-world TODO list — a deterministic mix of work +
- *   life tasks. This baseline lets E2E specs assume a realistic starting
- *   state in `beforeAll(resetDatabase)` without seeding individually.
+ *   life tasks for a realistic local-development baseline.
  */
 async function main(): Promise<void> {
   const user = await prisma.user.upsert({
@@ -30,7 +29,7 @@ async function main(): Promise<void> {
       clerkId: SEED_USER_CLERK_ID,
       email: SEED_USER_EMAIL,
       name: 'test01',
-      bio: 'Test account for development and E2E testing',
+      bio: 'Test account for local development',
     },
   })
 
@@ -61,10 +60,10 @@ async function main(): Promise<void> {
   ]
 
   // `migrate reset --force` (chained via `pnpm db:reset`) leaves these
-  // tables empty, so a plain `createMany` would suffice in the E2E flow.
+  // tables empty, so a plain `createMany` would suffice after a reset.
   // But `pnpm prisma:seed` is also exposed as a standalone script — without
   // a delete-first guard a second invocation would duplicate every fixture
-  // row and break the deterministic state E2E specs depend on. Wrapping the
+  // row and break the deterministic local baseline. Wrapping the
   // delete + insert in a single transaction makes the script idempotent for
   // both call sites.
   await prisma.$transaction([

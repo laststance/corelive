@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+# Vitest Browser Mode uses Playwright only as Storybook's browser provider.
+
 # Prefer Ubuntu's canonical mirror when a GitHub runner's Azure mirror is unreachable.
 if [[ -f /etc/apt/apt-mirrors.txt ]]; then
   sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
