@@ -5,7 +5,7 @@ import { call } from '@orpc/server'
 import { afterEach, expect, it } from 'vitest'
 
 import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
-import { HOME_HEATMAP_DAYS, HOME_TODO_QUERY_LIMIT } from '@/lib/constants/home'
+import { HOME_HEATMAP_DAYS } from '@/lib/constants/home'
 import { prisma } from '@/lib/prisma'
 
 import { describeIfDb } from './describeIfDb'
@@ -69,11 +69,6 @@ describeIfDb('home.bootstrap', () => {
       {
         heatmap: { days: HOME_HEATMAP_DAYS, timezone: 'UTC' },
         journal: { limit: COMPLETED_JOURNAL_PAGE_SIZE, offset: 0 },
-        todo: {
-          completed: false,
-          limit: HOME_TODO_QUERY_LIMIT,
-          offset: 0,
-        },
       },
       {
         context: {
@@ -86,139 +81,9 @@ describeIfDb('home.bootstrap', () => {
     expect(result.category.categories.map((entry) => entry.name)).toEqual([
       'General',
     ])
-    expect(result.todo.todos.map((entry) => entry.text)).toEqual([
-      "Review Sarah's PR before standup",
-    ])
     expect(result.heatmap.total).toBe(1)
     expect(result.journal.entries.map((entry) => entry.title)).toEqual([
       'Shipped the bootstrap',
-    ])
-  })
-
-  it('shows only default-category todos when a first Home visit has no stored selection', async () => {
-    // Arrange
-    const clerkId = freshClerkId()
-    const user = await prisma.user.create({ data: { clerkId } })
-    const defaultCategory = await prisma.category.create({
-      data: {
-        color: 'blue',
-        isDefault: true,
-        name: 'Default Work',
-        userId: user.id,
-      },
-    })
-    const otherCategory = await prisma.category.create({
-      data: {
-        color: 'green',
-        isDefault: false,
-        name: 'Other Work',
-        userId: user.id,
-      },
-    })
-    await prisma.todo.createMany({
-      data: [
-        {
-          categoryId: defaultCategory.id,
-          completed: false,
-          text: 'Visible on the first Home visit',
-          userId: user.id,
-        },
-        {
-          categoryId: otherCategory.id,
-          completed: false,
-          text: 'Hidden until the other category is selected',
-          userId: user.id,
-        },
-      ],
-    })
-
-    // Act
-    const result = await call(
-      bootstrapHome,
-      {
-        heatmap: { days: HOME_HEATMAP_DAYS, timezone: 'UTC' },
-        journal: { limit: COMPLETED_JOURNAL_PAGE_SIZE, offset: 0 },
-        todo: {
-          completed: false,
-          limit: HOME_TODO_QUERY_LIMIT,
-          offset: 0,
-        },
-      },
-      {
-        context: {
-          headers: new Headers({ Authorization: `Bearer ${clerkId}` }),
-        },
-      },
-    )
-
-    // Assert
-    expect(result.todo.todos.map((entry) => entry.text)).toEqual([
-      'Visible on the first Home visit',
-    ])
-  })
-
-  it('shows todos from every category when a first Home visit has no default category', async () => {
-    // Arrange
-    const clerkId = freshClerkId()
-    const user = await prisma.user.create({ data: { clerkId } })
-    const workCategory = await prisma.category.create({
-      data: {
-        color: 'blue',
-        isDefault: false,
-        name: 'Work',
-        userId: user.id,
-      },
-    })
-    const personalCategory = await prisma.category.create({
-      data: {
-        color: 'green',
-        isDefault: false,
-        name: 'Personal',
-        userId: user.id,
-      },
-    })
-    await prisma.todo.createMany({
-      data: [
-        {
-          categoryId: workCategory.id,
-          completed: false,
-          order: 1,
-          text: 'Visible work without a default category',
-          userId: user.id,
-        },
-        {
-          categoryId: personalCategory.id,
-          completed: false,
-          order: 2,
-          text: 'Visible personal without a default category',
-          userId: user.id,
-        },
-      ],
-    })
-
-    // Act
-    const result = await call(
-      bootstrapHome,
-      {
-        heatmap: { days: HOME_HEATMAP_DAYS, timezone: 'UTC' },
-        journal: { limit: COMPLETED_JOURNAL_PAGE_SIZE, offset: 0 },
-        todo: {
-          completed: false,
-          limit: HOME_TODO_QUERY_LIMIT,
-          offset: 0,
-        },
-      },
-      {
-        context: {
-          headers: new Headers({ Authorization: `Bearer ${clerkId}` }),
-        },
-      },
-    )
-
-    // Assert
-    expect(result.todo.todos.map((entry) => entry.text)).toEqual([
-      'Visible work without a default category',
-      'Visible personal without a default category',
     ])
   })
 })

@@ -24,18 +24,6 @@ import {
   getUnassignedPool,
   unassignTask,
 } from './procedures/skillTree'
-import {
-  listTodos,
-  createTodo,
-  createManyTodo,
-  deleteManyTodo,
-  updateTodo,
-  deleteTodo,
-  toggleTodo,
-  clearCompleted,
-  reorderTodos,
-} from './procedures/todo'
-
 export const router = {
   home: {
     bootstrap: bootstrapHome,
@@ -45,17 +33,6 @@ export const router = {
     create: createCategory,
     update: updateCategory,
     delete: deleteCategory,
-  },
-  todo: {
-    list: listTodos,
-    create: createTodo,
-    createMany: createManyTodo,
-    update: updateTodo,
-    delete: deleteTodo,
-    deleteMany: deleteManyTodo,
-    toggle: toggleTodo,
-    clearCompleted: clearCompleted,
-    reorder: reorderTodos,
   },
   completed: {
     heatmap: getHeatmap,

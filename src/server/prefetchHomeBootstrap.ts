@@ -4,11 +4,7 @@ import { dehydrate, type DehydratedState } from '@tanstack/react-query'
 import { cookies, headers } from 'next/headers'
 
 import { COMPLETED_JOURNAL_INITIAL_OFFSET } from '@/lib/constants/completed'
-import {
-  HOME_RETAIN_COMPLETED_COOKIE_NAME,
-  HOME_SELECTED_CATEGORY_COOKIE_NAME,
-  HOME_TIMEZONE_COOKIE_NAME,
-} from '@/lib/constants/home'
+import { HOME_TIMEZONE_COOKIE_NAME } from '@/lib/constants/home'
 import { log } from '@/lib/logger'
 import { createQueryClient } from '@/lib/query/createQueryClient'
 import {
@@ -16,8 +12,6 @@ import {
   getHomeCategoryListQueryKey,
   getHomeHeatmapQueryKey,
   getHomeJournalQueryKey,
-  getHomeTodoListQueryKey,
-  resolveHomeSelectedCategoryId,
 } from '@/lib/query/homeBootstrapQueries'
 import { bootstrapHome } from '@/server/procedures/home'
 import { ServerTiming } from '@/server/timing/ServerTiming'
@@ -58,52 +52,13 @@ async function resolveViewerTimeZone(): Promise<string> {
 }
 
 /**
- * Resolves the sidebar category selection this browser will query first, from
- * the cookie `useSelectedCategory` mirrors alongside its localStorage write.
- * Absent/garbage cookie lets the bootstrap and client choose the same default
- * category. A deleted-category id only makes the todo slice miss hydration.
- * @returns A positive category ID, or undefined for the All view.
- * @example `await resolveViewerSelectedCategoryId() // => 3`
- */
-async function resolveViewerSelectedCategoryId(): Promise<number | undefined> {
-  const cookieValue = (await cookies()).get(
-    HOME_SELECTED_CATEGORY_COOKIE_NAME,
-  )?.value
-  if (!cookieValue) {
-    return undefined
-  }
-
-  const selectedCategoryId = Number(cookieValue)
-  return Number.isInteger(selectedCategoryId) && selectedCategoryId > 0
-    ? selectedCategoryId
-    : undefined
-}
-
-/**
- * Resolves whether this browser has 居残りモード ON, from the cookie `HomeContent`
- * mirrors alongside the Redux setting. Retain ON drops the todo `completed`
- * filter, so the SSR key must match or retain-mode users miss todo hydration.
- * Absent cookie means OFF (matching the default). A stale value only costs one
- * client fetch — never wrong data, since the bootstrap forwards the same input
- * to the same `listTodos` the client would call.
- * @returns `true` when 居残りモード is ON, else `false`.
- * @example `await resolveViewerRetainCompleted() // => true`
- */
-async function resolveViewerRetainCompleted(): Promise<boolean> {
-  const cookieValue = (await cookies()).get(
-    HOME_RETAIN_COMPLETED_COOKIE_NAME,
-  )?.value
-  return cookieValue === 'true'
-}
-
-/**
  * Runs the one `home.bootstrap` call during the Home Server Component render and
- * dehydrates the four slices onto the exact client cache keys, so the browser
+ * dehydrates the three slices onto the exact client cache keys, so the browser
  * paints from hydrated data with zero initial `/api/orpc` requests.
  * Fails open: any data-phase error returns `undefined` and Home falls back to
  * today's client-side fetching.
  * @returns
- * - Dehydrated state holding category/todo/heatmap/journal for `<HydrationBoundary>`
+ * - Dehydrated state holding category/heatmap/journal for `<HydrationBoundary>`
  * - `undefined` when signed out or when the bootstrap call fails
  * @example `const dehydratedHomeState = await prefetchHomeBootstrap()`
  */
@@ -118,18 +73,12 @@ export async function prefetchHomeBootstrap(): Promise<
   }
 
   const viewerTimeZone = await resolveViewerTimeZone()
-  const viewerSelectedCategoryId = await resolveViewerSelectedCategoryId()
-  const viewerRetainCompleted = await resolveViewerRetainCompleted()
   const serverTiming = new ServerTiming()
 
   try {
     const bootstrap = await call(
       bootstrapHome,
-      buildHomeBootstrapInput(
-        viewerTimeZone,
-        viewerSelectedCategoryId,
-        viewerRetainCompleted,
-      ),
+      buildHomeBootstrapInput(viewerTimeZone),
       {
         context: {
           // Same Bearer contract the browser RPCLink sends; authMiddleware
@@ -139,17 +88,8 @@ export async function prefetchHomeBootstrap(): Promise<
         },
       },
     )
-    const selectedCategoryId = resolveHomeSelectedCategoryId(
-      viewerSelectedCategoryId,
-      bootstrap.category.categories,
-    )
-
     const queryClient = createQueryClient()
     queryClient.setQueryData(getHomeCategoryListQueryKey(), bootstrap.category)
-    queryClient.setQueryData(
-      getHomeTodoListQueryKey(selectedCategoryId, viewerRetainCompleted),
-      bootstrap.todo,
-    )
     queryClient.setQueryData(
       getHomeHeatmapQueryKey(viewerTimeZone),
       bootstrap.heatmap,
