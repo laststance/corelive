@@ -5,23 +5,23 @@
 > **Never:** streaks, completion rates, grading, social comparison (DESIGN.md North Star).
 
 **Login-wall baseline:** `__ s` until the wall in a private window at corelive.app/live-editor (fill in before any code).
-**The one person who gets the no-login link:** `________` (fill in; if no name comes, ship anyway and leave Later empty on purpose).
+**The one person who gets the no-login link (corelive.app/write):** `________` (fill in; if no name comes, ship anyway and leave Later empty on purpose).
 
-Design record: [docs/design/roadmap-2026-09-no-login-live-editor.md](design/roadmap-2026-09-no-login-live-editor.md) (office-hours, 2026-09-02, approved).
+Design record: [docs/design/roadmap-2026-09-no-login-live-editor.md](design/roadmap-2026-09-no-login-live-editor.md) (office-hours 2026-09-02, approved; eng review 2026-09-02, D1–D16 folded, 12 tasks).
 
 ## Now
 
-- **PR-1 — `LiveEditorHost` adapter + signed-out web editor.** Extract the preload surface into a host interface with `electronPreloadHost` (byte-for-byte today) and `webLocalHost` (device-local notes + completions, clear-on-complete ON while signed out, focus on ready). `src/proxy.ts` keeps `/live-editor` protected only for `Electron/` user agents, so the packaged panel is unchanged. Footer: "Kept on this device. Sign in to keep it everywhere." → `/login?redirect_url=/live-editor`.
-- **PR-2 — `TodayEmber` + `useTodayKeeps()`.** One warm cell under the editor + "N things kept today". Today only, no strip, no week counts. Signed in reads `completed.heatmap(days = 1).total`; signed out reads `localStorage` through `useSyncExternalStore`.
+- **PR-1 — public `/write` route + web `LiveEditorAPI` host + local store.** `src/app/write/page.tsx` renders the same `LiveEditor` through a web implementation of the existing preload interface (device-local notes and keeps in `localStorage`, memory fallback when storage is unavailable; clear-on-complete forced ON while signed out). `/live-editor`, `src/proxy.ts` and `electron/` are untouched, so the packaged panel keeps its `/login` contract. Sidebar link → `/write`. Footer: "Kept on this device." + "Sign in" → `/login?redirect_url=/write` (the login page passes `forceRedirectUrl` so the env force URL stops overriding it). Completions flow through one `useCompletionWriter` hook that routes on sign-in state.
+- **PR-2 — `TodayEmber` + `useTodayKeeps()`.** One warm cell under the editor + "N things kept today". Signed in = `completed.heatmap(days = 1).total` + unmerged local keeps, bumped ±1 on create / undo before the refetch; signed out = the local store through `useSyncExternalStore`. Offline signed-in reads "Can't reach your keeps right now", never a false 0. Today only, no strip, no week counts.
 
 ## Next
 
-- **`completed.importLocal`** — one-time merge of device-local keeps on sign-in: `ImportBatch` id as the idempotency key, `completedAt` preserved, default category, repeated titles never deduplicated.
+- **`completed.importLocal`** — one-time merge of device-local keeps on sign-in inside a single `prisma.$transaction`: `ImportBatch` id as the idempotency key, `completedAt` preserved, default category, repeated titles never deduplicated.
 
 ## Later
 
 - Watch one named person use the signed-out page for 15 minutes, silently.
-- Signed-out parity inside the packaged Electron LiveEditor panel (needs a main-process release).
+- Signed-out parity inside the packaged Electron LiveEditor panel (needs a main-process release; then point the panel at `/write`).
 - skill-tree: keep or delete, decided by the criterion.
 - Streak residue sweep: `calculateStreaks`, `useStreakNotifications`, `calc-streak`, the Year-in-Review "longest streak" line, the `AchievementAnimation` streak branch.
 - #120 drag a finished task onto Completed.
