@@ -9,19 +9,30 @@ import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
+import type * as LocalTodayIsoDateModule from '@/lib/getLocalTodayIsoDate'
 import { LOCAL_COMPLETIONS_STORAGE_KEY } from '@/lib/live-editor/constants'
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
 
 import { useCompletionWriter } from './useCompletionWriter'
 
-const { clerkUserRef, createCompletedFn, deleteCompletedFn } = vi.hoisted(
-  () => ({
+const { clerkUserRef, createCompletedFn, deleteCompletedFn, localDayRef } =
+  vi.hoisted(() => ({
     clerkUserRef: { current: { isSignedIn: true } },
     createCompletedFn: vi.fn(),
     deleteCompletedFn: vi.fn(),
-  }),
-)
+    localDayRef: { current: null as string | null },
+  }))
+
+// Real by default; a spec that needs to cross midnight sets `localDayRef`.
+vi.mock('@/lib/getLocalTodayIsoDate', async (importOriginal) => {
+  const actual = await importOriginal<typeof LocalTodayIsoDateModule>()
+  return {
+    ...actual,
+    getLocalTodayIsoDate: () =>
+      localDayRef.current ?? actual.getLocalTodayIsoDate(),
+  }
+})
 
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => clerkUserRef.current,
@@ -90,6 +101,7 @@ function readCachedTotal(queryClient: QueryClient): number | undefined {
 beforeEach(() => {
   localStorage.clear()
   clerkUserRef.current = { isSignedIn: true }
+  localDayRef.current = null
   createCompletedFn.mockReset()
   deleteCompletedFn.mockReset()
 })
@@ -126,7 +138,59 @@ describe('useCompletionWriter — where a keep lands', () => {
   })
 
   it('undo of an account keep deletes the row and moves the ember back down', async () => {
-    // Arrange
+    // Arrange — the real Undo path: the toast only offers ids `create` returned.
+    createCompletedFn.mockResolvedValue({ id: 42 })
+    deleteCompletedFn.mockResolvedValue({ success: true })
+    const { writer, queryClient } = renderWriter(2)
+    await writer.create({ categoryId: 1, title: 'buy milk' })
+
+    // Act
+    await writer.remove({ id: 42 })
+
+    // Assert
+    expect(deleteCompletedFn).toHaveBeenCalledWith(
+      { id: 42 },
+      expect.anything(),
+    )
+    expect(readCachedTotal(queryClient)).toBe(2)
+  })
+
+  it('undo just after local midnight takes the keep off yesterday, not off today', async () => {
+    // Arrange — keep filed on the 5th, Undo pressed on the 6th.
+    createCompletedFn.mockResolvedValue({ id: 42 })
+    deleteCompletedFn.mockResolvedValue({ success: true })
+    localDayRef.current = '2099-01-05'
+    const { writer, queryClient } = renderWriter(null)
+    queryClient.setQueryData<CachedHeatmap>(
+      getTodayHeatmapQueryKey('2099-01-05'),
+      { total: 4 },
+    )
+    queryClient.setQueryData<CachedHeatmap>(
+      getTodayHeatmapQueryKey('2099-01-06'),
+      { total: 1 },
+    )
+    await writer.create({ categoryId: 1, title: 'buy milk' })
+    localDayRef.current = '2099-01-06'
+
+    // Act
+    await writer.remove({ id: 42 })
+
+    // Assert — yesterday absorbs both the +1 and the −1; today is untouched.
+    expect(
+      queryClient.getQueryData<CachedHeatmap>(
+        getTodayHeatmapQueryKey('2099-01-05'),
+      )?.total,
+    ).toBe(4)
+    expect(
+      queryClient.getQueryData<CachedHeatmap>(
+        getTodayHeatmapQueryKey('2099-01-06'),
+      )?.total,
+    ).toBe(1)
+  })
+
+  it('leaves the ember alone when undoing a keep it never saw created', async () => {
+    // Arrange — no remembered day (a reload between keep and Undo); there is
+    // nothing safe to decrement, so the ember waits for the refetch.
     deleteCompletedFn.mockResolvedValue({ success: true })
     const { writer, queryClient } = renderWriter(3)
 
@@ -138,7 +202,7 @@ describe('useCompletionWriter — where a keep lands', () => {
       { id: 42 },
       expect.anything(),
     )
-    expect(readCachedTotal(queryClient)).toBe(2)
+    expect(readCachedTotal(queryClient)).toBe(3)
   })
 
   it('never invents a cached total when nothing was fetched yet', async () => {

@@ -2,7 +2,9 @@
 
 import { useUser } from '@clerk/nextjs'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRef } from 'react'
 
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import {
   addLocalCompletion,
   removeLocalCompletion,
@@ -11,7 +13,8 @@ import { orpc } from '@/lib/orpc/client-query'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
 import type { Completed, HeatmapResponse } from '@/server/schemas/completed'
 
-import { useLocalDayKey } from './useLocalDayKey'
+/** How many recent keeps remember their day for Undo; the toast only ever offers the newest few. */
+const REMEMBERED_COMPLETION_DAYS = 32
 
 /** A keep's id: the server row id when signed in, the device-local uuid when signed out. */
 export type LiveEditorCompletionId = Completed['id'] | string
@@ -41,8 +44,24 @@ export type CompletionWriter = {
 export function useCompletionWriter(): CompletionWriter {
   const { isSignedIn } = useUser()
   const queryClient = useQueryClient()
-  // The reader keys today's entry by local day; the bump has to use the same one.
-  const dayKey = useLocalDayKey()
+  // No `useLocalDayKey()` here on purpose, though the READER
+  // (`useTodayKeeps`) subscribes to it. Both days agree except in the window
+  // straddling local midnight, where the reader's `useSyncExternalStore`
+  // snapshot can still be yesterday for the milliseconds before its timeout
+  // fires. Resolving the day fresh after the await lands the +1 on the day the
+  // keep actually belongs to; that entry is usually absent, so the bump is a
+  // no-op and the ember simply does not animate for that one keep before the
+  // refetch settles it. Bumping the reader's stale key instead would inflate
+  // YESTERDAY's total for a keep filed today — a wrong number rather than a
+  // missing animation.
+  //
+  // Which day each keep was filed under, so Undo credits the day the keep
+  // HAPPENED rather than the day Undo was pressed. Only the Undo toast calls
+  // `remove`, and only with an id `create` just returned, so this map answers
+  // for every real call; anything else is treated as unknown. Capped because a
+  // keep whose Undo is never pressed would otherwise sit here for the life of
+  // an always-on-top panel. A ref, not state: nothing renders from it.
+  const dayKeyByCompletionId = useRef(new Map<LiveEditorCompletionId, string>())
   const createCompletedMutation = useMutation(
     orpc.completed.create.mutationOptions({}),
   )
@@ -51,29 +70,51 @@ export function useCompletionWriter(): CompletionWriter {
   )
 
   /**
-   * Shifts today's cached total so the ember answers at once; the caller's
+   * Shifts one day's cached total so the ember answers at once; the caller's
    * invalidation refetch then overwrites it with the server value. A missing
-   * cache entry is left missing (nothing to lie about). An Undo issued across
-   * local midnight decrements today's entry for a keep that now belongs to
-   * yesterday; the refetch corrects it within the second, and `Math.max` keeps
-   * the interim number sane.
+   * cache entry is left missing (nothing to lie about), and `Math.max` keeps the
+   * interim number sane.
+   * @param targetDayKey - Local `YYYY-MM-DD` of the day the keep belongs to.
    * @param delta - +1 after a create resolves, −1 after a delete resolves.
    * @returns Nothing.
    * @example
-   * bumpTodayTotal(1)
+   * bumpDayTotal('2026-09-05', 1)
    */
-  const bumpTodayTotal = (delta: number): void => {
+  const bumpDayTotal = (targetDayKey: string, delta: number): void => {
     // Stated rather than inferred: appending the day to the key spreads it into a
     // plain array, which drops TanStack's `DataTag` brand — the phantom type
     // `setQueryData` reads to know what `cached` holds. The schema is the source
     // of truth for that shape either way.
     queryClient.setQueryData<HeatmapResponse>(
-      getTodayHeatmapQueryKey(dayKey),
+      getTodayHeatmapQueryKey(targetDayKey),
       (cached) =>
         cached === undefined
           ? cached
           : { ...cached, total: Math.max(0, cached.total + delta) },
     )
+  }
+
+  /**
+   * Files a keep's day for the Undo that may follow, evicting the oldest entry
+   * past the cap so a long-lived panel cannot grow this without bound.
+   * @param id - Server row id the Undo path will pass back.
+   * @param createdDayKey - Local `YYYY-MM-DD` the keep was filed under.
+   * @returns Nothing.
+   * @example
+   * rememberCompletionDay(42, '2026-09-05')
+   */
+  const rememberCompletionDay = (
+    id: LiveEditorCompletionId,
+    createdDayKey: string,
+  ): void => {
+    const remembered = dayKeyByCompletionId.current
+    remembered.set(id, createdDayKey)
+    while (remembered.size > REMEMBERED_COMPLETION_DAYS) {
+      // Map iterates in insertion order, so the first key is the oldest keep.
+      const oldest = remembered.keys().next()
+      if (oldest.done) break
+      remembered.delete(oldest.value)
+    }
   }
 
   return {
@@ -84,7 +125,11 @@ export function useCompletionWriter(): CompletionWriter {
         categoryId,
         title,
       })
-      bumpTodayTotal(1)
+      // Resolved after the await, not during render: the round trip can span
+      // local midnight, and the keep belongs to the day it landed on.
+      const createdDayKey = getLocalTodayIsoDate()
+      rememberCompletionDay(created.id, createdDayKey)
+      bumpDayTotal(createdDayKey, 1)
       return { id: created.id }
     },
     remove: async ({ id }) => {
@@ -94,7 +139,12 @@ export function useCompletionWriter(): CompletionWriter {
         return
       }
       await deleteCompletedMutation.mutateAsync({ id })
-      bumpTodayTotal(-1)
+      // Undoing across local midnight must not take one off TODAY for a keep
+      // that now belongs to yesterday. With no remembered day there is nothing
+      // safe to decrement, so the ember waits for the refetch instead of lying.
+      const createdDayKey = dayKeyByCompletionId.current.get(id)
+      dayKeyByCompletionId.current.delete(id)
+      if (createdDayKey !== undefined) bumpDayTotal(createdDayKey, -1)
     },
   }
 }
