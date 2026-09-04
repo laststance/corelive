@@ -81,8 +81,8 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
     })
     // …and the newer fields are MATERIALIZED at their defaults in raw state,
     // not left `undefined` (the shallow-merge drop this regresses).
-    expect(state.settings.liveEditorFontFamily).toBe('mono')
-    expect(state.settings.liveEditorFontSize).toBe(14)
+    expect(state.settings.liveEditorFontFamily).toBe('sans')
+    expect(state.settings.liveEditorFontSize).toBe(16)
     expect(state.settings.liveEditorTextColor).toBe('var(--foreground)')
     expect(state.settings.liveEditorClearOnComplete).toBe(false)
   })

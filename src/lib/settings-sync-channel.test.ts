@@ -264,10 +264,10 @@ describe('settings cross-window sync', () => {
       },
     })
 
-    // Assert — the receiver applies the HEALED family (the default 'mono'),
+    // Assert — the receiver applies the HEALED family (the default 'sans'),
     // CLAMPED size (24, the max), and HEALED color (the default token), never
     // the raw 'comic-sans' / 99 / 'red'.
-    expect(windowB.getState().settings.liveEditorFontFamily).toBe('mono')
+    expect(windowB.getState().settings.liveEditorFontFamily).toBe('sans')
     expect(windowB.getState().settings.liveEditorFontSize).toBe(24)
     expect(windowB.getState().settings.liveEditorTextColor).toBe(
       'var(--foreground)',

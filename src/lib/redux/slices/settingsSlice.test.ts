@@ -54,8 +54,8 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      liveEditorFontFamily: 'mono',
-      liveEditorFontSize: 14,
+      liveEditorFontFamily: 'sans',
+      liveEditorFontSize: 16,
       liveEditorTextColor: 'var(--foreground)',
       liveEditorClearOnComplete: false,
       liveEditorClearDelayMs: 500,
@@ -249,8 +249,8 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      liveEditorFontFamily: 'mono',
-      liveEditorFontSize: 14,
+      liveEditorFontFamily: 'sans',
+      liveEditorFontSize: 16,
       liveEditorTextColor: 'var(--foreground)',
       liveEditorClearOnComplete: false,
       liveEditorClearDelayMs: 500,
@@ -317,8 +317,8 @@ describe('settingsSlice', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      liveEditorFontFamily: 'mono',
-      liveEditorFontSize: 14,
+      liveEditorFontFamily: 'sans',
+      liveEditorFontSize: 16,
       liveEditorTextColor: 'var(--foreground)',
       liveEditorClearOnComplete: false,
       liveEditorClearDelayMs: 500,
@@ -344,7 +344,7 @@ describe('settingsSlice', () => {
     })
 
     // Assert — the reducer falls back to the default face.
-    expect(next.liveEditorFontFamily).toBe('mono')
+    expect(next.liveEditorFontFamily).toBe('sans')
   })
 
   it('clamps an out-of-range LiveEditor font size into the slider bounds [12,24]', () => {
@@ -364,7 +364,7 @@ describe('settingsSlice', () => {
     const next = reducer(initialState, setLiveEditorFontSize(Number.NaN))
 
     // Assert
-    expect(next.liveEditorFontSize).toBe(14)
+    expect(next.liveEditorFontSize).toBe(16)
   })
 
   it('stores the selected LiveEditor text color', () => {
@@ -389,8 +389,8 @@ describe('settingsSlice', () => {
     const legacyState = stateWith({ completionSound: false })
 
     // Act / Assert — every LiveEditor selector coalesces to its default (Finding 5).
-    expect(selectLiveEditorFontFamily(legacyState)).toBe('mono')
-    expect(selectLiveEditorFontSize(legacyState)).toBe(14)
+    expect(selectLiveEditorFontFamily(legacyState)).toBe('sans')
+    expect(selectLiveEditorFontSize(legacyState)).toBe(16)
     expect(selectLiveEditorTextColor(legacyState)).toBe('var(--foreground)')
   })
 

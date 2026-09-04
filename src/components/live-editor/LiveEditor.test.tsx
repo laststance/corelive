@@ -821,7 +821,7 @@ describe('LiveEditor text styling settings', () => {
     expect(noteField.style.color).toBe('var(--primary)')
   })
 
-  it('falls back to the default look (mono / 14px) when no setting is saved', async () => {
+  it('falls back to the default look (sans / 16px) when no setting is saved', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -830,13 +830,14 @@ describe('LiveEditor text styling settings', () => {
       setVisibleOnAllWorkspaces,
     })
 
-    // Act — a fresh install (slice defaults) preserves the prior textarea look.
+    // Act — a fresh install reads the slice defaults.
     renderEditor()
     const noteField = await screen.findByRole('textbox')
 
-    // Assert — monospace at 14px, matching the removed `font-mono text-sm`.
-    expect(noteField.style.fontFamily).toBe('var(--font-mono)')
-    expect(noteField.style.fontSize).toBe('14px')
+    // Assert — Inter Tight at 16px: the DESIGN.md Body tier, and the size iOS
+    // Safari needs to leave a focused input alone instead of zooming into it.
+    expect(noteField.style.fontFamily).toBe('var(--font-sans)')
+    expect(noteField.style.fontSize).toBe('16px')
   })
 })
 

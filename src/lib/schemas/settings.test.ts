@@ -9,7 +9,7 @@ describe('UserSettingsStateSchema', () => {
 
     // Assert — every moment OFF, default timbre + volume, legacy flags OFF,
     // completed-title strikethrough ON to preserve the established presentation,
-    // the LiveEditor editor at its prior look (mono / 14px / theme foreground),
+    // the LiveEditor editor at its prior look (sans / 16px / theme foreground),
     // and clear-on-complete OFF (finished lines stay put by default).
     expect(result).toEqual({
       completionSound: false,
@@ -18,8 +18,8 @@ describe('UserSettingsStateSchema', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      liveEditorFontFamily: 'mono',
-      liveEditorFontSize: 14,
+      liveEditorFontFamily: 'sans',
+      liveEditorFontSize: 16,
       liveEditorTextColor: 'var(--foreground)',
       liveEditorClearOnComplete: false,
       liveEditorClearDelayMs: 500,
@@ -42,8 +42,8 @@ describe('UserSettingsStateSchema', () => {
       soundMoments: { 'task-create': false, complete: false, clear: false },
       soundTimbre: 'felt',
       soundVolume: 0.6,
-      liveEditorFontFamily: 'mono',
-      liveEditorFontSize: 14,
+      liveEditorFontFamily: 'sans',
+      liveEditorFontSize: 16,
       liveEditorTextColor: 'var(--foreground)',
       liveEditorClearOnComplete: false,
       liveEditorClearDelayMs: 500,
@@ -185,7 +185,7 @@ describe('UserSettingsStateSchema', () => {
     })
 
     // Assert
-    expect(result.liveEditorFontSize).toBe(14)
+    expect(result.liveEditorFontSize).toBe(16)
   })
 
   it('self-heals an unknown LiveEditor font family to the default instead of rejecting', () => {
@@ -195,7 +195,7 @@ describe('UserSettingsStateSchema', () => {
     })
 
     // Assert
-    expect(result.liveEditorFontFamily).toBe('mono')
+    expect(result.liveEditorFontFamily).toBe('sans')
   })
 
   it('keeps a valid LiveEditor text color (theme token or hex) and self-heals anything else', () => {

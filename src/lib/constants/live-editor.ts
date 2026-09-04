@@ -119,8 +119,12 @@ export const LIVE_EDITOR_FONT_FAMILIES: readonly LiveEditorFontFamilyOption[] =
     label: LIVE_EDITOR_FONT_FAMILY_LABELS[id],
   }))
 
-/** Default editor font — monospace, preserving the prior `font-mono` look. */
-export const DEFAULT_LIVE_EDITOR_FONT_FAMILY: LiveEditorFontFamilyId = 'mono'
+/**
+ * Default editor font — Inter Tight, the DESIGN.md Body tier. Geist Mono is the
+ * Data / Code tier there, so it stays an option rather than the surface a
+ * stranger meets first on `/write`.
+ */
+export const DEFAULT_LIVE_EDITOR_FONT_FAMILY: LiveEditorFontFamilyId = 'sans'
 
 /** Smallest selectable editor font size. */
 export const LIVE_EDITOR_FONT_SIZE_MIN_PX = 12
@@ -131,8 +135,12 @@ export const LIVE_EDITOR_FONT_SIZE_MAX_PX = 24
 /** Font-size slider granularity (whole px — finer steps aren't worth the jitter). */
 export const LIVE_EDITOR_FONT_SIZE_STEP_PX = 1
 
-/** Default editor font size — 14px, preserving the prior `text-sm` (0.875rem). */
-export const DEFAULT_LIVE_EDITOR_FONT_SIZE_PX = 14
+/**
+ * Default editor font size — 16px, the approved `/write` mockup's body size and
+ * the floor iOS Safari needs to leave a focused input alone instead of zooming
+ * the page into it.
+ */
+export const DEFAULT_LIVE_EDITOR_FONT_SIZE_PX = 16
 
 /**
  * Unitless line-height for the editor textarea. Unitless (not the old fixed
