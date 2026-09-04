@@ -39,4 +39,26 @@ describe('createQueryClient', () => {
     })
     expect(fetchHomeData).not.toHaveBeenCalled()
   })
+
+  it('keeps a query flagged meta.persist=false out of the dehydrated cache, so a one-day total never replays from an older day', async () => {
+    // Arrange — two successful queries, one flagged as never-persisted.
+    const queryClient = createQueryClient()
+    await queryClient.fetchQuery({
+      queryKey: ['completed', 'heatmap', { input: { days: 365 } }],
+      queryFn: async () => ({ total: 120 }),
+    })
+    await queryClient.fetchQuery({
+      queryKey: ['completed', 'heatmap', { input: { days: 1 } }],
+      queryFn: async () => ({ total: 3 }),
+      meta: { persist: false },
+    })
+
+    // Act
+    const dehydrated = dehydrate(queryClient)
+
+    // Assert
+    expect(dehydrated.queries.map((query) => query.queryKey)).toEqual([
+      ['completed', 'heatmap', { input: { days: 365 } }],
+    ])
+  })
 })

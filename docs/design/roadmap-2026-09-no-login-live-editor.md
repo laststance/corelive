@@ -305,6 +305,36 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
 > category id from the old account → empty Select + "Category not found" until a
 > category is picked.
 
+> **PR-2 status (2026-09-05, same branch)** — T8–T10 implemented:
+> `useTodayKeeps()` (device store signed out; account `days: 1` total + unmerged
+> device keeps signed in; `null` on a failed fetch with nothing cached) and
+> `TodayEmber` mounted above the editor for both hosts (`compact` in the panel).
+> Two deviations from the review text: (1) DR4's ember line "Can't keep on this
+> device right now." was dropped — the store's memory fallback (D6) means a keep
+> always lands for the session, so that line would be untrue; the footer's "Kept
+> for this session only." carries the honesty and the ember simply counts. (2) A
+> resolving state was needed before the source can answer (server render,
+> Clerk loading, first fetch): the ember shows the single word "Today" with
+> `aria-busy`, never a made-up 0. DR7 detail: the sweep layer also runs a
+> brightness ripple (1.35 → 1) so a second keep is visible over an already-lit
+> cell; keyframes live in `src/globals.css` as `--animate-ember-sweep`.
+>
+> **T11 QA (2026-09-05)** — production build (`pnpm build && pnpm start`)
+> driven by `playwright-cli` with recordings, frames inspected at 25 fps:
+> stranger loop on desktop (0 → 1 sweeps out from the centre, 1 → 2 ripples
+> over the lit cell with no unlit flash, undo 2 → 1 snaps, reload shows "Today"
+> then 1 with no sweep), phone viewport (Keep line → 1), dark theme (3 keeps),
+> and the signed-in loop (0 → 1 → undo 0). Electron panel (dev app over CDP,
+> signed in): compact 16px ember, keep → 1 → undo → 0, and the heatmap fetch
+> aborted → "Today" (`aria-busy`) while retrying → "Can't reach your keeps
+> right now" → recovers once restored. That last case surfaced a fix: the app
+> persists the Query cache to localStorage for 7 days, so a restored one-day
+> total masked the failed fetch and could replay yesterday's count as today's —
+> the ember query now carries `meta: { persist: false }` and
+> `createQueryClient` keeps such queries out of dehydration. Not exercised: the
+> packaged app (it loads production, which does not have this branch yet) and
+> the signed-out Electron front door (unchanged by this work).
+
 - [x] **T1 (P1, human: ~3h / CC: ~20min)** — live-editor host — Add `src/lib/live-editor/liveEditorHost.ts` (`getLiveEditorHost()`, `isElectronLiveEditorPanel()`) and swap the 15 `getLiveEditorAPI()` sites in `LiveEditor.tsx`
   - Surfaced by: Architecture D1 + D7
   - Files: `src/lib/live-editor/liveEditorHost.ts`, `src/components/live-editor/LiveEditor.tsx`
@@ -333,19 +363,19 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
   - Surfaced by: Test review D11 + Outside voice #8
   - Files: `src/components/live-editor/LiveEditor.test.tsx`, `src/lib/live-editor/*.test.ts`
   - Verify: `pnpm validate`
-- [ ] **T8 (P1, human: ~2h / CC: ~15min)** — `useTodayKeeps()` — source switch on `isSignedIn`, server `total` + unmerged local, `null` on error without data, `useSyncExternalStore` raw string + `useMemo`, `useLocalDayKey()`, `useMounted()`
+- [x] **T8 (P1, human: ~2h / CC: ~15min)** — `useTodayKeeps()` — source switch on `isSignedIn`, server `total` + unmerged local, `null` on error without data, `useSyncExternalStore` raw string + `useMemo`, `useLocalDayKey()`, `useMounted()`
   - Surfaced by: Performance D8, D15, D16, Outside voice #10
   - Files: `src/hooks/useTodayKeeps.ts`
   - Verify: `useTodayKeeps.test.tsx` (switch, sum, null, midnight, storage event, merged excluded)
-- [ ] **T9 (P1, human: ~2h / CC: ~15min)** — `TodayEmber` — lit/unlit cell (`--hm-0` / `--hm-4`, no intensity ramp), six copy variants with the sub-line rule, `tabular-nums`, 400ms `motion-safe:` radial-sweep on increment with instant snap-back, `compact` variant, mounted ABOVE the editor for both hosts
+- [x] **T9 (P1, human: ~2h / CC: ~15min)** — `TodayEmber` — lit/unlit cell (`--hm-0` / `--hm-4`, no intensity ramp), six copy variants with the sub-line rule, `tabular-nums`, 400ms `motion-safe:` radial-sweep on increment with instant snap-back, `compact` variant, mounted ABOVE the editor for both hosts
   - Surfaced by: PR-2 spec + D16 copy + design review DR1 / DR6 / DR7
   - Files: `src/components/live-editor/TodayEmber.tsx`, `src/components/live-editor/LiveEditor.tsx`
   - Verify: `TodayEmber.test.tsx` (0 / 1 / N / unavailable / null; lit only at ≥1; sub-line only in the 0 / 1 / N states; `compact` hides the sub-line)
-- [ ] **T10 (P1, human: ~2h / CC: ~15min)** — PR-2 tests — the two suites above plus the `LiveEditor.test.tsx` case that the ember row updates after Cmd+Enter and reverts on undo
+- [x] **T10 (P1, human: ~2h / CC: ~15min)** — PR-2 tests — the two suites above plus the `LiveEditor.test.tsx` case that the ember row updates after Cmd+Enter and reverts on undo
   - Surfaced by: Test review D11
   - Files: `src/components/live-editor/TodayEmber.test.tsx`, `src/hooks/useTodayKeeps.test.tsx`, `src/components/live-editor/LiveEditor.test.tsx`
   - Verify: `pnpm validate`
-- [ ] **T11 (P1, human: ~2h / CC: ~30min)** — QA gate — recorded `playwright-cli` QA of the stranger loop on the production build + packaged native QA (signed-in keep + ember, offline failure, undo, signed-out front-door fallback)
+- [x] **T11 (P1, human: ~2h / CC: ~30min)** — QA gate — recorded `playwright-cli` QA of the stranger loop on the production build + packaged native QA (signed-in keep + ember, offline failure, undo, signed-out front-door fallback)
   - Surfaced by: Test review D11
   - Files: none (runs `pnpm build && pnpm start`, `pnpm electron:build:dir`)
   - Verify: frames inspected (desktop AND a phone viewport with the Keep-line button); the Warm Cathedral light and dark renders of `/write` compared against the approved layout (`variant-F.png`); computer-use screenshots; results pasted in the PR

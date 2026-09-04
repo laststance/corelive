@@ -30,6 +30,7 @@ import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
+import { useTodayKeeps } from '@/hooks/useTodayKeeps'
 import {
   LIVE_EDITOR_FONT_FAMILY_CSS,
   LIVE_EDITOR_LINE_HEIGHT,
@@ -78,6 +79,7 @@ import {
   replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './liveEditorUtils'
+import { TodayEmber } from './TodayEmber'
 
 const NOTE_DEBOUNCE_MS = 400
 
@@ -550,6 +552,8 @@ export const LiveEditor = function LiveEditor({
   const isSignedOutWeb = !isElectronPanel && isAuthLoaded && !isSignedIn
   const isCoarsePointer = useCoarsePointer()
   const completionWriter = useCompletionWriter()
+  // Today's count for the ember above the editor (device store or account total).
+  const todayKeeps = useTodayKeeps()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [opacity, setOpacity] = useState<number>(LIVE_EDITOR_OPACITY_MAX)
@@ -2251,6 +2255,9 @@ export const LiveEditor = function LiveEditor({
           </span>
         </div>
       )}
+
+      {/* Today Ember above the editor for both hosts (design review DR1); the panel gets the compact cut. */}
+      <TodayEmber count={todayKeeps} compact={isElectronPanel} />
 
       {(isElectronPanel || isSignedIn) && (
         <div

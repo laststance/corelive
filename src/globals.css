@@ -59,6 +59,20 @@
   --font-sans: var(--font-inter-tight);
   --font-serif: var(--font-newsreader);
   --font-mono: var(--font-geist-mono);
+  /* Today Ember (LiveEditor) — DESIGN.md "Task completion → Heatmap cell fill":
+     a 400ms ease-out radial sweep. Used as `motion-safe:animate-ember-sweep`
+     on the lit layer; reduced-motion users get the instant fill. */
+  --animate-ember-sweep: ember-sweep 400ms ease-out both;
+  @keyframes ember-sweep {
+    from {
+      clip-path: circle(0% at 50% 50%);
+      filter: brightness(1.35);
+    }
+    to {
+      clip-path: circle(75% at 50% 50%);
+      filter: brightness(1);
+    }
+  }
 }
 /* ---break--- */
 :root {
