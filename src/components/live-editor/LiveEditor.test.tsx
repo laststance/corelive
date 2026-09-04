@@ -504,7 +504,7 @@ describe('LiveEditor web host (/write)', () => {
       screen.getByRole('combobox', { name: 'Active category' }),
     ).toBeEnabled()
     expect(screen.queryByText('Follow FloatingNav')).not.toBeInTheDocument()
-    expect(screen.getByText('Kept to your account.')).toBeInTheDocument()
+    expect(screen.getByText('Keeps go to your account.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Your year →' })).toHaveAttribute(
       'href',
       '/home',
@@ -619,7 +619,9 @@ describe('LiveEditor web host (/write)', () => {
     expect(screen.getByText('Follow Spaces')).toBeInTheDocument()
     expect(screen.getByText('Follow FloatingNav')).toBeInTheDocument()
     expect(screen.queryByText('CoreLive')).not.toBeInTheDocument()
-    expect(screen.queryByText('Kept to your account.')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Keeps go to your account.'),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'Sign in' }),
     ).not.toBeInTheDocument()

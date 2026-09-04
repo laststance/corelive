@@ -120,7 +120,7 @@ type FooterCopy = Readonly<{
  * @param storageAvailability - The localStorage probe result for signed-out keeps.
  * @returns
  * - Before auth resolves: "Kept on this device." with no link (the stand-in frame)
- * - Signed in: "Kept to your account." + "Your year →" to /home
+ * - Signed in: "Keeps go to your account." + "Your year →" to /home
  * - Signed out, storage ok: "Kept on this device." + "Sign in" (returns to /write)
  * - Signed out, storage unavailable: "Kept for this session only." + "Sign in"
  * @example
@@ -133,8 +133,11 @@ function resolveFooterCopy(
 ): FooterCopy {
   if (!isAuthLoaded) return { text: 'Kept on this device.', link: null }
   if (isSignedIn) {
+    // "Keeps", not a blanket "kept": the finished lines reach the account, but
+    // the half-written draft in the textarea lives in this browser's storage
+    // either way. The old wording read as covering the textarea too.
     return {
-      text: 'Kept to your account.',
+      text: 'Keeps go to your account.',
       link: { href: '/home', label: 'Your year →' },
     }
   }
