@@ -61,7 +61,7 @@ function resolveEmberCopy(count: TodayKeepsCount): EmberCopy {
   return {
     headline: (
       <>
-        <span className="tabular-nums">{count}</span>{' '}
+        <span className="font-mono tabular-nums">{count}</span>{' '}
         {count === 1 ? 'thing' : 'things'} kept today
       </>
     ),
@@ -124,7 +124,7 @@ export function TodayEmber({ count, compact = false }: TodayEmberProps) {
           // The unlit token sits ~1.05:1 against the page in every theme, so
           // without an edge there is no cell to light — just empty space.
           'relative shrink-0 overflow-hidden border border-border',
-          compact ? 'size-4 rounded-sm' : 'size-10 rounded-lg',
+          compact ? 'size-4 rounded-sm' : 'size-6 rounded-md',
         )}
         style={{ backgroundColor: UNLIT_CELL_TOKEN }}
       >
