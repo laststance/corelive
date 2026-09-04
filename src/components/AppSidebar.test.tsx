@@ -44,8 +44,9 @@ describe('AppSidebar', () => {
 
     // Assert: without this entry a browser user has no route to LiveEditor at
     // all — Home is a read-only dashboard since the Todo write paths were
-    // retired, so the sidebar is the only inbound link.
-    expect(liveEditorLink).toHaveAttribute('href', '/live-editor')
+    // retired, so the sidebar is the only inbound link. It points at the public
+    // web host (/write); /live-editor is the Electron panel's protected route.
+    expect(liveEditorLink).toHaveAttribute('href', '/write')
   })
 
   it('keeps Home and Skill Tree reachable alongside LiveEditor', () => {

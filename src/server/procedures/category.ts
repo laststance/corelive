@@ -14,6 +14,7 @@
  * await orpcClient.category.delete({ id: 1 })
  */
 import { ORPCError } from '@orpc/server'
+import { Prisma, type User } from '@prisma/client'
 import { z } from 'zod'
 
 import { createModuleLogger } from '@/lib/logger'
@@ -26,13 +27,65 @@ import {
   CategorySchema,
   CategoryListResponseSchema,
   CreateCategorySchema,
+  DEFAULT_CATEGORY_SEED,
   UpdateCategorySchema,
 } from '../schemas/category'
 
 const log = createModuleLogger('category')
 
 /**
- * List all categories for the authenticated user with todo counts.
+ * Reads one account's categories, oldest first, with their open-todo counts. Called by {@link listCategories} before and (when empty) after the default seed.
+ * @param userId - Owner whose categories to read.
+ * @returns The account's categories in creation order; `[]` for a brand-new account.
+ * @example
+ * await readCategoriesWithCounts(1) // => [{ id: 3, name: 'General', _count: { todos: 0 }, ... }]
+ */
+async function readCategoriesWithCounts(
+  userId: User['id'],
+): Promise<CategoryWithCount[]> {
+  const categories = await prisma.category.findMany({
+    where: { userId },
+    include: {
+      _count: {
+        select: { todos: { where: { completed: false } } },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  // Prisma returns color as string; cast to satisfy the enum-typed output schema
+  return categories as CategoryWithCount[]
+}
+
+/**
+ * Seeds the default "General" category for an account that has none — the auth middleware creates the user row lazily when the Clerk webhook was missed or has not arrived yet, and without this the editor opens locked on "No categories". Called by {@link listCategories} when its read comes back empty.
+ * @param userId - Owner of the missing default.
+ * @returns Nothing; a concurrent webhook insert of the same name is treated as success.
+ * @example
+ * await ensureDefaultCategory(user.id)
+ */
+async function ensureDefaultCategory(userId: User['id']): Promise<void> {
+  try {
+    await prisma.category.create({
+      data: { ...DEFAULT_CATEGORY_SEED, userId },
+    })
+  } catch (error) {
+    // Prisma P2002 = the webhook inserted "General" between our read and this
+    // write (@@unique([name, userId])) — that row is exactly what we wanted.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return
+    }
+    throw error
+  }
+}
+
+/**
+ * List all categories for the authenticated user with todo counts. An account
+ * with no categories yet gets its default "General" seeded on the way, so a
+ * first sign-in from `/write` (or the Electron panel) always has somewhere to write.
  *
  * @returns Array of categories with _count.todos for sidebar badge display
  *
@@ -46,20 +99,15 @@ export const listCategories = authMiddleware
     try {
       const { user } = context
 
-      const categories = await prisma.category.findMany({
-        where: { userId: user.id },
-        include: {
-          _count: {
-            select: { todos: { where: { completed: false } } },
-          },
-        },
-        orderBy: { createdAt: 'asc' },
-      })
-
-      // Prisma returns color as string; cast to satisfy the enum-typed output schema
-      return {
-        categories: categories as CategoryWithCount[],
+      const categories = await readCategoriesWithCounts(user.id)
+      if (categories.length > 0) {
+        return { categories }
       }
+
+      // Brand-new (or webhook-less) account: seed the default, then re-read so
+      // the response carries the real row id and count shape.
+      await ensureDefaultCategory(user.id)
+      return { categories: await readCategoriesWithCounts(user.id) }
     } catch (error) {
       log.error({ error }, 'Error in listCategories')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {

@@ -288,31 +288,48 @@ Outside voice (Codex timed out after 5 minutes; Claude subagent with fresh conte
 Synthesized from this review's findings. Each task derives from a specific
 finding above. Run with Claude Code or Codex; checkbox as you ship.
 
-- [ ] **T1 (P1, human: ~3h / CC: ~20min)** — live-editor host — Add `src/lib/live-editor/liveEditorHost.ts` (`getLiveEditorHost()`, `isElectronLiveEditorPanel()`) and swap the 15 `getLiveEditorAPI()` sites in `LiveEditor.tsx`
+> **PR-1 status (2026-09-05, branch `feat/write-public-route`)** — T1–T7, T13, T14
+> implemented and QA'd locally: recorded `playwright-cli` runs on the production
+> build (stranger loop on desktop, iPhone 15 viewport with the Keep-line button,
+> light + dark), the signed-in round trip (`/login?redirect_url=/write` → `/write`
+> → account keep → `Your year →` → `/home` → sidebar → `/write`), and the dev
+> Electron panel over CDP (panel chrome intact, ⌘ Enter keep + Undo against the
+> account, note persisted through the preload, Floating window picks up the
+> session). Deviations: T14's `max-w-[640px]` / 13px hint became the nearest
+> tokens `max-w-2xl` / `text-sm` (`dslint/token-only` forbids arbitrary values).
+> Unplanned fix surfaced by QA: `category.list` now seeds the default "General"
+> for an account the Clerk webhook never reached (or has not reached yet) —
+> without it a first sign-in from `/write` opened locked on "No categories"
+> (real-DB pin in `src/server/procedures/category.test.ts`). Pre-existing edge,
+> left for Later: switching accounts on one device keeps the panel's remembered
+> category id from the old account → empty Select + "Category not found" until a
+> category is picked.
+
+- [x] **T1 (P1, human: ~3h / CC: ~20min)** — live-editor host — Add `src/lib/live-editor/liveEditorHost.ts` (`getLiveEditorHost()`, `isElectronLiveEditorPanel()`) and swap the 15 `getLiveEditorAPI()` sites in `LiveEditor.tsx`
   - Surfaced by: Architecture D1 + D7
   - Files: `src/lib/live-editor/liveEditorHost.ts`, `src/components/live-editor/LiveEditor.tsx`
   - Verify: `pnpm test -- LiveEditor` (existing 66 cases unchanged)
-- [ ] **T2 (P1, human: ~4h / CC: ~25min)** — local stores — `localCompletionStore.ts` + note map over `localStorage` with RMW + zod + `storage` event, one-time probe, memory fallback, `LOCAL_CATEGORY_ID = 0` in `constants.ts`
+- [x] **T2 (P1, human: ~4h / CC: ~25min)** — local stores — `localCompletionStore.ts` + note map over `localStorage` with RMW + zod + `storage` event, one-time probe, memory fallback, `LOCAL_CATEGORY_ID = 0` in `constants.ts`
   - Surfaced by: Architecture D2, D5, D6
   - Files: `src/lib/live-editor/localCompletionStore.ts`, `src/lib/live-editor/localNoteStore.ts`, `src/lib/live-editor/constants.ts`, `src/lib/live-editor/schemas.ts`
   - Verify: `localCompletionStore.test.ts` (add / remove / today filter / corrupt / quota / event)
-- [ ] **T3 (P1, human: ~3h / CC: ~20min)** — completion writer — `useCompletionWriter()` replaces the 3 `mutateAsync` sites; routes on `isSignedIn`; `setQueryData` ±1 on the `days=1` key before the existing invalidation
+- [x] **T3 (P1, human: ~3h / CC: ~20min)** — completion writer — `useCompletionWriter()` replaces the 3 `mutateAsync` sites; routes on `isSignedIn`; `setQueryData` ±1 on the `days=1` key before the existing invalidation
   - Surfaced by: Code Quality D9 + Outside voice D16
   - Files: `src/hooks/useCompletionWriter.ts`, `src/components/live-editor/LiveEditor.tsx`
   - Verify: `useCompletionWriter.test.tsx` (route, +1 before refetch, failure unchanged, undo −1)
-- [ ] **T4 (P1, human: ~4h / CC: ~30min)** — LiveEditor signed-out wiring — sentinel set directly at `:521-525`, delete the 7 environment guards, `effectiveClearOnComplete`, replace the notice + disabled textarea, chrome behind `isElectronLiveEditorPanel()` (category `Select` also on the signed-in web), caption row + placeholder + per-state footer copy (design review DR2–DR4), 5 comment sites
+- [x] **T4 (P1, human: ~4h / CC: ~30min)** — LiveEditor signed-out wiring — sentinel set directly at `:521-525`, delete the 7 environment guards, `effectiveClearOnComplete`, replace the notice + disabled textarea, chrome behind `isElectronLiveEditorPanel()` (category `Select` also on the signed-in web), caption row + placeholder + per-state footer copy (design review DR2–DR4), 5 comment sites
   - Surfaced by: Architecture D2/D3, Outside voice #3/#5, Code Quality D10, D15
   - Files: `src/components/live-editor/LiveEditor.tsx`, `src/app/live-editor/page.tsx` (comment only), `src/components/AppSidebar.tsx` (comment)
   - Verify: `LiveEditor.test.tsx` web-host suite (T7)
-- [ ] **T5 (P1, human: ~1h / CC: ~10min)** — `/write` route — `src/app/write/page.tsx` renders the frame at first paint with a disabled stand-in textarea (same placeholder), swaps in `<LiveEditor>` on `useUser().isLoaded` (autofocus), no spinner (design review DR5); categories only when signed in; sidebar link + `isActive` → `/write`
+- [x] **T5 (P1, human: ~1h / CC: ~10min)** — `/write` route — `src/app/write/page.tsx` renders the frame at first paint with a disabled stand-in textarea (same placeholder), swaps in `<LiveEditor>` on `useUser().isLoaded` (autofocus), no spinner (design review DR5); categories only when signed in; sidebar link + `isActive` → `/write`
   - Surfaced by: Outside voice D14
   - Files: `src/app/write/page.tsx`, `src/components/AppSidebar.tsx:205-207`, `src/components/AppSidebar.test.tsx:48`
   - Verify: `write/page.test.tsx`; `src/proxy.ts` matcher test asserts `/write` is public and `/live-editor` still protected
-- [ ] **T6 (P1, human: ~30min / CC: ~5min)** — login redirect — `<Login forceRedirectUrl={resolvePostLoginPath(...)} />` so `?redirect_url=/write` beats `NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home`
+- [x] **T6 (P1, human: ~30min / CC: ~5min)** — login redirect — `<Login forceRedirectUrl={resolvePostLoginPath(...)} />` so `?redirect_url=/write` beats `NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home`
   - Surfaced by: Outside voice #6, verified against Clerk docs (force props override `redirect_url`; prop beats env)
   - Files: `src/app/login/[[...login]]/page.tsx:101`, `src/app/login/[[...login]]/page.test.tsx`
   - Verify: page test captures the `SignIn` prop for `?redirect_url=/write`, absent, and cross-origin
-- [ ] **T7 (P1, human: ~4h / CC: ~30min)** — PR-1 tests — mock `@clerk/nextjs` `useUser` across `LiveEditor.test.tsx`, rewrite the `:214` case into the web-host suite (focused editor, Cmd+Enter → local row, undo, forced clear-on-complete, footer link, no Electron chrome), `liveEditorHost.test.ts`
+- [x] **T7 (P1, human: ~4h / CC: ~30min)** — PR-1 tests — mock `@clerk/nextjs` `useUser` across `LiveEditor.test.tsx`, rewrite the `:214` case into the web-host suite (focused editor, Cmd+Enter → local row, undo, forced clear-on-complete, footer link, no Electron chrome), `liveEditorHost.test.ts`
   - Surfaced by: Test review D11 + Outside voice #8
   - Files: `src/components/live-editor/LiveEditor.test.tsx`, `src/lib/live-editor/*.test.ts`
   - Verify: `pnpm validate`
@@ -336,11 +353,11 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
   - Surfaced by: Outside voice #11 (Next, not PR-1/PR-2)
   - Files: `src/server/procedures/completed.ts`, `src/server/schemas/completed.ts`, `src/server/router.ts`, a root provider
   - Verify: procedure test with a real DB (duplicate `batchId` leaves zero rows)
-- [ ] **T13 (P1, human: ~2h / CC: ~15min)** — Keep-line button (touch) — `(pointer: coarse)`-only 44px `variant="secondary"` button under the editor that keeps the caret line through the existing Cmd/Ctrl+Enter handler; touch placeholder "Write one thing. Tap Keep when it's done."
+- [x] **T13 (P1, human: ~2h / CC: ~15min)** — Keep-line button (touch) — `(pointer: coarse)`-only 44px `variant="secondary"` button under the editor that keeps the caret line through the existing Cmd/Ctrl+Enter handler; touch placeholder "Write one thing. Tap Keep when it's done."
   - Surfaced by: design review DR9 (Claude + Codex, critical)
   - Files: `src/components/live-editor/LiveEditor.tsx`
   - Verify: `LiveEditor.test.tsx` (renders only under a coarse-pointer `matchMedia` mock; click keeps the caret line; hidden otherwise); recorded QA at a phone viewport
-- [ ] **T14 (P1, human: ~1.5h / CC: ~10min)** — Responsive + a11y — web column `max-w-[640px]` centered, 16px side padding on small screens (Electron panel full-bleed); ember `role="status" aria-live="polite"`, cell `aria-hidden`, textarea `aria-label`, hint in `<kbd>`, focus ring `--ring`, tap targets ≥ 44px
+- [x] **T14 (P1, human: ~1.5h / CC: ~10min)** — Responsive + a11y — web column `max-w-[640px]` centered, 16px side padding on small screens (Electron panel full-bleed); ember `role="status" aria-live="polite"`, cell `aria-hidden`, textarea `aria-label`, hint in `<kbd>`, focus ring `--ring`, tap targets ≥ 44px
   - Surfaced by: design review DR10
   - Files: `src/components/live-editor/TodayEmber.tsx`, `src/components/live-editor/LiveEditor.tsx`, `src/app/write/page.tsx`
   - Verify: `TodayEmber.test.tsx` (role / aria-live), `LiveEditor.test.tsx` (aria-label), axe pass during the recorded QA

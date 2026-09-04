@@ -80,6 +80,16 @@ const Page = function Page() {
     )
   }
 
+  // Rendered only after `isLoaded`, so `window` exists. `forceRedirectUrl` (not
+  // fallback) makes `?redirect_url=/write` beat the env-level
+  // NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL (/home) deterministically —
+  // the force prop wins over the env force URL; with no param it still resolves
+  // to /home, so existing bounces are unchanged.
+  const postLoginPath = resolvePostLoginPath(
+    window.location.search,
+    window.location.origin,
+  )
+
   return (
     <div className="flex min-h-screen items-center justify-center">
       {isElectron ? (
@@ -98,7 +108,7 @@ const Page = function Page() {
           </div>
         </div>
       ) : (
-        <Login fallbackRedirectUrl={POST_LOGIN_HOME_PATH} />
+        <Login forceRedirectUrl={postLoginPath} />
       )}
     </div>
   )

@@ -94,6 +94,32 @@ describe('proxy route protection', () => {
     expect(auth).not.toHaveBeenCalled()
   })
 
+  it('lets a signed-out stranger write on /write without a login wall', async () => {
+    // Arrange: the no-login LiveEditor route — public by construction because
+    // it is simply absent from the protected list (design D14).
+    const auth = vi.fn(async () => ({ isAuthenticated: false }))
+
+    // Act
+    const result = await handler(auth, requestFor('/write'))
+
+    // Assert: no redirect, and auth was never consulted.
+    expect(result).toBeUndefined()
+    expect(auth).not.toHaveBeenCalled()
+  })
+
+  it('keeps /live-editor protected so the Electron panel still gets its /login redirect', async () => {
+    // Arrange: the packaged panel loads /live-editor; signed out it must bounce
+    // to /login (hide + Floating front door), exactly as before /write existed.
+    const auth = vi.fn(async () => ({ isAuthenticated: false }))
+
+    // Act
+    const result = await handler(auth, requestFor('/live-editor'))
+
+    // Assert
+    expect(result?.status).toBe(307)
+    expect(result?.headers.get('location')).toContain('/login')
+  })
+
   it('still redirects a signed-out visitor on a protected route (/home) to /login', async () => {
     // Arrange: the same signed-out visitor, but on a protected route — proves
     // the carve-out is scoped to /floating-navigator, not a blanket open door.

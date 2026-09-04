@@ -9,11 +9,12 @@ import type { CategoryWithCount } from '@/server/schemas/category'
 
 /**
  * Route loaded by the LiveEditor Electron window
- * (`https://corelive.app/live-editor`).
+ * (`https://corelive.app/live-editor`). Protected by `src/proxy.ts`, so the
+ * packaged panel keeps its `/login` redirect contract while signed out.
  *
- * The route is intentionally browser-tolerant: when opened in a normal tab
- * (no `liveEditorAPI`), the editor renders a placeholder message so devs can
- * iterate from a regular Next.js dev server.
+ * Opened in a normal browser tab it renders the same editor through the web
+ * host (device-local notes, account keeps); the public, signed-out-capable
+ * browser entry point is `/write`.
  */
 const LiveEditorPage = function LiveEditorPage() {
   const isClerkReady = useClerkQueryReady()

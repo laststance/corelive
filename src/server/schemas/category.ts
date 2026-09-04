@@ -23,6 +23,18 @@ export const CategoryColorSchema = z.enum(CATEGORY_COLORS)
 export type CategoryColor = z.infer<typeof CategoryColorSchema>
 
 /**
+ * Every account's first category. The Clerk webhook seeds it on `user.created`,
+ * and `listCategories` re-seeds it for an account the auth middleware created
+ * without one (webhook missed or not yet delivered), so no signed-in editor
+ * ever opens locked on "No categories".
+ */
+export const DEFAULT_CATEGORY_SEED = {
+  name: 'General',
+  color: 'blue',
+  isDefault: true,
+} as const satisfies { name: string; color: CategoryColor; isDefault: boolean }
+
+/**
  * Schema for Category database model.
  * Validates the complete category object returned from the database.
  */
