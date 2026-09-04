@@ -22,6 +22,7 @@ Design record: [docs/design/roadmap-2026-09-no-login-live-editor.md](design/road
 
 - Watch one named person use the signed-out page for 15 minutes, silently.
 - Signed-out parity inside the packaged Electron LiveEditor panel (needs a main-process release; then point the panel at `/write`).
+- Per-record keys for `localCompletionStore` / `localNoteStore` (PR #171 review, accepted-and-deferred 2026-09-05). Two tabs writing simultaneously read the same slot and one entry is lost; the spread narrows the window to sub-milliseconds but does not make read-modify-write atomic. Deferred because `completed.importLocal` retires `localStorage` as the record, and the rewrite is a heavy lift for a single-user app. Revisit if `/write` ever grows real multi-tab use.
 - skill-tree: keep or delete, decided by the criterion.
 - Streak residue sweep: `calculateStreaks`, `useStreakNotifications`, `calc-streak`, the Year-in-Review "longest streak" line, the `AchievementAnimation` streak branch.
 - #120 drag a finished task onto Completed.
