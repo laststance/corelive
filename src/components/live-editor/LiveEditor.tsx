@@ -2414,7 +2414,7 @@ export const LiveEditor = function LiveEditor({
           'flex-1 resize-none rounded-lg border p-3 shadow-sm focus:outline-none',
           isElectronPanel
             ? 'bg-background/60 disabled:opacity-50'
-            : 'border-border bg-card focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default',
+            : 'border-border bg-card focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default',
         )}
         // Inline (not a useMemo) — a fresh style object on an intrinsic element is
         // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
