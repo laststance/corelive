@@ -2266,12 +2266,16 @@ export const LiveEditor = function LiveEditor({
               CoreLive
             </span>
           )}
-          <span className="text-xs text-muted-foreground">
-            <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-xs text-foreground">
-              {modifierLabel} Enter
-            </kbd>{' '}
-            = kept
-          </span>
+          {/* Touch has no ⌘: the placeholder already says "Tap Keep", so a
+              keyboard chip here would contradict it on the same screen. */}
+          {!isCoarsePointer && (
+            <span className="text-xs text-muted-foreground">
+              <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-xs text-foreground">
+                {modifierLabel} Enter
+              </kbd>{' '}
+              = kept
+            </span>
+          )}
         </div>
       )}
 
@@ -2449,7 +2453,7 @@ export const LiveEditor = function LiveEditor({
           {footerCopy.link && (
             <Link
               href={footerCopy.link.href}
-              className="inline-flex min-h-11 items-center hover:text-foreground"
+              className="inline-flex min-h-11 items-center px-2 hover:text-foreground"
             >
               {footerCopy.link.label}
             </Link>
