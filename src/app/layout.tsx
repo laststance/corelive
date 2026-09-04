@@ -6,6 +6,7 @@ import '@/globals.css'
 
 import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'
 import { ElectronStartupSync } from '@/components/electron/ElectronStartupSync'
+import { LocalKeepMergeSync } from '@/components/live-editor/LocalKeepMergeSync'
 import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ReduxProvider } from '@/lib/redux/providers'
@@ -64,6 +65,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
             <QueryClientProvider>
               <ReduxProvider>
                 <ElectronStartupSync />
+                <LocalKeepMergeSync />
                 <ElectronAuthProvider>{children}</ElectronAuthProvider>
                 <Toaster />
               </ReduxProvider>

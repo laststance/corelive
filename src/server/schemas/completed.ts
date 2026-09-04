@@ -236,3 +236,43 @@ export const CompletedJournalResponseSchema = z.object({
 export type CompletedJournalResponse = z.infer<
   typeof CompletedJournalResponseSchema
 >
+
+/**
+ * Input schema for `completed.importLocal` — the one-time merge of a device's
+ * signed-out keeps into the account. `batchId` is the client-generated
+ * idempotency key: the server namespaces it per user and stores it as the
+ * `ImportBatch` primary key, so a retry after a lost response re-sends the same
+ * key and imports nothing twice. `completedAt` arrives as a real `Date` (oRPC
+ * serialises it), which rejects an unparseable timestamp at the boundary
+ * instead of letting an Invalid Date reach the row.
+ * @example
+ * { batchId: '7d0c1a2e-…', items: [{ title: 'buy milk', completedAt: new Date('2026-09-04T09:12:00.000Z') }] }
+ */
+export const IMPORT_LOCAL_MAX_ITEMS = 2000
+
+export const ImportLocalSchema = z.object({
+  batchId: z.string().min(1).max(128),
+  items: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(255),
+        completedAt: z.date(),
+      }),
+    )
+    .min(1)
+    .max(IMPORT_LOCAL_MAX_ITEMS),
+})
+
+/**
+ * Response schema for `completed.importLocal`. `alreadyImported` is how the
+ * client tells "this batch just landed" from "this batch landed on an earlier
+ * attempt"; both outcomes mean the same thing locally (tag the items), so the
+ * flag exists for logging and tests rather than branching.
+ * @example
+ * { batchId: '7d0c1a2e-…', imported: 12, alreadyImported: false }
+ */
+export const ImportLocalResponseSchema = z.object({
+  batchId: z.string(),
+  imported: z.number().int().min(0),
+  alreadyImported: z.boolean(),
+})

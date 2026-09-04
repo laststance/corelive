@@ -6,6 +6,7 @@ import {
 } from './procedures/category'
 import {
   createCompleted,
+  importLocalCompleted,
   deleteCompleted,
   getDayDetail,
   getHeatmap,
@@ -38,6 +39,7 @@ export const router = {
     dayDetail: getDayDetail,
     journal: getJournal,
     create: createCompleted,
+    importLocal: importLocalCompleted,
     delete: deleteCompleted,
   },
   electronSettings: {
