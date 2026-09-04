@@ -2260,7 +2260,7 @@ export const LiveEditor = function LiveEditor({
           {isSignedIn ? (
             <Link
               href="/home"
-              className="inline-flex min-h-11 items-center font-semibold text-muted-foreground hover:text-foreground"
+              className="inline-flex min-h-11 items-center rounded-sm font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
               CoreLive
             </Link>
@@ -2272,8 +2272,8 @@ export const LiveEditor = function LiveEditor({
           {/* Touch has no ⌘: the placeholder already says "Tap Keep", so a
               keyboard chip here would contradict it on the same screen. */}
           {!isCoarsePointer && (
-            <span className="text-xs text-muted-foreground">
-              <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-xs text-foreground">
+            <span className="text-muted-foreground">
+              <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-foreground">
                 {modifierLabel} Enter
               </kbd>{' '}
               = kept
@@ -2282,8 +2282,12 @@ export const LiveEditor = function LiveEditor({
         </div>
       )}
 
-      {/* Today Ember above the editor for both hosts (design review DR1); the panel gets the compact cut. */}
-      <TodayEmber count={todayKeeps} compact={isElectronPanel} />
+      {/* Today Ember above the editor for both hosts (design review DR1); the panel gets the compact cut.
+          The web adds 12px on top of the container gap so the ember reads as its
+          own zone (the approved mockup's 24px), not another toolbar strip. */}
+      <div className={isElectronPanel ? undefined : 'mb-3'}>
+        <TodayEmber count={todayKeeps} compact={isElectronPanel} />
+      </div>
 
       {(isElectronPanel || isSignedIn) && (
         <div
@@ -2418,10 +2422,13 @@ export const LiveEditor = function LiveEditor({
         // translucent look. The web stand-in is not dimmed while disabled — it is
         // the first paint, not a loading state.
         className={cn(
-          'flex-1 resize-none rounded-lg border p-3 shadow-sm focus:outline-none',
+          // The focus indicator is SHARED: `outline-none` kills the UA ring for
+          // both hosts, so the replacement has to cover both or the packaged
+          // panel's primary surface has none at all (WCAG 2.4.7).
+          'flex-1 resize-none rounded-lg border outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring',
           isElectronPanel
-            ? 'bg-background/60 disabled:opacity-50'
-            : 'border-border bg-card focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default',
+            ? 'bg-background/60 p-3 disabled:opacity-50'
+            : 'border-border bg-card p-4 disabled:cursor-default',
         )}
         // Inline (not a useMemo) — a fresh style object on an intrinsic element is
         // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
@@ -2451,12 +2458,12 @@ export const LiveEditor = function LiveEditor({
       )}
 
       {!isElectronPanel && (
-        <footer className="flex items-center justify-between text-xs text-muted-foreground">
+        <footer className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{footerCopy.text}</span>
           {footerCopy.link && (
             <Link
               href={footerCopy.link.href}
-              className="inline-flex min-h-11 items-center px-2 hover:text-foreground"
+              className="inline-flex min-h-11 items-center rounded-sm px-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
               {footerCopy.link.label}
             </Link>
