@@ -202,6 +202,37 @@ describe('useTodayKeeps — signed in, the account', () => {
     ).toEqual([{ persist: false }])
   })
 
+  it("drops yesterday's total when the local day rolls over under a mounted editor, instead of counting it as today", async () => {
+    // Arrange — an editor left open overnight: 4 keeps yesterday, 0 so far today.
+    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+    heatmapQueryFn.mockResolvedValue({
+      total: 4,
+      data: [],
+      streaks: { current: 1, longest: 1 },
+    })
+    dayKeyRef.current = '2099-01-01'
+    const { result, rerender } = renderTodayKeeps()
+    await waitFor(() => {
+      expect(result.current).toBe(4)
+    })
+    heatmapQueryFn.mockResolvedValue({
+      total: 0,
+      data: [],
+      streaks: { current: 0, longest: 1 },
+    })
+
+    // Act — local midnight passes; nothing remounts, refocuses or reconnects.
+    dayKeyRef.current = '2099-01-02'
+    await act(async () => {
+      rerender()
+    })
+
+    // Assert — today's number, never yesterday's.
+    await waitFor(() => {
+      expect(result.current).toBe(0)
+    })
+  })
+
   it('reports null — not 0 — when the fetch fails with nothing cached', async () => {
     // Arrange
     clerkUserRef.current = { isLoaded: true, isSignedIn: true }

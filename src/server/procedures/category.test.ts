@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { prisma } from '@/lib/prisma'
 
 import { listCategories } from './category'
+import { getHeatmap } from './completed'
 import { describeIfDb } from './describeIfDb'
 
 /**
@@ -82,6 +83,37 @@ describeIfDb(
       expect(second.categories.map((category) => category.id)).toEqual(
         first.categories.map((category) => category.id),
       )
+    })
+
+    it('creates the account with "General" already attached, so a first call to any other procedure leaves somewhere to write', async () => {
+      // Arrange — a clerkId the DB has never seen.
+      const clerkId = freshClerkId()
+
+      // Act — the account is born inside a procedure that never touches categories.
+      await call(getHeatmap, { days: 1 }, authContext(clerkId))
+
+      // Assert — read the rows directly; no list call has run to repair anything.
+      const user = await prisma.user.findUnique({ where: { clerkId } })
+      const seeded = await prisma.category.findMany({
+        where: { userId: user?.id },
+      })
+      expect(seeded.map((category) => category.name)).toEqual(['General'])
+    })
+
+    it('two first lists racing on one new account still leave exactly one "General"', async () => {
+      // Arrange — a clerkId the DB has never seen, hit twice at once.
+      const clerkId = freshClerkId()
+
+      // Act
+      const [first, second] = await Promise.all([
+        call(listCategories, undefined, authContext(clerkId)),
+        call(listCategories, undefined, authContext(clerkId)),
+      ])
+
+      // Assert — the unique violation is absorbed, not surfaced as a 500.
+      expect(first.categories).toHaveLength(1)
+      expect(second.categories).toHaveLength(1)
+      expect(first.categories[0]?.id).toBe(second.categories[0]?.id)
     })
 
     it('leaves an account that already has categories alone (no surprise "General")', async () => {

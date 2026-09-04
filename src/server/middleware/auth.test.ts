@@ -75,7 +75,7 @@ describe('authMiddleware user resolution', () => {
     expect(mockedCreate).not.toHaveBeenCalled()
   })
 
-  it('creates the user only when the Clerk webhook row is genuinely missing', async () => {
+  it('creates the user only when the Clerk webhook row is genuinely missing, with "General" attached so the editor is never locked on "No categories"', async () => {
     // Arrange
     mockedFindUnique.mockResolvedValue(null)
     mockedCreate.mockResolvedValue(CONCURRENT_USER)
@@ -87,10 +87,15 @@ describe('authMiddleware user resolution', () => {
       authCallOptions('user_concurrent'),
     )
 
-    // Assert
+    // Assert — the default category rides along in the one account-creating write.
     expect(user).toEqual(CONCURRENT_USER)
     expect(mockedCreate).toHaveBeenCalledWith({
-      data: { clerkId: 'user_concurrent' },
+      data: {
+        clerkId: 'user_concurrent',
+        categories: {
+          create: { name: 'General', color: 'blue', isDefault: true },
+        },
+      },
     })
   })
 

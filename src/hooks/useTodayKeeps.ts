@@ -1,7 +1,7 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useSyncExternalStore } from 'react'
 
 import {
@@ -10,9 +10,14 @@ import {
   parseLocalCompletions,
   subscribeToLocalCompletions,
 } from '@/lib/live-editor/localCompletionStore'
-import { orpc } from '@/lib/orpc/client-query'
+import {
+  getTodayHeatmapQueryKey,
+  todayHeatmapQueryOptions,
+} from '@/lib/query/todayHeatmapQuery'
+import { getViewerTimeZone } from '@/lib/utils/getViewerTimeZone'
 
 import { useMounted } from './use-mounted'
+import { useUpdateEffect } from './use-update-effect'
 import { useLocalDayKey } from './useLocalDayKey'
 
 /**
@@ -39,8 +44,9 @@ export function useTodayKeeps(): TodayKeepsCount {
   const isMounted = useMounted()
   const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
   const dayKey = useLocalDayKey()
+  const queryClient = useQueryClient()
   // Stable per session, so both the local bucketing and the query key hold still.
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const timezone = getViewerTimeZone()
 
   const rawLocalCompletions = useSyncExternalStore(
     subscribeToLocalCompletions,
@@ -60,14 +66,19 @@ export function useTodayKeeps(): TodayKeepsCount {
 
   // Signed in only; the key mirrors useCompletionWriter's optimistic bump.
   const { data: todayHeatmap, isError } = useQuery({
-    ...orpc.completed.heatmap.queryOptions({
-      input: { days: 1, timezone },
-    }),
+    ...todayHeatmapQueryOptions(),
     enabled: isSignedIn === true,
-    // Never persisted: a one-day total replayed from an older day would count
-    // yesterday as today, and would hide a failed fetch behind a stale number.
-    meta: { persist: false },
   })
+
+  // The one-day key carries no date, so an observer that stays mounted across
+  // local midnight (the always-on-top panel, a /write tab left open) would keep
+  // serving yesterday's total: nothing remounts, refocuses or reconnects, and
+  // `staleTime` only marks it stale. Reset rather than invalidate so the ember
+  // returns to its resolving word instead of showing yesterday's number while
+  // the refetch is in flight.
+  useUpdateEffect(() => {
+    void queryClient.resetQueries({ queryKey: getTodayHeatmapQueryKey() })
+  }, [dayKey, queryClient])
 
   // The server render and the first client render must agree, so nothing is
   // claimed before mount (the ember shows its resolving word instead).

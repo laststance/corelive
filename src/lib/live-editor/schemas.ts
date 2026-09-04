@@ -28,8 +28,6 @@ export const localCompletionsFileSchema = z.object({
   items: z.array(localCompletionSchema),
 })
 
-export type LocalCompletionsFile = z.infer<typeof localCompletionsFileSchema>
-
 /** The `corelive.local-note.v1` value: note text keyed by category id string. */
 export const localNoteMapSchema = z.record(z.string(), z.string())
 

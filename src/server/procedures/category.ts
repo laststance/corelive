@@ -58,7 +58,7 @@ async function readCategoriesWithCounts(
 }
 
 /**
- * Seeds the default "General" category for an account that has none — the auth middleware creates the user row lazily when the Clerk webhook was missed or has not arrived yet, and without this the editor opens locked on "No categories". Called by {@link listCategories} when its read comes back empty.
+ * Seeds the default "General" category for an account that has none. New accounts get it from the auth middleware's create, so this is the repair path for accounts made before that (and for a category deleted down to zero) — without it the editor opens locked on "No categories". Called by {@link listCategories} when its read comes back empty.
  * @param userId - Owner of the missing default.
  * @returns Nothing; a concurrent webhook insert of the same name is treated as success.
  * @example

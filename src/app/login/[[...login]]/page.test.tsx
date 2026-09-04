@@ -76,4 +76,29 @@ describe('login page post-sign-in destination', () => {
     // Assert
     expect(signInProps.current).toEqual({ forceRedirectUrl: '/home' })
   })
+
+  it('refuses a same-origin redirect_url whose path is itself protocol-relative, so /login cannot bounce anyone off-site', () => {
+    // Arrange: `/..//evil.example` parses against our own origin, but leaves the
+    // path `//evil.example` — which a browser follows as https://evil.example/.
+    visitLogin('?redirect_url=/..//evil.example')
+
+    // Act
+    render(<LoginPage />)
+
+    // Assert
+    expect(signInProps.current).toEqual({ forceRedirectUrl: '/home' })
+  })
+
+  it('refuses the same trick spelled with our own origin in front of it', () => {
+    // Arrange: same-origin absolute URL, so only the path guard can reject it.
+    visitLogin(
+      `?redirect_url=${encodeURIComponent(`${window.location.origin}//evil.example`)}`,
+    )
+
+    // Act
+    render(<LoginPage />)
+
+    // Assert
+    expect(signInProps.current).toEqual({ forceRedirectUrl: '/home' })
+  })
 })

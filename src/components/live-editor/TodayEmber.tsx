@@ -121,7 +121,9 @@ export function TodayEmber({ count, compact = false }: TodayEmberProps) {
         aria-hidden="true"
         data-lit={copy.lit ? 'true' : 'false'}
         className={cn(
-          'relative shrink-0 overflow-hidden',
+          // The unlit token sits ~1.05:1 against the page in every theme, so
+          // without an edge there is no cell to light — just empty space.
+          'relative shrink-0 overflow-hidden border border-border',
           compact ? 'size-4 rounded-sm' : 'size-10 rounded-lg',
         )}
         style={{ backgroundColor: UNLIT_CELL_TOKEN }}

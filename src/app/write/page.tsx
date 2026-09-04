@@ -27,6 +27,9 @@ const WritePage = function WritePage() {
 
   return (
     <main className="min-h-dvh w-full bg-background text-foreground">
+      {/* The editor's own frame is a wordmark and a textarea, so the page's
+          only heading is this one — screen readers need something to land on. */}
+      <h1 className="sr-only">Write</h1>
       <LiveEditor categories={categories} />
     </main>
   )

@@ -37,7 +37,9 @@ export function getLocalNote(categoryId: number): string {
  * the web host's `note.set`, mirroring `electron/LiveEditorNoteStore.ts`.
  * @param categoryId - Category id whose note changes.
  * @param text - The full note text to persist.
- * @returns Nothing; same-tab subscribers and other tabs are notified by the slot.
+ * @returns Nothing. Last write wins: nothing subscribes to this key, so two
+ * `/write` tabs open on the same category overwrite each other's text, exactly
+ * as a single browser draft does. The spread keeps sibling categories intact.
  * @example
  * setLocalNote(0, '- [x] buy milk')
  */

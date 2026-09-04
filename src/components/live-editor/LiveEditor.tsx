@@ -21,6 +21,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import {
   type LiveEditorCompletionId,
@@ -576,6 +577,14 @@ export const LiveEditor = function LiveEditor({
   >(null)
   const [isLiveEditorConfigReady, setIsLiveEditorConfigReady] =
     useState<boolean>(false)
+  // The probe writes (and removes) a key, so it runs in an effect rather than in
+  // the render body — a side effect there is what React Compiler memoization is
+  // free to drop or repeat. 'ok' until it answers, matching the server render.
+  const [storageAvailability, setStorageAvailability] =
+    useState<LocalStorageAvailability>('ok')
+  useInitialEffect(() => {
+    setStorageAvailability(getLocalStorageAvailability())
+  })
   const [spacesTrackingEnabled, setSpacesTrackingEnabled] =
     useState<boolean>(false)
   const [isUpdatingSpacesTracking, setIsUpdatingSpacesTracking] =
@@ -607,6 +616,17 @@ export const LiveEditor = function LiveEditor({
   // line clears (standard linger); the persisted setting still rules signed in.
   const effectiveClearOnComplete = isSignedIn ? clearOnComplete : true
 
+  // Shared device: the remembered id belongs to whoever was signed in when it
+  // was stored, and category ids are globally unique, so on the web it can point
+  // at the previous account's category — whose note this editor would then show
+  // and, on the next debounced flush, overwrite. `categories` is the CURRENT
+  // account's list, so the pointer is only honoured once it appears there.
+  // The Electron panel follows the Floating window's selection instead and gets
+  // its list from another window, so it keeps the pointer as-is.
+  const isRememberedCategoryConfirmed =
+    isElectronPanel ||
+    categories.some((category) => category.id === floatingCategoryId)
+
   // Signed out, the implicit local category is set directly: useSelectedCategory
   // rejects the `0` sentinel by design (server ids are positive).
   const activeCategoryId =
@@ -615,7 +635,9 @@ export const LiveEditor = function LiveEditor({
       : isSignedOutWeb
         ? LOCAL_CATEGORY_ID
         : syncEnabled
-          ? floatingCategoryId
+          ? isRememberedCategoryConfirmed
+            ? floatingCategoryId
+            : null
           : localCategoryId
   const checkedRowsRef = useRef<TrackedRowsByCategory<CheckedRowMemory>>(
     new Map(),
@@ -2181,9 +2203,6 @@ export const LiveEditor = function LiveEditor({
     : isCoarsePointer
       ? "Write one thing. Tap Keep when it's done."
       : `Write one thing. ${modifierLabel} Enter keeps it.`
-  const storageAvailability: LocalStorageAvailability = isMounted
-    ? getLocalStorageAvailability()
-    : 'ok'
   const footerCopy = resolveFooterCopy(
     isAuthLoaded,
     isSignedIn,
@@ -2291,7 +2310,10 @@ export const LiveEditor = function LiveEditor({
               aria-label="Active category"
               className={cn(
                 'text-xs',
-                isElectronPanel ? 'h-7 w-32' : 'h-11 w-44',
+                // 44px touch target on the web (/write is the phone surface).
+                // `min-h-11`, not `h-11`: SelectTrigger's own
+                // `data-[size=default]:h-9` outranks a plain height.
+                isElectronPanel ? 'h-7 w-32' : 'min-h-11 w-44',
               )}
             >
               <SelectValue placeholder="No categories" />

@@ -51,6 +51,8 @@ vi.mock('@tanstack/react-query', () => ({
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    // useTodayKeeps resets today's one-day entry when the local day rolls over.
+    resetQueries: vi.fn().mockResolvedValue(undefined),
     setQueryData: vi.fn(),
   }),
   // The Today Ember's signed-in source (see todayHeatmapQueryRef).
@@ -267,9 +269,9 @@ beforeEach(() => {
 
 /**
  * Makes happy-dom report a touch-first device for the "Keep line" button specs.
- * @returns The spy, so the spec can restore the real matchMedia.
+ * @returns The spy; the describe's afterEach restores the real matchMedia.
  * @example
- * const matchMedia = mockCoarsePointer(); …; matchMedia.mockRestore()
+ * mockCoarsePointer()
  */
 function mockCoarsePointer() {
   return vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
@@ -303,6 +305,11 @@ describe('LiveEditor web host (/write)', () => {
       isSignedIn: true,
       user: { id: 'user_1' },
     }
+    // Both of these used to be restored by a trailing statement inside the spec
+    // that set them, so one failing assertion leaked a coarse pointer or a
+    // resolved ember into every spec after it.
+    vi.restoreAllMocks()
+    todayHeatmapQueryRef.current = { data: undefined, isError: false }
   })
 
   it('lets a signed-out stranger write right away — focus in the field, no notice, no spinner', async () => {
@@ -327,6 +334,28 @@ describe('LiveEditor web host (/write)', () => {
     await waitFor(() => {
       expect(noteField).toHaveFocus()
     })
+  })
+
+  it('paints the real editor as its own loading state before Clerk answers — no spinner, no empty-state copy (DR5)', async () => {
+    // Arrange — first paint: Clerk has not resolved the session yet.
+    clerkUserRef.current = { isLoaded: false, isSignedIn: false, user: null }
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — the stand-in IS the editor: same placeholder, disabled, silent.
+    expect(noteField).toBeDisabled()
+    expect(noteField).toHaveAttribute(
+      'placeholder',
+      'Write one thing. Ctrl Enter keeps it.',
+    )
+    expect(screen.queryByText('Loading LiveEditor…')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Pick a category to start writing'),
+    ).not.toBeInTheDocument()
+    // Nothing is claimed about the count before the source can answer.
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
   })
 
   it('shows the web frame — wordmark, shortcut hint, footer — and none of the panel chrome', async () => {
@@ -486,9 +515,47 @@ describe('LiveEditor web host (/write)', () => {
     )
   })
 
+  it("never opens the previous account's note when a shared device still remembers their category", async () => {
+    // Arrange — user A signed out leaving their category id and note on disk;
+    // user B signs in and their account owns category 1, not 5.
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '5': "user A's private note" }),
+    )
+    selectedCategoryRef.current = 5
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_B' },
+    }
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — B is asked to pick, and A's text never reaches the field.
+    await waitFor(() => {
+      expect(noteField).toHaveAttribute(
+        'placeholder',
+        'Pick a category to start writing',
+      )
+    })
+    expect(noteField).toBeDisabled()
+    expect(noteField).toHaveValue('')
+
+    // Assert — and B's typing cannot flush into A's slot.
+    fireEvent.change(noteField, { target: { value: "user B's note" } })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '5': "user A's private note" })
+  })
+
   it('on touch, a Keep line button under the editor keeps the caret line through the same path', async () => {
     // Arrange
-    const matchMedia = mockCoarsePointer()
+    mockCoarsePointer()
     renderEditor({ liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
     await waitForLiveEditorReady(noteField)
@@ -512,7 +579,6 @@ describe('LiveEditor web host (/write)', () => {
         localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY),
       ).map((item) => item.title),
     ).toEqual(['ship it'])
-    matchMedia.mockRestore()
   })
 
   it('hides the Keep line button for mouse and trackpad users', async () => {
@@ -562,7 +628,6 @@ describe('LiveEditor web host (/write)', () => {
       'Nothing kept yet today',
     )
     expect(screen.queryByText('Your day starts here.')).not.toBeInTheDocument()
-    todayHeatmapQueryRef.current = { data: undefined, isError: false }
   })
 
   it('lights the Today Ember the moment a line is kept and darkens it again on Undo', async () => {
