@@ -198,13 +198,12 @@ export const AppSidebar = function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  {/* LiveEditor is the only surface that creates tasks, so the
-                       web needs a way in — Home is a read-only dashboard. */}
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === '/live-editor'}
-                  >
-                    <Link href="/live-editor">
+                  {/* LiveEditor is the only surface that creates keeps, so the
+                       web needs a way in — Home is a read-only dashboard. /write
+                       is the public web host; /live-editor stays the Electron
+                       panel's protected route. */}
+                  <SidebarMenuButton asChild isActive={pathname === '/write'}>
+                    <Link href="/write">
                       <PenLine className="h-4 w-4" />
                       <span>LiveEditor</span>
                     </Link>

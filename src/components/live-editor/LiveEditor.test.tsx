@@ -5,8 +5,13 @@ import type { ReactElement } from 'react'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
 import type { ToastT } from 'sonner'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  LOCAL_COMPLETIONS_STORAGE_KEY,
+  LOCAL_NOTE_STORAGE_KEY,
+} from '@/lib/live-editor/constants'
+import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
 import userSettingsReducer, {
   initialState as userSettingsInitialState,
 } from '@/lib/redux/slices/settingsSlice'
@@ -22,11 +27,19 @@ const {
   completedDeleteMutationOptions,
   completedMutateAsync,
   deleteCompletedMutateAsync,
+  todayHeatmapQueryRef,
 } = vi.hoisted(() => ({
   completedCreateMutationOptions: {},
   completedDeleteMutationOptions: {},
   completedMutateAsync: vi.fn(),
   deleteCompletedMutateAsync: vi.fn(),
+  // What the Today Ember's signed-in source sees; unresolved unless a spec sets it.
+  todayHeatmapQueryRef: {
+    current: { data: undefined, isError: false } as {
+      data: { total: number } | undefined
+      isError: boolean
+    },
+  },
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -38,7 +51,12 @@ vi.mock('@tanstack/react-query', () => ({
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    // useTodayKeeps resets today's one-day entry when the local day rolls over.
+    resetQueries: vi.fn().mockResolvedValue(undefined),
+    setQueryData: vi.fn(),
   }),
+  // The Today Ember's signed-in source (see todayHeatmapQueryRef).
+  useQuery: () => todayHeatmapQueryRef.current,
 }))
 
 vi.mock('sonner', () => ({
@@ -53,19 +71,40 @@ vi.mock('@/hooks/use-mounted', () => ({
   useMounted: () => true,
 }))
 
-vi.mock('@/hooks/useClerkQueryReady', () => ({
-  useClerkQueryReady: () => true,
+// Clerk session, controllable per spec. Signed-in by default so every Electron
+// spec stays on the account path; the web-host suite flips it to signed out.
+type ClerkUserState = {
+  isLoaded: boolean
+  isSignedIn: boolean
+  user: { id: string } | null
+}
+
+const { clerkUserRef } = vi.hoisted(() => ({
+  clerkUserRef: {
+    current: {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_1' },
+    } as ClerkUserState,
+  },
+}))
+
+vi.mock('@clerk/nextjs', () => ({
+  useUser: () => clerkUserRef.current,
 }))
 
 // Controllable active floating category so a spec can flip the active category
 // mid-test (it drives activeCategoryId while sync is on). Defaults to 1 so every
 // existing spec keeps the single "General" category active.
-const { selectedCategoryRef } = vi.hoisted(() => ({
+const { selectedCategoryRef, setSelectedCategory } = vi.hoisted(() => ({
   selectedCategoryRef: { current: 1 as number },
+  setSelectedCategory: vi.fn(),
 }))
 
 vi.mock('@/hooks/useSelectedCategory', () => ({
-  useSelectedCategory: () => [selectedCategoryRef.current],
+  useSelectedCategory: () => [selectedCategoryRef.current, setSelectedCategory],
+  // The web-only default pick has its own spec; here the selection is explicit.
+  useAutoSelectDefaultCategory: vi.fn(),
 }))
 
 vi.mock('@/lib/orpc/client-query', () => ({
@@ -79,6 +118,9 @@ vi.mock('@/lib/orpc/client-query', () => ({
       },
       heatmap: {
         key: vi.fn(() => ['completed', 'heatmap']),
+        queryOptions: vi.fn(() => ({
+          queryKey: ['completed', 'heatmap', { input: { days: 1 } }],
+        })),
       },
     },
   },
@@ -87,6 +129,21 @@ vi.mock('@/lib/orpc/client-query', () => ({
 vi.mock('@/lib/todo-sync-channel', () => ({
   broadcastTodoSync: vi.fn(),
 }))
+
+// The storage probe is answered once per module; expose it as a per-spec switch
+// so the footer's "session only" wording can be exercised without a private
+// window. The stores themselves keep using the real slot.
+const { storageAvailabilityRef } = vi.hoisted(() => ({
+  storageAvailabilityRef: { current: 'ok' as 'ok' | 'unavailable' },
+}))
+
+vi.mock('@/lib/live-editor/localStorageSlot', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    getLocalStorageAvailability: () => storageAvailabilityRef.current,
+  }
+})
 
 const { liveEditorEnvironmentRef } = vi.hoisted(() => ({
   liveEditorEnvironmentRef: { current: true },
@@ -192,6 +249,7 @@ function renderEditor(settingOverrides: Partial<UserSettingsState> = {}) {
 function renderEditorWithCategories(
   editorCategories: CategoryWithCount[],
   settingOverrides: Partial<UserSettingsState> = {},
+  isCategoryListPending = false,
 ) {
   const store = configureStore({
     reducer: { settings: userSettingsReducer },
@@ -201,7 +259,10 @@ function renderEditorWithCategories(
   })
   return render(
     <Provider store={store}>
-      <LiveEditor categories={editorCategories} />
+      <LiveEditor
+        categories={editorCategories}
+        isCategoryListPending={isCategoryListPending}
+      />
     </Provider>,
   )
 }
@@ -210,19 +271,455 @@ beforeEach(() => {
   liveEditorEnvironmentRef.current = true
 })
 
-describe('LiveEditor environment fallback', () => {
-  it('explains desktop availability in a browser without the preload API', () => {
-    // Arrange
+/**
+ * Makes happy-dom report a touch-first device for the "Keep line" button specs.
+ * @returns The spy; the describe's afterEach restores the real matchMedia.
+ * @example
+ * mockCoarsePointer()
+ */
+function mockCoarsePointer() {
+  return vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: () => true,
+  }))
+}
+
+describe('LiveEditor web host (/write)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    // A browser tab: no preload bridge at all, a signed-out stranger.
     liveEditorEnvironmentRef.current = false
+    delete window.liveEditorAPI
+    delete window.brainDumpAPI
+    clerkUserRef.current = { isLoaded: true, isSignedIn: false, user: null }
+    storageAvailabilityRef.current = 'ok'
+    selectedCategoryRef.current = 1
+  })
+
+  afterEach(() => {
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_1' },
+    }
+    // Both of these used to be restored by a trailing statement inside the spec
+    // that set them, so one failing assertion leaked a coarse pointer or a
+    // resolved ember into every spec after it.
+    vi.restoreAllMocks()
+    todayHeatmapQueryRef.current = { data: undefined, isError: false }
+  })
+
+  it('lets a signed-out stranger write right away — focus in the field, no notice, no spinner', async () => {
+    // Arrange / Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox', {
+      name: 'Write one thing',
+    })
+    await waitForLiveEditorReady(noteField)
+
+    // Assert — happy-dom reports a Linux UA, so the hint reads Ctrl, not ⌘.
+    expect(
+      screen.queryByText(
+        'LiveEditor is available in the CoreLive desktop app.',
+      ),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading LiveEditor…')).not.toBeInTheDocument()
+    expect(noteField).toHaveAttribute(
+      'placeholder',
+      'Write one thing. Ctrl Enter keeps it.',
+    )
+    await waitFor(() => {
+      expect(noteField).toHaveFocus()
+    })
+  })
+
+  it('paints the real editor as its own loading state before Clerk answers — no spinner, no empty-state copy (DR5)', async () => {
+    // Arrange — first paint: Clerk has not resolved the session yet.
+    clerkUserRef.current = { isLoaded: false, isSignedIn: false, user: null }
 
     // Act
     renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — the stand-in IS the editor: same placeholder, disabled, silent.
+    expect(noteField).toBeDisabled()
+    expect(noteField).toHaveAttribute(
+      'placeholder',
+      'Write one thing. Ctrl Enter keeps it.',
+    )
+    expect(screen.queryByText('Loading LiveEditor…')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Pick a category to start writing'),
+    ).not.toBeInTheDocument()
+    // Nothing is claimed about the count before the source can answer.
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('says the categories are loading instead of inviting a keep into a dead field', async () => {
+    // Arrange — /write passes `data?.categories ?? []`, so the list reads empty
+    // for the whole `category.list` round trip after Clerk resolves the session.
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_A' },
+    }
+    selectedCategoryRef.current = 7
+
+    // Act
+    renderEditorWithCategories([], {}, true)
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — neither "pick from this empty list" nor "⌘ Enter keeps it" over a
+    // textarea that will not accept a keystroke.
+    await waitFor(() => {
+      expect(noteField).toHaveAttribute(
+        'placeholder',
+        'Loading your categories…',
+      )
+    })
+    expect(noteField).toBeDisabled()
+  })
+
+  it('does not tell a signed-in visitor with no categories at all to pick one', async () => {
+    // Arrange — the fetch landed and the account genuinely has nothing; the
+    // Select says "No categories" on its own.
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_A' },
+    }
+    selectedCategoryRef.current = 7
+
+    // Act
+    renderEditorWithCategories([], {}, false)
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveAttribute(
+        'placeholder',
+        'Write one thing. Ctrl Enter keeps it.',
+      )
+    })
+  })
+
+  it('shows the web frame — wordmark, shortcut hint, footer — and none of the panel chrome', async () => {
+    // Arrange / Act
+    renderEditor()
+    await waitForLiveEditorReady(
+      await screen.findByRole<HTMLTextAreaElement>('textbox'),
+    )
+
+    // Assert
+    expect(screen.getByText('CoreLive')).toBeInTheDocument()
+    expect(screen.getByText('Ctrl Enter')).toBeInTheDocument()
+    expect(screen.getByText('Kept on this device.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
+      'href',
+      '/login?redirect_url=/write',
+    )
+    expect(screen.queryByText('Follow Spaces')).not.toBeInTheDocument()
+    expect(screen.queryByText('Follow FloatingNav')).not.toBeInTheDocument()
+    expect(screen.queryByText('Opacity')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Close LiveEditor' }),
+    ).not.toBeInTheDocument()
+    // One implicit category while signed out — no picker to get lost in.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('Cmd+Enter keeps the line on this device — no server call — and clears it even with the setting off', async () => {
+    // Arrange — clear-on-complete OFF in settings; signed out forces it on.
+    renderEditor({
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 0,
+    })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, 'ship the thing\nnext')
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('next')
+    })
+    expect(completedMutateAsync).not.toHaveBeenCalled()
+    expect(
+      parseLocalCompletions(
+        localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY),
+      ).map((item) => item.title),
+    ).toEqual(['ship the thing'])
+    expect(toast.success).toHaveBeenCalledWith(
+      'Completed: ship the thing',
+      expect.anything(),
+    )
+  })
+
+  it('Undo brings the line back and forgets the device-local keep', async () => {
+    // Arrange — one kept line, already cleared.
+    renderEditor({ liveEditorClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    fireCompleteCommandOnFirstLine(noteField, 'ship the thing\nnext')
+    await waitFor(() => {
+      expect(noteField).toHaveValue('next')
+    })
+
+    // Act — Undo on the toast (see the instant-clear suite for the narrowing).
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('ship the thing\nnext')
+    })
+    await waitFor(() => {
+      expect(
+        parseLocalCompletions(
+          localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY),
+        ),
+      ).toEqual([])
+    })
+    expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('remembers the half-written note on this device', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+
+    // Act
+    await user.type(noteField, 'half a thought')
+
+    // Assert — the debounced write lands under the signed-out "0" key.
+    await waitFor(() => {
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'half a thought' })
+    })
+  })
+
+  it('says so when the browser refuses storage: keeps stay for this session only', async () => {
+    // Arrange
+    storageAvailabilityRef.current = 'unavailable'
+
+    // Act
+    renderEditor()
+    await waitForLiveEditorReady(
+      await screen.findByRole<HTMLTextAreaElement>('textbox'),
+    )
+
+    // Assert — still a Sign in link, never framed as the reason to sign in.
+    expect(screen.getByText('Kept for this session only.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('signed in on the web, keeps go to the account, the picker is the only category control, and the footer points home', async () => {
+    // Arrange
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_1' },
+    }
+    completedMutateAsync.mockResolvedValue({ id: 1 })
+    renderEditor({ liveEditorClearOnComplete: false })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, 'ship it')
+
+    // Assert
+    await waitFor(() => {
+      expect(completedMutateAsync).toHaveBeenCalledWith({
+        categoryId: 1,
+        title: 'ship it',
+      })
+    })
+    expect(localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY)).toBeNull()
+    // The signed-in setting (keep the [x]) is respected on the web.
+    expect(noteField).toHaveValue('- [x] ship it')
+    expect(
+      screen.getByRole('combobox', { name: 'Active category' }),
+    ).toBeEnabled()
+    expect(screen.queryByText('Follow FloatingNav')).not.toBeInTheDocument()
+    expect(screen.getByText('Keeps go to your account.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Your year →' })).toHaveAttribute(
+      'href',
+      '/home',
+    )
+    expect(screen.getByRole('link', { name: 'CoreLive' })).toHaveAttribute(
+      'href',
+      '/home',
+    )
+  })
+
+  it("never opens the previous account's note when a shared device still remembers their category", async () => {
+    // Arrange — user A signed out leaving their category id and note on disk;
+    // user B signs in and their account owns category 1, not 5.
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '5': "user A's private note" }),
+    )
+    selectedCategoryRef.current = 5
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_B' },
+    }
+
+    // Act
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — B is asked to pick, and A's text never reaches the field.
+    await waitFor(() => {
+      expect(noteField).toHaveAttribute(
+        'placeholder',
+        'Pick a category to start writing',
+      )
+    })
+    expect(noteField).toBeDisabled()
+    expect(noteField).toHaveValue('')
+
+    // Assert — and B's typing cannot flush into A's slot.
+    fireEvent.change(noteField, { target: { value: "user B's note" } })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '5': "user A's private note" })
+  })
+
+  it('on touch, a Keep line button under the editor keeps the caret line through the same path', async () => {
+    // Arrange
+    mockCoarsePointer()
+    renderEditor({ liveEditorClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    expect(noteField).toHaveAttribute(
+      'placeholder',
+      "Write one thing. Tap Keep when it's done.",
+    )
+    fireEvent.change(noteField, { target: { value: 'ship it\nnext' } })
+    noteField.selectionStart = 3
+    noteField.selectionEnd = 3
+
+    // Act
+    fireEvent.click(screen.getByRole('button', { name: 'Keep line' }))
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveValue('next')
+    })
+    expect(
+      parseLocalCompletions(
+        localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY),
+      ).map((item) => item.title),
+    ).toEqual(['ship it'])
+  })
+
+  it('hides the Keep line button for mouse and trackpad users', async () => {
+    // Arrange / Act
+    renderEditor()
+    await waitForLiveEditorReady(
+      await screen.findByRole<HTMLTextAreaElement>('textbox'),
+    )
 
     // Assert
     expect(
-      screen.getByText('LiveEditor is available in the CoreLive desktop app.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Loading LiveEditor…')).not.toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Keep line' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the panel chrome and skips the web frame inside the Electron panel', async () => {
+    // Arrange
+    liveEditorEnvironmentRef.current = true
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_1' },
+    }
+    installLiveEditorAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    // The account has nothing kept today.
+    todayHeatmapQueryRef.current = { data: { total: 0 }, isError: false }
+
+    // Act
+    renderEditor()
+    await waitForLiveEditorReady(
+      await screen.findByRole<HTMLTextAreaElement>('textbox'),
+    )
+
+    // Assert
+    expect(screen.getByText('Follow Spaces')).toBeInTheDocument()
+    expect(screen.getByText('Follow FloatingNav')).toBeInTheDocument()
+    expect(screen.queryByText('CoreLive')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Keeps go to your account.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Sign in' }),
+    ).not.toBeInTheDocument()
+    // The panel still gets its ember, in the compact cut (headline only).
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Nothing kept yet today',
+    )
+    expect(screen.queryByText('Your day starts here.')).not.toBeInTheDocument()
+  })
+
+  it('lights the Today Ember the moment a line is kept and darkens it again on Undo', async () => {
+    // Arrange — a stranger with nothing kept yet today.
+    renderEditor({ liveEditorClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    const ember = screen.getByRole('status')
+    expect(ember).toHaveTextContent('Nothing kept yet today')
+    expect(ember).toHaveTextContent('Your day starts here.')
+
+    // Act — keep one line.
+    fireCompleteCommandOnFirstLine(noteField, 'ship the thing\nnext')
+
+    // Assert — the count moves in the same viewport, no navigation.
+    await waitFor(() => {
+      expect(ember).toHaveTextContent('1 thing kept today')
+    })
+    expect(ember.querySelector('[data-lit]')).toHaveAttribute(
+      'data-lit',
+      'true',
+    )
+
+    // Act — Undo on the toast.
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
+      ?.action as { onClick: () => void } | undefined
+    await act(async () => {
+      undoAction?.onClick()
+    })
+
+    // Assert — back to dark, instantly.
+    await waitFor(() => {
+      expect(ember).toHaveTextContent('Nothing kept yet today')
+    })
+    expect(ember.querySelector('[data-lit]')).toHaveAttribute(
+      'data-lit',
+      'false',
+    )
   })
 })
 
@@ -376,7 +873,7 @@ describe('LiveEditor text styling settings', () => {
     expect(noteField.style.color).toBe('var(--primary)')
   })
 
-  it('falls back to the default look (mono / 14px) when no setting is saved', async () => {
+  it('falls back to the default look (sans / 16px) when no setting is saved', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -385,13 +882,14 @@ describe('LiveEditor text styling settings', () => {
       setVisibleOnAllWorkspaces,
     })
 
-    // Act — a fresh install (slice defaults) preserves the prior textarea look.
+    // Act — a fresh install reads the slice defaults.
     renderEditor()
     const noteField = await screen.findByRole('textbox')
 
-    // Assert — monospace at 14px, matching the removed `font-mono text-sm`.
-    expect(noteField.style.fontFamily).toBe('var(--font-mono)')
-    expect(noteField.style.fontSize).toBe('14px')
+    // Assert — Inter Tight at 16px: the DESIGN.md Body tier, and the size iOS
+    // Safari needs to leave a focused input alone instead of zooming into it.
+    expect(noteField.style.fontFamily).toBe('var(--font-sans)')
+    expect(noteField.style.fontSize).toBe('16px')
   })
 })
 

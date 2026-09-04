@@ -1,11 +1,14 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useUser } from '@clerk/nextjs'
+import { useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import * as React from 'react'
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -16,10 +19,19 @@ import {
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { useCoarsePointer } from '@/hooks/use-coarse-pointer'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
-import { useSelectedCategory } from '@/hooks/useSelectedCategory'
+import {
+  type LiveEditorCompletionId,
+  useCompletionWriter,
+} from '@/hooks/useCompletionWriter'
+import {
+  useAutoSelectDefaultCategory,
+  useSelectedCategory,
+} from '@/hooks/useSelectedCategory'
+import { useTodayKeeps } from '@/hooks/useTodayKeeps'
 import {
   LIVE_EDITOR_FONT_FAMILY_CSS,
   LIVE_EDITOR_LINE_HEIGHT,
@@ -28,6 +40,15 @@ import {
   LIVE_EDITOR_OPACITY_MIN,
   LIVE_EDITOR_OPACITY_STEP,
 } from '@/lib/constants/live-editor'
+import { LOCAL_CATEGORY_ID } from '@/lib/live-editor/constants'
+import {
+  getLiveEditorHost,
+  isElectronLiveEditorPanel,
+} from '@/lib/live-editor/liveEditorHost'
+import {
+  type LocalStorageAvailability,
+  getLocalStorageAvailability,
+} from '@/lib/live-editor/localStorageSlot'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
 import { useAppSelector } from '@/lib/redux/hooks'
@@ -40,14 +61,11 @@ import {
   selectLiveEditorToastDurationMs,
 } from '@/lib/redux/slices/settingsSlice'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
+import { cn } from '@/lib/utils'
+import { isApplePlatform } from '@/lib/utils/isApplePlatform'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
-import type { Completed } from '@/server/schemas/completed'
 
-import {
-  getLiveEditorAPI,
-  getLiveEditorCategoryChangedChannel,
-  isLiveEditorEnvironment,
-} from '../../../electron/utils/electron-client'
+import { getLiveEditorCategoryChangedChannel } from '../../../electron/utils/electron-client'
 
 import {
   type LiveEditorCompletedTitle,
@@ -62,6 +80,7 @@ import {
   replaceLineAtIndex,
   setCheckboxStateAtLine,
 } from './liveEditorUtils'
+import { TodayEmber } from './TodayEmber'
 
 const NOTE_DEBOUNCE_MS = 400
 
@@ -81,13 +100,63 @@ const categoryChangedPayloadSchema = z.object({
   categoryId: z.number().int(),
 })
 
+/** Stable empty list so the web-only default-category effect is a no-op in the Electron panel. */
+const NO_CATEGORIES: CategoryWithCount[] = []
+
+/** Accessible name of the note field; the placeholder changes with platform and pointer, this does not. */
+const NOTE_FIELD_LABEL = 'Write one thing'
+
+/** Web-frame footer: what happens to a keep, plus the one way onward. */
+type FooterCopy = Readonly<{
+  text: string
+  link: Readonly<{ href: string; label: string }> | null
+}>
+
+/**
+ * Picks the web frame's footer line for the current auth / storage state. The
+ * Electron panel renders no footer, so this is web-only copy (design review DR3/DR4).
+ * @param isAuthLoaded - Whether Clerk has resolved the session yet.
+ * @param isSignedIn - Whether a signed-in user is present (undefined until loaded).
+ * @param storageAvailability - The localStorage probe result for signed-out keeps.
+ * @returns
+ * - Before auth resolves: "Kept on this device." with no link (the stand-in frame)
+ * - Signed in: "Keeps go to your account." + "Your year →" to /home
+ * - Signed out, storage ok: "Kept on this device." + "Sign in" (returns to /write)
+ * - Signed out, storage unavailable: "Kept for this session only." + "Sign in"
+ * @example
+ * resolveFooterCopy(true, false, 'ok') // => { text: 'Kept on this device.', link: { href: '/login?redirect_url=/write', label: 'Sign in' } }
+ */
+function resolveFooterCopy(
+  isAuthLoaded: boolean,
+  isSignedIn: boolean | undefined,
+  storageAvailability: LocalStorageAvailability,
+): FooterCopy {
+  if (!isAuthLoaded) return { text: 'Kept on this device.', link: null }
+  if (isSignedIn) {
+    // "Keeps", not a blanket "kept": the finished lines reach the account, but
+    // the half-written draft in the textarea lives in this browser's storage
+    // either way. The old wording read as covering the textarea too.
+    return {
+      text: 'Keeps go to your account.',
+      link: { href: '/home', label: 'Your year →' },
+    }
+  }
+  return {
+    text:
+      storageAvailability === 'unavailable'
+        ? 'Kept for this session only.'
+        : 'Kept on this device.',
+    link: { href: '/login?redirect_url=/write', label: 'Sign in' },
+  }
+}
+
 type CheckedRowMemory = {
   /** Category owning the checked row across category switches. */
   categoryId: Category['id']
   /** Current line index, re-indexed whenever edits shift unchanged rows. */
   lineIndex: LiveEditorLineIndex
   /** Server-side Completed.id used by undo to call `completed.delete`. */
-  completedId: Completed['id']
+  completedId: LiveEditorCompletionId
   /** Verbatim title used to detect double-toggles on the same line. */
   title: LiveEditorCompletedTitle
 }
@@ -123,7 +192,7 @@ type ClearedLineMemory = {
   /** Stable map key — a monotonic counter, never reused. */
   token: number
   /** Created row id; null until the background create resolves. */
-  completedId: Completed['id'] | null
+  completedId: LiveEditorCompletionId | null
   /** Normalised title persisted for this completion. */
   title: LiveEditorCompletedTitle
   /** Category the line belonged to — guards cross-category re-insertion. */
@@ -182,7 +251,7 @@ type PendingCreate = {
   lineIndex: LiveEditorLineIndex
   /** Exact checked row used to reject unsafe rollback targets. */
   completedLineText: string
-  promise: Promise<Completed['id'] | null>
+  promise: Promise<LiveEditorCompletionId | null>
   /** Keeps duplicate completion blocked until a failed rollback is retried successfully. */
   restorePending: boolean
   title: LiveEditorCompletedTitle
@@ -450,36 +519,64 @@ function showCompletionToast({
 }
 
 /**
- * LiveEditor — frameless transparent panel that pairs a category picker
- * with a freeform textarea using markdown checkboxes.
+ * LiveEditor — the one surface that creates keeps. It renders inside the
+ * frameless Electron panel AND on the public `/write` page: `getLiveEditorHost()`
+ * hides the persistence difference (preload bridge vs. localStorage),
+ * `isElectronLiveEditorPanel()` gates the Cocoa-only chrome, and
+ * `useCompletionWriter()` routes each keep to the account (signed in) or the
+ * device (signed out).
  *
  * UX contract:
- *  - Per-category text is persisted via the Electron preload (`note.set`)
- *    with a 400 ms debounce — the panel is offline-tolerant on purpose.
- *  - Toggling `- [ ]` → `- [x]` instantly creates a `Completed` row and shows
- *    a 5 s sonner toast with **Undo**. Undo deletes the row and flips the
- *    checkbox back, mirroring the FloatingNav undo flow.
- *  - When sync mode is on, the editor follows the FloatingNav category via
- *    `useSelectedCategory()` (BroadcastChannel-backed). When off, the user
- *    picks the category locally and we persist it via `category.setLast`.
+ *  - Per-category text is persisted through the host's `note.set` with a
+ *    400 ms debounce — offline-tolerant on purpose (device-local on the web).
+ *  - Cmd/Ctrl+Enter (or the touch-only "Keep line" button) instantly records a
+ *    keep and shows an Undo toast; Undo removes it and flips the line back.
+ *  - The Electron panel can follow the FloatingNav category or pick one locally
+ *    (`category.setLast`); the web follows the shared selection the sidebar
+ *    uses, and a signed-out visitor writes into the implicit
+ *    `LOCAL_CATEGORY_ID` category with clear-on-complete forced on.
  *
  * Why optimistic UI: the checkbox flip must feel instant — we mutate the
- * textarea state first, then fire the IPC + oRPC writes. Failure rollback
+ * textarea state first, then fire the persistence writes. Failure rollback
  * is handled by the toast cleanup path.
  */
 export const LiveEditor = function LiveEditor({
   categories,
+  isCategoryListPending = false,
 }: {
   categories: CategoryWithCount[]
+  /**
+   * `category.list` is still in flight for a signed-in visitor. Without it an
+   * empty `categories` is ambiguous — mid-fetch and "this account has none"
+   * look identical from here, and the field is disabled either way.
+   */
+  isCategoryListPending?: boolean
 }) {
   const queryClient = useQueryClient()
   const isMounted = useMounted()
-  const isClerkReady = useClerkQueryReady()
+  // Auth gate follows the Floating pattern (`isLoaded` / `isSignedIn`), never
+  // useClerkQueryReady — that is false while signed out, a first-class state here.
+  const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
+  // Read after mount so the server render (no preload) and the first client
+  // render agree; the Electron panel is only ever mounted client-side.
+  const isElectronPanel = isMounted && isElectronLiveEditorPanel()
+  const isSignedOutWeb = !isElectronPanel && isAuthLoaded && !isSignedIn
+  const isCoarsePointer = useCoarsePointer()
+  const completionWriter = useCompletionWriter()
+  // Today's count for the ember above the editor (device store or account total).
+  const todayKeeps = useTodayKeeps()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [opacity, setOpacity] = useState<number>(LIVE_EDITOR_OPACITY_MAX)
   const [syncEnabled, setSyncEnabled] = useState<boolean>(true)
-  const [floatingCategoryId] = useSelectedCategory()
+  const [floatingCategoryId, setFloatingCategoryId] = useSelectedCategory()
+  // The web has no FloatingNavigator to pick a default category, so the editor
+  // does it itself; the Electron panel leaves that to the Floating window.
+  useAutoSelectDefaultCategory(
+    floatingCategoryId,
+    setFloatingCategoryId,
+    isElectronPanel ? NO_CATEGORIES : categories,
+  )
   const [localCategoryId, setLocalCategoryId] = useState<Category['id'] | null>(
     null,
   )
@@ -490,6 +587,14 @@ export const LiveEditor = function LiveEditor({
   >(null)
   const [isLiveEditorConfigReady, setIsLiveEditorConfigReady] =
     useState<boolean>(false)
+  // The probe writes (and removes) a key, so it runs in an effect rather than in
+  // the render body — a side effect there is what React Compiler memoization is
+  // free to drop or repeat. 'ok' until it answers, matching the server render.
+  const [storageAvailability, setStorageAvailability] =
+    useState<LocalStorageAvailability>('ok')
+  useInitialEffect(() => {
+    setStorageAvailability(getLocalStorageAvailability())
+  })
   const [spacesTrackingEnabled, setSpacesTrackingEnabled] =
     useState<boolean>(false)
   const [isUpdatingSpacesTracking, setIsUpdatingSpacesTracking] =
@@ -517,12 +622,33 @@ export const LiveEditor = function LiveEditor({
   // renders; >0 defers the removal so the eye registers the completion first.
   // Clamped ≤ the Undo window by the schema, so the line never outlasts Undo.
   const clearDelayMs = useAppSelector(selectLiveEditorClearDelayMs)
+  // Signed out there is no account to keep `[x]` rows for, so every finished
+  // line clears (standard linger); the persisted setting still rules signed in.
+  const effectiveClearOnComplete = isSignedIn ? clearOnComplete : true
 
-  const activeCategoryId = isLiveEditorConfigReady
-    ? syncEnabled
-      ? floatingCategoryId
-      : localCategoryId
-    : null
+  // Shared device: the remembered id belongs to whoever was signed in when it
+  // was stored, and category ids are globally unique, so on the web it can point
+  // at the previous account's category — whose note this editor would then show
+  // and, on the next debounced flush, overwrite. `categories` is the CURRENT
+  // account's list, so the pointer is only honoured once it appears there.
+  // The Electron panel follows the Floating window's selection instead and gets
+  // its list from another window, so it keeps the pointer as-is.
+  const isRememberedCategoryConfirmed =
+    isElectronPanel ||
+    categories.some((category) => category.id === floatingCategoryId)
+
+  // Signed out, the implicit local category is set directly: useSelectedCategory
+  // rejects the `0` sentinel by design (server ids are positive).
+  const activeCategoryId =
+    !isLiveEditorConfigReady || !isAuthLoaded
+      ? null
+      : isSignedOutWeb
+        ? LOCAL_CATEGORY_ID
+        : syncEnabled
+          ? isRememberedCategoryConfirmed
+            ? floatingCategoryId
+            : null
+          : localCategoryId
   const checkedRowsRef = useRef<TrackedRowsByCategory<CheckedRowMemory>>(
     new Map(),
   )
@@ -532,7 +658,7 @@ export const LiveEditor = function LiveEditor({
     new Map(),
   )
   const pendingCompletedDeletesRef = useRef<
-    Map<Completed['id'], PendingCompletedDelete>
+    Map<LiveEditorCompletionId, PendingCompletedDelete>
   >(new Map())
   const failedPromotionRestoresRef = useRef<Set<PendingCreate>>(new Set())
   // Clear-on-complete ON path: token-keyed undo memory for lines removed the
@@ -662,7 +788,7 @@ export const LiveEditor = function LiveEditor({
    */
   const forgetCheckedCompletion = (
     categoryId: Category['id'],
-    completedId: Completed['id'],
+    completedId: LiveEditorCompletionId,
   ): void => {
     const checkedRows = checkedRowsRef.current.get(categoryId)
     if (!checkedRows) return
@@ -674,36 +800,33 @@ export const LiveEditor = function LiveEditor({
   }
 
   /**
-   * Persists a dirty draft and marks it clean only after IPC succeeds. Called by debounce/final flush effects.
+   * Persists a dirty draft and marks it clean only after the host write succeeds. Called by debounce/final flush effects.
    * @param categoryId - Category whose note is being written.
    * @param text - Exact note text being persisted.
-   * @param api - Electron preload API used for note storage.
    * @returns void; completion updates refs only when the visible draft still matches.
    * @example
-   * persistNoteDraft(1, '- [ ] buy milk', getLiveEditorAPI()!)
+   * persistNoteDraft(1, '- [ ] buy milk')
    */
   const persistNoteDraft = React.useCallback(
-    (
-      categoryId: Category['id'],
-      text: string,
-      api: NonNullable<ReturnType<typeof getLiveEditorAPI>>,
-    ): void => {
-      void api.note.set(categoryId, text).then(
-        () => {
-          // A late save from category A must not mark category B's active draft clean.
-          if (
-            activeCategoryIdRef.current === categoryId &&
-            noteTextRef.current === text
-          ) {
-            lastPersistedRef.current = { categoryId, text }
-            dirtyNoteRef.current = { categoryId, dirty: false }
-          }
-        },
-        (error: unknown) => {
-          toast.error('Failed to save LiveEditor note')
-          log.error('LiveEditor note save failed', error)
-        },
-      )
+    (categoryId: Category['id'], text: string): void => {
+      void getLiveEditorHost()
+        .note.set(categoryId, text)
+        .then(
+          () => {
+            // A late save from category A must not mark category B's active draft clean.
+            if (
+              activeCategoryIdRef.current === categoryId &&
+              noteTextRef.current === text
+            ) {
+              lastPersistedRef.current = { categoryId, text }
+              dirtyNoteRef.current = { categoryId, dirty: false }
+            }
+          },
+          (error: unknown) => {
+            toast.error('Failed to save LiveEditor note')
+            log.error('LiveEditor note save failed', error)
+          },
+        )
     },
     [],
   )
@@ -741,8 +864,7 @@ export const LiveEditor = function LiveEditor({
       return true
     }
 
-    const api = getLiveEditorAPI()
-    if (!api) return false
+    const api = getLiveEditorHost()
     try {
       const stored = await api.note.get(categoryId)
       const restored = restoreText(stored)
@@ -799,8 +921,7 @@ export const LiveEditor = function LiveEditor({
       return updated.lineIndex
     }
 
-    const api = getLiveEditorAPI()
-    if (!api) return null
+    const api = getLiveEditorHost()
     try {
       const stored = await api.note.get(categoryId)
       const updated = updateText(stored)
@@ -860,19 +981,13 @@ export const LiveEditor = function LiveEditor({
     }
   }, [activeCategoryId])
 
-  const createCompletedMutation = useMutation(
-    orpc.completed.create.mutationOptions({}),
-  )
-  const deleteCompletedMutation = useMutation(
-    orpc.completed.delete.mutationOptions({}),
-  )
-
-  // Initial pull of opacity + sync mode + Spaces tracking from the main process.
+  // Initial pull of opacity + sync mode + Spaces tracking from the host (the
+  // main process, or the web host's instant defaults — which is what marks the
+  // browser editor ready with no preload).
   useCycleEffect(() => {
-    if (!isMounted || !isLiveEditorEnvironment()) return
+    if (!isMounted) return
     let cancelled = false
-    const api = getLiveEditorAPI()
-    if (!api) return
+    const api = getLiveEditorHost()
     void Promise.all([
       api.window.getOpacity(),
       api.sync.getEnabled(),
@@ -903,20 +1018,22 @@ export const LiveEditor = function LiveEditor({
   // Subscribe to main-process category broadcasts (e.g., when another window
   // changes the active category and main updates the LiveEditor config).
   useCycleEffect(() => {
-    if (!isMounted || !isLiveEditorEnvironment()) return
-    const api = getLiveEditorAPI()
-    if (!api) return
-    return api.on(getLiveEditorCategoryChangedChannel(), (payload) => {
-      // Preload sanitizes args and strips the IpcRendererEvent — payload is
-      // the first user arg.
-      const parsed = categoryChangedPayloadSchema.safeParse(payload)
-      if (parsed.success) setLocalCategoryId(parsed.data.categoryId)
-    })
+    if (!isMounted) return
+    return getLiveEditorHost().on(
+      getLiveEditorCategoryChangedChannel(),
+      (payload) => {
+        // Preload sanitizes args and strips the IpcRendererEvent — payload is
+        // the first user arg.
+        const parsed = categoryChangedPayloadSchema.safeParse(payload)
+        if (parsed.success) setLocalCategoryId(parsed.data.categoryId)
+      },
+    )
   }, [isMounted])
 
   // Move keyboard focus into the note editor whenever the LiveEditor window is
-  // shown, so a quick global-shortcut capture lands in the textarea instead of
-  // the first focusable control (the "Follow Spaces" switch). The window is
+  // shown (and on the web, as soon as the note is ready — the stranger lands on
+  // /write typing), so a quick global-shortcut capture lands in the textarea
+  // instead of the first focusable control (the "Follow Spaces" switch). The window is
   // hidden — not destroyed — between toggles, so the textarea can't lean on a
   // mount-time autoFocus to refocus on re-show; we listen for the Page
   // Visibility transition to 'visible' that BrowserWindow.show() drives, and
@@ -924,7 +1041,7 @@ export const LiveEditor = function LiveEditor({
   // focus() is a no-op while the textarea is disabled (no active category) —
   // picking a category first is the expected flow there.
   useCycleEffect(() => {
-    if (!isMounted || !isLiveEditorEnvironment()) return
+    if (!isMounted) return
     const canFocusNoteEditor =
       activeCategoryId !== null &&
       noteReadyCategoryId === activeCategoryId &&
@@ -955,17 +1072,14 @@ export const LiveEditor = function LiveEditor({
 
   // Whenever the active category flips, load that category's note text.
   useCycleEffect(() => {
-    if (!isMounted || !isLiveEditorEnvironment() || activeCategoryId === null) {
+    if (!isMounted || activeCategoryId === null) {
       setNoteDraft('', { categoryId: null, dirty: false })
       lastPersistedRef.current = { categoryId: null, text: '' }
       noteWritableCategoryRef.current = null
       setNoteReadyCategoryId(null)
       return
     }
-    const api = getLiveEditorAPI()
-    // Guard before flipping the spinner so the editor doesn't get stuck
-    // loading when the preload hasn't injected `liveEditorAPI` yet.
-    if (!api) return
+    const api = getLiveEditorHost()
     let cancelled = false
     setIsLoadingNote(true)
     noteWritableCategoryRef.current = null
@@ -1008,11 +1122,8 @@ export const LiveEditor = function LiveEditor({
   // the debounce because cleanup runs on every keystroke (noteText is a dep).
   // The companion effect below handles category-swap/unmount flushes.
   useCycleEffect(() => {
-    if (!isMounted || !isLiveEditorEnvironment() || activeCategoryId === null)
-      return
+    if (!isMounted || activeCategoryId === null) return
     if (isLoadingNote) return
-    const api = getLiveEditorAPI()
-    if (!api) return
     const persisted = lastPersistedRef.current
     // Never persist the initial empty textarea before this category's note has
     // loaded; a deploy-driven reload can otherwise overwrite real disk content.
@@ -1026,7 +1137,7 @@ export const LiveEditor = function LiveEditor({
       return
     }
     const timeoutId = window.setTimeout(() => {
-      persistNoteDraft(activeCategoryId, noteText, api)
+      persistNoteDraft(activeCategoryId, noteText)
     }, NOTE_DEBOUNCE_MS)
     return () => {
       window.clearTimeout(timeoutId)
@@ -1036,10 +1147,7 @@ export const LiveEditor = function LiveEditor({
   // Final flush: runs on category swap and unmount only (not on every keystroke).
   // Reads the latest text via ref so we never persist a stale snapshot.
   useCycleEffect(() => {
-    if (!isMounted || !isLiveEditorEnvironment() || activeCategoryId === null)
-      return
-    const api = getLiveEditorAPI()
-    if (!api) return
+    if (!isMounted || activeCategoryId === null) return
     const flushCategoryId = activeCategoryId
     return () => {
       const text = noteTextRef.current
@@ -1052,18 +1160,18 @@ export const LiveEditor = function LiveEditor({
       if (persisted.categoryId === flushCategoryId && persisted.text === text) {
         return
       }
-      persistNoteDraft(flushCategoryId, text, api)
+      persistNoteDraft(flushCategoryId, text)
     }
   }, [activeCategoryId, isMounted, persistNoteDraft])
 
   const handleToggleSync = (enabled: boolean) => {
     setSyncEnabled(enabled)
-    void getLiveEditorAPI()?.sync.setEnabled(enabled)
+    void getLiveEditorHost().sync.setEnabled(enabled)
   }
 
   const handleManualCategoryChange = (id: Category['id']) => {
     setLocalCategoryId(id)
-    void getLiveEditorAPI()?.category.setLast(id)
+    void getLiveEditorHost().category.setLast(id)
   }
 
   const handleOpacityChange = (next: number) => {
@@ -1072,11 +1180,18 @@ export const LiveEditor = function LiveEditor({
       Math.min(LIVE_EDITOR_OPACITY_MAX, next),
     )
     setOpacity(clamped)
-    void getLiveEditorAPI()?.window.setOpacity(clamped)
+    void getLiveEditorHost().window.setOpacity(clamped)
   }
 
   const handleCategoryValueChange = (value: string) => {
-    handleManualCategoryChange(Number(value))
+    const nextCategoryId = Number(value)
+    // The web has no FloatingNav: its picker writes the shared selection the
+    // sidebar reads, so /write and /home never disagree about the category.
+    if (!isElectronPanel) {
+      setFloatingCategoryId(nextCategoryId)
+      return
+    }
+    handleManualCategoryChange(nextCategoryId)
   }
 
   const handleOpacityValueChange = (values: number[]) => {
@@ -1104,7 +1219,7 @@ export const LiveEditor = function LiveEditor({
 
     try {
       const applied =
-        await getLiveEditorAPI()?.spaces?.setVisibleOnAllWorkspaces(enabled)
+        await getLiveEditorHost().spaces?.setVisibleOnAllWorkspaces(enabled)
       setSpacesTrackingEnabled(applied ?? enabled)
     } catch (error) {
       setSpacesTrackingEnabled(previous)
@@ -1142,7 +1257,7 @@ export const LiveEditor = function LiveEditor({
    * await deleteCompletedWithRetry(42)
    */
   const deleteCompletedWithRetry = async (
-    completedId: Completed['id'],
+    completedId: LiveEditorCompletionId,
   ): Promise<boolean> => {
     let entry = pendingCompletedDeletesRef.current.get(completedId)
     if (!entry) {
@@ -1153,7 +1268,7 @@ export const LiveEditor = function LiveEditor({
 
     const request = (async (): Promise<boolean> => {
       try {
-        await deleteCompletedMutation.mutateAsync({ id: completedId })
+        await completionWriter.remove({ id: completedId })
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Failed to undo completion'
@@ -1238,7 +1353,7 @@ export const LiveEditor = function LiveEditor({
     ) {
       return
     }
-    const createRequest = createCompletedMutation.mutateAsync({
+    const createRequest = completionWriter.create({
       categoryId,
       title: safeTitle,
     })
@@ -1341,7 +1456,7 @@ export const LiveEditor = function LiveEditor({
       // fires onDismiss instead (site A wires no onDismiss), so an undone or
       // ✕-closed completion is never cleared here; the ✕ just hides the toast
       // early (this site's clear is toast-tied, so dismissing simply skips it).
-      onAutoClose: clearOnComplete
+      onAutoClose: effectiveClearOnComplete
         ? () => {
             // Tie the clear to THIS completion via its completedId entry in
             // checkedRowsRef. If the entry is gone, the completion was already
@@ -1395,7 +1510,7 @@ export const LiveEditor = function LiveEditor({
    */
   const undoCompleted = async (
     title: LiveEditorCompletedTitle,
-    completedId: Completed['id'],
+    completedId: LiveEditorCompletionId,
     originalText: string,
     fallbackLineIndex: LiveEditorLineIndex,
     categoryId: Category['id'],
@@ -1483,8 +1598,7 @@ export const LiveEditor = function LiveEditor({
     // *active* note, so this out-of-band write to an inactive category can't race
     // them. (Worst case, if that category is re-opened mid-write, the line lands
     // on disk and surfaces on its next load — eventual consistency, never loss.)
-    const api = getLiveEditorAPI()
-    if (!api) return false
+    const api = getLiveEditorHost()
     try {
       const stored = await api.note.get(entry.categoryId)
       await api.note.set(
@@ -1531,8 +1645,7 @@ export const LiveEditor = function LiveEditor({
       return true
     }
 
-    const api = getLiveEditorAPI()
-    if (!api) return false
+    const api = getLiveEditorHost()
     try {
       const stored = await api.note.get(entry.categoryId)
       const lines = stored.split('\n')
@@ -1804,10 +1917,10 @@ export const LiveEditor = function LiveEditor({
 
     // 3) Background create. Success/failure mutate `entry` and consult
     //    `outcome` so undo / auto-close / late-failure never double-apply.
-    const createPromise = createCompletedMutation
-      .mutateAsync({ categoryId, title: safeTitle })
+    const createPromise = completionWriter
+      .create({ categoryId, title: safeTitle })
       .then(
-        (created): Completed['id'] | null => {
+        (created): LiveEditorCompletionId | null => {
           entry.completedId = created.id
           const rowStillVisible =
             !entry.lineCleared &&
@@ -1921,7 +2034,7 @@ export const LiveEditor = function LiveEditor({
    */
   const undoClearedCompletion = async (
     entry: ClearedLineMemory,
-    createPromise: Promise<Completed['id'] | null>,
+    createPromise: Promise<LiveEditorCompletionId | null>,
   ): Promise<void> => {
     // Idempotent: once the line is already back — via a prior Undo ('undone') or
     // the failure handler's restore ('restored') — do nothing. Re-inserting
@@ -1966,27 +2079,18 @@ export const LiveEditor = function LiveEditor({
   }
 
   /**
-   * Complete the line nearest the caret: finish an existing `- [ ]`/`- [x]`
+   * Keep the line nearest the caret: finish an existing `- [ ]`/`- [x]`
    * checkbox, or wrap a plain prose line as `- [x]` before promoting it (so
-   * users don't have to pre-type `- [ ]` to log a win).
-   * Triggered by Cmd/Ctrl+Enter inside the textarea — the keyboard path is the
-   * deliberate UX; pointer-clicks would require a second editor mode.
+   * users don't have to pre-type `- [ ]` to log a win). The shared body of the
+   * Cmd/Ctrl+Enter shortcut and the touch-only "Keep line" button — one code
+   * path, so the two can never drift.
+   * @returns void; a blank caret line is a no-op.
+   * @example
+   * keepCaretLine() // caret on "ship it" → "- [x] ship it" plus a keep
    */
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
-      // Keyboard edits expose their pre-change selection here; beforeinput covers paste/IME.
-      pendingTextareaEditRef.current = {
-        start: event.currentTarget.selectionStart,
-        end: event.currentTarget.selectionEnd,
-      }
-      return
-    }
-    pendingTextareaEditRef.current = null
-    // Skip while IME is composing — never hijack a CJK confirmation Enter.
-    if (event.nativeEvent.isComposing) return
+  const keepCaretLine = (): void => {
     const textarea = textareaRef.current
     if (!textarea) return
-    event.preventDefault()
 
     const text = textarea.value
     const caret = textarea.selectionStart
@@ -1998,7 +2102,7 @@ export const LiveEditor = function LiveEditor({
 
     // Clear-on-complete treats plain, unchecked, and manually checked rows alike:
     // record the win, show `[x]`, then tuck the source row away with Undo available.
-    if (clearOnComplete) {
+    if (effectiveClearOnComplete) {
       let completionTitle: LiveEditorCompletedTitle
       let completedText: string
       if (parsed) {
@@ -2046,136 +2150,242 @@ export const LiveEditor = function LiveEditor({
     )
   }
 
+  /**
+   * Cmd/Ctrl+Enter keeps the caret line; every other key just records the
+   * pre-edit selection so identical inserted rows still re-index unambiguously.
+   * @param event - The textarea keydown.
+   * @returns void.
+   * @example
+   * <textarea onKeyDown={handleKeyDown} />
+   */
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
+      // Keyboard edits expose their pre-change selection here; beforeinput covers paste/IME.
+      pendingTextareaEditRef.current = {
+        start: event.currentTarget.selectionStart,
+        end: event.currentTarget.selectionEnd,
+      }
+      return
+    }
+    pendingTextareaEditRef.current = null
+    // Skip while IME is composing — never hijack a CJK confirmation Enter.
+    if (event.nativeEvent.isComposing) return
+    event.preventDefault()
+    keepCaretLine()
+  }
+
+  /**
+   * Touch-only "Keep line" button (design review DR9): the same completion path
+   * as the shortcut, then focus returns to the textarea so the next line can start.
+   * @returns void.
+   * @example
+   * <Button onClick={handleKeepLineClick}>Keep line</Button>
+   */
+  const handleKeepLineClick = (): void => {
+    keepCaretLine()
+    textareaRef.current?.focus()
+  }
+
   const closeWindow = () => {
-    void getLiveEditorAPI()?.window.close()
+    void getLiveEditorHost().window.close()
   }
 
-  // Block oRPC calls until Clerk has loaded — otherwise the request 401s
-  // before useUser hydrates.
-  const hasLiveEditorAPI = isLiveEditorEnvironment()
-  const isReady = isMounted && isClerkReady && hasLiveEditorAPI
-  if (isMounted && isClerkReady && !hasLiveEditorAPI) {
-    return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-        LiveEditor is available in the CoreLive desktop app.
-      </div>
-    )
-  }
   const opacityValue = [opacity]
-  if (!isReady) {
-    return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-        Loading LiveEditor…
-      </div>
-    )
-  }
-
   const hasCategories = categories.length > 0
+  // The field is disabled until its note is ready. On the web that disabled
+  // field IS the first-paint stand-in (design review DR5) — same placeholder,
+  // same styling, no spinner — and turns live once Clerk resolves.
   const isNoteFieldDisabled =
     activeCategoryId === null ||
     isLoadingNote ||
     noteReadyCategoryId !== activeCategoryId
+  // Only a signed-in editor with a loaded config can be waiting on a category
+  // pick; before auth resolves the disabled field is the stand-in, not a prompt.
+  // An empty list is never a prompt either: `/write` passes `[]` while
+  // `category.list` is still in flight, and an account with no categories is
+  // told so by the Select's own "No categories". Either way, telling someone to
+  // pick from a list that has nothing in it is the one thing this must not do.
+  const needsCategoryPick =
+    isLiveEditorConfigReady &&
+    isAuthLoaded &&
+    !isSignedOutWeb &&
+    activeCategoryId === null &&
+    categories.length > 0
+  // Platform copy is read after mount so the server's ⌘ and the first client render agree.
+  const modifierLabel = isMounted && !isApplePlatform() ? 'Ctrl' : '⌘'
+  // Ordered by honesty about the disabled field: say why it is not ready before
+  // inviting anyone to type into it. A network round trip is long enough that
+  // "⌘ Enter keeps it" over a dead textarea reads as a broken editor.
+  const placeholder = isCategoryListPending
+    ? 'Loading your categories…'
+    : needsCategoryPick
+      ? 'Pick a category to start writing'
+      : isCoarsePointer
+        ? "Write one thing. Tap Keep when it's done."
+        : `Write one thing. ${modifierLabel} Enter keeps it.`
+  const footerCopy = resolveFooterCopy(
+    isAuthLoaded,
+    isSignedIn,
+    storageAvailability,
+  )
 
   return (
     <div
-      className="flex h-screen w-full flex-col gap-2 p-3"
+      className={cn(
+        'flex w-full flex-col',
+        isElectronPanel
+          ? 'h-screen gap-2 p-3'
+          : 'mx-auto h-dvh max-w-2xl gap-3 px-4 py-6',
+      )}
       data-live-editor-root
     >
-      <header
-        className="flex items-center justify-between gap-2"
-        style={DRAG_REGION_STYLE}
-      >
-        <div className="flex items-center gap-2">{/* Header Text Zone*/}</div>
-        <div className="flex items-center gap-2" style={NO_DRAG_REGION_STYLE}>
-          <Switch
-            id={spacesInputId}
-            checked={spacesTrackingEnabled}
-            onCheckedChange={handleSpacesTrackingChange}
-            disabled={isUpdatingSpacesTracking}
-            aria-label="Show LiveEditor on all Mac desktops"
-          />
-
-          <Label
-            htmlFor={spacesInputId}
-            className="cursor-pointer text-xs text-muted-foreground"
-          >
-            Follow Spaces
-          </Label>
-          <button
-            type="button"
-            onClick={closeWindow}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Close LiveEditor"
-          >
-            ✕
-          </button>
-        </div>
-      </header>
-
-      <div
-        className="flex items-center gap-3 text-xs"
-        style={NO_DRAG_REGION_STYLE}
-      >
-        <div className="flex items-center gap-2">
-          <Switch
-            id={syncInputId}
-            checked={syncEnabled}
-            onCheckedChange={handleToggleSync}
-          />
-
-          <Label htmlFor={syncInputId} className="cursor-pointer text-xs">
-            Follow FloatingNav
-          </Label>
-        </div>
-
-        <Select
-          value={activeCategoryId === null ? '' : String(activeCategoryId)}
-          onValueChange={handleCategoryValueChange}
-          disabled={syncEnabled || !hasCategories}
+      {isElectronPanel ? (
+        <header
+          className="flex items-center justify-between gap-2"
+          style={DRAG_REGION_STYLE}
         >
-          <SelectTrigger
-            id={categoryInputId}
-            aria-label="Active category"
-            className="h-7 w-32 text-xs"
-          >
-            <SelectValue placeholder="No categories" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map((category) => (
-              <SelectItem key={category.id} value={String(category.id)}>
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <div className="flex items-center gap-2">{/* Header Text Zone*/}</div>
+          <div className="flex items-center gap-2" style={NO_DRAG_REGION_STYLE}>
+            <Switch
+              id={spacesInputId}
+              checked={spacesTrackingEnabled}
+              onCheckedChange={handleSpacesTrackingChange}
+              disabled={isUpdatingSpacesTracking}
+              aria-label="Show LiveEditor on all Mac desktops"
+            />
 
-        <div className="flex flex-1 items-center gap-2">
-          <Label
-            htmlFor={opacityInputId}
-            className="text-xs text-muted-foreground"
-          >
-            Opacity
-          </Label>
-          <Slider
-            id={opacityInputId}
-            min={LIVE_EDITOR_OPACITY_MIN}
-            max={LIVE_EDITOR_OPACITY_MAX}
-            step={LIVE_EDITOR_OPACITY_STEP}
-            value={opacityValue}
-            onValueChange={handleOpacityValueChange}
-            className="flex-1"
-            aria-label="Window opacity"
-          />
-
-          <span className="w-10 text-right tabular-nums">
-            {Math.round(opacity * 100)}%
-          </span>
+            <Label
+              htmlFor={spacesInputId}
+              className="cursor-pointer text-xs text-muted-foreground"
+            >
+              Follow Spaces
+            </Label>
+            <button
+              type="button"
+              onClick={closeWindow}
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Close LiveEditor"
+            >
+              ✕
+            </button>
+          </div>
+        </header>
+      ) : (
+        // Web caption row (design review DR2/DR3): plain wordmark left (a link
+        // home once signed in), the shortcut hint right — it stays after typing.
+        <div className="flex items-center justify-between font-sans text-sm">
+          {isSignedIn ? (
+            <Link
+              href="/home"
+              className="inline-flex min-h-11 items-center rounded-sm font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              CoreLive
+            </Link>
+          ) : (
+            <span className="inline-flex min-h-11 items-center font-semibold text-muted-foreground">
+              CoreLive
+            </span>
+          )}
+          {/* Touch has no ⌘: the placeholder already says "Tap Keep", so a
+              keyboard chip here would contradict it on the same screen. */}
+          {!isCoarsePointer && (
+            <span className="text-muted-foreground">
+              <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-foreground">
+                {modifierLabel} Enter
+              </kbd>{' '}
+              = kept
+            </span>
+          )}
         </div>
+      )}
+
+      {/* Today Ember above the editor for both hosts (design review DR1); the panel gets the compact cut.
+          The web adds 12px on top of the container gap so the ember reads as its
+          own zone (the approved mockup's 24px), not another toolbar strip. */}
+      <div className={isElectronPanel ? undefined : 'mb-3'}>
+        <TodayEmber count={todayKeeps} compact={isElectronPanel} />
       </div>
+
+      {(isElectronPanel || isSignedIn) && (
+        <div
+          className="flex items-center gap-3 text-xs"
+          style={NO_DRAG_REGION_STYLE}
+        >
+          {isElectronPanel && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id={syncInputId}
+                checked={syncEnabled}
+                onCheckedChange={handleToggleSync}
+              />
+
+              <Label htmlFor={syncInputId} className="cursor-pointer text-xs">
+                Follow FloatingNav
+              </Label>
+            </div>
+          )}
+
+          {/* /write has no sidebar, so on the signed-in web this picker is the
+              only category control (design review DR3); it writes the shared
+              selection. Signed out there is one implicit category — no picker. */}
+          <Select
+            value={activeCategoryId === null ? '' : String(activeCategoryId)}
+            onValueChange={handleCategoryValueChange}
+            disabled={(isElectronPanel && syncEnabled) || !hasCategories}
+          >
+            <SelectTrigger
+              id={categoryInputId}
+              aria-label="Active category"
+              className={cn(
+                'text-xs',
+                // 44px touch target on the web (/write is the phone surface).
+                // `min-h-11`, not `h-11`: SelectTrigger's own
+                // `data-[size=default]:h-9` outranks a plain height.
+                isElectronPanel ? 'h-7 w-32' : 'min-h-11 w-44',
+              )}
+            >
+              <SelectValue placeholder="No categories" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={String(category.id)}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {isElectronPanel && (
+            <div className="flex flex-1 items-center gap-2">
+              <Label
+                htmlFor={opacityInputId}
+                className="text-xs text-muted-foreground"
+              >
+                Opacity
+              </Label>
+              <Slider
+                id={opacityInputId}
+                min={LIVE_EDITOR_OPACITY_MIN}
+                max={LIVE_EDITOR_OPACITY_MAX}
+                step={LIVE_EDITOR_OPACITY_STEP}
+                value={opacityValue}
+                onValueChange={handleOpacityValueChange}
+                className="flex-1"
+                aria-label="Window opacity"
+              />
+
+              <span className="w-10 text-right tabular-nums">
+                {Math.round(opacity * 100)}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <textarea
         ref={textareaRef}
         id={noteInputId}
+        aria-label={NOTE_FIELD_LABEL}
         value={noteText}
         onPaste={(event) => {
           // Context-menu paste has no keydown, so capture its replaced selection here.
@@ -2216,11 +2426,7 @@ export const LiveEditor = function LiveEditor({
           })
         }}
         onKeyDown={handleKeyDown}
-        placeholder={
-          activeCategoryId === null
-            ? 'Pick a category to start writing'
-            : '- [ ] capture anything here…\nUse Cmd/Ctrl+Enter to complete the current line.'
-        }
+        placeholder={placeholder}
         disabled={isNoteFieldDisabled}
         maxLength={NOTE_MAX_LENGTH}
         // LiveEditor is messy quick-capture — the native red spellcheck underlines
@@ -2228,7 +2434,19 @@ export const LiveEditor = function LiveEditor({
         // we keep the writing surface calm by disabling them. Only the correction
         // overlay is suppressed; typing / IME / save are unaffected (#128).
         spellCheck={false}
-        className="bg-background/60 flex-1 resize-none rounded-lg border p-3 shadow-sm focus:outline-none disabled:opacity-50"
+        // Token slots only (design review DR8): the web surface inherits the
+        // visitor's theme through --card / --border / --ring; the panel keeps its
+        // translucent look. The web stand-in is not dimmed while disabled — it is
+        // the first paint, not a loading state.
+        className={cn(
+          // The focus indicator is SHARED: `outline-none` kills the UA ring for
+          // both hosts, so the replacement has to cover both or the packaged
+          // panel's primary surface has none at all (WCAG 2.4.7).
+          'flex-1 resize-none rounded-lg border outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring',
+          isElectronPanel
+            ? 'bg-background/60 p-3 disabled:opacity-50'
+            : 'border-border bg-card p-4 disabled:cursor-default',
+        )}
         // Inline (not a useMemo) — a fresh style object on an intrinsic element is
         // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
         // textarea outside the frameless drag region), then layer the saved
@@ -2241,6 +2459,34 @@ export const LiveEditor = function LiveEditor({
           color: liveEditorTextColor,
         }}
       />
+
+      {/* Touch has no Cmd+Enter (design review DR9): a 44px button under the
+          editor keeps the caret line through the same handler. */}
+      {isCoarsePointer && (
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-11 w-full"
+          onClick={handleKeepLineClick}
+          disabled={isNoteFieldDisabled}
+        >
+          Keep line
+        </Button>
+      )}
+
+      {!isElectronPanel && (
+        <footer className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{footerCopy.text}</span>
+          {footerCopy.link && (
+            <Link
+              href={footerCopy.link.href}
+              className="inline-flex min-h-11 items-center rounded-sm px-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {footerCopy.link.label}
+            </Link>
+          )}
+        </footer>
+      )}
     </div>
   )
 }

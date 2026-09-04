@@ -2,6 +2,7 @@ import { ORPCError, os } from '@orpc/server'
 import { Prisma, type User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 import { ServerTiming } from '@/server/timing/ServerTiming'
 
 export interface AuthContext {
@@ -37,6 +38,10 @@ async function resolveUser(clerkUserId: string): Promise<User> {
     return await prisma.user.create({
       data: {
         clerkId: clerkUserId,
+        // Seeded here, in the one write that creates the account, so a
+        // webhook-less user never reaches a procedure with zero categories.
+        // `listCategories` keeps its own seed for accounts created before this.
+        categories: { create: DEFAULT_CATEGORY_SEED },
         ...(clerkUserId === DEVELOPMENT_USER_ID
           ? { email: 'test@example.com', name: 'Test User' }
           : {}),

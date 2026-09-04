@@ -7,6 +7,7 @@ import { headers } from 'next/headers'
 import { Webhook } from 'svix'
 
 import { env } from '@/env.mjs'
+import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 
 import { log } from '../../../lib/logger'
 
@@ -79,12 +80,7 @@ export async function POST(req: Request) {
       })
 
       await tx.category.create({
-        data: {
-          name: 'General',
-          color: 'blue',
-          isDefault: true,
-          userId: user.id,
-        },
+        data: { ...DEFAULT_CATEGORY_SEED, userId: user.id },
       })
     })
   }
