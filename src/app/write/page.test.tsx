@@ -35,8 +35,14 @@ vi.mock('@/lib/orpc/client-query', () => ({
 
 // The editor has its own suite; here it only reports what the page handed it.
 vi.mock('@/components/live-editor/LiveEditor', () => ({
-  LiveEditor: ({ categories }: { categories: { name: string }[] }) => (
-    <div data-testid="live-editor">
+  LiveEditor: ({
+    categories,
+    isCategoryListPending,
+  }: {
+    categories: { name: string }[]
+    isCategoryListPending?: boolean
+  }) => (
+    <div data-testid="live-editor" data-pending={String(isCategoryListPending)}>
       {categories.map((category) => category.name).join(',')}
     </div>
   ),
@@ -45,7 +51,7 @@ vi.mock('@/components/live-editor/LiveEditor', () => ({
 beforeEach(() => {
   clerkUserRef.current = { isLoaded: false, isSignedIn: undefined }
   useQueryMock.mockReset()
-  useQueryMock.mockReturnValue({ data: undefined })
+  useQueryMock.mockReturnValue({ data: undefined, isPending: false })
 })
 
 describe('/write page', () => {
@@ -74,11 +80,43 @@ describe('/write page', () => {
     expect(screen.getByTestId('live-editor')).toHaveTextContent('')
   })
 
+  it('tells the editor the category list is still in flight, so it stops inviting a keep', () => {
+    // Arrange — signed in, `category.list` round trip not back yet.
+    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+    useQueryMock.mockReturnValue({ data: undefined, isPending: true })
+
+    // Act
+    render(<WritePage />)
+
+    // Assert
+    expect(screen.getByTestId('live-editor')).toHaveAttribute(
+      'data-pending',
+      'true',
+    )
+  })
+
+  it('never reports pending while signed out, where a disabled query is pending forever', () => {
+    // Arrange — TanStack keeps a disabled query in `pending` with no fetch in
+    // flight, so the signed-in check is the whole difference.
+    clerkUserRef.current = { isLoaded: true, isSignedIn: false }
+    useQueryMock.mockReturnValue({ data: undefined, isPending: true })
+
+    // Act
+    render(<WritePage />)
+
+    // Assert
+    expect(screen.getByTestId('live-editor')).toHaveAttribute(
+      'data-pending',
+      'false',
+    )
+  })
+
   it("hands a signed-in visitor their account's categories", () => {
     // Arrange
     clerkUserRef.current = { isLoaded: true, isSignedIn: true }
     useQueryMock.mockReturnValue({
       data: { categories: [{ name: 'Today' }, { name: 'Work' }] },
+      isPending: false,
     })
 
     // Act

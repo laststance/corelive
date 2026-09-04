@@ -104,6 +104,9 @@ export const HeatmapResponseSchema = z.object({
   total: z.number().int(),
 })
 
+/** Payload the heatmap endpoint returns; `total` is what the Today Ember counts. */
+export type HeatmapResponse = z.infer<typeof HeatmapResponseSchema>
+
 /**
  * Input schema for the day-detail endpoint used by DayDetailDialog.
  * Date is the local calendar date the user clicked on the heatmap.

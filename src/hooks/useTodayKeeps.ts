@@ -1,7 +1,7 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useMemo, useSyncExternalStore } from 'react'
 
 import {
@@ -10,14 +10,10 @@ import {
   parseLocalCompletions,
   subscribeToLocalCompletions,
 } from '@/lib/live-editor/localCompletionStore'
-import {
-  getTodayHeatmapQueryKey,
-  todayHeatmapQueryOptions,
-} from '@/lib/query/todayHeatmapQuery'
+import { todayHeatmapQueryOptions } from '@/lib/query/todayHeatmapQuery'
 import { getViewerTimeZone } from '@/lib/utils/getViewerTimeZone'
 
 import { useMounted } from './use-mounted'
-import { useUpdateEffect } from './use-update-effect'
 import { useLocalDayKey } from './useLocalDayKey'
 
 /**
@@ -44,7 +40,6 @@ export function useTodayKeeps(): TodayKeepsCount {
   const isMounted = useMounted()
   const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
   const dayKey = useLocalDayKey()
-  const queryClient = useQueryClient()
   // Stable per session, so both the local bucketing and the query key hold still.
   const timezone = getViewerTimeZone()
 
@@ -64,21 +59,15 @@ export function useTodayKeeps(): TodayKeepsCount {
     [rawLocalCompletions, dayKey, timezone],
   )
 
-  // Signed in only; the key mirrors useCompletionWriter's optimistic bump.
+  // Signed in only; the key mirrors useCompletionWriter's optimistic bump. The
+  // day is part of that key, and `useLocalDayKey` is a `useSyncExternalStore`,
+  // so local midnight changes the key DURING the render that observes it: the
+  // ember falls back to its resolving word on the same frame instead of paying
+  // out yesterday's total while a refetch is in flight.
   const { data: todayHeatmap, isError } = useQuery({
-    ...todayHeatmapQueryOptions(),
+    ...todayHeatmapQueryOptions(dayKey),
     enabled: isSignedIn === true,
   })
-
-  // The one-day key carries no date, so an observer that stays mounted across
-  // local midnight (the always-on-top panel, a /write tab left open) would keep
-  // serving yesterday's total: nothing remounts, refocuses or reconnects, and
-  // `staleTime` only marks it stale. Reset rather than invalidate so the ember
-  // returns to its resolving word instead of showing yesterday's number while
-  // the refetch is in flight.
-  useUpdateEffect(() => {
-    void queryClient.resetQueries({ queryKey: getTodayHeatmapQueryKey() })
-  }, [dayKey, queryClient])
 
   // The server render and the first client render must agree, so nothing is
   // claimed before mount (the ember shows its resolving word instead).

@@ -8,8 +8,10 @@ import { renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { LOCAL_COMPLETIONS_STORAGE_KEY } from '@/lib/live-editor/constants'
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
+import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
 
 import { useCompletionWriter } from './useCompletionWriter'
 
@@ -46,16 +48,10 @@ vi.mock('@/lib/orpc/client-query', () => ({
   },
 }))
 
-const todayHeatmapKey = [
-  'completed',
-  'heatmap',
-  {
-    input: {
-      days: 1,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    },
-  },
-]
+// The READER's key, built by the same function `useTodayKeeps` calls (over the
+// mocked orpc above) rather than re-typed here: a bump that lands on a
+// hand-copied literal proves nothing once the real key's shape drifts.
+const todayHeatmapKey = getTodayHeatmapQueryKey(getLocalTodayIsoDate())
 
 type CachedHeatmap = { total: number }
 

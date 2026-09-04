@@ -542,8 +542,15 @@ function showCompletionToast({
  */
 export const LiveEditor = function LiveEditor({
   categories,
+  isCategoryListPending = false,
 }: {
   categories: CategoryWithCount[]
+  /**
+   * `category.list` is still in flight for a signed-in visitor. Without it an
+   * empty `categories` is ambiguous — mid-fetch and "this account has none"
+   * look identical from here, and the field is disabled either way.
+   */
+  isCategoryListPending?: boolean
 }) {
   const queryClient = useQueryClient()
   const isMounted = useMounted()
@@ -2194,18 +2201,28 @@ export const LiveEditor = function LiveEditor({
     noteReadyCategoryId !== activeCategoryId
   // Only a signed-in editor with a loaded config can be waiting on a category
   // pick; before auth resolves the disabled field is the stand-in, not a prompt.
+  // An empty list is never a prompt either: `/write` passes `[]` while
+  // `category.list` is still in flight, and an account with no categories is
+  // told so by the Select's own "No categories". Either way, telling someone to
+  // pick from a list that has nothing in it is the one thing this must not do.
   const needsCategoryPick =
     isLiveEditorConfigReady &&
     isAuthLoaded &&
     !isSignedOutWeb &&
-    activeCategoryId === null
+    activeCategoryId === null &&
+    categories.length > 0
   // Platform copy is read after mount so the server's ⌘ and the first client render agree.
   const modifierLabel = isMounted && !isApplePlatform() ? 'Ctrl' : '⌘'
-  const placeholder = needsCategoryPick
-    ? 'Pick a category to start writing'
-    : isCoarsePointer
-      ? "Write one thing. Tap Keep when it's done."
-      : `Write one thing. ${modifierLabel} Enter keeps it.`
+  // Ordered by honesty about the disabled field: say why it is not ready before
+  // inviting anyone to type into it. A network round trip is long enough that
+  // "⌘ Enter keeps it" over a dead textarea reads as a broken editor.
+  const placeholder = isCategoryListPending
+    ? 'Loading your categories…'
+    : needsCategoryPick
+      ? 'Pick a category to start writing'
+      : isCoarsePointer
+        ? "Write one thing. Tap Keep when it's done."
+        : `Write one thing. ${modifierLabel} Enter keeps it.`
   const footerCopy = resolveFooterCopy(
     isAuthLoaded,
     isSignedIn,

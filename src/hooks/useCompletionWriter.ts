@@ -9,7 +9,9 @@ import {
 } from '@/lib/live-editor/localCompletionStore'
 import { orpc } from '@/lib/orpc/client-query'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
-import type { Completed } from '@/server/schemas/completed'
+import type { Completed, HeatmapResponse } from '@/server/schemas/completed'
+
+import { useLocalDayKey } from './useLocalDayKey'
 
 /** A keep's id: the server row id when signed in, the device-local uuid when signed out. */
 export type LiveEditorCompletionId = Completed['id'] | string
@@ -39,6 +41,8 @@ export type CompletionWriter = {
 export function useCompletionWriter(): CompletionWriter {
   const { isSignedIn } = useUser()
   const queryClient = useQueryClient()
+  // The reader keys today's entry by local day; the bump has to use the same one.
+  const dayKey = useLocalDayKey()
   const createCompletedMutation = useMutation(
     orpc.completed.create.mutationOptions({}),
   )
@@ -59,10 +63,16 @@ export function useCompletionWriter(): CompletionWriter {
    * bumpTodayTotal(1)
    */
   const bumpTodayTotal = (delta: number): void => {
-    queryClient.setQueryData(getTodayHeatmapQueryKey(), (cached) =>
-      cached === undefined
-        ? cached
-        : { ...cached, total: Math.max(0, cached.total + delta) },
+    // Stated rather than inferred: appending the day to the key spreads it into a
+    // plain array, which drops TanStack's `DataTag` brand — the phantom type
+    // `setQueryData` reads to know what `cached` holds. The schema is the source
+    // of truth for that shape either way.
+    queryClient.setQueryData<HeatmapResponse>(
+      getTodayHeatmapQueryKey(dayKey),
+      (cached) =>
+        cached === undefined
+          ? cached
+          : { ...cached, total: Math.max(0, cached.total + delta) },
     )
   }
 

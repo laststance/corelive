@@ -233,6 +233,34 @@ describe('useTodayKeeps — signed in, the account', () => {
     })
   })
 
+  it("shows the resolving word on the very frame the day flips, never yesterday's number for a beat", async () => {
+    // Arrange — an editor left open overnight with 4 keeps on the cached day.
+    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+    heatmapQueryFn.mockResolvedValue({
+      total: 4,
+      data: [],
+      streaks: { current: 1, longest: 1 },
+    })
+    dayKeyRef.current = '2099-01-01'
+    const { result, rerender } = renderTodayKeeps()
+    await waitFor(() => {
+      expect(result.current).toBe(4)
+    })
+    // The new day's fetch never settles, so the only thing that can be read
+    // here is whatever the hook decides BEFORE fresh data exists.
+    heatmapQueryFn.mockReturnValue(new Promise(() => {}))
+
+    // Act — local midnight passes; nothing remounts, refocuses or reconnects.
+    dayKeyRef.current = '2099-01-02'
+    await act(async () => {
+      rerender()
+    })
+
+    // Assert — resolving, not yesterday's 4. An effect-based reset cannot pass
+    // this: it runs after the frame that already painted the stale number.
+    expect(result.current).toBeUndefined()
+  })
+
   it('reports null — not 0 — when the fetch fails with nothing cached', async () => {
     // Arrange
     clerkUserRef.current = { isLoaded: true, isSignedIn: true }

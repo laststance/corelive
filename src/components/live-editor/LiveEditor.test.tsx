@@ -249,6 +249,7 @@ function renderEditor(settingOverrides: Partial<UserSettingsState> = {}) {
 function renderEditorWithCategories(
   editorCategories: CategoryWithCount[],
   settingOverrides: Partial<UserSettingsState> = {},
+  isCategoryListPending = false,
 ) {
   const store = configureStore({
     reducer: { settings: userSettingsReducer },
@@ -258,7 +259,10 @@ function renderEditorWithCategories(
   })
   return render(
     <Provider store={store}>
-      <LiveEditor categories={editorCategories} />
+      <LiveEditor
+        categories={editorCategories}
+        isCategoryListPending={isCategoryListPending}
+      />
     </Provider>,
   )
 }
@@ -356,6 +360,54 @@ describe('LiveEditor web host (/write)', () => {
     ).not.toBeInTheDocument()
     // Nothing is claimed about the count before the source can answer.
     expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('says the categories are loading instead of inviting a keep into a dead field', async () => {
+    // Arrange — /write passes `data?.categories ?? []`, so the list reads empty
+    // for the whole `category.list` round trip after Clerk resolves the session.
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_A' },
+    }
+    selectedCategoryRef.current = 7
+
+    // Act
+    renderEditorWithCategories([], {}, true)
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert — neither "pick from this empty list" nor "⌘ Enter keeps it" over a
+    // textarea that will not accept a keystroke.
+    await waitFor(() => {
+      expect(noteField).toHaveAttribute(
+        'placeholder',
+        'Loading your categories…',
+      )
+    })
+    expect(noteField).toBeDisabled()
+  })
+
+  it('does not tell a signed-in visitor with no categories at all to pick one', async () => {
+    // Arrange — the fetch landed and the account genuinely has nothing; the
+    // Select says "No categories" on its own.
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_A' },
+    }
+    selectedCategoryRef.current = 7
+
+    // Act
+    renderEditorWithCategories([], {}, false)
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+
+    // Assert
+    await waitFor(() => {
+      expect(noteField).toHaveAttribute(
+        'placeholder',
+        'Write one thing. Ctrl Enter keeps it.',
+      )
+    })
   })
 
   it('shows the web frame — wordmark, shortcut hint, footer — and none of the panel chrome', async () => {

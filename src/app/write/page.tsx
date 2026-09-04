@@ -18,19 +18,25 @@ import type { CategoryWithCount } from '@/server/schemas/category'
  */
 const WritePage = function WritePage() {
   const { isSignedIn } = useUser()
-  const { data } = useQuery({
+  const { data, isPending } = useQuery({
     ...orpc.category.list.queryOptions({}),
     // Signed-out visitors never trigger a server read; the list stays empty.
     enabled: isSignedIn === true,
   })
   const categories: CategoryWithCount[] = data?.categories ?? []
+  // A disabled query reports `isPending` forever, so the signed-in check is what
+  // separates "the round trip has not landed yet" from "there is nothing to fetch".
+  const isCategoryListPending = isSignedIn === true && isPending
 
   return (
     <main className="min-h-dvh w-full bg-background text-foreground">
       {/* The editor's own frame is a wordmark and a textarea, so the page's
           only heading is this one — screen readers need something to land on. */}
       <h1 className="sr-only">Write</h1>
-      <LiveEditor categories={categories} />
+      <LiveEditor
+        categories={categories}
+        isCategoryListPending={isCategoryListPending}
+      />
     </main>
   )
 }

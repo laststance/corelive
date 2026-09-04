@@ -28,24 +28,39 @@ function buildTodayHeatmapInput() {
  * total replayed from an older day counts yesterday as today and hides a failed
  * fetch behind a stale number. Carried here rather than at the call site so a
  * second observer cannot re-register the query without the opt-out.
- * @returns oRPC's heatmap options plus `meta: { persist: false }`.
+ * @param dayKey - The viewer's local `YYYY-MM-DD`, from `useLocalDayKey()`.
+ * @returns oRPC's heatmap options, keyed by the local day, plus `meta: { persist: false }`.
  * @example
- * useQuery({ ...todayHeatmapQueryOptions(), enabled: isSignedIn === true })
+ * useQuery({ ...todayHeatmapQueryOptions('2026-09-05'), enabled: isSignedIn === true })
  */
-export function todayHeatmapQueryOptions() {
+export function todayHeatmapQueryOptions(dayKey: string) {
+  const options = orpc.completed.heatmap.queryOptions({
+    input: buildTodayHeatmapInput(),
+  })
   return {
-    ...orpc.completed.heatmap.queryOptions({ input: buildTodayHeatmapInput() }),
+    ...options,
+    // The one-day input carries no date, so an observer that stays mounted
+    // across local midnight (the always-on-top panel, a `/write` tab left open)
+    // would keep reading yesterday's entry. Making the day part of the KEY turns
+    // the rollover into a cache miss: `data` is `undefined` on the very render
+    // the day flips, so the ember shows its resolving word rather than
+    // yesterday's number for a frame. An effect cannot do this — it runs after
+    // that frame has already painted. Appended last so a prefix invalidation on
+    // `orpc.completed.heatmap.key()` still matches.
+    queryKey: [...options.queryKey, dayKey],
     meta: { persist: false },
   }
 }
 
 /**
  * Query key of the one-day window whose `total` the Today Ember reads — the
- * entry `useCompletionWriter` bumps and `useTodayKeeps` resets at local midnight.
+ * entry `useCompletionWriter` bumps. Pass the SAME `dayKey` the reader used, or
+ * the bump lands on an entry nobody is watching.
+ * @param dayKey - The viewer's local `YYYY-MM-DD`, from `useLocalDayKey()`.
  * @returns The exact TanStack key {@link todayHeatmapQueryOptions} registers.
  * @example
- * getTodayHeatmapQueryKey() // => ['completed', 'heatmap', { input: { days: 1, timezone: 'Asia/Tokyo' } }, …]
+ * getTodayHeatmapQueryKey('2026-09-05') // => ['completed', 'heatmap', { input: { days: 1, timezone: 'Asia/Tokyo' } }, …, '2026-09-05']
  */
-export function getTodayHeatmapQueryKey() {
-  return todayHeatmapQueryOptions().queryKey
+export function getTodayHeatmapQueryKey(dayKey: string) {
+  return todayHeatmapQueryOptions(dayKey).queryKey
 }
