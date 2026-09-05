@@ -78,17 +78,6 @@ export interface LiveEditorConfig {
   notes: Record<string, string>
 }
 
-/** System tray configuration */
-interface TrayConfig {
-  enabled: boolean
-  minimizeToTray: boolean
-  closeToTray: boolean
-  startMinimized: boolean
-  showNotificationCount: boolean
-  doubleClickAction: 'restore' | 'toggle'
-  rightClickAction: 'menu' | 'restore'
-}
-
 /** Keyboard shortcuts configuration */
 interface ShortcutsConfig {
   enabled: boolean
@@ -169,7 +158,6 @@ export interface SettingsPopoverConfig {
 export interface AppConfig {
   version: string
   window: WindowConfig
-  tray: TrayConfig
   shortcuts: ShortcutsConfig
   notifications: NotificationsConfig
   appearance: AppearanceConfig
@@ -232,6 +220,21 @@ const RETIRED_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
   ],
   behavior: ['startup'],
   liveEditor: ['syncMode', 'lastCategoryId'],
+  // Tray section retirement: nothing ever read any of these 7 keys outside
+  // this file's own interface + default (verified by grep across the whole
+  // codebase, including tests). Listed individually, not as a whole-section
+  // drop, since pruneRetiredConfigKeys deletes keys within a section rather
+  // than the section itself — an old config.json's `tray: {}` survives empty,
+  // same as the existing `window: { main: {} }` precedent above.
+  tray: [
+    'enabled',
+    'minimizeToTray',
+    'closeToTray',
+    'startMinimized',
+    'showNotificationCount',
+    'doubleClickAction',
+    'rightClickAction',
+  ],
 }
 
 // ============================================================================
@@ -320,16 +323,6 @@ export class ConfigManager {
           startMaximized: false,
           centerOnStart: true,
         },
-      },
-
-      tray: {
-        enabled: true,
-        minimizeToTray: true,
-        closeToTray: true,
-        startMinimized: false,
-        showNotificationCount: true,
-        doubleClickAction: 'restore',
-        rightClickAction: 'menu',
       },
 
       shortcuts: {

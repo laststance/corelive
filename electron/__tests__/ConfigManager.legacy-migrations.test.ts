@@ -336,4 +336,34 @@ describe('ConfigManager legacy migrations', () => {
       })
     })
   })
+
+  describe('pruneRetiredConfigKeys (tray section retirement)', () => {
+    it('strips all 7 legacy tray keys from config.json while leaving other sections untouched', () => {
+      // Arrange: a config written before the tray section was retired — none
+      // of these 7 keys were ever read anywhere, but old installs still have
+      // them on disk.
+      writeConfigFile({
+        tray: {
+          enabled: true,
+          minimizeToTray: true,
+          closeToTray: true,
+          startMinimized: false,
+          showNotificationCount: true,
+          doubleClickAction: 'restore',
+          rightClickAction: 'menu',
+        },
+        window: { main: { width: 1337 } },
+      })
+
+      // Act
+      const configManager = new ConfigManager()
+      const persisted = readPersistedConfig()
+
+      // Assert: every retired tray key is gone (the section survives empty,
+      // same shape as the existing window.main precedent), and a section
+      // written in the same file that was never a prune target is untouched.
+      expect(persisted.tray).toEqual({})
+      expect(configManager.get('window.main.width', 0)).toBe(1337)
+    })
+  })
 })

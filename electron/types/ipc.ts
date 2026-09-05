@@ -137,7 +137,6 @@ export type ConfigSection =
   | 'shortcuts'
   | 'general'
   | 'appearance'
-  | 'tray'
   | 'behavior'
   | 'advanced'
   | 'liveEditor'
