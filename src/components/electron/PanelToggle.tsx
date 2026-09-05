@@ -145,5 +145,3 @@ export const PanelToggle = function PanelToggle({
     </div>
   )
 }
-
-export default PanelToggle

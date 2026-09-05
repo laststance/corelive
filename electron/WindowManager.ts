@@ -24,6 +24,7 @@ import type { ConfigManager } from './ConfigManager'
 import {
   AUTH_PATHNAMES,
   ERR_ABORTED,
+  HTTP_ERROR_STATUS_MIN,
   LOGIN_WINDOW_HEIGHT_PX,
   LOGIN_WINDOW_WIDTH_PX,
   PANEL_LOAD_MAX_RETRIES,
@@ -470,7 +471,7 @@ export class WindowManager {
     loginWindow.webContents.on(
       'did-navigate',
       (_event, _url, httpResponseCode) => {
-        if (!(httpResponseCode >= 400)) return
+        if (httpResponseCode < HTTP_ERROR_STATUS_MIN) return
         errorPagePendingFinish = true
         if (hasLoadedOnce) return
         this.recoverPanelFromLoadFailure(loginWindow, {
@@ -980,7 +981,7 @@ export class WindowManager {
         finish(false)
         return
       }
-      errorPagePendingFinish = httpResponseCode >= 400
+      errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
       if (!errorPagePendingFinish) return
       // corelive.app answered 4xx/5xx: keep the panel hidden and reload this
       // same window (the watch stays armed), parentless dialog on exhaustion so
@@ -1283,7 +1284,7 @@ export class WindowManager {
    * the load redirects to an auth page or fails (offline/timeout). HTTP error
    * pages retry in place instead (see {@link watchLiveEditorNavigation}).
    *
-   * Ordering note: `createLiveEditorWindow` calls `loadURL` synchronously
+   * Ordering note: {@link createLiveEditorWindow} calls `loadURL` synchronously
    * *before* this runs. That is safe — `did-navigate` is async, so these
    * listeners register in the same tick, before the network response arrives.
    * Do NOT "fix" it by moving `loadURL`.

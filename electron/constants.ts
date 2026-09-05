@@ -1,10 +1,10 @@
 /**
  * @fileoverview Shared constants for the Electron main process.
  *
- * Why this module exists: the panel nav-watch (`WindowManager`) must compare a
+ * Why this module exists: the panel nav-watch ({@link WindowManager}) must compare a
  * panel's final navigated URL against Clerk's auth pages and ignore Chromium's
  * "intentionally aborted" load errors. Centralizing those strings, the magic
- * error code and the fixed window sizes keeps them out of `WindowManager` as
+ * error code and the fixed window sizes keeps them out of {@link WindowManager} as
  * bare literals.
  *
  * @module electron/constants
@@ -38,6 +38,15 @@ export const AUTH_PATHNAMES: readonly string[] = [
  * @see https://source.chromium.org/chromium/chromium/src/+/main:net/base/net_error_list.h
  */
 export const ERR_ABORTED = -3
+
+/**
+ * Lowest HTTP status that means the origin answered with an error page. A 4xx/5xx
+ * is a SUCCESSFUL navigation, so `did-fail-load` never fires and the status code
+ * on `did-navigate` is the only signal a panel got an error page instead of the app.
+ * Consumed by {@link WindowManager.createLoginWindow} and
+ * {@link WindowManager.watchLiveEditorNavigation}.
+ */
+export const HTTP_ERROR_STATUS_MIN = 400
 
 // ============================================================================
 // Panel load-failure recovery (DT7)

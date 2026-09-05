@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 
-import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { log } from '@/lib/logger'
 
@@ -75,7 +75,7 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
   // Load once on mount. The availability guard means web / outdated-preload
   // renderers simply never flip `isReady` and the consumer hides the row.
   // `floatingPanels` is the legacy wire name — frozen preloads expose it; do not rename.
-  useCycleEffect(() => {
+  useInitialEffect(() => {
     const api =
       typeof window === 'undefined'
         ? undefined
@@ -102,7 +102,7 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
     return () => {
       cancelled = true
     }
-  }, [])
+  })
 
   const apply = async (next: boolean): Promise<void> => {
     const api = window.electronAPI?.floatingPanels
