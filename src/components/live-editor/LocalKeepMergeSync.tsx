@@ -5,10 +5,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
-import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { MAX_LOCAL_MERGE_PASSES } from '@/lib/live-editor/constants'
 import {
-  countLocalCompletionsOnDay,
   readUnmergedLocalCompletions,
   tagLocalCompletionsMerged,
 } from '@/lib/live-editor/localCompletionStore'
@@ -19,12 +17,7 @@ import {
 } from '@/lib/live-editor/pendingMergeStore'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
-import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
-import { getViewerTimeZone } from '@/lib/utils/getViewerTimeZone'
-import {
-  IMPORT_LOCAL_MAX_ITEMS,
-  type HeatmapResponse,
-} from '@/server/schemas/completed'
+import { IMPORT_LOCAL_MAX_ITEMS } from '@/server/schemas/completed'
 
 /**
  * Merges this device's signed-out keeps into the account once per session, right
@@ -45,15 +38,13 @@ import {
 export function LocalKeepMergeSync(): null {
   const { isLoaded, isSignedIn, user } = useUser()
   const queryClient = useQueryClient()
-  const dayKey = useLocalDayKey()
-  const timezone = getViewerTimeZone()
   const hasRunRef = useRef(false)
   const importLocalMutation = useMutation(
     orpc.completed.importLocal.mutationOptions({}),
   )
 
   /**
-   * Sends ONE claimed batch and settles the ember. Split from the effect so the
+   * Sends ONE claimed batch and tags what landed. Split from the effect so the
    * await chain reads top-to-bottom, and from the loop so the cap applies per
    * pass rather than per sign-in.
    * @param clerkId - The account the claim is filed under.
@@ -81,7 +72,7 @@ export function LocalKeepMergeSync(): null {
       return false
     }
 
-    const result = await importLocalMutation.mutateAsync({
+    await importLocalMutation.mutateAsync({
       batchId: pending.batchId,
       items: items.map(({ id, title, completedAt }) => ({
         localId: id,
@@ -90,35 +81,9 @@ export function LocalKeepMergeSync(): null {
       })),
     })
 
-    // A heatmap fetch that started before the import committed answers with a
-    // total short by exactly this batch, and it lands AFTER the tag below —
-    // painting a number LOWER than the one the visitor was just looking at.
-    // (Measured: a brand-new account sat on "Nothing kept yet today" until the
-    // refetch returned.) Dropping that answer first leaves the ember on its
-    // resolving word for a moment, which is honest, instead of a wrong count.
-    await queryClient.cancelQueries({ queryKey: orpc.completed.key() })
-
-    // Tag and bump in ONE synchronous block. Tagging alone drops the local term
-    // before the refetch lands (the ember dips); bumping alone counts the same
-    // keeps twice (it spikes). Both writes in one turn are batched into a single
-    // render, so the number never moves wrong. On `alreadyImported` the rows
-    // landed on an earlier attempt and the server already owns them — tag only.
-    // Same when the server skipped some as already filed: WHICH ones is
-    // unknowable here, so the refetch settles it rather than a guess.
-    const landedToday =
-      result.alreadyImported || result.imported !== items.length
-        ? 0
-        : countLocalCompletionsOnDay(items, dayKey, timezone)
+    // Tagged only once the server owns the rows; `mergeLocalKeeps` then
+    // invalidates every completed-derived view against what landed.
     tagLocalCompletionsMerged(pending.ids, pending.batchId)
-    if (landedToday > 0) {
-      queryClient.setQueryData<HeatmapResponse>(
-        getTodayHeatmapQueryKey(dayKey),
-        (previous) =>
-          previous === undefined
-            ? previous
-            : { ...previous, total: previous.total + landedToday },
-      )
-    }
     clearPendingMerge()
     return true
   }

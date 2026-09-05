@@ -27,19 +27,11 @@ const {
   completedDeleteMutationOptions,
   completedMutateAsync,
   deleteCompletedMutateAsync,
-  todayHeatmapQueryRef,
 } = vi.hoisted(() => ({
   completedCreateMutationOptions: {},
   completedDeleteMutationOptions: {},
   completedMutateAsync: vi.fn(),
   deleteCompletedMutateAsync: vi.fn(),
-  // What the Today Ember's signed-in source sees; unresolved unless a spec sets it.
-  todayHeatmapQueryRef: {
-    current: { data: undefined, isError: false } as {
-      data: { total: number } | undefined
-      isError: boolean
-    },
-  },
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -51,12 +43,7 @@ vi.mock('@tanstack/react-query', () => ({
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
-    // useTodayKeeps resets today's one-day entry when the local day rolls over.
-    resetQueries: vi.fn().mockResolvedValue(undefined),
-    setQueryData: vi.fn(),
   }),
-  // The Today Ember's signed-in source (see todayHeatmapQueryRef).
-  useQuery: () => todayHeatmapQueryRef.current,
 }))
 
 vi.mock('sonner', () => ({
@@ -309,11 +296,10 @@ describe('LiveEditor web host (/write)', () => {
       isSignedIn: true,
       user: { id: 'user_1' },
     }
-    // Both of these used to be restored by a trailing statement inside the spec
-    // that set them, so one failing assertion leaked a coarse pointer or a
-    // resolved ember into every spec after it.
+    // Restored here rather than by a trailing statement inside the spec that
+    // set it, so one failing assertion cannot leak a coarse pointer into every
+    // spec after it.
     vi.restoreAllMocks()
-    todayHeatmapQueryRef.current = { data: undefined, isError: false }
   })
 
   it('lets a signed-out stranger write right away — focus in the field, no notice, no spinner', async () => {
@@ -358,8 +344,6 @@ describe('LiveEditor web host (/write)', () => {
     expect(
       screen.queryByText('Pick a category to start writing'),
     ).not.toBeInTheDocument()
-    // Nothing is claimed about the count before the source can answer.
-    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
   })
 
   it('says the categories are loading instead of inviting a keep into a dead field', async () => {
@@ -658,8 +642,6 @@ describe('LiveEditor web host (/write)', () => {
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
-    // The account has nothing kept today.
-    todayHeatmapQueryRef.current = { data: { total: 0 }, isError: false }
 
     // Act
     renderEditor()
@@ -677,49 +659,6 @@ describe('LiveEditor web host (/write)', () => {
     expect(
       screen.queryByRole('link', { name: 'Sign in' }),
     ).not.toBeInTheDocument()
-    // The panel still gets its ember, in the compact cut (headline only).
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Nothing kept yet today',
-    )
-    expect(screen.queryByText('Your day starts here.')).not.toBeInTheDocument()
-  })
-
-  it('lights the Today Ember the moment a line is kept and darkens it again on Undo', async () => {
-    // Arrange — a stranger with nothing kept yet today.
-    renderEditor({ liveEditorClearDelayMs: 0 })
-    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-    await waitForLiveEditorReady(noteField)
-    const ember = screen.getByRole('status')
-    expect(ember).toHaveTextContent('Nothing kept yet today')
-    expect(ember).toHaveTextContent('Your day starts here.')
-
-    // Act — keep one line.
-    fireCompleteCommandOnFirstLine(noteField, 'ship the thing\nnext')
-
-    // Assert — the count moves in the same viewport, no navigation.
-    await waitFor(() => {
-      expect(ember).toHaveTextContent('1 thing kept today')
-    })
-    expect(ember.querySelector('[data-lit]')).toHaveAttribute(
-      'data-lit',
-      'true',
-    )
-
-    // Act — Undo on the toast.
-    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]
-      ?.action as { onClick: () => void } | undefined
-    await act(async () => {
-      undoAction?.onClick()
-    })
-
-    // Assert — back to dark, instantly.
-    await waitFor(() => {
-      expect(ember).toHaveTextContent('Nothing kept yet today')
-    })
-    expect(ember.querySelector('[data-lit]')).toHaveAttribute(
-      'data-lit',
-      'false',
-    )
   })
 })
 

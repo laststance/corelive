@@ -104,7 +104,7 @@ export const HeatmapResponseSchema = z.object({
   total: z.number().int(),
 })
 
-/** Payload the heatmap endpoint returns; `total` is what the Today Ember counts. */
+/** Payload the heatmap endpoint returns; `total` is the window's completion count. */
 export type HeatmapResponse = z.infer<typeof HeatmapResponseSchema>
 
 /**

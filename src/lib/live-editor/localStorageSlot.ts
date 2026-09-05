@@ -14,9 +14,9 @@ const memoryFallback = new Map<string, string>()
 let probedAvailability: LocalStorageAvailability | null = null
 
 /**
- * Probes localStorage once per session so the ember can say "Can't keep on this
- * device right now." instead of failing on every keystroke. Called by every slot
- * write and by the footer / ember copy.
+ * Probes localStorage once per session so the footer can say the device cannot
+ * keep right now instead of failing on every keystroke. Called by every slot
+ * write and by the footer copy.
  * @returns
  * - `'ok'` when a probe write + remove succeeded
  * - `'unavailable'` on the server (not cached, re-probed after hydration) or when the probe threw

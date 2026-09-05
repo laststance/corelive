@@ -1,7 +1,7 @@
 /**
  * @fileoverview Signed-out keep store — the device-local record behind `/write`.
  * If these fail, a stranger's Cmd+Enter either loses the keep, double-counts it,
- * crashes on a corrupt key, or the second tab's ember stops agreeing.
+ * crashes on a corrupt key, or a second tab stops hearing the write.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -168,41 +168,6 @@ describe('local completion store — a signed-out keep stays on this device', ()
     })
   })
 
-  it("counts only today's unmerged keeps in the visitor's zone", async () => {
-    // Arrange: 01:00 JST on the 4th (counted), 00:30 JST on the 5th (not
-    // today), a merged keep (the account already counts it), a garbage date.
-    const { store } = await loadFreshStore()
-    const items = [
-      {
-        id: 'a',
-        title: 'late night',
-        completedAt: '2026-09-03T16:00:00.000Z',
-      },
-      {
-        id: 'b',
-        title: 'past midnight',
-        completedAt: '2026-09-04T15:30:00.000Z',
-      },
-      {
-        id: 'c',
-        title: 'merged',
-        completedAt: '2026-09-04T01:00:00.000Z',
-        mergedBatchId: 'batch-1',
-      },
-      { id: 'd', title: 'garbage', completedAt: 'not a date' },
-    ]
-
-    // Act
-    const count = store.countLocalCompletionsOnDay(
-      items,
-      '2026-09-04',
-      'Asia/Tokyo',
-    )
-
-    // Assert
-    expect(count).toBe(1)
-  })
-
   it('notifies same-tab subscribers on every keep and undo', async () => {
     // Arrange
     const { store } = await loadFreshStore()
@@ -219,7 +184,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     expect(listener).toHaveBeenCalledTimes(2)
   })
 
-  it('hears another tab write the key (storage event) so both embers agree', async () => {
+  it('hears another tab write the key (storage event) so both tabs agree', async () => {
     // Arrange
     const { store } = await loadFreshStore()
     const listener = vi.fn()
@@ -243,7 +208,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     // Act
     const item = store.addLocalCompletion('still counts')
 
-    // Assert: the keep is readable for this session and the ember can say why.
+    // Assert: the keep is readable for this session and the footer can say why.
     expect(slot.getLocalStorageAvailability()).toBe('unavailable')
     expect(
       store
