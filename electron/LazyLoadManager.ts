@@ -271,46 +271,6 @@ export class LazyLoadManager {
   }
 
   /**
-   * Check if a component is loaded.
-   *
-   * @param componentName - Name of the component
-   * @returns True if loaded
-   */
-  isLoaded(componentName: string): boolean {
-    return this.loadedComponents.has(componentName)
-  }
-
-  /**
-   * Check if a component is currently loading.
-   *
-   * @param componentName - Name of the component
-   * @returns True if loading
-   */
-  isLoading(componentName: string): boolean {
-    return this.loadingPromises.has(componentName)
-  }
-
-  /**
-   * Get loading status for all components.
-   *
-   * @returns Status object
-   */
-  getStatus(): LoadingStatus {
-    const allComponents = Array.from(this.componentFactories.keys())
-
-    return {
-      total: allComponents.length,
-      loaded: this.loadedComponents.size,
-      loading: this.loadingPromises.size,
-      components: allComponents.map((name) => ({
-        name,
-        loaded: this.isLoaded(name),
-        loading: this.isLoading(name),
-      })),
-    }
-  }
-
-  /**
    * Cleanup all loaded components.
    */
   cleanup(): void {

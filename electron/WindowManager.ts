@@ -1513,18 +1513,6 @@ export class WindowManager {
   }
 
   /**
-   * Closes the settings window if it exists.
-   * The window reference is nulled by the 'closed' event handler
-   * set up in createSettingsWindow().
-   */
-  closeSettings(): void {
-    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-      this.settingsWindow.close()
-      // Note: Don't null here - the 'closed' event handler will do it
-    }
-  }
-
-  /**
    * Get settings window instance
    */
   getSettingsWindow(): BrowserWindow | null {

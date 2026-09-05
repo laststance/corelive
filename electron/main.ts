@@ -1150,35 +1150,6 @@ function setupIPCHandlers(): void {
     getWindowManager: () => windowManager ?? null,
   })
 
-  // Settings window IPC handlers
-  typedHandle('settings:open', () => {
-    try {
-      if (windowManager) {
-        windowManager.openSettings()
-        return true
-      }
-      log.warn('settings:open - windowManager not available')
-      return false
-    } catch (error) {
-      log.error('settings:open - Failed to open settings window:', error)
-      return false
-    }
-  })
-
-  typedHandle('settings:close', () => {
-    try {
-      if (windowManager) {
-        windowManager.closeSettings()
-        return true
-      }
-      log.warn('settings:close - windowManager not available')
-      return false
-    } catch (error) {
-      log.error('settings:close - Failed to close settings window:', error)
-      return false
-    }
-  })
-
   // Hide App Icon (Dock visibility) IPC handler - macOS only
   typedHandle('settings:setHideAppIcon', (_event, hide) => {
     try {
@@ -1346,49 +1317,6 @@ function setupIPCHandlers(): void {
       oauth.clearPendingSignInToken()
     }
     return true
-  })
-
-  // Performance monitoring IPC handlers (typed)
-  typedHandle('performance-get-metrics', () => {
-    return {
-      optimizer: performanceOptimizer.getMetrics(),
-      memory: memoryProfiler.getStatistics(),
-      lazyLoad: lazyLoadManager.getStatus(),
-    }
-  })
-
-  typedHandle('performance-trigger-cleanup', () => {
-    memoryProfiler.performCleanup('manual')
-    return true
-  })
-
-  typedHandle('performance-get-startup-time', () => {
-    return Date.now() - performanceOptimizer.startupMetrics.startTime
-  })
-
-  // Deep linking IPC handlers
-  typedHandle('deep-link-generate', (_event, action, params) => {
-    const manager = ensureDeepLinkManager()
-    if (manager) {
-      return manager.generateDeepLink(action, params)
-    }
-    return null
-  })
-
-  typedHandle('deep-link-get-examples', () => {
-    const manager = ensureDeepLinkManager()
-    if (manager) {
-      return manager.getExampleUrls()
-    }
-    return null
-  })
-
-  typedHandle('deep-link-handle-url', async (_event, url) => {
-    const manager = ensureDeepLinkManager()
-    if (manager) {
-      return manager.handleDeepLink(url)
-    }
-    return false
   })
 
   // Auto-updater IPC handlers (Zod-validated)

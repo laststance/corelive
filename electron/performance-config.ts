@@ -365,32 +365,6 @@ export class PerformanceOptimizer {
   }
 
   /**
-   * Get performance metrics.
-   *
-   * @returns Performance metrics object
-   */
-  getMetrics(): PerformanceMetrics {
-    const memoryUsage = process.memoryUsage()
-    const uptime = Date.now() - this.startupMetrics.startTime
-
-    return {
-      uptime,
-      memory: {
-        heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
-        heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
-        external: Math.round(memoryUsage.external / 1024 / 1024),
-        rss: Math.round(memoryUsage.rss / 1024 / 1024),
-      },
-      modules: {
-        loaded: this.startupMetrics.modulesLoaded,
-        cached: Object.keys(require.cache).length,
-        lazyLoaded: this.lazyModules.size,
-      },
-      windows: this.startupMetrics.windowsCreated,
-    }
-  }
-
-  /**
    * Cleanup all performance monitoring.
    */
   cleanup(): void {
