@@ -101,7 +101,6 @@ function expectNoRetiredKeys(
   expect(config.shortcuts).not.toHaveProperty('toggleFloatingNavigator')
   expect(config.shortcuts).not.toHaveProperty('focusFloatingNavigator')
   expect(config.shortcuts).not.toHaveProperty('toggleAlwaysOnTop')
-  expect(config.behavior).not.toHaveProperty('startup')
   expect(config.liveEditor).not.toHaveProperty('syncMode')
   expect(config.liveEditor).not.toHaveProperty('lastCategoryId')
 }
@@ -271,9 +270,29 @@ describe('ConfigManager legacy migrations', () => {
         configManager = new ConfigManager()
       }).not.toThrow()
 
-      // Assert: the load completed and the retired key is still dropped.
-      expect(configManager.getSection('behavior')).not.toHaveProperty('startup')
+      // Assert: the load completed and the surviving key is readable.
       expect(configManager.get('behavior.startOnLogin', false)).toBe(true)
+    })
+
+    it('keeps behavior.startup so reinstalling v0.21.0 still opens the panel the user chose', () => {
+      // Arrange: a config written by v0.21.0, where the user turned the
+      // Floating window off and LiveEditor on.
+      writeConfigFile(RETIRED_CONFIG_FIXTURE)
+
+      // Act
+      const configManager = new ConfigManager()
+
+      // Assert: this build ignores the key, but it must survive in memory AND
+      // on disk. v0.21.0's main reads behavior.startup to pick its launch
+      // window and this build ships no picker UI, so pruning it would strand a
+      // downgrading user on the Floating window with no way back.
+      expect(configManager.get('behavior.startup.showLiveEditor', null)).toBe(
+        false,
+      )
+      expect(configManager.get('behavior.startup.showFloating', null)).toBe(
+        true,
+      )
+      expect(readPersistedConfig().behavior).toHaveProperty('startup')
     })
 
     it('leaves a pristine config.json untouched (no rewrite when nothing was pruned)', () => {

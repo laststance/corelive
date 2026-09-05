@@ -211,14 +211,21 @@ const RETIRED_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
   // T9: the web app owns theme via localStorage; the native shell never read these.
   appearance: ['theme', 'accentColor'],
   // Floating Navigator retirement (login shell): its window geometry, its
-  // shortcuts, the startup-window picker, and LiveEditor's category sync.
+  // shortcuts, and LiveEditor's category sync.
   window: ['floating'],
   shortcuts: [
     'toggleFloatingNavigator',
     'focusFloatingNavigator',
     'toggleAlwaysOnTop',
   ],
-  behavior: ['startup'],
+  // DELIBERATELY NOT RETIRED: `behavior.startup`. This build ignores it, but
+  // v0.21.0's main still reads it to choose which panel opens at launch, and
+  // this build dropped the picker UI. Pruning it would send a user who
+  // reinstalls v0.21.0 back to the Floating window with no way to switch back
+  // — a one-way change we cannot undo for them. Leaving two unread keys in
+  // config.json is the same tradeoff as the `window: { main: {} }` remnant
+  // above. Geometry and accelerators DO stay pruned: v0.21.0 still ships UI
+  // to re-set both, so those resets self-heal.
   liveEditor: ['syncMode', 'lastCategoryId'],
   // Tray section retirement: nothing ever read any of these 7 keys outside
   // this file's own interface + default (verified by grep across the whole
