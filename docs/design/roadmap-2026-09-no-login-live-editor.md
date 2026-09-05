@@ -7,6 +7,8 @@ Status: APPROVED (office-hours) → ENG REVIEWED 2026-09-02 (/plan-eng-review, D
 Mode: Startup
 Supersedes: ryotamurakami-main-design-20260617-132129.md
 
+> **Superseded in part 2026-09-05 (PR #178):** Floating Navigator was retired. Below, the "Floating OAuth front door" / "/floating-navigator" references (:34-35, :84-85, :139, :244) point to the login window (`/login-shell`, `LoginShell.tsx`, `WindowManager.createLoginWindow`). The `/write` design is unaffected.
+
 ## Problem Statement
 
 Raphtalia is stuck on the CoreLive product roadmap ("ロードマップについて悩んでいる") and asked where to consult and where to record it. Diagnosis from the session: this is not an idea shortage, it is the absence of a sorting criterion. Deliverable = one criterion, a short Now / Next / Later list, and a fixed place to keep it (`docs/ROADMAP.md` + GitHub Issues via `/spec`).

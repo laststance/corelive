@@ -83,7 +83,7 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
   const { user } = useUser()
 
   // Clear transient state the instant Clerk reports a signed-in user (the token
-  // exchange completed) — the card is about to swap to the live navigator.
+  // exchange completed) — the main process closes this login window right after.
   const isLoading = user ? false : state.isLoading
   const error = user ? null : state.error
 

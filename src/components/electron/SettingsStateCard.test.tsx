@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { Sunrise } from 'lucide-react'
+import { Brain } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
 
 import { SettingsStateCard } from './SettingsStateCard'
@@ -9,26 +9,24 @@ describe('SettingsStateCard', () => {
     // Arrange / Act
     render(
       <SettingsStateCard
-        icon={Sunrise}
-        title="On launch"
-        description="Loading startup window settings…"
+        icon={Brain}
+        title="LiveEditor Note"
+        description="Loading LiveEditor settings…"
       />,
     )
 
     // Assert: both the title and the status description render for the reader.
-    expect(screen.getByText('On launch')).toBeInTheDocument()
-    expect(
-      screen.getByText('Loading startup window settings…'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('LiveEditor Note')).toBeInTheDocument()
+    expect(screen.getByText('Loading LiveEditor settings…')).toBeInTheDocument()
   })
 
   it('forwards className to the card so the parent keeps control of spacing', () => {
     // Arrange / Act
     const { container } = render(
       <SettingsStateCard
-        icon={Sunrise}
-        title="On launch"
-        description="Startup window settings are only available in the desktop application."
+        icon={Brain}
+        title="LiveEditor Note"
+        description="LiveEditor Note is only available in the desktop application."
         className="custom-outer-spacing"
       />,
     )

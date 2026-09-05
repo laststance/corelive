@@ -215,7 +215,7 @@ export const ElectronSettingsPage =
     return (
       // A fragment, NOT a wrapper div: these Electron sections become direct
       // siblings of the web-common sections in page.tsx's `space-y-12` flow, so
-      // all seven settings sections share one 48px rhythm (DESIGN.md 2xl).
+      // all six settings sections share one 48px rhythm (DESIGN.md 2xl).
       <>
         {/* LIVEEDITOR — note behavior, look-and-feel, and its keep-on-top pin.
             Three independent siblings (advisor): the note card degrades on the

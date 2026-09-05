@@ -128,7 +128,7 @@ export class SystemTrayManager {
         return null
       }
 
-      this.setTrayTooltipSafely('TODO Desktop App')
+      this.setTrayTooltipSafely('CoreLive')
 
       if (!this.setupTrayMenuSafely()) {
         log.warn('Failed to setup tray menu, using minimal functionality')

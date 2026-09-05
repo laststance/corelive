@@ -25,7 +25,7 @@ import {
 interface SettingsStateCardProps {
   /** Lucide icon shown beside the title (the same glyph the live card uses). */
   icon: LucideIcon
-  /** Card title — the feature name (e.g. "On launch", "LiveEditor Note"). */
+  /** Card title — the feature name (e.g. "LiveEditor Note"). */
   title: string
   /** One-line status message (desktop-only / update-prompt / loading). */
   description: string
@@ -43,7 +43,7 @@ interface SettingsStateCardProps {
  * @param props - icon, title, description, and optional className
  * @returns A Card with an icon + title header and a one-line description
  * @example
- * <SettingsStateCard icon={Sunrise} title="On launch" description="Loading startup window settings…" />
+ * <SettingsStateCard icon={Brain} title="LiveEditor Note" description="Loading LiveEditor settings…" />
  */
 export const SettingsStateCard = function SettingsStateCard({
   icon: Icon,
