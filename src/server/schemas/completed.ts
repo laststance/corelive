@@ -236,3 +236,71 @@ export const CompletedJournalResponseSchema = z.object({
 export type CompletedJournalResponse = z.infer<
   typeof CompletedJournalResponseSchema
 >
+
+/**
+ * Input schema for `completed.importLocal` — the one-time merge of a device's
+ * signed-out keeps into the account. `batchId` is the client-generated
+ * idempotency key: the server namespaces it per user and stores it as the
+ * `ImportBatch` primary key, so a retry after a lost response re-sends the same
+ * key and imports nothing twice. `completedAt` arrives as a real `Date` (oRPC
+ * serialises it), which rejects an unparseable timestamp at the boundary
+ * instead of letting an Invalid Date reach the row.
+ * @example
+ * { batchId: '7d0c1a2e-…', items: [{ title: 'buy milk', completedAt: new Date('2026-09-04T09:12:00.000Z') }] }
+ */
+export const IMPORT_LOCAL_MAX_ITEMS = 2000
+
+/**
+ * How far ahead of the server clock a client-supplied `completedAt` may sit.
+ * Device clocks drift, so a hard `<= now` would reject honest keeps; anything
+ * beyond this is a wrong clock or a tampered payload, and `getJournal` has no
+ * upper bound so a future row would show up there and never age out.
+ */
+export const IMPORT_LOCAL_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
+
+/**
+ * Transaction budget for one import. Prisma's 5s default is measured against a
+ * handful of statements, not {@link IMPORT_LOCAL_MAX_ITEMS} rows on a cold
+ * connection — a slow DB there aborts with P2028 and surfaces as a 500.
+ */
+export const IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS = 30_000
+
+export const ImportLocalSchema = z.object({
+  batchId: z.string().min(1).max(128),
+  items: z
+    .array(
+      z.object({
+        // The id the keep had in the browser's signed-out store. Stored as
+        // `Completed.localCompletionId` (unique per user) so however the client
+        // retries, the same keep can only ever land once.
+        localId: z.string().min(1).max(128),
+        title: z.string().min(1).max(255),
+        completedAt: z
+          .date()
+          .refine(
+            (value) =>
+              value.getTime() <= Date.now() + IMPORT_LOCAL_FUTURE_TOLERANCE_MS,
+            { message: 'completedAt cannot be in the future' },
+          ),
+      }),
+    )
+    .min(1)
+    .max(IMPORT_LOCAL_MAX_ITEMS),
+})
+
+/**
+ * Response schema for `completed.importLocal`. `alreadyImported` is how the
+ * client tells "this batch just landed" from "this batch landed on an earlier
+ * attempt"; both outcomes mean the same thing locally (tag the items), so the
+ * flag exists for logging and tests rather than branching.
+ * @example
+ * { batchId: '7d0c1a2e-…', imported: 12, alreadyImported: false }
+ */
+export const ImportLocalResponseSchema = z.object({
+  batchId: z.string(),
+  imported: z.number().int().min(0),
+  alreadyImported: z.boolean(),
+})
+
+export type ImportLocalInput = z.infer<typeof ImportLocalSchema>
+export type ImportLocalResponse = z.infer<typeof ImportLocalResponseSchema>

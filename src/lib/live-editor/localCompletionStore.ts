@@ -133,3 +133,47 @@ export function countLocalCompletionsOnDay(
   }
   return count
 }
+
+/**
+ * The keeps a sign-in merge should send: not yet merged, and carrying a
+ * timestamp the server can parse. Unparsable ones are skipped for the same
+ * reason {@link countLocalCompletionsOnDay} skips them — they are already
+ * invisible to the ember, and shipping an Invalid Date would 400 the whole batch.
+ * @returns Items in stored order; `[]` when there is nothing to merge.
+ * @example
+ * readUnmergedLocalCompletions() // => [{ id: '5b1c…', title: 'buy milk', completedAt: '2026-09-04T…' }]
+ */
+export function readUnmergedLocalCompletions(): LocalCompletion[] {
+  return parseLocalCompletions(slot.read()).filter(
+    (item) =>
+      item.mergedBatchId === undefined &&
+      !Number.isNaN(new Date(item.completedAt).getTime()),
+  )
+}
+
+/**
+ * Stamps `mergedBatchId` on the keeps a merge just landed, which is what takes
+ * them out of the ember's local count so the server's total is not double
+ * counted. Safe to re-run: items already tagged (or missing entirely) are left
+ * alone and an all-no-op call writes nothing, so a retry after a partially
+ * applied tag-back cannot disturb sibling tabs.
+ * @param ids - Exactly the ids that were sent, read from the pending merge record.
+ * @param batchId - The client batch id the merge used.
+ * @returns Nothing; subscribers re-read through the slot.
+ * @example
+ * tagLocalCompletionsMerged(['5b1c…'], '7d0c1a2e-…')
+ */
+export function tagLocalCompletionsMerged(
+  ids: string[],
+  batchId: string,
+): void {
+  const wanted = new Set(ids)
+  let changed = false
+  const items = parseLocalCompletions(slot.read()).map((item) => {
+    if (!wanted.has(item.id) || item.mergedBatchId !== undefined) return item
+    changed = true
+    return { ...item, mergedBatchId: batchId }
+  })
+  if (!changed) return
+  writeLocalCompletions(items)
+}

@@ -32,9 +32,16 @@ model Completed {
   // (createMany returns only {count}, never the inserted ids). Indexed for the
   // undo deleteMany lookup. NULL for rows created outside paste-import.
   importBatchId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  // The id the keep had in the browser's signed-out store, so the same keep can
+  // never land twice however the client retries (two tabs claiming the same
+  // batch, a lost tag re-sending it under a fresh batch id). NULL for rows that
+  // did not come from the signed-out store; Postgres treats NULLs as distinct,
+  // so the unique index only bites on real ids.
+  localCompletionId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
+  @@unique([userId, localCompletionId])
   @@index([categoryId])
   @@index([importBatchId])
 }

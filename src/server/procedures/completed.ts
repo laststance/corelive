@@ -8,6 +8,7 @@ import { toLocalDayKey } from '@/lib/toLocalDayKey'
 
 import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
+import { DEFAULT_CATEGORY_SEED } from '../schemas/category'
 import {
   CompletedJournalInputSchema,
   CompletedJournalResponseSchema,
@@ -18,6 +19,9 @@ import {
   DeleteCompletedSchema,
   HeatmapInputSchema,
   HeatmapResponseSchema,
+  IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS,
+  ImportLocalResponseSchema,
+  ImportLocalSchema,
 } from '../schemas/completed'
 import { calculateStreaks } from '../utils/calculateStreaks'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
@@ -485,4 +489,127 @@ export const deleteCompleted = authMiddleware
     throw new ORPCError('NOT_FOUND', {
       message: 'Completed row not found',
     })
+  })
+
+/**
+ * Resolves the category every imported keep lands in: the account's default,
+ * falling back to any category, seeding "General" when the account has none.
+ * Exists because a `/write` visitor can sign up and merge before the Clerk
+ * webhook's seed lands, and an import that 404s there would strand the device's
+ * whole history. Called only by {@link importLocalCompleted}, outside its
+ * transaction — a P2002 from the seed would abort the batch insert.
+ * @param userId - Owner whose default category is wanted.
+ * @returns The category id to file every imported row under.
+ * @example
+ * await resolveImportCategoryId(user.id) // => 3
+ */
+async function resolveImportCategoryId(userId: number): Promise<number> {
+  const existing = await prisma.category.findFirst({
+    where: { userId, isDefault: true },
+    select: { id: true },
+  })
+  if (existing) return existing.id
+
+  try {
+    const created = await prisma.category.create({
+      data: { ...DEFAULT_CATEGORY_SEED, userId },
+      select: { id: true },
+    })
+    return created.id
+  } catch (error) {
+    // P2002 = @@unique([name, userId]); the webhook (or a non-default "General")
+    // already owns the name, so fall through to whatever the account does have.
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== 'P2002'
+    ) {
+      throw error
+    }
+  }
+
+  const fallback = await prisma.category.findFirst({
+    where: { userId },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  })
+  if (!fallback) {
+    throw new ORPCError('INTERNAL_SERVER_ERROR', {
+      message: 'No category available to import into',
+    })
+  }
+  return fallback.id
+}
+
+/**
+ * Merges a device's signed-out keeps into the account exactly once. Runs from
+ * the root-level merge provider right after sign-in, so a visitor who wrote at
+ * `/write` before making an account keeps every ember they earned.
+ *
+ * Idempotency is the `ImportBatch` primary key, namespaced `"<userId>:<batchId>"`
+ * so two accounts can never collide on one client-generated id. The insert and
+ * the rows share a single transaction: a duplicate batch throws P2002 and rolls
+ * the whole thing back before a row lands, which is why the catch sits outside
+ * the callback — catching inside would run against an already-aborting
+ * transaction. Repeated titles are never deduplicated; repeating a task is the
+ * habit signal this app exists to count.
+ *
+ * @param input.batchId - Client idempotency key, persisted locally before the call so a retry reuses it.
+ * @param input.items - The device's unmerged keeps, each with the timestamp it actually happened at.
+ * @returns How many rows landed, and whether this batch had already been imported.
+ * @example
+ * importLocalCompleted({ batchId: '7d0c…', items: [{ title: 'buy milk', completedAt: new Date() }] })
+ * // => { batchId: '7d0c…', imported: 1, alreadyImported: false }
+ */
+export const importLocalCompleted = authMiddleware
+  .input(ImportLocalSchema)
+  .output(ImportLocalResponseSchema)
+  .handler(async ({ input, context }) => {
+    const { user } = context
+    const { batchId, items } = input
+    const namespacedBatchId = `${user.id}:${batchId}`
+
+    try {
+      const categoryId = await resolveImportCategoryId(user.id)
+
+      const imported = await prisma.$transaction(
+        async (tx) => {
+          await tx.importBatch.create({
+            data: { id: namespacedBatchId, userId: user.id },
+          })
+          const { count } = await tx.completed.createMany({
+            data: items.map((item) => ({
+              title: item.title,
+              completedAt: item.completedAt,
+              categoryId,
+              userId: user.id,
+              importBatchId: namespacedBatchId,
+              localCompletionId: item.localId,
+            })),
+            // A keep this account already holds (a second tab claimed the same
+            // batch, or a lost tag re-sent it under a fresh batch id) is skipped
+            // rather than duplicated — `(userId, localCompletionId)` is unique.
+            skipDuplicates: true,
+          })
+          return count
+        },
+        { timeout: IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS },
+      )
+
+      return { batchId, imported, alreadyImported: false }
+    } catch (error) {
+      // The batch id is already taken: an earlier attempt committed and only its
+      // response was lost. Nothing to do, and the client tags its items either way.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return { batchId, imported: 0, alreadyImported: true }
+      }
+      if (error instanceof ORPCError) throw error
+      log.error('Error in importLocalCompleted:', error)
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to import local completions',
+        cause: error,
+      })
+    }
   })
