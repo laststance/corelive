@@ -24,12 +24,6 @@ import type { WindowManager } from './WindowManager'
 // Type Definitions
 // ============================================================================
 
-/** API Bridge interface for task operations */
-interface APIBridge {
-  getTodoById(id: string): Promise<unknown>
-  createTodo(data: unknown): Promise<unknown>
-}
-
 /** Parsed deep link URL */
 interface ParsedDeepLink {
   action: string
@@ -58,18 +52,6 @@ export class DeepLinkManager {
   /** Window manager reference */
   private windowManager: WindowManager
 
-  /**
-   * API bridge for task operations.
-   *
-   * VESTIGIAL after T15: main.ts already constructs this manager with `null`
-   * (WebView architecture has no in-process task store), and T15 dropped the
-   * last `getTodoById`/`createTodo` reads, so this field is now written-only.
-   * Kept (with the `APIBridge` interface + constructor param) so T18 can delete
-   * the whole apiBridge plumbing in one Phase-2 sweep without touching the
-   * constructor call here first.
-   */
-  private apiBridge: APIBridge | null
-
   /** Notification manager reference */
   private notificationManager: NotificationManager | null
 
@@ -93,12 +75,10 @@ export class DeepLinkManager {
    */
   constructor(
     windowManager: WindowManager,
-    apiBridge: APIBridge | null,
     notificationManager: NotificationManager | null,
     app: App | null = null,
   ) {
     this.windowManager = windowManager
-    this.apiBridge = apiBridge
     this.notificationManager = notificationManager
     this.app = app || electronApp
     this.protocol = 'corelive'

@@ -140,7 +140,6 @@ let configManager: ConfigManager
 let windowStateManager: WindowStateManager
 let windowManager: WindowManager
 let ipcErrorHandler: IPCErrorHandler
-// Note: apiBridge and nextServerManager are no longer needed in WebView architecture
 
 /**
  * Guards setupIPCHandlers against a second run. IPC handlers bind the
@@ -297,7 +296,6 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
     const { DeepLinkManager } = require('./DeepLinkManager.cjs')
     deepLinkManager = new DeepLinkManager(
       windowManager,
-      null, // apiBridge no longer used in WebView architecture
       notificationManager || null, // Notifications are optional
       app,
     )
@@ -1536,8 +1534,6 @@ app.on('before-quit', async () => {
   if (ipcErrorHandler) {
     ipcErrorHandler.cleanup()
   }
-
-  // Note: apiBridge cleanup removed - no local database in WebView architecture
 
   // Final performance cleanup
   lazyLoadManager.cleanup()

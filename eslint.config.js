@@ -47,7 +47,6 @@ export default defineConfig([
       'electron/ipc/typedHandle.ts',
       'electron/ipc/typedInvoke.ts',
       'electron/ipc/typedSend.ts',
-      'electron/auth-manager.ts', // Dead code — see comment at top of file
       'electron/__tests__/**',
     ],
     rules: {

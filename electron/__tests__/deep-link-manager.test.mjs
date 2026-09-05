@@ -43,7 +43,6 @@ describe('DeepLinkManager', () => {
   let DeepLinkManager
   let deepLinkManager
   let mockWindowManager
-  let mockApiBridge
   let mockNotificationManager
 
   beforeEach(async () => {
@@ -72,11 +71,6 @@ describe('DeepLinkManager', () => {
       getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
     }
 
-    mockApiBridge = {
-      getTodoById: vi.fn(),
-      createTodo: vi.fn(),
-    }
-
     mockNotificationManager = {
       showNotification: vi.fn(),
     }
@@ -90,9 +84,8 @@ describe('DeepLinkManager', () => {
     DeepLinkManager = module.default
     deepLinkManager = new DeepLinkManager(
       mockWindowManager,
-      mockApiBridge,
       mockNotificationManager,
-      mockApp, // Pass the mocked app as 4th parameter for dependency injection
+      mockApp, // Pass the mocked app as 3rd parameter for dependency injection
     )
   })
 
@@ -221,12 +214,11 @@ describe('DeepLinkManager', () => {
 
       // Assert: LiveEditor opens — Home is a read-only dashboard, so routing
       // there would dead-end the user. Prefill fields are dropped because
-      // LiveEditor is free text. No task is created, so a deep link never
-      // mutates the database.
+      // LiveEditor is free text; the deep link never touches a database
+      // (DeepLinkManager has no database bridge to call).
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/live-editor',
       )
-      expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
 
     it('opens LiveEditor in the browser when the deep link carries no fields', async () => {
@@ -239,7 +231,6 @@ describe('DeepLinkManager', () => {
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/live-editor',
       )
-      expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
   })
 
