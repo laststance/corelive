@@ -42,7 +42,7 @@ Before CoreLive: 「メモ・テキストファイルに書いて消していた
 - **Pre-launch freedom**: schema / API breaking changes are allowed (README). No migrations to preserve.
 - **No-dedup principle**: repeating a task is a habit signal, never collapse identical titles. Accidental double submission still needs an idempotency key. The `ImportBatch` model exists in the schema but its write path was deleted in v0.21.0 (`157320ab`); nothing in `src/server` writes it today.
 - **`createCompleted` has no `completedAt` input**: merged rows would all bucket on sign-in day (`completedAt ?? createdAt`). `Completed.categoryId` is required (`onDelete: Restrict`), so a merge must resolve the account's `Category.isDefault`.
-- **Streak residue still ships**: `calculateStreaks` in `completed.ts`, `calc-streak.ts`, "longest streak" in `YearInReviewModal.tsx`, `AchievementAnimation.tsx`. Handled in Later. (`useStreakNotifications.ts` was deleted in v0.22.0.)
+- **Streak residue still ships**: `calculateStreaks` in `completed.ts`, `calc-streak.ts`, "longest streak" in `YearInReviewModal.tsx`, `AchievementAnimation.tsx`. Handled in Later. (`useStreakNotifications.ts` was deleted in PR #178.)
 - **Test infrastructure**: E2E / Playwright was removed in PR #167 (`2558b90f`); `pnpm validate` is vitest only. Any gate must name vitest suites or a `playwright-cli` recording.
 
 ## Premises
@@ -123,7 +123,7 @@ Wireframe (signed-out state, two screens, today-only ember): `~/.gstack/projects
 - Watch one named person use the signed-out page (15 minutes, silent).
 - Signed-out parity inside the packaged Electron panel (needs a main-process release; the day it lands, point the panel at `/write` and delete nothing).
 - skill-tree keep / delete decided by the criterion.
-- Streak residue sweep: delete `calculateStreaks`, `calc-streak.ts`, the "longest streak" line in `YearInReviewModal.tsx`, and the streak branch in `AchievementAnimation.tsx`, unless a piece is explicitly exempted as celebratory copy that never shows a broken chain. (`useStreakNotifications.ts` is already deleted as of v0.22.0.)
+- Streak residue sweep: delete `calculateStreaks`, `calc-streak.ts`, the "longest streak" line in `YearInReviewModal.tsx`, and the streak branch in `AchievementAnimation.tsx`, unless a piece is explicitly exempted as celebratory copy that never shows a broken chain. (`useStreakNotifications.ts` was already deleted in PR #178.)
 - #120 drag-to-Completed stays Later; #53 AI labels and #124 modifier chords are cut unless the criterion changes.
 
 ### Local store spec (signed out)

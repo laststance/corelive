@@ -208,7 +208,7 @@ describe('OAuthManager emitted channel surface', () => {
 
     // Assert: the emitted channel set is exactly the two the preload bridge
     // still listens for. `oauth-success` and `oauth-complete-exchange` lost
-    // their senders in v0.14.0 and their listeners in v0.22.0; re-adding a send
+    // their senders in v0.14.0 and their listeners in PR #178; re-adding a send
     // without a listener would silently drop the sign-in, so this pins the set
     // rather than asserting one absence.
     const emittedChannels = vi

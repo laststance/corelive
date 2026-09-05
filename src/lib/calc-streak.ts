@@ -42,7 +42,7 @@ export type StreakSummary = {
   /** Highest tier the current streak has crossed: `7`, `30`, `100`, `365`,
    * or `null` (streak < 7). Computed but currently unconsumed: its only reader
    * was the milestone-notification hook, retired with the Floating Navigator in
-   * v0.22.0. Kept because DESIGN.md D12 ("never decreases without explanation")
+   * PR #178. Kept because DESIGN.md D12 ("never decreases without explanation")
    * governs how a future surface must present it. */
   currentTier: StreakTier
   /** Distinct local-day keys with activity within `todayIso`'s calendar month.

@@ -95,7 +95,11 @@ describe('registerAuthHandlers', () => {
     const result = await getHandler('auth-set-user')(EVENT, USER)
 
     // Assert: stored first, then the sender's window is handed off.
-    expect(result).toEqual(USER)
+    expect(result).toEqual({
+      clerkId: 'user_123',
+      emailAddresses: ['qa@example.com'],
+      firstName: 'QA',
+    })
     expect(setActiveUser).toHaveBeenCalledWith(USER)
     expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
   })
@@ -123,7 +127,11 @@ describe('registerAuthHandlers', () => {
     // stored would bounce LiveEditor straight back to /login.
     expect(windowManager.completeLogin).not.toHaveBeenCalled()
     releaseStore()
-    await expect(pendingHandoff).resolves.toEqual(USER)
+    await expect(pendingHandoff).resolves.toEqual({
+      clerkId: 'user_123',
+      emailAddresses: ['qa@example.com'],
+      firstName: 'QA',
+    })
     expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
   })
 

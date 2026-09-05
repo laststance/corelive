@@ -7,7 +7,7 @@
  * own. Status text comes from a one-time `updater.getStatus()` fetch on mount
  * plus the optimistic message set locally when the user presses the button —
  * the main process stopped sending live `updater-message` /
- * `updater-download-progress` events in v0.22.0, when the retired main window
+ * `updater-download-progress` events in PR #178, when the retired main window
  * (T18) that received them was cleaned up. When a download finishes, a
  * "Restart to Update" button calls `updater.quitAndInstall()`.
  *

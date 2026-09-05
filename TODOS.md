@@ -78,3 +78,27 @@ None belong in that deletion PR; all four are verified against `86ef29e1`.
 **Effort:** S
 **Priority:** P3
 **Depends on:** a call on whether the native-tap re-enable control ships.
+
+### A login window re-shown after a failed LiveEditor load has no in-window recovery
+
+**What:** `WindowManager.completeLogin()` sets `loginHandoffPending = true` before calling `showLiveEditor()`. If the LiveEditor's `loadURL` then fails (`did-fail-load` on the main frame, e.g. offline or a blocked host), `finish(false)` at `WindowManager.ts:1028` routes into the `suppressLiveEditorAuthRedirect` fallback and re-shows the login window with the latch still set. The re-shown window renders `LoginShell.tsx:85` ("Signed in. Open LiveEditor to log your wins."), but pressing sign-in again is a deliberate no-op, so the only ways out are the tray / global-shortcut toggle (→ `revealLiveEditorNow()`) or signing out (→ `clearLoginHandoff()`). Neither is reachable from the window the user is looking at.
+
+**Why:** Raised by CodeRabbit on PR #178 as a Major finding whose proposed fix — clear the latch on failure — would reintroduce the exact loop the latch exists to stop (login → LiveEditor → fail → login → `auth-set-user` → …), which the ASCII diagram at `WindowManager.ts:548-553` documents as the reason `did-fail-load` leaves `pending` set. The design is correct; what is missing is a retry affordance inside the login window, which is a UI addition and does not belong in a subtractive cleanup PR.
+
+**Context:** The recovery paths do work — this is a discoverability gap, not a dead end. A "Retry opening LiveEditor" button in `LoginShell.tsx`'s signed-in placeholder, wired to the same `showLiveEditor()` entry point the tray uses, would close it without touching the latch.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** a call on whether the login window should carry a retry control.
+
+### `config` namespace in `src/types/electron.d.ts` has never matched the preload implementation
+
+**What:** `src/types/electron.d.ts:76-81` declares `export`/`import`/`backup`/`getPaths`/`save`/`load` on `electronAPI.config`. `save: () => boolean` and `load: () => any` are declared synchronous even though every preload config method goes through async `ipcRenderer.invoke`, and `getPaths: () => Promise<any>` plus `load: () => any` are two `any` violations under the repo's `unknown`-over-`any` rule.
+
+**Why:** Raised by CodeRabbit on PR #178 as a Major finding, but verified byte-identical at the merge base (`e50888dc:176-183`) — this drift predates the PR and is not part of its diff. Fixing it means reconciling the mirror against `electron/types/electron-api.d.ts` and the real preload surface, which is the same two-d.ts reconciliation the PR already did for the `oauth` namespace and would widen a subtractive diff into unrelated territory.
+
+**Context:** `skipLibCheck` hides `TS2717` on duplicate `Window` augmentations, so nothing in CI catches this class of drift. The four-column table method (implementation / canonical d.ts / mirror d.ts / renderer caller) that PR #178 used for `oauth` is the tool for it; the `config` namespace is the next candidate.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** nothing.

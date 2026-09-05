@@ -538,7 +538,7 @@ export class ShortcutManager {
         this.hasNotifiedLatchBlock = true
         this.notificationManager.showNotification(
           'Native Shortcut Disabled',
-          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Re-enable it in Settings.`,
+          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Restart CoreLive to re-enable it.`,
           { silent: true },
         )
       }

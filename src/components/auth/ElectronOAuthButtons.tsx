@@ -93,7 +93,7 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
     // Main-process OAuth error events drive the button back out of its
     // loading state. There is no matching success event: the OAuth bridge's
     // `onSuccess` lost its sender in v0.14.0 (the retired main window) and
-    // its listener was deleted in v0.22.0 as dead code. On success the CTA's
+    // its listener was deleted in PR #178 as dead code. On success the CTA's
     // loading state is cleared instead by `isLoading = user ? false : ...`
     // above, the instant Clerk reports the newly signed-in user.
     const unsubscribeError = window.electronAPI?.oauth?.onError?.((data) => {
