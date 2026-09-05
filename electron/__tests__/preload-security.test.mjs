@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-import { log } from '../../src/lib/logger.ts'
 import { sanitizeData } from '../preload-shared/sanitize-data.ts'
 
 // Mock Electron modules. Defined via vi.hoisted so the (hoisted) vi.mock factory
@@ -29,38 +28,6 @@ await import('../preload.ts')
 describe('Preload Script Security Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  describe('Channel Validation', () => {
-    it('should validate allowed IPC channels correctly', () => {
-      const ALLOWED_CHANNELS = {
-        'todo-get-all': true,
-        'todo-create': true,
-        'todo-update': true,
-        'todo-delete': true,
-        'window-minimize': true,
-        'window-close': true,
-        'notification-show': true,
-      }
-
-      const validateChannel = (channel) => {
-        return ALLOWED_CHANNELS[channel] === true
-      }
-
-      // Test allowed channels
-      expect(validateChannel('todo-get-all')).toBe(true)
-      expect(validateChannel('todo-create')).toBe(true)
-      expect(validateChannel('window-minimize')).toBe(true)
-      expect(validateChannel('notification-show')).toBe(true)
-
-      // Test disallowed channels
-      expect(validateChannel('malicious-channel')).toBe(false)
-      expect(validateChannel('file-system-access')).toBe(false)
-      expect(validateChannel('shell-execute')).toBe(false)
-      expect(validateChannel('')).toBe(false)
-      expect(validateChannel(null)).toBe(false)
-      expect(validateChannel(undefined)).toBe(false)
-    })
   })
 
   describe('Data Sanitization', () => {
@@ -399,119 +366,6 @@ describe('Preload Script Security Tests', () => {
         isValid: false,
         error: "Dangerous property 'eval' detected",
       })
-    })
-  })
-
-  describe('Event Listener Security', () => {
-    it('should validate event channels before adding listeners', () => {
-      const ALLOWED_CHANNELS = {
-        'auth-state-changed': true,
-        'window-focus': true,
-        'window-blur': true,
-      }
-
-      const secureEventListener = (channel, callback) => {
-        if (!ALLOWED_CHANNELS[channel]) {
-          log.error(`Attempted to listen to unauthorized channel: ${channel}`)
-          return false
-        }
-
-        if (typeof callback !== 'function') {
-          log.error('Callback must be a function')
-          return false
-        }
-
-        // In real implementation, would call ipcRenderer.on
-        return true
-      }
-
-      // Test allowed channels
-      expect(secureEventListener('auth-state-changed', vi.fn())).toBe(true)
-      expect(secureEventListener('window-focus', vi.fn())).toBe(true)
-
-      // Test disallowed channels
-      expect(secureEventListener('malicious-channel', vi.fn())).toBe(false)
-      expect(secureEventListener('file-system-event', vi.fn())).toBe(false)
-
-      // Test invalid callback
-      expect(secureEventListener('auth-state-changed', 'not-a-function')).toBe(
-        false,
-      )
-      expect(secureEventListener('auth-state-changed', null)).toBe(false)
-    })
-
-    it('should sanitize event data in callbacks', () => {
-      const sanitizeData = (data) => {
-        if (typeof data === 'string') {
-          return data.trim()
-        }
-        return data
-      }
-
-      // Mirrors preload.ts: the IpcRendererEvent is intentionally dropped so
-      // renderer listeners receive only the sanitized payload (matching the
-      // typed `on<C>()` contract in electron-api.d.ts).
-      const createSecureCallback = (userCallback) => {
-        return (_event, ...args) => {
-          try {
-            const sanitizedArgs = args.map((arg) => sanitizeData(arg))
-            userCallback(...sanitizedArgs)
-          } catch (error) {
-            log.error('Error in event callback:', error)
-          }
-        }
-      }
-
-      const mockUserCallback = vi.fn()
-      const secureCallback = createSecureCallback(mockUserCallback)
-
-      // Test callback with sanitized data
-      secureCallback({}, '  test data  ', 123, true)
-
-      expect(mockUserCallback).toHaveBeenCalledWith('test data', 123, true)
-    })
-
-    it('should provide cleanup functions for event listeners', () => {
-      const eventListeners = new Map()
-
-      const secureOn = (channel, callback) => {
-        const ALLOWED_CHANNELS = { 'window-focus': true }
-
-        if (!ALLOWED_CHANNELS[channel]) {
-          return null
-        }
-
-        const wrappedCallback = (_event, ...args) => {
-          callback(...args)
-        }
-
-        // Store the listener
-        if (!eventListeners.has(channel)) {
-          eventListeners.set(channel, [])
-        }
-        eventListeners.get(channel).push(wrappedCallback)
-
-        // Return cleanup function
-        return () => {
-          const listeners = eventListeners.get(channel)
-          if (listeners) {
-            const index = listeners.indexOf(wrappedCallback)
-            if (index > -1) {
-              listeners.splice(index, 1)
-            }
-          }
-        }
-      }
-
-      const callback = vi.fn()
-      const cleanup = secureOn('window-focus', callback)
-
-      expect(cleanup).toBeInstanceOf(Function)
-      expect(eventListeners.get('window-focus')).toHaveLength(1)
-
-      // Test cleanup
-      cleanup()
-      expect(eventListeners.get('window-focus')).toHaveLength(0)
     })
   })
 

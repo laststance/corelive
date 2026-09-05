@@ -18,14 +18,13 @@
  * Best Practices:
  * - NEVER expose raw Node.js APIs to renderer
  * - Always validate and sanitize data
- * - Use channel whitelisting for IPC
+ * - Constrain IPC channels at compile time (see `typedInvoke`)
  * - Keep the exposed API surface minimal
  *
  * @module electron/preload
  */
 
-import { contextBridge, ipcRenderer } from 'electron'
-import type { IpcRendererEvent } from 'electron'
+import { contextBridge } from 'electron'
 
 import { typedInvoke } from './ipc/typedInvoke'
 import { log } from './logger'
@@ -34,100 +33,15 @@ import {
   createOAuthBridge,
 } from './preload-shared/auth-oauth-bridge'
 import { sanitizeData } from './preload-shared/sanitize-data'
-import type { ConfigSection, IPCEventChannel, IPCResponse } from './types/ipc'
+import type { ConfigSection, IPCResponse } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
-/**
- * Allowed event-channel map for the generic `on/removeListener/removeAllListeners`
- * entry points.
- *
- * Request/response channels are already guarded by `typedInvoke` — the typed
- * wrapper constrains channel names to `IPCChannel` at compile-time. The
- * whitelist below only protects the untyped listener surface, which is solely
- * for one-way events (main → renderer). Including request/response channels
- * here would needlessly widen the listener-management attack surface.
- */
-type AllowedChannelsMap = Record<IPCEventChannel, true>
-
 // `ElectronUserData` / `OAuthCallbackData` now live alongside the bridge
 // factories in `./preload-shared/auth-oauth-bridge` (single source for every
 // window's auth/oauth surface).
-
-// ============================================================================
-// Allowed Channels Whitelist
-// ============================================================================
-
-/**
- * Whitelist of allowed IPC channels for security.
- *
- * This is a critical security control. Only channels listed here
- * can be used by the renderer process. This prevents:
- * - Malicious code from accessing unauthorized APIs
- * - Accidental exposure of dangerous functionality
- * - IPC injection attacks
- *
- * When adding new channels:
- * 1. Consider if it's truly needed in the renderer
- * 2. Ensure the main process handler validates all input
- * 3. Document what the channel does and why it's safe
- */
-/**
- * Whitelist of channels allowed for renderer-facing `on/off/removeAllListeners`.
- *
- * Since `typedInvoke`/`createTypedListener` already constrain callers to valid
- * channel names at compile-time, this map only guards the untyped generic
- * `on()` / `removeListener()` / `removeAllListeners()` entry points below.
- *
- * The `satisfies AllowedChannelsMap` assertion forces exhaustive enumeration
- * of every `IPCEventChannel`. Adding an event channel in `types/ipc.ts`
- * without listing it here is a compile error. This is the single source of
- * truth — no hand-maintained subset is allowed to drift.
- */
-const ALLOWED_CHANNELS = {
-  // Event channels (main → renderer) — the only surface guarded here,
-  // since request/response channels go through typedInvoke (compile-time safe).
-  'oauth-success': true,
-  'oauth-error': true,
-  'oauth-complete-exchange': true,
-  'clerk-sign-in-token': true,
-  'auth-state-changed': true,
-  'window-focus': true,
-  'window-blur': true,
-  'app-update-available': true,
-  'app-update-downloaded': true,
-  'updater-message': true,
-  'updater-download-progress': true,
-  'focus-task': true,
-  'mark-task-complete': true,
-  'shortcut-new-task': true,
-  'shortcut-search': true,
-  'menu-action': true,
-  'deep-link-focus-task': true,
-  'deep-link-create-task': true,
-  'deep-link-task-created': true,
-  'deep-link-navigate': true,
-  'deep-link-search': true,
-  'notification-permission-denied': true,
-  'show-fallback-notification': true,
-  'system-integration-status': true,
-} satisfies AllowedChannelsMap
-
-// ============================================================================
-// Security Utilities
-// ============================================================================
-
-/**
- * Validate IPC channel for security.
- *
- * @param channel - Channel name to validate
- * @returns True if channel is in whitelist
- */
-function validateChannel(channel: string): boolean {
-  return (ALLOWED_CHANNELS as Record<string, boolean>)[channel] === true
-}
 
 // ============================================================================
 // Exposed API
@@ -680,89 +594,6 @@ const electronAPI = {
         throw error
       }
     },
-  },
-
-  // Secure event listener management.
-  //
-  // Callbacks receive only the sanitized main-process payload — the
-  // IpcRendererEvent argument is intentionally dropped so listeners can be
-  // written as `(data) => …` to match the typed `on<C>()` contract in
-  // `electron-api.d.ts` (`callback: (data: IPCEventData<C>) => void`). This
-  // also aligns with the LiveEditor preload's behavior.
-  on: (
-    channel: string,
-    callback: (...args: unknown[]) => void,
-  ): (() => void) | undefined => {
-    if (!validateChannel(channel)) {
-      log.error(`Attempted to listen to unauthorized channel: ${channel}`)
-      return
-    }
-
-    if (typeof callback !== 'function') {
-      log.error('Callback must be a function')
-      return
-    }
-
-    const wrappedCallback = (
-      _event: IpcRendererEvent,
-      ...args: unknown[]
-    ): void => {
-      try {
-        const sanitizedArgs = args.map((arg) => sanitizeData(arg))
-        callback(...sanitizedArgs)
-      } catch (error) {
-        log.error('Error in event callback:', error)
-      }
-    }
-
-    ipcRenderer.on(channel, wrappedCallback)
-
-    // Return cleanup function
-    return () => {
-      ipcRenderer.removeListener(channel, wrappedCallback)
-    }
-  },
-
-  /**
-   * @deprecated Use the cleanup function returned by `on()` instead.
-   *
-   * This method cannot work correctly because `on()` wraps the callback.
-   * The original callback passed here won't match the registered listener.
-   *
-   * @example
-   * // Correct usage:
-   * const cleanup = api.on('channel', callback)
-   * cleanup() // Removes the listener
-   *
-   * // Incorrect (won't work):
-   * api.removeListener('channel', callback)
-   */
-  removeListener: (
-    channel: string,
-    _callback: (...args: unknown[]) => void,
-  ): void => {
-    if (!validateChannel(channel)) {
-      log.error(
-        `Attempted to remove listener from unauthorized channel: ${channel}`,
-      )
-      return
-    }
-
-    log.warn(
-      `removeListener is deprecated. Use the cleanup function returned by on() instead. Channel: ${channel}`,
-    )
-  },
-
-  // Remove all listeners for a channel
-  removeAllListeners: (channel: string): void => {
-    if (!validateChannel(channel)) {
-      log.error(
-        `Attempted to remove all listeners from unauthorized channel: ${channel}`,
-      )
-      return
-    }
-
-    ipcRenderer.removeAllListeners(channel)
   },
 
   // Auto-updater operations

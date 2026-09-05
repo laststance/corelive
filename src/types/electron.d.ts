@@ -19,14 +19,6 @@ interface ElectronAuthUser {
 }
 
 interface ElectronAPI {
-  // Event handling
-  on: (
-    channel: string,
-    callback: (event: any, ...args: any[]) => void,
-  ) => () => void
-  removeListener: (channel: string, callback: Function) => void
-  removeAllListeners: (channel: string) => void
-
   // Authentication
   auth?: {
     getUser: () => Promise<any>

@@ -16,8 +16,6 @@ import type {
   ConfigSection,
   UpdaterStatus,
   IPCResponse,
-  IPCEventChannel,
-  IPCEventData,
 } from './ipc'
 
 /**
@@ -159,33 +157,6 @@ export interface ElectronAPI {
       }) => void,
     ) => () => void
   }
-
-  /**
-   * Event listener management.
-   * @param channel - Event channel name
-   * @param callback - Event handler function
-   * @returns Cleanup function to remove the listener
-   */
-  on: <C extends IPCEventChannel>(
-    channel: C,
-    callback: (data: IPCEventData<C>) => void,
-  ) => () => void
-
-  /**
-   * Remove specific event listener.
-   * @param channel - Event channel name
-   * @param callback - Event handler to remove
-   */
-  removeListener: <C extends IPCEventChannel>(
-    channel: C,
-    callback: (data: IPCEventData<C>) => void,
-  ) => void
-
-  /**
-   * Remove all listeners for a channel.
-   * @param channel - Event channel name
-   */
-  removeAllListeners: (channel: IPCEventChannel) => void
 
   /**
    * Electron-specific settings management.
