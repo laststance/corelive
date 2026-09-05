@@ -144,8 +144,8 @@ describe('LocalKeepMergeSync', () => {
     expect(sent).toEqual({
       batchId: expect.any(String),
       items: [
-        { title: 'push-ups', completedAt: new Date(completedAt) },
-        { title: 'push-ups', completedAt: new Date(completedAt) },
+        { localId: 'a', title: 'push-ups', completedAt: new Date(completedAt) },
+        { localId: 'b', title: 'push-ups', completedAt: new Date(completedAt) },
       ],
     })
   })
@@ -221,14 +221,14 @@ describe('LocalKeepMergeSync', () => {
     expect(resumed).toEqual({
       batchId: 'pending-1',
       items: [
-        { title: 'read', completedAt: new Date(completedAt) },
-        { title: 'read', completedAt: new Date(completedAt) },
+        { localId: 'a', title: 'read', completedAt: new Date(completedAt) },
+        { localId: 'b', title: 'read', completedAt: new Date(completedAt) },
       ],
     })
     const next = importLocalFn.mock.calls[1]?.[0] as ImportPayload | undefined
     expect(next?.batchId).not.toBe('pending-1')
     expect(next?.items).toEqual([
-      { title: 'walk', completedAt: new Date(completedAt) },
+      { localId: 'c', title: 'walk', completedAt: new Date(completedAt) },
     ])
     await waitFor(() => {
       const stored = readStoredKeeps()
@@ -330,6 +330,35 @@ describe('LocalKeepMergeSync', () => {
     expect(
       queryClient.getQueryData<{ total: number }>(todayHeatmapKey)?.total,
     ).toBe(4)
+  })
+
+  it("leaves today's count to the refetch when the server already held some of the keeps", async () => {
+    // Arrange — two keeps sent, one already filed (a second tab got there
+    // first). WHICH one is unknowable here, so painting a guess is worse than
+    // waiting for the real number.
+    const completedAt = new Date().toISOString()
+    seedLocalKeeps([
+      { id: 'a', title: 'push-ups', completedAt },
+      { id: 'b', title: 'push-ups', completedAt },
+    ])
+    importLocalFn.mockResolvedValue({
+      batchId: 'fresh',
+      imported: 1,
+      alreadyImported: false,
+    })
+
+    // Act
+    const queryClient = renderMergeSync(3)
+
+    // Assert
+    await waitFor(() => {
+      expect(
+        readStoredKeeps().every((keep) => keep.mergedBatchId !== undefined),
+      ).toBe(true)
+    })
+    expect(
+      queryClient.getQueryData<{ total: number }>(todayHeatmapKey)?.total,
+    ).toBe(3)
   })
 
   it('waits for the refetch rather than painting a total when a resumed batch was already imported', async () => {

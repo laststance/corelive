@@ -270,6 +270,10 @@ export const ImportLocalSchema = z.object({
   items: z
     .array(
       z.object({
+        // The id the keep had in the browser's signed-out store. Stored as
+        // `Completed.localCompletionId` (unique per user) so however the client
+        // retries, the same keep can only ever land once.
+        localId: z.string().min(1).max(128),
         title: z.string().min(1).max(255),
         completedAt: z
           .date()

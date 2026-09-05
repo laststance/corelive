@@ -72,9 +72,21 @@ describeIfDb('completed.importLocal', () => {
       {
         batchId: randomUUID(),
         items: [
-          { title: 'push-ups', completedAt: new Date('2026-09-01T09:00:00Z') },
-          { title: 'push-ups', completedAt: new Date('2026-09-02T09:00:00Z') },
-          { title: 'push-ups', completedAt: new Date('2026-09-03T09:00:00Z') },
+          {
+            localId: 'k1',
+            title: 'push-ups',
+            completedAt: new Date('2026-09-01T09:00:00Z'),
+          },
+          {
+            localId: 'k2',
+            title: 'push-ups',
+            completedAt: new Date('2026-09-02T09:00:00Z'),
+          },
+          {
+            localId: 'k3',
+            title: 'push-ups',
+            completedAt: new Date('2026-09-03T09:00:00Z'),
+          },
         ],
       },
       authContext(clerkId),
@@ -100,7 +112,7 @@ describeIfDb('completed.importLocal', () => {
       importLocalCompleted,
       {
         batchId: randomUUID(),
-        items: [{ title: 'gym', completedAt: happenedAt }],
+        items: [{ localId: 'k4', title: 'gym', completedAt: happenedAt }],
       },
       authContext(clerkId),
     )
@@ -118,8 +130,16 @@ describeIfDb('completed.importLocal', () => {
     const user = await ensureUser(clerkId)
     const batchId = randomUUID()
     const items = [
-      { title: 'read', completedAt: new Date('2026-08-01T09:00:00Z') },
-      { title: 'read', completedAt: new Date('2026-08-02T09:00:00Z') },
+      {
+        localId: 'k5',
+        title: 'read',
+        completedAt: new Date('2026-08-01T09:00:00Z'),
+      },
+      {
+        localId: 'k6',
+        title: 'read',
+        completedAt: new Date('2026-08-02T09:00:00Z'),
+      },
     ]
     await call(importLocalCompleted, { batchId, items }, authContext(clerkId))
 
@@ -147,7 +167,11 @@ describeIfDb('completed.importLocal', () => {
     const secondUser = await ensureUser(secondClerkId)
     const sharedBatchId = randomUUID()
     const items = [
-      { title: 'walk', completedAt: new Date('2026-08-10T09:00:00Z') },
+      {
+        localId: 'k7',
+        title: 'walk',
+        completedAt: new Date('2026-08-10T09:00:00Z'),
+      },
     ]
 
     // Act
@@ -172,6 +196,42 @@ describeIfDb('completed.importLocal', () => {
     ).toBe(1)
   })
 
+  it('a keep re-sent under a fresh batch id lands once, not twice', async () => {
+    // Arrange — the first batch committed but its tag was lost (or a second
+    // tab claimed the same keep under its own batch id), so the keep comes back
+    // under a NEW batch id. Batch-level dedup cannot see this; only the keep's
+    // own id can.
+    const clerkId = freshClerkId()
+    const user = await ensureUser(clerkId)
+    const items = [
+      {
+        localId: 'keep-1',
+        title: 'meditate',
+        completedAt: new Date('2026-08-15T09:00:00Z'),
+      },
+    ]
+    await call(
+      importLocalCompleted,
+      { batchId: randomUUID(), items },
+      authContext(clerkId),
+    )
+
+    // Act
+    const resent = await call(
+      importLocalCompleted,
+      { batchId: randomUUID(), items },
+      authContext(clerkId),
+    )
+
+    // Assert
+    expect(resent.alreadyImported).toBe(false)
+    expect(resent.imported).toBe(0)
+    const rows = await prisma.completed.findMany({
+      where: { userId: user.id, title: 'meditate' },
+    })
+    expect(rows).toHaveLength(1)
+  })
+
   it('merges into a freshly seeded category when the account has none', async () => {
     // Arrange
     const clerkId = freshClerkId()
@@ -184,7 +244,11 @@ describeIfDb('completed.importLocal', () => {
       {
         batchId: randomUUID(),
         items: [
-          { title: 'stretch', completedAt: new Date('2026-08-20T09:00:00Z') },
+          {
+            localId: 'k8',
+            title: 'stretch',
+            completedAt: new Date('2026-08-20T09:00:00Z'),
+          },
         ],
       },
       authContext(clerkId),

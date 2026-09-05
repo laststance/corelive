@@ -83,7 +83,8 @@ export function LocalKeepMergeSync(): null {
 
     const result = await importLocalMutation.mutateAsync({
       batchId: pending.batchId,
-      items: items.map(({ title, completedAt }) => ({
+      items: items.map(({ id, title, completedAt }) => ({
+        localId: id,
         title,
         completedAt: new Date(completedAt),
       })),
@@ -102,9 +103,12 @@ export function LocalKeepMergeSync(): null {
     // keeps twice (it spikes). Both writes in one turn are batched into a single
     // render, so the number never moves wrong. On `alreadyImported` the rows
     // landed on an earlier attempt and the server already owns them — tag only.
-    const landedToday = result.alreadyImported
-      ? 0
-      : countLocalCompletionsOnDay(items, dayKey, timezone)
+    // Same when the server skipped some as already filed: WHICH ones is
+    // unknowable here, so the refetch settles it rather than a guess.
+    const landedToday =
+      result.alreadyImported || result.imported !== items.length
+        ? 0
+        : countLocalCompletionsOnDay(items, dayKey, timezone)
     tagLocalCompletionsMerged(pending.ids, pending.batchId)
     if (landedToday > 0) {
       queryClient.setQueryData<HeatmapResponse>(

@@ -19,6 +19,7 @@ describe('ImportLocalSchema', () => {
       batchId: 'batch-1',
       items: [
         {
+          localId: 'k1',
           title: 'push-ups',
           completedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
@@ -38,6 +39,7 @@ describe('ImportLocalSchema', () => {
       batchId: 'batch-1',
       items: [
         {
+          localId: 'k1',
           title: 'push-ups',
           completedAt: new Date(
             Date.now() + IMPORT_LOCAL_FUTURE_TOLERANCE_MS / 2,

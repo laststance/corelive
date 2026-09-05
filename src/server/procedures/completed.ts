@@ -571,25 +571,31 @@ export const importLocalCompleted = authMiddleware
     try {
       const categoryId = await resolveImportCategoryId(user.id)
 
-      await prisma.$transaction(
+      const imported = await prisma.$transaction(
         async (tx) => {
           await tx.importBatch.create({
             data: { id: namespacedBatchId, userId: user.id },
           })
-          await tx.completed.createMany({
+          const { count } = await tx.completed.createMany({
             data: items.map((item) => ({
               title: item.title,
               completedAt: item.completedAt,
               categoryId,
               userId: user.id,
               importBatchId: namespacedBatchId,
+              localCompletionId: item.localId,
             })),
+            // A keep this account already holds (a second tab claimed the same
+            // batch, or a lost tag re-sent it under a fresh batch id) is skipped
+            // rather than duplicated — `(userId, localCompletionId)` is unique.
+            skipDuplicates: true,
           })
+          return count
         },
         { timeout: IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS },
       )
 
-      return { batchId, imported: items.length, alreadyImported: false }
+      return { batchId, imported, alreadyImported: false }
     } catch (error) {
       // The batch id is already taken: an earlier attempt committed and only its
       // response was lost. Nothing to do, and the client tags its items either way.
