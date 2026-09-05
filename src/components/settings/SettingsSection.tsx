@@ -1,7 +1,7 @@
 import * as React from 'react'
 
 /**
- * Caption-tier section-label class (DESIGN.md Caption token): 12px Inter Tight 500,
+ * Caption-tier section-label class (DESIGN.md Caption token): 12px / 500,
  * uppercase, 0.05em tracking. `text-foreground` keeps the section `<h2>` one step
  * STRONGER than the muted in-section sub-group captions (e.g. "On launch"), so the
  * hierarchy reads Section `<h2>` ＞ sub-group caption ＞ row. Pairs with

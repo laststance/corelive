@@ -70,7 +70,6 @@ export function buildUpdateProgressWindowHtml(
         align-items: center;
         justify-content: center;
         font-family:
-          'Inter Tight',
           -apple-system,
           BlinkMacSystemFont,
           'Segoe UI',
@@ -103,7 +102,6 @@ export function buildUpdateProgressWindowHtml(
       .percent {
         color: var(--muted);
         font-family:
-          'Geist Mono',
           ui-monospace,
           SFMono-Regular,
           Menlo,

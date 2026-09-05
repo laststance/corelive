@@ -806,8 +806,9 @@ describe('LiveEditor text styling settings', () => {
     })
     const noteField = await screen.findByRole('textbox')
 
-    // Assert — the saved presentation is applied inline to the writing surface.
-    expect(noteField.style.fontFamily).toBe('var(--font-serif)')
+    // Assert — the saved face is a stock Tailwind utility on the writing
+    // surface; size and color are applied inline.
+    expect(noteField).toHaveClass('font-serif')
     expect(noteField.style.fontSize).toBe('20px')
     expect(noteField.style.color).toBe('var(--primary)')
   })
@@ -825,9 +826,9 @@ describe('LiveEditor text styling settings', () => {
     renderEditor()
     const noteField = await screen.findByRole('textbox')
 
-    // Assert — Inter Tight at 16px: the DESIGN.md Body tier, and the size iOS
-    // Safari needs to leave a focused input alone instead of zooming into it.
-    expect(noteField.style.fontFamily).toBe('var(--font-sans)')
+    // Assert — the default sans at 16px: the DESIGN.md Body tier, and the size
+    // iOS Safari needs to leave a focused input alone instead of zooming into it.
+    expect(noteField).toHaveClass('font-sans')
     expect(noteField.style.fontSize).toBe('16px')
   })
 })

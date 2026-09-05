@@ -5,11 +5,18 @@ import {
   deriveThemeTokens,
   deriveThemeCss,
   generateThemesCss,
+  staticThemeCss,
   type DerivationSeed,
 } from '../../../scripts/generate-theme-css'
 
 import { contrastRatio, meetsAA } from './contrast'
-import { THEME_REGISTRY, type DerivedTheme, type ThemeSeed } from './registry'
+import {
+  isDerivedTheme,
+  isStaticTheme,
+  THEME_REGISTRY,
+  type DerivedTheme,
+  type ThemeSeed,
+} from './registry'
 
 const toOklch = converter('oklch')
 
@@ -230,7 +237,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
   })
 
   it('emits the header alone when every registered theme is preserved', () => {
-    // Arrange / Act — nothing derived → no blocks (today's real registry shape)
+    // Arrange / Act — nothing emitted → no blocks
     const css = generateThemesCss([THEME_REGISTRY.light, THEME_REGISTRY.dark])
     const blockCount = css.split(':root[data-theme=').length - 1
 
@@ -238,33 +245,76 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(blockCount).toBe(0)
     expect(css).toContain('AUTO-GENERATED')
   })
+
+  it('copies the stock shadcn Default tokens verbatim — no derivation, same selector contract', () => {
+    // Arrange / Act
+    const css = staticThemeCss(THEME_REGISTRY['default-light'])
+    const declarationCount = css
+      .split('\n')
+      .filter((line) => line.trim().startsWith('--')).length
+
+    // Assert — same (0,2,0) selector as derived themes, the literal values, and
+    // the full 36-token block (31 shadcn tokens + the 5 heatmap stops)
+    expect(css.startsWith(":root[data-theme='default-light'] {\n")).toBe(true)
+    expect(css).toContain('  color-scheme: light;')
+    expect(css).toContain('  --background: oklch(1 0 0);')
+    expect(css).toContain('  --primary: oklch(0.205 0 0);')
+    expect(css).toContain('  --hm-4: oklch(0.55 0.16 40);')
+    expect(declarationCount).toBe(36)
+  })
+
+  it('emits a static theme alongside derived ones and still skips preserved cathedral', () => {
+    // Arrange / Act
+    const css = generateThemesCss([
+      THEME_REGISTRY['default-dark'],
+      THEME_REGISTRY.light,
+      SAMPLE_DERIVED_THEME,
+    ])
+    const blockCount = css.split(':root[data-theme=').length - 1
+
+    // Assert — Default dark + the derived sample; cathedral light skipped
+    expect(blockCount).toBe(2)
+    expect(css).toContain(":root[data-theme='default-dark'] {")
+    expect(css).toContain('  --background: oklch(0.145 0 0);')
+  })
 })
 
-// Every SHIPPED colored family (preserve:false). The per-theme gates below iterate
-// these so a bad seed fails CI by name. generated.css staleness is a separate guard
-// (`theme:check` regenerates + git-diffs); here we prove the SEEDS themselves are sound.
-// Widen the literal value union from the `satisfies`-typed registry to ThemeSeed
-// first, so the `theme is DerivedTheme` predicate is assignable (DerivedTheme is a
-// ThemeSeed, but is NOT assignable to any single narrow literal member).
+// Every SHIPPED generator-emitted theme (preserve:false): the colored families
+// (OKLCH seeds) plus the static shadcn Default pair (literal tokens). The per-theme
+// gates below iterate these so a bad seed OR a bad literal fails CI by name.
+// generated.css staleness is a separate guard (`theme:check` regenerates +
+// git-diffs); here we prove the SEEDS / TOKENS themselves are sound. Widen the
+// literal value union from the `satisfies`-typed registry to ThemeSeed first, so
+// the type predicates are assignable.
 const ALL_THEMES: ThemeSeed[] = Object.values(THEME_REGISTRY)
-const DERIVED_THEMES = ALL_THEMES.filter(
-  (theme): theme is DerivedTheme => !theme.preserve,
-)
+const DERIVED_THEMES = ALL_THEMES.filter(isDerivedTheme)
+const STATIC_THEMES = ALL_THEMES.filter(isStaticTheme)
+const EMITTED_THEMES = [...STATIC_THEMES, ...DERIVED_THEMES]
 
-// it.each([]) passes vacuously — so if the registry ever empties or the preserve
-// filter regresses, the per-theme gates below would silently test NOTHING. Lock
-// the shipped set to the full 10 (5 colored families × light/dark) up front.
-it('ships exactly 10 colored families (5 families × light + dark)', () => {
+/** The token map generated.css carries for an emitted theme (literal or derived). */
+const emittedTokens = (theme: ThemeSeed): Record<string, string> => {
+  if (theme.preserve) throw new Error(`${theme.id} is hand-authored, not emitted`)
+  return isStaticTheme(theme) ? theme.tokens : deriveThemeTokens(theme)
+}
+
+// it.each([]) passes vacuously — so if the registry ever empties or the kind
+// filters regress, the per-theme gates below would silently test NOTHING. Lock
+// the shipped set up front: 10 colored (5 families × light/dark) + 2 Default.
+it('ships exactly 10 colored families (5 families × light + dark) and the 2 static Default themes', () => {
   // Arrange / Act / Assert
   expect(DERIVED_THEMES).toHaveLength(10)
+  expect(STATIC_THEMES.map((theme) => theme.id)).toEqual([
+    'default-light',
+    'default-dark',
+  ])
 })
 
-describe('every registered colored family — WCAG AA gate', () => {
-  it.each(DERIVED_THEMES)(
+describe('every emitted theme — WCAG AA gate', () => {
+  it.each(EMITTED_THEMES)(
     '$id clears AA on body text, muted labels, and the computed primary foreground',
     (theme) => {
       // Arrange
-      const t = deriveThemeTokens(theme)
+      const t = emittedTokens(theme)
 
       // Assert (STRUCTURAL) — foreground/background and muted/card are both
       // neutral-on-neutral at the FIXED cathedral L ladder; a seed only tints the
@@ -293,7 +343,7 @@ describe('every registered colored family — WCAG AA gate', () => {
   )
 })
 
-describe('every registered colored family — heatmap "temperature = pride" invariant', () => {
+describe('every emitted theme — heatmap "temperature = pride" invariant', () => {
   // The HOT END of the ramp must bloom warm so "more completions = hotter" reads
   // the same across families. The band brackets the cathedral apex (hue 40/65)
   // with headroom for seeds (which land 25–65 at the two hottest stops).
@@ -303,11 +353,11 @@ describe('every registered colored family — heatmap "temperature = pride" inva
   // stops, are what must read warm. (--hm-3 = second-hottest, --hm-4 = apex.)
   const WARMEST_STOPS = ['--hm-3', '--hm-4'] as const
 
-  it.each(DERIVED_THEMES)(
+  it.each(EMITTED_THEMES)(
     '$id reuses the cathedral L/C ramp and blooms its two hottest stops into the warm band',
     (theme) => {
       // Arrange — the five heatmap stops, coolest (rest) → warmest (apex)
-      const tokens = deriveThemeTokens(theme)
+      const tokens = emittedTokens(theme)
       const ramp = HEATMAP_TOKENS.map((k) => oklchOf(token(tokens, k)))
 
       // Assert (STRUCTURAL) — the generator reuses the cathedral L/C ladder

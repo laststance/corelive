@@ -1,6 +1,5 @@
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
-import { Geist_Mono, Inter_Tight, Newsreader } from 'next/font/google'
 import * as React from 'react'
 import '@/globals.css'
 
@@ -10,28 +9,8 @@ import { LocalKeepMergeSync } from '@/components/live-editor/LocalKeepMergeSync'
 import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
 import { ReduxProvider } from '@/lib/redux/providers'
-import { cn } from '@/lib/utils'
 import { QueryClientProvider } from '@/providers/QueryClientProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
-
-const newsreader = Newsreader({
-  subsets: ['latin'],
-  style: ['normal', 'italic'],
-  display: 'swap',
-  variable: '--font-newsreader',
-})
-
-const interTight = Inter_Tight({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter-tight',
-})
-
-const geistMono = Geist_Mono({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-geist-mono',
-})
 
 export const metadata: Metadata = {
   title: {
@@ -48,16 +27,10 @@ interface RootLayoutProps {
 const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
   return (
     <ClerkProvider>
-      <html
-        lang="en"
-        suppressHydrationWarning
-        className={cn(
-          newsreader.variable,
-          interTight.variable,
-          geistMono.variable,
-        )}
-      >
-        <body className={cn('mx-auto min-h-screen font-sans antialiased')}>
+      <html lang="en" suppressHydrationWarning>
+        {/* No font-family class: the stock shadcn/Tailwind system stacks apply
+            (`--font-sans` / `--font-mono` defaults); no web font is loaded. */}
+        <body className="mx-auto min-h-screen antialiased">
           {/* attribute + disableTransitionOnChange are owned by ThemeProvider;
               passing them here would override its crossfade config (T8). */}
           <ThemeProvider>

@@ -2,25 +2,28 @@
  * Theme registry — the single source of truth for every theme CoreLive ships.
  *
  * Framework-agnostic (no `'use client'`) so the build-time CSS generator, unit
- * tests, Electron, and the React provider can all import it. The default
+ * tests, Electron, and the React provider can all import it. The brand
  * "cathedral" family is the untouched Warm Cathedral light/dark (hand-authored
- * in globals.css); colored families get added here as one DerivedTheme seed each,
- * without touching any consumer. Exists so theme identity lives in one place
- * instead of being hardcoded across the provider, the picker, chart.tsx, and
- * globals.css.
+ * in globals.css); the stock shadcn "default" family is a {@link StaticTheme}
+ * (literal tokens, emitted verbatim); colored families get added here as one
+ * DerivedTheme seed each, without touching any consumer. Exists so theme
+ * identity lives in one place instead of being hardcoded across the provider,
+ * the picker, chart.tsx, and globals.css.
  */
 
 /** A theme's light/dark axis. Drives `color-scheme` and the `dark:` variant. */
 export type ThemeMode = 'light' | 'dark'
 
 /**
- * A color identity. Each family ships a light + dark pair. The default
+ * A color identity. Each family ships a light + dark pair. `default` is the stock
+ * shadcn/ui neutral palette, verbatim, listed first in the picker. The brand
  * "cathedral" family keeps the flat `light`/`dark` ids for zero migration; the
  * colored families tint neutrals toward their accent hue and re-aim the heatmap's
  * rest→warm-apex hue path, while the heatmap L/C ramp and the warm
  * chart/destructive identity stay fixed across every family (design decision #15).
  */
 export type ThemeFamilyId =
+  | 'default'
   | 'cathedral'
   | 'harbor'
   | 'grove'
@@ -68,8 +71,9 @@ export interface PreservedTheme extends ThemeBase {
 
 /**
  * A generated theme: the generator derives its ~36 color tokens from these OKLCH
- * seed params at the fixed cathedral lightness ladder. `preserve: false` is the
- * union discriminant.
+ * seed params at the fixed cathedral lightness ladder. `preserve: false` means
+ * "the generator emits it" (a {@link StaticTheme} is emitted too — tell them
+ * apart with {@link isDerivedTheme} / {@link isStaticTheme}).
  * - `accent*` — the family signature color (`--primary`, `--ring`, sidebar primary/ring)
  * - `neutral*` — hue/chroma for every neutral surface, text, and border (L from the ladder)
  * - `heatmapHues` — the 5-stop rest→warm-apex hue path; L/C reuse the cathedral ramp
@@ -84,14 +88,204 @@ export interface DerivedTheme extends ThemeBase {
   heatmapHues: readonly [number, number, number, number, number]
 }
 
-/** One registry entry — a preserved (cathedral) or derived (colored) theme. */
-export type ThemeSeed = PreservedTheme | DerivedTheme
+/**
+ * Every color token a theme block declares, in globals.css (cathedral) order.
+ * `--hm-0..4` are CoreLive's heatmap ramp — not a shadcn token — so a static
+ * theme must supply them too.
+ */
+export const THEME_TOKENS = [
+  '--background',
+  '--foreground',
+  '--card',
+  '--card-foreground',
+  '--popover',
+  '--popover-foreground',
+  '--primary',
+  '--primary-foreground',
+  '--secondary',
+  '--secondary-foreground',
+  '--muted',
+  '--muted-foreground',
+  '--accent',
+  '--accent-foreground',
+  '--destructive',
+  '--border',
+  '--input',
+  '--ring',
+  '--chart-1',
+  '--chart-2',
+  '--chart-3',
+  '--chart-4',
+  '--chart-5',
+  '--sidebar',
+  '--sidebar-foreground',
+  '--sidebar-primary',
+  '--sidebar-primary-foreground',
+  '--sidebar-accent',
+  '--sidebar-accent-foreground',
+  '--sidebar-border',
+  '--sidebar-ring',
+  '--hm-0',
+  '--hm-1',
+  '--hm-2',
+  '--hm-3',
+  '--hm-4',
+] as const
+
+/** A color token name a theme block declares (`--background`, `--hm-4`, …). */
+export type ThemeToken = (typeof THEME_TOKENS)[number]
 
 /**
- * Every theme, keyed by its stored id. Currently the untouched Warm Cathedral
- * light/dark; colored families are appended here (one DerivedTheme per family/mode).
+ * A verbatim theme: its tokens are literal values (the stock shadcn neutral
+ * palette) that the generator copies unchanged into generated.css — no OKLCH
+ * derivation, no hand-authored globals.css block. `tokens` is the single source:
+ * the CSS, the picker preview, and the a11y tests all read it.
+ */
+export interface StaticTheme extends ThemeBase {
+  preserve: false
+  tokens: Readonly<Record<ThemeToken, string>>
+}
+
+/** One registry entry — a preserved (cathedral), static (shadcn), or derived (colored) theme. */
+export type ThemeSeed = PreservedTheme | DerivedTheme | StaticTheme
+
+/**
+ * Narrows a seed to a verbatim-token theme, so the generator, the preview, and
+ * the a11y tests read `tokens` instead of deriving. `preserve` alone cannot tell
+ * a static theme from a derived one (both are generator-emitted).
+ * @param seed - Any registry entry.
+ * @returns true only for a {@link StaticTheme}.
+ * @example
+ * isStaticTheme(THEME_REGISTRY['default-light']) // => true
+ * isStaticTheme(THEME_REGISTRY['harbor-light'])  // => false
+ */
+export function isStaticTheme(seed: ThemeSeed): seed is StaticTheme {
+  return 'tokens' in seed
+}
+
+/**
+ * Narrows a seed to an OKLCH-seeded theme — the ones `deriveThemeTokens` computes.
+ * @param seed - Any registry entry.
+ * @returns true only for a {@link DerivedTheme} (not preserved, not static).
+ * @example
+ * isDerivedTheme(THEME_REGISTRY['harbor-light'])  // => true
+ * isDerivedTheme(THEME_REGISTRY.light)            // => false (preserved)
+ * isDerivedTheme(THEME_REGISTRY['default-light']) // => false (static)
+ */
+export function isDerivedTheme(seed: ThemeSeed): seed is DerivedTheme {
+  return !seed.preserve && !isStaticTheme(seed)
+}
+
+/**
+ * Every theme, keyed by its stored id: the stock shadcn Default pair first, the
+ * untouched Warm Cathedral light/dark, then the colored families (one
+ * DerivedTheme per family/mode).
  */
 export const THEME_REGISTRY = {
+  // ── Default — the stock shadcn/ui "neutral" palette, verbatim ─────────────────
+  // Tokens copied from https://ui.shadcn.com/r/colors/neutral.json (Tailwind v4,
+  // OKLCH), the same values `shadcn init` writes for baseColor "neutral". Listed
+  // FIRST so the palette picker leads with the un-opinionated pair; the APPLIED
+  // default for a fresh install stays Warm Cathedral (DEFAULT_THEME_ID). shadcn
+  // ships no heatmap, so `--hm-*` reuse the cathedral ramp — the temperature=pride
+  // invariant holds here exactly as it does for Graphite (neutral room, warm bloom).
+  'default-light': {
+    family: 'default',
+    mode: 'light',
+    id: 'default-light',
+    name: 'Default Light',
+    preview: '#ffffff',
+    colorScheme: 'light',
+    preserve: false,
+    tokens: {
+      '--background': 'oklch(1 0 0)',
+      '--foreground': 'oklch(0.145 0 0)',
+      '--card': 'oklch(1 0 0)',
+      '--card-foreground': 'oklch(0.145 0 0)',
+      '--popover': 'oklch(1 0 0)',
+      '--popover-foreground': 'oklch(0.145 0 0)',
+      '--primary': 'oklch(0.205 0 0)',
+      '--primary-foreground': 'oklch(0.985 0 0)',
+      '--secondary': 'oklch(0.97 0 0)',
+      '--secondary-foreground': 'oklch(0.205 0 0)',
+      '--muted': 'oklch(0.97 0 0)',
+      '--muted-foreground': 'oklch(0.556 0 0)',
+      '--accent': 'oklch(0.97 0 0)',
+      '--accent-foreground': 'oklch(0.205 0 0)',
+      '--destructive': 'oklch(0.577 0.245 27.325)',
+      '--border': 'oklch(0.922 0 0)',
+      '--input': 'oklch(0.922 0 0)',
+      '--ring': 'oklch(0.708 0 0)',
+      '--chart-1': 'oklch(0.87 0 0)',
+      '--chart-2': 'oklch(0.556 0 0)',
+      '--chart-3': 'oklch(0.439 0 0)',
+      '--chart-4': 'oklch(0.371 0 0)',
+      '--chart-5': 'oklch(0.269 0 0)',
+      '--sidebar': 'oklch(0.985 0 0)',
+      '--sidebar-foreground': 'oklch(0.145 0 0)',
+      '--sidebar-primary': 'oklch(0.205 0 0)',
+      '--sidebar-primary-foreground': 'oklch(0.985 0 0)',
+      '--sidebar-accent': 'oklch(0.97 0 0)',
+      '--sidebar-accent-foreground': 'oklch(0.205 0 0)',
+      '--sidebar-border': 'oklch(0.922 0 0)',
+      '--sidebar-ring': 'oklch(0.708 0 0)',
+      // shadcn has no heatmap — the Warm Cathedral light ramp, verbatim.
+      '--hm-0': 'oklch(0.96 0.008 80)',
+      '--hm-1': 'oklch(0.89 0.06 75)',
+      '--hm-2': 'oklch(0.78 0.11 70)',
+      '--hm-3': 'oklch(0.65 0.14 60)',
+      '--hm-4': 'oklch(0.55 0.16 40)',
+    },
+  },
+  'default-dark': {
+    family: 'default',
+    mode: 'dark',
+    id: 'default-dark',
+    name: 'Default Dark',
+    preview: '#0a0a0a',
+    colorScheme: 'dark',
+    preserve: false,
+    tokens: {
+      '--background': 'oklch(0.145 0 0)',
+      '--foreground': 'oklch(0.985 0 0)',
+      '--card': 'oklch(0.205 0 0)',
+      '--card-foreground': 'oklch(0.985 0 0)',
+      '--popover': 'oklch(0.205 0 0)',
+      '--popover-foreground': 'oklch(0.985 0 0)',
+      '--primary': 'oklch(0.922 0 0)',
+      '--primary-foreground': 'oklch(0.205 0 0)',
+      '--secondary': 'oklch(0.269 0 0)',
+      '--secondary-foreground': 'oklch(0.985 0 0)',
+      '--muted': 'oklch(0.269 0 0)',
+      '--muted-foreground': 'oklch(0.708 0 0)',
+      '--accent': 'oklch(0.269 0 0)',
+      '--accent-foreground': 'oklch(0.985 0 0)',
+      '--destructive': 'oklch(0.704 0.191 22.216)',
+      '--border': 'oklch(1 0 0 / 10%)',
+      '--input': 'oklch(1 0 0 / 15%)',
+      '--ring': 'oklch(0.556 0 0)',
+      '--chart-1': 'oklch(0.87 0 0)',
+      '--chart-2': 'oklch(0.556 0 0)',
+      '--chart-3': 'oklch(0.439 0 0)',
+      '--chart-4': 'oklch(0.371 0 0)',
+      '--chart-5': 'oklch(0.269 0 0)',
+      '--sidebar': 'oklch(0.205 0 0)',
+      '--sidebar-foreground': 'oklch(0.985 0 0)',
+      '--sidebar-primary': 'oklch(0.488 0.243 264.376)',
+      '--sidebar-primary-foreground': 'oklch(0.985 0 0)',
+      '--sidebar-accent': 'oklch(0.269 0 0)',
+      '--sidebar-accent-foreground': 'oklch(0.985 0 0)',
+      '--sidebar-border': 'oklch(1 0 0 / 10%)',
+      '--sidebar-ring': 'oklch(0.556 0 0)',
+      // shadcn has no heatmap — the Warm Cathedral dark ramp, verbatim.
+      '--hm-0': 'oklch(0.22 0.012 40)',
+      '--hm-1': 'oklch(0.32 0.06 50)',
+      '--hm-2': 'oklch(0.45 0.1 55)',
+      '--hm-3': 'oklch(0.58 0.13 60)',
+      '--hm-4': 'oklch(0.7 0.15 65)',
+    },
+  },
+
   light: {
     family: 'cathedral',
     mode: 'light',
@@ -350,16 +544,19 @@ export function getThemeId(family: ThemeFamilyId, mode: ThemeMode): ThemeId {
 }
 
 /**
- * Human-readable family names for the two-axis theme picker (T8). The default
- * family carries the brand name "Warm Cathedral" — its ids are the flat
+ * Human-readable family names for the two-axis theme picker (T8). The brand
+ * family carries the name "Warm Cathedral" — its ids are the flat
  * `light`/`dark`, so the label is NOT derivable by stripping the mode from a
- * theme name. Insertion order is default-first, matching how the picker lists
+ * theme name. Insertion order IS the picker order: the stock shadcn "Default"
+ * first, then Warm Cathedral (what a fresh install applies), then the colored
  * families.
  * @example
+ * THEME_FAMILY_LABEL.default   // => 'Default'
  * THEME_FAMILY_LABEL.cathedral // => 'Warm Cathedral'
  * THEME_FAMILY_LABEL.harbor    // => 'Harbor'
  */
 export const THEME_FAMILY_LABEL: Record<ThemeFamilyId, string> = {
+  default: 'Default',
   cathedral: 'Warm Cathedral',
   harbor: 'Harbor',
   grove: 'Grove',
@@ -369,7 +566,7 @@ export const THEME_FAMILY_LABEL: Record<ThemeFamilyId, string> = {
 }
 
 /**
- * All theme family ids, default-first — the family axis of the T8 picker. The
+ * All theme family ids in picker order (Default first) — the family axis of the T8 picker. The
  * cast is required because `Object.keys` widens to `string[]`; the `Record<
  * ThemeFamilyId, …>` type guarantees the keys are exactly the family ids (same
  * documented pattern as `THEME_META` in ThemeProvider).

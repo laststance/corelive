@@ -7,8 +7,8 @@ import {
 
 import { getThemePreview } from './preview'
 import {
+  isDerivedTheme,
   THEME_REGISTRY,
-  type DerivedTheme,
   type ThemeId,
   type ThemeSeed,
 } from './registry'
@@ -56,11 +56,9 @@ function expectPreviewMatchesTokens(
 }
 
 // Widen from the `satisfies`-typed registry to ThemeSeed so the `is DerivedTheme`
-// predicate is assignable, then keep only the colored (preserve:false) families.
+// predicate is assignable, then keep only the colored (OKLCH-seeded) families.
 const ALL_THEMES: ThemeSeed[] = Object.values(THEME_REGISTRY)
-const DERIVED_THEMES = ALL_THEMES.filter(
-  (theme): theme is DerivedTheme => !theme.preserve,
-)
+const DERIVED_THEMES = ALL_THEMES.filter(isDerivedTheme)
 
 describe('theme preview swatches match the generated CSS the user will actually see', () => {
   it('covers all 10 colored families (5 families × light + dark)', () => {
@@ -99,6 +97,16 @@ describe('theme preview swatches match the generated CSS the user will actually 
       'oklch(0.55 0.16 42)', // --hm-4
     ])
   })
+
+  it.each(['default-light', 'default-dark'] as const)(
+    '%s preview equals the literal shadcn tokens the generator emits verbatim',
+    (id) => {
+      // Arrange — a static theme's registry `tokens` ARE what generated.css emits
+      const { tokens } = THEME_REGISTRY[id]
+      // Act / Assert
+      expectPreviewMatchesTokens(id, tokens)
+    },
+  )
 
   it.each(['light', 'dark'] as const)(
     'cathedral %s preview equals the generator-exported CATHEDRAL map (verbatim globals.css)',

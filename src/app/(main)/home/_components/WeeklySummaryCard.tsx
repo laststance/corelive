@@ -66,8 +66,8 @@ function trendLabel(trend: WeeklyTrend): string {
  *
  * Design intent (DESIGN.md "Warm Cathedral"):
  * - Quiet pride, not KPI grading.
- * - Newsreader (serif italic) for the trend line, Geist Mono (tabular-nums)
- *   for the count, Inter Tight default for chips.
+ * - Italic muted copy for the trend line, `font-mono` (tabular-nums) for the
+ *   count, the default sans for chips.
  * - Negative deltas read factual ("↓ 25%"), never red, never alarming.
  *
  * @example
@@ -106,7 +106,7 @@ export const WeeklySummaryCard = function WeeklySummaryCard({
           </span>
         </div>
 
-        <p className="font-serif text-sm italic text-muted-foreground">
+        <p className="text-sm italic text-muted-foreground">
           {isLoading ? '…' : trendLabel(stats.trend)}
         </p>
 

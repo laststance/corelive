@@ -32,7 +32,7 @@ import {
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
 import {
-  LIVE_EDITOR_FONT_FAMILY_CSS,
+  LIVE_EDITOR_FONT_FAMILY_CLASS,
   LIVE_EDITOR_LINE_HEIGHT,
   LIVE_EDITOR_NOTE_LINES_PER_CAP,
   LIVE_EDITOR_OPACITY_MAX,
@@ -2435,14 +2435,15 @@ export const LiveEditor = function LiveEditor({
           isElectronPanel
             ? 'bg-background/60 p-3 disabled:opacity-50'
             : 'border-border bg-card p-4 disabled:cursor-default',
+          // The saved face is a stock Tailwind utility (see the class map).
+          LIVE_EDITOR_FONT_FAMILY_CLASS[liveEditorFontFamily],
         )}
         // Inline (not a useMemo) — a fresh style object on an intrinsic element is
         // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
         // textarea outside the frameless drag region), then layer the saved
-        // presentation. lineHeight is unitless so spacing scales with the size.
+        // size and color. lineHeight is unitless so spacing scales with the size.
         style={{
           ...NO_DRAG_REGION_STYLE,
-          fontFamily: LIVE_EDITOR_FONT_FAMILY_CSS[liveEditorFontFamily],
           fontSize: `${liveEditorFontSize}px`,
           lineHeight: LIVE_EDITOR_LINE_HEIGHT,
           color: liveEditorTextColor,

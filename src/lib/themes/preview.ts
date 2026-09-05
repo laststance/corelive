@@ -1,4 +1,4 @@
-import { THEME_REGISTRY } from './registry'
+import { isStaticTheme, THEME_REGISTRY } from './registry'
 import type { ThemeId, ThemeMode } from './registry'
 
 /**
@@ -88,7 +88,8 @@ const CATHEDRAL_PREVIEW: Record<ThemeMode, ThemePreview> = {
 /**
  * Builds the composite preview swatches for a theme id, so the two-axis picker
  * (T8) can render every family's identity without the runtime importing culori or
- * reading the generated CSS. Cathedral is returned verbatim; colored families are
+ * reading the generated CSS. Cathedral is returned verbatim; a static theme (the
+ * stock shadcn Default) reads its literal registry tokens; colored families are
  * reconstructed from their registry seed at the cathedral ladder — identical to
  * the generator's output (cross-checked in `preview.test.ts`).
  * @param id - A registered theme id.
@@ -102,6 +103,24 @@ export function getThemePreview(id: ThemeId): ThemePreview {
   const seed = THEME_REGISTRY[id]
   // Cathedral is hand-authored — reuse its exact globals.css swatches.
   if (seed.preserve) return CATHEDRAL_PREVIEW[seed.mode]
+
+  // A static theme carries literal tokens — the same values generated.css emits.
+  if (isStaticTheme(seed)) {
+    const { tokens } = seed
+    return {
+      surface: tokens['--background'],
+      card: tokens['--card'],
+      accent: tokens['--primary'],
+      text: tokens['--foreground'],
+      heatmap: [
+        tokens['--hm-0'],
+        tokens['--hm-1'],
+        tokens['--hm-2'],
+        tokens['--hm-3'],
+        tokens['--hm-4'],
+      ],
+    }
+  }
 
   // Colored families: cathedral L + the family's own neutral/accent/heatmap params.
   const mode = seed.mode

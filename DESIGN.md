@@ -32,33 +32,28 @@ This holds for **design, features, and UX alike**. The concept owns the default;
 
 **Never deviable: the North Star itself** — self-affirmation over judgment. "Configure everything" means every _aesthetic and UX_ item (theme, sound, motion, layout, copy, density) — a louder theme, an optional sound, a denser layout are all fair game. It does **not** mean an option that grades, shames, or guilts (no opt-in streak-shame, no KPI-percentage mode). Style is infinitely yours to tune; the emotional contract is not.
 
-> **Instances.** **Sound palette** — default is silence (on-concept); every soft cue is configurable per moment, off until the user turns it on. **Theme system** — Warm Cathedral is the default; the colored families are user-selectable. Next customization? Same shape: ship the concept default, make it sufficient, then let the user tune it.
+> **Instances.** **Sound palette** — default is silence (on-concept); every soft cue is configurable per moment, off until the user turns it on. **Theme system** — Warm Cathedral is the default; the colored families are user-selectable, and a stock shadcn **Default** light/dark pair heads the palette list for anyone who wants the un-opinionated look. Next customization? Same shape: ship the concept default, make it sufficient, then let the user tune it.
 
 ## Typography
 
-Three-font stack, deliberately unusual for the productivity category. The serif display is the loudest differentiation move — productivity apps converge on geometric sans (Inter / Geist / DM Sans), so a serif says "this is craft, not corporate" within the first 0.3 seconds.
+**Stock shadcn/ui + Tailwind system stacks — no web fonts (2026-09-05).** Nothing is loaded from Google Fonts or Vercel Fonts, and nothing overrides Tailwind's `--font-*` defaults: `font-sans` is the platform UI stack (`ui-sans-serif, system-ui, …`), `font-mono` the platform monospace stack. There is no serif display tier — display copy is the same sans, set larger or italic. The former three-font stack (Newsreader / Inter Tight / Geist Mono, 2026-05-10 → 2026-09-05) is retired; its reasoning stays in the Decisions Log as history.
 
-- **Display / Hero (≥18px):** **Newsreader** — variable serif, optical sizes built-in. Editorial without being precious. Loaded from Google Fonts.
-- **Body / UI:** **Inter Tight** — variable sans, dense and modern. Compact enough for dashboard density; pairs with Newsreader's character. Loaded from Google Fonts. Never plain Inter (AI default), never DM Sans (category convergence).
-- **Data / Code:** **Geist Mono** — tabular-nums, warmer than JetBrains Mono, more disciplined than Fira Code. Loaded from Vercel Fonts or self-hosted.
-- **Loading:** Google Fonts (`display=swap`) for Newsreader + Inter Tight, Vercel Fonts or self-hosted for Geist Mono.
-
-### Blacklist (do NOT use as primary)
-
-Inter, Roboto, Arial, Helvetica, DM Sans, Geist Sans, Plus Jakarta Sans, Open Sans, Lato, Montserrat, Poppins, Space Grotesk. All are productivity-category convergence fonts; using them dilutes the differentiation Newsreader earns.
+- **Body / UI:** `font-sans` (system stack). Do not load a web font for it and do not override `--font-sans`.
+- **Data / Code:** `font-mono` (system stack) with `font-variant-numeric: tabular-nums` for counts and dates.
+- **LiveEditor:** the writing surface keeps its Mono / Sans / Serif setting — the three stock Tailwind stacks, user-owned per "Presets First, Then Options".
 
 ### Scale (1.2 modular ratio)
 
-| Tier    | Size                     | Font        | Weight | Notes                                                 |
-| ------- | ------------------------ | ----------- | ------ | ----------------------------------------------------- |
-| Hero    | `clamp(40px, 5vw, 64px)` | Newsreader  | 600    | Marketing/empty-state moments                         |
-| H1      | 36px                     | Newsreader  | 600    | Section headers, dialog titles                        |
-| H2      | 24px                     | Newsreader  | 500    | Subsection                                            |
-| H3      | 18px                     | Inter Tight | 600    | Card headers, group labels                            |
-| Body    | 15px                     | Inter Tight | 400    | Default reading size                                  |
-| Small   | 13px                     | Inter Tight | 400    | Secondary copy, footers                               |
-| Caption | 12px                     | Inter Tight | 500    | `text-transform: uppercase`, `letter-spacing: 0.05em` |
-| Data    | 13px                     | Geist Mono  | 500    | `font-variant-numeric: tabular-nums` for counts/dates |
+| Tier    | Size                     | Face | Weight | Notes                                                 |
+| ------- | ------------------------ | ---- | ------ | ----------------------------------------------------- |
+| Hero    | `clamp(40px, 5vw, 64px)` | Sans | 600    | Marketing/empty-state moments                         |
+| H1      | 36px                     | Sans | 600    | Section headers, dialog titles                        |
+| H2      | 24px                     | Sans | 500    | Subsection                                            |
+| H3      | 18px                     | Sans | 600    | Card headers, group labels                            |
+| Body    | 15px                     | Sans | 400    | Default reading size                                  |
+| Small   | 13px                     | Sans | 400    | Secondary copy, footers                               |
+| Caption | 12px                     | Sans | 500    | `text-transform: uppercase`, `letter-spacing: 0.05em` |
+| Data    | 13px                     | Mono | 500    | `font-variant-numeric: tabular-nums` for counts/dates |
 
 ## Color
 
@@ -143,10 +138,10 @@ This is the project's most consequential color decision. Departs from GitHub's g
 
 Warm Cathedral is the soul of the product; the colored families are optional self-expression layered _on top of_ it without ever touching it. The ten rules below govern how themes are added, derived, and applied.
 
-1. **The default is sacred.** Warm Cathedral light + dark are the untouched default, byte-for-byte. Every other theme is derived or layered; none may alter the cathedral tokens. The cathedral pair stays **hand-authored in `src/globals.css`** (never machine-generated) — brand safety over DRY.
-2. **12 themes, 6 families.** Warm Cathedral (default) + five colored families — **Harbor** (calm blue), **Grove** (forest green), **Rose Tea** (dusty rose), **Iris** (soft violet), **Graphite** (near-neutral slate) — each in `{light, dark}`.
-3. **The registry is the single source of truth.** `src/lib/themes/registry.ts` holds every theme as a discriminated union: `PreservedTheme` (cathedral — metadata only) or `DerivedTheme` (a colored family's accent L/C/H, a neutral tint, and a 5-stop heatmap hue path). `THEMES`, the picker, and `useThemeAxis` all derive from it — never edit them directly.
-4. **Colored families are generated, the default is not.** A build-time generator (`scripts/generate-theme-css.ts`) reads the registry and emits static CSS to `src/lib/themes/generated.css`, one `:root[data-theme='id']` block per derived theme (specificity `0,2,0`, so it beats the cathedral `:root` regardless of `@import` order). The generator **skips every `preserve` theme** — cathedral is never emitted. WCAG math (`culori`) runs at **build/test time only**; it is never shipped in the client bundle. `pnpm theme:generate` regenerates; `theme:check` fails CI if the committed CSS is stale.
+1. **The default is sacred.** Warm Cathedral light + dark are the untouched default, byte-for-byte. Every other theme is derived, static, or layered; none may alter the cathedral tokens. The cathedral pair stays **hand-authored in `src/globals.css`** (never machine-generated) — brand safety over DRY.
+2. **14 themes, 7 families.** The stock shadcn **Default** (neutral, listed first in the picker) + Warm Cathedral (the applied default) + five colored families — **Harbor** (calm blue), **Grove** (forest green), **Rose Tea** (dusty rose), **Iris** (soft violet), **Graphite** (near-neutral slate) — each in `{light, dark}`.
+3. **The registry is the single source of truth.** `src/lib/themes/registry.ts` holds every theme as a discriminated union: `PreservedTheme` (cathedral — metadata only), `StaticTheme` (the stock shadcn Default pair — literal tokens emitted verbatim), or `DerivedTheme` (a colored family's accent L/C/H, a neutral tint, and a 5-stop heatmap hue path). `THEMES`, the picker, and `useThemeAxis` all derive from it — never edit them directly.
+4. **Colored families are generated, the default is not.** A build-time generator (`scripts/generate-theme-css.ts`) reads the registry and emits static CSS to `src/lib/themes/generated.css`, one `:root[data-theme='id']` block per derived or static theme (specificity `0,2,0`, so it beats the cathedral `:root` regardless of `@import` order). The generator **skips every `preserve` theme** — cathedral is never emitted. WCAG math (`culori`) runs at **build/test time only**; it is never shipped in the client bundle. `pnpm theme:generate` regenerates; `theme:check` fails CI if the committed CSS is stale.
 5. **Derivation is systematic, identity is preserved.** A derived family tints its neutral surfaces toward the family hue at the **cathedral lightness ladder** (so AA is L-driven and always holds); the accent is the family's own L/C/H; **fixed-identity tokens — `--destructive`, `--chart-1…5` — are emitted as the cathedral value unchanged for every theme**; foregrounds are contrast-computed for WCAG AA, never hand-picked.
 6. **Graphite is the temperature=pride proof.** Its accent is nearly desaturated (chroma ~0.02), so the **only real chroma on screen is the heatmap bloom**. A near-monochrome chrome with a glowing heatmap is the purest statement of the north star: the year you accumulated is the color.
 7. **The picker is two-axis.** Settings and the sidebar quick-switch both pick a **family** and a **mode** independently. Each family card previews the family's _real_ tokens (surface · accent · text · heatmap ramp) as a **composite swatch reconstructed at runtime from the registry** — never a single hex dot, never the culori library.
@@ -311,8 +306,8 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 - **Button (primary):** amber bg, paper-white text, 8px radius, hover lifts 1px
 - **Card:** surface bg, 1px soft border, 12px radius, no shadow by default (shadow only when elevated/dragging)
 - **Input:** transparent bg in light mode, white-on-white feel; focus ring uses `--ring` (amber)
-- **Badge:** pill (full radius), Caption typography (12px Inter Tight 500 uppercase)
-- **Tooltip:** popover bg, 4px slide-up entrance, 13px Inter Tight; max 2 lines, no markdown
+- **Badge:** pill (full radius), Caption typography (12px / 500 uppercase)
+- **Tooltip:** popover bg, 4px slide-up entrance, 13px sans; max 2 lines, no markdown
 - **Heatmap cell:** `<rect>` with explicit fill from `--hm-0…--hm-4` (resolved per active theme; the component reads them via the `HEATMAP_LEVEL_TOKENS` source-of-truth in `src/lib/heatmap-intensity.ts`), role=button when count>0, focus ring identical to other interactive elements
 
 ## Decisions Log
@@ -343,15 +338,15 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 | 2026-09-05 | `/write` is a public, no-login writing surface — a stranger types before any account exists (keeps and note live on the device), and the sign-in CTA sits in the footer, never as a wall. `/live-editor` stays the Electron panel's protected route                                                                                                                                                          |
 | 2026-09-05 | Today Ember: one heatmap cell above the editor, lit or unlit only (level tokens 0 and 4, no 1–3 ramp — it is a lamp, not a grade). A keep sweeps it in 400ms (radial `clip-path` plus a `brightness(1.35 -> 1)` flare, so a keep on an already-lit cell still reads as a ripple rather than a no-op); an undo snaps back with no reverse motion. Unreachable counts say so instead of showing 0              |
 | 2026-09-05 | Today Ember removed the same day it shipped: no count sits above the editor, at 0 or at N (`ember-sweep` keyframe and the one-day heatmap query went with it)                                                                                                                                                                                                                                                | Cut as unnecessary. The reward stays where the criterion puts it — the line clears where you pressed and the year heatmap fills — without a number over the editor                                                                                                                                                                                                                                                                                                               |
+| 2026-09-05 | Typography reverted to the stock shadcn/ui + Tailwind system font stacks: no web fonts, no `@theme` font override, no serif display tier (Newsreader / Inter Tight / Geist Mono retired; the LiveEditor Mono / Sans / Serif setting now maps to the stock `font-*` utilities)                                                                                                                                | User call (2026-09-05): shadcn defaults everywhere; nothing to download, nothing to differentiate on faces — the room is the heatmap, not the type                                                                                                                                                                                                                                                                                                                               |
+| 2026-09-05 | Palette list gains a stock shadcn neutral **Default** light/dark family, listed FIRST (tokens verbatim from `ui.shadcn.com/r/colors/neutral.json`, registered as a `StaticTheme`, heatmap ramp reused from Warm Cathedral); Warm Cathedral stays the applied default for a fresh install and the only family offering `System`                                                                               | User call (2026-09-05): lead the picker with the un-opinionated pair; keep the brand pair as what a fresh install actually gets                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Implementation Migration Notes
 
-This DESIGN.md describes the target system. Migration from current state (cold-neutral oklch + GitHub green Heatmap) is per-token in `src/globals.css`. No component code changes are required for the color/spacing migration. Typography requires:
+This DESIGN.md describes the target system. Migration from current state (cold-neutral oklch + GitHub green Heatmap) is per-token in `src/globals.css`. No component code changes are required for the color/spacing migration. Typography loads nothing: the stock Tailwind `font-sans` / `font-mono` stacks are the defaults (no `next/font`, no `@theme` font override). Still open:
 
-1. Adding Newsreader, Inter Tight, Geist Mono to `<head>` (Google Fonts + Vercel)
-2. Updating `body` className in `src/app/layout.tsx` to apply Inter Tight as default
-3. A type-scale utility component or CSS layer for the Hero / H1 / H2 / H3 / Body / Small / Caption / Data tiers
+1. A type-scale utility component or CSS layer for the Hero / H1 / H2 / H3 / Body / Small / Caption / Data tiers
 
-The Heatmap palette is defined by the `--hm-0…--hm-4` tokens. For the **default Warm Cathedral**, edit them directly in `src/globals.css` (light and dark). For a **colored family**, change its `heatmapHues` seed in `src/lib/themes/registry.ts` and run `pnpm theme:generate` (the generator rewrites `src/lib/themes/generated.css`). Either way **no `ContributionGraph.tsx` change is required** — the component resolves the tokens through the `HEATMAP_LEVEL_TOKENS` source-of-truth.
+The Heatmap palette is defined by the `--hm-0…--hm-4` tokens. The stock **Default** family carries the Warm Cathedral ramp verbatim in its registry `tokens` (shadcn ships no heatmap). For the **default Warm Cathedral**, edit them directly in `src/globals.css` (light and dark). For a **colored family**, change its `heatmapHues` seed in `src/lib/themes/registry.ts` and run `pnpm theme:generate` (the generator rewrites `src/lib/themes/generated.css`). Either way **no `ContributionGraph.tsx` change is required** — the component resolves the tokens through the `HEATMAP_LEVEL_TOKENS` source-of-truth.
 
 Streak and tooltip copy changes are scoped to `ContributionGraph.tsx` and any future StreakBadge component (deferred to the Heatmap Cathedral plan, decision D12 / Electron-only).
