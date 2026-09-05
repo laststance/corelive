@@ -301,3 +301,6 @@ export const ImportLocalResponseSchema = z.object({
   imported: z.number().int().min(0),
   alreadyImported: z.boolean(),
 })
+
+export type ImportLocalInput = z.infer<typeof ImportLocalSchema>
+export type ImportLocalResponse = z.infer<typeof ImportLocalResponseSchema>

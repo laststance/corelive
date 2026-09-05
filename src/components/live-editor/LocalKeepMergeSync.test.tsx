@@ -17,6 +17,10 @@ import {
 } from '@/lib/live-editor/constants'
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
+import type {
+  ImportLocalInput,
+  ImportLocalResponse,
+} from '@/server/schemas/completed'
 
 import { LocalKeepMergeSync } from './LocalKeepMergeSync'
 
@@ -28,7 +32,10 @@ const { clerkUserRef, importLocalFn } = vi.hoisted(() => ({
       user: { id: 'user_a' } as { id: string } | undefined,
     },
   },
-  importLocalFn: vi.fn(),
+  // Typed from the procedure's own schema, so a batch missing a required field
+  // fails to compile here instead of passing on a count alone.
+  importLocalFn:
+    vi.fn<(input: ImportLocalInput) => Promise<ImportLocalResponse>>(),
 }))
 
 vi.mock('@clerk/nextjs', () => ({
@@ -55,9 +62,6 @@ vi.mock('@/lib/orpc/client-query', () => ({
 }))
 
 const todayHeatmapKey = getTodayHeatmapQueryKey(getLocalTodayIsoDate())
-
-/** The payload shape `mutationFn` receives, so a spec can size a batch without `any`. */
-type ImportPayload = { batchId: string; items: { title: string }[] }
 
 type StoredKeep = {
   id: string
@@ -224,7 +228,7 @@ describe('LocalKeepMergeSync', () => {
         { localId: 'b', title: 'read', completedAt: new Date(completedAt) },
       ],
     })
-    const next = importLocalFn.mock.calls[1]?.[0] as ImportPayload | undefined
+    const next = importLocalFn.mock.calls[1]?.[0]
     expect(next?.batchId).not.toBe('pending-1')
     expect(next?.items).toEqual([
       { localId: 'c', title: 'walk', completedAt: new Date(completedAt) },
@@ -433,8 +437,8 @@ describe('LocalKeepMergeSync', () => {
 
     // Assert
     await waitFor(() => expect(importLocalFn).toHaveBeenCalledTimes(2))
-    const first = importLocalFn.mock.calls[0]?.[0] as ImportPayload | undefined
-    const second = importLocalFn.mock.calls[1]?.[0] as ImportPayload | undefined
+    const first = importLocalFn.mock.calls[0]?.[0]
+    const second = importLocalFn.mock.calls[1]?.[0]
     expect(first?.items).toHaveLength(2000)
     expect(second?.items).toHaveLength(1)
     await waitFor(() => {
