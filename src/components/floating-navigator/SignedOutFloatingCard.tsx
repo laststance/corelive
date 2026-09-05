@@ -62,7 +62,7 @@ export const SignedOutFloatingCard = function SignedOutFloatingCard() {
         CoreLive
       </p>
 
-      {/* Editorial hero: the north-star invitation, serif display per DESIGN.md. */}
+      {/* Editorial hero: the north-star invitation in the stock sans stack per DESIGN.md. */}
       <div className="mt-5 space-y-2">
         <h1 className="text-3xl font-semibold leading-tight text-foreground">
           Your year is waiting

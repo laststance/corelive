@@ -182,7 +182,7 @@ export function buildShareCard(input: ExportDayInput): {
       <p style="font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: ${SHARE_COLORS.mutedForeground}; margin: 0 0 24px 0;">
         corelive · ${escapeHtml(prettyDate)}
       </p>
-      <p style="font-size: 64px; font-weight: 500; line-height: 1; margin: 0; color: ${SHARE_COLORS.foreground}; font-variant-numeric: tabular-nums;">
+      <p style="font-family: ui-monospace, monospace; font-size: 64px; font-weight: 500; line-height: 1; margin: 0; color: ${SHARE_COLORS.foreground}; font-variant-numeric: tabular-nums;">
         ${input.totalCompleted}
       </p>
       <p style="font-size: 20px; font-style: italic; margin: 12px 0 0 0; color: ${SHARE_COLORS.mutedForeground};">
