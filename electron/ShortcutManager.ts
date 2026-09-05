@@ -7,7 +7,7 @@
  * @module electron/ShortcutManager
  */
 
-import { BrowserWindow, globalShortcut } from 'electron'
+import { app, BrowserWindow, globalShortcut } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import {
@@ -44,9 +44,6 @@ interface ShortcutConfig {
   newTask?: string
   quit?: string
   minimize?: string
-  toggleAlwaysOnTop?: string
-  focusFloatingNavigator?: string
-  toggleFloatingNavigator?: string
   /** LiveEditor's global quick-open accelerator; empty string disables it. */
   toggleLiveEditor?: string
   /** Second, equally-live LiveEditor accelerator; empty string (the default) disables it. */
@@ -115,21 +112,14 @@ export class ShortcutManager {
   /** Contextual shortcuts (only when app focused) */
   private contextualShortcuts: Set<string>
 
-  /** Global shortcuts (always active) - stored for future use */
-  // @ts-ignore - Intentionally unused, stored for future features
-  private _globalShortcuts: Set<string>
-
   /** Whether shortcuts are enabled */
   private isEnabled: boolean
 
   /** Current shortcut configuration */
   private shortcuts: ShortcutConfig
 
-  /** Stored focus handlers for cleanup */
-  private focusHandlers: Map<
-    number,
-    { focus: () => void; blur: () => void; window: BrowserWindow }
-  >
+  /** The one app-level focus/blur handler; kept so {@link cleanup} can remove it. */
+  private appFocusListener: (() => void) | null = null
 
   /**
    * Native tap for lone-modifier bindings (e.g. Right ⌥ alone) that
@@ -138,7 +128,7 @@ export class ShortcutManager {
    */
   private nativeEngine: NativeShortcutEngine
 
-  /** Main-process cue player used after a shortcut opens Floating or toggles LiveEditor. */
+  /** Main-process cue player used after a shortcut toggles LiveEditor. */
   private shortcutOpenSoundController: ShortcutOpenSoundController
 
   /**
@@ -151,7 +141,7 @@ export class ShortcutManager {
 
   /**
    * Creates the shortcut router and its injectable native engines.
-   * @param windowManager - Owns Floating and LiveEditor visibility.
+   * @param windowManager - Owns LiveEditor visibility.
    * @param notificationManager - Reports registration failures to the user.
    * @param configManager - Supplies accelerators and shortcut-sound preference.
    * @param nativeEngine - Handles lone-modifier key taps Electron cannot register.
@@ -176,28 +166,7 @@ export class ShortcutManager {
     this.registeredShortcuts = new Map()
     this.failedShortcuts = null
 
-    this.contextualShortcuts = new Set([
-      'newTask',
-      'minimize',
-      'toggleAlwaysOnTop',
-      'focusFloatingNavigator',
-    ])
-    this._globalShortcuts = new Set([
-      'toggleFloatingNavigator',
-      ...LIVE_EDITOR_SHORTCUT_IDS,
-    ])
-    this.focusHandlers = new Map()
-
-    // Rebind contextual-shortcut focus/blur listeners to EVERY Floating window
-    // the WindowManager (re)creates — Cmd+3 reopen, tray, restoreFromTray, or a
-    // LiveEditor-only startup that opens Floating later. T18 moved these listeners
-    // off the retired main window onto Floating; without rebinding, a Floating
-    // created after the initial setup would carry no listeners and its contextual
-    // shortcuts would never fire. createFloatingNavigator is the single chokepoint.
-    this.windowManager.setOnFloatingNavigatorCreated(() => {
-      this.setupFocusListeners()
-    })
-
+    this.contextualShortcuts = new Set(['newTask', 'minimize'])
     this.isEnabled = true
     this.shortcuts = this.getDefaultShortcuts()
 
@@ -236,8 +205,6 @@ export class ShortcutManager {
     return {
       newTask: 'CommandOrControl+N',
       minimize: 'CommandOrControl+M',
-      toggleAlwaysOnTop: 'CommandOrControl+Shift+A',
-      toggleFloatingNavigator: 'CommandOrControl+3',
       toggleLiveEditor: 'Alt+Space',
       // Second LiveEditor slot ships unbound — an opt-in extra key, not a
       // preset that would silently claim a chord the user never chose.
@@ -296,77 +263,36 @@ export class ShortcutManager {
   }
 
   /**
-   * Setup focus listeners for dynamic shortcut management.
+   * Registers the app-level focus/blur listeners once; both resolve state via {@link syncContextualShortcuts}.
+   * Called by {@link initialize} and {@link enable}; idempotent so neither call can double-bind.
+   * @example
+   * shortcutManager.setupFocusListeners()
    */
   setupFocusListeners(): void {
-    try {
-      // Main window retired (T18): contextual shortcuts hang off the Floating
-      // navigator's focus/blur only. Floating may be absent here (LiveEditor-only
-      // startup) or a fresh replacement (closed then reopened via Cmd+3 / tray /
-      // restoreFromTray with a new window id), so this runs again on every
-      // Floating (re)creation via WindowManager.setOnFloatingNavigatorCreated.
-      const floatingWindow = this.windowManager.getFloatingNavigator()
+    // Already bound — a second setup must not add a second pair of listeners.
+    if (this.appFocusListener) return
+    // `browser-window-focus` / `browser-window-blur` are not ordered on a
+    // window-to-window switch, so both events run the same state resolver.
+    const listener = (): void => this.syncContextualShortcuts()
+    app.on('browser-window-focus', listener)
+    app.on('browser-window-blur', listener)
+    this.appFocusListener = listener
+  }
 
-      // No Floating to bind yet. Crucially, do NOT mark setup "done": the T18
-      // regression was a sticky boolean that, once set while Floating was absent,
-      // blocked the rebind when a Floating window was created later.
-      if (!floatingWindow || floatingWindow.isDestroyed()) {
-        return
-      }
-
-      // Already bound to THIS exact window — idempotent, avoids duplicate
-      // focus/blur handlers when setup runs more than once for one window.
-      const floatingWindowId = floatingWindow.id
-      if (this.focusHandlers.has(floatingWindowId)) {
-        log.debug(
-          '[ShortcutManager] Focus listeners already bound for current floating window',
-        )
-        return
-      }
-
-      // Create named handlers for cleanup
-      const focusHandler = (): void => {
-        log.debug(
-          '[ShortcutManager] Floating window focused - registering contextual shortcuts',
-        )
-        this.registerContextualShortcuts()
-      }
-
-      const blurHandler = (): void => {
-        log.debug(
-          '[ShortcutManager] Floating window blurred - unregistering contextual shortcuts',
-        )
-        this.unregisterContextualShortcuts()
-      }
-
-      floatingWindow.on('focus', focusHandler)
-      floatingWindow.on('blur', blurHandler)
-
-      // Store handlers for cleanup
-      this.focusHandlers.set(floatingWindowId, {
-        focus: focusHandler,
-        blur: blurHandler,
-        window: floatingWindow,
-      })
-
-      // Drop this window's entry once it is destroyed so the NEXT Floating window
-      // (new id) rebinds instead of being mistaken for already-bound. (T18:
-      // Floating is recreated on Cmd+3 / tray after a close.)
-      floatingWindow.once('closed', () => {
-        this.focusHandlers.delete(floatingWindowId)
-      })
-
-      // The window may already be focused (created → shown → focused before this
-      // runs), so register now instead of waiting for the next focus event.
-      if (floatingWindow.isFocused()) {
-        this.registerContextualShortcuts()
-      }
-
-      log.info(
-        '[ShortcutManager] Focus listeners setup for the floating window',
-      )
-    } catch (error) {
-      log.error('[ShortcutManager] Failed to setup focus listeners:', error)
+  /**
+   * Binds contextual shortcuts while any CoreLive window is focused and releases them otherwise.
+   * Runs on every app focus/blur event and once from {@link enable}; no-op while shortcuts are disabled.
+   * @example
+   * shortcutManager.syncContextualShortcuts() // focused window → Cmd+N / Cmd+M bound
+   */
+  private syncContextualShortcuts(): void {
+    if (!this.isEnabled) return
+    // `registeredShortcuts` is the only registration truth: register skips
+    // already-bound ids and unregister only touches bound ones.
+    if (BrowserWindow.getFocusedWindow()) {
+      this.registerContextualShortcuts()
+    } else {
+      this.unregisterContextualShortcuts()
     }
   }
 
@@ -376,17 +302,6 @@ export class ShortcutManager {
   registerGlobalShortcuts(): ShortcutRegistrationResult[] {
     const shortcuts = this.shortcuts
     const results: ShortcutRegistrationResult[] = []
-
-    results.push({
-      id: 'toggleFloatingNavigator',
-      success: this.registerShortcut(
-        shortcuts.toggleFloatingNavigator as string,
-        'toggleFloatingNavigator',
-        () => {
-          this.handleToggleFloatingNavigator()
-        },
-      ),
-    })
 
     // Honor the persisted LiveEditor accelerators on startup — both slots, same
     // handler. Empty string is the "disabled" sentinel used by Settings (and the
@@ -411,7 +326,11 @@ export class ShortcutManager {
   }
 
   /**
-   * Register contextual shortcuts that only work when app has focus.
+   * Binds Cmd+N / Cmd+M while any CoreLive window (LiveEditor, Settings, login) is focused; already-bound ids are skipped.
+   * Cmd+N opens the browser `/live-editor` even from the panel or Settings — intended: the browser page is the task-creation surface.
+   * @returns One registration result per contextual shortcut attempted.
+   * @example
+   * shortcutManager.registerContextualShortcuts() // => [{ id: 'newTask', success: true }, ...]
    */
   registerContextualShortcuts(): ShortcutRegistrationResult[] {
     const shortcuts = this.shortcuts
@@ -447,32 +366,6 @@ export class ShortcutManager {
           'minimize',
           () => {
             this.handleMinimizeWindow()
-          },
-        ),
-      })
-    }
-
-    if (this.contextualShortcuts.has('toggleAlwaysOnTop')) {
-      results.push({
-        id: 'toggleAlwaysOnTop',
-        success: this.registerShortcut(
-          shortcuts.toggleAlwaysOnTop as string,
-          'toggleAlwaysOnTop',
-          () => {
-            this.handleToggleAlwaysOnTop()
-          },
-        ),
-      })
-    }
-
-    if (this.contextualShortcuts.has('focusFloatingNavigator')) {
-      results.push({
-        id: 'focusFloatingNavigator',
-        success: this.registerShortcut(
-          shortcuts.focusFloatingNavigator as string,
-          'focusFloatingNavigator',
-          () => {
-            this.handleFocusFloatingNavigator()
           },
         ),
       })
@@ -851,9 +744,6 @@ export class ShortcutManager {
     const alternatives: Record<string, string[]> = {
       newTask: ['Insert', 'Plus', 'T'],
       minimize: ['H', 'Down', 'Minus'],
-      toggleAlwaysOnTop: ['T', 'Up', 'P'],
-      focusFloatingNavigator: ['W', 'Space', 'F'],
-      toggleFloatingNavigator: ['F12', 'Backquote', 'F'],
       toggleLiveEditor: ['B', 'F13', 'Backquote'],
     }
 
@@ -906,9 +796,6 @@ export class ShortcutManager {
     const displayNames: Record<string, string> = {
       newTask: 'New Task',
       minimize: 'Minimize',
-      toggleAlwaysOnTop: 'Toggle Always On Top',
-      focusFloatingNavigator: 'Focus Floating Navigator',
-      toggleFloatingNavigator: 'Toggle Floating Navigator',
       toggleLiveEditor: 'Toggle LiveEditor',
       toggleLiveEditorSecondary: 'Toggle LiveEditor (second key)',
     }
@@ -986,16 +873,14 @@ export class ShortcutManager {
   }
 
   /**
-   * Handle new task shortcut.
+   * Opens the browser `/live-editor` (the only task-creation surface) on Cmd+N; fired by the contextual binding.
+   * @example
+   * shortcutManager.handleNewTaskShortcut()
    */
   handleNewTaskShortcut(): void {
     try {
-      // Surface the Floating quick-navigator, then open LiveEditor in the
-      // browser — it is the only task-creation surface left, and restoreFromTray
-      // surfaces Floating (not the hidden main) so a `shortcut-new-task` IPC to
-      // main would land in an unsurfaced window. Mirrors the deep-link
-      // create-task route (/live-editor).
-      this.windowManager.restoreFromTray()
+      // Browser only: surfacing the LiveEditor panel too would open the same
+      // note in two places at once. Mirrors the deep-link create-task route.
       openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
 
       if (this.notificationManager) {
@@ -1011,78 +896,15 @@ export class ShortcutManager {
   }
 
   /**
-   * Handle minimize window shortcut.
+   * Minimizes whichever CoreLive window is focused on Cmd+M; fired by the contextual binding.
+   * @example
+   * shortcutManager.handleMinimizeWindow()
    */
   handleMinimizeWindow(): void {
     try {
-      const focusedWindow = BrowserWindow.getFocusedWindow()
-
-      // Main window retired (T18): only the Floating navigator self-minimizes.
-      if (
-        focusedWindow &&
-        focusedWindow === this.windowManager.getFloatingNavigator()
-      ) {
-        focusedWindow.minimize()
-      }
+      BrowserWindow.getFocusedWindow()?.minimize()
     } catch (error) {
       log.error('Error handling minimize window shortcut:', error)
-    }
-  }
-
-  /**
-   * Handle toggle always on top shortcut.
-   */
-  handleToggleAlwaysOnTop(): void {
-    try {
-      if (this.windowManager.hasFloatingNavigator()) {
-        const floatingWindow = this.windowManager.getFloatingNavigator()
-        if (floatingWindow) {
-          const isAlwaysOnTop = floatingWindow.isAlwaysOnTop()
-          floatingWindow.setAlwaysOnTop(!isAlwaysOnTop)
-
-          if (this.notificationManager) {
-            this.notificationManager.showNotification(
-              'Always On Top',
-              !isAlwaysOnTop
-                ? 'Floating navigator always on top'
-                : 'Always on top disabled',
-              { silent: true },
-            )
-          }
-        }
-      }
-    } catch (error) {
-      log.error('Error handling toggle always on top shortcut:', error)
-    }
-  }
-
-  /**
-   * Handle focus floating navigator shortcut.
-   */
-  handleFocusFloatingNavigator(): void {
-    try {
-      if (this.windowManager.hasFloatingNavigator()) {
-        const floatingWindow = this.windowManager.getFloatingNavigator()
-        floatingWindow?.show()
-        floatingWindow?.focus()
-      } else {
-        this.windowManager.showFloatingNavigator()
-      }
-    } catch (error) {
-      log.error('Error handling focus floating navigator shortcut:', error)
-    }
-  }
-
-  /**
-   * Handle toggle floating navigator shortcut (global shortcut).
-   * This is a global shortcut that works even when the app is not focused.
-   */
-  handleToggleFloatingNavigator(): void {
-    try {
-      const didOpen = this.windowManager.toggleFloatingNavigator()
-      if (didOpen) this.playShortcutOpenSoundIfEnabled()
-    } catch (error) {
-      log.error('Error handling toggle floating navigator shortcut:', error)
     }
   }
 
@@ -1263,9 +1085,6 @@ export class ShortcutManager {
     const handlers: Record<string, () => void> = {
       newTask: () => this.handleNewTaskShortcut(),
       minimize: () => this.handleMinimizeWindow(),
-      toggleAlwaysOnTop: () => this.handleToggleAlwaysOnTop(),
-      focusFloatingNavigator: () => this.handleFocusFloatingNavigator(),
-      toggleFloatingNavigator: () => this.handleToggleFloatingNavigator(),
       // Both LiveEditor slots route to the same toggle.
       toggleLiveEditor: () => this.handleToggleLiveEditor(),
       toggleLiveEditorSecondary: () => this.handleToggleLiveEditor(),
@@ -1307,9 +1126,9 @@ export class ShortcutManager {
   }
 
   /**
-   * Enable shortcuts.
-   * Only registers global shortcuts immediately.
-   * Contextual shortcuts are registered via focus listeners when a window gains focus.
+   * Turns shortcuts on: global ones bind now, contextual ones bind now only if a CoreLive window is already focused.
+   * @example
+   * shortcutManager.enable()
    */
   enable(): void {
     this.isEnabled = true
@@ -1324,17 +1143,9 @@ export class ShortcutManager {
     // Setup focus listeners (handles contextual shortcuts on focus/blur)
     this.setupFocusListeners()
 
-    // Only register contextual shortcuts if a window is currently focused.
-    // Main window retired (T18): the Floating navigator is the only surface.
-    const floatingWindow = this.windowManager.getFloatingNavigator()
-    const isWindowFocused =
-      floatingWindow &&
-      !floatingWindow.isDestroyed() &&
-      floatingWindow.isFocused()
-
-    if (isWindowFocused) {
-      this.registerContextualShortcuts()
-    }
+    // A window may already be focused (e.g. re-enable from Settings), so
+    // resolve the contextual state now instead of waiting for the next event.
+    this.syncContextualShortcuts()
   }
 
   /**
@@ -1390,28 +1201,20 @@ export class ShortcutManager {
   }
 
   /**
-   * Cleanup - unregister all shortcuts and remove focus listeners.
+   * Unregisters every shortcut and detaches the app focus listeners; called on app quit.
+   * @example
+   * shortcutManager.cleanup()
    */
   cleanup(): void {
     this.unregisterAllShortcuts()
     this.shortcutOpenSoundController.cleanup()
 
-    // Remove focus listeners from windows
-    for (const [windowId, handlers] of this.focusHandlers) {
-      try {
-        const { focus, blur, window } = handlers
-        if (window && !window.isDestroyed()) {
-          window.removeListener('focus', focus)
-          window.removeListener('blur', blur)
-        }
-      } catch (error) {
-        log.warn(
-          `Failed to remove focus listeners for window ${windowId}:`,
-          error,
-        )
-      }
+    // Detach the exact handler we added so no other app listener is touched.
+    if (this.appFocusListener) {
+      app.removeListener('browser-window-focus', this.appFocusListener)
+      app.removeListener('browser-window-blur', this.appFocusListener)
+      this.appFocusListener = null
     }
-    this.focusHandlers.clear()
   }
 }
 
