@@ -16,10 +16,6 @@ import type { NativeTapStatus } from '../nativeShortcutEngine'
 // the renderer bridge imports from — it never reaches into main-process modules.
 export type { NativeTapStatus } from '../nativeShortcutEngine'
 import type { PerformanceMetrics } from '../performance-config'
-import type {
-  DisplayInfo as WindowManagerDisplayInfo,
-  WindowStats,
-} from '../WindowStateManager'
 
 // ============================================================================
 // Shared Types
@@ -61,76 +57,6 @@ export interface WindowBounds {
   width: number
   height: number
 }
-
-/** Extended window state including maximized/fullscreen flags */
-export interface WindowState extends WindowBounds {
-  isMaximized?: boolean
-  isFullScreen?: boolean
-  isMinimized?: boolean
-  alwaysOnTop?: boolean
-  displayId?: number
-  lastSaved?: number
-}
-
-/**
- * Which window(s) Electron surfaces at launch — the source of truth for the
- * configurable-startup feature, read synchronously from config.json at
- * `app.whenReady()` before auth/DB exist. Lives here (a pure type module)
- * because ConfigManager imports fs/electron and cannot be a type dependency.
- *
- * Invariant: at least one boolean is always true (enforced in ConfigManager,
- * never the IPC handler, so generic config writes can't break it).
- */
-export interface StartupWindowConfig {
-  /** Open the LiveEditor panel (`/live-editor`) at launch. */
-  showLiveEditor: boolean
-  /** Open the Floating Navigator (`/floating-navigator`) at launch. */
-  showFloating: boolean
-}
-
-/** Pre-rename startup wire shape accepted only while installed Electron versions roll forward. */
-export interface LegacyStartupWindowConfig {
-  /** Legacy name for the LiveEditor startup choice. */
-  showBraindump: boolean
-  /** Open the Floating Navigator at launch. */
-  showFloating: boolean
-}
-
-/**
- * Boot-safe startup default — the Floating Navigator opens (the front door
- * after the main window's retirement, T18). The single source of truth shared
- * by ConfigManager (factory default), both preload bridges, and the settings UI
- * so the "what opens at launch" default can never drift between surfaces. Always
- * satisfies the ≥1-true invariant. Spread it (`{ ...DEFAULT }`) at call sites
- * that need a mutable copy.
- *
- * @example
- * setStartup({ ...DEFAULT_STARTUP_WINDOW_CONFIG }) // => { showLiveEditor: false, showFloating: true }
- */
-export const DEFAULT_STARTUP_WINDOW_CONFIG: StartupWindowConfig = {
-  showLiveEditor: false,
-  showFloating: true,
-}
-
-/**
- * Live visibility of the auxiliary (non-main) windows, read on demand from the
- * main process. Lets the settings UI reflect what is *actually* on screen now
- * (e.g. to label a "Try it now" action) rather than the persisted startup
- * setting, which can drift once a panel is opened/closed at runtime.
- *
- * Both flags require the window to both exist and be visible.
- */
-export interface AuxWindowVisibility {
-  /** The Floating Navigator window exists and is currently visible. */
-  floating: boolean
-  /** The LiveEditor window exists and is currently visible. */
-  liveEditor: boolean
-}
-
-/** Display information (richer version from WindowStateManager) */
-export type DisplayInfo = WindowManagerDisplayInfo
-
-export type { WindowStats }
 
 /**
  * Notification options safe to serialize across IPC.
@@ -215,9 +141,6 @@ export type ConfigSection =
   | 'behavior'
   | 'advanced'
   | 'liveEditor'
-
-/** Window-state-managed window kinds (must mirror WindowStateManager support). */
-export type ManagedWindowKind = 'main' | 'floating' | 'liveEditor'
 
 /** Deep link examples */
 export interface DeepLinkExamples {
@@ -314,159 +237,6 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Window Operations
-  // ──────────────────────────────────────────────────────────────────────────
-  'window-toggle-floating-navigator': {
-    request: void
-    response: boolean
-  }
-  'window-show-floating-navigator': {
-    request: void
-    response: void
-  }
-  'window-hide-floating-navigator': {
-    request: void
-    response: void
-  }
-  'window-show-main': {
-    request: void
-    response: void
-  }
-  /**
-   * Toggle the LiveEditor window. Available from any renderer (FloatingNav,
-   * Main) — mirrors `window-toggle-floating-navigator`.
-   */
-  'window-toggle-live-editor': {
-    request: void
-    response: boolean
-  }
-  /**
-   * Read-only snapshot of which auxiliary windows are visible right now. Used
-   * by the settings UI to label "Try it now" actions accurately. Never mutates
-   * window state.
-   */
-  'window-get-aux-visibility': {
-    request: void
-    response: AuxWindowVisibility
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Window State Management
-  // ──────────────────────────────────────────────────────────────────────────
-  'window-state-get': {
-    request: ManagedWindowKind
-    response: WindowState | null
-  }
-  'window-state-set': {
-    request: [ManagedWindowKind, Partial<WindowState>]
-    response: WindowState | null
-  }
-  'window-state-reset': {
-    request: ManagedWindowKind
-    response: WindowState | null
-  }
-  'window-state-get-stats': {
-    request: void
-    response: WindowStats
-  }
-  'window-state-move-to-display': {
-    request: [ManagedWindowKind, number]
-    response: boolean
-  }
-  'window-state-snap-to-edge': {
-    request: [
-      ManagedWindowKind,
-      (
-        | 'left'
-        | 'right'
-        | 'top'
-        | 'bottom'
-        | 'top-left'
-        | 'top-right'
-        | 'bottom-left'
-        | 'bottom-right'
-        | 'maximize'
-      ),
-    ]
-    response: boolean
-  }
-  'window-state-get-display': {
-    request: ManagedWindowKind
-    response: DisplayInfo | null
-  }
-  'window-state-get-all-displays': {
-    request: void
-    response: DisplayInfo[]
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Floating Window
-  // ──────────────────────────────────────────────────────────────────────────
-  'floating-window-get-visible-on-all-workspaces': {
-    request: void
-    response: boolean
-  }
-  'floating-window-set-visible-on-all-workspaces': {
-    request: boolean
-    response: boolean
-  }
-  'floating-window-close': {
-    request: void
-    response: boolean
-  }
-  'floating-window-minimize': {
-    request: void
-    response: boolean
-  }
-  'floating-window-toggle-always-on-top': {
-    request: void
-    response: boolean
-  }
-  'floating-window-get-bounds': {
-    request: void
-    response: WindowBounds | null
-  }
-  'floating-window-set-bounds': {
-    request: WindowBounds
-    response: boolean
-  }
-  'floating-window-is-always-on-top': {
-    request: void
-    response: boolean
-  }
-  /**
-   * Persisted Settings value for FloatingNavigator's always-on-top state —
-   * distinct from the live `is`/`toggle` pair above. `get` returns the effective
-   * value (live window when open, else the persisted relaunch state); `set`
-   * persists across config + window-state + the live window so relaunch honors it.
-   */
-  'floating-window-get-always-on-top': {
-    request: void
-    response: boolean
-  }
-  'floating-window-set-always-on-top': {
-    request: boolean
-    response: boolean
-  }
-  /**
-   * Floating Navigator global toggle accelerator. Mirrors the LiveEditor shortcut
-   * channels, but reads/writes the canonical `shortcuts.toggleFloatingNavigator`
-   * config key (no separate mirror), so the inline box never drifts from a rebind
-   * made via the generic keybind settings. `get` returns the configured
-   * accelerator (empty string when disabled); `set` re-registers it and returns
-   * false on conflict — including a silently-substituted fallback, which the main
-   * handler unwinds so the renderer shows the conflict copy (§6e).
-   */
-  'floating-config-get-shortcut': {
-    request: void
-    response: string
-  }
-  'floating-config-set-shortcut': {
-    request: string
-    response: boolean
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // LiveEditor Window
   // ──────────────────────────────────────────────────────────────────────────
   /** Toggle LiveEditor window visibility (callable from LiveEditor itself). */
@@ -508,6 +278,15 @@ export interface IPCChannels {
     request: WindowBounds
     response: boolean
   }
+  /** Persisted Settings value: show LiveEditor on every macOS Space. */
+  'live-editor-get-visible-on-all-workspaces': {
+    request: void
+    response: boolean
+  }
+  'live-editor-set-visible-on-all-workspaces': {
+    request: boolean
+    response: boolean
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // LiveEditor Notes (per-category text persistence)
@@ -524,16 +303,8 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // LiveEditor Configuration (sync mode, shortcut, last category)
+  // LiveEditor Configuration (shortcuts)
   // ──────────────────────────────────────────────────────────────────────────
-  'live-editor-config-get-sync': {
-    request: void
-    response: boolean
-  }
-  'live-editor-config-set-sync': {
-    request: boolean
-    response: boolean
-  }
   'live-editor-config-get-shortcut': {
     request: void
     response: string
@@ -548,14 +319,6 @@ export interface IPCChannels {
   }
   'live-editor-config-set-shortcut-secondary': {
     request: string
-    response: boolean
-  }
-  'live-editor-config-get-last-category': {
-    request: void
-    response: number | null
-  }
-  'live-editor-config-set-last-category': {
-    request: number
     response: boolean
   }
 
@@ -826,25 +589,6 @@ export interface IPCChannels {
     response: { openAtLogin: boolean; openAsHidden?: boolean }
   }
   /**
-   * Persist which window(s) open at Electron launch. The >=1-true invariant is
-   * enforced in ConfigManager (not here), so a renderer cannot persist a
-   * boot-nothing config. Returns the saved success flag.
-   */
-  'settings:setStartupConfig': {
-    request: StartupWindowConfig
-    response: boolean
-  }
-  /**
-   * Read the persisted startup-window config so the settings UI can show the
-   * saved choice. Mirrors the read+write pairs every other settings domain
-   * exposes, so the renderer never has to consume the untyped `config.getSection`
-   * surface. The returned config always satisfies the >=1-true invariant.
-   */
-  'settings:getStartupConfig': {
-    request: void
-    response: StartupWindowConfig
-  }
-  /**
    * Reset the Settings popover window to its default size (360×380) and
    * re-anchor it to the tray icon. Called from the "Restore default size"
    * button in ElectronSettingsPage. Takes no arguments; returns true on success.
@@ -891,16 +635,6 @@ export interface IPCEventChannels {
 
   // Menu events
   'menu-action': { action: string; filePath?: string }
-  /**
-   * Broadcast when the Floating Navigator's keep-on-top setting changes from
-   * ANY surface (the Settings toggle or the in-window pin). Lets the floating
-   * window's own pin button live-update instead of lying until relaunch (§6d).
-   */
-  'floating-window-always-on-top-changed': { alwaysOnTop: boolean }
-
-  // LiveEditor events (main → liveEditor renderer)
-  /** Sent when the active category changes (via FloatingNav sync, etc.). */
-  'live-editor-category-changed': { categoryId: number }
 
   // Notification fallback events (renderer hook-up pending)
   'notification-permission-denied': { reason?: string; guidance?: string }

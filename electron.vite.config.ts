@@ -64,10 +64,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           preload: resolve(__dirname, 'electron/preload.ts'),
-          'preload-floating': resolve(
-            __dirname,
-            'electron/preload-floating.ts',
-          ),
+          'preload-login': resolve(__dirname, 'electron/preload-login.ts'),
           'preload-live-editor': resolve(
             __dirname,
             'electron/preload-live-editor.ts',

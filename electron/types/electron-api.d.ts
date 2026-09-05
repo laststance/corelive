@@ -10,10 +10,6 @@
 
 import type {
   AuthUserPayload,
-  AuxWindowVisibility,
-  WindowBounds,
-  WindowState,
-  DisplayInfo,
   NotificationOptions,
   NotificationSettingsState,
   TrayIconState,
@@ -21,8 +17,6 @@ import type {
   OAuthResult,
   PendingSignInToken,
   ShortcutDefinition,
-  StartupWindowConfig,
-  LegacyStartupWindowConfig,
   ConfigSection,
   DeepLinkExamples,
   UpdaterStatus,
@@ -40,30 +34,6 @@ import type {
  * sensible defaults rather than throwing.
  */
 export interface ElectronAPI {
-  /**
-   * Window control operations.
-   */
-  window: {
-    /** Toggle floating navigator visibility */
-    toggleFloatingNavigator: () => Promise<boolean | undefined>
-    /** Show floating navigator */
-    showFloatingNavigator: () => Promise<void>
-    /** Hide floating navigator */
-    hideFloatingNavigator: () => Promise<void>
-    /** Get current window bounds */
-    getBounds: () => Promise<WindowBounds>
-    /** Set window bounds (partial updates supported) */
-    setBounds: (bounds: Partial<WindowBounds>) => Promise<void>
-    /** Check if window is minimized */
-    isMinimized: () => Promise<boolean>
-    /** Check if window is always on top */
-    isAlwaysOnTop: () => Promise<boolean>
-    /** Move window to specific display */
-    moveToDisplay: (displayIndex: number) => Promise<void>
-    /** Read which auxiliary windows (floating navigator, LiveEditor) are visible now */
-    getAuxVisibility: () => Promise<AuxWindowVisibility>
-  }
-
   /**
    * System integration APIs (tray, notifications).
    */
@@ -249,81 +219,16 @@ export interface ElectronAPI {
   }
 
   /**
-   * Window state management.
-   */
-  windowState: {
-    /** Get window state */
-    get: (windowType: 'main' | 'floating') => Promise<WindowState | null>
-    /** Set window state */
-    set: (
-      windowType: 'main' | 'floating',
-      state: Partial<WindowState>,
-    ) => Promise<boolean>
-    /** Reset window state to defaults */
-    reset: (windowType: 'main' | 'floating') => Promise<void>
-    /** Get window state statistics */
-    getStats: () => Promise<{
-      windowCount: number
-      lastSaved: number
-      saves?: number
-      loads?: number
-      resets?: number
-    }>
-    /** Move window to display */
-    moveToDisplay: (
-      windowType: 'main' | 'floating',
-      displayIndex: number,
-    ) => Promise<boolean>
-    /** Snap window to edge */
-    snapToEdge: (
-      windowType: 'main' | 'floating',
-      edge:
-        | 'left'
-        | 'right'
-        | 'top'
-        | 'bottom'
-        | 'top-left'
-        | 'top-right'
-        | 'bottom-left'
-        | 'bottom-right'
-        | 'maximize',
-    ) => Promise<boolean>
-    /** Get current display info */
-    getDisplay: (windowType: 'main' | 'floating') => Promise<DisplayInfo | null>
-    /** Get all displays */
-    getAllDisplays: () => Promise<DisplayInfo[]>
-  }
-
-  /**
-   * Floating window operations.
-   */
-  floatingWindow: {
-    /** Close floating window */
-    close: () => Promise<void>
-    /** Minimize floating window */
-    minimize: () => Promise<void>
-    /** Toggle always on top */
-    toggleAlwaysOnTop: () => Promise<boolean>
-    /** Get floating window bounds */
-    getBounds: () => Promise<WindowBounds>
-    /** Set floating window bounds (partial updates supported) */
-    setBounds: (bounds: Partial<WindowBounds>) => Promise<void>
-    /** Check if always on top */
-    isAlwaysOnTop: () => Promise<boolean>
-  }
-
-  /**
-   * Shared settings for floating utility panels.
+   * Shared settings for the LiveEditor panel.
+   *
+   * `floatingPanels` is the legacy wire name — frozen preloads in installed
+   * builds expose it under this key; do not rename.
    */
   floatingPanels?: {
-    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces. */
+    /** Read whether LiveEditor follows macOS Spaces. */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
-    /** Persist and apply whether both panels follow macOS Spaces. */
+    /** Persist and apply whether LiveEditor follows macOS Spaces. */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
-    /** Read FloatingNavigator's always-on-top setting (effective state). */
-    getFloatingNavigatorAlwaysOnTop: () => Promise<boolean>
-    /** Persist and apply FloatingNavigator's always-on-top setting. */
-    setFloatingNavigatorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
     /** Read LiveEditor's always-on-top setting (config-backed, default off). */
     getLiveEditorAlwaysOnTop: () => Promise<boolean>
     /** Persist and apply LiveEditor's always-on-top setting. */
@@ -332,10 +237,6 @@ export interface ElectronAPI {
     getBrainDumpAlwaysOnTop?: () => Promise<boolean>
     /** @deprecated Pre-rename installed preload method; use `setLiveEditorAlwaysOnTop`. */
     setBrainDumpAlwaysOnTop?: (enabled: boolean) => Promise<boolean>
-    /** Read FloatingNavigator's global toggle accelerator (empty when disabled). */
-    getFloatingNavigatorShortcut: () => Promise<string>
-    /** Persist + register the accelerator; resolves false on conflict. */
-    setFloatingNavigatorShortcut: (accelerator: string) => Promise<boolean>
   }
 
   /**
@@ -426,24 +327,6 @@ export interface ElectronAPI {
   removeAllListeners: (channel: IPCEventChannel) => void
 
   /**
-   * Display management.
-   * Note: All methods are async as they use IPC under the hood.
-   */
-  display?: {
-    /** Get all connected displays */
-    getAllDisplays?: () => Promise<DisplayInfo[]>
-    /** Get primary display */
-    getPrimaryDisplay?: () => Promise<DisplayInfo | null>
-    /** Get display matching a rectangle */
-    getDisplayMatching?: (rect: {
-      x: number
-      y: number
-      width: number
-      height: number
-    }) => Promise<DisplayInfo | null>
-  }
-
-  /**
    * Electron-specific settings management.
    * Controls app behavior like dock visibility and startup settings.
    */
@@ -472,24 +355,6 @@ export interface ElectronAPI {
      */
     getLoginItemSettings: () => Promise<
       IPCResponse<'settings:getLoginItemSettings'>
-    >
-    /**
-     * Persist which window(s) open at Electron launch. The >=1-true invariant is
-     * enforced in the main process, so an all-false request is repaired before
-     * saving and this still resolves true.
-     * @param config - The two startup-window booleans (LiveEditor / floating).
-     * @returns Promise resolving to success status
-     */
-    setStartupConfig: (
-      config: StartupWindowConfig | LegacyStartupWindowConfig,
-    ) => Promise<boolean>
-    /**
-     * Read the persisted startup-window config so the settings UI can show the
-     * saved choice without consuming the untyped `config.getSection` surface.
-     * @returns Promise resolving to the saved config (Floating-only default on failure).
-     */
-    getStartupConfig: () => Promise<
-      StartupWindowConfig | LegacyStartupWindowConfig
     >
     /**
      * Resets the Settings popover window to default size (360×380) and
@@ -522,10 +387,6 @@ export interface LiveEditorSettingsAPI {
   getOpacity: () => Promise<number>
   /** Persist + apply opacity; returns the clamped value the main applied. */
   setOpacity: (value: number) => Promise<number>
-  /** Read the "follow FloatingNav category" toggle. */
-  getSyncMode: () => Promise<boolean>
-  /** Update the "follow FloatingNav category" toggle. */
-  setSyncMode: (enabled: boolean) => Promise<boolean>
   /** Read the global accelerator (empty string when disabled). */
   getShortcut: () => Promise<string>
   /** Persist + register the global accelerator. */
@@ -553,82 +414,12 @@ export interface ElectronEnv {
 }
 
 /**
- * Floating Navigator API exposed via contextBridge in preload-floating.ts.
- * Provides window control APIs for the floating navigator window.
- */
-export interface FloatingNavigatorAPI {
-  /** Window control operations */
-  window: {
-    /** Close floating navigator window */
-    close: () => Promise<void>
-    /** Minimize floating navigator window */
-    minimize: () => Promise<void>
-    /** Toggle always on top behavior */
-    toggleAlwaysOnTop: () => Promise<boolean>
-    /** Focus main application window */
-    focusMainWindow: () => Promise<void>
-    /** Get current window bounds */
-    getBounds: () => Promise<{
-      x: number
-      y: number
-      width: number
-      height: number
-    } | null>
-    /** Set window bounds */
-    setBounds: (bounds: {
-      x?: number
-      y?: number
-      width?: number
-      height?: number
-    }) => Promise<void>
-    /** Check if window is always on top */
-    isAlwaysOnTop: () => Promise<boolean>
-  }
-  /**
-   * LiveEditor controls reachable from the floating navigator. Intentionally
-   * minimal — only `toggle`, since other LiveEditor operations are owned by
-   * the LiveEditor window itself (`window.liveEditorAPI`).
-   */
-  liveEditor?: LiveEditorToggleAPI
-  /** @deprecated Pre-rename installed clients expose this namespace; use `liveEditor`. */
-  brainDump?: LiveEditorToggleAPI
-  /** Subscribe to IPC events */
-  on: (channel: string, callback: (...args: unknown[]) => void) => () => void
-  /** @deprecated Use the cleanup function returned by `on()` instead */
-  removeListener: (
-    channel: string,
-    callback: (...args: unknown[]) => void,
-  ) => void
-}
-
-/** Minimal LiveEditor toggle surface exposed inside Floating Navigator. */
-export interface LiveEditorToggleAPI {
-  /** Toggle LiveEditor window visibility. */
-  toggle: () => Promise<void>
-}
-
-/**
- * Floating Navigator environment information exposed via preload-floating.ts.
- */
-export interface FloatingNavigatorEnv {
-  /** Whether running in Electron */
-  isElectron: boolean
-  /** Whether this is the floating navigator window */
-  isFloatingNavigator: boolean
-  /** Platform identifier */
-  platform: string
-}
-
-/**
  * LiveEditor API exposed via contextBridge in preload-live-editor.ts.
  *
  * Provides:
  * - `window.*` — frameless panel controls (close/toggle/opacity/bounds)
  * - `note.*`   — per-category text persistence
- * - `sync.*`   — toggle for "follow FloatingNav category"
- * - `category.*` — last-active category id used to restore state
- * - `spaces.*` — shared macOS Spaces tracking for utility panels
- * - `on(channel, cb)` — subscribe to whitelisted main-process events
+ * - `spaces.*` — macOS Spaces tracking for the panel
  */
 export interface LiveEditorAPI {
   window: {
@@ -663,29 +454,12 @@ export interface LiveEditorAPI {
     /** Persist note text for a category. */
     set: (categoryId: number, text: string) => Promise<void>
   }
-  sync: {
-    /** Read the "follow FloatingNav category" toggle. */
-    getEnabled: () => Promise<boolean>
-    /** Update the "follow FloatingNav category" toggle. */
-    setEnabled: (enabled: boolean) => Promise<void>
-  }
-  category: {
-    /** Read the last-active category id (null when never set). */
-    getLast: () => Promise<number | null>
-    /** Persist the active category id. */
-    setLast: (categoryId: number) => Promise<void>
-  }
   spaces: {
-    /** Read whether LiveEditor and Floating Navigator follow macOS Spaces. */
+    /** Read whether LiveEditor follows macOS Spaces. */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
-    /** Persist and apply whether both utility panels follow macOS Spaces. */
+    /** Persist and apply whether LiveEditor follows macOS Spaces. */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
   }
-  /** Subscribe to a whitelisted event; returns a cleanup function. */
-  on: (
-    channel: string,
-    callback: (...args: unknown[]) => void,
-  ) => (() => void) | undefined
 }
 
 /**
@@ -717,18 +491,6 @@ declare global {
      * Only available when running in Electron environment.
      */
     electronEnv?: ElectronEnv
-
-    /**
-     * Floating Navigator API exposed via contextBridge.
-     * Only available when running in floating navigator window.
-     */
-    floatingNavigatorAPI?: FloatingNavigatorAPI
-
-    /**
-     * Floating Navigator environment information.
-     * Only available when running in floating navigator window.
-     */
-    floatingNavigatorEnv?: FloatingNavigatorEnv
 
     /**
      * LiveEditor API exposed via contextBridge.
