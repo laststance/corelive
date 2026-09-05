@@ -25,26 +25,46 @@ export function readPendingMerge(): PendingMerge | null {
 }
 
 /**
+ * The outstanding claim when it belongs to somebody else — a browser where one
+ * account started a merge, lost the tab mid-flight, then a DIFFERENT account
+ * signed in. Those keeps may already sit in the first account, so the second one
+ * must never send them; the caller retires them locally instead.
+ * @param clerkId - The account asking, i.e. whoever is signed in now.
+ * @returns The foreign claim, or null when the record is ours or absent.
+ * @example
+ * readForeignPendingMerge('user_b') // => { clerkId: 'user_a', batchId: '7d0c…', … }
+ */
+export function readForeignPendingMerge(clerkId: string): PendingMerge | null {
+  const pending = readPendingMerge()
+  if (pending === null || pending.clerkId === clerkId) return null
+  return pending
+}
+
+/**
  * Claims the batch a merge is about to send, writing it before the request so a
  * tab closed mid-flight can resume with the SAME idempotency key. An existing
- * record wins over the ids passed in: those are the items the server may already
- * hold, and re-deriving the batch from whatever the store holds now is exactly
- * the bug this record prevents (keeps added between attempts would ride along
- * under a fresh key and double count the originals).
- * @param candidateIds - Ids to claim when no attempt is outstanding.
+ * record of OURS wins over the ids passed in: those are the items the server may
+ * already hold, and re-deriving the batch from whatever the store holds now is
+ * exactly the bug this record prevents (keeps added between attempts would ride
+ * along under a fresh key and double count the originals). A record belonging to
+ * another account is never resumed — see {@link readForeignPendingMerge}.
+ * @param clerkId - The account the claim is filed under.
+ * @param candidateIds - Ids to claim when no attempt of ours is outstanding.
  * @returns The batch to send, or null when there is nothing pending and nothing to claim.
  * @example
- * readOrCreatePendingMerge(['5b1c…']) // => { batchId: '7d0c…', ids: ['5b1c…'] }
+ * readOrCreatePendingMerge('user_a', ['5b1c…']) // => { batchId: '7d0c…', ids: ['5b1c…'] }
  */
 export function readOrCreatePendingMerge(
+  clerkId: string,
   candidateIds: string[],
 ): PendingMerge | null {
   const pending = readPendingMerge()
-  if (pending !== null) return pending
+  if (pending !== null && pending.clerkId === clerkId) return pending
   if (candidateIds.length === 0) return null
 
   const claimed: PendingMerge = {
     version: LOCAL_PENDING_MERGE_SCHEMA_VERSION,
+    clerkId,
     batchId: createBatchId(),
     ids: candidateIds,
   }

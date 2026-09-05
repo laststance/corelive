@@ -6,6 +6,7 @@ import { useRef } from 'react'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useLocalDayKey } from '@/hooks/useLocalDayKey'
+import { MAX_LOCAL_MERGE_PASSES } from '@/lib/live-editor/constants'
 import {
   countLocalCompletionsOnDay,
   readUnmergedLocalCompletions,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/live-editor/localCompletionStore'
 import {
   clearPendingMerge,
+  readForeignPendingMerge,
   readOrCreatePendingMerge,
 } from '@/lib/live-editor/pendingMergeStore'
 import { log } from '@/lib/logger'
@@ -41,7 +43,7 @@ import {
  * <LocalKeepMergeSync />
  */
 export function LocalKeepMergeSync(): null {
-  const { isLoaded, isSignedIn } = useUser()
+  const { isLoaded, isSignedIn, user } = useUser()
   const queryClient = useQueryClient()
   const dayKey = useLocalDayKey()
   const timezone = getViewerTimeZone()
@@ -51,18 +53,21 @@ export function LocalKeepMergeSync(): null {
   )
 
   /**
-   * Sends the claimed batch and settles the ember. Split from the effect so the
-   * await chain reads top-to-bottom.
-   * @returns Nothing; throws only what the mutation throws.
+   * Sends ONE claimed batch and settles the ember. Split from the effect so the
+   * await chain reads top-to-bottom, and from the loop so the cap applies per
+   * pass rather than per sign-in.
+   * @param clerkId - The account the claim is filed under.
+   * @returns Whether a batch actually reached the server.
    */
-  const mergeLocalKeeps = async (): Promise<void> => {
+  const mergeOneBatch = async (clerkId: string): Promise<boolean> => {
     const unmerged = readUnmergedLocalCompletions()
     // Claimed (and persisted) BEFORE the request: a tab closed mid-flight must
     // resume with the SAME batch id, or the retry double-counts what landed.
     const pending = readOrCreatePendingMerge(
+      clerkId,
       unmerged.slice(0, IMPORT_LOCAL_MAX_ITEMS).map((item) => item.id),
     )
-    if (pending === null) return
+    if (pending === null) return false
 
     // Deliberately resolved from the claimed ids, not from whatever the store
     // holds now — keeps added since the claim belong to the NEXT batch.
@@ -73,7 +78,7 @@ export function LocalKeepMergeSync(): null {
     if (items.length === 0) {
       // Every claimed keep is already tagged or gone; release the claim.
       clearPendingMerge()
-      return
+      return false
     }
 
     const result = await importLocalMutation.mutateAsync({
@@ -111,21 +116,57 @@ export function LocalKeepMergeSync(): null {
       )
     }
     clearPendingMerge()
+    return true
+  }
+
+  /**
+   * Drains this device's unmerged keeps, one capped batch per pass. A store
+   * holding more than {@link IMPORT_LOCAL_MAX_ITEMS} needs several passes, and
+   * the effect latches after its first run — without the loop the overflow would
+   * sit unmerged until the next page load.
+   * @param clerkId - The account the keeps are being filed under.
+   * @returns Nothing; throws only what the mutation throws.
+   */
+  const mergeLocalKeeps = async (clerkId: string): Promise<void> => {
+    // A claim left by another account covers keeps that may already sit in THAT
+    // account. Retiring them locally is the only way to stop this user re-sending
+    // someone else's wins — there is no signal here to tell landed from lost.
+    const foreign = readForeignPendingMerge(clerkId)
+    if (foreign !== null) {
+      tagLocalCompletionsMerged(foreign.ids, foreign.batchId)
+      clearPendingMerge()
+    }
+
+    let imported = false
+    let remaining = readUnmergedLocalCompletions().length
+    for (let pass = 0; pass < MAX_LOCAL_MERGE_PASSES && remaining > 0; pass++) {
+      if (!(await mergeOneBatch(clerkId))) break
+      // Progress, not count, is the exit condition: a pass that tags nothing
+      // (ids drifted under us) would otherwise re-claim the same batch forever.
+      const left = readUnmergedLocalCompletions().length
+      imported = true
+      if (left >= remaining) break
+      remaining = left
+    }
 
     // Settle every completed-derived view (heatmap windows, journal, day detail)
     // against the rows that just landed.
-    await queryClient.invalidateQueries({ queryKey: orpc.completed.key() })
+    if (imported) {
+      await queryClient.invalidateQueries({ queryKey: orpc.completed.key() })
+    }
   }
 
   useCycleEffect(() => {
     if (!isLoaded || isSignedIn !== true || hasRunRef.current) return
+    const clerkId = user?.id
+    if (clerkId === undefined) return
     hasRunRef.current = true
     // Swallowed on purpose: a failed merge must not take the app down, and the
     // pending record already guarantees the next session retries it.
-    void mergeLocalKeeps().catch((error: unknown) => {
+    void mergeLocalKeeps(clerkId).catch((error: unknown) => {
       log.error('Failed to merge local completions:', error)
     })
-  }, [isLoaded, isSignedIn])
+  }, [isLoaded, isSignedIn, user?.id])
 
   return null
 }

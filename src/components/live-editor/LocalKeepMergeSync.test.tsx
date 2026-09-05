@@ -17,11 +17,18 @@ import {
 } from '@/lib/live-editor/constants'
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
+import { IMPORT_LOCAL_MAX_ITEMS } from '@/server/schemas/completed'
 
 import { LocalKeepMergeSync } from './LocalKeepMergeSync'
 
 const { clerkUserRef, importLocalFn } = vi.hoisted(() => ({
-  clerkUserRef: { current: { isLoaded: true, isSignedIn: true } },
+  clerkUserRef: {
+    current: {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_a' } as { id: string } | undefined,
+    },
+  },
   importLocalFn: vi.fn(),
 }))
 
@@ -49,6 +56,9 @@ vi.mock('@/lib/orpc/client-query', () => ({
 }))
 
 const todayHeatmapKey = getTodayHeatmapQueryKey(getLocalTodayIsoDate())
+
+/** The payload shape `mutationFn` receives, so a spec can size a batch without `any`. */
+type ImportPayload = { batchId: string; items: { title: string }[] }
 
 type StoredKeep = {
   id: string
@@ -109,7 +119,11 @@ describe('LocalKeepMergeSync', () => {
       imported: 1,
       alreadyImported: false,
     })
-    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_a' },
+    }
   })
 
   it('sends a signed-out visitor every unmerged keep once they sign in', async () => {
@@ -138,7 +152,11 @@ describe('LocalKeepMergeSync', () => {
 
   it('leaves the account alone for a visitor who never signed in', async () => {
     // Arrange
-    clerkUserRef.current = { isLoaded: true, isSignedIn: false }
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: false,
+      user: undefined,
+    }
     seedLocalKeeps([
       { id: 'a', title: 'push-ups', completedAt: new Date().toISOString() },
     ])
@@ -181,6 +199,7 @@ describe('LocalKeepMergeSync', () => {
       LOCAL_PENDING_MERGE_STORAGE_KEY,
       JSON.stringify({
         version: LOCAL_PENDING_MERGE_SCHEMA_VERSION,
+        clerkId: 'user_a',
         batchId: 'pending-1',
         ids: ['a', 'b'],
       }),
@@ -194,22 +213,29 @@ describe('LocalKeepMergeSync', () => {
     // Act
     renderMergeSync(0)
 
-    // Assert
-    await waitFor(() => expect(importLocalFn).toHaveBeenCalledTimes(1))
-    const [sent] = importLocalFn.mock.calls[0] ?? []
-    expect(sent).toEqual({
+    // Assert — the resumed request carries a and b only. c merges too, but in a
+    // pass of its own under a fresh key; riding along on `pending-1` is what
+    // would double-count a and b when that batch turns out to have landed.
+    await waitFor(() => expect(importLocalFn).toHaveBeenCalledTimes(2))
+    const [resumed] = importLocalFn.mock.calls[0] ?? []
+    expect(resumed).toEqual({
       batchId: 'pending-1',
       items: [
         { title: 'read', completedAt: new Date(completedAt) },
         { title: 'read', completedAt: new Date(completedAt) },
       ],
     })
+    const next = importLocalFn.mock.calls[1]?.[0] as ImportPayload | undefined
+    expect(next?.batchId).not.toBe('pending-1')
+    expect(next?.items).toEqual([
+      { title: 'walk', completedAt: new Date(completedAt) },
+    ])
     await waitFor(() => {
       const stored = readStoredKeeps()
       expect(stored.map((item) => item.mergedBatchId)).toEqual([
         'pending-1',
         'pending-1',
-        undefined,
+        expect.any(String),
       ])
     })
   })
@@ -240,32 +266,50 @@ describe('LocalKeepMergeSync', () => {
     })
   })
 
-  it("drops the heatmap fetch that started before the import, so a total short by the batch can't land afterwards", async () => {
-    // Arrange
+  it("discards a heatmap answer already in flight when the import landed, so today's count can't fall back", async () => {
+    // Arrange — a heatmap request is already running and will answer with the
+    // account total from BEFORE the import (3), missing the keep being merged.
     seedLocalKeeps([
       { id: 'a', title: 'push-ups', completedAt: new Date().toISOString() },
     ])
     const queryClient = new QueryClient()
-    const order: string[] = []
-    vi.spyOn(queryClient, 'cancelQueries').mockImplementation(async () => {
-      order.push('cancel')
+    queryClient.setQueryData(todayHeatmapKey, {
+      data: [],
+      streaks: { current: 0, longest: 0 },
+      total: 3,
     })
-    importLocalFn.mockImplementation(async () => {
-      order.push('import')
-      return { batchId: 'fresh', imported: 1, alreadyImported: false }
+    let answerStaleFetch = (): void => undefined
+    const staleFetch = queryClient.fetchQuery({
+      queryKey: todayHeatmapKey,
+      queryFn: async () =>
+        new Promise((resolve) => {
+          answerStaleFetch = () =>
+            resolve({
+              data: [],
+              streaks: { current: 0, longest: 0 },
+              total: 3,
+            })
+        }),
     })
+    // Cancelling rejects this promise; production has nobody awaiting it either.
+    staleFetch.catch(() => undefined)
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     )
 
     // Act
     render(<LocalKeepMergeSync />, { wrapper })
-
-    // Assert
     await waitFor(() => {
       expect(readStoredKeeps()[0]?.mergedBatchId).toEqual(expect.any(String))
     })
-    expect(order).toEqual(['import', 'cancel'])
+    // The stale request answers only now, after the merge already settled.
+    answerStaleFetch()
+    await staleFetch.catch(() => undefined)
+
+    // Assert — the merged total stands; the stale 3 never overwrote it.
+    expect(
+      queryClient.getQueryData<{ total: number }>(todayHeatmapKey)?.total,
+    ).toBe(4)
   })
 
   it('does not double-count a batch the server had already imported', async () => {
@@ -310,6 +354,64 @@ describe('LocalKeepMergeSync', () => {
       expect(readStoredKeeps()[0]?.mergedBatchId).toEqual(expect.any(String))
     })
     expect(queryClient.getQueryData(todayHeatmapKey)).toBeUndefined()
+  })
+
+  it("never files another account's interrupted batch under whoever signs in next", async () => {
+    // Arrange — user_a claimed this keep and lost the tab mid-merge, so it may
+    // already sit in user_a's account. user_b is the one signing in now.
+    seedLocalKeeps([
+      { id: 'a', title: 'therapy', completedAt: new Date().toISOString() },
+    ])
+    window.localStorage.setItem(
+      LOCAL_PENDING_MERGE_STORAGE_KEY,
+      JSON.stringify({
+        version: LOCAL_PENDING_MERGE_SCHEMA_VERSION,
+        clerkId: 'user_a',
+        batchId: 'a-batch',
+        ids: ['a'],
+      }),
+    )
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_b' },
+    }
+
+    // Act
+    renderMergeSync(0)
+
+    // Assert
+    await waitFor(() => {
+      expect(readStoredKeeps()[0]?.mergedBatchId).toBe('a-batch')
+    })
+    expect(importLocalFn).not.toHaveBeenCalled()
+  })
+
+  it('merges a device holding more keeps than one request can carry', async () => {
+    // Arrange — one keep more than a single batch may send.
+    const completedAt = new Date().toISOString()
+    seedLocalKeeps(
+      Array.from({ length: IMPORT_LOCAL_MAX_ITEMS + 1 }, (_, index) => ({
+        id: `k${index}`,
+        title: 'push-ups',
+        completedAt,
+      })),
+    )
+
+    // Act
+    renderMergeSync(0)
+
+    // Assert
+    await waitFor(() => expect(importLocalFn).toHaveBeenCalledTimes(2))
+    const first = importLocalFn.mock.calls[0]?.[0] as ImportPayload | undefined
+    const second = importLocalFn.mock.calls[1]?.[0] as ImportPayload | undefined
+    expect(first?.items).toHaveLength(IMPORT_LOCAL_MAX_ITEMS)
+    expect(second?.items).toHaveLength(1)
+    await waitFor(() => {
+      expect(
+        readStoredKeeps().filter((keep) => keep.mergedBatchId === undefined),
+      ).toHaveLength(0)
+    })
   })
 
   it('leaves the batch claimed when the import fails so the next session retries it', async () => {

@@ -19,6 +19,7 @@ import {
   DeleteCompletedSchema,
   HeatmapInputSchema,
   HeatmapResponseSchema,
+  IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS,
   ImportLocalResponseSchema,
   ImportLocalSchema,
 } from '../schemas/completed'
@@ -570,20 +571,23 @@ export const importLocalCompleted = authMiddleware
     try {
       const categoryId = await resolveImportCategoryId(user.id)
 
-      await prisma.$transaction(async (tx) => {
-        await tx.importBatch.create({
-          data: { id: namespacedBatchId, userId: user.id },
-        })
-        await tx.completed.createMany({
-          data: items.map((item) => ({
-            title: item.title,
-            completedAt: item.completedAt,
-            categoryId,
-            userId: user.id,
-            importBatchId: namespacedBatchId,
-          })),
-        })
-      })
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.importBatch.create({
+            data: { id: namespacedBatchId, userId: user.id },
+          })
+          await tx.completed.createMany({
+            data: items.map((item) => ({
+              title: item.title,
+              completedAt: item.completedAt,
+              categoryId,
+              userId: user.id,
+              importBatchId: namespacedBatchId,
+            })),
+          })
+        },
+        { timeout: IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS },
+      )
 
       return { batchId, imported: items.length, alreadyImported: false }
     } catch (error) {

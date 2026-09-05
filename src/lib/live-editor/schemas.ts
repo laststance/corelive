@@ -41,10 +41,13 @@ export type LocalNoteMap = z.infer<typeof localNoteMapSchema>
  * before sending. Holding the ids (not just the id) is what lets a retry re-send
  * exactly the original set instead of whatever the store holds by then.
  * @example
- * { version: 1, batchId: '7d0c1a2e-…', ids: ['5b1c…', '9a2f…'] }
+ * { version: 1, clerkId: 'user_2f…', batchId: '7d0c1a2e-…', ids: ['5b1c…'] }
  */
 export const pendingMergeSchema = z.object({
   version: z.literal(LOCAL_PENDING_MERGE_SCHEMA_VERSION),
+  // Required, so a record written before this field existed fails closed and is
+  // treated as "not mine" rather than resumed under whoever signs in next.
+  clerkId: z.string().min(1),
   batchId: z.string().min(1),
   ids: z.array(z.string().min(1)),
 })

@@ -30,10 +30,17 @@ export const LOCAL_STORAGE_PROBE_KEY = 'corelive.local-storage-probe'
 
 /**
  * localStorage key holding the merge attempt currently in flight,
- * `{ version: 1, batchId, ids }`. Written before the request so a retry reuses
- * the same idempotency key and re-sends the same items.
+ * `{ version: 1, clerkId, batchId, ids }`. Written before the request so a retry
+ * reuses the same idempotency key and re-sends the same items.
  */
 export const LOCAL_PENDING_MERGE_STORAGE_KEY = 'corelive.local-merge-pending.v1'
 
 /** Schema version stamped on the pending-merge record. */
 export const LOCAL_PENDING_MERGE_SCHEMA_VERSION = 1
+
+/**
+ * How many capped batches one sign-in may send. A device holding more keeps than
+ * {@link IMPORT_LOCAL_MAX_ITEMS} needs several passes; the ceiling stops a pass
+ * that tags nothing (ids drifted underneath) from looping forever.
+ */
+export const MAX_LOCAL_MERGE_PASSES = 10

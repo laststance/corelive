@@ -250,13 +250,34 @@ export type CompletedJournalResponse = z.infer<
  */
 export const IMPORT_LOCAL_MAX_ITEMS = 2000
 
+/**
+ * How far ahead of the server clock a client-supplied `completedAt` may sit.
+ * Device clocks drift, so a hard `<= now` would reject honest keeps; anything
+ * beyond this is a wrong clock or a tampered payload, and `getJournal` has no
+ * upper bound so a future row would show up there and never age out.
+ */
+export const IMPORT_LOCAL_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
+
+/**
+ * Transaction budget for one import. Prisma's 5s default is measured against a
+ * handful of statements, not {@link IMPORT_LOCAL_MAX_ITEMS} rows on a cold
+ * connection — a slow DB there aborts with P2028 and surfaces as a 500.
+ */
+export const IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS = 30_000
+
 export const ImportLocalSchema = z.object({
   batchId: z.string().min(1).max(128),
   items: z
     .array(
       z.object({
         title: z.string().min(1).max(255),
-        completedAt: z.date(),
+        completedAt: z
+          .date()
+          .refine(
+            (value) =>
+              value.getTime() <= Date.now() + IMPORT_LOCAL_FUTURE_TOLERANCE_MS,
+            { message: 'completedAt cannot be in the future' },
+          ),
       }),
     )
     .min(1)
