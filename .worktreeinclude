@@ -1,0 +1,12 @@
+# Gitignored files copied into new worktrees (gitignore syntax; only files that
+# are BOTH matched here and gitignored are copied).
+# https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees
+
+# secrets / local config — a worktree can't build or run without these
+.env
+.env*.local
+.mcp.json
+
+# agent instructions (root CLAUDE.md holds prod test-account creds; nested
+# package CLAUDE.md files are caught by the global gitignore)
+CLAUDE.md
