@@ -7,9 +7,9 @@
  * reopening Settings after switching desktops yanks the user back to that
  * old Space — the "opens on another desktop" bug these tests guard against.
  *
- * Unlike the Floating / LiveEditor panels (opt-in, config-gated, default OFF),
- * the settings popover follows the Space UNCONDITIONALLY (hardcoded `true`), so
- * a future refactor that copies the floating call-site's config-driven boolean
+ * Unlike the LiveEditor panel (opt-in, config-gated, default OFF), the
+ * settings popover follows the Space UNCONDITIONALLY (hardcoded `true`), so
+ * a future refactor that copies the LiveEditor call-site's config-driven boolean
  * would re-introduce the bug — and fail the darwin test below. The non-darwin
  * test locks the platform guard so Windows/Linux never call the no-op API.
  *
@@ -115,7 +115,7 @@ describe('WindowManager settings popover Spaces-following', () => {
 
     // Assert: the popover is told to join ALL Spaces, which makes macOS render it
     // on the CURRENTLY active desktop instead of switching to the Space it was
-    // last shown on. Hardcoded `true` — it is never gated on the floating opt-out.
+    // last shown on. Hardcoded `true` — it is never gated on the LiveEditor opt-out.
     expect(settingsWindow.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(
       true,
       SPACES_FOLLOW_OPTIONS,

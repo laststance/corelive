@@ -34,22 +34,16 @@ import {
   createOAuthBridge,
 } from './preload-shared/auth-oauth-bridge'
 import type {
-  AuxWindowVisibility,
   ConfigSection,
   DeepLinkExamples,
   IPCEventChannel,
   IPCResponse,
-  LegacyStartupWindowConfig,
   NativeTapStatus,
   NotificationOptions,
   NotificationSettingsState,
   ShortcutDefinition,
-  StartupWindowConfig,
   TrayIconState,
-  WindowBounds,
-  WindowState,
 } from './types/ipc'
-import { DEFAULT_STARTUP_WINDOW_CONFIG } from './types/ipc'
 
 // ============================================================================
 // Type Definitions
@@ -142,10 +136,6 @@ const ALLOWED_CHANNELS = {
   'deep-link-task-created': true,
   'deep-link-navigate': true,
   'deep-link-search': true,
-  // Consumed by the floating window's preload (§6d keep-on-top sync); listed
-  // here too because AllowedChannelsMap is exhaustive over IPCEventChannels.
-  'floating-window-always-on-top-changed': true,
-  'live-editor-category-changed': true,
   'notification-permission-denied': true,
   'show-fallback-notification': true,
   'system-integration-status': true,
@@ -279,144 +269,20 @@ const electronAPI = {
    * the same oRPC client used by the browser version.
    */
 
-  // Window control APIs. The retired main window's minimize/close (T18) are
-  // gone; what remains here drives the floating navigator + window bounds.
-  window: {
-    /**
-     * Toggle floating navigator visibility.
-     */
-    toggleFloatingNavigator: async () => {
-      try {
-        return await typedInvoke('window-toggle-floating-navigator')
-      } catch (error) {
-        log.error('Failed to toggle floating navigator:', error)
-      }
-    },
-
-    /**
-     * Show floating navigator.
-     */
-    showFloatingNavigator: async () => {
-      try {
-        return await typedInvoke('window-show-floating-navigator')
-      } catch (error) {
-        log.error('Failed to show floating navigator:', error)
-      }
-    },
-
-    /**
-     * Hide floating navigator.
-     */
-    hideFloatingNavigator: async () => {
-      try {
-        return await typedInvoke('window-hide-floating-navigator')
-      } catch (error) {
-        log.error('Failed to hide floating navigator:', error)
-      }
-    },
-
-    /**
-     * Get window bounds.
-     * Extracts only x, y, width, height from the full window state.
-     */
-    getBounds: async (): Promise<WindowBounds> => {
-      try {
-        const state = await typedInvoke('window-state-get', 'main')
-        if (state) {
-          return {
-            x: typeof state.x === 'number' ? state.x : 0,
-            y: typeof state.y === 'number' ? state.y : 0,
-            width: typeof state.width === 'number' ? state.width : 800,
-            height: typeof state.height === 'number' ? state.height : 600,
-          }
-        }
-        return { x: 0, y: 0, width: 800, height: 600 }
-      } catch (error) {
-        log.error('Failed to get window bounds:', error)
-        return { x: 0, y: 0, width: 800, height: 600 }
-      }
-    },
-
-    /**
-     * Set window bounds.
-     */
-    setBounds: async (bounds: WindowBounds): Promise<void> => {
-      try {
-        await typedInvoke('window-state-set', 'main', bounds)
-      } catch (error) {
-        log.error('Failed to set window bounds:', error)
-      }
-    },
-
-    /**
-     * Check if window is minimized.
-     */
-    isMinimized: async (): Promise<boolean> => {
-      try {
-        const state = await typedInvoke('window-state-get', 'main')
-        return state?.isMinimized || false
-      } catch (error) {
-        log.error('Failed to check if window is minimized:', error)
-        return false
-      }
-    },
-
-    /**
-     * Check if window is always on top.
-     */
-    isAlwaysOnTop: async (): Promise<boolean> => {
-      try {
-        const state = await typedInvoke('window-state-get', 'main')
-        return state?.alwaysOnTop || false
-      } catch (error) {
-        log.error('Failed to check if window is always on top:', error)
-        return false
-      }
-    },
-
-    /**
-     * Move window to specific display.
-     */
-    moveToDisplay: async (displayIndex: number): Promise<void> => {
-      try {
-        await typedInvoke('window-state-move-to-display', 'main', displayIndex)
-      } catch (error) {
-        log.error('Failed to move window to display:', error)
-      }
-    },
-
-    /**
-     * Read which auxiliary windows (floating navigator, LiveEditor) are visible
-     * right now, so the settings UI can label a "Try it now" action correctly.
-     * @returns Live visibility flags; `{ floating: false, liveEditor: false }` on error.
-     * @example
-     * const { floating } = await window.electronAPI.window.getAuxVisibility()
-     */
-    getAuxVisibility: async (): Promise<AuxWindowVisibility> => {
-      try {
-        return await typedInvoke('window-get-aux-visibility')
-      } catch (error) {
-        log.error('Failed to read auxiliary window visibility:', error)
-        return { floating: false, liveEditor: false }
-      }
-    },
-  },
-
   /**
-   * Shared controls for floating utility panels.
+   * LiveEditor panel controls. `floatingPanels` is the legacy wire name — frozen
+   * preloads expose it and the renderer reads it; do not rename.
    *
    * Settings uses this narrow surface instead of raw config writes so the main
    * process can persist the setting and update already-open BrowserWindows.
    */
   floatingPanels: {
-    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces. */
+    /** Read whether LiveEditor follows macOS Spaces. */
     getVisibleOnAllWorkspaces: async (): Promise<boolean> => {
       try {
-        return await typedInvoke(
-          'floating-window-get-visible-on-all-workspaces',
-        )
+        return await typedInvoke('live-editor-get-visible-on-all-workspaces')
       } catch (error) {
-        log.error('Failed to get floating panels desktop setting:', error)
+        log.error('Failed to get panel desktop setting:', error)
         return false
       }
     },
@@ -427,38 +293,11 @@ const electronAPI = {
       }
       try {
         return await typedInvoke(
-          'floating-window-set-visible-on-all-workspaces',
+          'live-editor-set-visible-on-all-workspaces',
           enabled,
         )
       } catch (error) {
-        log.error('Failed to set floating panels desktop setting:', error)
-        throw error
-      }
-    },
-    /**
-     * Read FloatingNavigator's always-on-top setting (effective state: the
-     * live window when open, else the persisted relaunch value).
-     */
-    getFloatingNavigatorAlwaysOnTop: async (): Promise<boolean> => {
-      try {
-        return await typedInvoke('floating-window-get-always-on-top')
-      } catch (error) {
-        log.error('Failed to get floating navigator always-on-top:', error)
-        // Floating defaults to pinned — fail to its config default.
-        return true
-      }
-    },
-    /** Persist and apply FloatingNavigator's always-on-top setting. */
-    setFloatingNavigatorAlwaysOnTop: async (
-      enabled: boolean,
-    ): Promise<boolean> => {
-      if (typeof enabled !== 'boolean') {
-        throw new Error('FloatingNavigator alwaysOnTop must be a boolean')
-      }
-      try {
-        return await typedInvoke('floating-window-set-always-on-top', enabled)
-      } catch (error) {
-        log.error('Failed to set floating navigator always-on-top:', error)
+        log.error('Failed to set panel desktop setting:', error)
         throw error
       }
     },
@@ -484,32 +323,6 @@ const electronAPI = {
         )
       } catch (error) {
         log.error('Failed to set liveEditor always-on-top:', error)
-        throw error
-      }
-    },
-    /** Read FloatingNavigator's global toggle accelerator (empty when disabled). */
-    getFloatingNavigatorShortcut: async (): Promise<string> => {
-      try {
-        return await typedInvoke('floating-config-get-shortcut')
-      } catch (error) {
-        // Surface a load failure instead of returning '' — '' is the real
-        // "intentionally unbound" value, so masking an IPC error as '' would
-        // seed the wrong (disabled) shortcut into the Settings rollback state.
-        log.error('Failed to get floating navigator shortcut:', error)
-        throw error
-      }
-    },
-    /** Persist + register FloatingNavigator's toggle accelerator; false on conflict. */
-    setFloatingNavigatorShortcut: async (
-      accelerator: string,
-    ): Promise<boolean> => {
-      if (typeof accelerator !== 'string') {
-        throw new Error('FloatingNavigator shortcut must be a string')
-      }
-      try {
-        return await typedInvoke('floating-config-set-shortcut', accelerator)
-      } catch (error) {
-        log.error('Failed to set floating navigator shortcut:', error)
         throw error
       }
     },
@@ -1177,127 +990,6 @@ const electronAPI = {
     },
   },
 
-  // Window state management APIs
-  windowState: {
-    /**
-     * Get window state.
-     */
-    get: async (windowType: 'main' | 'floating') => {
-      try {
-        return await typedInvoke('window-state-get', windowType)
-      } catch (error) {
-        log.error('Failed to get window state:', error)
-        return null
-      }
-    },
-
-    /**
-     * Set window state properties.
-     */
-    set: async (
-      windowType: 'main' | 'floating',
-      properties: Partial<WindowState>,
-    ) => {
-      try {
-        return await typedInvoke('window-state-set', windowType, properties)
-      } catch (error) {
-        log.error('Failed to set window state:', error)
-        throw new Error('Failed to update window state')
-      }
-    },
-
-    /**
-     * Reset window state to defaults.
-     */
-    reset: async (windowType: 'main' | 'floating') => {
-      try {
-        return await typedInvoke('window-state-reset', windowType)
-      } catch (error) {
-        log.error('Failed to reset window state:', error)
-        throw new Error('Failed to reset window state')
-      }
-    },
-
-    /**
-     * Get window state statistics.
-     */
-    getStats: async () => {
-      try {
-        return await typedInvoke('window-state-get-stats')
-      } catch (error) {
-        log.error('Failed to get window state stats:', error)
-        return null
-      }
-    },
-
-    /**
-     * Move window to specific display.
-     */
-    moveToDisplay: async (
-      windowType: 'main' | 'floating',
-      displayId: number,
-    ): Promise<boolean> => {
-      try {
-        return await typedInvoke(
-          'window-state-move-to-display',
-          windowType,
-          displayId,
-        )
-      } catch (error) {
-        log.error('Failed to move window to display:', error)
-        throw new Error('Failed to move window to display')
-      }
-    },
-
-    /**
-     * Snap window to edge of current display.
-     */
-    snapToEdge: async (
-      windowType: 'main' | 'floating',
-      edge:
-        | 'left'
-        | 'right'
-        | 'top'
-        | 'bottom'
-        | 'top-left'
-        | 'top-right'
-        | 'bottom-left'
-        | 'bottom-right'
-        | 'maximize',
-    ): Promise<boolean> => {
-      try {
-        return await typedInvoke('window-state-snap-to-edge', windowType, edge)
-      } catch (error) {
-        log.error('Failed to snap window to edge:', error)
-        throw new Error('Failed to snap window to edge')
-      }
-    },
-
-    /**
-     * Get display information for a window.
-     */
-    getDisplay: async (windowType: 'main' | 'floating') => {
-      try {
-        return await typedInvoke('window-state-get-display', windowType)
-      } catch (error) {
-        log.error('Failed to get window display:', error)
-        return null
-      }
-    },
-
-    /**
-     * Get all available displays.
-     */
-    getAllDisplays: async () => {
-      try {
-        return await typedInvoke('window-state-get-all-displays')
-      } catch (error) {
-        log.error('Failed to get all displays:', error)
-        return []
-      }
-    },
-  },
-
   // App information and controls
   app: {
     /**
@@ -1456,67 +1148,6 @@ const electronAPI = {
     },
 
     /**
-     * Persist which window(s) open at Electron launch (LiveEditor / floating
-     * navigator). The >=1-true invariant is enforced in the main process, so an
-     * all-false request is repaired (showFloating forced back on) before
-     * saving — this call still resolves true in that case.
-     * @param config - The two startup-window booleans.
-     * @returns true when persisted; false on IPC/validation failure.
-     * @example
-     * await window.electronAPI.settings.setStartupConfig({ showLiveEditor: true, showFloating: false })
-     */
-    setStartupConfig: async (
-      config: StartupWindowConfig | LegacyStartupWindowConfig,
-    ): Promise<boolean> => {
-      try {
-        // Defense-in-depth: strip forbidden keys / trim strings, then assert both
-        // flags are real booleans before crossing the IPC boundary, so a
-        // malformed renderer payload can never poison the persisted config.
-        const sanitized = sanitizeData(config) as Partial<
-          StartupWindowConfig & LegacyStartupWindowConfig
-        >
-        const showLiveEditor =
-          sanitized.showLiveEditor ?? sanitized.showBraindump
-        if (
-          typeof showLiveEditor !== 'boolean' ||
-          typeof sanitized.showFloating !== 'boolean'
-        ) {
-          throw new Error('Startup config flags must be booleans')
-        }
-        return await typedInvoke('settings:setStartupConfig', {
-          showLiveEditor,
-          showFloating: sanitized.showFloating,
-        })
-      } catch (error) {
-        log.error('Failed to set startup window config:', error)
-        return false
-      }
-    },
-
-    /**
-     * Read the persisted startup-window config so the settings UI can show the
-     * saved choice. On IPC failure it returns the Floating-only default (which
-     * satisfies the >=1-true invariant), so the UI never renders an all-off state.
-     * @returns The saved startup-window config, or the Floating-only default on failure.
-     * @example
-     * const startup = await window.electronAPI.settings.getStartupConfig() // => { showLiveEditor: false, showFloating: true }
-     */
-    getStartupConfig: async (): Promise<
-      StartupWindowConfig & LegacyStartupWindowConfig
-    > => {
-      try {
-        const startup = await typedInvoke('settings:getStartupConfig')
-        return { ...startup, showBraindump: startup.showLiveEditor }
-      } catch (error) {
-        log.error('Failed to read startup window config:', error)
-        return {
-          ...DEFAULT_STARTUP_WINDOW_CONFIG,
-          showBraindump: DEFAULT_STARTUP_WINDOW_CONFIG.showLiveEditor,
-        }
-      }
-    },
-
-    /**
      * Resets the Settings popover window to default size (360×380) and
      * re-anchors it to the tray icon. Returns false on IPC failure.
      * @returns true on success, false on failure.
@@ -1583,27 +1214,6 @@ const electronAPI = {
         // Re-throw — returning the requested value masks failure and the
         // Settings UI cannot roll back to the last good opacity.
         log.error('Failed to set LiveEditor opacity:', error)
-        throw error
-      }
-    },
-    /** Read "follow FloatingNav category" toggle. */
-    getSyncMode: async (): Promise<boolean> => {
-      try {
-        return await typedInvoke('live-editor-config-get-sync')
-      } catch (error) {
-        log.error('Failed to get LiveEditor sync mode:', error)
-        return true
-      }
-    },
-    /** Update "follow FloatingNav category" toggle. */
-    setSyncMode: async (enabled: boolean): Promise<boolean> => {
-      if (typeof enabled !== 'boolean') {
-        throw new Error('SyncMode must be a boolean')
-      }
-      try {
-        return await typedInvoke('live-editor-config-set-sync', enabled)
-      } catch (error) {
-        log.error('Failed to set LiveEditor sync mode:', error)
         throw error
       }
     },
@@ -1776,21 +1386,6 @@ const electronAPI = {
           updateDownloaded: false,
           downloadProgress: null,
         }
-      }
-    },
-  },
-
-  // Display management APIs
-  display: {
-    /**
-     * Get all displays.
-     */
-    getAllDisplays: async () => {
-      try {
-        return await typedInvoke('window-state-get-all-displays')
-      } catch (error) {
-        log.error('Failed to get all displays:', error)
-        return []
       }
     },
   },

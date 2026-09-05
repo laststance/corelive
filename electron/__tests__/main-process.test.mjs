@@ -92,7 +92,7 @@ describe('Main Process Components', () => {
           windowStateManager = null,
         ) {
           this.mainWindow = null
-          this.floatingNavigator = null
+          this.loginWindow = null
           this.serverUrl = serverUrl
           this.configManager = configManager
           this.windowStateManager = windowStateManager
@@ -104,22 +104,11 @@ describe('Main Process Components', () => {
           return this.mainWindow
         }
 
-        createFloatingNavigator() {
-          if (!this.floatingNavigator) {
-            this.floatingNavigator = new mockBrowserWindow()
+        createLoginWindow() {
+          if (!this.loginWindow) {
+            this.loginWindow = new mockBrowserWindow()
           }
-          return this.floatingNavigator
-        }
-
-        toggleFloatingNavigator() {
-          if (!this.floatingNavigator) {
-            this.createFloatingNavigator()
-            this.floatingNavigator.show()
-          } else if (this.floatingNavigator.isVisible()) {
-            this.floatingNavigator.hide()
-          } else {
-            this.floatingNavigator.show()
-          }
+          return this.loginWindow
         }
 
         minimizeToTray() {
@@ -154,15 +143,13 @@ describe('Main Process Components', () => {
           return Boolean(this.mainWindow && !this.mainWindow.isDestroyed())
         }
 
-        hasFloatingNavigator() {
-          return Boolean(
-            this.floatingNavigator && !this.floatingNavigator.isDestroyed(),
-          )
+        hasLoginWindow() {
+          return Boolean(this.loginWindow && !this.loginWindow.isDestroyed())
         }
 
         cleanup() {
-          if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
-            this.floatingNavigator.close()
+          if (this.loginWindow && !this.loginWindow.isDestroyed()) {
+            this.loginWindow.close()
           }
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.close()
@@ -174,7 +161,7 @@ describe('Main Process Components', () => {
 
       expect(windowManager.serverUrl).toBe('http://localhost:4991')
       expect(windowManager.hasMainWindow()).toBe(false)
-      expect(windowManager.hasFloatingNavigator()).toBe(false)
+      expect(windowManager.hasLoginWindow()).toBe(false)
     })
 
     it('should create main window correctly', () => {

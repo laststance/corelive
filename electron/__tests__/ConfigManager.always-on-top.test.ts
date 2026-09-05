@@ -83,9 +83,7 @@ describe('ConfigManager LiveEditor always-on-top', () => {
         height: 640,
         visibleOnAllWorkspaces: false,
         opacity: 0.95,
-        syncMode: true,
         shortcut: 'Alt+Space',
-        lastCategoryId: null,
         notes: {},
       },
     })

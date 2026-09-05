@@ -195,7 +195,7 @@ export class WindowManager {
   }
 
   /**
-   * Applies the macOS Spaces-following behavior to a floating utility window.
+   * Applies the macOS Spaces-following behavior to a utility panel window.
    *
    * Electron exposes this through `setVisibleOnAllWorkspaces`, but it is only
    * meaningful on macOS for CoreLive's use case. The guard keeps Linux/Windows
@@ -232,8 +232,8 @@ export class WindowManager {
     enabled: boolean,
   ): void {
     if (!browserWindow || browserWindow.isDestroyed()) return
-    // setAlwaysOnTop defaults to the 'floating' window level when enabled —
-    // the correct level for these utility panels.
+    // setAlwaysOnTop's default window level (above normal windows, below
+    // menus) is the right one for these utility panels.
     browserWindow.setAlwaysOnTop(enabled)
   }
 

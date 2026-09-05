@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { log } from '../../src/lib/logger.ts'
-import { sanitizeData } from '../preload-floating.ts'
+import { sanitizeData } from '../preload-login.ts'
 
 // Mock Electron modules. Defined via vi.hoisted so the (hoisted) vi.mock factory
 // can reference them without a TDZ error — needed now that a real preload module
-// (preload-floating) is imported through this mock for the sanitizer test.
+// (preload-login) is imported through this mock for the sanitizer test.
 const { mockIpcRenderer, mockContextBridge, exposedWorlds } = vi.hoisted(() => {
   const worlds = new Map()
 
@@ -66,52 +66,6 @@ describe('Preload Script Security Tests', () => {
       expect(validateChannel('')).toBe(false)
       expect(validateChannel(null)).toBe(false)
       expect(validateChannel(undefined)).toBe(false)
-    })
-
-    it('should have different channel restrictions for floating navigator', () => {
-      const MAIN_ALLOWED_CHANNELS = {
-        'todo-get-all': true,
-        'todo-create': true,
-        'todo-update': true,
-        'todo-delete': true,
-        'window-minimize': true,
-        'window-close': true,
-        'notification-show': true,
-        'config-get': true,
-        'config-set': true,
-        'shortcuts-update': true,
-      }
-
-      const FLOATING_ALLOWED_CHANNELS = {
-        'todo-get-all': true,
-        'todo-create': true,
-        'todo-update': true,
-        'todo-delete': true,
-        'floating-window-close': true,
-        'floating-window-minimize': true,
-        'notification-show': true,
-        // Note: No config or shortcut management for floating navigator
-      }
-
-      const validateMainChannel = (channel) =>
-        MAIN_ALLOWED_CHANNELS[channel] === true
-      const validateFloatingChannel = (channel) =>
-        FLOATING_ALLOWED_CHANNELS[channel] === true
-
-      // Test that main window has more permissions
-      expect(validateMainChannel('config-get')).toBe(true)
-      expect(validateFloatingChannel('config-get')).toBe(false)
-
-      expect(validateMainChannel('shortcuts-update')).toBe(true)
-      expect(validateFloatingChannel('shortcuts-update')).toBe(false)
-
-      // Test that both have basic todo operations
-      expect(validateMainChannel('todo-get-all')).toBe(true)
-      expect(validateFloatingChannel('todo-get-all')).toBe(true)
-
-      // Test floating-specific channels
-      expect(validateMainChannel('floating-window-close')).toBe(false)
-      expect(validateFloatingChannel('floating-window-close')).toBe(true)
     })
   })
 
@@ -239,7 +193,7 @@ describe('Preload Script Security Tests', () => {
     })
   })
 
-  describe('Prototype pollution hardening (floating preload)', () => {
+  describe('Prototype pollution hardening (login preload)', () => {
     it('strips __proto__/constructor/prototype and returns a null-prototype object', () => {
       // Arrange: a payload carrying an own __proto__ key, as JSON.parse yields —
       // the attacker shape a naive sanitizer would copy into the result.
@@ -247,7 +201,7 @@ describe('Preload Script Security Tests', () => {
         '{"__proto__":{"polluted":true},"title":"  Plan the week  "}',
       )
 
-      // Act: the REAL floating-preload sanitizer (now mirrors the main preload).
+      // Act: the REAL login-preload sanitizer (mirrors the main preload).
       const sanitized = sanitizeData(malicious)
 
       // Assert: forbidden keys are dropped, the result has a null prototype, the
@@ -445,7 +399,6 @@ describe('Preload Script Security Tests', () => {
         window: {
           minimize: vi.fn(),
           close: vi.fn(),
-          toggleFloatingNavigator: vi.fn(),
         },
         system: {
           showNotification: vi.fn(),
@@ -767,87 +720,6 @@ describe('Preload Script Security Tests', () => {
       expect(insecureResult.failedChecks).toContain('nodeIntegration')
       expect(insecureResult.failedChecks).toContain('contextIsolation')
       expect(insecureResult.securityScore).toBe(0)
-    })
-  })
-
-  describe('IPC Channel Whitelisting', () => {
-    it('should maintain separate whitelists for different preload scripts', () => {
-      const MAIN_PRELOAD_CHANNELS = {
-        'todo-get-all': true,
-        'todo-create': true,
-        'todo-update': true,
-        'todo-delete': true,
-        'window-minimize': true,
-        'window-close': true,
-        'config-get': true,
-        'config-set': true,
-        'shortcuts-update': true,
-        'notification-show': true,
-      }
-
-      const FLOATING_PRELOAD_CHANNELS = {
-        'todo-get-all': true,
-        'todo-create': true,
-        'todo-update': true,
-        'todo-delete': true,
-        'floating-window-close': true,
-        'floating-window-minimize': true,
-        'notification-show': true,
-        // Notably missing: config and shortcuts management
-      }
-
-      // Test that main preload has more channels
-      const mainChannels = Object.keys(MAIN_PRELOAD_CHANNELS)
-      const floatingChannels = Object.keys(FLOATING_PRELOAD_CHANNELS)
-
-      expect(mainChannels.length).toBeGreaterThan(floatingChannels.length)
-
-      // Test specific differences
-      expect(MAIN_PRELOAD_CHANNELS['config-get']).toBe(true)
-      expect(FLOATING_PRELOAD_CHANNELS['config-get']).toBeUndefined()
-
-      expect(MAIN_PRELOAD_CHANNELS['shortcuts-update']).toBe(true)
-      expect(FLOATING_PRELOAD_CHANNELS['shortcuts-update']).toBeUndefined()
-
-      expect(MAIN_PRELOAD_CHANNELS['floating-window-close']).toBeUndefined()
-      expect(FLOATING_PRELOAD_CHANNELS['floating-window-close']).toBe(true)
-    })
-
-    it('should validate channel access based on preload script type', () => {
-      const createChannelValidator = (allowedChannels) => {
-        return (channel) => {
-          if (!channel || typeof channel !== 'string') {
-            return false
-          }
-          return allowedChannels[channel] === true
-        }
-      }
-
-      const mainValidator = createChannelValidator({
-        'todo-get-all': true,
-        'config-get': true,
-      })
-
-      const floatingValidator = createChannelValidator({
-        'todo-get-all': true,
-        'floating-window-close': true,
-      })
-
-      // Test shared channels
-      expect(mainValidator('todo-get-all')).toBe(true)
-      expect(floatingValidator('todo-get-all')).toBe(true)
-
-      // Test main-only channels
-      expect(mainValidator('config-get')).toBe(true)
-      expect(floatingValidator('config-get')).toBe(false)
-
-      // Test floating-only channels
-      expect(mainValidator('floating-window-close')).toBe(false)
-      expect(floatingValidator('floating-window-close')).toBe(true)
-
-      // Test invalid channels
-      expect(mainValidator('malicious-channel')).toBe(false)
-      expect(floatingValidator('malicious-channel')).toBe(false)
     })
   })
 })

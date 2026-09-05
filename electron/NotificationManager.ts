@@ -522,7 +522,7 @@ export class NotificationManager {
    */
   private async handleTaskNotificationClick(_taskId: string): Promise<void> {
     try {
-      // Surface the Floating quick-navigator, then route to the full task view in
+      // Surface LiveEditor (or the login window), then route to the full task view in
       // the browser — the task UI lives at corelive.app now, not an Electron
       // window. The old `focus-task` IPC had no renderer listener even before the
       // cut; its type def (types/ipc.ts) + preload allowlist are orphaned, slated

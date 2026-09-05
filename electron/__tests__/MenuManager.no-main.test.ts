@@ -100,7 +100,6 @@ function createStubWindowManager(): WindowManager {
   return {
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
     openSettings: vi.fn(),
-    toggleFloatingNavigator: vi.fn(),
     toggleLiveEditor: vi.fn(),
   } as unknown as WindowManager
 }

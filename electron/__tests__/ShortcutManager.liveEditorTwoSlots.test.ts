@@ -52,10 +52,7 @@ const globalRegisterMock = vi.mocked(globalShortcut.register)
 function createWindowManagerHarness() {
   const toggleLiveEditor = vi.fn(() => true)
   const windowManager = {
-    getFloatingNavigator: vi.fn(() => null),
     toggleLiveEditor,
-    toggleFloatingNavigator: vi.fn(),
-    setOnFloatingNavigatorCreated: vi.fn(),
   } as unknown as WindowManager
   return { windowManager, toggleLiveEditor }
 }

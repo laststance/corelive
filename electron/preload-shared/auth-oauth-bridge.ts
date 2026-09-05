@@ -6,7 +6,7 @@
  * app, not just the (now-retired) main window. `ElectronAuthProvider` lives in
  * the root layout, so it renders in every panel — but it can only act where the
  * preload has exposed `window.electronAPI.{auth,oauth}`. These factories are that
- * single source of truth, consumed by both `preload.ts` and `preload-floating.ts`
+ * single source of truth, consumed by both `preload.ts` and `preload-login.ts`
  * so the bridge never skews between windows.
  *
  * `sanitizeData` is dependency-injected rather than imported so each preload keeps

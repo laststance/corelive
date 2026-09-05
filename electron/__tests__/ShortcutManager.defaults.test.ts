@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
-  BrowserWindow: vi.fn(),
+  app: { on: vi.fn(), removeListener: vi.fn() },
+  BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
   globalShortcut: {
     isRegistered: vi.fn(() => false),
     register: vi.fn(() => true),
@@ -21,11 +22,8 @@ import type { WindowManager } from '../WindowManager'
  */
 function createWindowManagerStub(): WindowManager {
   return {
-    getFloatingNavigator: vi.fn(() => null),
-    getMainWindow: vi.fn(() => null),
     toggleLiveEditor: vi.fn(() => true),
-    toggleFloatingNavigator: vi.fn(),
-    setOnFloatingNavigatorCreated: vi.fn(),
+    getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
 }
 
@@ -34,15 +32,21 @@ describe('ShortcutManager default shortcuts', () => {
     vi.clearAllMocks()
   })
 
-  it('uses Option+Space for LiveEditor and Command+3 for Floating Navigator defaults', () => {
+  it('ships Option+Space for the LiveEditor toggle and no other global toggle', () => {
     // Arrange
     const shortcutManager = new ShortcutManager(createWindowManagerStub(), null)
 
     // Act
     const defaults = shortcutManager.getDefaultShortcuts()
 
-    // Assert
+    // Assert: exactly the four surviving ids — a retired toggle creeping back
+    // into the defaults would re-register its key on every launch.
     expect(defaults.toggleLiveEditor).toBe('Alt+Space')
-    expect(defaults.toggleFloatingNavigator).toBe('CommandOrControl+3')
+    expect(Object.keys(defaults).sort()).toEqual([
+      'minimize',
+      'newTask',
+      'toggleLiveEditor',
+      'toggleLiveEditorSecondary',
+    ])
   })
 })

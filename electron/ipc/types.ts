@@ -11,7 +11,7 @@ import type { IPCChannel, IPCChannels } from '../types/ipc'
  * @example
  *   ArgsOf<'auth-get-user'>           // []
  *   ArgsOf<'auth-sync-from-web'>      // [AuthUserPayload]
- *   ArgsOf<'window-state-set'>        // ['main' | 'floating', Partial<WindowState>]
+ *   ArgsOf<'live-editor-note-set'>    // [number, string]
  */
 export type ArgsOf<C extends IPCChannel> =
   IPCChannels[C]['request'] extends void

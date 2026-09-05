@@ -32,22 +32,22 @@ describe('applyShortcutRebind', () => {
     // Arrange — the requested chord registers and is what comes back.
     const rebinder = createRebinder({
       updateResult: true,
-      effective: { toggleFloatingNavigator: 'CommandOrControl+3' },
+      effective: { toggleLiveEditor: 'Alt+Space' },
     })
 
     // Act
     const didApply = applyShortcutRebind(
       rebinder,
-      'toggleFloatingNavigator',
-      'CommandOrControl+3',
-      'CommandOrControl+Shift+3',
+      'toggleLiveEditor',
+      'Alt+Space',
+      'Alt+Shift+Space',
     )
 
     // Assert — success, and we never rolled back to the previous binding.
     expect(didApply).toBe(true)
     expect(rebinder.updateShortcuts).toHaveBeenCalledTimes(1)
     expect(rebinder.updateShortcuts).toHaveBeenCalledWith({
-      toggleFloatingNavigator: 'CommandOrControl+3',
+      toggleLiveEditor: 'Alt+Space',
     })
   })
 
@@ -124,9 +124,9 @@ describe('applyShortcutRebind', () => {
     // Act
     const didApply = applyShortcutRebind(
       rebinder,
-      'toggleFloatingNavigator',
+      'toggleLiveEditor',
       '',
-      'CommandOrControl+3',
+      'Alt+Space',
     )
 
     // Assert — success with no read-back (an empty registration is not a conflict).

@@ -46,17 +46,14 @@ function createManager(): {
   openSettings: ReturnType<typeof vi.fn>
   restoreFromTray: ReturnType<typeof vi.fn>
   toggleLiveEditor: ReturnType<typeof vi.fn>
-  toggleFloatingNavigator: ReturnType<typeof vi.fn>
 } {
   const openSettings = vi.fn()
   const restoreFromTray = vi.fn()
   const toggleLiveEditor = vi.fn()
-  const toggleFloatingNavigator = vi.fn()
   const stubWindowManager = {
     restoreFromTray,
     openSettings,
     toggleLiveEditor,
-    toggleFloatingNavigator,
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
   const manager = new SystemTrayManager(stubWindowManager)
@@ -68,7 +65,6 @@ function createManager(): {
     openSettings,
     restoreFromTray,
     toggleLiveEditor,
-    toggleFloatingNavigator,
   }
 }
 
@@ -106,7 +102,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     ;(liveEditorItem?.click as () => void)?.()
 
     // Assert: the item is the toggle (not the old one-way "Open LiveEditor")
-    // and it routes to the window toggle, matching Floating Navigator.
+    // and it routes to the window toggle.
     expect(liveEditorItem).toBeDefined()
     expect(findItem(lastBuiltTemplate(), 'Open LiveEditor')).toBeUndefined()
     expect(toggleLiveEditor).toHaveBeenCalledTimes(1)
@@ -132,7 +128,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
       'https://corelive.app/home',
     )
     // ...and it ONLY opens the browser — it must not also surface a native
-    // window (Floating) via restoreFromTray.
+    // window (LiveEditor / login) via restoreFromTray.
     expect(restoreFromTray).not.toHaveBeenCalled()
   })
 
@@ -153,11 +149,10 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect(openSettings).toHaveBeenCalledTimes(1)
   })
 
-  it('shows each toggle item’s live hotkey supplied by the accelerator provider', () => {
+  it('shows the LiveEditor toggle item’s live hotkey supplied by the accelerator provider', () => {
     // Arrange
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
-      toggleFloatingNavigator: 'CommandOrControl+3',
       toggleLiveEditor: 'Alt+Space',
     }))
 
@@ -166,9 +161,6 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const template = lastBuiltTemplate()
 
     // Assert
-    expect(findItem(template, 'Toggle Floating Navigator')?.accelerator).toBe(
-      'CommandOrControl+3',
-    )
     expect(findItem(template, 'Toggle LiveEditor')?.accelerator).toBe(
       'Alt+Space',
     )
@@ -178,7 +170,6 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     // Arrange: provider reports no LiveEditor binding (empty string disables it).
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
-      toggleFloatingNavigator: 'CommandOrControl+3',
       toggleLiveEditor: '',
     }))
 
@@ -199,10 +190,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     manager.updateTrayMenu([])
     const template = lastBuiltTemplate()
 
-    // Assert: items render, just without accelerators — never a hardcoded ⌘3.
-    expect(
-      'accelerator' in findItem(template, 'Toggle Floating Navigator')!,
-    ).toBe(false)
+    // Assert: the item renders, just without an accelerator — never a hardcoded key.
     expect('accelerator' in findItem(template, 'Toggle LiveEditor')!).toBe(
       false,
     )

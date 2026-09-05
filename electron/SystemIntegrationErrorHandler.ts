@@ -467,8 +467,8 @@ export class SystemIntegrationErrorHandler {
     // The retired main window was the last fallback surface here (a title flash
     // + a `system-integration-status` IPC). The title flash is gone with the
     // window, and that status channel had no renderer listener anywhere — dead
-    // even pre-cut — so it's dropped rather than re-pointed at Floating (a
-    // minimal navigator, not a diagnostics host). The tray tooltip above is the
+    // even pre-cut — so it's dropped rather than re-pointed at the login window
+    // (a sign-in shell, not a diagnostics host). The tray tooltip above is the
     // surviving non-notification surface. Orphaned type def + preload allowlist
     // entry tracked for T18/T19 cleanup.
   }

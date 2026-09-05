@@ -525,10 +525,9 @@ export class SystemTrayManager {
     this.lastTasks = tasks
 
     try {
-      // Live, display-only hotkeys; an empty/absent value omits the accelerator
+      // Live, display-only hotkey; an empty/absent value omits the accelerator
       // so a rebound or unset shortcut never shows a stale or orphan glyph.
       const accelerators = this.getShortcutAccelerators?.() ?? {}
-      const floatingNavigatorAccelerator = accelerators.toggleFloatingNavigator
       const liveEditorAccelerator = accelerators.toggleLiveEditor
 
       const template: MenuItemConstructorOptions[] = [
@@ -545,19 +544,6 @@ export class SystemTrayManager {
         {
           // A native lone-modifier binding renders as a label glyph, not an
           // Electron accelerator (which can't parse 'lone-modifier:*').
-          ...trayShortcutMenuFields(
-            'Toggle Floating Navigator',
-            floatingNavigatorAccelerator,
-          ),
-          click: () => {
-            try {
-              this.windowManager.toggleFloatingNavigator()
-            } catch (error) {
-              log.error('Failed to toggle floating navigator:', error)
-            }
-          },
-        },
-        {
           ...trayShortcutMenuFields('Toggle LiveEditor', liveEditorAccelerator),
           click: () => {
             try {

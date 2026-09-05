@@ -23,10 +23,10 @@ import type {
 /**
  * Check if running in Electron environment.
  *
- * Detects Electron by checking for window.electronAPI which is exposed
- * by the preload script in the main window.
+ * Detects Electron by checking for window.electronAPI, which the Settings and
+ * login window preloads expose.
  *
- * @returns true if running in Electron main window, false otherwise
+ * @returns true if running in an Electron window with electronAPI, false otherwise
  * @example
  * isElectronEnvironment() // => true (in Electron)
  * isElectronEnvironment() // => false (in browser)
@@ -38,21 +38,6 @@ export const isElectronEnvironment = (): boolean => {
 }
 
 /**
- * Check if running in Electron floating navigator window.
- *
- * Detects the floating navigator by checking for window.floatingNavigatorAPI
- * which is exposed by the preload-floating script.
- *
- * @returns true if running in floating navigator window, false otherwise
- */
-export const isFloatingNavigatorEnvironment = (): boolean => {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.floatingNavigatorAPI !== 'undefined'
-  )
-}
-
-/**
  * Returns the LiveEditor preload bridge across canonical and pre-rename installed desktop versions.
  * @returns The available LiveEditor API, or undefined in a regular browser.
  * @example const note = await getLiveEditorAPI()?.note.get(1)
@@ -60,19 +45,6 @@ export const isFloatingNavigatorEnvironment = (): boolean => {
 export const getLiveEditorAPI = (): LiveEditorAPI | undefined => {
   if (typeof window === 'undefined') return undefined
   return window.liveEditorAPI ?? window.brainDumpAPI
-}
-
-/**
- * Selects the category event name understood by the installed LiveEditor preload version.
- * @returns The canonical channel for new preloads or the legacy channel for older installed apps.
- * @example getLiveEditorCategoryChangedChannel() // => 'live-editor-category-changed'
- */
-export const getLiveEditorCategoryChangedChannel = ():
-  'live-editor-category-changed' | 'braindump-category-changed' => {
-  if (typeof window !== 'undefined' && window.liveEditorAPI) {
-    return 'live-editor-category-changed'
-  }
-  return 'braindump-category-changed'
 }
 
 /**
@@ -103,17 +75,4 @@ export const getLiveEditorSettingsAPI = ():
  */
 export const isLiveEditorEnvironment = (): boolean => {
   return getLiveEditorAPI() !== undefined
-}
-
-/**
- * Check if running in any Electron window (main or floating).
- *
- * @returns true if running in any Electron window, false otherwise
- */
-export const isAnyElectronEnvironment = (): boolean => {
-  return (
-    isElectronEnvironment() ||
-    isFloatingNavigatorEnvironment() ||
-    isLiveEditorEnvironment()
-  )
 }

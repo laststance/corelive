@@ -258,7 +258,7 @@ export class MenuManager {
    */
   createViewMenu(): MenuItemConstructorOptions {
     // Standard view chrome uses Electron roles so each item targets whatever
-    // window is focused (main, Floating, LiveEditor or Settings) — no main-window
+    // window is focused (login, LiveEditor or Settings) — no main-window
     // reference needed, so these stay correct after main retirement. Explicit
     // accelerators are kept so the bindings don't shift from the previous build.
     const submenu: MenuItemConstructorOptions[] = [
@@ -278,15 +278,6 @@ export class MenuManager {
       { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', role: 'zoomIn' },
       { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', role: 'zoomOut' },
       { type: 'separator' },
-      {
-        label: 'Floating Navigator',
-        submenu: [
-          {
-            label: 'Toggle Floating Navigator',
-            click: () => this.toggleFloatingNavigator(),
-          },
-        ],
-      },
       {
         label: 'Toggle Fullscreen',
         accelerator: this.isMac ? 'Ctrl+Command+F' : 'F11',
@@ -308,7 +299,7 @@ export class MenuManager {
    */
   createWindowMenu(): MenuItemConstructorOptions {
     // Minimize/Close are Electron roles so they act on the focused window — they
-    // work for Floating/LiveEditor/Settings, not just a main window that may not exist.
+    // work for login/LiveEditor/Settings, not just a main window that may not exist.
     const submenu: MenuItemConstructorOptions[] = [
       { label: 'Minimize', accelerator: 'CmdOrCtrl+M', role: 'minimize' },
       { label: 'Close', accelerator: 'CmdOrCtrl+W', role: 'close' },
@@ -397,25 +388,13 @@ export class MenuManager {
   // renderer over `menu-action`, so they no-op when no main window exists. Their
   // delete-vs-reroute is unresolved — there's no companion URL for "focus the
   // search box" and the design names no browser target for menu-driven task
-  // import/export (unlike T14's Floating Import → dashboard). Kept main-optional
+  // import/export (unlike T14's Import → dashboard). Kept main-optional
   // for Phase 1 (main still exists for QA); revisit when main is retired.
   focusSearch(): void {
     if (this.mainWindow && this.mainWindow.webContents) {
       typedSend(this.mainWindow.webContents, 'menu-action', {
         action: 'focus-search',
       })
-    }
-  }
-
-  toggleFloatingNavigator(): void {
-    log.debug('[MenuManager] toggleFloatingNavigator() called')
-    log.debug('[MenuManager] windowManager exists:', !!this.windowManager)
-
-    if (this.windowManager) {
-      log.debug('[MenuManager] Calling windowManager.toggleFloatingNavigator()')
-      this.windowManager.toggleFloatingNavigator()
-    } else {
-      console.error('[MenuManager] windowManager is not available!')
     }
   }
 
@@ -573,9 +552,6 @@ Copyright © 2025 CoreLive`,
     const shortcuts = [
       'Ctrl/Cmd + N: New Task',
       'Ctrl/Cmd + M: Minimize Window',
-      'Ctrl/Cmd + Shift + A: Toggle Always on Top',
-      'Ctrl/Cmd + Shift + N: Focus Floating Navigator',
-      'Ctrl/Cmd + 3: Toggle Floating Navigator',
       'Alt/Option + Space: Toggle LiveEditor',
       'Ctrl/Cmd + Q: Quit Application',
       'Ctrl/Cmd + ,: Settings',
