@@ -11,7 +11,6 @@ import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { ShortcutManager } from './ShortcutManager'
 import type { SystemTrayManager } from './SystemTrayManager'
-import type { WindowManager } from './WindowManager'
 
 // ============================================================================
 // Type Definitions
@@ -93,9 +92,6 @@ type OverallStatus = 'full' | 'partial' | 'minimal' | 'failed' | undefined
  * Coordinates error handling and fallback strategies for OS integrations.
  */
 export class SystemIntegrationErrorHandler {
-  /** Window manager reference */
-  private windowManager: WindowManager
-
   /** Config manager reference */
   private configManager: ConfigManager | null
 
@@ -121,11 +117,7 @@ export class SystemIntegrationErrorHandler {
   /** List of issues */
   private issues: string[]
 
-  constructor(
-    windowManager: WindowManager,
-    configManager: ConfigManager | null = null,
-  ) {
-    this.windowManager = windowManager
+  constructor(configManager: ConfigManager | null = null) {
     this.configManager = configManager
 
     this.systemTrayManager = null
@@ -230,10 +222,6 @@ export class SystemIntegrationErrorHandler {
       }
 
       log.error('System tray initialization failed:', error)
-
-      if (this.windowManager) {
-        this.windowManager.setTrayFallbackMode(true)
-      }
 
       return {
         success: false,

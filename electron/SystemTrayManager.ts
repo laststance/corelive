@@ -355,19 +355,13 @@ export class SystemTrayManager {
   }
 
   /**
-   * Single writer for fallback mode: keeps this manager's flag and the
-   * WindowManager's close-routing flag in lockstep, so window-close never tries
-   * to `.hide()` into a tray that no longer exists.
-   * @param enabled - true routes window-close to minimize; false restores hide-to-tray.
+   * Single writer for this manager's fallback-mode flag.
+   * @param enabled - Whether the tray is unavailable and fallback UI should be used.
    * @example
-   * this.setFallbackMode(true) // tray gone → minimize on close instead of hide
+   * this.setFallbackMode(true) // tray gone → fallback mode on
    */
   private setFallbackMode(enabled: boolean): void {
     this.fallbackMode = enabled
-
-    if (this.windowManager) {
-      this.windowManager.setTrayFallbackMode(enabled)
-    }
   }
 
   /**

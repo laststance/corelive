@@ -503,7 +503,6 @@ async function loadSystemIntegrationStack(): Promise<void> {
     'SystemIntegrationErrorHandler',
   )) as new (...args: unknown[]) => SystemIntegrationErrorHandlerType
   systemIntegrationErrorHandler = new SystemIntegrationErrorHandlerCls(
-    windowManager,
     configManager,
   )
   log.info('✅ [DEFERRED] SystemIntegrationErrorHandler loaded')

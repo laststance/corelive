@@ -124,9 +124,6 @@ export class WindowManager {
   /** Handles window state persistence */
   private windowStateManager: WindowStateManager | null
 
-  /** Fallback mode for when window minimize to tray fails */
-  private trayFallbackMode: boolean
-
   /** Callback to get tray icon bounds for popover positioning */
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
@@ -176,7 +173,6 @@ export class WindowManager {
     this.serverUrl = serverUrl
     this.configManager = configManager
     this.windowStateManager = windowStateManager
-    this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
     this.startupAuthFallbackOccurred = false
     this.startupPanelLoadCancellations = new Set()
@@ -1189,20 +1185,6 @@ export class WindowManager {
    */
   restoreFromTray(): void {
     this.showLiveEditor()
-  }
-
-  /**
-   * Set tray fallback mode.
-   */
-  setTrayFallbackMode(enabled: boolean): void {
-    this.trayFallbackMode = enabled
-  }
-
-  /**
-   * Check if in tray fallback mode.
-   */
-  isTrayFallbackMode(): boolean {
-    return this.trayFallbackMode
   }
 
   // ==========================================================================
