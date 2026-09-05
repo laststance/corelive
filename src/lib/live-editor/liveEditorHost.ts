@@ -8,7 +8,7 @@ import { LIVE_EDITOR_OPACITY_MAX } from '@/lib/constants/live-editor'
 import { getLocalNote, setLocalNote } from './localNoteStore'
 
 /**
- * Shared no-op for the window / sync / category controls the browser cannot honour.
+ * Shared no-op for the window controls the browser cannot honour.
  * @returns An already-resolved promise.
  * @example
  * await resolved()
@@ -16,9 +16,8 @@ import { getLocalNote, setLocalNote } from './localNoteStore'
 const resolved = async (): Promise<void> => {}
 
 /**
- * Browser implementation of the preload bridge: notes persist in localStorage,
- * the frameless-window controls are no-ops, and "follow the shared category
- * selection" is always on so the editor tracks `useSelectedCategory`.
+ * Browser implementation of the preload bridge: notes persist in localStorage
+ * and the frameless-window controls are no-ops.
  */
 const webLiveEditorHost: LiveEditorAPI = {
   window: {
@@ -35,20 +34,10 @@ const webLiveEditorHost: LiveEditorAPI = {
       setLocalNote(categoryId, text)
     },
   },
-  sync: {
-    getEnabled: async () => true,
-    setEnabled: resolved,
-  },
-  // The web derives its category itself (shared selection, or the signed-out sentinel).
-  category: {
-    getLast: async () => null,
-    setLast: resolved,
-  },
   spaces: {
     getVisibleOnAllWorkspaces: async () => false,
     setVisibleOnAllWorkspaces: async (enabled) => enabled,
   },
-  on: () => undefined,
 }
 
 /**

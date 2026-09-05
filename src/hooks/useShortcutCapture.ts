@@ -4,12 +4,12 @@
  * @fileoverview Shared optimistic-capture state for an inline single-accelerator
  * rebind box (`KeybindingCaptureInput`).
  *
- * Both the LiveEditor and Floating Navigator Settings rows let the user press a
- * key combo to rebind one global toggle. The capture box commits immediately (no
+ * The LiveEditor Settings rows (one per shortcut slot) let the user press a key
+ * combo to rebind the global toggle. The capture box commits immediately (no
  * blur step), so each row needs the same dance: show the new combo optimistically,
  * push it over IPC, then roll back to the last accepted value when the main
  * process reports a conflict (`persist` resolves `false`) or the call throws. This
- * hook owns that mechanism so the two rows don't duplicate it (CQ-1); the IPC call
+ * hook owns that mechanism so the rows don't duplicate it (CQ-1); the IPC call
  * and the error sink differ per row and are injected.
  *
  * @module hooks/useShortcutCapture

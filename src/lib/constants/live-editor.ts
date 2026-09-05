@@ -49,15 +49,6 @@ export type LiveEditorOpacity = number
  */
 export type LiveEditorShortcut = string
 
-/**
- * Whether LiveEditor should follow the FloatingNavigator's selected category.
- * `true` mirrors the FloatingNav choice; `false` keeps a local selection.
- *
- * @example
- * const sync: LiveEditorSyncMode = true
- */
-export type LiveEditorSyncMode = boolean
-
 /* -------------------------------------------------------------------------- */
 /* LiveEditor editor text presentation (font family / size / color)            */
 /* -------------------------------------------------------------------------- */

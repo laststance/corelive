@@ -15,9 +15,14 @@ import type { WindowManager } from '../WindowManager'
  * and `globalShortcut` resolve to the mocks below.
  */
 
+/** `app.on` mock typed on the event NAME so `mock.calls` can be filtered by it. */
+const { appOnMock } = vi.hoisted(() => ({
+  appOnMock: vi.fn<(eventName: string, listener: () => void) => void>(),
+}))
+
 vi.mock('electron', () => ({
   app: {
-    on: vi.fn(),
+    on: appOnMock,
     removeListener: vi.fn(),
   },
   BrowserWindow: {
@@ -34,7 +39,6 @@ vi.mock('electron', () => ({
 const registerMock = vi.mocked(globalShortcut.register)
 const unregisterMock = vi.mocked(globalShortcut.unregister)
 const getFocusedWindowMock = vi.mocked(BrowserWindow.getFocusedWindow)
-const appOnMock = vi.mocked(app.on)
 
 /** Default contextual accelerators — the observable proof a focus bound. */
 const NEW_TASK_ACCELERATOR = 'CommandOrControl+N'
@@ -57,7 +61,7 @@ function getAppListener(eventName: string): () => void {
   if (!registration) {
     throw new Error(`Expected an app listener for ${eventName}`)
   }
-  return registration[1] as () => void
+  return registration[1]
 }
 
 /** WindowManager stand-in: contextual shortcuts no longer read any window from it. */

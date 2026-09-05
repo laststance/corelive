@@ -8,14 +8,12 @@ import { SettingsStateCard } from '@/components/electron/SettingsStateCard'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import { Switch } from '@/components/ui/switch'
 import { getLiveEditorSettingsAPI } from '@/electron/utils/electron-client'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import {
   type LiveEditorOpacity,
-  type LiveEditorSyncMode,
   LIVE_EDITOR_OPACITY_MAX,
   LIVE_EDITOR_OPACITY_MIN,
   LIVE_EDITOR_OPACITY_STEP,
@@ -29,7 +27,6 @@ import { cn } from '@/lib/utils'
  * Surfaces the per-device LiveEditor configuration that is persisted in
  * `electron-store` (`liveEditor.*`):
  *
- * - `syncMode`  — when on, LiveEditor follows the FloatingNavigator category
  * - `opacity`   — frameless window opacity, 30%–100%
  * - `shortcut`  — global accelerator (empty string disables)
  *
@@ -51,7 +48,7 @@ interface LiveEditorSettingsProps {
  * local state stays put (the main-side persistence is the source of truth, so
  * the next render after a failure stays consistent).
  *
- * @returns Settings card with toggle, slider, and shortcut input. Renders a
+ * @returns Settings card with the opacity slider and shortcut inputs. Renders a
  *   short fallback in non-Electron environments.
  *
  * @example
@@ -60,7 +57,6 @@ interface LiveEditorSettingsProps {
 export const LiveEditorSettings = function LiveEditorSettings({
   className,
 }: LiveEditorSettingsProps): React.ReactElement {
-  const syncId = useId()
   const opacityId = useId()
   const shortcutId = useId()
   const secondaryShortcutId = useId()
@@ -72,14 +68,13 @@ export const LiveEditorSettings = function LiveEditorSettings({
   // exist without `electronAPI` in non-Electron browsers). Uses
   // useSyncExternalStore under the hood for tear-free SSR semantics.
   const hasMounted = useMounted()
-  const [syncMode, setSyncMode] = useState<LiveEditorSyncMode>(true)
   const [opacity, setOpacity] = useState<LiveEditorOpacity>(1.0)
   const [error, setError] = useState<string | null>(null)
   // Last successfully persisted opacity — a rollback target so we don't restore
   // the in-flight optimistic value (held in `opacity`) while the IPC call pends.
   const lastGoodOpacityRef = useRef<LiveEditorOpacity>(1.0)
-  // Shortcut capture (optimistic set + conflict rollback) shared with the
-  // Floating Navigator row via the hook; persists over the `liveEditor` bridge.
+  // Shortcut capture (optimistic set + conflict rollback) via the shared hook;
+  // persists over the `liveEditor` bridge.
   const {
     shortcut,
     setLoadedShortcut,
@@ -118,7 +113,6 @@ export const LiveEditorSettings = function LiveEditorSettings({
     // the effect and bubbles to global-error, so bail out and let the
     // fallback card render instead.
     if (
-      typeof api?.getSyncMode !== 'function' ||
       typeof api?.getOpacity !== 'function' ||
       typeof api?.getShortcut !== 'function'
     )
@@ -127,16 +121,14 @@ export const LiveEditorSettings = function LiveEditorSettings({
     let cancelled = false
 
     void Promise.all([
-      api.getSyncMode(),
       api.getOpacity(),
       api.getShortcut(),
-      // Newer than the three above — an older preload lacks it, so the optional
+      // Newer than the two above — an older preload lacks it, so the optional
       // call yields undefined and the second box stays hidden (see the render).
       api.getShortcutSecondary?.() ?? '',
     ])
-      .then(([sync, op, sc, secondarySc]) => {
+      .then(([op, sc, secondarySc]) => {
         if (cancelled) return
-        setSyncMode(sync)
         setOpacity(op)
         setLoadedShortcut(sc)
         setLoadedSecondaryShortcut(secondarySc)
@@ -156,19 +148,6 @@ export const LiveEditorSettings = function LiveEditorSettings({
       cancelled = true
     }
   }, [])
-
-  const handleSyncChange = async (next: LiveEditorSyncMode): Promise<void> => {
-    const previous = syncMode
-    setSyncMode(next)
-    setError(null)
-    try {
-      await getLiveEditorSettingsAPI()?.setSyncMode(next)
-    } catch (err) {
-      log.error('Failed to update LiveEditor sync mode:', err)
-      setSyncMode(previous)
-      setError('Failed to update sync setting')
-    }
-  }
 
   const handleOpacityChange = (values: number[]): void => {
     const next = values[0]
@@ -236,8 +215,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
   // getters. Invite an update instead of crashing the page.
   if (
     hasMounted &&
-    (typeof getLiveEditorSettingsAPI()?.getSyncMode !== 'function' ||
-      typeof getLiveEditorSettingsAPI()?.getOpacity !== 'function' ||
+    (typeof getLiveEditorSettingsAPI()?.getOpacity !== 'function' ||
       typeof getLiveEditorSettingsAPI()?.getShortcut !== 'function')
   ) {
     return (
@@ -280,23 +258,6 @@ export const LiveEditorSettings = function LiveEditorSettings({
           {error}
         </div>
       )}
-
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor={syncId} className="text-sm font-medium">
-            Follow Floating Navigator category
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            When on, LiveEditor always shows the same category as the floating
-            navigator. Turn off to keep its own selection.
-          </p>
-        </div>
-        <Switch
-          id={syncId}
-          checked={syncMode}
-          onCheckedChange={handleSyncChange}
-        />
-      </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">

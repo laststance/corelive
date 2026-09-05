@@ -265,7 +265,8 @@ export class WindowStateManager {
       const config = windowConfig[windowType]
       minWidth = 'minWidth' in config ? config.minWidth : 400
       minHeight = 'minHeight' in config ? config.minHeight : 300
-      maxWidth = 'maxWidth' in config ? config.maxWidth : 2000
+      // No remaining window config carries a max width; keep the historical cap.
+      maxWidth = 2000
       shouldRememberPosition = config.rememberPosition
     }
 

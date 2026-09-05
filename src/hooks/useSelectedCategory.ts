@@ -107,7 +107,7 @@ export function useSelectedCategory(): [
 
 /**
  * Auto-selects the default (isDefault=true) category when none is selected.
- * Extracts the shared auto-select logic used by both Category sidebar and FloatingNavigator.
+ * Extracts the shared auto-select logic used by the Category sidebar and LiveEditor.
  *
  * @param selectedCategoryId - Current selected category ID from useSelectedCategory
  * @param setSelectedCategoryId - Setter from useSelectedCategory

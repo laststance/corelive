@@ -5,12 +5,9 @@
 // `export type` lines at the bottom), so a top-level import is safe and does
 // not affect the `declare global` Window augmentation below.
 import type {
-  AuxWindowVisibility,
   IPCResponse,
   NativeTapStatus,
   NotificationSettingsState,
-  StartupWindowConfig,
-  LegacyStartupWindowConfig,
 } from '@/electron/types/ipc'
 
 interface ElectronAuthUser {
@@ -33,31 +30,6 @@ interface ElectronAPI {
   ) => () => void
   removeListener: (channel: string, callback: Function) => void
   removeAllListeners: (channel: string) => void
-
-  // Window operations
-  window?: {
-    toggleFloatingNavigator: () => Promise<void>
-    showFloatingNavigator: () => Promise<void>
-    hideFloatingNavigator: () => Promise<void>
-    getBounds?: () => any
-    setBounds?: (bounds: any) => void
-    isMinimized?: () => boolean
-    isMaximized?: () => boolean
-    isFullScreen?: () => boolean
-    isVisible?: () => boolean
-    isAlwaysOnTop?: () => boolean
-    focus?: () => void
-    show?: () => void
-    hide?: () => void
-    restore?: () => void
-    maximize?: () => void
-    unmaximize?: () => void
-    setFullScreen?: (flag: boolean) => void
-    setAlwaysOnTop?: (flag: boolean) => void
-    moveToDisplay?: (displayIndex: number) => void
-    /** Read which auxiliary windows (floating navigator, LiveEditor) are visible now */
-    getAuxVisibility?: () => Promise<AuxWindowVisibility>
-  }
 
   // System integration
   system?: {
@@ -183,23 +155,14 @@ interface ElectronAPI {
     load: () => any
   }
 
-  // Window state
-  windowState?: {
-    get: (windowType: string) => Promise<any>
-    set: (windowType: string, properties: any) => Promise<boolean>
-    reset: (windowType: string) => Promise<boolean>
-    getStats: () => Promise<any>
-    moveToDisplay: (windowType: string, displayId: number) => Promise<boolean>
-    snapToEdge: (windowType: string, edge: string) => Promise<boolean>
-    getDisplay: (windowType: string) => Promise<any>
-    getAllDisplays: () => Promise<any[]>
-  }
-
-  // Shared floating panel behavior
+  /**
+   * LiveEditor panel controls. `floatingPanels` is the legacy wire name —
+   * frozen preloads expose it and the renderer reads it; do not rename.
+   */
   floatingPanels?: {
-    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces */
+    /** Read whether LiveEditor follows macOS Spaces */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
-    /** Persist and apply whether both panels follow macOS Spaces */
+    /** Persist and apply whether LiveEditor follows macOS Spaces */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
   }
 
@@ -222,16 +185,9 @@ interface ElectronAPI {
   // Generic invoke method (for settings IPC)
   invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>
 
-  // Display management
-  display?: {
-    getAllDisplays?: () => any[]
-    getPrimaryDisplay?: () => any
-    getDisplayMatching?: (rect: any) => any
-  }
-
   /**
    * Electron-specific settings management.
-   * Controls app behavior like dock visibility and startup settings.
+   * Controls app behavior like dock visibility and login items.
    *
    * Note: Canonical type definition is in /electron/types/electron-api.d.ts
    * Keep this in sync with ElectronAPIInterface.settings
@@ -247,25 +203,10 @@ interface ElectronAPI {
     getLoginItemSettings: () => Promise<
       IPCResponse<'settings:getLoginItemSettings'>
     >
-    /**
-     * Persist which window(s) open at Electron launch (LiveEditor / floating
-     * navigator). The >=1-true invariant is enforced in the main process;
-     * resolves true even when an all-false request is repaired.
-     */
-    setStartupConfig: (
-      config: StartupWindowConfig | LegacyStartupWindowConfig,
-    ) => Promise<boolean>
-    /**
-     * Read the persisted startup-window config so the settings UI can show the
-     * saved choice. Returns the Floating-only default on failure, never all-off.
-     */
-    getStartupConfig: () => Promise<
-      StartupWindowConfig | LegacyStartupWindowConfig
-    >
   }
 
   /**
-   * LiveEditor window controls exposed to the main window's Settings UI.
+   * LiveEditor window controls exposed to the Settings window's UI.
    *
    * Minimal renderer-side mirror; the canonical surface lives in
    * /electron/types/electron-api.d.ts. Only includes what the settings page

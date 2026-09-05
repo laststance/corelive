@@ -140,11 +140,10 @@ This project includes an Electron desktop application that wraps the Next.js web
 
 Beyond the web app, the macOS build adds native surfaces:
 
-- **Floating Navigator** — a compact, always-available quick-capture window
 - **LiveEditor** — a distraction-light freeform capture window
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
-- **Always-on-top** — per-window keep-on-top setting (Floating on by default)
+- **Always-on-top** — keep LiveEditor above other windows (off by default)
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default)
 - **Deep links** — `corelive://` URLs open the app

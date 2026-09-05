@@ -87,7 +87,7 @@ const isUserSettingsSyncEnvelope = (
  * Creates Redux middleware that mirrors local setting changes to other
  * windows/tabs over a BroadcastChannel and applies settings received from
  * them. Why: each window owns its own Redux store + localStorage, so without
- * this a toggle in window A would not reach window B (web, Electron, Floating)
+ * this a toggle in window A would not reach window B (web, Electron panels)
  * until a reload. Loop-free: a received snapshot is applied via
  * hydrateUserSettings (NOT a broadcastable action), and only the user-initiated
  * set* toggles trigger an outgoing broadcast. No-ops on the server / where

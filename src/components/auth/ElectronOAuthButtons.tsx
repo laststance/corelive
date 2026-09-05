@@ -63,7 +63,7 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
 }
 
 /**
- * The signed-out Floating front door's sign-in CTA — a single amber "Sign in
+ * The login window's signed-out sign-in CTA — a single amber "Sign in
  * with Google" button that launches the system-browser OAuth flow.
  *
  * Why Google-only: Google blocks OAuth inside a WebView, so Electron opens the
@@ -161,9 +161,9 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
         // the OAUTH_OPENING_BROWSER_TIMEOUT_MS backstop re-arms the CTA — the
         // retired main window (T18) is no longer a fallback path, so this would
         // otherwise dead-end at "Opening browser…" until window reopen. A timeout,
-        // not focus-regain: the Floating card is always-on-top so a closed-tab
-        // return won't reliably refocus it, and the success path itself refocuses
-        // the window (OAuthManager) — focus-regain would misfire on both.
+        // not focus-regain: a closed-tab return won't reliably refocus the login
+        // window, and the success path itself refocuses it (OAuthManager) —
+        // focus-regain would misfire on both.
       } catch {
         dispatch({ type: 'ERROR', error: 'Failed to start authentication' })
       }

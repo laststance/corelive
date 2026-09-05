@@ -8,14 +8,9 @@ const isProtectedRoute = createRouteMatcher([
   // /settings is web-reachable (D15) but still requires auth like the rest of
   // the app — the settings it edits belong to a signed-in user's experience.
   '/settings(.*)',
-  // NOTE: /floating-navigator is intentionally NOT protected. The Electron
-  // companion renders a signed-out "front door" card on this route so the
-  // Floating window stays visible + interactive while signed out, and Clerk
-  // re-renders it in place after a native OAuth sign-in — there is no main
-  // window to surface and no /login redirect to detect. A signed-out web
-  // visitor reaching /floating-navigator (a browser tab, not the Electron
-  // panel) just sees the existing "desktop app only" notice — the card is
-  // Electron-only.
+  // NOTE: /login-shell is intentionally NOT protected: the Electron login
+  // window renders its signed-out OAuth front door there and Clerk re-renders
+  // it in place after a native sign-in (pinned by src/proxy.test.ts).
 ])
 
 const middleware = clerkMiddleware(async (auth, req) => {

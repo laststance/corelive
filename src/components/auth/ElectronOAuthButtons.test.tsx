@@ -1,9 +1,9 @@
 /**
- * @fileoverview ElectronOAuthButtons — the Floating front door's native sign-in CTA.
+ * @fileoverview ElectronOAuthButtons — the login window's native sign-in CTA.
  *
  * The sentinel: this single amber button is the ONLY way a signed-out user
- * starts the system-browser OAuth flow from the Floating window (the Electron
- * main window is being retired). If the click ever stops calling
+ * starts the system-browser OAuth flow from the login window (the Electron
+ * main window is retired). If the click ever stops calling
  * `window.electronAPI.oauth.start('google')`, or stops surfacing a start
  * failure, the desktop front door silently goes dead — a signed-out user is
  * stranded with a button that does nothing. These pin the click → start →
@@ -34,7 +34,7 @@ vi.mock('../../../electron/utils/electron-client', () => ({
 type OAuthStartResult = { success: boolean; error?: string }
 
 /**
- * Plants a Floating-preload-shaped `window.electronAPI.oauth` whose `start`
+ * Plants a login-preload-shaped `window.electronAPI.oauth` whose `start`
  * resolves to the given result, returning the spy so the test can assert the
  * provider it was called with.
  */
@@ -61,7 +61,7 @@ describe('ElectronOAuthButtons', () => {
   })
 
   it('launches the Google system-browser sign-in when the front-door button is pressed', async () => {
-    // Arrange: the Floating preload exposes a working oauth bridge.
+    // Arrange: the login preload exposes a working oauth bridge.
     const start = plantOAuthBridge({ success: true })
     render(<ElectronOAuthButtons />)
 

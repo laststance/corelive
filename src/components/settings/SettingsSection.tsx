@@ -2,23 +2,11 @@ import * as React from 'react'
 
 /**
  * Caption-tier section-label class (DESIGN.md Caption token): 12px / 500,
- * uppercase, 0.05em tracking. `text-foreground` keeps the section `<h2>` one step
- * STRONGER than the muted in-section sub-group captions (e.g. "On launch"), so the
- * hierarchy reads Section `<h2>` ＞ sub-group caption ＞ row. Pairs with
- * {@link SETTINGS_SUBGROUP_LABEL_CLASS}, which is the same token but muted.
+ * uppercase, 0.05em tracking. `text-foreground` keeps the section `<h2>` the
+ * strongest caption on the page, so the hierarchy reads Section `<h2>` ＞ row.
  */
 export const SETTINGS_SECTION_LABEL_CLASS =
   'text-xs font-medium uppercase tracking-[0.05em] text-foreground'
-
-/**
- * Sub-group caption class — the same Caption token as {@link SETTINGS_SECTION_LABEL_CLASS}
- * but `text-muted-foreground`, so a labelled group nested inside a section (the
- * "On launch" toggles within Application) sits one tier BELOW the section `<h2>`.
- * Used for the lone in-section sub-caption left after the regroup dissolved the
- * old shared "Keep on top" group into per-section single pins.
- */
-export const SETTINGS_SUBGROUP_LABEL_CLASS =
-  'text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground'
 
 /**
  * Turns a human label into a stable DOM id (hook-free, so this wrapper renders in
@@ -28,7 +16,7 @@ export const SETTINGS_SUBGROUP_LABEL_CLASS =
  * @param label - The section's display label.
  * @returns A slugified `settings-section-*` id.
  * @example
- * slugifySectionId('Floating Navigator') // => 'settings-section-floating-navigator'
+ * slugifySectionId('Application') // => 'settings-section-application'
  */
 function slugifySectionId(label: string): string {
   const slug = label

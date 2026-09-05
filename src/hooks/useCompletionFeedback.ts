@@ -25,8 +25,8 @@ export interface CompletionFeedback {
 }
 
 /**
- * Completion-feedback seam for the three row surfaces (TodoItem + the two
- * Floating rows), which share no row component. Returns the motion-safe checkbox
+ * Completion-feedback seam for completion row surfaces that share no row
+ * component. Returns the motion-safe checkbox
  * fill className and a `fire()` that plays the opt-in **complete** earned-beat
  * cue. A thin wrapper over `useSoundFeedback('complete')`: timbre selection,
  * master volume, the per-window AudioContext, and the at-most-one-in-flight

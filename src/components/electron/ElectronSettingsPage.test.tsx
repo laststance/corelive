@@ -3,9 +3,9 @@
  *
  * Covers the "Restore default size" button and its version-skew guard, now
  * folded into the Application section (the standalone "Settings Window" card was
- * retired in the settings regroup, DR-D2). The application/startup-window/
- * floating/live-editor toggle behaviours are tested in their own sub-component
- * test files — only the page-level composition is exercised here.
+ * retired in the settings regroup, DR-D2). The application/live-editor toggle
+ * behaviours are tested in their own sub-component test files — only the
+ * page-level composition is exercised here.
  *
  * Triggered when: `pnpm test` (Vitest, happy-dom environment).
  *
@@ -32,16 +32,10 @@ vi.mock('../../../electron/utils/electron-client', () => ({
 }))
 
 // Sub-component stubs: focus on the folded Window size control, not the toggles.
-// (FloatingPanelToggle is left real — without a floatingPanels bridge it renders
-// null on its own, and ElectronSettingsPage imports its setting descriptors.)
+// (PanelToggle is left real — without a panels bridge it renders null on its
+// own, and ElectronSettingsPage imports its setting descriptors.)
 vi.mock('./AppUpdateSettings', () => ({
   AppUpdateSettings: () => null,
-}))
-vi.mock('./StartupWindowSettings', () => ({
-  StartupWindowSettings: () => null,
-}))
-vi.mock('./FloatingNavigatorSettings', () => ({
-  FloatingNavigatorSettings: () => null,
 }))
 vi.mock('./LiveEditorSettings', () => ({
   LiveEditorSettings: () => null,

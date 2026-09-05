@@ -80,9 +80,9 @@ vi.mock('@clerk/nextjs', () => ({
   useUser: () => clerkUserRef.current,
 }))
 
-// Controllable active floating category so a spec can flip the active category
-// mid-test (it drives activeCategoryId while sync is on). Defaults to 1 so every
-// existing spec keeps the single "General" category active.
+// Controllable shared category selection so a spec can flip the active category
+// mid-test (it drives activeCategoryId). Defaults to 1 so every existing spec
+// keeps the single "General" category active.
 const { selectedCategoryRef, setSelectedCategory } = vi.hoisted(() => ({
   selectedCategoryRef: { current: 1 as number },
   setSelectedCategory: vi.fn(),
@@ -138,7 +138,6 @@ const { liveEditorEnvironmentRef } = vi.hoisted(() => ({
 
 vi.mock('../../../electron/utils/electron-client', () => ({
   getLiveEditorAPI: () => window.liveEditorAPI ?? window.brainDumpAPI,
-  getLiveEditorCategoryChangedChannel: () => 'live-editor-category-changed',
   isLiveEditorEnvironment: () => liveEditorEnvironmentRef.current,
 }))
 
@@ -198,16 +197,7 @@ function installLiveEditorAPI(spaces: LiveEditorSpacesBridge): void {
         get: vi.fn().mockResolvedValue(''),
         set: vi.fn().mockResolvedValue(undefined),
       },
-      sync: {
-        getEnabled: vi.fn().mockResolvedValue(true),
-        setEnabled: vi.fn().mockResolvedValue(undefined),
-      },
-      category: {
-        getLast: vi.fn().mockResolvedValue(1),
-        setLast: vi.fn().mockResolvedValue(undefined),
-      },
       spaces,
-      on: vi.fn(() => vi.fn()),
     },
   })
 }
@@ -410,7 +400,6 @@ describe('LiveEditor web host (/write)', () => {
       '/login?redirect_url=/write',
     )
     expect(screen.queryByText('Follow Spaces')).not.toBeInTheDocument()
-    expect(screen.queryByText('Follow FloatingNav')).not.toBeInTheDocument()
     expect(screen.queryByText('Opacity')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Close LiveEditor' }),
@@ -539,7 +528,6 @@ describe('LiveEditor web host (/write)', () => {
     expect(
       screen.getByRole('combobox', { name: 'Active category' }),
     ).toBeEnabled()
-    expect(screen.queryByText('Follow FloatingNav')).not.toBeInTheDocument()
     expect(screen.getByText('Keeps go to your account.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Your year →' })).toHaveAttribute(
       'href',
@@ -651,7 +639,10 @@ describe('LiveEditor web host (/write)', () => {
 
     // Assert
     expect(screen.getByText('Follow Spaces')).toBeInTheDocument()
-    expect(screen.getByText('Follow FloatingNav')).toBeInTheDocument()
+    // The panel's picker is live: it drives the one shared category selection.
+    expect(
+      screen.getByRole('combobox', { name: 'Active category' }),
+    ).toBeEnabled()
     expect(screen.queryByText('CoreLive')).not.toBeInTheDocument()
     expect(
       screen.queryByText('Keeps go to your account.'),
@@ -864,7 +855,7 @@ describe('LiveEditor note persistence during reload', () => {
     selectedCategoryRef.current = 1
   })
 
-  it('does not read or write the temporary floating category before LiveEditor config finishes loading', async () => {
+  it('does not read or write the shared category note before LiveEditor config finishes loading', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -872,10 +863,9 @@ describe('LiveEditor note persistence during reload', () => {
     })
     const api = window.liveEditorAPI
     if (!api) throw new Error('liveEditorAPI was not installed')
-    api.sync.getEnabled = vi.fn(
-      async () => new Promise<boolean>(() => undefined),
+    api.window.getOpacity = vi.fn(
+      async () => new Promise<number>(() => undefined),
     )
-    api.category.getLast = vi.fn().mockResolvedValue(12)
     api.note.get = vi.fn().mockResolvedValue('should not load yet')
     const noteSet = vi.mocked(api.note.set)
 
@@ -891,32 +881,55 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('loads only the saved local LiveEditor category after config disables FloatingNav sync', async () => {
-    // Arrange
+  it('keeps the panel on "pick a category" when the remembered id belongs to another account', async () => {
+    // Arrange: the shared selection remembers an id this account's list does
+    // not contain (a shared device, or a category deleted elsewhere).
+    selectedCategoryRef.current = 99
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
     })
     const api = window.liveEditorAPI
     if (!api) throw new Error('liveEditorAPI was not installed')
-    api.sync.getEnabled = vi.fn().mockResolvedValue(false)
-    api.category.getLast = vi.fn().mockResolvedValue(12)
-    api.note.get = vi.fn(async (categoryId: number) =>
-      categoryId === 12 ? 'local Corelive note' : 'temporary floating note',
-    )
-    const noteSet = vi.mocked(api.note.set)
+    api.note.get = vi.fn().mockResolvedValue('someone else’s note')
 
     // Act
-    renderEditorWithCategories(categoriesWithCorelive)
+    renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
-
-    // Assert
-    await waitFor(() => {
-      expect(noteField).toHaveValue('local Corelive note')
+    await act(async () => {
+      await Promise.resolve()
     })
-    expect(api.note.get).toHaveBeenCalledWith(12)
-    expect(api.note.get).not.toHaveBeenCalledWith(1)
-    expect(noteSet).not.toHaveBeenCalled()
+
+    // Assert: the confirmed-id gate holds in the panel too — no foreign note is
+    // loaded (or later overwritten), and the field asks for a pick instead.
+    expect(noteField).toBeDisabled()
+    expect(noteField).toHaveAttribute(
+      'placeholder',
+      'Pick a category to start writing',
+    )
+    expect(api.note.get).not.toHaveBeenCalled()
+  })
+
+  it('writes the picker choice to the shared category selection from the Electron panel', async () => {
+    // Arrange: the panel lists two categories; the shared selection is on the first.
+    installLiveEditorAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const user = userEvent.setup()
+    renderEditorWithCategories(categoriesWithCorelive)
+    const picker = await screen.findByRole('combobox', {
+      name: 'Active category',
+    })
+    await waitFor(() => expect(picker).toBeEnabled())
+
+    // Act: pick the other category from the panel's own picker.
+    await user.click(picker)
+    await user.click(screen.getByRole('option', { name: 'Corelive' }))
+
+    // Assert: the choice goes to the ONE shared selection (what the sidebar and
+    // /write read), never a panel-private slot.
+    expect(setSelectedCategory).toHaveBeenCalledWith(12)
   })
 
   it('does not flush a clean loaded note when the active category changes', async () => {
@@ -1844,7 +1857,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
-    // Reset the active floating category — the cross-category spec mutates it.
+    // Reset the shared category selection — the cross-category spec mutates it.
     selectedCategoryRef.current = 1
   })
 
@@ -2759,7 +2772,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
-    // Reset the active floating category — the category-swap spec mutates it.
+    // Reset the shared category selection — the category-swap spec mutates it.
     selectedCategoryRef.current = 1
   })
 
@@ -3137,7 +3150,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
   beforeEach(() => {
     vi.clearAllMocks()
     completedMutateAsync.mockResolvedValue({ id: 1 })
-    // Reset the active floating category — the clamp spec leaves it on 1, but be
+    // Reset the shared category selection — the clamp spec leaves it on 1, but be
     // explicit so a future cross-category spec here can't bleed state.
     selectedCategoryRef.current = 1
   })

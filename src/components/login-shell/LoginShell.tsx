@@ -1,11 +1,14 @@
 'use client'
 
+import { useUser } from '@clerk/nextjs'
 import { Heart } from 'lucide-react'
 
 import {
   ElectronOAuthButtons,
   useShowElectronOAuth,
 } from '@/components/auth/ElectronOAuthButtons'
+import { isElectronEnvironment } from '@/electron/utils/electron-client'
+import { useMounted } from '@/hooks/use-mounted'
 import { HEATMAP_LEVEL_TOKENS } from '@/lib/heatmap-intensity'
 
 /**
@@ -30,33 +33,67 @@ const HEATMAP_RIBBON_CELLS = [
 ] as const
 
 /**
- * Signed-out "front door" for the Electron Floating window — rendered by
- * FloatingNavigatorContainer when Clerk reports no active session.
- *
- * Why it exists: the Electron main window is being retired, so the Floating
- * panel is now the visible surface a signed-out user signs in from. It must stay
- * visible + interactive while signed out, else a signed-out launch = zero
- * interactive windows. After a native OAuth sign-in, Clerk re-renders the
- * container in place and this card is swapped for the live navigator — no
- * reload, no navigation (Clerk's `setActive` is called with a no-op `navigate`).
- *
- * The design is the approved "Warm Cathedral" front door (Variant A): a serif
- * editorial headline over the accumulated-warmth heatmap motif, carrying the
- * north star — "your year is waiting", never a KPI gate.
- *
- * @returns The amber native-OAuth front door when the preload exposes the oauth
- * bridge, else a skew-safe fallback (an older frozen preload may lack it).
+ * The Electron login window's whole UI: a Clerk gate in front of the signed-out native-OAuth
+ * front door. After sign-in the current main process closes the window
+ * ({@link WindowManager.completeLogin}); older installs keep showing the signed-in placeholder.
+ * @returns
+ * - A desktop-only notice in a plain browser tab
+ * - "Loading…" until Clerk resolves
+ * - The "Warm Cathedral" front door: native OAuth buttons, or a web-app fallback when a frozen preload lacks the oauth bridge
+ * - A signed-in placeholder
  * @example
- * if (isLoaded && !isSignedIn) return <SignedOutFloatingCard />
+ * <LoginShell />
  */
-export const SignedOutFloatingCard = function SignedOutFloatingCard() {
+export const LoginShell = function LoginShell() {
+  const isMounted = useMounted()
+  // Clerk auth gate: drives the signed-out front door vs the signed-in placeholder.
+  const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
   // Render-time skew guard (DT3/F4): decide the affordance by CAPABILITY, not a
   // call-time `?.` — a frozen preload from an older install may not expose the
   // oauth bridge at all, in which case the buttons would be dead.
   const canStartOAuth = useShowElectronOAuth()
+  // Preload wiring is what makes this the login window; without it the page is
+  // being viewed in a plain browser tab.
+  const isLoginWindow = isMounted && isElectronEnvironment()
 
+  if (!isLoginWindow) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">
+          Only available in the desktop app
+        </p>
+      </div>
+    )
+  }
+
+  // Hold a calm loading state until Clerk resolves. A native OAuth sign-in
+  // re-renders this in place — no reload.
+  if (!isAuthLoaded) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    )
+  }
+
+  // Signed in: the current main process closes this window right away; an
+  // older install (no handoff) keeps it open, so say what to do next.
+  if (isSignedIn) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background p-4">
+        <p className="text-center text-sm text-muted-foreground">
+          Signed in. Open LiveEditor to log your wins.
+        </p>
+      </div>
+    )
+  }
+
+  // The approved "Warm Cathedral" front door (Variant A): an editorial headline
+  // over the accumulated-warmth heatmap motif, carrying the north star — "your
+  // year is waiting", never a KPI gate. `pt-10` clears the native traffic lights
+  // that overlay the top edge of the hidden-title-bar window.
   return (
-    <div className="flex h-full w-full flex-col bg-background p-6">
+    <div className="flex h-full w-full flex-col bg-background p-6 pt-10">
       {/* Quiet brand wordmark — the headline below is the hero, not this. */}
       <p className="text-xs font-semibold tracking-wide text-muted-foreground">
         CoreLive
@@ -83,7 +120,7 @@ export const SignedOutFloatingCard = function SignedOutFloatingCard() {
         )}
       </div>
 
-      {/* Push the motif + footer to the bottom edge of the panel. */}
+      {/* Push the motif + footer to the bottom edge of the window. */}
       <div className="mt-auto space-y-3 pt-6">
         {/* Accumulated-warmth heatmap ribbon — decorative north-star motif. */}
         <div className="flex gap-1" aria-hidden="true">

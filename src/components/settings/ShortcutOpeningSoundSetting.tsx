@@ -370,8 +370,8 @@ export const ShortcutOpeningSoundSetting =
               id={SHORTCUT_OPEN_SOUND_DESCRIPTION_ID}
               className="text-xs text-muted-foreground"
             >
-              Play a brief keyboard cue when a shortcut opens Floating Navigator
-              or LiveEditor off-screen.
+              Play a brief keyboard cue when a shortcut opens LiveEditor
+              off-screen.
             </p>
           </div>
           <Switch

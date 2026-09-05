@@ -22,15 +22,13 @@ import { useTransition } from 'react'
  */
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
-import { FloatingNavigatorSettings } from '@/components/electron/FloatingNavigatorSettings'
-import {
-  LIVE_EDITOR_PIN_SETTING,
-  FloatingPanelToggle,
-  VISIBLE_ON_ALL_WORKSPACES_SETTING,
-} from '@/components/electron/FloatingPanelToggle'
 import { LiveEditorAppearance } from '@/components/electron/LiveEditorAppearance'
 import { LiveEditorSettings } from '@/components/electron/LiveEditorSettings'
-import { StartupWindowSettings } from '@/components/electron/StartupWindowSettings'
+import {
+  LIVE_EDITOR_PIN_SETTING,
+  PanelToggle,
+  VISIBLE_ON_ALL_WORKSPACES_SETTING,
+} from '@/components/electron/PanelToggle'
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -208,8 +206,8 @@ export const ElectronSettingsPage =
       return null
     }
 
-    // Electron is macOS-only in production, but keep the defensive guard the old
-    // Floating windows card carried: the Spaces toggle only applies on macOS.
+    // Electron is macOS-only in production, but keep the defensive guard: the
+    // Spaces toggle only applies on macOS.
     const platform =
       typeof window === 'undefined' ? undefined : window.electronEnv?.platform
     const isMac = !platform || platform === 'darwin'
@@ -222,26 +220,21 @@ export const ElectronSettingsPage =
         {/* LIVEEDITOR — note behavior, look-and-feel, and its keep-on-top pin.
             Three independent siblings (advisor): the note card degrades on the
             `liveEditor` preload, the appearance is pure Redux, and the pin lives
-            on `floatingPanels` — nesting the pin in the card would let a stale
+            on the panels bridge — nesting the pin in the card would let a stale
             `liveEditor` preload hide a working pin. */}
         <SettingsSection label="LiveEditor">
           <LiveEditorSettings />
           <LiveEditorAppearance />
-          <FloatingPanelToggle
+          <PanelToggle
             setting={LIVE_EDITOR_PIN_SETTING}
             label="Keep on top"
             description="Pin LiveEditor above your other windows so it stays visible."
           />
         </SettingsSection>
 
-        {/* FLOATING NAVIGATOR — Floating-Navigator-only behavior. */}
-        <SettingsSection label="Floating Navigator">
-          <FloatingNavigatorSettings />
-        </SettingsSection>
-
         {/* APPLICATION — app-wide chrome: dock/menu-bar/login presence, the
-            on-launch sub-group, the shared Spaces toggle, and the Settings
-            window size (folded from its old standalone card, DR-D2). */}
+            Spaces toggle, and the Settings window size (folded from its old
+            standalone card, DR-D2). */}
         <SettingsSection label="Application">
           {/* Hide App Icon */}
           <div className="flex items-center justify-between">
@@ -300,15 +293,12 @@ export const ElectronSettingsPage =
             />
           </div>
 
-          {/* On launch — sub-group (StartupWindowSettings renders its own caption). */}
-          <StartupWindowSettings />
-
-          {/* Show on all desktops — one OS-level flag shared by both panels,
-              relocated here from the retired Floating windows card. */}
-          <FloatingPanelToggle
+          {/* Show on all desktops — LiveEditor's OS-level Spaces flag, kept
+              under Application because it is app-wide chrome. */}
+          <PanelToggle
             setting={VISIBLE_ON_ALL_WORKSPACES_SETTING}
             label="Show on all desktops"
-            description="Keep CoreLive's panels visible while switching Spaces, including fullscreen Spaces."
+            description="Keep LiveEditor visible while switching Spaces, including fullscreen Spaces."
             disabled={!isMac}
             note={
               !isMac && (

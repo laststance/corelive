@@ -15,10 +15,9 @@ import {
  * (decode only — off-gesture safe, so the first cue has no latency), and returns
  * a stable `fire()` that plays the cue via the per-window sound engine ONLY when
  * the moment is ON. Why a hook: enablement + timbre + volume are app-level Redux
- * state, and several structurally-unrelated surfaces (TodoItem, FloatingNavigator,
- * TodoList's add/clear) each need the same gated trigger. `fire()` is a no-op
- * while the moment is OFF (a fresh install is silent), so callers fire it
- * unconditionally on the user gesture without re-checking settings.
+ * state, and structurally-unrelated surfaces each need the same gated trigger.
+ * `fire()` is a no-op while the moment is OFF (a fresh install is silent), so
+ * callers fire it unconditionally on the user gesture without re-checking settings.
  *
  * @param moment - Which earned-beat moment this trigger belongs to.
  * @returns A stable `fire()` that plays the moment's cue when enabled, else a no-op.

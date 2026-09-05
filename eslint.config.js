@@ -121,7 +121,6 @@ export default defineConfig([
             'achievement-*',
             'level-up-*',
             'confetti-*',
-            'floating-navigator-*',
             // Custom utility classes (defined in globals.css @layer utilities)
             'cathedral-lit',
             'tap-target-24',

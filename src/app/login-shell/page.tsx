@@ -1,14 +1,20 @@
 'use client'
 
-import { FloatingNavigatorContainer } from '@/components/floating-navigator'
-import '@/components/floating-navigator/floating-navigator.css'
+import { LoginShell } from '@/components/login-shell/LoginShell'
 
-const FloatingNavigatorPage = function FloatingNavigatorPage() {
+/**
+ * `/login-shell` — the page the Electron login window loads; a plain browser tab
+ * only sees {@link LoginShell}'s desktop-only notice.
+ * @returns The full-height login shell.
+ * @example
+ * // https://corelive.app/login-shell (loaded by WindowManager.createLoginWindow)
+ */
+const LoginShellPage = function LoginShellPage() {
   return (
     <div className="h-screen w-full overflow-hidden">
-      <FloatingNavigatorContainer />
+      <LoginShell />
     </div>
   )
 }
 
-export default FloatingNavigatorPage
+export default LoginShellPage

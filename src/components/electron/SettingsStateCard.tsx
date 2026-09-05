@@ -3,12 +3,12 @@
 /**
  * @fileoverview Shared status-card scaffold for the Electron Settings page.
  *
- * The Startup / Floating / LiveEditor settings cards each render the SAME small
- * header-only Card in three non-interactive states — desktop-app-only, an
- * "update CoreLive" version-skew notice, and a loading placeholder. This extracts
- * that repeated `<Card><CardHeader>` scaffold so the three components stay in
- * lockstep (one icon + title + one-line description) and their degraded/loading
- * copy renders identically instead of drifting apart per component.
+ * A settings card (LiveEditor today) renders the SAME small header-only Card in
+ * three non-interactive states — desktop-app-only, an "update CoreLive"
+ * version-skew notice, and a loading placeholder. This extracts that repeated
+ * `<Card><CardHeader>` scaffold so every card stays in lockstep (one icon +
+ * title + one-line description) and the degraded/loading copy renders
+ * identically instead of drifting apart per component.
  *
  * @module components/electron/SettingsStateCard
  */
