@@ -142,6 +142,7 @@ Beyond the web app, the macOS build adds native surfaces:
 
 - **LiveEditor** — a distraction-light freeform capture window
 - **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens
+- **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the Floating Navigator shortcuts, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)
@@ -149,6 +150,7 @@ Beyond the web app, the macOS build adds native surfaces:
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default)
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
+- **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog
 - **Auto-update** — signed, notarized releases update in place
 
 ### Electron Development
