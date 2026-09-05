@@ -17,7 +17,6 @@ import {
 } from '@/lib/live-editor/constants'
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
-import { IMPORT_LOCAL_MAX_ITEMS } from '@/server/schemas/completed'
 
 import { LocalKeepMergeSync } from './LocalKeepMergeSync'
 
@@ -417,10 +416,12 @@ describe('LocalKeepMergeSync', () => {
   })
 
   it('merges a device holding more keeps than one request can carry', async () => {
-    // Arrange — one keep more than a single batch may send.
+    // Arrange — 2001 keeps: one more than the 2000 a single request may carry.
+    // Hard-coded on purpose: if the cap moves, this spec must fail and be
+    // re-decided, not silently follow it.
     const completedAt = new Date().toISOString()
     seedLocalKeeps(
-      Array.from({ length: IMPORT_LOCAL_MAX_ITEMS + 1 }, (_, index) => ({
+      Array.from({ length: 2001 }, (_, index) => ({
         id: `k${index}`,
         title: 'push-ups',
         completedAt,
@@ -434,7 +435,7 @@ describe('LocalKeepMergeSync', () => {
     await waitFor(() => expect(importLocalFn).toHaveBeenCalledTimes(2))
     const first = importLocalFn.mock.calls[0]?.[0] as ImportPayload | undefined
     const second = importLocalFn.mock.calls[1]?.[0] as ImportPayload | undefined
-    expect(first?.items).toHaveLength(IMPORT_LOCAL_MAX_ITEMS)
+    expect(first?.items).toHaveLength(2000)
     expect(second?.items).toHaveLength(1)
     await waitFor(() => {
       expect(
