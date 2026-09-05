@@ -141,6 +141,7 @@ This project includes an Electron desktop application that wraps the Next.js web
 Beyond the web app, the macOS build adds native surfaces:
 
 - **LiveEditor** — a distraction-light freeform capture window
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)
