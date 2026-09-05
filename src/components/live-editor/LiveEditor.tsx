@@ -2428,10 +2428,11 @@ export const LiveEditor = function LiveEditor({
         // translucent look. The web stand-in is not dimmed while disabled — it is
         // the first paint, not a loading state.
         className={cn(
-          // The focus indicator is SHARED: `outline-none` kills the UA ring for
-          // both hosts, so the replacement has to cover both or the packaged
-          // panel's primary surface has none at all (WCAG 2.4.7).
-          'flex-1 resize-none rounded-lg border outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring',
+          // No focus line on purpose (Raphtalia, 2026-09-05): the writing surface
+          // is the whole panel, so the caret is the focus cue. `outline-none`
+          // drops the UA ring on both hosts; keep it if you re-add a ring so the
+          // two never stack. Deliberate WCAG 2.4.7 trade-off for this textarea.
+          'flex-1 resize-none rounded-lg border outline-none',
           isElectronPanel
             ? 'bg-background/60 p-3 disabled:opacity-50'
             : 'border-border bg-card p-4 disabled:cursor-default',
