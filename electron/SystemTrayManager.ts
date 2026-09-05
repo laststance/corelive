@@ -18,22 +18,6 @@ import { trayShortcutMenuFields } from './utils/trayShortcutMenuFields'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
-// Type Definitions
-// ============================================================================
-
-/** Task item for tray menu */
-export interface TaskItem {
-  title: string
-  completed: boolean
-}
-
-/** Notification options */
-interface TrayNotificationOptions {
-  silent?: boolean
-  onClick?: () => void
-}
-
-// ============================================================================
 // System Tray Manager Class
 // ============================================================================
 
@@ -69,20 +53,12 @@ export class SystemTrayManager {
    */
   private getShortcutAccelerators?: () => Record<string, string>
 
-  /**
-   * Last task list passed to updateTrayMenu, cached so a shortcut-triggered
-   * refreshTrayMenu() re-renders with current accelerators without wiping the
-   * recent-tasks section.
-   */
-  private lastTasks: TaskItem[]
-
   constructor(windowManager: WindowManager) {
     this.windowManager = windowManager
     this.tray = null
     this.trayCreationPromise = null
     this.isQuitting = false
     this.fallbackMode = false
-    this.lastTasks = []
   }
 
   /**
@@ -502,27 +478,23 @@ export class SystemTrayManager {
   }
 
   /**
-   * Re-render the tray menu with the last tasks + current accelerators.
+   * Re-render the tray menu with current accelerators.
    * Triggered after a shortcut rebind so a displayed hotkey never goes stale.
    *
    * @returns True when the menu was rebuilt, false when no tray is available.
    */
   refreshTrayMenu(): boolean {
-    return this.updateTrayMenu(this.lastTasks)
+    return this.updateTrayMenu()
   }
 
   /**
    * Update tray context menu.
    */
-  updateTrayMenu(tasks: TaskItem[] = []): boolean {
+  updateTrayMenu(): boolean {
     if (!this.tray || this.tray.isDestroyed()) {
       log.warn('Cannot update tray menu: tray not available')
       return false
     }
-
-    // Cache so refreshTrayMenu() can re-render with live accelerators without
-    // losing the recent-tasks section.
-    this.lastTasks = tasks
 
     try {
       // Live, display-only hotkey; an empty/absent value omits the accelerator
@@ -564,8 +536,6 @@ export class SystemTrayManager {
             }
           },
         },
-        { type: 'separator' },
-        ...this.buildTaskMenuItems(tasks),
         { type: 'separator' },
         {
           label: 'Quit',
@@ -627,29 +597,6 @@ export class SystemTrayManager {
   }
 
   /**
-   * Build menu items for recent tasks.
-   */
-  buildTaskMenuItems(tasks: TaskItem[]): MenuItemConstructorOptions[] {
-    if (!tasks || tasks.length === 0) {
-      return [
-        {
-          label: 'No recent tasks',
-          enabled: false,
-        },
-      ]
-    }
-
-    const recentTasks = tasks.slice(0, 5)
-
-    return recentTasks.map((task) => ({
-      label: `${task.completed ? '✓' : '○'} ${task.title.substring(0, 30)}${task.title.length > 30 ? '...' : ''}`,
-      click: () => {
-        this.windowManager.restoreFromTray()
-      },
-    }))
-  }
-
-  /**
    * Setup tray event handlers for macOS.
    */
   setupTrayEvents(): void {
@@ -658,50 +605,6 @@ export class SystemTrayManager {
     this.tray.on('double-click', () => {
       this.windowManager.restoreFromTray()
     })
-  }
-
-  /**
-   * Show native notification with error handling.
-   */
-  showNotification(
-    title: string,
-    body: string,
-    options: TrayNotificationOptions = {},
-  ): Notification | null {
-    try {
-      if (!Notification.isSupported()) {
-        log.warn('Notifications are not supported on this system')
-        return null
-      }
-
-      const notification = new Notification({
-        title,
-        body,
-        icon: this.getTrayIconPath() ?? undefined,
-        silent: options.silent || false,
-      })
-
-      notification.on('click', () => {
-        try {
-          this.windowManager.restoreFromTray()
-          if (options.onClick) {
-            options.onClick()
-          }
-        } catch (error) {
-          log.error('Failed to handle notification click:', error)
-        }
-      })
-
-      notification.on('failed', (_event, error) => {
-        log.error('Notification failed:', error)
-      })
-
-      notification.show()
-      return notification
-    } catch (error) {
-      log.error('Failed to show notification:', error)
-      return null
-    }
   }
 
   /**

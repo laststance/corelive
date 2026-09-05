@@ -3,7 +3,6 @@ import type { MenuItemConstructorOptions, Tray } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SystemTrayManager } from '../SystemTrayManager'
-import type { TaskItem } from '../SystemTrayManager'
 import type { WindowManager } from '../WindowManager'
 
 // vitest hoists BOTH vi.mock calls above every import in this file, so the
@@ -97,7 +96,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager, toggleLiveEditor } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const liveEditorItem = findItem(lastBuiltTemplate(), 'Toggle LiveEditor')
     ;(liveEditorItem?.click as () => void)?.()
 
@@ -113,7 +112,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager, restoreFromTray } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const browserItem = findItem(
       lastBuiltTemplate(),
       'Open full app in browser ↗',
@@ -137,7 +136,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager, openSettings } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const template = lastBuiltTemplate()
     const settingsItem = findItem(template, 'Settings')
     ;(settingsItem?.click as () => void)?.()
@@ -157,7 +156,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     }))
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const template = lastBuiltTemplate()
 
     // Assert
@@ -174,7 +173,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     }))
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const liveEditorItem = findItem(lastBuiltTemplate(), 'Toggle LiveEditor')
 
     // Assert: no orphan accelerator glyph for an unbound shortcut.
@@ -187,7 +186,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const template = lastBuiltTemplate()
 
     // Assert: the item renders, just without an accelerator — never a hardcoded key.
@@ -196,29 +195,23 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     )
   })
 
-  it('refreshes the displayed hotkey after a rebind without losing recent tasks', () => {
-    // Arrange: first render shows the default LiveEditor hotkey with one task.
+  it('refreshes the displayed hotkey after a rebind', () => {
+    // Arrange: first render shows the default LiveEditor hotkey.
     const { manager } = createManager()
     let liveEditorAccelerator = 'Alt+Space'
     manager.setShortcutAcceleratorProvider(() => ({
       toggleLiveEditor: liveEditorAccelerator,
     }))
-    const tasks: TaskItem[] = [
-      { title: 'Write the release notes', completed: false },
-    ]
-    manager.updateTrayMenu(tasks)
+    manager.updateTrayMenu()
 
     // Act: the user rebinds LiveEditor, then a refresh re-renders the tray.
     liveEditorAccelerator = 'CommandOrControl+Shift+B'
     manager.refreshTrayMenu()
     const template = lastBuiltTemplate()
 
-    // Assert: the new hotkey shows AND the cached task survived the refresh.
+    // Assert: the new hotkey shows.
     expect(findItem(template, 'Toggle LiveEditor')?.accelerator).toBe(
       'CommandOrControl+Shift+B',
     )
-    expect(
-      template.some((item) => item.label?.includes('Write the release notes')),
-    ).toBe(true)
   })
 })

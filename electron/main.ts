@@ -40,10 +40,7 @@ import type { OAuthManager as OAuthManagerType } from './OAuthManager'
 import { performanceOptimizer, OPTIMIZATION_LEVELS } from './performance-config'
 import type { ShortcutManager as ShortcutManagerType } from './ShortcutManager'
 import type { SystemIntegrationErrorHandler as SystemIntegrationErrorHandlerType } from './SystemIntegrationErrorHandler'
-import type {
-  SystemTrayManager as SystemTrayManagerType,
-  TaskItem,
-} from './SystemTrayManager'
+import type { SystemTrayManager as SystemTrayManagerType } from './SystemTrayManager'
 import type { AuthUserPayload } from './types/ipc'
 import { createUiohookShortcutEngine } from './uiohookEngine'
 import { applyShortcutRebind } from './utils/applyShortcutRebind'
@@ -1043,33 +1040,6 @@ function setupIPCHandlers(): void {
     (_event, accelerator) =>
       setLiveEditorShortcutSlot('toggleLiveEditorSecondary', accelerator),
   )
-
-  typedHandle('tray-show-notification', (_event, title, body, options) => {
-    if (systemTrayManager) {
-      const notif = systemTrayManager.showNotification(title, body, options)
-      return notif ? { id: String(Date.now()) } : null
-    }
-    return null
-  })
-
-  typedHandle('tray-update-menu', (_event, tasks) => {
-    if (systemTrayManager) {
-      systemTrayManager.updateTrayMenu(tasks as TaskItem[])
-    }
-  })
-
-  typedHandle('tray-set-tooltip', (_event, text) => {
-    if (systemTrayManager) {
-      systemTrayManager.setTrayTooltip(text)
-    }
-  })
-
-  typedHandle('tray-set-icon-state', (_event, state) => {
-    if (systemTrayManager) {
-      return systemTrayManager.setTrayIconState(state)
-    }
-    return false
-  })
 
   // Notification management IPC handlers (Zod-validated, lazy-loaded)
   typedHandle('notification-show', async (_event, title, body, options) => {
