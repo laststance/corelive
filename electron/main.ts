@@ -50,7 +50,6 @@ import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { isSameAccelerator } from './utils/isSameAccelerator'
 import { loadUiohook } from './utils/loadUiohook'
-import { isNativeTapLatchSet } from './utils/nativeTapLatch'
 import { openConfigFile } from './utils/openConfigFile'
 import {
   HIDE_APP_ICON_CONFIG_PATH,
@@ -833,13 +832,6 @@ function redactLiveEditorNotes(
   return { ...snapshot, liveEditor: rest }
 }
 
-/**
- * Shortcut ids that stay bound while the app is unfocused — everything else is
- * contextual. Reported to the keybind Settings UI as `isGlobal`. Widened to
- * `string[]` so `includes` accepts the plain-string ids `Object.entries` yields.
- */
-const GLOBAL_SHORTCUT_IDS: string[] = [...LIVE_EDITOR_SHORTCUT_IDS]
-
 function setupIPCHandlers(): void {
   // Register IPC channels exactly once per process. A macOS re-launch via the
   // `activate` handler can call createWindow again, which would re-enter here
@@ -1486,136 +1478,6 @@ function setupIPCHandlers(): void {
 
   typedHandle('performance-get-startup-time', () => {
     return Date.now() - performanceOptimizer.startupMetrics.startTime
-  })
-
-  // Shortcuts IPC handlers
-  typedHandle('shortcuts-get-registered', () => {
-    if (!shortcutManager) {
-      return []
-    }
-    const registered = shortcutManager.getRegisteredShortcuts()
-    return Object.entries(registered).map(([id, accelerator]) => ({
-      id,
-      accelerator,
-      description: id,
-      enabled: true,
-      isGlobal: GLOBAL_SHORTCUT_IDS.includes(id),
-    }))
-  })
-
-  typedHandle('shortcuts-get-defaults', () => {
-    if (!shortcutManager) {
-      return []
-    }
-    const defaults = shortcutManager.getDefaultShortcuts()
-    return Object.entries(defaults)
-      .filter(([key]) => key !== 'enabled')
-      .map(([id, accelerator]) => ({
-        id,
-        accelerator: accelerator as string,
-        description: id,
-        enabled: true,
-        isGlobal: GLOBAL_SHORTCUT_IDS.includes(id),
-      }))
-  })
-
-  typedHandle('shortcuts-update', (_event, shortcuts) => {
-    if (!shortcutManager) {
-      return false
-    }
-    const didUpdate = shortcutManager.updateShortcuts(shortcuts)
-    // Keep the tray's displayed hotkeys in sync with the rebind.
-    if (didUpdate) {
-      systemTrayManager?.refreshTrayMenu()
-    }
-    return didUpdate
-  })
-
-  typedHandle('shortcuts-register', (_event, definition) => {
-    if (!shortcutManager) {
-      return false
-    }
-    const handler = shortcutManager.getHandlerForShortcut(definition.id)
-    if (!handler) {
-      return false
-    }
-    return shortcutManager.registerShortcut(
-      definition.accelerator,
-      definition.id,
-      handler,
-    )
-  })
-
-  typedHandle('shortcuts-unregister', (_event, id) => {
-    if (!shortcutManager) {
-      return false
-    }
-    return shortcutManager.unregisterShortcut(id)
-  })
-
-  typedHandle('shortcuts-is-registered', (_event, accelerator) => {
-    if (!shortcutManager) {
-      return false
-    }
-    return shortcutManager.isShortcutRegistered(accelerator)
-  })
-
-  typedHandle('shortcuts-enable', () => {
-    if (!shortcutManager) {
-      return false
-    }
-    shortcutManager.enable()
-    return true
-  })
-
-  typedHandle('shortcuts-disable', () => {
-    if (!shortcutManager) {
-      return false
-    }
-    shortcutManager.disable()
-    return true
-  })
-
-  typedHandle('shortcuts-get-stats', () => {
-    if (!shortcutManager) {
-      return {
-        totalRegistered: 0,
-        isEnabled: false,
-        platform: process.platform,
-        shortcuts: {},
-      }
-    }
-    return shortcutManager.getStats()
-  })
-
-  // #125 native key-tap freeze-safety: surface tap health + manual re-enable to
-  // the renderer's "disabled after a failed start — re-enable" control.
-  typedHandle('shortcuts-get-native-tap-status', () => {
-    if (!shortcutManager) {
-      // ShortcutManager not constructed yet: read the persisted brick-guard from
-      // disk so an early renderer poll during a latch-blocked launch still sees
-      // the block (and keeps the re-enable affordance) instead of a false
-      // "not blocked" (codex review). `active` is false — nothing is live yet.
-      return {
-        available: false,
-        latchBlocked: isNativeTapLatchSet(),
-        active: false,
-      }
-    }
-    return shortcutManager.getNativeTapStatus()
-  })
-
-  typedHandle('shortcuts-reenable-native-tap', () => {
-    if (!shortcutManager) {
-      // Re-enable can't act before ShortcutManager exists, but report the real
-      // persisted latch state so the renderer doesn't conclude the block cleared.
-      return {
-        available: false,
-        latchBlocked: isNativeTapLatchSet(),
-        active: false,
-      }
-    }
-    return shortcutManager.reenableNativeTap()
   })
 
   // Deep linking IPC handlers

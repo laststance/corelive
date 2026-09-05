@@ -78,14 +78,6 @@ interface ShortcutRegistrationResult {
   success: boolean
 }
 
-/** Shortcut statistics */
-interface ShortcutStats {
-  totalRegistered: number
-  isEnabled: boolean
-  platform: string
-  shortcuts: Record<string, string>
-}
-
 // ============================================================================
 // Shortcut Manager Class
 // ============================================================================
@@ -1112,24 +1104,10 @@ export class ShortcutManager {
   }
 
   /**
-   * Get default shortcuts config.
-   */
-  getDefaultShortcutsConfig(): ShortcutConfig {
-    return { ...this.getDefaultShortcuts() }
-  }
-
-  /**
    * Get current shortcuts configuration.
    */
   getCurrentShortcuts(): ShortcutConfig {
     return { ...this.shortcuts }
-  }
-
-  /**
-   * Check if shortcut is registered.
-   */
-  isShortcutRegistered(accelerator: string): boolean {
-    return globalShortcut.isRegistered(accelerator)
   }
 
   /**
@@ -1192,18 +1170,6 @@ export class ShortcutManager {
       this.registeredShortcuts.clear()
     } catch (error) {
       log.error('Error unregistering all shortcuts:', error)
-    }
-  }
-
-  /**
-   * Get shortcut statistics.
-   */
-  getStats(): ShortcutStats {
-    return {
-      totalRegistered: this.registeredShortcuts.size,
-      isEnabled: this.isEnabled,
-      platform: process.platform,
-      shortcuts: this.getRegisteredShortcuts(),
     }
   }
 
