@@ -475,6 +475,7 @@ export class DeepLinkManager {
 
   /**
    * Surface the app for a non-OAuth deep link: LiveEditor, or the login window while signed out ({@link WindowManager.restoreFromTray} decides).
+   * @returns Nothing; a no-op until the WindowManager exists.
    * @example
    * this.ensureWindowVisible()
    */

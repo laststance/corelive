@@ -617,7 +617,7 @@ export const LiveEditor = function LiveEditor({
 
   // Signed out, the implicit local category is set directly: useSelectedCategory
   // rejects the `0` sentinel by design (server ids are positive).
-  // gstack-shortcut(dec-52b0a642): one-time category reset for Follow-OFF upgraders; upgrade when a user reports losing the panel category
+  // gstack-shortcut(dec-52b0a642): Follow-OFF upgraders lose their per-panel category once (no lastCategoryId migration — the shared pick or the default wins); upgrade when a user reports losing the panel category
   const activeCategoryId =
     !isLiveEditorConfigReady || !isAuthLoaded
       ? null

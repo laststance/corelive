@@ -100,6 +100,33 @@ describe('registerAuthHandlers', () => {
     expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
   })
 
+  it('keeps the login window open until the user is actually stored', async () => {
+    // Arrange: the store stays pending until this spec releases it.
+    const windowManager = createWindowManagerStub()
+    const { deps, setActiveUser } = createDeps(
+      windowManager as unknown as WindowManager,
+    )
+    let releaseStore!: () => void
+    setActiveUser.mockImplementationOnce(
+      async () =>
+        new Promise<AuthUserPayload>((resolve) => {
+          releaseStore = () => resolve(USER)
+        }),
+    )
+    registerAuthHandlers(deps)
+
+    // Act: fire the handler and look at the window before the store settles.
+    const pendingHandoff = getHandler('auth-set-user')(EVENT, USER)
+    await Promise.resolve()
+
+    // Assert: no handoff yet — closing the login window before the user is
+    // stored would bounce LiveEditor straight back to /login.
+    expect(windowManager.completeLogin).not.toHaveBeenCalled()
+    releaseStore()
+    await expect(pendingHandoff).resolves.toEqual(USER)
+    expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
+  })
+
   it('does not hand off and propagates the error when the user payload is rejected', async () => {
     // Arrange
     const windowManager = createWindowManagerStub()

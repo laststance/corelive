@@ -264,9 +264,14 @@ describe('ConfigManager legacy migrations', () => {
         behavior: { startup: 'corrupted', startOnLogin: true },
       })
 
-      // Act / Assert: the load completes and the retired key is still dropped.
-      expect(() => new ConfigManager()).not.toThrow()
-      const configManager = new ConfigManager()
+      // Act: one load only — a second instance would read the already-pruned
+      // file and prove nothing about the garbage sections.
+      let configManager!: ConfigManager
+      expect(() => {
+        configManager = new ConfigManager()
+      }).not.toThrow()
+
+      // Assert: the load completed and the retired key is still dropped.
       expect(configManager.getSection('behavior')).not.toHaveProperty('startup')
       expect(configManager.get('behavior.startOnLogin', false)).toBe(true)
     })

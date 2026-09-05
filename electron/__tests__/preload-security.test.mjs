@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { log } from '../../src/lib/logger.ts'
-import { sanitizeData } from '../preload-login.ts'
+import { sanitizeData } from '../preload-shared/sanitize-data.ts'
 
 // Mock Electron modules. Defined via vi.hoisted so the (hoisted) vi.mock factory
-// can reference them without a TDZ error — needed now that a real preload module
-// (preload-login) is imported through this mock for the sanitizer test.
+// can reference them without a TDZ error.
 const { mockIpcRenderer, mockContextBridge, exposedWorlds } = vi.hoisted(() => {
   const worlds = new Map()
 
@@ -193,7 +192,7 @@ describe('Preload Script Security Tests', () => {
     })
   })
 
-  describe('Prototype pollution hardening (login preload)', () => {
+  describe('Prototype pollution hardening (shared preload sanitizer)', () => {
     it('strips __proto__/constructor/prototype and returns a null-prototype object', () => {
       // Arrange: a payload carrying an own __proto__ key, as JSON.parse yields —
       // the attacker shape a naive sanitizer would copy into the result.

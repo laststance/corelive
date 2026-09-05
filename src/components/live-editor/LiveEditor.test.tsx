@@ -8,6 +8,10 @@ import type { ToastT } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  useAutoSelectDefaultCategory,
+  useSelectedCategory,
+} from '@/hooks/useSelectedCategory'
+import {
   LOCAL_COMPLETIONS_STORAGE_KEY,
   LOCAL_NOTE_STORAGE_KEY,
 } from '@/lib/live-editor/constants'
@@ -89,8 +93,12 @@ const { selectedCategoryRef, setSelectedCategory } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/hooks/useSelectedCategory', () => ({
-  useSelectedCategory: () => [selectedCategoryRef.current, setSelectedCategory],
-  // The web-only default pick has its own spec; here the selection is explicit.
+  useSelectedCategory: vi.fn(() => [
+    selectedCategoryRef.current,
+    setSelectedCategory,
+  ]),
+  // Both stubbed so specs control the selection explicitly; two specs in
+  // "note persistence during reload" swap the real hooks back in.
   useAutoSelectDefaultCategory: vi.fn(),
 }))
 
@@ -855,6 +863,14 @@ describe('LiveEditor note persistence during reload', () => {
     selectedCategoryRef.current = 1
   })
 
+  afterEach(() => {
+    // Two specs below install the real hooks; hand the stubs back and clear the
+    // shared slot the real selection wrote.
+    vi.mocked(useAutoSelectDefaultCategory).mockReset()
+    vi.mocked(useSelectedCategory).mockReset()
+    localStorage.removeItem('corelive-selected-category')
+  })
+
   it('does not read or write the shared category note before LiveEditor config finishes loading', async () => {
     // Arrange
     installLiveEditorAPI({
@@ -881,9 +897,17 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('keeps the panel on "pick a category" when the remembered id belongs to another account', async () => {
+  it('swaps a remembered id this account does not own for the default category without requesting the foreign note', async () => {
     // Arrange: the shared selection remembers an id this account's list does
-    // not contain (a shared device, or a category deleted elsewhere).
+    // not contain (a shared device, a category deleted elsewhere, or a
+    // Follow-OFF upgrader — plan D11). The REAL auto-select runs here so the
+    // whole upgrade path is pinned, not just the gate in front of it.
+    const actualHooks = await vi.importActual<{
+      useAutoSelectDefaultCategory: typeof useAutoSelectDefaultCategory
+    }>('@/hooks/useSelectedCategory')
+    vi.mocked(useAutoSelectDefaultCategory).mockImplementation(
+      actualHooks.useAutoSelectDefaultCategory,
+    )
     selectedCategoryRef.current = 99
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -895,23 +919,28 @@ describe('LiveEditor note persistence during reload', () => {
 
     // Act
     renderEditor()
-    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await screen.findByRole('textbox')
     await act(async () => {
       await Promise.resolve()
     })
 
-    // Assert: the confirmed-id gate holds in the panel too — no foreign note is
-    // loaded (or later overwritten), and the field asks for a pick instead.
-    expect(noteField).toBeDisabled()
-    expect(noteField).toHaveAttribute(
-      'placeholder',
-      'Pick a category to start writing',
-    )
-    expect(api.note.get).not.toHaveBeenCalled()
+    // Assert: the shared selection moves to the default category (id 1), and
+    // the confirmed-id gate never let the panel ask for note 99 in between.
+    expect(setSelectedCategory).toHaveBeenCalledWith(1)
+    expect(api.note.get).not.toHaveBeenCalledWith(99)
   })
 
   it('writes the picker choice to the shared category selection from the Electron panel', async () => {
-    // Arrange: the panel lists two categories; the shared selection is on the first.
+    // Arrange: the REAL shared selection backs this spec, so the pick has to
+    // land in the localStorage slot the sidebar and /write read. Two
+    // categories, nothing selected yet.
+    const actualHooks = await vi.importActual<{
+      useSelectedCategory: typeof useSelectedCategory
+    }>('@/hooks/useSelectedCategory')
+    vi.mocked(useSelectedCategory).mockImplementation(
+      actualHooks.useSelectedCategory,
+    )
+    localStorage.removeItem('corelive-selected-category')
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
       setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
@@ -927,9 +956,8 @@ describe('LiveEditor note persistence during reload', () => {
     await user.click(picker)
     await user.click(screen.getByRole('option', { name: 'Corelive' }))
 
-    // Assert: the choice goes to the ONE shared selection (what the sidebar and
-    // /write read), never a panel-private slot.
-    expect(setSelectedCategory).toHaveBeenCalledWith(12)
+    // Assert: the choice sits in the ONE shared slot, never a panel-private one.
+    expect(localStorage.getItem('corelive-selected-category')).toBe('12')
   })
 
   it('does not flush a clean loaded note when the active category changes', async () => {

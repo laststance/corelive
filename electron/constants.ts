@@ -106,6 +106,16 @@ export const LOGIN_WINDOW_WIDTH_PX = 300
 export const LOGIN_WINDOW_HEIGHT_PX = 400
 
 // ============================================================================
+// Persisted window geometry
+// ============================================================================
+
+/** Cap on a restored window width when its config carries no max of its own. */
+export const WINDOW_STATE_MAX_WIDTH_PX = 2000
+
+/** Cap on every restored window height; guards against absurd persisted geometry. */
+export const WINDOW_STATE_MAX_HEIGHT_PX = 1500
+
+// ============================================================================
 // Settings popover window
 // ============================================================================
 

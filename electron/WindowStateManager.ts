@@ -22,6 +22,10 @@ import {
 } from 'electron'
 
 import type { ConfigManager, AppConfig } from './ConfigManager'
+import {
+  WINDOW_STATE_MAX_HEIGHT_PX,
+  WINDOW_STATE_MAX_WIDTH_PX,
+} from './constants'
 import { log } from './logger'
 
 // ============================================================================
@@ -266,11 +270,11 @@ export class WindowStateManager {
       minWidth = 'minWidth' in config ? config.minWidth : 400
       minHeight = 'minHeight' in config ? config.minHeight : 300
       // No remaining window config carries a max width; keep the historical cap.
-      maxWidth = 2000
+      maxWidth = WINDOW_STATE_MAX_WIDTH_PX
       shouldRememberPosition = config.rememberPosition
     }
 
-    const maxHeight = 1500
+    const maxHeight = WINDOW_STATE_MAX_HEIGHT_PX
 
     if (typeof state.width === 'number' && state.width >= minWidth) {
       validatedState.width = Math.min(state.width, maxWidth)

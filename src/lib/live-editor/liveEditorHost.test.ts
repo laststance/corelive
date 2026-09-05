@@ -102,8 +102,12 @@ describe('LiveEditor host resolver', () => {
     // Arrange
     const host = getLiveEditorHost()
 
-    // Act / Assert: fully opaque and not pinned to every Space.
-    await expect(host.window.getOpacity()).resolves.toBe(1)
-    await expect(host.spaces.getVisibleOnAllWorkspaces()).resolves.toBe(false)
+    // Act
+    const opacity = host.window.getOpacity()
+    const visibleOnAllWorkspaces = host.spaces.getVisibleOnAllWorkspaces()
+
+    // Assert: fully opaque and not pinned to every Space.
+    await expect(opacity).resolves.toBe(1)
+    await expect(visibleOnAllWorkspaces).resolves.toBe(false)
   })
 })

@@ -835,7 +835,8 @@ function redactLiveEditorNotes(
 
 /**
  * Shortcut ids that stay bound while the app is unfocused — everything else is
- * contextual. Reported to the keybind Settings UI as `isGlobal`.
+ * contextual. Reported to the keybind Settings UI as `isGlobal`. Widened to
+ * `string[]` so `includes` accepts the plain-string ids `Object.entries` yields.
  */
 const GLOBAL_SHORTCUT_IDS: string[] = [...LIVE_EDITOR_SHORTCUT_IDS]
 

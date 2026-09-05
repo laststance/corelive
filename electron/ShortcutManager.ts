@@ -268,6 +268,7 @@ export class ShortcutManager {
   /**
    * Registers the app-level focus/blur listeners once; both resolve state via {@link syncContextualShortcuts}.
    * Called by {@link initialize} and {@link enable}; idempotent so neither call can double-bind.
+   * @returns Nothing; the listener is kept in `appFocusListener` for {@link cleanup}.
    * @example
    * shortcutManager.setupFocusListeners()
    */
@@ -285,6 +286,7 @@ export class ShortcutManager {
   /**
    * Binds contextual shortcuts while any CoreLive window is focused and releases them otherwise.
    * Runs on every app focus/blur event and once from {@link initialize} / {@link enable}; no-op while shortcuts are disabled.
+   * @returns Nothing; `registeredShortcuts` stays the only registration truth.
    * @example
    * shortcutManager.syncContextualShortcuts() // focused window → Cmd+N / Cmd+M bound
    */
@@ -877,6 +879,7 @@ export class ShortcutManager {
 
   /**
    * Opens the browser `/live-editor` (the only task-creation surface) on Cmd+N; fired by the contextual binding.
+   * @returns Nothing; failures are logged, never thrown into the shortcut callback.
    * @example
    * shortcutManager.handleNewTaskShortcut()
    */
@@ -900,6 +903,7 @@ export class ShortcutManager {
 
   /**
    * Minimizes whichever CoreLive window is focused on Cmd+M; fired by the contextual binding.
+   * @returns Nothing; a no-op when no CoreLive window has focus.
    * @example
    * shortcutManager.handleMinimizeWindow()
    */

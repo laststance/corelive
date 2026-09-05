@@ -1,5 +1,3 @@
-'use client'
-
 import { LoginShell } from '@/components/login-shell/LoginShell'
 
 /**

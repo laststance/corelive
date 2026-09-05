@@ -142,7 +142,7 @@ Beyond the web app, the macOS build adds native surfaces:
 
 - **LiveEditor** — a distraction-light freeform capture window
 - **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens
-- **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the Floating Navigator shortcuts, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
+- **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)

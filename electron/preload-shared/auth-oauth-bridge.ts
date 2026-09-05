@@ -9,9 +9,8 @@
  * single source of truth, consumed by both `preload.ts` and `preload-login.ts`
  * so the bridge never skews between windows.
  *
- * `sanitizeData` is dependency-injected rather than imported so each preload keeps
- * its own isolated sanitizer instance (the context-isolation boundary is
- * per-preload); the bridge logic itself stays DRY.
+ * Every renderer payload goes through the shared {@link sanitizeData} before it
+ * crosses IPC, so the login window is exactly as hardened as the settings window.
  *
  * @module electron/preload-shared/auth-oauth-bridge
  */
@@ -21,6 +20,8 @@ import type { IpcRendererEvent } from 'electron'
 
 import { typedInvoke } from '../ipc/typedInvoke'
 import { log } from '../logger'
+
+import { sanitizeData } from './sanitize-data'
 
 /** User data payload pushed from the renderer to the main process. */
 export interface ElectronUserData {
@@ -34,22 +35,15 @@ export interface OAuthCallbackData {
 }
 
 /**
- * Deep-trim sanitizer signature. Injected by each preload so the bridge reuses
- * the caller's already-isolated `sanitizeData` instead of importing a third copy.
- */
-export type SanitizeData = <T>(data: T) => T
-
-/**
  * Build the `auth` bridge — the renderer↔main auth-sync surface (Clerk user push,
  * logout, auth-state reads). Identical in every window; exposed wherever
  * `ElectronAuthProvider` needs to mirror sign-in state to the main process.
  *
- * @param sanitizeData - The host preload's deep-trim sanitizer.
  * @returns The `auth` object exposed at `window.electronAPI.auth`.
  * @example
- * contextBridge.exposeInMainWorld('electronAPI', { auth: createAuthBridge(sanitizeData) })
+ * contextBridge.exposeInMainWorld('electronAPI', { auth: createAuthBridge() })
  */
-export function createAuthBridge(sanitizeData: SanitizeData) {
+export function createAuthBridge() {
   return {
     /**
      * Get current user.
@@ -160,12 +154,11 @@ export function createAuthBridge(sanitizeData: SanitizeData) {
  * store/clear) so a panel can both START a flow and RECEIVE its ticket without a
  * main window in the loop.
  *
- * @param sanitizeData - The host preload's deep-trim sanitizer.
  * @returns The `oauth` object exposed at `window.electronAPI.oauth`.
  * @example
- * contextBridge.exposeInMainWorld('electronAPI', { oauth: createOAuthBridge(sanitizeData) })
+ * contextBridge.exposeInMainWorld('electronAPI', { oauth: createOAuthBridge() })
  */
-export function createOAuthBridge(sanitizeData: SanitizeData) {
+export function createOAuthBridge() {
   return {
     /**
      * Start OAuth flow in system browser.

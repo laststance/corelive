@@ -17,61 +17,6 @@ import {
   createOAuthBridge,
 } from './preload-shared/auth-oauth-bridge'
 
-/** Sanitized data type */
-type SanitizedValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | SanitizedValue[]
-  | { [key: string]: SanitizedValue }
-
-/**
- * Sanitize data to prevent injection attacks.
- *
- * @param data - Data to sanitize
- * @returns Sanitized data
- */
-export function sanitizeData<T>(data: T): T {
-  // Keys that could be used for prototype pollution attacks. Mirrors the main
-  // preload's hardening so the login bridge is not the weaker IPC boundary: it
-  // forwards renderer-controlled auth/OAuth payloads.
-  const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype']
-
-  if (typeof data === 'string') {
-    return data.trim() as T
-  }
-  if (typeof data === 'object' && data !== null) {
-    if (Array.isArray(data)) {
-      return data.map((item) => sanitizeData(item)) as T
-    }
-    // Deep clone and sanitize object properties
-    // Use null prototype to prevent prototype pollution attacks
-    const sanitized = Object.create(null) as Record<string, SanitizedValue>
-    for (const [key, value] of Object.entries(data)) {
-      // Block prototype pollution attacks
-      if (FORBIDDEN_KEYS.includes(key)) {
-        continue
-      }
-
-      if (typeof value === 'string') {
-        sanitized[key] = value.trim()
-      } else if (typeof value === 'number' || typeof value === 'boolean') {
-        sanitized[key] = value
-      } else if (value === null || value === undefined) {
-        sanitized[key] = value
-      } else if (Array.isArray(value)) {
-        sanitized[key] = value.map((item) => sanitizeData(item))
-      } else if (typeof value === 'object') {
-        sanitized[key] = sanitizeData(value)
-      }
-    }
-    return sanitized as T
-  }
-  return data
-}
-
 /**
  * Expose the auth + OAuth slice of `electronAPI` so the signed-out login window
  * is a self-contained native-OAuth front door.
@@ -89,6 +34,6 @@ export function sanitizeData<T>(data: T): T {
  * effects in the login window.
  */
 contextBridge.exposeInMainWorld('electronAPI', {
-  auth: createAuthBridge(sanitizeData),
-  oauth: createOAuthBridge(sanitizeData),
+  auth: createAuthBridge(),
+  oauth: createOAuthBridge(),
 })

@@ -26,6 +26,7 @@ export interface AuthHandlerDeps {
  * Registers the five `auth-*` IPC channels; `auth-set-user` also runs {@link WindowManager.completeLogin} for its sender.
  * Called once from `setupIPCHandlers` in main.ts.
  * @param deps - Accessors for the active user and the (possibly not yet built) WindowManager.
+ * @returns Nothing; the five channels are registered on `ipcMain` as a side effect.
  * @example
  * registerAuthHandlers({ getActiveUser: () => activeUser, setActiveUser, clearActiveUser, getWindowManager: () => windowManager })
  */

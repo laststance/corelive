@@ -33,6 +33,7 @@ import {
   createAuthBridge,
   createOAuthBridge,
 } from './preload-shared/auth-oauth-bridge'
+import { sanitizeData } from './preload-shared/sanitize-data'
 import type {
   ConfigSection,
   DeepLinkExamples,
@@ -60,16 +61,6 @@ import type {
  * here would needlessly widen the listener-management attack surface.
  */
 type AllowedChannelsMap = Record<IPCEventChannel, true>
-
-/** Sanitized data type */
-type SanitizedValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | SanitizedValue[]
-  | { [key: string]: SanitizedValue }
 
 /** Task item for tray menu */
 interface TrayTaskItem {
@@ -153,49 +144,6 @@ const ALLOWED_CHANNELS = {
  */
 function validateChannel(channel: string): boolean {
   return (ALLOWED_CHANNELS as Record<string, boolean>)[channel] === true
-}
-
-/**
- * Sanitize data to prevent injection attacks.
- *
- * @param data - Data to sanitize
- * @returns Sanitized data
- */
-function sanitizeData<T>(data: T): T {
-  // Keys that could be used for prototype pollution attacks
-  const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype']
-
-  if (typeof data === 'string') {
-    return data.trim() as T
-  }
-  if (typeof data === 'object' && data !== null) {
-    if (Array.isArray(data)) {
-      return data.map((item) => sanitizeData(item)) as T
-    }
-    // Deep clone and sanitize object properties
-    // Use null prototype to prevent prototype pollution attacks
-    const sanitized = Object.create(null) as Record<string, SanitizedValue>
-    for (const [key, value] of Object.entries(data)) {
-      // Block prototype pollution attacks
-      if (FORBIDDEN_KEYS.includes(key)) {
-        continue
-      }
-
-      if (typeof value === 'string') {
-        sanitized[key] = value.trim()
-      } else if (typeof value === 'number' || typeof value === 'boolean') {
-        sanitized[key] = value
-      } else if (value === null || value === undefined) {
-        sanitized[key] = value
-      } else if (Array.isArray(value)) {
-        sanitized[key] = value.map((item) => sanitizeData(item))
-      } else if (typeof value === 'object') {
-        sanitized[key] = sanitizeData(value)
-      }
-    }
-    return sanitized as T
-  }
-  return data
 }
 
 // ============================================================================
@@ -721,10 +669,10 @@ const electronAPI = {
   },
 
   // Authentication management (shared factory — single source for every window)
-  auth: createAuthBridge(sanitizeData),
+  auth: createAuthBridge(),
 
   // OAuth management (shared factory — full browser-based OAuth surface)
-  oauth: createOAuthBridge(sanitizeData),
+  oauth: createOAuthBridge(),
 
   // Menu management APIs
   menu: {

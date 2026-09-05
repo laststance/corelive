@@ -59,9 +59,7 @@ function exposeElectronAPI(api: Record<string, unknown>): void {
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
     writable: true,
-    // Partial test double for a wide preload global — only `oauth` truthiness is
-    // read by the capability hook, so the cast through `unknown` is intentional.
-    value: api as unknown as Window['electronAPI'],
+    value: api,
   })
 }
 

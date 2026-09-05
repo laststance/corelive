@@ -39,14 +39,13 @@ describe('ShortcutManager default shortcuts', () => {
     // Act
     const defaults = shortcutManager.getDefaultShortcuts()
 
-    // Assert: exactly the four surviving ids — a retired toggle creeping back
-    // into the defaults would re-register its key on every launch.
-    expect(defaults.toggleLiveEditor).toBe('Alt+Space')
-    expect(Object.keys(defaults).sort()).toEqual([
-      'minimize',
-      'newTask',
-      'toggleLiveEditor',
-      'toggleLiveEditorSecondary',
-    ])
+    // Assert: exactly the four surviving ids with their shipped keys — a retired
+    // toggle creeping back in would re-register its key on every launch.
+    expect(defaults).toEqual({
+      newTask: 'CommandOrControl+N',
+      minimize: 'CommandOrControl+M',
+      toggleLiveEditor: 'Alt+Space',
+      toggleLiveEditorSecondary: '',
+    })
   })
 })
