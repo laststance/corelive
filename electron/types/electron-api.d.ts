@@ -10,20 +10,14 @@
 
 import type {
   AuthUserPayload,
-  NotificationOptions,
-  NotificationSettingsState,
-  TrayIconState,
   OAuthProvider,
   OAuthResult,
   PendingSignInToken,
-  ShortcutDefinition,
   ConfigSection,
-  DeepLinkExamples,
   UpdaterStatus,
   IPCResponse,
   IPCEventChannel,
   IPCEventData,
-  NativeTapStatus,
 } from './ipc'
 
 /**
@@ -34,98 +28,6 @@ import type {
  * sensible defaults rather than throwing.
  */
 export interface ElectronAPI {
-  /**
-   * System integration APIs (tray, notifications).
-   */
-  system: {
-    /** Show native notification */
-    showNotification: (
-      title: string,
-      body: string,
-      options?: NotificationOptions,
-    ) => Promise<{ id: string } | null>
-    /** Update system tray menu with tasks */
-    updateTrayMenu: (
-      tasks: Array<{ id: string; title: string; completed?: boolean }>,
-    ) => Promise<void>
-    /** Set system tray tooltip */
-    setTrayTooltip: (text: string) => Promise<void>
-    /** Set system tray icon state */
-    setTrayIconState: (state: TrayIconState) => Promise<boolean>
-  }
-
-  /**
-   * Notification management.
-   */
-  notifications: {
-    /** Show custom notification */
-    show: (
-      title: string,
-      body: string,
-      options?: NotificationOptions,
-    ) => Promise<{ id: string } | null>
-    /** Get notification settings */
-    getSettings: () => Promise<NotificationSettingsState | null>
-    /** Update notification settings */
-    updateSettings: (
-      settings: Partial<NotificationSettingsState>,
-    ) => Promise<NotificationSettingsState | null>
-    /** @deprecated Use getSettings; retained for hosted-renderer version skew. */
-    getPreferences: () => Promise<NotificationSettingsState | null>
-    /** @deprecated Use updateSettings; retained for hosted-renderer version skew. */
-    updatePreferences: (
-      settings: Partial<NotificationSettingsState>,
-    ) => Promise<NotificationSettingsState | null>
-    /** Clear all active notifications */
-    clearAll: () => Promise<void>
-    /** Clear specific notification */
-    clear: (id: string) => Promise<void>
-    /** Check if notifications are enabled */
-    isEnabled: () => Promise<boolean>
-    /** Get active notification count */
-    getActiveCount: () => Promise<number>
-  }
-
-  /**
-   * Keyboard shortcut management.
-   */
-  shortcuts: {
-    /** Get all registered shortcuts */
-    getRegistered: () => Promise<ShortcutDefinition[]>
-    /** Get default shortcuts */
-    getDefaults: () => Promise<ShortcutDefinition[]>
-    /** Update shortcut accelerators in one batch (id → accelerator; `''` unbinds). */
-    update: (shortcuts: Record<string, string>) => Promise<boolean>
-    /** Register new shortcut */
-    register: (shortcut: ShortcutDefinition) => Promise<boolean>
-    /** Unregister shortcut */
-    unregister: (id: string) => Promise<boolean>
-    /** Check if shortcut is registered */
-    isRegistered: (id: string) => Promise<boolean>
-    /** Enable shortcut */
-    enable: (id: string) => Promise<boolean>
-    /** Disable shortcut */
-    disable: (id: string) => Promise<boolean>
-    /** Get shortcut statistics */
-    getStats: () => Promise<{
-      totalRegistered: number
-      isEnabled: boolean
-      platform: string
-      shortcuts: Record<string, string>
-    }>
-    /**
-     * Native key-tap freeze-safety status (#125) — `available` / `latchBlocked`
-     * / `active` so the renderer can show a "disabled after a failed start —
-     * re-enable" control when a prior arming was left unconfirmed.
-     */
-    getNativeTapStatus: () => Promise<NativeTapStatus>
-    /**
-     * Manually re-enable a latch-blocked native key-tap (#125): clears the
-     * stale-latch block and re-arms the tap, returning the post-action status.
-     */
-    reenableNativeTap: () => Promise<NativeTapStatus>
-  }
-
   /**
    * Authentication operations.
    */
@@ -164,14 +66,6 @@ export interface ElectronAPI {
     getPendingToken: () => Promise<PendingSignInToken | null>
     /** Clear pending sign-in token */
     clearPendingToken: () => Promise<void>
-  }
-
-  /**
-   * Menu operations.
-   */
-  menu: {
-    /** Trigger menu action */
-    triggerAction: (action: string) => Promise<void>
   }
 
   /**
@@ -248,21 +142,6 @@ export interface ElectronAPI {
   }
 
   /**
-   * Deep linking operations.
-   */
-  deepLink: {
-    /** Generate deep link URL */
-    generateUrl: (
-      action: string,
-      params?: Record<string, string>,
-    ) => Promise<string>
-    /** Get example deep link URLs */
-    getExamples: () => Promise<DeepLinkExamples | null>
-    /** Handle incoming deep link URL */
-    handleUrl: (url: string) => Promise<boolean>
-  }
-
-  /**
    * Auto-updater operations.
    */
   updater: {
@@ -279,22 +158,6 @@ export interface ElectronAPI {
         message?: string
       }) => void,
     ) => () => void
-  }
-
-  /**
-   * Performance monitoring.
-   */
-  performance: {
-    /** Get performance metrics */
-    getMetrics: () => Promise<{
-      memoryUsage: NodeJS.MemoryUsage
-      uptime: number
-      cpuUsage: NodeJS.CpuUsage
-    }>
-    /** Trigger memory cleanup */
-    triggerCleanup: () => Promise<{ freedMemory: number }>
-    /** Get startup time */
-    getStartupTime: () => Promise<number>
   }
 
   /**
@@ -403,12 +266,6 @@ export interface ElectronEnv {
   isElectron: true
   /** Platform identifier */
   platform: NodeJS.Platform
-  /** Runtime versions */
-  versions: {
-    node: string
-    chrome: string
-    electron: string
-  }
 }
 
 /**

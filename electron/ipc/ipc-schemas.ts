@@ -57,125 +57,18 @@ const rendererReadableConfigPathSchema = z
  *
  * @example
  *   // Void-arg channel
- *   'performance-get-metrics': z.tuple([]),
+ *   'app-version': z.tuple([]),
  *   // Single-arg channel
  *   'config-get': z.tuple([z.string()]),
  *   // Tuple-arg channel (multiple positional args)
  *   'config-set': z.tuple([z.string(), z.unknown()]),
  */
-const notificationActionSchema = z.strictObject({
-  type: z.literal('button'),
-  text: z.string(),
-})
-
-const notificationOptionsSchema = z.strictObject({
-  type: z.enum(['info', 'warning', 'error', 'success']).optional(),
-  silent: z.boolean().optional(),
-  tag: z.string().optional(),
-  urgency: z.enum(['low', 'normal', 'critical']).optional(),
-  timeoutMs: z.number().optional(),
-  icon: z.string().optional(),
-  actions: z.array(notificationActionSchema).optional(),
-})
-
-const notificationSettingsUpdateSchema = z.strictObject({
-  enabled: z.boolean().optional(),
-  taskCreated: z.boolean().optional(),
-  taskCompleted: z.boolean().optional(),
-  taskUpdated: z.boolean().optional(),
-  taskDeleted: z.boolean().optional(),
-  sound: z.boolean().optional(),
-  showInTray: z.boolean().optional(),
-  autoHide: z.boolean().optional(),
-  autoHideDelay: z.number().optional(),
-  position: z
-    .enum(['topRight', 'topLeft', 'bottomRight', 'bottomLeft'])
-    .optional(),
-})
-
 export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // App (all void-arg)
   // ──────────────────────────────────────────────────────────────────────────
   'app-version': z.tuple([]),
   'app-quit': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Deep Linking
-  // ──────────────────────────────────────────────────────────────────────────
-  'deep-link-generate': z.tuple([
-    z.string(),
-    z.record(z.string(), z.unknown()).optional(),
-  ]),
-  'deep-link-get-examples': z.tuple([]),
-  'deep-link-handle-url': z.tuple([z.string()]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Menu
-  // ──────────────────────────────────────────────────────────────────────────
-  'menu-action': z.tuple([z.string()]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // System Tray
-  // ──────────────────────────────────────────────────────────────────────────
-  'tray-show-notification': z.tuple([
-    z.string(),
-    z.string(),
-    notificationOptionsSchema.optional(),
-  ]),
-  'tray-update-menu': z.tuple([
-    z.array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        completed: z.boolean().optional(),
-      }),
-    ),
-  ]),
-  'tray-set-tooltip': z.tuple([z.string()]),
-  'tray-set-icon-state': z.tuple([
-    z.enum(['default', 'active', 'notification', 'disabled']),
-  ]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Notifications
-  // ──────────────────────────────────────────────────────────────────────────
-  'notification-show': z.tuple([
-    z.string(),
-    z.string(),
-    notificationOptionsSchema.optional(),
-  ]),
-  'notification-get-settings': z.tuple([]),
-  'notification-update-settings': z.tuple([notificationSettingsUpdateSchema]),
-  'notification-clear-all': z.tuple([]),
-  'notification-clear': z.tuple([z.string()]),
-  'notification-is-enabled': z.tuple([]),
-  'notification-get-active-count': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Shortcuts
-  // ──────────────────────────────────────────────────────────────────────────
-  'shortcuts-get-registered': z.tuple([]),
-  'shortcuts-get-defaults': z.tuple([]),
-  'shortcuts-update': z.tuple([z.record(z.string(), z.string())]),
-  'shortcuts-register': z.tuple([
-    z.object({
-      id: z.string(),
-      accelerator: z.string(),
-      description: z.string(),
-      enabled: z.boolean(),
-      isGlobal: z.boolean(),
-    }),
-  ]),
-  'shortcuts-unregister': z.tuple([z.string()]),
-  'shortcuts-is-registered': z.tuple([z.string()]),
-  'shortcuts-enable': z.tuple([]),
-  'shortcuts-disable': z.tuple([]),
-  'shortcuts-get-stats': z.tuple([]),
-  // #125 native key-tap freeze-safety: query the tap's health and the manual
-  // re-enable after a latch-blocked launch. Both take no args.
-  'shortcuts-get-native-tap-status': z.tuple([]),
-  'shortcuts-reenable-native-tap': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Configuration
@@ -261,17 +154,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'updater-get-status': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Performance (all void-arg)
-  // ──────────────────────────────────────────────────────────────────────────
-  'performance-get-metrics': z.tuple([]),
-  'performance-trigger-cleanup': z.tuple([]),
-  'performance-get-startup-time': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Settings
   // ──────────────────────────────────────────────────────────────────────────
-  'settings:open': z.tuple([]),
-  'settings:close': z.tuple([]),
   'settings:setHideAppIcon': z.tuple([z.boolean()]),
   'settings:setShowInMenuBar': z.tuple([z.boolean()]),
   'settings:setStartAtLogin': z.tuple([z.boolean()]),

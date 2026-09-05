@@ -66,3 +66,15 @@ None belong in that deletion PR; all four are verified against `86ef29e1`.
 **Effort:** M
 **Priority:** P3
 **Depends on:** a call on whether the year-in-review line counts as celebratory copy.
+
+### `ShortcutManager.reenableNativeTap()` has no caller left after the IPC contract narrowing
+
+**What:** `electron/ShortcutManager.ts`'s `reenableNativeTap()` had exactly one caller: the `shortcuts-reenable-native-tap` IPC handler in `main.ts`, which was deleted (along with the rest of the unwired `shortcuts-*` invoke namespace — the plan's own W3 audit never flagged these two methods). `getNativeTapStatus()` stays alive as `reenableNativeTap()`'s own internal call, but `reenableNativeTap()` itself is now only exercised by `ShortcutManager.nativeRouting.test.ts` calling the method directly, never through a real trigger path.
+
+**Why:** Found incidentally while narrowing the IPC contract (PR #178, W2) — fixing the two JSDoc comments that wrongly claimed IPC exposure surfaced the orphan. Deleting a public method of the #125 native-key-tap freeze-safety class is a more consequential, safety-adjacent change than IPC plumbing cleanup, so it was deliberately left out of that PR rather than folded in.
+
+**Context:** The renderer-side re-enable control this fed was already gone (unwired `useElectronShortcuts.ts`, deleted earlier in the same sweep). If a real re-enable UI never returns, this method and its test should go together; if one is planned, the IPC channel needs re-wiring instead.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** a call on whether the native-tap re-enable control ships.

@@ -41,8 +41,6 @@ describe('IPC contract', () => {
       const voidChannels: IPCChannel[] = [
         'app-version',
         'app-quit',
-        'performance-get-metrics',
-        'performance-trigger-cleanup',
         'auth-get-user',
         'auth-logout',
         'auth-is-authenticated',

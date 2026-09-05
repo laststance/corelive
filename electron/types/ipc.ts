@@ -9,14 +9,6 @@
 
 import type { IpcMainInvokeEvent } from 'electron'
 
-import type { LoadingStatus } from '../LazyLoadManager'
-import type { MemoryStatistics } from '../MemoryProfiler'
-import type { NativeTapStatus } from '../nativeShortcutEngine'
-// Re-export so the preload barrel (`./types/ipc`) stays the single type surface
-// the renderer bridge imports from — it never reaches into main-process modules.
-export type { NativeTapStatus } from '../nativeShortcutEngine'
-import type { PerformanceMetrics } from '../performance-config'
-
 // ============================================================================
 // Shared Types
 // ============================================================================
@@ -322,120 +314,6 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // System Tray
-  // ──────────────────────────────────────────────────────────────────────────
-  'tray-show-notification': {
-    request: [string, string, SerializableNotificationOptions?]
-    response: { id: string } | null
-  }
-  'tray-update-menu': {
-    request: [tasks: Array<{ id: string; title: string; completed?: boolean }>]
-    response: void
-  }
-  'tray-set-tooltip': {
-    request: string
-    response: void
-  }
-  'tray-set-icon-state': {
-    request: TrayIconState
-    response: boolean
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Menu
-  // ──────────────────────────────────────────────────────────────────────────
-  'menu-action': {
-    request: string
-    response: void
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Notifications
-  // ──────────────────────────────────────────────────────────────────────────
-  'notification-show': {
-    request: [string, string, SerializableNotificationOptions?]
-    response: { id: string } | null
-  }
-  'notification-get-settings': {
-    request: void
-    response: NotificationSettingsState | null
-  }
-  'notification-update-settings': {
-    request: Partial<NotificationSettingsState>
-    response: NotificationSettingsState | null
-  }
-  'notification-clear-all': {
-    request: void
-    response: void
-  }
-  'notification-clear': {
-    request: string
-    response: void
-  }
-  'notification-is-enabled': {
-    request: void
-    response: boolean
-  }
-  'notification-get-active-count': {
-    request: void
-    response: number
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Shortcuts
-  // ──────────────────────────────────────────────────────────────────────────
-  'shortcuts-get-registered': {
-    request: void
-    response: ShortcutDefinition[]
-  }
-  'shortcuts-get-defaults': {
-    request: void
-    response: ShortcutDefinition[]
-  }
-  'shortcuts-update': {
-    request: Record<string, string>
-    response: boolean
-  }
-  'shortcuts-register': {
-    request: ShortcutDefinition
-    response: boolean
-  }
-  'shortcuts-unregister': {
-    request: string
-    response: boolean
-  }
-  'shortcuts-is-registered': {
-    request: string
-    response: boolean
-  }
-  'shortcuts-enable': {
-    request: void
-    response: boolean
-  }
-  'shortcuts-disable': {
-    request: void
-    response: boolean
-  }
-  'shortcuts-get-stats': {
-    request: void
-    response: {
-      totalRegistered: number
-      isEnabled: boolean
-      platform: string
-      shortcuts: Record<string, string>
-    }
-  }
-  // #125 native key-tap freeze-safety: read tap health / manually re-enable.
-  'shortcuts-get-native-tap-status': {
-    request: void
-    response: NativeTapStatus
-  }
-  'shortcuts-reenable-native-tap': {
-    request: void
-    response: NativeTapStatus
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Configuration
   // ──────────────────────────────────────────────────────────────────────────
   'config-get': {
@@ -492,22 +370,6 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Deep Linking
-  // ──────────────────────────────────────────────────────────────────────────
-  'deep-link-generate': {
-    request: [action: string, params?: Record<string, unknown>]
-    response: string | null
-  }
-  'deep-link-get-examples': {
-    request: void
-    response: DeepLinkExamples | null
-  }
-  'deep-link-handle-url': {
-    request: string
-    response: boolean
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // App Operations
   // ──────────────────────────────────────────────────────────────────────────
   'app-version': {
@@ -536,39 +398,8 @@ export interface IPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Performance
-  // ──────────────────────────────────────────────────────────────────────────
-  'performance-get-metrics': {
-    request: void
-    response: {
-      optimizer: PerformanceMetrics
-      memory: MemoryStatistics | null
-      lazyLoad: LoadingStatus
-    }
-  }
-  'performance-trigger-cleanup': {
-    request: void
-    // Returns `true` once cleanup completes. Historical spec advertised
-    // `{ freedMemory: number }` but the implementation has always returned a boolean
-    // — aligned here so `typedHandle` can enforce the contract.
-    response: boolean
-  }
-  'performance-get-startup-time': {
-    request: void
-    response: number
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Settings window + per-user settings
   // ──────────────────────────────────────────────────────────────────────────
-  'settings:open': {
-    request: void
-    response: boolean
-  }
-  'settings:close': {
-    request: void
-    response: boolean
-  }
   /** macOS only: toggle dock visibility via `app.setActivationPolicy`. */
   'settings:setHideAppIcon': {
     request: boolean

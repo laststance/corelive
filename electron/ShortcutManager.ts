@@ -578,9 +578,10 @@ export class ShortcutManager {
 
   /**
    * Reports the native tap's health for the renderer's re-enable affordance
-   * (#125) — exposed over the `shortcuts-get-native-tap-status` IPC so the UI
-   * can show a "disabled after a failed start — re-enable" control when a prior
-   * arming was left unconfirmed.
+   * (#125) — was exposed over IPC so the UI could show a "disabled after a
+   * failed start — re-enable" control when a prior arming was left
+   * unconfirmed; the IPC channel is gone (no renderer caller), method kept
+   * for {@link reenableNativeTap}'s return value.
    * @returns `{ available, latchBlocked, active }` — engine health plus whether a
    *   lone-modifier binding is actually LIVE right now. `active` reads the engine's
    *   RUNTIME state (codex review), not registration: after a failed re-enable/
@@ -601,8 +602,8 @@ export class ShortcutManager {
    * Manual "re-enable" path after a latch-blocked launch (#125): clears the
    * engine's stale-latch block, then re-runs registration so the lone-modifier
    * binding re-arms the tap (a fresh arm overwrites the stale marker, which then
-   * clears after the stability window). Triggered by the
-   * `shortcuts-reenable-native-tap` IPC from the renderer's re-enable control.
+   * clears after the stability window). Was triggered by the renderer's
+   * re-enable control via IPC; that channel is gone (no renderer caller).
    * @returns the post-re-enable status so the caller can confirm the block cleared.
    * @example
    * reenableNativeTap() // => { available: true, latchBlocked: false }

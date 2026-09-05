@@ -4,11 +4,7 @@
 // than re-declaring the booleans here. This file is already a module (see the
 // `export type` lines at the bottom), so a top-level import is safe and does
 // not affect the `declare global` Window augmentation below.
-import type {
-  IPCResponse,
-  NativeTapStatus,
-  NotificationSettingsState,
-} from '@/electron/types/ipc'
+import type { IPCResponse } from '@/electron/types/ipc'
 
 interface ElectronAuthUser {
   /**
@@ -30,58 +26,6 @@ interface ElectronAPI {
   ) => () => void
   removeListener: (channel: string, callback: Function) => void
   removeAllListeners: (channel: string) => void
-
-  // System integration
-  system?: {
-    showNotification: (
-      title: string,
-      body: string,
-      options?: any,
-    ) => Promise<void>
-    updateTrayMenu: (tasks: any[]) => Promise<void>
-    setTrayTooltip: (text: string) => Promise<void>
-    setTrayIconState: (state: string) => Promise<boolean>
-  }
-
-  // Menu management
-  menu?: {
-    triggerAction: (action: string) => Promise<void>
-  }
-
-  // Notifications
-  notifications?: {
-    show: (title: string, body: string, options?: any) => Promise<void>
-    getSettings?: () => Promise<NotificationSettingsState | null>
-    updateSettings?: (
-      settings: Partial<NotificationSettingsState>,
-    ) => Promise<NotificationSettingsState | null>
-    /** @deprecated Use getSettings; retained for installed-app version skew. */
-    getPreferences?: () => Promise<NotificationSettingsState | null>
-    /** @deprecated Use updateSettings; retained for installed-app version skew. */
-    updatePreferences?: (
-      settings: Partial<NotificationSettingsState>,
-    ) => Promise<NotificationSettingsState | null>
-    clearAll: () => Promise<void>
-    clear: (tag: string) => Promise<void>
-    isEnabled: () => Promise<boolean>
-    getActiveCount: () => Promise<number>
-  }
-
-  // Keyboard shortcuts
-  shortcuts?: {
-    getRegistered: () => Promise<any>
-    getDefaults: () => Promise<any>
-    update: (shortcuts: Record<string, string>) => Promise<boolean>
-    register: (accelerator: string, id: string) => Promise<boolean>
-    unregister: (id: string) => Promise<boolean>
-    isRegistered: (accelerator: string) => Promise<boolean>
-    enable: () => Promise<boolean>
-    disable: () => Promise<boolean>
-    getStats: () => Promise<any>
-    // Native key-tap freeze-safety (#125) — status + manual re-enable.
-    getNativeTapStatus: () => Promise<NativeTapStatus>
-    reenableNativeTap: () => Promise<NativeTapStatus>
-  }
 
   // Authentication
   auth?: {
@@ -162,16 +106,6 @@ interface ElectronAPI {
     quit: () => Promise<void>
   }
 
-  // Deep linking
-  deepLink?: {
-    generateUrl: (
-      action: string,
-      params?: Record<string, any>,
-    ) => Promise<string | null>
-    getExamples: () => Promise<Record<string, string>>
-    handleUrl: (url: string) => Promise<boolean>
-  }
-
   /**
    * Electron-specific settings management.
    * Controls app behavior like dock visibility and login items.
@@ -216,12 +150,6 @@ declare global {
     electronEnv?: {
       isElectron: boolean
       platform: string
-      arch: string
-      versions: {
-        electron: string
-        node: string
-        chrome: string
-      }
     }
   }
 }
