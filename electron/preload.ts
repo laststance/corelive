@@ -35,10 +35,6 @@ import {
 import { sanitizeData } from './preload-shared/sanitize-data'
 import type { ConfigSection, IPCResponse } from './types/ipc'
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
 // `ElectronUserData` / `OAuthCallbackData` now live alongside the bridge
 // factories in `./preload-shared/auth-oauth-bridge` (single source for every
 // window's auth/oauth surface).
