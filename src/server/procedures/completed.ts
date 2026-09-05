@@ -543,7 +543,7 @@ async function resolveImportCategoryId(userId: number): Promise<number> {
 /**
  * Merges a device's signed-out keeps into the account exactly once. Runs from
  * the root-level merge provider right after sign-in, so a visitor who wrote at
- * `/write` before making an account keeps every ember they earned.
+ * `/write` before making an account keeps everything they earned.
  *
  * Idempotency is the `ImportBatch` primary key, namespaced `"<userId>:<batchId>"`
  * so two accounts can never collide on one client-generated id. The insert and

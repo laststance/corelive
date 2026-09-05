@@ -4,7 +4,7 @@
 
 ### Playwright web E2E for the signed-out LiveEditor loop (when a second person actually uses it)
 
-**What:** One Clerk-free Playwright spec: land on the public LiveEditor page in a fresh profile → editor focused → write → Cmd+Enter → Today Ember updates → reload keeps the count.
+**What:** One Clerk-free Playwright spec: land on the public LiveEditor page in a fresh profile → editor focused → write → Cmd+Enter → the line clears and the Kept toast offers Undo → reload keeps the device-local record (`localStorage`).
 
 **Why:** The recorded QA gate (eng review D11, 2026-09-02) only catches regressions at the next QA run. Once a named second person uses the page, their entry point deserves a per-PR guard.
 
@@ -12,4 +12,4 @@
 
 **Effort:** M
 **Priority:** P3
-**Depends on:** PR-1 and PR-2 merged; a named second user.
+**Depends on:** PR-1 merged; a named second user.

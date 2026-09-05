@@ -7,7 +7,7 @@ import {
 
 /**
  * One device-local keep. `mergedBatchId` is stamped by the future sign-in merge
- * so the ember can exclude items that already landed in the account.
+ * so the sign-in merge can skip items that already landed in the account.
  * @example
  * { id: '5b1c…', title: 'buy milk', completedAt: '2026-09-04T09:12:00.000Z' }
  */
