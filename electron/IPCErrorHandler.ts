@@ -344,13 +344,6 @@ export class IPCErrorHandler {
 
     // Return appropriate fallback based on operation type
     switch (operationType) {
-      case 'getTodos':
-        return []
-      case 'createTodo':
-      case 'updateTodo':
-        return null
-      case 'deleteTodo':
-        return { success: false, error: error.message }
       case 'getConfig':
         return fallbackValue
       case 'notification':

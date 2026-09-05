@@ -1423,15 +1423,10 @@ if (!gotTheLock) {
           return
         }
         // Windows exist but no *real* one is visible — e.g. a panel-only startup
-        // whose panel was later closed, or every panel hidden to the tray.
-        // The startup pill is excluded: it is shown via `showInactive()` so
-        // `isVisible()` reports true, but it carries no surface the user can act
-        // on, so counting it would wrongly suppress the dock-click reveal. A dock
+        // whose panel was later closed, or every panel hidden to the tray. A dock
         // click must always surface something, so surface LiveEditor (or the
-        // login window when signed out) via restoreFromTray.
-        //
-        // The startup pill is retired with the main window (T18), so any visible
-        // window now counts as a real one.
+        // login window when signed out) via restoreFromTray. The startup pill is
+        // retired with the main window (T18), so any visible window counts as real.
         const isAnyRealWindowVisible = allWindows.some((window) =>
           window.isVisible(),
         )

@@ -648,14 +648,6 @@ export class WindowStateManager {
     }
 
     try {
-      if (state.isMaximized && windowType === 'main') {
-        browserWindow.maximize()
-      }
-
-      if (state.isFullScreen && windowType === 'main') {
-        browserWindow.setFullScreen(true)
-      }
-
       // Visibility is owned by WindowManager's explicit show paths. Restoring
       // it here would let stale window-state.json bypass the signed-out auth
       // gate for the LiveEditor panel.
