@@ -322,12 +322,30 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('surfaces the Floating front door (restoreFromTray) when a deep link arrives', () => {
-      // T18: the main window is retired, so every deep-link "show the app" path
-      // delegates to restoreFromTray — the Floating navigator is the front door.
+    it('surfaces LiveEditor (restoreFromTray) when a deep link arrives', () => {
+      // The main window is retired, so every deep-link "show the app" path
+      // delegates to restoreFromTray — LiveEditor (or the login window while
+      // signed out) is the front door.
       deepLinkManager.ensureWindowVisible()
 
       expect(mockWindowManager.restoreFromTray).toHaveBeenCalled()
+    })
+
+    it('does not surface LiveEditor before the OAuth callback ticket is delivered', async () => {
+      // Arrange: the OAuth deep link arrives while the app is still signed out.
+      // Surfacing LiveEditor here would load the protected route with the
+      // pre-login session; OAuthManager shows the initiating login window
+      // itself once the ticket validates.
+
+      // Act
+      await deepLinkManager.handleOAuthCallback(
+        '/callback',
+        { code: 'abc', state: 'xyz' },
+        'corelive://oauth/callback?code=abc&state=xyz',
+      )
+
+      // Assert
+      expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled()
     })
   })
 

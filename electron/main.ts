@@ -16,14 +16,7 @@
  * @module electron/main
  */
 
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  session,
-  powerMonitor,
-  screen,
-} from 'electron'
+import { app, BrowserWindow, dialog, session, powerMonitor } from 'electron'
 import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
@@ -34,8 +27,8 @@ import {
 } from './constants'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
 import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
+import { registerAuthHandlers } from './ipc/registerAuthHandlers'
 import { typedHandle } from './ipc/typedHandle'
-import { typedSend } from './ipc/typedSend'
 import { IPCErrorHandler } from './IPCErrorHandler'
 import { lazyLoadManager } from './LazyLoadManager'
 import { getLiveEditorNote, setLiveEditorNote } from './LiveEditorNoteStore'
@@ -51,11 +44,7 @@ import type {
   SystemTrayManager as SystemTrayManagerType,
   TaskItem,
 } from './SystemTrayManager'
-import {
-  DEFAULT_STARTUP_WINDOW_CONFIG,
-  type AuthUserPayload,
-  type WindowBounds,
-} from './types/ipc'
+import type { AuthUserPayload } from './types/ipc'
 import { createUiohookShortcutEngine } from './uiohookEngine'
 import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
@@ -68,11 +57,7 @@ import {
   resolveHideAppIcon,
 } from './utils/resolveHideAppIcon'
 import { WindowManager } from './WindowManager'
-import {
-  WindowStateManager,
-  type WindowType,
-  type SnapEdge,
-} from './WindowStateManager'
+import { WindowStateManager } from './WindowStateManager'
 
 // ============================================================================
 // Type Definitions
@@ -84,20 +69,6 @@ import {
 interface OptimizationConfig {
   enableMemoryMonitoring: boolean
   [key: string]: unknown
-}
-
-/**
- * Validates and converts a string to WindowType.
- * Returns 'main' as default if the input is invalid.
- *
- * @param value - Input value to validate
- * @returns Valid WindowType
- */
-function toWindowType(value: unknown): WindowType {
-  if (value === 'main' || value === 'floating' || value === 'liveEditor') {
-    return value
-  }
-  return 'main'
 }
 
 // ============================================================================
@@ -356,23 +327,6 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
 }
 
 /**
- * Ensures WindowStateManager is available before use.
- *
- * Window state persistence is critical for user experience - users expect
- * windows to appear where they left them. This helper prevents crashes
- * if state management is accessed before initialization.
- *
- * @returns The initialized window state manager
- * @throws Error if manager hasn't been initialized yet
- */
-function ensureWindowStateManagerInstance(): WindowStateManager {
-  if (!windowStateManager) {
-    throw new Error('Window state manager not initialized')
-  }
-  return windowStateManager
-}
-
-/**
  * Ensures the NotificationManager is initialized when needed.
  * Uses a Promise tracker to prevent race conditions from concurrent calls.
  *
@@ -414,144 +368,6 @@ async function ensureNotificationManager(): Promise<NotificationManagerType> {
   })()
 
   return notificationManagerPromise
-}
-
-/**
- * Retrieves a BrowserWindow instance by type, creating it if necessary.
- *
- * Electron apps can have multiple windows with different purposes:
- * - Main window: Primary application interface
- * - Floating window: Always-on-top utility window for quick access
- *
- * @param windowType - Type of window to retrieve ('main' or 'floating')
- * @returns The requested window or null if unavailable
- */
-function getBrowserWindowForType(
-  windowType: string = 'main',
-): BrowserWindow | null {
-  // Can't get windows if manager isn't initialized
-  if (!windowManager) {
-    return null
-  }
-
-  // Handle LiveEditor panel — never auto-create from a state operation; the
-  // panel is created on demand by user gesture (menu/tray/shortcut).
-  if (windowType === 'liveEditor') {
-    return windowManager.hasLiveEditorWindow?.()
-      ? (windowManager.getLiveEditorWindow?.() ?? null)
-      : null
-  }
-
-  // Handle floating navigator window
-  if (windowType === 'floating') {
-    // Create floating window on-demand if it doesn't exist
-    if (!windowManager.hasFloatingNavigator()) {
-      try {
-        windowManager.createFloatingNavigator()
-      } catch (error) {
-        // Non-fatal: floating window is optional feature
-        log.warn(
-          'Failed to create floating navigator window:',
-          error instanceof Error ? error.message : String(error),
-        )
-      }
-    }
-    // Safe property access in case getter doesn't exist
-    return windowManager.getFloatingNavigator
-      ? windowManager.getFloatingNavigator()
-      : null
-  }
-
-  // The main window is retired (T18); a 'main' request resolves to nothing.
-  return null
-}
-
-/**
- * Synchronizes saved window state (position, size, etc.) to actual BrowserWindow.
- *
- * This function is crucial for user experience continuity. When users reposition
- * or resize windows, we save that state and restore it on next app launch.
- *
- * Why is this important?
- * - Users often have specific screen layouts (multi-monitor setups)
- * - Restoring window positions saves users time reconfiguring
- * - Provides a native app feel vs web apps that always start fresh
- *
- * @param windowType - Type of window to sync ('main' or 'floating')
- */
-function syncWindowBoundsToBrowserWindow(
-  windowType: WindowType = 'main',
-): void {
-  try {
-    const stateManager = ensureWindowStateManagerInstance()
-    const state = stateManager.getWindowState(windowType)
-    const targetWindow = getBrowserWindowForType(windowType)
-
-    // Skip if state is missing or window is destroyed
-    if (!state || !targetWindow || targetWindow.isDestroyed?.()) {
-      return
-    }
-
-    const existingBounds = targetWindow.getBounds()
-    const bounds: WindowBounds = {
-      x:
-        typeof state.x === 'number'
-          ? state.x
-          : typeof existingBounds.x === 'number'
-            ? existingBounds.x
-            : 0,
-      y:
-        typeof state.y === 'number'
-          ? state.y
-          : typeof existingBounds.y === 'number'
-            ? existingBounds.y
-            : 0,
-      width:
-        typeof state.width === 'number'
-          ? state.width
-          : typeof existingBounds.width === 'number'
-            ? existingBounds.width
-            : 800,
-      height:
-        typeof state.height === 'number'
-          ? state.height
-          : typeof existingBounds.height === 'number'
-            ? existingBounds.height
-            : 600,
-    }
-
-    if (
-      typeof bounds.width === 'number' &&
-      typeof bounds.height === 'number' &&
-      typeof bounds.x === 'number' &&
-      typeof bounds.y === 'number'
-    ) {
-      targetWindow.setBounds(bounds)
-    }
-
-    if (windowType === 'floating' && typeof state.isAlwaysOnTop === 'boolean') {
-      targetWindow.setAlwaysOnTop(state.isAlwaysOnTop)
-    }
-
-    if (windowType === 'main') {
-      if (typeof state.isFullScreen === 'boolean') {
-        targetWindow.setFullScreen(state.isFullScreen)
-      }
-
-      if (typeof state.isMaximized === 'boolean') {
-        if (state.isMaximized && !targetWindow.isMaximized()) {
-          targetWindow.maximize()
-        } else if (!state.isMaximized && targetWindow.isMaximized()) {
-          targetWindow.unmaximize()
-        }
-      }
-    }
-  } catch (error) {
-    log.warn(
-      'Failed to synchronize window bounds:',
-      error instanceof Error ? error.message : String(error),
-    )
-  }
 }
 
 /**
@@ -796,16 +612,13 @@ async function loadSystemIntegrationStack(): Promise<void> {
     powerMonitor.on('unlock-screen', reviveNativeTap)
   }
 
-  // Feed the tray live, display-only hotkeys for the two toggle items it shows.
+  // Feed the tray the live, display-only hotkey for the LiveEditor toggle item.
   // ShortcutManager is constructed AFTER SystemTrayManager, so this is a setter
-  // injection rather than a constructor argument. Only the two displayed keys
-  // are exposed, and only when they hold a real accelerator string.
+  // injection rather than a constructor argument. Only the displayed key is
+  // exposed, and only when it holds a real accelerator string.
   systemTrayManager?.setShortcutAcceleratorProvider(() => {
     const current = shortcutManager?.getCurrentShortcuts() ?? {}
     const accelerators: Record<string, string> = {}
-    if (typeof current.toggleFloatingNavigator === 'string') {
-      accelerators.toggleFloatingNavigator = current.toggleFloatingNavigator
-    }
     if (typeof current.toggleLiveEditor === 'string') {
       accelerators.toggleLiveEditor = current.toggleLiveEditor
     }
@@ -888,8 +701,6 @@ async function createWindow(): Promise<void> {
     // Development uses the local Next.js server; packaged builds use the web app.
     const serverUrl = isDev ? 'http://localhost:4991' : 'https://corelive.app'
 
-    // Note: APIBridge no longer needed - Floating Navigator uses oRPC via web
-
     // Initialize window manager with server URL and managers
     windowManager = new WindowManager(
       serverUrl,
@@ -899,25 +710,12 @@ async function createWindow(): Promise<void> {
 
     // The Electron main window is retired (T18). CoreLive is now a thin native
     // companion: the full task app runs browser-only at corelive.app, and
-    // Electron opens only the auxiliary panels the user chose at launch. Each
-    // panel is created hidden and surfaces once it resolves — a signed-out panel
-    // shows the OAuth front door (WindowManager nav-watch), a load-failed one
-    // self-heals via the DT7 recovery dialog.
-    const startupConfig = configManager.getSection('behavior').startup
-    // Count the panels actually opened so the metric reflects the real 0/1/2,
-    // not a flat +1: a bare `++` under-reported the both-panels case and
-    // over-reported the none-open case (both toggles can be off mid-session).
-    let startupPanelsOpened = 0
-    if (startupConfig.showFloating) {
-      windowManager.openStartupPanel('floating')
-      startupPanelsOpened += 1
-    }
-    if (startupConfig.showLiveEditor) {
-      windowManager.openStartupPanel('liveEditor')
-      startupPanelsOpened += 1
-    }
-
-    performanceOptimizer.startupMetrics.windowsCreated += startupPanelsOpened
+    // Electron always opens the LiveEditor panel at launch. It is created hidden
+    // and surfaces once it resolves — signed out, it hands over to the login
+    // window (WindowManager nav-watch); a load failure self-heals via the panel
+    // recovery dialog.
+    windowManager.openStartupPanel()
+    performanceOptimizer.startupMetrics.windowsCreated += 1
 
     return { serverUrl }
   }
@@ -963,7 +761,7 @@ async function createWindow(): Promise<void> {
       await loadDeepLinkStack()
 
       // No main-window close-to-tray wiring after T18 — the surviving panels own
-      // their own close behavior (Floating/LiveEditor via floating-window-* IPC).
+      // their own close behavior (LiveEditor via live-editor-window-* IPC).
     } catch (error) {
       log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
@@ -1039,10 +837,7 @@ function redactLiveEditorNotes(
  * Shortcut ids that stay bound while the app is unfocused — everything else is
  * contextual. Reported to the keybind Settings UI as `isGlobal`.
  */
-const GLOBAL_SHORTCUT_IDS: string[] = [
-  'toggleFloatingNavigator',
-  ...LIVE_EDITOR_SHORTCUT_IDS,
-]
+const GLOBAL_SHORTCUT_IDS: string[] = [...LIVE_EDITOR_SHORTCUT_IDS]
 
 function setupIPCHandlers(): void {
   // Register IPC channels exactly once per process. A macOS re-launch via the
@@ -1068,129 +863,20 @@ function setupIPCHandlers(): void {
     app.quit()
   })
 
-  // Note: Todo IPC handlers removed - Floating Navigator uses oRPC via web app
-
-  // Window management IPC handlers (Zod-validated). The retired main window's
-  // minimize/close handlers were removed with T18; the surviving panels use the
-  // floating-window-* channels below.
-  typedHandle('window-toggle-floating-navigator', () => {
-    if (!windowManager) {
-      throw new Error('Window manager not initialized')
-    }
-    windowManager.toggleFloatingNavigator()
-    return true
-  })
-
-  typedHandle('window-state-get', (_event, windowType) => {
-    const type = toWindowType(windowType)
-    const stateManager = ensureWindowStateManagerInstance()
-    return stateManager.getWindowState(type)
-  })
-
-  typedHandle('window-state-set', (_event, windowType, properties) => {
-    const type = toWindowType(windowType)
-    const stateManager = ensureWindowStateManagerInstance()
-    stateManager.setWindowState(type, properties)
-    syncWindowBoundsToBrowserWindow(type)
-    return stateManager.getWindowState(type)
-  })
-
-  typedHandle('window-state-reset', (_event, windowType) => {
-    const type = toWindowType(windowType)
-    const stateManager = ensureWindowStateManagerInstance()
-    stateManager.resetWindowState(type)
-    syncWindowBoundsToBrowserWindow(type)
-    return stateManager.getWindowState(type)
-  })
-
-  typedHandle('window-state-get-stats', () => {
-    const stateManager = ensureWindowStateManagerInstance()
-    return stateManager.getStats()
-  })
-
-  typedHandle(
-    'window-state-move-to-display',
-    (_event, windowType, displayId) => {
-      const type = toWindowType(windowType)
-      const stateManager = ensureWindowStateManagerInstance()
-      const targetWindow = getBrowserWindowForType(type)
-      return stateManager.moveWindowToDisplay(type, displayId, targetWindow)
-    },
-  )
-
-  typedHandle('window-state-snap-to-edge', (_event, windowType, edge) => {
-    const type = toWindowType(windowType)
-    const stateManager = ensureWindowStateManagerInstance()
-    const targetWindow = getBrowserWindowForType(type)
-    return stateManager.snapWindowToEdge(type, edge as SnapEdge, targetWindow)
-  })
-
-  typedHandle('window-state-get-display', (_event, windowType) => {
-    const type = toWindowType(windowType)
-    const stateManager = ensureWindowStateManagerInstance()
-    const display = stateManager.getWindowDisplay(type)
-    if (!display) return null
-    return {
-      id: display.id,
-      label: display.label || `Display ${display.id}`,
-      bounds: display.bounds,
-      workArea: display.workArea,
-      scaleFactor: display.scaleFactor,
-      rotation: display.rotation,
-      touchSupport: display.touchSupport,
-      monochrome: display.monochrome,
-      accelerometerSupport: display.accelerometerSupport,
-      colorSpace: display.colorSpace,
-      colorDepth: display.colorDepth,
-      depthPerComponent: display.depthPerComponent,
-      isPrimary: display.id === screen.getPrimaryDisplay().id,
-    }
-  })
-
-  typedHandle('window-state-get-all-displays', () => {
-    const stateManager = ensureWindowStateManagerInstance()
-    return stateManager.getAllDisplays()
-  })
-
-  // System tray IPC handlers
-  typedHandle('window-show-floating-navigator', () => {
-    if (windowManager) {
-      windowManager.showFloatingNavigator()
-    }
-  })
-
-  typedHandle('window-hide-floating-navigator', () => {
-    if (windowManager) {
-      windowManager.hideFloatingNavigator()
-    }
-  })
-
-  typedHandle('floating-window-get-visible-on-all-workspaces', () => {
+  // Panel settings (Zod-validated). Setters persist config and apply to the
+  // live window inside WindowManager, so these handlers only delegate.
+  typedHandle('live-editor-get-visible-on-all-workspaces', () => {
     if (!windowManager) return false
-    return windowManager.getFloatingPanelsVisibleOnAllWorkspaces()
+    return windowManager.getLiveEditorVisibleOnAllWorkspaces()
   })
 
   typedHandle(
-    'floating-window-set-visible-on-all-workspaces',
+    'live-editor-set-visible-on-all-workspaces',
     (_event, enabled) => {
       if (!windowManager) return false
-      return windowManager.setFloatingPanelsVisibleOnAllWorkspaces(enabled)
+      return windowManager.setLiveEditorVisibleOnAllWorkspaces(enabled)
     },
   )
-
-  // Always-on-top setting (persisted Settings toggles, per window). The
-  // floating setter writes config + window-state + the live window atomically
-  // inside WindowManager — so relaunch honors it — which is why these handlers
-  // only delegate and never touch WindowStateManager directly.
-  typedHandle('floating-window-get-always-on-top', () => {
-    if (!windowManager) return false
-    return windowManager.getFloatingNavigatorAlwaysOnTop()
-  })
-
-  typedHandle('floating-window-set-always-on-top', (_event, enabled) => {
-    if (!windowManager) return false
-    return windowManager.setFloatingNavigatorAlwaysOnTop(enabled)
-  })
 
   typedHandle('live-editor-window-get-always-on-top', () => {
     if (!windowManager) return false
@@ -1202,115 +888,13 @@ function setupIPCHandlers(): void {
     return windowManager.setLiveEditorAlwaysOnTop(enabled)
   })
 
-  // Floating window control IPC handlers (Zod-validated)
-  typedHandle('floating-window-close', () => {
-    try {
-      if (windowManager && windowManager.hasFloatingNavigator()) {
-        const floatingWindow = windowManager.getFloatingNavigator()
-        if (floatingWindow && !floatingWindow.isDestroyed()) {
-          floatingWindow.close()
-        }
-      }
-      return true
-    } catch (error) {
-      log.error('Failed to close floating window:', error)
-      return false
-    }
-  })
-
-  typedHandle('floating-window-minimize', () => {
-    try {
-      if (windowManager && windowManager.hasFloatingNavigator()) {
-        const floatingWindow = windowManager.getFloatingNavigator()
-        if (floatingWindow && !floatingWindow.isDestroyed()) {
-          floatingWindow.minimize()
-        }
-      }
-      return true
-    } catch (error) {
-      log.error('Failed to minimize floating window:', error)
-      return false
-    }
-  })
-
-  typedHandle('floating-window-toggle-always-on-top', () => {
-    try {
-      if (windowManager && windowManager.hasFloatingNavigator()) {
-        // Toggle through the persisting setter (not a bare live-window flip) so
-        // the in-window pin button writes config + window-state + the live
-        // window, exactly like the Settings toggle. Floating isn't saved on
-        // close (only on move/resize), so a bare flip here would be lost on the
-        // next relaunch — contradicting the "survives relaunch" guarantee.
-        const next = !windowManager.getFloatingNavigatorAlwaysOnTop()
-        return windowManager.setFloatingNavigatorAlwaysOnTop(next)
-      }
-      return false
-    } catch (error) {
-      log.error('Failed to toggle always on top:', error)
-      return false
-    }
-  })
-
-  typedHandle('floating-window-get-bounds', () => {
-    try {
-      if (windowManager && windowManager.hasFloatingNavigator()) {
-        const floatingWindow = windowManager.getFloatingNavigator()
-        if (floatingWindow && !floatingWindow.isDestroyed()) {
-          return floatingWindow.getBounds()
-        }
-      }
-      return null
-    } catch (error) {
-      log.error('Failed to get floating window bounds:', error)
-      return null
-    }
-  })
-
-  typedHandle('floating-window-set-bounds', (_event, bounds) => {
-    try {
-      if (windowManager && windowManager.hasFloatingNavigator()) {
-        const floatingWindow = windowManager.getFloatingNavigator()
-        if (floatingWindow && !floatingWindow.isDestroyed()) {
-          floatingWindow.setBounds(bounds)
-        }
-      }
-      return true
-    } catch (error) {
-      log.error('Failed to set floating window bounds:', error)
-      return false
-    }
-  })
-
-  typedHandle('floating-window-is-always-on-top', () => {
-    try {
-      if (windowManager && windowManager.hasFloatingNavigator()) {
-        const floatingWindow = windowManager.getFloatingNavigator()
-        if (floatingWindow && !floatingWindow.isDestroyed()) {
-          return floatingWindow.isAlwaysOnTop()
-        }
-      }
-      return false
-    } catch (error) {
-      log.error('Failed to check always on top status:', error)
-      return false
-    }
-  })
-
   // ────────────────────────────────────────────────────────────────────────
   // LiveEditor Window IPC handlers
   //
   // Why a separate block: LiveEditor is a frameless transparent panel with
-  // its own preload; window/note/sync/category channels live together so the
-  // contract between preload-live-editor.ts and main.ts is easy to audit.
+  // its own preload; window/note channels live together so the contract
+  // between preload-live-editor.ts and main.ts is easy to audit.
   // ────────────────────────────────────────────────────────────────────────
-  typedHandle('window-toggle-live-editor', () => {
-    if (!windowManager) {
-      throw new Error('Window manager not initialized')
-    }
-    windowManager.toggleLiveEditor()
-    return true
-  })
-
   typedHandle('live-editor-window-toggle', () => {
     if (!windowManager) return false
     windowManager.toggleLiveEditor()
@@ -1379,18 +963,6 @@ function setupIPCHandlers(): void {
     return true
   })
 
-  // Sync mode (mirror FloatingNav category selection).
-  typedHandle('live-editor-config-get-sync', () => {
-    if (!configManager) return true
-    return configManager.get<boolean>('liveEditor.syncMode', true) ?? true
-  })
-
-  typedHandle('live-editor-config-set-sync', (_event, enabled) => {
-    if (!configManager) return false
-    configManager.set('liveEditor.syncMode', enabled)
-    return true
-  })
-
   /**
    * Rebind ONE of the two LiveEditor toggle slots — the shared body behind both
    * set-shortcut handlers, so the cross-slot duplicate guard can't be
@@ -1453,8 +1025,8 @@ function setupIPCHandlers(): void {
 
   typedHandle('live-editor-config-get-shortcut', () => {
     if (!configManager) return ''
-    // Read the CANONICAL store ShortcutManager registers from, like the floating
-    // and secondary-slot getters do. This used to read the legacy
+    // Read the CANONICAL store ShortcutManager registers from, like the
+    // secondary-slot getter does. This used to read the legacy
     // `liveEditor.shortcut` mirror, which only this UI ever wrote — so it stayed
     // empty on every profile that never touched it and the box showed "unbound"
     // while Alt+Space was live. That empty box beside the second slot would read
@@ -1478,68 +1050,6 @@ function setupIPCHandlers(): void {
     (_event, accelerator) =>
       setLiveEditorShortcutSlot('toggleLiveEditorSecondary', accelerator),
   )
-
-  typedHandle('floating-config-get-shortcut', () => {
-    if (!configManager) return ''
-    // Read the canonical store ShortcutManager registers from (and the generic
-    // keybind UI writes), NOT a separate mirror — so the inline box always shows
-    // the real, current binding even if it was rebound elsewhere. Seeded to the
-    // platform default in ConfigManager, so a fresh install shows it, not empty.
-    return (
-      configManager.get<string>('shortcuts.toggleFloatingNavigator', '') ?? ''
-    )
-  })
-
-  typedHandle('floating-config-set-shortcut', (_event, accelerator) => {
-    if (!shortcutManager) return false
-    // updateShortcuts persists `shortcuts.toggleFloatingNavigator` itself, so
-    // there is no separate config write here (unlike the LiveEditor mirror above).
-    const previous =
-      configManager?.get<string>('shortcuts.toggleFloatingNavigator', '') ?? ''
-    try {
-      // Reject a hard failure OR a silently-substituted fallback as a conflict so
-      // the renderer shows the real binding, not a key the user never chose (§6e).
-      if (
-        !applyShortcutRebind(
-          shortcutManager,
-          'toggleFloatingNavigator',
-          accelerator,
-          previous,
-        )
-      ) {
-        return false
-      }
-    } catch (error) {
-      log.error('Failed to update Floating Navigator shortcut:', error)
-      return false
-    }
-    // Keep the tray's displayed Floating Navigator hotkey in sync with the rebind.
-    systemTrayManager?.refreshTrayMenu()
-    return true
-  })
-
-  typedHandle('live-editor-config-get-last-category', () => {
-    if (!configManager) return null
-    return (
-      configManager.get<number | null>('liveEditor.lastCategoryId', null) ??
-      null
-    )
-  })
-
-  typedHandle('live-editor-config-set-last-category', (_event, categoryId) => {
-    if (!configManager) return false
-    configManager.set('liveEditor.lastCategoryId', categoryId)
-
-    // Broadcast to LiveEditor window so its `on('live-editor-category-changed')`
-    // listener mirrors the new selection without round-tripping config.
-    const liveEditorWin = windowManager?.getLiveEditorWindow()
-    if (liveEditorWin && !liveEditorWin.isDestroyed()) {
-      typedSend(liveEditorWin.webContents, 'live-editor-category-changed', {
-        categoryId,
-      })
-    }
-    return true
-  })
 
   typedHandle('tray-show-notification', (_event, title, body, options) => {
     if (systemTrayManager) {
@@ -1750,37 +1260,15 @@ function setupIPCHandlers(): void {
     return openConfigFile(configPath)
   })
 
-  // Authentication IPC handlers (basic implementations for testing)
-  typedHandle('auth-get-user', () => {
-    return activeUser
-  })
-
-  typedHandle('auth-set-user', async (_event, user) => {
-    try {
-      return await setActiveUser(user)
-    } catch (error) {
-      log.error('Failed to set active user:', error)
-      throw error
-    }
-  })
-
-  typedHandle('auth-logout', () => {
-    activeUser = null
-    return true
-  })
-
-  typedHandle('auth-is-authenticated', () => {
-    return Boolean(activeUser)
-  })
-
-  typedHandle('auth-sync-from-web', async (_event, authData) => {
-    try {
-      await setActiveUser(authData)
-      return true
-    } catch (error) {
-      log.error('Failed to sync auth from web:', error)
-      return false
-    }
+  // Authentication IPC handlers; `auth-set-user` from the login window also
+  // triggers the native login → LiveEditor handoff.
+  registerAuthHandlers({
+    getActiveUser: () => activeUser,
+    setActiveUser,
+    clearActiveUser: () => {
+      activeUser = null
+    },
+    getWindowManager: () => windowManager ?? null,
   })
 
   // Settings window IPC handlers
@@ -1909,46 +1397,6 @@ function setupIPCHandlers(): void {
       )
       return { openAtLogin: false }
     }
-  })
-
-  // Persist which window(s) open at Electron launch. Writes through
-  // ConfigManager.update() (flat dot-paths) so the >=1-true invariant runs:
-  // a renderer cannot persist a boot-nothing config — all-false snaps showFloating
-  // back on before saving.
-  typedHandle('settings:setStartupConfig', (_event, startup) => {
-    try {
-      if (!configManager) {
-        log.error('settings:setStartupConfig - ConfigManager not initialized')
-        return false
-      }
-      const didSave = configManager.update({
-        'behavior.startup.showLiveEditor': startup.showLiveEditor,
-        'behavior.startup.showFloating': startup.showFloating,
-      })
-      log.info(
-        'settings:setStartupConfig - startup window config saved',
-        startup,
-      )
-      return didSave
-    } catch (error) {
-      log.error(
-        'settings:setStartupConfig - Failed to save startup config:',
-        error,
-      )
-      return false
-    }
-  })
-
-  // Read side of the startup-window pair — lets the settings UI show the saved
-  // choice without consuming the untyped `config.getSection` surface. Falls back
-  // to the Floating-only default (which satisfies the >=1-true invariant) when
-  // ConfigManager is somehow unavailable, so the UI never renders an all-off state.
-  typedHandle('settings:getStartupConfig', () => {
-    if (!configManager) {
-      log.error('settings:getStartupConfig - ConfigManager not initialized')
-      return { ...DEFAULT_STARTUP_WINDOW_CONFIG }
-    }
-    return configManager.getSection('behavior').startup
   })
 
   // Reset the Settings popover to default size and re-anchor to the tray.
@@ -2202,31 +1650,6 @@ function setupIPCHandlers(): void {
     return false
   })
 
-  typedHandle('window-show-main', () => {
-    if (windowManager) {
-      windowManager.restoreFromTray()
-    }
-  })
-
-  // Read-only snapshot of which auxiliary windows are visible right now, so the
-  // settings UI can label a "Try it now" action accurately. has*() already
-  // guards destroyed windows; isVisible() only runs on a live reference.
-  typedHandle('window-get-aux-visibility', () => {
-    if (!windowManager) {
-      return { floating: false, liveEditor: false }
-    }
-    const floatingWindow = windowManager.hasFloatingNavigator()
-      ? windowManager.getFloatingNavigator()
-      : null
-    const liveEditorWindow = windowManager.hasLiveEditorWindow()
-      ? windowManager.getLiveEditorWindow()
-      : null
-    return {
-      floating: Boolean(floatingWindow?.isVisible()),
-      liveEditor: Boolean(liveEditorWindow?.isVisible()),
-    }
-  })
-
   // Auto-updater IPC handlers (Zod-validated)
   typedHandle('updater-check-for-updates', () => {
     if (autoUpdater) {
@@ -2254,8 +1677,6 @@ function setupIPCHandlers(): void {
       downloadProgress: null,
     }
   })
-
-  // Note: Quick todo operations removed - Floating Navigator uses oRPC via web app
 }
 
 // ============================================================================
@@ -2319,14 +1740,14 @@ if (!gotTheLock) {
           // the full createWindow() here would build a SECOND ConfigManager /
           // WindowManager / tray / shortcut stack on top of it with no teardown —
           // leaking a duplicate tray icon and clashing global-shortcut
-          // registrations. Just surface the Floating companion through the
-          // existing WindowManager (creates it if absent, then shows + focuses).
+          // registrations. Just surface LiveEditor (or the login window when
+          // signed out) through the existing WindowManager.
           if (windowManager) {
             windowManager.restoreFromTray()
             return
           }
           // Genuinely uninitialized (boot never completed): recreate from scratch.
-          // createWindow is async; floating the promise unhandled would swallow
+          // createWindow is async; leaving the promise unhandled would swallow
           // a boot failure here silently, so log any rejection instead.
           void createWindow().catch((error: unknown) => {
             log.error('Failed to recreate window on activate:', error)
@@ -2338,9 +1759,8 @@ if (!gotTheLock) {
         // The startup pill is excluded: it is shown via `showInactive()` so
         // `isVisible()` reports true, but it carries no surface the user can act
         // on, so counting it would wrongly suppress the dock-click reveal. A dock
-        // click must always surface something, so surface the Floating navigator —
-        // the surviving companion window — via restoreFromTray (T6 retargeted it
-        // off the retired main; it creates Floating if absent, then shows + focuses).
+        // click must always surface something, so surface LiveEditor (or the
+        // login window when signed out) via restoreFromTray.
         //
         // The startup pill is retired with the main window (T18), so any visible
         // window now counts as a real one.
@@ -2370,7 +1790,7 @@ if (!gotTheLock) {
  * Window close behavior for macOS.
  *
  * macOS convention: closing all windows keeps the app alive. With the main
- * window retired, CoreLive is a tray-resident companion (LiveEditor / Floating /
+ * window retired, CoreLive is a tray-resident companion (LiveEditor / login /
  * Settings) — closing every panel leaves it running in the menu bar; the user
  * quits explicitly via Cmd+Q, the app menu, or the tray's Quit. (T10 / design
  * Open Question #6: stay tray-resident, never quit on the last panel close.)
@@ -2380,10 +1800,10 @@ if (!gotTheLock) {
  * Summon-surface note (why staying alive at zero windows is not a soft-lock):
  * in the default config at least one route back to a window always remains —
  * the Dock icon re-opens via the `activate` handler above, the always-registered
- * global shortcut Cmd+3 (`toggleFloatingNavigator`) creates + shows Floating from
+ * global shortcut Alt+Space (`toggleLiveEditor`) creates + shows LiveEditor from
  * anywhere, and the tray's menu offers a restore item. Becoming truly headless
  * needs the exotic combination of Hide-App-Icon (accessory Dock) AND
- * Show-in-Menu-Bar=false (tray destroyed) AND rebinding Cmd+3 to an empty /
+ * Show-in-Menu-Bar=false (tray destroyed) AND rebinding Alt+Space to an empty /
  * unregistrable accelerator — narrow enough to accept here; revisit (e.g. force
  * the tray to stay while the Dock is hidden) if it is ever reported.
  */
@@ -2474,8 +1894,7 @@ app.on('before-quit', async () => {
  * 3. Protocol handler exploits
  *
  * These handlers run for ALL web content, including:
- * - Main window
- * - Floating window
+ * - Login, LiveEditor and Settings windows
  * - Any webviews (if used)
  * - DevTools windows
  */

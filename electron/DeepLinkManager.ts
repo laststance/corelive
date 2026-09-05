@@ -201,7 +201,8 @@ export class DeepLinkManager {
    * Handle second instance launch.
    */
   handleSecondInstance(commandLine: string[], _workingDirectory: string): void {
-    // Main window retired (T18): a second instance surfaces the Floating front door.
+    // Main window retired (T18): a second instance surfaces LiveEditor (or the
+    // login window while signed out).
     if (this.windowManager) {
       this.windowManager.restoreFromTray()
     }
@@ -340,8 +341,9 @@ export class DeepLinkManager {
       hasState: !!params.state,
     })
 
-    this.ensureWindowVisible()
-
+    // No ensureWindowVisible() here: OAuthManager shows the initiating login
+    // window once the ticket validates, and surfacing LiveEditor before that
+    // would load the protected route with the pre-login session.
     if (!this.oauthManager) {
       log.error('OAuth manager not initialized')
       if (this.notificationManager) {
@@ -473,7 +475,8 @@ export class DeepLinkManager {
       return
     }
 
-    // Main window retired (T18): always surface the Floating front door.
+    // Main window retired (T18): surface LiveEditor, or the login window while
+    // signed out (WindowManager decides).
     this.windowManager.restoreFromTray()
   }
 
