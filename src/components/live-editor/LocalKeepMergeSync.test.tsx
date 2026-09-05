@@ -414,6 +414,37 @@ describe('LocalKeepMergeSync', () => {
     })
   })
 
+  it('still merges when the account arrives a render after the session does', async () => {
+    // Arrange — the sign-UP redirect is this component's whole reason to exist,
+    // and auth can report "signed in" a render before the user object lands.
+    // Latching on that render would burn the one run the new account gets.
+    seedLocalKeeps([
+      { id: 'a', title: 'push-ups', completedAt: new Date().toISOString() },
+    ])
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: undefined,
+    }
+    const queryClient = new QueryClient()
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    const { rerender } = render(<LocalKeepMergeSync />, { wrapper })
+    expect(importLocalFn).not.toHaveBeenCalled()
+
+    // Act — the user object resolves on the next render.
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_a' },
+    }
+    rerender(<LocalKeepMergeSync />)
+
+    // Assert
+    await waitFor(() => expect(importLocalFn).toHaveBeenCalledTimes(1))
+  })
+
   it('leaves the batch claimed when the import fails so the next session retries it', async () => {
     // Arrange
     seedLocalKeeps([
