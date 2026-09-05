@@ -731,11 +731,11 @@ async function createWindow(): Promise<void> {
       menuManager = new MenuManagerCls()
 
       // The menu bar is companion chrome after main-window retirement (T18):
-      // View/Window roles target whatever window is focused; New Task opens the
-      // browser. MenuManager.initialize accepts `BrowserWindow | null`, so the
-      // (now permanently absent) main window passes through as null.
+      // View/Window roles target whatever window is focused; New Task opens
+      // the browser. MenuManager.initialize takes no main-window reference —
+      // there has been none to pass since T18.
       if (menuManager) {
-        menuManager.initialize(null, windowManager, configManager)
+        menuManager.initialize(windowManager, configManager)
       }
       log.info('✅ [DEFERRED] MenuManager loaded')
 
@@ -1486,13 +1486,6 @@ function setupIPCHandlers(): void {
 
   typedHandle('performance-get-startup-time', () => {
     return Date.now() - performanceOptimizer.startupMetrics.startTime
-  })
-
-  // Menu action IPC handlers
-  typedHandle('menu-action', (_event, action) => {
-    if (menuManager) {
-      menuManager.handleMenuAction({ action })
-    }
   })
 
   // Shortcuts IPC handlers
