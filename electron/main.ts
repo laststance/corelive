@@ -667,7 +667,7 @@ async function createWindow(): Promise<void> {
     return { serverUrl }
   }
 
-  // Deferred initialization - happens after main window is shown
+  // Deferred initialization - happens after the startup panel is opened
   const deferredInit = async (): Promise<void> => {
     try {
       // MenuManager always loads (works under xvfb)
@@ -1380,7 +1380,7 @@ if (!gotTheLock) {
    * App ready event - fired when Electron has finished initialization.
    * This is where we:
    * 1. Set up security policies
-   * 2. Create the main window
+   * 2. Open the startup panel (LiveEditor, hidden until it resolves)
    * 3. Initialize all systems
    */
   app

@@ -523,8 +523,10 @@ export class ShortcutManager {
     // confirmed stability (it may have wedged the app during arming). Re-arming
     // would risk re-freezing on every launch — so do NOT register. A lone
     // modifier has no chord equivalent, so the binding is simply left INACTIVE
-    // (not "degraded to chord"); the user re-enables it from Settings, which
-    // calls reenableNativeTap() to clear the block and re-arm.
+    // (not "degraded to chord"). The block lasts the whole session: its only
+    // clear is {@link ShortcutManager.reenableNativeTap}, kept as the re-arm
+    // entry point but with no renderer caller since the Settings control and
+    // its IPC channel were retired — so in practice a restart is the reset.
     if (this.nativeEngine.isLatchBlocked()) {
       log.warn(
         `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Manual re-enable required.`,

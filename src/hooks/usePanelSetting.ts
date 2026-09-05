@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 
 import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useMounted } from '@/hooks/use-mounted'
@@ -68,9 +68,6 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
   const [isReady, setIsReady] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Last value the main process confirmed — the rollback target, so a failed
-  // write never restores the in-flight optimistic value.
-  const lastGoodRef = useRef(config.defaultValue)
 
   // Load once on mount. The availability guard means web / outdated-preload
   // renderers simply never flip `isReady` and the consumer hides the row.
@@ -89,7 +86,6 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
       .then((loaded) => {
         if (cancelled) return
         setValue(loaded)
-        lastGoodRef.current = loaded
       })
       .catch((loadError: unknown) => {
         log.error('Failed to load panel setting:', loadError)
@@ -116,7 +112,6 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
     try {
       const applied = await config.set(api, next)
       setValue(applied)
-      lastGoodRef.current = applied
     } catch (saveError: unknown) {
       log.error('Failed to update panel setting:', saveError)
       setValue(previous)

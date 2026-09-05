@@ -471,8 +471,14 @@ export class WindowManager {
     loginWindow.webContents.on(
       'did-navigate',
       (_event, _url, httpResponseCode) => {
-        if (httpResponseCode < HTTP_ERROR_STATUS_MIN) return
-        errorPagePendingFinish = true
+        // Reassign, never latch (mirrors the LiveEditor watcher): a retry that
+        // outraces Chromium's error-page commit leaves the marker set with no
+        // did-finish-load to consume it, so a later SUCCESSFUL navigation must
+        // clear it. Latching would make the retry's real did-finish-load look
+        // like the error page's, stranding the window at hasLoadedOnce=false
+        // with an unreset retry budget.
+        errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
+        if (!errorPagePendingFinish) return
         if (hasLoadedOnce) return
         this.recoverPanelFromLoadFailure(loginWindow, {
           ...recoveryOptions,

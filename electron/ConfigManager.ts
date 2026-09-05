@@ -545,7 +545,7 @@ export class ConfigManager {
 
   /**
    * Strips every key listed in {@link RETIRED_CONFIG_KEYS} out of a persisted
-   * or imported config before merge. `mergeWithDefaults` copies every unknown
+   * or imported config before merge. {@link ConfigManager.mergeWithDefaults} copies every unknown
    * source key verbatim, so without this an older `config.json` would carry
    * dead fields indefinitely. Runs on the RAW config, LAST among the raw
    * migrations: {@link ConfigManager.migrateLegacyLiveEditorConfig} spreads the

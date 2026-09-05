@@ -6,7 +6,7 @@
  *
  * The two panel booleans live apart in Settings — the Spaces toggle under
  * Application, the LiveEditor keep-on-top pin in the LiveEditor section. Each
- * row owns its own `usePanelSetting` (per-method skew guard, Arch-2), so an
+ * row owns its own {@link usePanelSetting} (per-method skew guard, Arch-2), so an
  * outdated preload missing one setter hides only that row instead of the whole
  * section.
  *

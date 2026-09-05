@@ -26,8 +26,7 @@ const loggerMocks = vi.hoisted(() => ({
 }))
 
 let signInTokenListener:
-  | ((data: { provider: string; token: string }) => Promise<void>)
-  | null = null
+  ((data: { provider: string; token: string }) => Promise<void>) | null = null
 
 vi.mock('@clerk/nextjs', () => ({
   useClerk: () => ({
@@ -100,10 +99,8 @@ describe('ElectronAuthProvider', () => {
         clearPendingToken: mockClearPendingToken,
         getPendingToken: mockGetPendingToken,
         getSupportedProviders: vi.fn(),
-        onCompleteExchange: vi.fn(),
         onError: vi.fn(),
         onSignInToken: mockOnSignInToken,
-        onSuccess: vi.fn(),
         start: vi.fn(),
       },
     } as unknown as Window['electronAPI']

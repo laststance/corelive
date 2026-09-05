@@ -853,6 +853,36 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
+    it('counts a retry that outran the error-page commit as a real load', () => {
+      // Arrange: a main-frame failure whose chrome-error page never commits,
+      // because the backoff retry's loadURL outraces it. No did-finish-load
+      // arrives to consume the pending-error marker.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.createLoginWindow()
+      const loginWindow = getWindow(0)
+      fireNetworkLoadFailure(loginWindow, LOGIN_SHELL_URL)
+      vi.runOnlyPendingTimers() // retry 1 reloads
+
+      // Act: that retry lands — a real 200 navigation, then the page settles.
+      loginWindow.fireWebContents(
+        'did-navigate',
+        {},
+        LOGIN_SHELL_URL,
+        200,
+        'OK',
+      )
+      loginWindow.fireWebContents('did-finish-load')
+      fireNetworkLoadFailure(loginWindow, LOGIN_SHELL_URL)
+      vi.runOnlyPendingTimers()
+
+      // Assert: still only the first retry. The successful load registered, so
+      // the later transient failure belongs to the live renderer — a stale
+      // marker must never strand the window at "never loaded" and pop the
+      // recovery dialog over a working, un-closable login page.
+      expect(loginWindow.win.webContents.loadURL).toHaveBeenCalledTimes(1)
+      expect(dialog.showMessageBox).not.toHaveBeenCalled()
+    })
+
     it('restarts the recovery cycle when the user picks Retry in the login window dialog', async () => {
       // Arrange: the dialog will return "Retry" (response 0) this time.
       vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({

@@ -12,8 +12,8 @@
  *   - The window is frameless + transparent + always-on-top; it ships its own
  *     minimal API surface so the main `preload.ts` (~50 channels) does not
  *     leak into a high-trust panel.
- *   - Every call goes through `typedInvoke`, whose channels are validated by
- *     `IPC_ARG_SCHEMAS` in the main process.
+ *   - Every call goes through {@link typedInvoke}, whose channels are validated
+ *     by {@link IPC_ARG_SCHEMAS} in the main process.
  *
  * @module electron/preload-live-editor
  */

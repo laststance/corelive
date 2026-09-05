@@ -197,7 +197,7 @@ export interface ElectronAPI {
   }
 
   /**
-   * LiveEditor Note window configuration from the main window's Settings UI.
+   * LiveEditor Note window configuration from the Settings window's UI.
    *
    * Mirrors the `LiveEditorAPI` exposed inside the LiveEditor window itself
    * (`preload-live-editor.ts`), but only includes the surface a settings page
@@ -209,7 +209,7 @@ export interface ElectronAPI {
   brainDump?: LiveEditorSettingsAPI
 }
 
-/** LiveEditor configuration controls exposed to the main Settings renderer. */
+/** LiveEditor configuration controls exposed to the Settings window's renderer. */
 export interface LiveEditorSettingsAPI {
   /** Toggle LiveEditor window visibility. */
   toggle: () => Promise<void>

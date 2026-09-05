@@ -18,7 +18,7 @@
  * Best Practices:
  * - NEVER expose raw Node.js APIs to renderer
  * - Always validate and sanitize data
- * - Constrain IPC channels at compile time (see `typedInvoke`)
+ * - Constrain IPC channels at compile time (see {@link typedInvoke})
  * - Keep the exposed API surface minimal
  *
  * @module electron/preload
@@ -493,11 +493,11 @@ const electronAPI = {
   },
 
   /**
-   * LiveEditor Note window controls — exposed to the main window's Settings UI.
+   * LiveEditor Note window controls — exposed to the Settings window's UI.
    *
    * The LiveEditor renderer has its own preload (`preload-live-editor.ts`) for
    * window-local operations. These methods let the Settings page configure
-   * LiveEditor from the *main* window without opening it.
+   * LiveEditor without opening it.
    */
   liveEditor: {
     /** Toggle LiveEditor window visibility. */

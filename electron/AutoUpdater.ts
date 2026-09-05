@@ -319,23 +319,12 @@ export class AutoUpdater {
   }
 
   /**
-   * Logs the updater status and pushes it as transient TEXT to the main
-   * window's renderer (`AppUpdateSettings` in-card status line).
-   *
-   * BREADCRUMB (T18, Electron main-retirement): this send is main-window-bound
-   * and already no-ops when no main window is up (`log.info` still records it);
-   * after T18 deletes the main window it becomes a permanent no-op, so the
-   * transient "Update not available" / "Error" TEXT loses its only renderer.
-   * That is an ACCEPTED A3 tradeoff, not a regression — the ACTIONABLE states
-   * surface without a main window: `update-available` / `update-downloaded` show
-   * as the parentless dialogs (`showUpdaterMessageBox`) and download progress
-   * shows in the native progress window. The Settings popover is deliberately
-   * NOT retargeted (blur-to-hide, rejected as a status host), and these sends
-   * target the main renderer's webContents — a different webContents from the
-   * popover — so they never reached it anyway. T18/T19 can drop the
-   * `updater-message` channel (+ its preload allowlist entry and the
-   * `AppUpdateSettings` listener); the main window that once received it was
-   * retired in T18, so this is now a plain, named logging choke-point.
+   * Named logging choke-point for updater status lines. Log-only by design: the
+   * transient "not available" / "error" TEXT lost its renderer with the retired
+   * main window, and the Settings popover was rejected as a replacement host
+   * (it hides on blur). The ACTIONABLE states still reach the user — the
+   * parentless dialogs from {@link AutoUpdater.showUpdaterMessageBox} and the
+   * native download-progress window.
    *
    * @param text - Status message to log.
    */

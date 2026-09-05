@@ -82,9 +82,6 @@ export interface NotificationSettingsState {
   position: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft'
 }
 
-/** Tray icon states */
-export type TrayIconState = 'default' | 'active' | 'notification' | 'disabled'
-
 /** OAuth provider types */
 export type OAuthProvider = 'google' | 'github' | 'apple'
 
@@ -101,15 +98,6 @@ export interface PendingSignInToken {
   provider: string
 }
 
-/** Shortcut definition */
-export interface ShortcutDefinition {
-  id: string
-  accelerator: string
-  description: string
-  enabled: boolean
-  isGlobal: boolean
-}
-
 /** Config section types */
 export type ConfigSection =
   | 'window'
@@ -120,14 +108,6 @@ export type ConfigSection =
   | 'behavior'
   | 'advanced'
   | 'liveEditor'
-
-/** Deep link examples */
-export interface DeepLinkExamples {
-  openTask: string
-  createTask: string
-  searchTasks: string
-  openView: string
-}
 
 /** Updater status (matches AutoUpdater.getUpdateStatus()) */
 export interface UpdaterStatus {

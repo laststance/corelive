@@ -34,21 +34,6 @@ import { performanceOptimizer } from './performance-config'
 /** Component factory function */
 type ComponentFactory<T = unknown> = () => T
 
-/** Component loading status */
-interface ComponentStatus {
-  name: string
-  loaded: boolean
-  loading: boolean
-}
-
-/** Loading status for all components */
-export interface LoadingStatus {
-  total: number
-  loaded: number
-  loading: number
-  components: ComponentStatus[]
-}
-
 /** Loading priority levels */
 export interface LoadingPriorities {
   /** Components loaded immediately */

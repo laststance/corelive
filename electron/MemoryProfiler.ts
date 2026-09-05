@@ -56,16 +56,6 @@ export interface MemorySnapshot {
   totalHeapUsed: number
 }
 
-/** Memory statistics */
-export interface MemoryStatistics {
-  current: MemorySnapshot
-  average: number
-  peak: number
-  minimum: number
-  trend: 'increasing' | 'decreasing' | 'stable'
-  historySize: number
-}
-
 /** Cleanup level */
 type CleanupLevel = 'warning' | 'critical' | 'system-warning' | 'manual'
 

@@ -48,29 +48,6 @@ interface StartupMetrics {
   windowsCreated: number
 }
 
-/** Memory metrics in MB */
-interface MemoryMetrics {
-  heapUsed: number
-  heapTotal: number
-  external: number
-  rss: number
-}
-
-/** Module metrics */
-interface ModuleMetrics {
-  loaded: number
-  cached: number
-  lazyLoaded: number
-}
-
-/** Complete performance metrics */
-export interface PerformanceMetrics {
-  uptime: number
-  memory: MemoryMetrics
-  modules: ModuleMetrics
-  windows: number
-}
-
 /** Optimization level configuration */
 export interface OptimizationLevel {
   /** Enable lazy loading of modules */
