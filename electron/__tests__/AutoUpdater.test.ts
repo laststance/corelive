@@ -1,4 +1,3 @@
-import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AutoUpdater, normalizeDownloadProgress } from '../AutoUpdater'
@@ -87,9 +86,6 @@ vi.mock('electron', () => ({
     showMessageBox: electronMocks.mockShowMessageBox,
   },
   screen: {
-    getDisplayMatching: vi.fn(() => ({
-      workArea: { x: 1440, y: 0, width: 1440, height: 900 },
-    })),
     getPrimaryDisplay: vi.fn(() => ({
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     })),
@@ -103,23 +99,6 @@ vi.mock('electron-updater', () => ({
 vi.mock('../logger', () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
-
-/**
- * Creates a main-window stub with the webContents surface `typedSend` needs.
- * @returns BrowserWindow-compatible object for AutoUpdater tests.
- * @example
- * const mainWindow = createMainWindowStub()
- */
-function createMainWindowStub(): BrowserWindow {
-  return {
-    getBounds: vi.fn(() => ({ x: 1500, y: 40, width: 900, height: 700 })),
-    isDestroyed: vi.fn(() => false),
-    webContents: {
-      isDestroyed: vi.fn(() => false),
-      send: vi.fn(),
-    },
-  } as unknown as BrowserWindow
-}
 
 /**
  * Returns the native update-progress BrowserWindow created by AutoUpdater.
@@ -191,11 +170,11 @@ describe('AutoUpdater download progress', () => {
     expect(invalidMetrics.total).toBe(0)
   })
 
-  it('creates a passive native window and broadcasts progress on download-progress', () => {
-    // Arrange
-    const updater = new AutoUpdater()
-    const mainWindow = createMainWindowStub()
-    updater.setMainWindow(mainWindow)
+  it('creates a passive native window on download-progress, sized to the primary display', () => {
+    // Arrange: constructing AutoUpdater wires its `download-progress`
+    // listener as a side effect; no main window exists (retired T18), so the
+    // progress window is always positioned against the primary display.
+    new AutoUpdater()
 
     // Act
     electronMocks.mockAutoUpdater.emit('download-progress', {
@@ -213,27 +192,17 @@ describe('AutoUpdater download progress', () => {
     expect(progressWindow.options.alwaysOnTop).toBe(true)
     expect(progressWindow.options.skipTaskbar).toBe(true)
     expect(progressWindow.options.focusable).toBe(false)
-    expect(progressWindow.options.x).toBe(1980)
-    expect(progressWindow.options.y).toBe(690)
+    expect(progressWindow.options.x).toBe(780)
+    expect(progressWindow.options.y).toBe(870)
     expect(progressWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(true)
     expect(progressWindow.loadURL).toHaveBeenCalledWith(
       expect.stringMatching(/^data:text\/html;charset=utf-8,/),
     )
-    expect(mainWindow.webContents.send).toHaveBeenCalledWith(
-      'updater-download-progress',
-      {
-        percent: 42,
-        bytesPerSecond: 1024,
-        transferred: 42,
-        total: 100,
-      },
-    )
   })
 
   it('destroys the native progress window after update-downloaded', () => {
-    // Arrange
-    const updater = new AutoUpdater()
-    updater.setMainWindow(createMainWindowStub())
+    // Arrange: constructing AutoUpdater wires its listeners as a side effect.
+    new AutoUpdater()
     electronMocks.mockAutoUpdater.emit('download-progress', {
       percent: 42,
       bytesPerSecond: 1024,
@@ -255,7 +224,6 @@ describe('AutoUpdater download progress', () => {
   it('destroys the native progress window during cleanup', () => {
     // Arrange
     const updater = new AutoUpdater()
-    updater.setMainWindow(createMainWindowStub())
     electronMocks.mockAutoUpdater.emit('download-progress', {
       percent: 42,
       bytesPerSecond: 1024,
@@ -293,38 +261,20 @@ describe('AutoUpdater update dialogs', () => {
     vi.useRealTimers()
   })
 
-  it('anchors the update-available prompt to the main window while one is open', () => {
-    // Arrange
-    const updater = new AutoUpdater()
-    const mainWindow = createMainWindowStub()
-    updater.setMainWindow(mainWindow)
-
-    // Act
-    electronMocks.mockAutoUpdater.emit('update-available', { version: '1.2.4' })
-
-    // Assert: anchored overload — the window is the dialog's first argument.
-    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledTimes(1)
-    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledWith(
-      mainWindow,
-      expect.objectContaining({ title: 'Update Available' }),
-    )
-
-    updater.cleanup()
-  })
-
-  it('surfaces the update-available prompt even when no main window is open', () => {
-    // Arrange: companion mode — the updater is never handed a main window.
+  it('shows the update-available prompt with the parentless overload — there is no main window to anchor to', () => {
+    // Arrange: companion mode is the only mode — the main window was retired
+    // in T18, so AutoUpdater never has one to anchor a dialog to.
     const updater = new AutoUpdater()
 
     // Act
     electronMocks.mockAutoUpdater.emit('update-available', { version: '1.2.4' })
 
-    // Assert: parentless overload (options-only call) keeps the prompt reachable
-    // after the main window is retired (T18).
+    // Assert: parentless overload — exactly one argument (options), no window.
     expect(electronMocks.mockShowMessageBox).toHaveBeenCalledTimes(1)
     expect(electronMocks.mockShowMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Update Available' }),
     )
+    expect(electronMocks.mockShowMessageBox.mock.calls[0]).toHaveLength(1)
 
     updater.cleanup()
   })

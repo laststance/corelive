@@ -18,7 +18,6 @@ import {
   UPDATE_PROGRESS_WINDOW_HEIGHT_PX,
   UPDATE_PROGRESS_WINDOW_WIDTH_PX,
 } from './constants'
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { UpdaterDownloadProgress } from './types/ipc'
 import {
@@ -108,9 +107,6 @@ export function normalizeDownloadProgress(
  * Manages automatic application updates.
  */
 export class AutoUpdater {
-  /** Reference to main window for dialogs */
-  private mainWindow: BrowserWindow | null
-
   /** Track if update is available */
   private updateAvailable: boolean
 
@@ -130,7 +126,6 @@ export class AutoUpdater {
   private periodicCheckInterval: ReturnType<typeof setInterval> | null = null
 
   constructor() {
-    this.mainWindow = null
     this.updateAvailable = false
     this.updateDownloaded = false
     this.downloadProgress = null
@@ -151,15 +146,6 @@ export class AutoUpdater {
   }
 
   /**
-   * Set the main window reference.
-   *
-   * @param window - The main BrowserWindow
-   */
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
-  }
-
-  /**
    * Configures auto-updater event handlers and scheduling.
    */
   setupAutoUpdater(): void {
@@ -169,13 +155,13 @@ export class AutoUpdater {
       this.updateAvailable = false
       this.updateDownloaded = false
       this.clearDownloadProgress()
-      this.sendStatusToWindow('Checking for update...')
+      this.logUpdaterStatus('Checking for update...')
     })
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       log.info('Update available', info)
       this.updateAvailable = true
-      this.sendStatusToWindow('Update available')
+      this.logUpdaterStatus('Update available')
       this.showUpdateAvailableDialog(info).catch((err) => {
         log.error('Failed to show update available dialog:', err)
       })
@@ -187,7 +173,7 @@ export class AutoUpdater {
       this.updateAvailable = false
       this.updateDownloaded = false
       this.clearDownloadProgress()
-      this.sendStatusToWindow('Update not available')
+      this.logUpdaterStatus('Update not available')
     })
 
     autoUpdater.on('error', (err: Error) => {
@@ -196,7 +182,7 @@ export class AutoUpdater {
       this.updateAvailable = false
       this.updateDownloaded = false
       this.clearDownloadProgress()
-      this.sendStatusToWindow('Error in auto-updater')
+      this.logUpdaterStatus('Error in auto-updater')
     })
 
     autoUpdater.on('download-progress', (progressObj: ProgressInfo) => {
@@ -206,7 +192,7 @@ export class AutoUpdater {
       logMessage += ` (${progressObj.transferred}/${progressObj.total})`
       log.info(logMessage)
       this.sendDownloadProgress(progress)
-      this.sendStatusToWindow(
+      this.logUpdaterStatus(
         `Downloading update: ${Math.round(progress.percent)}%`,
       )
     })
@@ -222,7 +208,7 @@ export class AutoUpdater {
       })
       this.closeUpdateProgressWindow()
       this.downloadProgress = null
-      this.sendStatusToWindow('Update downloaded')
+      this.logUpdaterStatus('Update downloaded')
       this.showUpdateDownloadedDialog().catch((err) => {
         log.error('Failed to show update downloaded dialog:', err)
       })
@@ -275,12 +261,8 @@ export class AutoUpdater {
   private async showUpdaterMessageBox(
     options: MessageBoxOptions,
   ): Promise<MessageBoxReturnValue> {
-    const mainWindow = this.mainWindow
-    // Anchor to the main window only while it is genuinely alive; otherwise the
-    // app-modal (parentless) overload keeps update prompts reachable.
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      return dialog.showMessageBox(mainWindow, options)
-    }
+    // Always the app-modal (parentless) overload — there is no main window to
+    // anchor to (retired T18); this keeps update prompts reachable regardless.
     return dialog.showMessageBox(options)
   }
 
@@ -312,7 +294,7 @@ export class AutoUpdater {
       void autoUpdater.downloadUpdate().catch((error) => {
         log.error('Failed to download update:', error)
         this.clearDownloadProgress()
-        this.sendStatusToWindow('Failed to download update')
+        this.logUpdaterStatus('Failed to download update')
       })
     }
   }
@@ -352,15 +334,13 @@ export class AutoUpdater {
    * target the main renderer's webContents — a different webContents from the
    * popover — so they never reached it anyway. T18/T19 can drop the
    * `updater-message` channel (+ its preload allowlist entry and the
-   * `AppUpdateSettings` listener) once the main window is gone.
+   * `AppUpdateSettings` listener); the main window that once received it was
+   * retired in T18, so this is now a plain, named logging choke-point.
    *
-   * @param text - Status message (always logged; rendered only while a main window lives).
+   * @param text - Status message to log.
    */
-  sendStatusToWindow(text: string): void {
+  logUpdaterStatus(text: string): void {
     log.info(text)
-    if (this.mainWindow && this.mainWindow.webContents) {
-      typedSend(this.mainWindow.webContents, 'updater-message', text)
-    }
   }
 
   /**
@@ -372,19 +352,10 @@ export class AutoUpdater {
    */
   private sendDownloadProgress(progress: UpdaterDownloadProgress): void {
     this.downloadProgress = progress
-    // Native progress window is the primary, main-optional UI (above). The
-    // renderer mirror below is secondary; like `sendStatusToWindow` it is
-    // main-window-bound and becomes a permanent no-op after T18 — kept until
-    // then so the in-app Settings view still mirrors progress while main lives.
+    // Native progress window is the only live UI this paints to now — the
+    // renderer mirror was retired with the main window in T18. `AppUpdateSettings`
+    // still reads `this.downloadProgress` on demand via `getUpdateStatus()`.
     this.showUpdateProgressWindow(progress)
-
-    if (this.mainWindow && this.mainWindow.webContents) {
-      typedSend(
-        this.mainWindow.webContents,
-        'updater-download-progress',
-        progress,
-      )
-    }
   }
 
   /**
@@ -396,11 +367,9 @@ export class AutoUpdater {
    */
   private showUpdateProgressWindow(progress: UpdaterDownloadProgress): void {
     if (!this.updateProgressWindow || this.updateProgressWindow.isDestroyed()) {
-      const display =
-        this.mainWindow && !this.mainWindow.isDestroyed()
-          ? screen.getDisplayMatching(this.mainWindow.getBounds())
-          : screen.getPrimaryDisplay()
-      const { workArea } = display
+      // No main window to match a display to (retired T18) — the primary
+      // display is the only anchor left.
+      const { workArea } = screen.getPrimaryDisplay()
       const x = Math.round(
         workArea.x + (workArea.width - UPDATE_PROGRESS_WINDOW_WIDTH_PX) / 2,
       )
@@ -552,8 +521,6 @@ export class AutoUpdater {
     autoUpdater.removeAllListeners('download-progress')
     autoUpdater.removeAllListeners('update-downloaded')
 
-    // Clear window reference
-    this.mainWindow = null
     this.closeUpdateProgressWindow()
 
     // Reset status flags
