@@ -83,8 +83,8 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
         await setActive({
           // Electron companion: after a native OAuth sign-in we deliberately do
           // NOT navigate. Clerk's reactive hooks (useUser/useAuth) re-render the
-          // current route in place — the signed-out Floating card swaps to the
-          // live navigator with no reload — and no Electron window wants the web
+          // current route in place — the signed-out login shell swaps to its
+          // signed-in state with no reload — and no Electron window wants the web
           // `/home` dashboard (it was retired with the main window). The only
           // exception is a multi-step task (e.g. MFA) that can't be completed
           // inside a companion panel, surfaced here as an error.

@@ -11,7 +11,6 @@ import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { ShortcutManager } from './ShortcutManager'
 import type { SystemTrayManager } from './SystemTrayManager'
-import type { WindowManager } from './WindowManager'
 
 // ============================================================================
 // Type Definitions
@@ -93,9 +92,6 @@ type OverallStatus = 'full' | 'partial' | 'minimal' | 'failed' | undefined
  * Coordinates error handling and fallback strategies for OS integrations.
  */
 export class SystemIntegrationErrorHandler {
-  /** Window manager reference */
-  private windowManager: WindowManager
-
   /** Config manager reference */
   private configManager: ConfigManager | null
 
@@ -121,11 +117,7 @@ export class SystemIntegrationErrorHandler {
   /** List of issues */
   private issues: string[]
 
-  constructor(
-    windowManager: WindowManager,
-    configManager: ConfigManager | null = null,
-  ) {
-    this.windowManager = windowManager
+  constructor(configManager: ConfigManager | null = null) {
     this.configManager = configManager
 
     this.systemTrayManager = null
@@ -230,10 +222,6 @@ export class SystemIntegrationErrorHandler {
       }
 
       log.error('System tray initialization failed:', error)
-
-      if (this.windowManager) {
-        this.windowManager.setTrayFallbackMode(true)
-      }
 
       return {
         success: false,
@@ -467,10 +455,9 @@ export class SystemIntegrationErrorHandler {
     // The retired main window was the last fallback surface here (a title flash
     // + a `system-integration-status` IPC). The title flash is gone with the
     // window, and that status channel had no renderer listener anywhere — dead
-    // even pre-cut — so it's dropped rather than re-pointed at Floating (a
-    // minimal navigator, not a diagnostics host). The tray tooltip above is the
-    // surviving non-notification surface. Orphaned type def + preload allowlist
-    // entry tracked for T18/T19 cleanup.
+    // even pre-cut — so it's dropped rather than re-pointed at the login window
+    // (a sign-in shell, not a diagnostics host). The tray tooltip above is the
+    // surviving non-notification surface.
   }
 
   /**

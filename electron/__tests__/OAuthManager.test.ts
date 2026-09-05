@@ -72,7 +72,7 @@ describe('OAuthManager', () => {
   })
 })
 
-// The Floating window can START a sign-in, so the resulting ticket and any
+// The login window can START a sign-in, so the resulting ticket and any
 // failure must come back to THAT window — not leak to the main window or strand
 // the initiator on "Opening browser…" forever. These pin the targeting contract.
 describe('OAuthManager initiator targeting', () => {
@@ -81,16 +81,13 @@ describe('OAuthManager initiator targeting', () => {
   })
 
   it('routes a provider-denied callback error to the window that started the flow', async () => {
-    // Arrange: the Floating renderer (id 11) starts a Google flow.
+    // Arrange: the login-window renderer (id 11) starts a Google flow.
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
       null,
     )
-    const floatingRenderer = fakeRenderer(11)
-    const { state } = await oauthManager.startOAuthFlow(
-      'google',
-      floatingRenderer,
-    )
+    const loginRenderer = fakeRenderer(11)
+    const { state } = await oauthManager.startOAuthFlow('google', loginRenderer)
 
     // Act: the deep-link callback comes back as a denial for that state.
     await oauthManager.handleOAuthCallback(
@@ -100,40 +97,40 @@ describe('OAuthManager initiator targeting', () => {
     )
 
     // Assert: the error is delivered to the initiating window — not broadcast to
-    // the main renderer, which would leave the Floating CTA stuck "Opening…".
-    expect(typedSend).toHaveBeenCalledWith(floatingRenderer, 'oauth-error', {
+    // the main renderer, which would leave the login window's CTA stuck "Opening…".
+    expect(typedSend).toHaveBeenCalledWith(loginRenderer, 'oauth-error', {
       error: 'User denied access',
     })
   })
 
   it('hands the pending sign-in ticket only to the window that initiated it', () => {
-    // Arrange: a ticket bound to the Floating renderer (id 11).
+    // Arrange: a ticket bound to the login-window renderer (id 11).
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
       null,
     )
-    const floatingRenderer = fakeRenderer(11)
-    oauthManager.sendSignInToken('tok_floating', 'google', floatingRenderer)
+    const loginRenderer = fakeRenderer(11)
+    oauthManager.sendSignInToken('tok_login', 'google', loginRenderer)
 
     // Act + Assert: a DIFFERENT window (id 22) cannot consume the one-time
     // ticket — it gets null, and the ticket stays put for the rightful window.
     expect(oauthManager.getPendingSignInToken(fakeRenderer(22))).toBeNull()
-    expect(oauthManager.getPendingSignInToken(floatingRenderer)).toEqual({
-      token: 'tok_floating',
+    expect(oauthManager.getPendingSignInToken(loginRenderer)).toEqual({
+      token: 'tok_login',
       provider: 'google',
     })
   })
 
   it('pushes the sign-in ticket to the initiating window with no main-window fallback', () => {
-    // Arrange: a Floating-initiated flow (id 11); no main window exists (T18).
+    // Arrange: a login-window-initiated flow (id 11); no main window exists (T18).
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
       null,
     )
-    const floatingRenderer = fakeRenderer(11)
+    const loginRenderer = fakeRenderer(11)
 
     // Act
-    oauthManager.sendSignInToken('tok_floating', 'google', floatingRenderer)
+    oauthManager.sendSignInToken('tok_login', 'google', loginRenderer)
 
     // Assert: delivered to the initiator exactly once via the per-window send —
     // the retired main window gets no second, racing delivery of the one-time
@@ -141,9 +138,9 @@ describe('OAuthManager initiator targeting', () => {
     // path, not the live one.
     expect(typedSend).toHaveBeenCalledTimes(1)
     expect(typedSend).toHaveBeenCalledWith(
-      floatingRenderer,
+      loginRenderer,
       'clerk-sign-in-token',
-      { token: 'tok_floating', provider: 'google' },
+      { token: 'tok_login', provider: 'google' },
     )
   })
 
@@ -183,5 +180,44 @@ describe('OAuthManager initiator targeting', () => {
       token: 'tok_coldboot',
       provider: 'google',
     })
+  })
+})
+
+describe('OAuthManager emitted channel surface', () => {
+  beforeEach(() => {
+    vi.mocked(typedSend).mockClear()
+  })
+
+  it('never emits oauth-success or oauth-complete-exchange on any OAuth outcome', async () => {
+    // Arrange: one manager driven through BOTH live outcomes — a granted flow
+    // that yields a sign-in ticket, and a provider denial that yields an error.
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+    const loginRenderer = fakeRenderer(11)
+
+    // Act: success path, then failure path.
+    oauthManager.sendSignInToken('tok_login', 'google', loginRenderer)
+    const { state } = await oauthManager.startOAuthFlow('google', loginRenderer)
+    await oauthManager.handleOAuthCallback(
+      new URL(
+        `corelive://oauth/callback?state=${state}&error=access_denied&error_description=User+denied+access`,
+      ),
+    )
+
+    // Assert: the emitted channel set is exactly the two the preload bridge
+    // still listens for. `oauth-success` and `oauth-complete-exchange` lost
+    // their senders in v0.14.0 and their listeners in PR #178; re-adding a send
+    // without a listener would silently drop the sign-in, so this pins the set
+    // rather than asserting one absence.
+    const emittedChannels = vi
+      .mocked(typedSend)
+      .mock.calls.map((call) => call[1])
+    expect(new Set(emittedChannels)).toEqual(
+      new Set(['clerk-sign-in-token', 'oauth-error']),
+    )
+    expect(emittedChannels).not.toContain('oauth-success')
+    expect(emittedChannels).not.toContain('oauth-complete-exchange')
   })
 })

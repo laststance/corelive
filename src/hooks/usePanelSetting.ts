@@ -1,34 +1,37 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 
-import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { log } from '@/lib/logger'
 
-/** The preload bridge these settings drive (reused from the electron-api source of truth). */
-export type FloatingPanelsBridge = NonNullable<
+/**
+ * The preload bridge these settings drive (reused from the electron-api source of truth).
+ * `floatingPanels` is the legacy wire name — frozen preloads expose it; do not rename.
+ */
+export type PanelsBridge = NonNullable<
   NonNullable<Window['electronAPI']>['floatingPanels']
 >
 
 /**
- * Describes ONE floating-panel boolean setting: its default, how to read it,
- * how to write it, and how to tell whether THIS setting's pair of methods
- * exists on the preload. `available` is per-setting (Arch-2) — an outdated
- * preload missing one setter degrades only that toggle, never the whole section.
- * The single descriptor is the source of truth a consumer passes to the hook.
+ * Describes ONE panel boolean setting: its default, how to read it, how to
+ * write it, and how to tell whether THIS setting's pair of methods exists on
+ * the preload. `available` is per-setting (Arch-2) — an outdated preload
+ * missing one setter degrades only that toggle, never the whole section. The
+ * single descriptor is the source of truth a consumer passes to the hook.
  */
-export interface FloatingPanelSettingConfig {
+export interface PanelSettingConfig {
   /** Shown until the mount load resolves (mirrors the main-process default). */
   defaultValue: boolean
   /** Reads the persisted value from the main process. */
-  get: (api: FloatingPanelsBridge) => Promise<boolean>
+  get: (api: PanelsBridge) => Promise<boolean>
   /** Writes the new value; resolves to the value the main process actually applied. */
-  set: (api: FloatingPanelsBridge, next: boolean) => Promise<boolean>
+  set: (api: PanelsBridge, next: boolean) => Promise<boolean>
   /** True only when both `get` and `set` exist on this preload (per-method skew guard). */
-  available: (api: FloatingPanelsBridge) => boolean
+  available: (api: PanelsBridge) => boolean
 }
 
 /** What a consumer renders from: the current value plus load/save/skew status. */
-export interface FloatingPanelSetting {
+export interface PanelSetting {
   /** Current (optimistic) value. */
   value: boolean
   /** True once the mount-time load has resolved (or failed). */
@@ -44,12 +47,11 @@ export interface FloatingPanelSetting {
 }
 
 /**
- * Manages one `floatingPanels.*` boolean setting (Spaces visibility or a
- * per-window keep-on-top pin): loads it once on mount, applies optimistically with
- * rollback, and reports per-method availability so a single row can hide itself on
- * an outdated preload. Shared by the Floating Navigator pin, the LiveEditor pin,
- * and the Application "show on all desktops" toggle — each previously duplicated in
- * the monolithic FloatingWindowSettings before the settings regroup.
+ * Manages one LiveEditor panel boolean setting (Spaces visibility or the
+ * keep-on-top pin): loads it once on mount, applies optimistically with
+ * rollback, and reports per-method availability so a single row can hide itself
+ * on an outdated preload. Shared by the LiveEditor pin and the Application
+ * "show on all desktops" toggle.
  *
  * Intentionally load-once + apply-with-rollback only; §6d's cross-window pin sync
  * lives in the TARGET windows, not this Settings-side hook, so it grafts on later.
@@ -57,24 +59,20 @@ export interface FloatingPanelSetting {
  * @param config - The descriptor (default + get/set/available) for this setting.
  * @returns The setting's value + status + an `apply` setter.
  * @example
- * const pin = useFloatingPanelSetting(FLOATING_NAVIGATOR_PIN_SETTING)
+ * const pin = usePanelSetting(LIVE_EDITOR_PIN_SETTING)
  * <Switch checked={pin.value} disabled={pin.isSaving} onCheckedChange={pin.apply} />
  */
-export function useFloatingPanelSetting(
-  config: FloatingPanelSettingConfig,
-): FloatingPanelSetting {
+export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
   const hasMounted = useMounted()
   const [value, setValue] = useState(config.defaultValue)
   const [isReady, setIsReady] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Last value the main process confirmed — the rollback target, so a failed
-  // write never restores the in-flight optimistic value.
-  const lastGoodRef = useRef(config.defaultValue)
 
   // Load once on mount. The availability guard means web / outdated-preload
   // renderers simply never flip `isReady` and the consumer hides the row.
-  useCycleEffect(() => {
+  // `floatingPanels` is the legacy wire name — frozen preloads expose it; do not rename.
+  useInitialEffect(() => {
     const api =
       typeof window === 'undefined'
         ? undefined
@@ -88,10 +86,9 @@ export function useFloatingPanelSetting(
       .then((loaded) => {
         if (cancelled) return
         setValue(loaded)
-        lastGoodRef.current = loaded
       })
       .catch((loadError: unknown) => {
-        log.error('Failed to load floating panel setting:', loadError)
+        log.error('Failed to load panel setting:', loadError)
         if (!cancelled) setError('Failed to load setting')
       })
       .finally(() => {
@@ -101,7 +98,7 @@ export function useFloatingPanelSetting(
     return () => {
       cancelled = true
     }
-  }, [])
+  })
 
   const apply = async (next: boolean): Promise<void> => {
     const api = window.electronAPI?.floatingPanels
@@ -115,9 +112,8 @@ export function useFloatingPanelSetting(
     try {
       const applied = await config.set(api, next)
       setValue(applied)
-      lastGoodRef.current = applied
     } catch (saveError: unknown) {
-      log.error('Failed to update floating panel setting:', saveError)
+      log.error('Failed to update panel setting:', saveError)
       setValue(previous)
       setError('Failed to update setting')
     } finally {

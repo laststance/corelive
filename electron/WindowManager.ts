@@ -9,7 +9,7 @@
  * - Manage window lifecycle (show, hide, close)
  * - Coordinate with WindowStateManager for position persistence
  * - Handle window-specific events and behaviors
- * - Support multiple window types (main, floating)
+ * - Support the three desktop surfaces: LiveEditor panel, login window, Settings popover
  *
  * @module electron/WindowManager
  */
@@ -18,13 +18,17 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 import { BrowserWindow, dialog, screen } from 'electron'
+import type { WebContents } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import {
   AUTH_PATHNAMES,
   ERR_ABORTED,
-  FLOATING_LOAD_MAX_RETRIES,
-  FLOATING_LOAD_RETRY_BASE_MS,
+  HTTP_ERROR_STATUS_MIN,
+  LOGIN_WINDOW_HEIGHT_PX,
+  LOGIN_WINDOW_WIDTH_PX,
+  PANEL_LOAD_MAX_RETRIES,
+  PANEL_LOAD_RETRY_BASE_MS,
   SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
   SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
   SETTINGS_POPOVER_MAX_HEIGHT_PX,
@@ -33,15 +37,10 @@ import {
   SETTINGS_POPOVER_MIN_WIDTH_PX,
   SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS,
 } from './constants'
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
-import type {
-  WindowStateManager,
-  WindowOptions,
-  WindowType,
-} from './WindowStateManager'
+import type { WindowStateManager, WindowOptions } from './WindowStateManager'
 
 // Resolve __dirname for ES modules
 // @ts-ignore - import.meta.url is valid at runtime (electron-vite handles this)
@@ -52,20 +51,17 @@ const __dirname = path.dirname(__filename)
 // Type Definitions
 // ============================================================================
 
-/** Floating window configuration */
-interface FloatingConfig {
-  frame: boolean
-  alwaysOnTop: boolean
-  resizable: boolean
-  visibleOnAllWorkspaces?: boolean
+/** How a panel that failed to load is retried, dismissed and parented by {@link WindowManager.recoverPanelFromLoadFailure}. */
+interface PanelLoadRecoveryOptions {
+  /** Reloads the panel route; run by each backoff retry and by the dialog's Retry button. */
+  retry: () => void
+  /** Run when the user picks Close in the recovery dialog. */
+  dismiss: () => void
+  /** Window to show and attach the dialog to, or null for an app-modal dialog (hidden transparent panels). */
+  parent: BrowserWindow | null
+  /** HTTP status of the error page when the failure was a 4xx/5xx rather than a network error. */
+  httpStatus?: number
 }
-
-/**
- * The auxiliary panels that can be requested at Electron startup. Derived from
- * `WindowType` (the source of truth) so adding a panel type there flows here
- * automatically; excludes `'main'` since the main window is handled separately.
- */
-type StartupPanelKind = Exclude<WindowType, 'main'>
 
 // ============================================================================
 // Window Manager Class
@@ -82,26 +78,26 @@ type StartupPanelKind = Exclude<WindowType, 'main'>
  * - Handles platform-specific window behaviors
  */
 export class WindowManager {
-  /** Always-on-top utility window */
-  private floatingNavigator: BrowserWindow | null
+  /** Fixed-size sign-in window (`/login-shell`); the only signed-out surface. */
+  private loginWindow: BrowserWindow | null
 
-  // DT7 Floating load-failure recovery state. The Floating window is the
-  // signed-out front door, so a main-frame load failure must self-heal (retry +
-  // native dialog) instead of leaving a dead window. Reset per fresh window in
-  // `createFloatingNavigator`.
-  /** Retry count for the current never-succeeded Floating load. */
-  private floatingLoadFailAttempts: number = 0
-  /** True while a retry timer is queued or the recovery dialog is open. */
-  private floatingLoadRecoveryPending: boolean = false
-  /** Latched on the first successful Floating load; after it the renderer owns errors. */
-  private floatingHasLoadedOnce: boolean = false
   /**
-   * True between a real main-frame `did-fail-load` and the `did-finish-load`
-   * Chromium then fires for the error page it commits. Lets the finish handler
-   * tell an error-page settle (which must NOT latch `floatingHasLoadedOnce`, or
-   * it silences DT7 recovery and strands a blank window) from a genuine app load.
+   * True from a login-window handoff ({@link completeLogin}) until LiveEditor is
+   * actually revealed or the user logs out. While set, repeated sign-in reports
+   * are ignored so a LiveEditor load failure that re-shows the login window can
+   * never ping-pong back into another handoff.
    */
-  private floatingLoadFailedPendingFinish: boolean = false
+  private loginHandoffPending: boolean
+
+  /**
+   * Per-window load-failure retry bookkeeping for {@link recoverPanelFromLoadFailure}.
+   * Keyed weakly so the state dies with its window: a replacement window always
+   * starts a fresh retry budget, and a stale retry timer cannot touch it.
+   */
+  private readonly loadRecovery = new WeakMap<
+    BrowserWindow,
+    { attempts: number; pending: boolean }
+  >()
 
   /** Frameless transparent LiveEditor Note panel */
   private liveEditorWindow: BrowserWindow | null
@@ -129,35 +125,16 @@ export class WindowManager {
   /** Handles window state persistence */
   private windowStateManager: WindowStateManager | null
 
-  /** Fallback mode for when window minimize to tray fails */
-  private trayFallbackMode: boolean
-
   /** Callback to get tray icon bounds for popover positioning */
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
   /**
-   * Notified right after a Floating navigator window is (re)created, so
-   * dependents can rebind to the fresh BrowserWindow. ShortcutManager uses it to
-   * re-attach its focus/blur contextual-shortcut listeners: T18 retired the main
-   * window and moved those listeners onto Floating, but Floating can be absent at
-   * setup (LiveEditor-only startup) or replaced (closed then reopened via Cmd+3 /
-   * tray / restoreFromTray with a NEW window id). Without this hook such a
-   * later-created Floating would carry no listeners and its contextual shortcuts
-   * would never fire. `createFloatingNavigator` is their single chokepoint, so
-   * firing here covers every creation path at once.
+   * True once the startup LiveEditor load was redirected to an auth page (or
+   * failed), so the login window was surfaced in its place. Exposed only through
+   * {@link hasStartupAuthFallback} as test-observable evidence of that decision;
+   * no production code branches on it. Durable for the session.
    */
-  private onFloatingNavigatorCreated: (() => void) | null
-
-  /**
-   * Panels that were redirected to an auth page (or failed to load) at startup,
-   * so the main window was surfaced in their place. Exposed only through
-   * `getStartupAuthFallbacks()` as test-observable evidence of the
-   * suppress-and-surface decision; no production code branches on it (the pill
-   * shows a static "Opening CoreLive…"). Durable for the session — the entry
-   * stays even after the panel is re-shown post-login, since it records a fact
-   * about this boot.
-   */
-  private startupAuthFallbacks: Set<StartupPanelKind>
+  private startupAuthFallbackOccurred: boolean
   /** Cancels startup-panel auth gates that have not reached a load decision yet. */
   private startupPanelLoadCancellations: Set<() => void>
 
@@ -185,7 +162,8 @@ export class WindowManager {
     configManager: ConfigManager | null = null,
     windowStateManager: WindowStateManager | null = null,
   ) {
-    this.floatingNavigator = null
+    this.loginWindow = null
+    this.loginHandoffPending = false
     this.liveEditorWindow = null
     this.liveEditorHasLoadedOnce = false
     this.liveEditorRevealPending = false
@@ -196,10 +174,8 @@ export class WindowManager {
     this.serverUrl = serverUrl
     this.configManager = configManager
     this.windowStateManager = windowStateManager
-    this.trayFallbackMode = false
     this.getTrayBoundsProvider = null
-    this.onFloatingNavigatorCreated = null
-    this.startupAuthFallbacks = new Set()
+    this.startupAuthFallbackOccurred = false
     this.startupPanelLoadCancellations = new Set()
     this.settingsResizeDebounceTimer = null
     this.settingsPersistDebounceTimer = null
@@ -218,31 +194,16 @@ export class WindowManager {
   }
 
   /**
-   * Registers a callback fired right after each Floating navigator (re)creation,
-   * letting dependents rebind to the new BrowserWindow — e.g. ShortcutManager
-   * re-attaching its contextual-shortcut focus/blur listeners. Setter injection
-   * (not a constructor arg) because ShortcutManager is built after WindowManager
-   * in `deferredInit`.
-   *
-   * @param handler - Invoked after `createFloatingNavigator` fully wires the window, or null to clear.
-   * @example
-   * windowManager.setOnFloatingNavigatorCreated(() => shortcutManager.setupFocusListeners())
-   */
-  setOnFloatingNavigatorCreated(handler: (() => void) | null): void {
-    this.onFloatingNavigatorCreated = handler
-  }
-
-  /**
-   * Applies the macOS Spaces-following behavior to a floating utility window.
+   * Applies the macOS Spaces-following behavior to a utility panel window.
    *
    * Electron exposes this through `setVisibleOnAllWorkspaces`, but it is only
    * meaningful on macOS for CoreLive's use case. The guard keeps Linux/Windows
    * behavior unchanged while still allowing the setting to be stored.
    *
-   * @param browserWindow - Floating panel to update, if it currently exists
+   * @param browserWindow - Panel to update, if it currently exists
    * @param enabled - true keeps the window visible across Spaces/desktops
    * @example
-   * this.applyVisibleOnAllWorkspaces(this.floatingNavigator, true)
+   * this.applyVisibleOnAllWorkspaces(this.liveEditorWindow, true)
    */
   private applyVisibleOnAllWorkspaces(
     browserWindow: BrowserWindow | null,
@@ -270,57 +231,43 @@ export class WindowManager {
     enabled: boolean,
   ): void {
     if (!browserWindow || browserWindow.isDestroyed()) return
-    // setAlwaysOnTop defaults to the 'floating' window level when enabled —
-    // the correct level for these utility panels.
+    // setAlwaysOnTop's default window level (above normal windows, below
+    // menus) is the right one for these utility panels.
     browserWindow.setAlwaysOnTop(enabled)
   }
 
   /**
-   * Reads whether both floating panels should follow macOS Spaces.
+   * Reads whether the LiveEditor panel should follow macOS Spaces (config-backed, default off).
    *
-   * The Settings UI presents this as a single switch, while the config stores
-   * values beside each window's own settings so future per-window controls can
-   * split cleanly without a migration.
-   *
-   * @returns true only when both Floating Navigator and LiveEditor are enabled
+   * @returns true when LiveEditor stays visible across desktops
    * @example
-   * const enabled = windowManager.getFloatingPanelsVisibleOnAllWorkspaces()
+   * const enabled = windowManager.getLiveEditorVisibleOnAllWorkspaces()
    */
-  getFloatingPanelsVisibleOnAllWorkspaces(): boolean {
-    const floatingEnabled =
-      this.configManager?.get<boolean>(
-        'window.floating.visibleOnAllWorkspaces',
-        false,
-      ) ?? false
-    const liveEditorEnabled =
+  getLiveEditorVisibleOnAllWorkspaces(): boolean {
+    return (
       this.configManager?.get<boolean>(
         'liveEditor.visibleOnAllWorkspaces',
-        floatingEnabled,
-      ) ?? floatingEnabled
-
-    return Boolean(floatingEnabled && liveEditorEnabled)
+        false,
+      ) ?? false
+    )
   }
 
   /**
    * Persists and applies the "show on all Mac desktops" setting.
    *
-   * Called from Settings via IPC. Existing windows update immediately; windows
-   * created later read the persisted config during creation.
+   * Called from Settings via IPC. An open LiveEditor updates immediately; a
+   * window created later reads the persisted config during creation.
    *
-   * @param enabled - true keeps both floating panels visible across Spaces
+   * @param enabled - true keeps LiveEditor visible across Spaces
    * @returns The setting value that was applied
    * @example
-   * windowManager.setFloatingPanelsVisibleOnAllWorkspaces(true)
+   * windowManager.setLiveEditorVisibleOnAllWorkspaces(true)
    */
-  setFloatingPanelsVisibleOnAllWorkspaces(enabled: boolean): boolean {
+  setLiveEditorVisibleOnAllWorkspaces(enabled: boolean): boolean {
     if (this.configManager) {
-      this.configManager.update({
-        'window.floating.visibleOnAllWorkspaces': enabled,
-        'liveEditor.visibleOnAllWorkspaces': enabled,
-      })
+      this.configManager.set('liveEditor.visibleOnAllWorkspaces', enabled)
     }
 
-    this.applyVisibleOnAllWorkspaces(this.floatingNavigator, enabled)
     this.applyVisibleOnAllWorkspaces(this.liveEditorWindow, enabled)
 
     return enabled
@@ -347,61 +294,6 @@ export class WindowManager {
       this.configManager.set('liveEditor.alwaysOnTop', enabled)
     }
     this.applyAlwaysOnTop(this.liveEditorWindow, enabled)
-    return enabled
-  }
-
-  /**
-   * Reads FloatingNavigator's effective always-on-top state.
-   * @returns
-   * - the live window's `isAlwaysOnTop()` when the panel is open
-   * - else the persisted WindowStateManager value (what relaunch will re-apply)
-   * - else the config default (true)
-   */
-  getFloatingNavigatorAlwaysOnTop(): boolean {
-    if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
-      return this.floatingNavigator.isAlwaysOnTop()
-    }
-    const persisted =
-      this.windowStateManager?.getWindowState('floating')?.isAlwaysOnTop
-    if (typeof persisted === 'boolean') return persisted
-    return (
-      this.configManager?.get<boolean>('window.floating.alwaysOnTop', true) ??
-      true
-    )
-  }
-
-  /**
-   * Persists + applies FloatingNavigator's always-on-top setting across all
-   * three layers that decide its relaunch state — config seed, window-state.json,
-   * and the live window — then broadcasts the change so the floating window's own
-   * pin button live-updates (§6d). The window-state write is load-bearing:
-   * `getWindowOptions` reads `state.isAlwaysOnTop` at create and main re-applies it
-   * post-create, so a config-only write would be silently overridden after the
-   * first launch.
-   * @param enabled - true pins FloatingNavigator above others; false unpins it.
-   * @returns The applied value (echoed for optimistic-UI confirmation).
-   */
-  setFloatingNavigatorAlwaysOnTop(enabled: boolean): boolean {
-    if (this.configManager) {
-      this.configManager.set('window.floating.alwaysOnTop', enabled)
-    }
-    // Load-bearing — without this, relaunch re-pins from the persisted state.
-    this.windowStateManager?.setWindowState('floating', {
-      isAlwaysOnTop: enabled,
-    })
-    this.applyAlwaysOnTop(this.floatingNavigator, enabled)
-    // §6d cross-window sync: tell the floating window's own pin button about the
-    // change so a toggle made from the Settings window updates it live. The
-    // in-window pin toggles through here too, where this is a harmless echo (the
-    // button already updated optimistically). No-op when the window is closed —
-    // it re-reads fresh state via its mount-init effect on next open.
-    if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
-      typedSend(
-        this.floatingNavigator.webContents,
-        'floating-window-always-on-top-changed',
-        { alwaysOnTop: enabled },
-      )
-    }
     return enabled
   }
 
@@ -462,69 +354,58 @@ export class WindowManager {
   }
 
   /**
-   * Saves current window positions and sizes to persistent storage.
+   * Saves the LiveEditor position and size to persistent storage.
    */
   saveWindowState(): void {
-    if (this.windowStateManager) {
-      if (this.floatingNavigator) {
-        this.windowStateManager.updateWindowState(
-          'floating',
-          this.floatingNavigator,
-        )
-      }
-      if (this.liveEditorWindow) {
-        this.windowStateManager.updateWindowState(
-          'liveEditor',
-          this.liveEditorWindow,
-        )
-      }
+    if (this.windowStateManager && this.liveEditorWindow) {
+      this.windowStateManager.updateWindowState(
+        'liveEditor',
+        this.liveEditorWindow,
+      )
     }
   }
 
+  // ==========================================================================
+  // Login window
+  // ==========================================================================
+
   /**
-   * Create the floating navigator window.
+   * Create the login window: a fixed-size shell ({@link LOGIN_WINDOW_WIDTH_PX} ×
+   * {@link LOGIN_WINDOW_HEIGHT_PX}) that loads `/login-shell`, the only
+   * signed-out surface. Nothing about it is persisted (no config, no
+   * window-state); it is created hidden so callers decide when it appears.
+   *
+   * @returns The (possibly already-existing) login BrowserWindow.
+   * @example
+   * windowManager.createLoginWindow().show()
    */
-  createFloatingNavigator(): BrowserWindow {
-    if (this.floatingNavigator) {
-      return this.floatingNavigator
+  createLoginWindow(): BrowserWindow {
+    if (this.loginWindow && !this.loginWindow.isDestroyed()) {
+      return this.loginWindow
     }
 
-    const windowOptions: WindowOptions = this.windowStateManager
-      ? this.windowStateManager.getWindowOptions('floating')
-      : {
-          width: 300,
-          height: 400,
-          minWidth: 250,
-          minHeight: 300,
-          maxWidth: 400,
-        }
+    log.debug('Creating login window...', { isDev: this.isDev })
 
-    const floatingConfig: FloatingConfig = this.configManager
-      ? this.configManager.getSection('window').floating
-      : { frame: false, alwaysOnTop: true, resizable: true }
-
-    log.debug('Creating floating navigator window...', {
-      windowOptions,
-      floatingConfig,
-      isDev: this.isDev,
-    })
-
-    // Resolve floating preload script path (built by electron-vite). It is
-    // packaged inside `app.asar`, so resolve it relative to `__dirname`;
-    // `process.resourcesPath` would miss it in production.
-    const floatingPreloadPath = path.join(
-      __dirname,
-      '..',
-      'preload',
-      'preload-floating.cjs',
-    )
-
-    this.floatingNavigator = new BrowserWindow({
-      ...windowOptions,
+    const loginWindow = new BrowserWindow({
+      width: LOGIN_WINDOW_WIDTH_PX,
+      height: LOGIN_WINDOW_HEIGHT_PX,
+      resizable: false,
+      center: true,
+      // Framed with hidden title bar: the native traffic lights stay visible
+      // over the content, the only non-login way to dismiss this window (they
+      // work in accessory / no-Dock mode too). Do not add `frame: false` or an
+      // off-screen `trafficLightPosition`.
+      titleBarStyle: 'hidden',
+      skipTaskbar: true,
+      show: false,
+      hasShadow: true,
+      backgroundColor: '#ffffff',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: floatingPreloadPath,
+        // Built by electron-vite and packaged inside `app.asar`, so resolve it
+        // relative to `__dirname`; `process.resourcesPath` would miss it.
+        preload: path.join(__dirname, '..', 'preload', 'preload-login.cjs'),
         webSecurity: true,
         allowRunningInsecureContent: false,
         sandbox: false,
@@ -534,222 +415,273 @@ export class WindowManager {
           process.env,
         ),
       },
-      frame: floatingConfig.frame,
-      // Sole pin-source for users upgrading from a build that predates this
-      // setting: their saved window-state has no isAlwaysOnTop field, so
-      // applyWindowState's `typeof === 'boolean'` guard skips it and CANNOT
-      // re-pin. This line must stay AFTER the ...windowOptions spread (which
-      // carries getWindowOptions' `alwaysOnTop: undefined` on upgrade) and must
-      // NOT be folded into it — doing so hands the ctor `undefined` (unpinned).
-      // Locked by the upgrade test in WindowManager.always-on-top.test.ts.
-      alwaysOnTop: floatingConfig.alwaysOnTop,
-      skipTaskbar: true,
-      resizable: floatingConfig.resizable,
-      show: false,
-      backgroundColor: '#ffffff',
-      transparent: false,
-      hasShadow: true,
-      titleBarStyle: 'hidden',
-      trafficLightPosition: { x: -100, y: -100 },
+    })
+    this.loginWindow = loginWindow
+
+    const loginUrl = this.getPanelUrl('login')
+    log.debug('Loading login window URL:', loginUrl)
+    loginWindow.loadURL(loginUrl)
+
+    // Load-failure recovery (DT7). Per-window closure state, so a replacement
+    // window never inherits a predecessor's latch.
+    /** Latched on the first real load; after it the renderer owns its own errors. */
+    let hasLoadedOnce = false
+    /**
+     * True between a main-frame failure (network error or HTTP 4xx/5xx page)
+     * and the `did-finish-load` Chromium then fires for the error page it
+     * commits. Lets the finish handler tell an error-page settle (which must
+     * NOT latch `hasLoadedOnce`, or recovery goes silent on a blank window)
+     * from a genuine app load.
+     */
+    let errorPagePendingFinish = false
+    const recoveryOptions: PanelLoadRecoveryOptions = {
+      retry: () => {
+        void loginWindow.webContents.loadURL(loginUrl)
+      },
+      // Close leaves the app tray-resident; the tray reopens the login window.
+      dismiss: () => loginWindow.close(),
+      parent: loginWindow,
+    }
+
+    loginWindow.on('closed', () => {
+      log.debug('Login window closed')
+      if (this.loginWindow === loginWindow) this.loginWindow = null
     })
 
-    // DT7: fresh window → reset the load-failure recovery machine so a prior
-    // window's exhausted retries don't carry over.
-    this.floatingLoadFailAttempts = 0
-    this.floatingLoadRecoveryPending = false
-    this.floatingHasLoadedOnce = false
-    this.floatingLoadFailedPendingFinish = false
-
-    const floatingUrl = this.getPanelUrl('floating')
-
-    log.debug('Loading floating navigator URL:', floatingUrl)
-    this.floatingNavigator.loadURL(floatingUrl)
-
-    this.floatingNavigator.on('resize', () => {
-      if (this.windowStateManager && this.floatingNavigator) {
-        this.windowStateManager.updateWindowStateDebounced(
-          'floating',
-          this.floatingNavigator,
-        )
-      }
+    loginWindow.on('ready-to-show', () => {
+      log.debug('Login window ready-to-show event')
     })
 
-    this.floatingNavigator.on('move', () => {
-      if (this.windowStateManager && this.floatingNavigator) {
-        this.windowStateManager.updateWindowStateDebounced(
-          'floating',
-          this.floatingNavigator,
-        )
-      }
-    })
-
-    this.floatingNavigator.on('closed', () => {
-      log.debug('Floating navigator window closed')
-      this.floatingNavigator = null
-      this.saveWindowState()
-    })
-
-    this.floatingNavigator.on('ready-to-show', () => {
-      log.debug('Floating navigator ready-to-show event')
-    })
-
-    this.floatingNavigator.webContents.on('did-finish-load', () => {
-      // DT7: Chromium fires did-finish-load for the ERROR PAGE too (chrome-error://…)
-      // after a failed load, not only for a real app load. If the most recent
-      // main-frame load failed, THIS finish is that error page settling: consume
-      // the marker and do NOT latch, so recovery keeps retrying instead of being
-      // silenced into a permanently blank window (the bug T20 native QA caught).
-      if (this.floatingLoadFailedPendingFinish) {
-        this.floatingLoadFailedPendingFinish = false
+    loginWindow.webContents.on('did-finish-load', () => {
+      // Chromium fires did-finish-load for the ERROR PAGE too, not only for a
+      // real app load. Consume the marker instead of latching (the bug T20
+      // native QA caught) so recovery keeps retrying.
+      if (errorPagePendingFinish) {
+        errorPagePendingFinish = false
         return
       }
-      log.debug('Floating navigator content loaded')
-      // DT7: the renderer is alive now and owns its own error states, so stop
-      // the main-process load-failure recovery from firing on later transient
-      // events (e.g. a stale did-fail-load for the settled load).
-      this.floatingHasLoadedOnce = true
-      this.floatingLoadRecoveryPending = false
+      log.debug('Login window content loaded')
+      hasLoadedOnce = true
+      this.loadRecovery.delete(loginWindow)
     })
 
-    // DT7: recover a never-loaded Floating window from a main-frame load
-    // failure (offline/DNS/5xx). Without this the signed-out front door can
-    // boot into a permanently blank window. See `recoverFloatingFromLoadFailure`.
-    this.floatingNavigator.webContents.on(
+    // HTTP 4xx/5xx is a SUCCESSFUL navigation to an error page — it never
+    // fires did-fail-load — so the status code on did-navigate is the only
+    // signal that corelive.app answered with an error.
+    loginWindow.webContents.on(
+      'did-navigate',
+      (_event, _url, httpResponseCode) => {
+        // Reassign, never latch (mirrors the LiveEditor watcher): a retry that
+        // outraces Chromium's error-page commit leaves the marker set with no
+        // did-finish-load to consume it, so a later SUCCESSFUL navigation must
+        // clear it. Latching would make the retry's real did-finish-load look
+        // like the error page's, stranding the window at hasLoadedOnce=false
+        // with an unreset retry budget.
+        errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
+        if (!errorPagePendingFinish) return
+        if (hasLoadedOnce) return
+        this.recoverPanelFromLoadFailure(loginWindow, {
+          ...recoveryOptions,
+          httpStatus: httpResponseCode,
+        })
+      },
+    )
+
+    loginWindow.webContents.on(
       'did-fail-load',
       (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
         // Sub-resource failures and intentional cancellations (ERR_ABORTED
         // fires during a normal redirect chain) are not real document failures.
         if (!isMainFrame || errorCode === ERR_ABORTED) return
-        // A real main-frame failure: Chromium will now commit an error page and
-        // fire did-finish-load for IT. Mark it so that finish doesn't mistake the
-        // error page for a live app render and latch `floatingHasLoadedOnce`.
-        this.floatingLoadFailedPendingFinish = true
-        // Once the panel has loaded once, its live renderer owns its error UI —
-        // main-process retry is only for a never-loaded (dead) window.
-        if (this.floatingHasLoadedOnce) return
-        // A retry timer or dialog is already in flight — don't stack them.
-        if (this.floatingLoadRecoveryPending) return
-        this.recoverFloatingFromLoadFailure()
+        errorPagePendingFinish = true
+        // Once loaded, the live renderer owns its error UI — main-process
+        // retry is only for a never-loaded (dead) window.
+        if (hasLoadedOnce) return
+        this.recoverPanelFromLoadFailure(loginWindow, recoveryOptions)
       },
     )
 
-    this.floatingNavigator.webContents.on(
-      'render-process-gone',
-      (_event, details) => {
-        log.error('Floating navigator process gone:', {
-          reason: details.reason,
-        })
-      },
-    )
+    loginWindow.webContents.on('render-process-gone', (_event, details) => {
+      log.error('Login window process gone:', { reason: details.reason })
+    })
 
-    if (this.windowStateManager) {
-      this.windowStateManager.applyWindowState(
-        'floating',
-        this.floatingNavigator,
-      )
-    }
-
-    this.applyVisibleOnAllWorkspaces(
-      this.floatingNavigator,
-      Boolean(floatingConfig.visibleOnAllWorkspaces),
-    )
-
-    // Notify dependents that a fresh Floating window exists so they can rebind to
-    // it (ShortcutManager re-attaches contextual-shortcut focus/blur listeners).
-    // Fired here — after the window is fully wired but before the caller shows it
-    // — so listeners are in place by the time it first gains focus.
-    this.onFloatingNavigatorCreated?.()
-
-    return this.floatingNavigator
+    return loginWindow
   }
 
   /**
-   * Drive the Floating window back to life after a main-frame load failure:
+   * Surface the login window (creating it if needed). The signed-out fallback
+   * for every LiveEditor path — called directly, never via {@link restoreFromTray},
+   * so a signed-out LiveEditor bounce cannot loop back into LiveEditor.
+   *
+   * @returns Nothing.
+   * @example
+   * windowManager.showLoginWindow()
+   */
+  showLoginWindow(): void {
+    const loginWindow =
+      this.loginWindow && !this.loginWindow.isDestroyed()
+        ? this.loginWindow
+        : this.createLoginWindow()
+    loginWindow.show()
+    loginWindow.focus()
+  }
+
+  /**
+   * Whether the login window currently exists (and is not destroyed). A
+   * test-observability seam; no production code reads it (`restoreFromTray`
+   * deliberately does not short-circuit on it, see its docstring).
+   *
+   * @returns true while a live login window exists.
+   * @example
+   * expect(windowManager.hasLoginWindow()).toBe(true)
+   */
+  hasLoginWindow(): boolean {
+    return this.loginWindow !== null && !this.loginWindow.isDestroyed()
+  }
+
+  /**
+   * Hand off from the login window to LiveEditor once the login window reports
+   * a signed-in user (`auth-set-user`). Only the login window's own
+   * `webContents` may trigger it, and only once per handoff:
+   *
+   * ```
+   * login window ──auth-set-user──▶ main ──completeLogin(sender)──▶ [pending=true] showLiveEditor() → close login
+   *       ▲                                                                            │
+   *       │ showLoginWindow() (fallback; pending stays set)             did-fail-load / /login bounce
+   *       └────────────────── suppressLiveEditorAuthRedirect ◀─────────────────────────┘
+   * A re-shown login window's auth-set-user arrives while pending → no-op → no loop.
+   * Cleared by: revealLiveEditorNow() (LiveEditor shown + leftover login closed) / auth-logout → clearLoginHandoff()
+   * ```
+   *
+   * @param sender - `event.sender` of the `auth-set-user` IPC.
+   * @returns Nothing.
+   * @example
+   * windowManager.completeLogin(event.sender)
+   */
+  completeLogin(sender: WebContents): void {
+    const loginWindow = this.loginWindow
+    if (!loginWindow || loginWindow.isDestroyed()) return
+    if (loginWindow.webContents !== sender) return
+    if (this.loginHandoffPending) return
+
+    this.loginHandoffPending = true
+    this.showLiveEditor()
+    // A cached reveal already ran synchronously (latch cleared, login window
+    // closed by revealLiveEditorNow); otherwise close the login window here.
+    if (this.loginHandoffPending && !loginWindow.isDestroyed()) {
+      loginWindow.close()
+    }
+  }
+
+  /**
+   * Clear the login handoff latch so the next sign-in hands off again. Called
+   * from `auth-logout`; the other release is a successful LiveEditor reveal.
+   *
+   * @returns Nothing.
+   * @example
+   * windowManager.clearLoginHandoff()
+   */
+  clearLoginHandoff(): void {
+    this.loginHandoffPending = false
+  }
+
+  // ==========================================================================
+  // Panel load-failure recovery
+  // ==========================================================================
+
+  /**
+   * Drive a never-loaded panel back to life after a main-frame load failure:
    * silently retry with linear backoff, then — once retries are exhausted —
    * surface a NATIVE recovery dialog. Main-process owned because a never-loaded
    * renderer can't render its own error page; the dialog is native (not bundled
-   * HTML) because electron-builder can drop asar leaf deps. Wired from the
-   * Floating `did-fail-load` handler in `createFloatingNavigator`.
+   * HTML) because electron-builder can drop asar leaf deps. Idempotent while a
+   * retry timer or dialog is in flight for the same window.
    *
-   * @returns nothing — schedules a retry or opens the recovery dialog as a side effect.
+   * @param target - The window whose load failed; keys the retry state.
+   * @param options - How to retry / dismiss / parent the dialog for this panel.
+   * @returns Nothing — schedules a retry or opens the recovery dialog as a side effect.
    * @example
-   * // on a real offline boot: retries 3× (800/1600/2400 ms) then shows the dialog
+   * // offline boot: retries 3× (800/1600/2400 ms) then shows the dialog
+   * this.recoverPanelFromLoadFailure(loginWindow, { retry, dismiss, parent: loginWindow })
    */
-  private recoverFloatingFromLoadFailure(): void {
-    const target = this.floatingNavigator
-    if (!target || target.isDestroyed()) return
+  private recoverPanelFromLoadFailure(
+    target: BrowserWindow,
+    options: PanelLoadRecoveryOptions,
+  ): void {
+    if (target.isDestroyed()) return
 
-    // Still within the silent-retry budget: schedule a backed-off reload.
-    if (this.floatingLoadFailAttempts < FLOATING_LOAD_MAX_RETRIES) {
-      this.floatingLoadFailAttempts += 1
-      this.floatingLoadRecoveryPending = true
-      const backoffMs =
-        FLOATING_LOAD_RETRY_BASE_MS * this.floatingLoadFailAttempts
-      // Bind the retry to the window that ACTUALLY failed. If it closes and a
-      // fresh Floating window replaces it during the backoff, this stale timer
-      // must not reload (and corrupt the recovery state of) the new window.
-      const retryTarget = target
+    const state = this.loadRecovery.get(target) ?? {
+      attempts: 0,
+      pending: false,
+    }
+    this.loadRecovery.set(target, state)
+    // A retry timer or dialog is already in flight — don't stack them.
+    if (state.pending) return
+    state.pending = true
+
+    // Still within the silent-retry budget: schedule a backed-off reload,
+    // bound to the window that ACTUALLY failed (never a replacement).
+    if (state.attempts < PANEL_LOAD_MAX_RETRIES) {
+      state.attempts += 1
       setTimeout(() => {
-        if (
-          this.floatingNavigator !== retryTarget ||
-          retryTarget.isDestroyed()
-        ) {
-          return
-        }
-        this.floatingLoadRecoveryPending = false
-        retryTarget.webContents.loadURL(this.getPanelUrl('floating'))
-      }, backoffMs)
+        if (target.isDestroyed()) return
+        state.pending = false
+        options.retry()
+      }, PANEL_LOAD_RETRY_BASE_MS * state.attempts)
       return
     }
 
-    // Retries exhausted. Show the (until now hidden) startup panel FIRST: a
-    // window-modal sheet attached to a non-visible window may never render on
-    // macOS, which would itself be the dead window this recovery exists to kill.
-    this.floatingLoadRecoveryPending = true
-    target.show()
-    void this.promptFloatingLoadFailure(target)
+    // Retries exhausted. Show the parent FIRST: a window-modal sheet attached
+    // to a non-visible window may never render on macOS.
+    options.parent?.show()
+    void this.promptPanelLoadFailure(target, options)
   }
 
   /**
-   * Native "couldn't reach corelive.app" recovery dialog shown when the Floating
-   * window exhausts its silent reload retries. Retry restarts a fresh recovery
-   * cycle; Close dismisses the window (re-openable from the tray). Deliberately
-   * Close, not Quit: in Phase 1 the main window is still alive and `app.quit()`
-   * would take it down over a companion-window network blip.
+   * Native "couldn't reach corelive.app" recovery dialog shown when a panel
+   * exhausts its silent reload retries. Either choice ends this recovery cycle
+   * (a later failure starts a fresh one); Retry reloads, Close runs the panel's
+   * dismiss action. Parentless when the panel is a hidden transparent window.
    *
-   * @param target - The Floating window to attach the dialog to and recover.
-   * @returns a promise that settles once the user picks Retry or Close.
+   * @param target - The window being recovered.
+   * @param options - Retry / dismiss actions, dialog parent and optional HTTP status.
+   * @returns A promise that settles once the user picks Retry or Close.
    * @example
-   * void this.promptFloatingLoadFailure(this.floatingNavigator)
+   * void this.promptPanelLoadFailure(loginWindow, options)
    */
-  private async promptFloatingLoadFailure(
+  private async promptPanelLoadFailure(
     target: BrowserWindow,
+    options: PanelLoadRecoveryOptions,
   ): Promise<void> {
-    const { response } = await dialog.showMessageBox(target, {
+    const messageBoxOptions: Electron.MessageBoxOptions = {
       type: 'warning',
       message: "Couldn't reach corelive.app",
-      detail: 'Check your internet connection, then try again.',
+      detail:
+        options.httpStatus === undefined
+          ? 'Check your internet connection, then try again.'
+          : `corelive.app returned HTTP ${options.httpStatus}. Try again in a moment.`,
       buttons: ['Retry', 'Close'],
       defaultId: 0,
       cancelId: 1,
-    })
+    }
+    const { response } = options.parent
+      ? await dialog.showMessageBox(options.parent, messageBoxOptions)
+      : await dialog.showMessageBox(messageBoxOptions)
 
+    // Clean slate either way so the next failure restarts the backoff sequence.
+    this.loadRecovery.delete(target)
     if (target.isDestroyed()) return
 
-    // Retry (button 0): restart the backoff sequence from a clean slate.
     if (response === 0) {
-      this.floatingLoadFailAttempts = 0
-      this.floatingLoadRecoveryPending = false
-      target.webContents.loadURL(this.getPanelUrl('floating'))
+      options.retry()
       return
     }
-
-    // Close (button 1): keep the Phase-1 main window alive; the tray re-opens
-    // Floating later.
-    // PHASE 2 (main window deleted): Close here would leave zero windows + tray
-    // only — revisit whether to keep the window on a recoverable blank instead.
-    target.close()
+    options.dismiss()
   }
+
+  // ==========================================================================
+  // LiveEditor panel
+  // ==========================================================================
 
   /**
    * Create the LiveEditor Note window — a frameless, transparent, always-on-top
@@ -855,7 +787,7 @@ export class WindowManager {
     })
 
     // 'close' fires before destruction — capture bounds while the window
-    // is still alive (matches the main window pattern).
+    // is still alive.
     this.liveEditorWindow.on('close', () => {
       this.saveWindowState()
     })
@@ -885,10 +817,7 @@ export class WindowManager {
 
     this.applyVisibleOnAllWorkspaces(
       this.liveEditorWindow,
-      this.configManager?.get<boolean>(
-        'liveEditor.visibleOnAllWorkspaces',
-        false,
-      ) ?? false,
+      this.getLiveEditorVisibleOnAllWorkspaces(),
     )
 
     return this.liveEditorWindow
@@ -915,6 +844,10 @@ export class WindowManager {
 
     if (this.liveEditorRevealPending) {
       this.cancelPendingLiveEditorReveal()
+      // A user cancel ends any login handoff riding on this load; the next
+      // sign-in must be able to hand off again (the latch only guards a load
+      // that is still in flight).
+      this.loginHandoffPending = false
       return false
     }
 
@@ -923,7 +856,7 @@ export class WindowManager {
   }
 
   /**
-   * Show LiveEditor only after its protected route settles; signed-out redirects surface Floating Navigator instead.
+   * Show LiveEditor only after its protected route settles; signed-out redirects surface the login window instead.
    * @param onShown - Optional callback fired after the authenticated panel appears.
    * @returns void.
    * @example
@@ -939,7 +872,7 @@ export class WindowManager {
   }
 
   /**
-   * Reveal a manual LiveEditor open only when it is on the editor route; auth pages are always re-homed to Floating.
+   * Reveal a manual LiveEditor open only when it is on the editor route; auth pages are always re-homed to the login window.
    * @param panel - Hidden LiveEditor window whose current navigation decides whether it can appear.
    * @param onShown - Optional callback fired only after the panel is visibly shown.
    * @returns void.
@@ -958,8 +891,8 @@ export class WindowManager {
       this.liveEditorNeedsReloadBeforeReveal ||
       (currentUrl && this.isAuthPathname(currentUrl))
     ) {
-      // The old hidden window is parked on /login; reload the protected editor
-      // route so a later signed-in open can reach LiveEditor instead of stale auth/error.
+      // The old hidden window is parked on /login (or an error page); reload the
+      // protected editor route so a later signed-in open can reach LiveEditor.
       this.liveEditorHasLoadedOnce = false
       this.cancelPendingLiveEditorReveal()
       this.liveEditorNeedsReloadBeforeReveal = false
@@ -967,9 +900,7 @@ export class WindowManager {
     }
 
     if (this.liveEditorHasLoadedOnce) {
-      panel.show()
-      panel.focus()
-      onShown?.()
+      this.revealLiveEditorNow(panel, onShown)
       return
     }
 
@@ -980,79 +911,109 @@ export class WindowManager {
   }
 
   /**
-   * Watch a manual LiveEditor open until it either reaches the editor or redirects to auth.
-   * @param panel - LiveEditor BrowserWindow that has started loading `/live-editor`.
-   * @param onShown - Optional callback fired only after an authenticated reveal.
-   * @returns void.
+   * The single place LiveEditor becomes visible: latch the loaded route, release
+   * the login handoff, close any login window left over from a fallback re-show,
+   * then show + focus. Shared by the cached reveal and both load watchers.
+   *
+   * @param panel - LiveEditor window sitting on its authenticated editor route.
+   * @param onShown - Optional callback fired after the panel is visible.
+   * @returns Nothing.
    * @example
-   * this.watchManualLiveEditorLoad(panel, onShown)
+   * this.revealLiveEditorNow(panel, onShown)
    */
-  private watchManualLiveEditorLoad(
+  private revealLiveEditorNow(
     panel: BrowserWindow,
     onShown?: () => void,
   ): void {
+    this.liveEditorHasLoadedOnce = true
+    this.liveEditorNeedsReloadBeforeReveal = false
+    this.loginHandoffPending = false
+    if (this.loginWindow && !this.loginWindow.isDestroyed()) {
+      this.loginWindow.close()
+    }
+    panel.show()
+    panel.focus()
+    onShown?.()
+  }
+
+  /**
+   * Wire the did-navigate / did-finish-load / did-fail-load trio that decides a
+   * hidden LiveEditor load, shared by the startup and manual watchers. Auth pages
+   * and network failures settle as unauthenticated; HTTP 4xx/5xx pages (a
+   * SUCCESSFUL navigation, never `did-fail-load`) keep the watch alive and
+   * self-heal in place through {@link recoverPanelFromLoadFailure}.
+   *
+   * @param panel - Hidden LiveEditor window that has started loading `/live-editor`.
+   * @param onSettled - Receives the one-time authenticated / unauthenticated decision.
+   * @returns A stop function: detaches the listeners and reports whether the watch was still undecided.
+   * @example
+   * const stopWatching = this.watchLiveEditorNavigation(panel, (authenticated) => { ... })
+   */
+  private watchLiveEditorNavigation(
+    panel: BrowserWindow,
+    onSettled: (authenticated: boolean) => void,
+  ): () => boolean {
     const { webContents } = panel
     const removeListeners: Array<() => void> = []
+    // Guard so the decision is made exactly once per load, even though
+    // `did-navigate`, `did-finish-load` and `did-fail-load` can all fire.
     let decided = false
     let latestMainFrameUrl = webContents.getURL() || null
+    // True after an HTTP error page navigation so its did-finish-load is never
+    // mistaken for the editor; the next real navigation clears it.
+    let errorPagePendingFinish = false
 
-    this.liveEditorRevealPending = true
-
-    const cancelReveal = (): void => {
-      if (decided) return
+    const stopWatching = (): boolean => {
+      if (decided) return false
       decided = true
-      this.liveEditorRevealPending = false
-      this.liveEditorHasLoadedOnce = false
-      this.liveEditorNeedsReloadBeforeReveal = true
-      if (this.cancelLiveEditorReveal === cancelReveal) {
-        this.cancelLiveEditorReveal = null
-      }
       removeListeners.forEach((remove) => remove())
-
-      // A toggle-off before load settlement must keep LiveEditor hidden.
-      if (!panel.isDestroyed()) panel.hide()
+      // Any in-flight retry belongs to this watch; forget its budget with it.
+      this.loadRecovery.delete(panel)
+      return true
     }
-    this.cancelLiveEditorReveal = cancelReveal
 
     const finish = (authenticated: boolean): void => {
-      if (decided) return
-      decided = true
-      this.liveEditorRevealPending = false
-      if (this.cancelLiveEditorReveal === cancelReveal) {
-        this.cancelLiveEditorReveal = null
-      }
-      removeListeners.forEach((remove) => remove())
-
-      if (panel.isDestroyed()) return
-
-      if (authenticated) {
-        // Authenticated: now the editor route is safe to expose in LiveEditor.
-        this.liveEditorHasLoadedOnce = true
-        this.liveEditorNeedsReloadBeforeReveal = false
-        panel.show()
-        panel.focus()
-        onShown?.()
-        return
-      }
-
-      this.suppressLiveEditorAuthRedirect(panel)
+      if (stopWatching()) onSettled(authenticated)
     }
 
-    const onDidNavigate = (_event: Electron.Event, url: string): void => {
+    const onDidNavigate = (
+      _event: Electron.Event,
+      url: string,
+      httpResponseCode: number,
+    ): void => {
       latestMainFrameUrl = url
       // Auth redirects are terminal: do not let /login render inside LiveEditor.
-      if (this.isAuthPathname(url)) finish(false)
+      if (this.isAuthPathname(url)) {
+        finish(false)
+        return
+      }
+      errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
+      if (!errorPagePendingFinish) return
+      // corelive.app answered 4xx/5xx: keep the panel hidden and reload this
+      // same window (the watch stays armed), parentless dialog on exhaustion so
+      // an empty transparent panel is never shown as a dialog parent.
+      this.recoverPanelFromLoadFailure(panel, {
+        retry: () => {
+          if (!decided) panel.loadURL(this.getPanelUrl('liveEditor'))
+        },
+        // Close ends this open: drop the still-armed watch so the next toggle
+        // starts a fresh load instead of cancelling a reveal that never comes,
+        // and keep the error page hidden until that reload.
+        dismiss: () => {
+          this.cancelPendingLiveEditorReveal()
+          this.liveEditorNeedsReloadBeforeReveal = true
+        },
+        parent: null,
+        httpStatus: httpResponseCode,
+      })
     }
 
     const onDidFinishLoad = (): void => {
+      if (errorPagePendingFinish) return
       // Trust the route only after load settles; unauthenticated redirects can
       // report the requested /live-editor URL before landing on /login.
-      const currentSettledUrl = webContents.getURL() || latestMainFrameUrl
-      finish(
-        currentSettledUrl === null
-          ? false
-          : !this.isAuthPathname(currentSettledUrl),
-      )
+      const settledUrl = webContents.getURL() || latestMainFrameUrl
+      finish(settledUrl === null ? false : !this.isAuthPathname(settledUrl))
     }
 
     const onDidFailLoad = (
@@ -1075,10 +1036,53 @@ export class WindowManager {
       () => webContents.removeListener('did-finish-load', onDidFinishLoad),
       () => webContents.removeListener('did-fail-load', onDidFailLoad),
     )
+
+    return stopWatching
   }
 
   /**
-   * Hide LiveEditor when it hits auth and show Floating Navigator as the only sign-in surface.
+   * Watch a manual LiveEditor open until it either reaches the editor or redirects to auth.
+   * @param panel - LiveEditor BrowserWindow that has started loading `/live-editor`.
+   * @param onShown - Optional callback fired only after an authenticated reveal.
+   * @returns void.
+   * @example
+   * this.watchManualLiveEditorLoad(panel, onShown)
+   */
+  private watchManualLiveEditorLoad(
+    panel: BrowserWindow,
+    onShown?: () => void,
+  ): void {
+    this.liveEditorRevealPending = true
+
+    const stopWatching = this.watchLiveEditorNavigation(
+      panel,
+      (authenticated) => {
+        this.liveEditorRevealPending = false
+        this.cancelLiveEditorReveal = null
+        if (panel.isDestroyed()) return
+        if (authenticated) {
+          // Authenticated: now the editor route is safe to expose in LiveEditor.
+          this.revealLiveEditorNow(panel, onShown)
+          return
+        }
+        this.suppressLiveEditorAuthRedirect(panel)
+      },
+    )
+
+    const cancelReveal = (): void => {
+      if (!stopWatching()) return
+      this.liveEditorRevealPending = false
+      this.liveEditorHasLoadedOnce = false
+      this.liveEditorNeedsReloadBeforeReveal = true
+      this.cancelLiveEditorReveal = null
+      // A toggle-off before load settlement must keep LiveEditor hidden.
+      if (!panel.isDestroyed()) panel.hide()
+    }
+    this.cancelLiveEditorReveal = cancelReveal
+  }
+
+  /**
+   * Hide LiveEditor when it hits auth and show the login window as the only sign-in surface.
    *
    * @param panel - LiveEditor BrowserWindow that attempted to host an auth page.
    * @returns void.
@@ -1091,17 +1095,26 @@ export class WindowManager {
     this.cancelLiveEditorReveal = null
     this.liveEditorNeedsReloadBeforeReveal = true
     panel.hide()
-    this.restoreFromTray()
+    // Direct, not restoreFromTray(): that now opens LiveEditor and would loop.
+    this.showLoginWindow()
   }
 
   /**
-   * Cancels a pending manual LiveEditor reveal when callers toggle it off before navigation settles.
+   * Cancels every pending LiveEditor reveal (manual and startup) when callers toggle it off, reload it, or shut down before navigation settles.
    *
    * @returns void.
    * @example
    * this.cancelPendingLiveEditorReveal()
    */
   private cancelPendingLiveEditorReveal(): void {
+    // A reload or toggle-off supersedes any startup gate still waiting on the old load.
+    for (const cancelStartupPanelLoad of [
+      ...this.startupPanelLoadCancellations,
+    ]) {
+      cancelStartupPanelLoad()
+    }
+    this.startupPanelLoadCancellations.clear()
+
     if (this.cancelLiveEditorReveal) {
       this.cancelLiveEditorReveal()
       return
@@ -1167,112 +1180,18 @@ export class WindowManager {
   }
 
   /**
-   * Toggles Floating Navigator and reports whether this call revealed it.
-   * @returns True after create/show, false after hide.
-   * @example
-   * const didOpen = windowManager.toggleFloatingNavigator()
-   */
-  toggleFloatingNavigator(): boolean {
-    log.debug('toggleFloatingNavigator called', {
-      hasWindow: !!this.floatingNavigator,
-      isVisible: this.floatingNavigator?.isVisible?.(),
-    })
-
-    let didOpen = false
-
-    if (!this.floatingNavigator) {
-      log.info('Creating floating navigator...')
-      const navigator = this.createFloatingNavigator()
-      log.info('Showing floating navigator...')
-      navigator.show()
-      didOpen = true
-    } else if (this.floatingNavigator.isVisible()) {
-      log.info('Hiding floating navigator')
-      this.floatingNavigator.hide()
-    } else {
-      log.info('Showing floating navigator')
-      this.floatingNavigator.show()
-      didOpen = true
-    }
-
-    this.saveWindowState()
-    return didOpen
-  }
-
-  /**
-   * Shows the floating navigator window.
-   */
-  showFloatingNavigator(): void {
-    if (!this.floatingNavigator) {
-      this.createFloatingNavigator()
-    }
-    this.floatingNavigator?.show()
-    this.saveWindowState()
-  }
-
-  /**
-   * Hides the floating navigator window without destroying it.
-   */
-  hideFloatingNavigator(): void {
-    if (this.floatingNavigator) {
-      this.floatingNavigator.hide()
-      this.saveWindowState()
-    }
-  }
-
-  /**
-   * Surface the Floating Navigator from the tray / dock / notification click /
-   * shortcut / deep-link — the primary companion window now that the main
-   * window is being retired (T6). Shared chokepoint for every native-chrome
-   * caller that used to "restore the app"; creates Floating if absent so these
-   * paths always land on a real window, never a no-op on a tray-resident boot.
+   * Surface the app from the tray / dock / notification click / deep link:
+   * opens LiveEditor, whose auth gate re-homes a signed-out user to the login
+   * window. Shared chokepoint for every native-chrome caller that "restores the
+   * app". Deliberately no `hasLoginWindow()` short-circuit — this is also the
+   * retry path while a login handoff is pending.
    *
    * @example
-   * // tray "Focus Floating" / dock activate / notification click all call:
+   * // tray click / dock activate / notification click all call:
    * windowManager.restoreFromTray()
    */
   restoreFromTray(): void {
-    if (!this.floatingNavigator) {
-      this.createFloatingNavigator()
-    }
-    if (this.floatingNavigator) {
-      if (this.floatingNavigator.isMinimized()) {
-        this.floatingNavigator.restore()
-      }
-      this.floatingNavigator.show()
-      this.floatingNavigator.focus()
-    }
-    this.saveWindowState()
-  }
-
-  /**
-   * Set tray fallback mode.
-   */
-  setTrayFallbackMode(enabled: boolean): void {
-    this.trayFallbackMode = enabled
-  }
-
-  /**
-   * Check if in tray fallback mode.
-   */
-  isTrayFallbackMode(): boolean {
-    return this.trayFallbackMode
-  }
-
-  /**
-   * Get floating navigator instance.
-   */
-  getFloatingNavigator(): BrowserWindow | null {
-    return this.floatingNavigator
-  }
-
-  /**
-   * Check if floating navigator exists and is not destroyed.
-   */
-  hasFloatingNavigator(): boolean {
-    return (
-      this.floatingNavigator !== null && !this.floatingNavigator.isDestroyed()
-    )
+    this.showLiveEditor()
   }
 
   // ==========================================================================
@@ -1280,19 +1199,19 @@ export class WindowManager {
   // ==========================================================================
 
   /**
-   * Build a startup panel's URL from the configured server origin. Single
-   * source of truth shared by the create methods and the post-login re-show.
+   * Build a panel's URL from the configured server origin. Single source of
+   * truth shared by the create methods, the retries and the post-login reload.
    *
-   * @param kind - Which auxiliary panel.
+   * @param kind - Which panel.
    * @returns The fully-qualified panel URL.
    * @example
-   * this.getPanelUrl('floating')  // => 'https://corelive.app/floating-navigator'
+   * this.getPanelUrl('login')      // => 'https://corelive.app/login-shell'
    * this.getPanelUrl('liveEditor') // => 'https://corelive.app/live-editor'
    */
-  private getPanelUrl(kind: StartupPanelKind): string {
+  private getPanelUrl(kind: 'login' | 'liveEditor'): string {
     const baseUrl = this.serverUrl || 'https://corelive.app'
-    return kind === 'floating'
-      ? `${baseUrl}/floating-navigator`
+    return kind === 'login'
+      ? `${baseUrl}/login-shell`
       : `${baseUrl}/live-editor`
   }
 
@@ -1319,13 +1238,13 @@ export class WindowManager {
 
   /**
    * Whether a navigated URL is a Clerk auth page, i.e. the user is not yet
-   * authenticated. A startup panel that lands here was redirected by proxy.ts.
+   * authenticated. A panel that lands here was redirected by proxy.ts.
    *
    * @param rawUrl - Full URL from a `did-navigate` event.
    * @returns true when the pathname is `/login` or `/sign-up`.
    * @example
    * this.isAuthPathname('https://corelive.app/login?redirect_url=/live-editor') // true
-   * this.isAuthPathname('https://corelive.app/floating-navigator')            // false
+   * this.isAuthPathname('https://corelive.app/login-shell')                    // false
    */
   private isAuthPathname(rawUrl: string): boolean {
     try {
@@ -1338,146 +1257,68 @@ export class WindowManager {
   }
 
   /**
-   * Open an auxiliary panel as part of Electron startup, gated on auth.
+   * Open the LiveEditor panel as part of Electron startup, gated on auth.
    *
-   * Why this exists: a panel-only cold boot must not flash an empty window when
-   * the user is signed out. We create the panel hidden, watch its first load,
-   * and only `show()` it once it actually renders the panel route (not /login).
-   * Called from `main.ts` for each panel enabled in `behavior.startup`.
+   * Why this exists: a cold boot must not flash an empty window when the user
+   * is signed out. We create the panel hidden, watch its first load, and only
+   * `show()` it once it actually renders the editor route (not /login).
+   * Called once from `main.ts`.
    *
-   * @param kind - 'floating' | 'liveEditor' — which startup panel to open.
    * @example
-   * windowManager.openStartupPanel('floating')
+   * windowManager.openStartupPanel()
    */
-  openStartupPanel(kind: StartupPanelKind): void {
-    const panel =
-      kind === 'floating'
-        ? this.createFloatingNavigator()
-        : this.createLiveEditorWindow()
-    this.watchStartupPanelLoad(panel, kind)
+  openStartupPanel(): void {
+    this.watchStartupPanelLoad(this.createLiveEditorWindow())
   }
 
   /**
-   * Panels suppressed at startup because they hit an auth page or failed to
-   * load (so main was surfaced instead). A test-observability seam: the unit
-   * tests assert the suppress-and-surface decision through this set; no
-   * production code reads it.
+   * Whether the startup LiveEditor load was suppressed (auth page or load
+   * failure) and the login window surfaced instead. A test-observability seam;
+   * no production code reads it.
    *
-   * @returns A read-only view of the suppressed-panel set.
+   * @returns true once the startup suppress-and-surface decision was made.
    * @example
-   * if (windowManager.getStartupAuthFallbacks().has('liveEditor')) { ... }
+   * if (windowManager.hasStartupAuthFallback()) { ... }
    */
-  getStartupAuthFallbacks(): ReadonlySet<StartupPanelKind> {
-    return this.startupAuthFallbacks
+  hasStartupAuthFallback(): boolean {
+    return this.startupAuthFallbackOccurred
   }
 
   /**
-   * Decide a startup panel's fate from its settled load: show it if the load
-   * lands on the panel route, or suppress it + surface main if the load
-   * redirects to an auth page or fails (offline/timeout/5xx).
+   * Decide the startup panel's fate from its settled load: show it if the load
+   * lands on the editor route, or keep it hidden + surface the login window if
+   * the load redirects to an auth page or fails (offline/timeout). HTTP error
+   * pages retry in place instead (see {@link watchLiveEditorNavigation}).
    *
-   * Ordering note: `createFloatingNavigator`/`createLiveEditorWindow` call
-   * `loadURL` synchronously *before* this runs. That is safe — `did-navigate`
-   * is async, so these listeners register in the same tick, before the network
-   * response arrives. Do NOT "fix" it by moving `loadURL`.
+   * Ordering note: {@link createLiveEditorWindow} calls `loadURL` synchronously
+   * *before* this runs. That is safe — `did-navigate` is async, so these
+   * listeners register in the same tick, before the network response arrives.
+   * Do NOT "fix" it by moving `loadURL`.
    *
-   * @param panel - The freshly created (hidden) panel window.
-   * @param kind - Which startup panel, used for the fallback record + re-show.
+   * @param panel - The freshly created (hidden) LiveEditor window.
    */
-  private watchStartupPanelLoad(
-    panel: BrowserWindow,
-    kind: StartupPanelKind,
-  ): void {
-    const { webContents } = panel
-    // Removers run once the decision is made, so the panel's later in-app
-    // navigations never re-trigger the auth gate.
-    const removeListeners: Array<() => void> = []
-    // Guard so the show-or-suppress decision is made exactly once per load,
-    // even though `did-navigate` and `did-fail-load` can both fire.
-    let decided = false
-    let latestMainFrameUrl: string | null = null
-
-    const stopWatching = (): boolean => {
-      if (decided) return false
-      decided = true
-      removeListeners.forEach((remove) => remove())
-      this.startupPanelLoadCancellations.delete(stopWatching)
-      return true
-    }
-    this.startupPanelLoadCancellations.add(stopWatching)
-
-    const finish = (authenticated: boolean): void => {
-      if (!stopWatching()) return
-
-      if (authenticated) {
-        // Authed: reveal the panel the user asked to start with.
-        if (kind === 'liveEditor') {
-          this.liveEditorHasLoadedOnce = true
-          this.liveEditorNeedsReloadBeforeReveal = false
+  private watchStartupPanelLoad(panel: BrowserWindow): void {
+    const stopWatching = this.watchLiveEditorNavigation(
+      panel,
+      (authenticated) => {
+        this.startupPanelLoadCancellations.delete(stopWatching)
+        if (authenticated) {
+          // Authed: reveal the panel the app starts with.
+          this.revealLiveEditorNow(panel)
+          return
         }
-        panel.show()
-        return
-      }
-
-      // Signed out or load failed: keep this panel hidden. With the main window
-      // retired (T18), surface the Floating navigator instead — it is public
-      // (`/floating-navigator`) and renders the signed-out OAuth front door, so a
-      // signed-out launch always leaves one visible, interactive window to sign in
-      // from. The suppressed panel reopens from the tray after sign-in; main's
-      // post-login auto-reshow is retired with the window.
-      if (kind === 'liveEditor') {
-        this.liveEditorHasLoadedOnce = false
-        this.liveEditorRevealPending = false
-        this.cancelLiveEditorReveal = null
-        this.liveEditorNeedsReloadBeforeReveal = true
-      }
-      this.startupAuthFallbacks.add(kind)
-      this.restoreFromTray()
-    }
-
-    const onDidNavigate = (_event: Electron.Event, url: string): void => {
-      latestMainFrameUrl = url
-      // Auth redirects are terminal for this startup attempt: keep the panel
-      // hidden and surface main immediately so a login page never flashes in
-      // the auxiliary panel.
-      if (this.isAuthPathname(url)) finish(false)
-    }
-
-    const onDidFinishLoad = (): void => {
-      // Non-auth panel routes are only trusted after load settles; during an
-      // unauthenticated cold boot Chromium can report the requested panel URL
-      // before the redirect lands on /login.
-      const currentUrl = webContents.getURL() || latestMainFrameUrl
-      finish(currentUrl === null ? false : !this.isAuthPathname(currentUrl))
-    }
-
-    const onDidFailLoad = (
-      _event: Electron.Event,
-      errorCode: number,
-      _errorDescription: string,
-      _validatedURL: string,
-      isMainFrame: boolean,
-    ): void => {
-      // Subresource failures and intentional cancellations (ERR_ABORTED fires
-      // during the normal panel -> /login redirect chain) are not real errors.
-      if (!isMainFrame || errorCode === ERR_ABORTED) return
-      // Phase 1 / DT7: the Floating window owns its own load-failure recovery
-      // (retry + native dialog in `createFloatingNavigator`), so the startup
-      // gate must NOT suppress it and surface main on a network blip. LiveEditor
-      // is still main-deferred in Phase 1, so it keeps the surface-main path.
-      if (kind === 'floating') return
-      finish(false)
-    }
-
-    webContents.on('did-navigate', onDidNavigate)
-    webContents.on('did-finish-load', onDidFinishLoad)
-    webContents.on('did-fail-load', onDidFailLoad)
-    removeListeners.push(
-      () => webContents.removeListener('did-navigate', onDidNavigate),
-      () => webContents.removeListener('did-finish-load', onDidFinishLoad),
-      () => webContents.removeListener('did-fail-load', onDidFailLoad),
+        // Signed out or offline: the login window is the only sign-in surface;
+        // LiveEditor reopens from the tray / handoff after sign-in.
+        this.startupAuthFallbackOccurred = true
+        this.suppressLiveEditorAuthRedirect(panel)
+      },
     )
+    this.startupPanelLoadCancellations.add(stopWatching)
   }
+
+  // ==========================================================================
+  // Settings popover
+  // ==========================================================================
 
   /**
    * Creates the settings window with security-first configuration.
@@ -1636,7 +1477,7 @@ export class WindowManager {
     // on the CURRENT desktop. Without this, the window stays bound to the Space
     // it was last shown on, and reopening it after switching desktops yanks the
     // user over to that old Space (the reported "opens on another desktop" bug).
-    // Unlike the floating panels (opt-in via config), this is transient tray
+    // Unlike the LiveEditor panel (opt-in via config), this is transient tray
     // chrome that must ALWAYS follow the active Space, so `true` is hardcoded.
     this.applyVisibleOnAllWorkspaces(this.settingsWindow, true)
 
@@ -1661,29 +1502,10 @@ export class WindowManager {
   }
 
   /**
-   * Closes the settings window if it exists.
-   * The window reference is nulled by the 'closed' event handler
-   * set up in createSettingsWindow().
-   */
-  closeSettings(): void {
-    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-      this.settingsWindow.close()
-      // Note: Don't null here - the 'closed' event handler will do it
-    }
-  }
-
-  /**
    * Get settings window instance
    */
   getSettingsWindow(): BrowserWindow | null {
     return this.settingsWindow
-  }
-
-  /**
-   * Check if settings window exists and is not destroyed
-   */
-  hasSettingsWindow(): boolean {
-    return this.settingsWindow !== null && !this.settingsWindow.isDestroyed()
   }
 
   /**
@@ -1712,7 +1534,7 @@ export class WindowManager {
     })
   }
 
-  /** Saves window state and cancels pending reveals before app shutdown closes every auxiliary window.
+  /** Saves window state and cancels pending reveals before app shutdown closes every window.
    * @returns Nothing.
    * @example
    * windowManager.cleanup()
@@ -1720,15 +1542,8 @@ export class WindowManager {
   cleanup(): void {
     this.saveWindowState()
 
-    // Stop every startup auth gate before any window begins closing.
-    for (const cancelStartupPanelLoad of [
-      ...this.startupPanelLoadCancellations,
-    ]) {
-      cancelStartupPanelLoad()
-    }
-    this.startupPanelLoadCancellations.clear()
-
-    // Shutdown must detach load listeners before late navigation can reveal LiveEditor.
+    // Shutdown must detach load listeners before late navigation can reveal
+    // LiveEditor or open the login window.
     this.cancelPendingLiveEditorReveal()
 
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
@@ -1739,8 +1554,8 @@ export class WindowManager {
       this.liveEditorWindow.close()
     }
 
-    if (this.floatingNavigator && !this.floatingNavigator.isDestroyed()) {
-      this.floatingNavigator.close()
+    if (this.loginWindow && !this.loginWindow.isDestroyed()) {
+      this.loginWindow.close()
     }
   }
 }

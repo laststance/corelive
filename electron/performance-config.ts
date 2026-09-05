@@ -48,29 +48,6 @@ interface StartupMetrics {
   windowsCreated: number
 }
 
-/** Memory metrics in MB */
-interface MemoryMetrics {
-  heapUsed: number
-  heapTotal: number
-  external: number
-  rss: number
-}
-
-/** Module metrics */
-interface ModuleMetrics {
-  loaded: number
-  cached: number
-  lazyLoaded: number
-}
-
-/** Complete performance metrics */
-export interface PerformanceMetrics {
-  uptime: number
-  memory: MemoryMetrics
-  modules: ModuleMetrics
-  windows: number
-}
-
 /** Optimization level configuration */
 export interface OptimizationLevel {
   /** Enable lazy loading of modules */
@@ -362,32 +339,6 @@ export class PerformanceOptimizer {
     })
 
     await Promise.allSettled(preloadPromises)
-  }
-
-  /**
-   * Get performance metrics.
-   *
-   * @returns Performance metrics object
-   */
-  getMetrics(): PerformanceMetrics {
-    const memoryUsage = process.memoryUsage()
-    const uptime = Date.now() - this.startupMetrics.startTime
-
-    return {
-      uptime,
-      memory: {
-        heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
-        heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
-        external: Math.round(memoryUsage.external / 1024 / 1024),
-        rss: Math.round(memoryUsage.rss / 1024 / 1024),
-      },
-      modules: {
-        loaded: this.startupMetrics.modulesLoaded,
-        cached: Object.keys(require.cache).length,
-        lazyLoaded: this.lazyModules.size,
-      },
-      windows: this.startupMetrics.windowsCreated,
-    }
   }
 
   /**

@@ -40,8 +40,8 @@ The LiveEditor writing area is a **single shared component** rendered in exactly
 
 - `LiveEditor` (the only liveEditor text input — one raw `<textarea>`, line 1436) is
   rendered solely by `src/app/live-editor/page.tsx` (`<LiveEditor categories={…} />`).
-- Every Electron LiveEditor surface (the Floating / LiveEditor windows) loads the **remote web
-  `/live-editor` route** (Electron is a full WebView of `corelive.app`), so they render the same
+- The Electron LiveEditor window loads the **remote web
+  `/live-editor` route** (Electron is a full WebView of `corelive.app`), so it renders the same
   component. There is no separate native or duplicate LiveEditor editor.
 - The only other `<textarea>` in the app is the generic shadcn primitive
   `src/components/ui/textarea.tsx`, which liveEditor does **not** use and which must stay

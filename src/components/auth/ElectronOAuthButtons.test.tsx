@@ -1,9 +1,9 @@
 /**
- * @fileoverview ElectronOAuthButtons — the Floating front door's native sign-in CTA.
+ * @fileoverview ElectronOAuthButtons — the login window's native sign-in CTA.
  *
  * The sentinel: this single amber button is the ONLY way a signed-out user
- * starts the system-browser OAuth flow from the Floating window (the Electron
- * main window is being retired). If the click ever stops calling
+ * starts the system-browser OAuth flow from the login window (the Electron
+ * main window is retired). If the click ever stops calling
  * `window.electronAPI.oauth.start('google')`, or stops surfacing a start
  * failure, the desktop front door silently goes dead — a signed-out user is
  * stranded with a button that does nothing. These pin the click → start →
@@ -34,7 +34,7 @@ vi.mock('../../../electron/utils/electron-client', () => ({
 type OAuthStartResult = { success: boolean; error?: string }
 
 /**
- * Plants a Floating-preload-shaped `window.electronAPI.oauth` whose `start`
+ * Plants a login-preload-shaped `window.electronAPI.oauth` whose `start`
  * resolves to the given result, returning the spy so the test can assert the
  * provider it was called with.
  */
@@ -46,7 +46,6 @@ function plantOAuthBridge(result: OAuthStartResult) {
     value: {
       oauth: {
         start,
-        onSuccess: vi.fn(() => () => {}),
         onError: vi.fn(() => () => {}),
       },
     } as unknown as Window['electronAPI'],
@@ -61,7 +60,7 @@ describe('ElectronOAuthButtons', () => {
   })
 
   it('launches the Google system-browser sign-in when the front-door button is pressed', async () => {
-    // Arrange: the Floating preload exposes a working oauth bridge.
+    // Arrange: the login preload exposes a working oauth bridge.
     const start = plantOAuthBridge({ success: true })
     render(<ElectronOAuthButtons />)
 
@@ -112,11 +111,11 @@ describe('ElectronOAuthButtons', () => {
   it('re-arms the sign-in button after an abandoned browser flow times out', async () => {
     // Arrange: fake timers so we can fast-forward the abandonment backstop. The
     // flow STARTS successfully (the system browser opens), but the user then
-    // ABANDONS it — closes the tab / picks no account — so neither onSuccess nor
-    // onError ever fires (the bridge's listeners are registered but never
-    // invoked). Without the backstop the CTA would sit dead at "Opening browser…"
-    // until the window is reopened, which post-main-window-retirement (T18) is
-    // the only other escape.
+    // ABANDONS it — closes the tab / picks no account — so onError never fires
+    // (the bridge's listener is registered but never invoked). Without the
+    // backstop the CTA would sit dead at "Opening browser…" until the window
+    // is reopened, which post-main-window-retirement (T18) is the only other
+    // escape.
     vi.useFakeTimers()
     try {
       const start = plantOAuthBridge({ success: true })

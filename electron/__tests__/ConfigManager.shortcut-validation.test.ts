@@ -53,7 +53,7 @@ describe('ConfigManager shortcut validation', () => {
     // more key. Two empty strings must not read as a duplicated accelerator.
     const configManager = new ConfigManager()
     configManager.set('shortcuts.toggleLiveEditorSecondary', '')
-    configManager.set('shortcuts.toggleAlwaysOnTop', '')
+    configManager.set('shortcuts.newTask', '')
 
     // Act
     const result = configManager.validate()
@@ -67,7 +67,7 @@ describe('ConfigManager shortcut validation', () => {
     // Arrange
     const configManager = new ConfigManager()
     configManager.set('shortcuts.toggleLiveEditor', 'Alt+Space')
-    configManager.set('shortcuts.toggleAlwaysOnTop', 'Alt+Space')
+    configManager.set('shortcuts.newTask', 'Alt+Space')
 
     // Act
     const result = configManager.validate()

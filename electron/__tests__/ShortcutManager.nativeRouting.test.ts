@@ -83,9 +83,7 @@ function createAvailableNativeEngineHarness() {
 
 /** Minimal WindowManager stand-in — only the constructor chokepoint hook is read. */
 function createWindowManagerStub(): WindowManager {
-  return {
-    setOnFloatingNavigatorCreated: vi.fn(),
-  } as unknown as WindowManager
+  return {} as unknown as WindowManager
 }
 
 describe('ShortcutManager routing of native lone-modifier bindings', () => {

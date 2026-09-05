@@ -40,11 +40,10 @@ export type StreakSummary = {
    * in `dataByDate`. */
   longestStreak: number
   /** Highest tier the current streak has crossed: `7`, `30`, `100`, `365`,
-   * or `null` (streak < 7). Used by `useStreakNotifications` to decide
-   * whether to fire a one-shot milestone notification — paired with a
-   * `streak-max-tier-notified` localStorage key so a tier never re-fires
-   * after the user breaks and rebuilds a streak (DESIGN.md D12:
-   * "never decreases without explanation"). */
+   * or `null` (streak < 7). Computed but currently unconsumed: its only reader
+   * was the milestone-notification hook, retired with the Floating Navigator in
+   * PR #178. Kept because DESIGN.md D12 ("never decreases without explanation")
+   * governs how a future surface must present it. */
   currentTier: StreakTier
   /** Distinct local-day keys with activity within `todayIso`'s calendar month.
    * Surfaced as "shown up N days this month" per DESIGN.md voice — never

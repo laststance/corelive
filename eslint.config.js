@@ -47,7 +47,6 @@ export default defineConfig([
       'electron/ipc/typedHandle.ts',
       'electron/ipc/typedInvoke.ts',
       'electron/ipc/typedSend.ts',
-      'electron/auth-manager.ts', // Dead code — see comment at top of file
       'electron/__tests__/**',
     ],
     rules: {
@@ -121,7 +120,6 @@ export default defineConfig([
             'achievement-*',
             'level-up-*',
             'confetti-*',
-            'floating-navigator-*',
             // Custom utility classes (defined in globals.css @layer utilities)
             'cathedral-lit',
             'tap-target-24',

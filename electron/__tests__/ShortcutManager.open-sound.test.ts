@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
-  BrowserWindow: vi.fn(),
+  app: { on: vi.fn(), removeListener: vi.fn() },
+  BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
   globalShortcut: {
     isRegistered: vi.fn(() => false),
     register: vi.fn(() => true),
@@ -10,10 +11,16 @@ vi.mock('electron', () => ({
   },
 }))
 
+// The browser handoff is an OS side effect; capture the call instead.
+vi.mock('../utils/openWebAppInBrowser', () => ({
+  openWebAppInBrowser: vi.fn(),
+}))
+
 import type { ConfigManager } from '../ConfigManager'
 import type { ShortcutOpenSoundSelection } from '../constants'
 import ShortcutManager from '../ShortcutManager'
 import type { ShortcutOpenSoundController } from '../ShortcutOpenSoundPlayer'
+import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
 import type { WindowManager } from '../WindowManager'
 
 /**
@@ -42,25 +49,35 @@ function createConfigManager(
   } as unknown as ConfigManager
 }
 
+/** Spies for every window action a shortcut may reach. */
+interface WindowManagerHarness {
+  windowManager: WindowManager
+  restoreFromTray: ReturnType<typeof vi.fn>
+  showLiveEditor: ReturnType<typeof vi.fn>
+}
+
 /**
- * Creates window toggles whose return/callback behavior is controlled per test.
- * @param toggleFloatingNavigator - Reports whether Floating opened or closed.
+ * Creates the LiveEditor toggle whose return/callback behavior is controlled per test.
  * @param toggleLiveEditor - Delivers the actual-shown callback for LiveEditor.
- * @returns A WindowManager-compatible shortcut boundary.
+ * @returns A WindowManager-compatible shortcut boundary plus its spies.
  * @example
- * createWindowManager(vi.fn(() => true), vi.fn(() => true))
+ * createWindowManager(vi.fn(() => true))
  */
 function createWindowManager(
-  toggleFloatingNavigator: () => boolean,
   toggleLiveEditor: (onShown?: () => void) => boolean,
-): WindowManager {
+): WindowManagerHarness {
+  const restoreFromTray = vi.fn()
+  const showLiveEditor = vi.fn()
   return {
-    getFloatingNavigator: vi.fn(() => null),
-    getMainWindow: vi.fn(() => null),
-    setOnFloatingNavigatorCreated: vi.fn(),
-    toggleLiveEditor,
-    toggleFloatingNavigator,
-  } as unknown as WindowManager
+    restoreFromTray,
+    showLiveEditor,
+    windowManager: {
+      toggleLiveEditor,
+      restoreFromTray,
+      showLiveEditor,
+      getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+    } as unknown as WindowManager,
+  }
 }
 
 /**
@@ -81,33 +98,6 @@ describe('ShortcutManager shortcut opening sound', () => {
     vi.clearAllMocks()
   })
 
-  it('plays once when the Floating shortcut opens and stays silent when it closes', () => {
-    // Arrange
-    const toggleFloatingNavigator = vi
-      .fn()
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false)
-    const soundController = createSoundController()
-    const shortcutManager = new ShortcutManager(
-      createWindowManager(
-        toggleFloatingNavigator,
-        vi.fn(() => false),
-      ),
-      null,
-      createConfigManager(true, 'walnut-desk-thock'),
-      undefined,
-      soundController,
-    )
-
-    // Act
-    shortcutManager.handleToggleFloatingNavigator()
-    shortcutManager.handleToggleFloatingNavigator()
-
-    // Assert
-    expect(soundController.play).toHaveBeenCalledOnce()
-    expect(soundController.play).toHaveBeenCalledWith('walnut-desk-thock')
-  })
-
   it('plays after LiveEditor becomes visible and again when the shortcut closes it', () => {
     // Arrange
     let onShown: (() => void) | undefined
@@ -120,10 +110,7 @@ describe('ShortcutManager shortcut opening sound', () => {
       .mockReturnValueOnce(false)
     const soundController = createSoundController()
     const shortcutManager = new ShortcutManager(
-      createWindowManager(
-        vi.fn(() => false),
-        toggleLiveEditor,
-      ),
+      createWindowManager(toggleLiveEditor).windowManager,
       null,
       createConfigManager(true),
       undefined,
@@ -149,6 +136,29 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(2)
   })
 
+  it('plays the selected fixed cue instead of a shuffled one', () => {
+    // Arrange
+    const toggleLiveEditor = vi.fn((onShown?: () => void) => {
+      onShown?.()
+      return true
+    })
+    const soundController = createSoundController()
+    const shortcutManager = new ShortcutManager(
+      createWindowManager(toggleLiveEditor).windowManager,
+      null,
+      createConfigManager(true, 'walnut-desk-thock'),
+      undefined,
+      soundController,
+    )
+
+    // Act
+    shortcutManager.handleToggleLiveEditor()
+
+    // Assert
+    expect(soundController.play).toHaveBeenCalledOnce()
+    expect(soundController.play).toHaveBeenCalledWith('walnut-desk-thock')
+  })
+
   it('plays once when a second LiveEditor toggle cancels its pending reveal', () => {
     // Arrange
     const toggleLiveEditor = vi
@@ -157,10 +167,7 @@ describe('ShortcutManager shortcut opening sound', () => {
       .mockReturnValueOnce(false)
     const soundController = createSoundController()
     const shortcutManager = new ShortcutManager(
-      createWindowManager(
-        vi.fn(() => false),
-        toggleLiveEditor,
-      ),
+      createWindowManager(toggleLiveEditor).windowManager,
       null,
       createConfigManager(true),
       undefined,
@@ -189,10 +196,7 @@ describe('ShortcutManager shortcut opening sound', () => {
       }),
     }
     const shortcutManager = new ShortcutManager(
-      createWindowManager(
-        vi.fn(() => false),
-        toggleLiveEditor,
-      ),
+      createWindowManager(toggleLiveEditor).windowManager,
       null,
       createConfigManager(true),
       undefined,
@@ -205,7 +209,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(1)
   })
 
-  it('opens both shortcut windows silently after the user turns the cue off', () => {
+  it('opens LiveEditor silently after the user turns the cue off', () => {
     // Arrange
     const toggleLiveEditor = vi.fn((onShown?: () => void) => {
       onShown?.()
@@ -213,10 +217,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     })
     const soundController = createSoundController()
     const shortcutManager = new ShortcutManager(
-      createWindowManager(
-        vi.fn(() => true),
-        toggleLiveEditor,
-      ),
+      createWindowManager(toggleLiveEditor).windowManager,
       null,
       createConfigManager(false),
       undefined,
@@ -224,24 +225,22 @@ describe('ShortcutManager shortcut opening sound', () => {
     )
 
     // Act
-    shortcutManager.handleToggleFloatingNavigator()
     shortcutManager.handleToggleLiveEditor()
 
     // Assert
     expect(soundController.play).not.toHaveBeenCalled()
   })
 
-  it('keeps shortcut windows silent when the enabled setting is malformed', () => {
+  it('keeps LiveEditor silent when the enabled setting is malformed', () => {
     // Arrange
     const soundController = createSoundController()
     const shortcutManager = new ShortcutManager(
       createWindowManager(
-        vi.fn(() => true),
         vi.fn((onShown?: () => void) => {
           onShown?.()
           return true
         }),
-      ),
+      ).windowManager,
       null,
       createConfigManager('false'),
       undefined,
@@ -249,10 +248,37 @@ describe('ShortcutManager shortcut opening sound', () => {
     )
 
     // Act
-    shortcutManager.handleToggleFloatingNavigator()
     shortcutManager.handleToggleLiveEditor()
 
     // Assert
     expect(soundController.play).not.toHaveBeenCalled()
+  })
+})
+
+describe('ShortcutManager new-task shortcut', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('opens /live-editor in the browser without surfacing any Electron window (regression)', () => {
+    // Arrange: Cmd+N used to call restoreFromTray, which now shows LiveEditor —
+    // that would open the panel AND the browser tab at once.
+    const harness = createWindowManager(vi.fn(() => true))
+    const shortcutManager = new ShortcutManager(
+      harness.windowManager,
+      null,
+      createConfigManager(true),
+    )
+
+    // Act
+    shortcutManager.handleNewTaskShortcut()
+
+    // Assert
+    expect(openWebAppInBrowser).toHaveBeenCalledWith(
+      'https://corelive.app',
+      '/live-editor',
+    )
+    expect(harness.restoreFromTray).not.toHaveBeenCalled()
+    expect(harness.showLiveEditor).not.toHaveBeenCalled()
   })
 })

@@ -11,8 +11,8 @@ import type { ArgsOf } from './types'
  * a `Promise<IPCChannels[C]['response']>` with correct inference.
  *
  * Triggered when: preload script wraps a main-process handler for exposure via `contextBridge`.
- * Called by: `electron/preload.ts` and `electron/preload-floating.ts` inside the
- * `contextBridge.exposeInMainWorld(...)` namespaces.
+ * Called by: the preload scripts inside their `contextBridge.exposeInMainWorld(...)`
+ * namespaces.
  *
  * Why this exists:
  *   Raw `ipcRenderer.invoke` returns `Promise<any>`. This wrapper removes the
@@ -20,9 +20,8 @@ import type { ArgsOf } from './types'
  *
  * @example
  *   // Inside electron/preload.ts contextBridge namespace:
- *   window: {
- *     toggleFloatingNavigator: () =>
- *       typedInvoke('window-toggle-floating-navigator'),
+ *   liveEditor: {
+ *     toggle: () => typedInvoke('live-editor-window-toggle'),
  *   },
  *   auth: {
  *     syncFromWeb: (user: AuthUserPayload) =>

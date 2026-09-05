@@ -12,25 +12,9 @@ import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
 import type { ConfigManager } from './ConfigManager'
-import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
-
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-/** Menu action payload */
-interface MenuAction {
-  action: string
-  filePath?: string
-}
-
-/** Menu state for enabling/disabling items */
-interface MenuState {
-  [key: string]: boolean
-}
 
 // ============================================================================
 // Menu Manager Class
@@ -40,9 +24,6 @@ interface MenuState {
  * Manages application menu creation and updates.
  */
 export class MenuManager {
-  /** Main window reference */
-  private mainWindow: BrowserWindow | null
-
   /** Window manager reference */
   private windowManager: WindowManager | null
 
@@ -54,34 +35,26 @@ export class MenuManager {
   private isMac: boolean
 
   constructor() {
-    this.mainWindow = null
     this.windowManager = null
     this._configManager = null
     this.isMac = process.platform === 'darwin'
   }
 
   /**
-   * Initializes the menu manager with required dependencies.
+   * Initializes the menu manager with required dependencies. There is no main
+   * window to pass — it was retired in T18; View & Window menu items are
+   * Electron roles that target the focused window instead, and New Task opens
+   * the browser, so the menu needs no main-window reference to build correctly.
    *
-   * @param mainWindow - The main application window, or `null` when none exists
-   *   (post-main-retirement / signed-out launch). The menu still builds: View &
-   *   Window items are Electron roles that target the focused window, and New Task
-   *   opens the browser, so a `null` main window leaves no dead menu items.
    * @param windowManager - For window-related menu actions
    * @param configManager - Provides configuration-backed menu actions
    */
-  initialize(
-    mainWindow: BrowserWindow | null,
-    windowManager: WindowManager,
-    configManager: ConfigManager,
-  ): void {
+  initialize(windowManager: WindowManager, configManager: ConfigManager): void {
     log.debug('[MenuManager] initialize() called with:', {
-      hasMainWindow: !!mainWindow,
       hasWindowManager: !!windowManager,
       hasConfigManager: !!configManager,
     })
 
-    this.mainWindow = mainWindow
     this.windowManager = windowManager
     this._configManager = configManager
 
@@ -183,47 +156,17 @@ export class MenuManager {
   }
 
   /**
-   * Whether a live main window currently hosts the main-renderer-only menu
-   * actions (File ▸ Import/Export, Edit ▸ Find). They `typedSend` to the main
-   * renderer, so they silently no-op without one — gate their `enabled` on this
-   * so a null/destroyed main (signed-out launch, and post-T18 when main is gone)
-   * shows them disabled rather than as dead-clickable items.
-   * @returns true when `mainWindow` exists and is not destroyed.
-   * @example
-   * { label: 'Find', enabled: this.hasUsableMainWindow(), click: () => this.focusSearch() }
-   */
-  private hasUsableMainWindow(): boolean {
-    return Boolean(this.mainWindow && !this.mainWindow.isDestroyed())
-  }
-
-  /**
    * Create File menu.
    */
   createFileMenu(): MenuItemConstructorOptions {
-    // Import/Export drive the main renderer over `menu-action`, so disable them
-    // when no main window can receive it (see hasUsableMainWindow).
-    const canUseMainRenderer = this.hasUsableMainWindow()
-    const submenu: MenuItemConstructorOptions[] = [
-      {
-        label: 'New Task',
-        click: () => this.createNewTask(),
-      },
-      { type: 'separator' },
-      {
-        label: 'Import Tasks...',
-        enabled: canUseMainRenderer,
-        click: async () => this.importTasks(),
-      },
-      {
-        label: 'Export Tasks...',
-        enabled: canUseMainRenderer,
-        click: async () => this.exportTasks(),
-      },
-    ]
-
     return {
       label: 'File',
-      submenu,
+      submenu: [
+        {
+          label: 'New Task',
+          click: () => this.createNewTask(),
+        },
+      ],
     }
   }
 
@@ -241,14 +184,6 @@ export class MenuManager {
         { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
         { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
         { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
-        { type: 'separator' },
-        {
-          // Find drives the main renderer's search box over `menu-action`;
-          // disable it when no main window can receive that (see createFileMenu).
-          label: 'Find',
-          enabled: this.hasUsableMainWindow(),
-          click: () => this.focusSearch(),
-        },
       ],
     }
   }
@@ -258,7 +193,7 @@ export class MenuManager {
    */
   createViewMenu(): MenuItemConstructorOptions {
     // Standard view chrome uses Electron roles so each item targets whatever
-    // window is focused (main, Floating, LiveEditor or Settings) — no main-window
+    // window is focused (login, LiveEditor or Settings) — no main-window
     // reference needed, so these stay correct after main retirement. Explicit
     // accelerators are kept so the bindings don't shift from the previous build.
     const submenu: MenuItemConstructorOptions[] = [
@@ -278,15 +213,6 @@ export class MenuManager {
       { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', role: 'zoomIn' },
       { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', role: 'zoomOut' },
       { type: 'separator' },
-      {
-        label: 'Floating Navigator',
-        submenu: [
-          {
-            label: 'Toggle Floating Navigator',
-            click: () => this.toggleFloatingNavigator(),
-          },
-        ],
-      },
       {
         label: 'Toggle Fullscreen',
         accelerator: this.isMac ? 'Ctrl+Command+F' : 'F11',
@@ -308,7 +234,7 @@ export class MenuManager {
    */
   createWindowMenu(): MenuItemConstructorOptions {
     // Minimize/Close are Electron roles so they act on the focused window — they
-    // work for Floating/LiveEditor/Settings, not just a main window that may not exist.
+    // work for login/LiveEditor/Settings, not just a main window that may not exist.
     const submenu: MenuItemConstructorOptions[] = [
       { label: 'Minimize', accelerator: 'CmdOrCtrl+M', role: 'minimize' },
       { label: 'Close', accelerator: 'CmdOrCtrl+W', role: 'close' },
@@ -393,32 +319,6 @@ export class MenuManager {
     openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
   }
 
-  // FOLLOW-UP (T14/T18): Find / Import Tasks / Export Tasks still drive the main
-  // renderer over `menu-action`, so they no-op when no main window exists. Their
-  // delete-vs-reroute is unresolved — there's no companion URL for "focus the
-  // search box" and the design names no browser target for menu-driven task
-  // import/export (unlike T14's Floating Import → dashboard). Kept main-optional
-  // for Phase 1 (main still exists for QA); revisit when main is retired.
-  focusSearch(): void {
-    if (this.mainWindow && this.mainWindow.webContents) {
-      typedSend(this.mainWindow.webContents, 'menu-action', {
-        action: 'focus-search',
-      })
-    }
-  }
-
-  toggleFloatingNavigator(): void {
-    log.debug('[MenuManager] toggleFloatingNavigator() called')
-    log.debug('[MenuManager] windowManager exists:', !!this.windowManager)
-
-    if (this.windowManager) {
-      log.debug('[MenuManager] Calling windowManager.toggleFloatingNavigator()')
-      this.windowManager.toggleFloatingNavigator()
-    } else {
-      console.error('[MenuManager] windowManager is not available!')
-    }
-  }
-
   /** Toggle the LiveEditor Note window via WindowManager. */
   toggleLiveEditor(): void {
     log.debug('[MenuManager] toggleLiveEditor() called')
@@ -444,27 +344,13 @@ export class MenuManager {
       this.windowManager.openSettings()
     } else {
       log.warn(
-        '📋 [MenuManager] windowManager not available, falling back to IPC',
+        '📋 [MenuManager] windowManager not available; cannot open Settings',
       )
-      // Fallback: send IPC message if windowManager is not available
-      if (this.mainWindow && this.mainWindow.webContents) {
-        typedSend(this.mainWindow.webContents, 'menu-action', {
-          action: 'open-settings',
-        })
-      }
     }
   }
 
   async checkForUpdates(): Promise<void> {
     try {
-      if (this.mainWindow && this.mainWindow.webContents) {
-        typedSend(
-          this.mainWindow.webContents,
-          'updater-message',
-          'Checking for updates...',
-        )
-      }
-
       await autoUpdater.checkForUpdatesAndNotify()
     } catch (error) {
       log.error('Failed to check for updates:', error)
@@ -478,54 +364,6 @@ export class MenuManager {
         detail: errorMessage,
         buttons: ['OK'],
       })
-    }
-  }
-
-  async importTasks(): Promise<void> {
-    if (!this.mainWindow) return
-
-    try {
-      const result = await dialog.showOpenDialog(this.mainWindow, {
-        title: 'Import Tasks',
-        filters: [
-          { name: 'JSON Files', extensions: ['json'] },
-          { name: 'All Files', extensions: ['*'] },
-        ],
-        properties: ['openFile'],
-      })
-
-      if (!result.canceled && result.filePaths.length > 0) {
-        typedSend(this.mainWindow.webContents, 'menu-action', {
-          action: 'import-tasks',
-          filePath: result.filePaths[0],
-        })
-      }
-    } catch (error) {
-      log.error('Failed to show import dialog:', error)
-    }
-  }
-
-  async exportTasks(): Promise<void> {
-    if (!this.mainWindow) return
-
-    try {
-      const result = await dialog.showSaveDialog(this.mainWindow, {
-        title: 'Export Tasks',
-        defaultPath: `tasks-${new Date().toISOString().split('T')[0]}.json`,
-        filters: [
-          { name: 'JSON Files', extensions: ['json'] },
-          { name: 'All Files', extensions: ['*'] },
-        ],
-      })
-
-      if (!result.canceled && result.filePath) {
-        typedSend(this.mainWindow.webContents, 'menu-action', {
-          action: 'export-tasks',
-          filePath: result.filePath,
-        })
-      }
-    } catch (error) {
-      log.error('Failed to show export dialog:', error)
     }
   }
 
@@ -573,9 +411,6 @@ Copyright © 2025 CoreLive`,
     const shortcuts = [
       'Ctrl/Cmd + N: New Task',
       'Ctrl/Cmd + M: Minimize Window',
-      'Ctrl/Cmd + Shift + A: Toggle Always on Top',
-      'Ctrl/Cmd + Shift + N: Focus Floating Navigator',
-      'Ctrl/Cmd + 3: Toggle Floating Navigator',
       'Alt/Option + Space: Toggle LiveEditor',
       'Ctrl/Cmd + Q: Quit Application',
       'Ctrl/Cmd + ,: Settings',
@@ -600,35 +435,7 @@ Copyright © 2025 CoreLive`,
     })
   }
 
-  handleMenuAction(action: MenuAction): void {
-    switch (action.action) {
-      case 'new-task':
-        this.createNewTask()
-        break
-      case 'focus-search':
-        this.focusSearch()
-        break
-      case 'open-settings':
-      case 'open-preferences': // Legacy hosted renderer action.
-        this.openSettings()
-        break
-      case 'import-tasks':
-        this.importTasks()
-        break
-      case 'export-tasks':
-        this.exportTasks()
-        break
-      default:
-        log.warn('Unknown menu action:', action.action)
-    }
-  }
-
-  updateMenuState(_state: MenuState = {}): void {
-    // Can be used to enable/disable menu items based on app state
-  }
-
   destroy(): void {
-    this.mainWindow = null
     this.windowManager = null
     this._configManager = null
   }

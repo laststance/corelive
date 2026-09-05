@@ -269,7 +269,7 @@ export class OAuthManager {
       if (error) {
         log.error('OAuth error:', { error, errorDescription })
         // Route the failure to the window that STARTED the flow (Phase 1: falls
-        // back to the main renderer) so a floating-initiated sign-in can't hang
+        // back to the main renderer) so a login-window-initiated sign-in can't hang
         // forever on "Opening browser…" after a provider denial/error.
         const initiator = state
           ? this.pendingStates.get(state)?.initiator
@@ -464,7 +464,7 @@ export class OAuthManager {
    * Sends OAuth error event to the renderer that started the flow.
    *
    * Routes the failure to the initiating window when known (so a
-   * floating-initiated flow surfaces its own error instead of hanging). With the
+   * login-window-initiated flow surfaces its own error instead of hanging). With the
    * main window retired (T18) there is no default renderer, so an initiator-less
    * error (callback with no/expired state, or a pre-flow failure) can only be
    * logged. The renderer covers the stranded case itself: `ElectronOAuthButtons`

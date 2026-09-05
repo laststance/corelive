@@ -1,11 +1,11 @@
 /**
  * @fileoverview Shared constants for the Electron main process.
  *
- * Why this module exists: the startup-window nav-watch (`WindowManager`) must
- * compare a panel's final navigated URL against Clerk's auth pages and ignore
- * Chromium's "intentionally aborted" load errors. Centralizing those strings
- * and the magic error code keeps them out of `WindowManager` as bare literals
- * and gives later commits (e.g. the cold-boot pill) a single source of truth.
+ * Why this module exists: the panel nav-watch ({@link WindowManager}) must compare a
+ * panel's final navigated URL against Clerk's auth pages and ignore Chromium's
+ * "intentionally aborted" load errors. Centralizing those strings, the magic
+ * error code and the fixed window sizes keeps them out of {@link WindowManager} as
+ * bare literals.
  *
  * @module electron/constants
  */
@@ -21,9 +21,9 @@ export const LOGIN_PATHNAME = '/login'
 export const SIGN_UP_PATHNAME = '/sign-up'
 
 /**
- * Pathnames that mean "the user is not yet authenticated" when a startup panel
- * lands on them. A panel that ends up here was redirected by `proxy.ts`, so the
- * nav-watch surfaces the main window instead of an empty panel.
+ * Pathnames that mean "the user is not yet authenticated" when a panel lands on
+ * them. A panel that ends up here was redirected by `proxy.ts`, so the nav-watch
+ * keeps it hidden and surfaces the login window instead of an empty panel.
  */
 export const AUTH_PATHNAMES: readonly string[] = [
   LOGIN_PATHNAME,
@@ -39,24 +39,34 @@ export const AUTH_PATHNAMES: readonly string[] = [
  */
 export const ERR_ABORTED = -3
 
-// ============================================================================
-// Floating window load-failure recovery (DT7)
-// ============================================================================
-
 /**
- * How many times the Floating window silently retries a failed main-frame load
- * before surfacing the native recovery dialog. The Floating panel is the
- * signed-out front door now, so a never-loaded ("dead") window must self-heal
- * across a brief offline/DNS/5xx blip rather than stranding the user.
+ * Lowest HTTP status that means the origin answered with an error page. A 4xx/5xx
+ * is a SUCCESSFUL navigation, so `did-fail-load` never fires and the status code
+ * on `did-navigate` is the only signal a panel got an error page instead of the app.
+ * Consumed by {@link WindowManager.createLoginWindow} and
+ * {@link WindowManager.watchLiveEditorNavigation}.
  */
-export const FLOATING_LOAD_MAX_RETRIES: number = 3
+export const HTTP_ERROR_STATUS_MIN = 400
+
+// ============================================================================
+// Panel load-failure recovery (DT7)
+// ============================================================================
 
 /**
- * Base backoff before a Floating reload retry; the delay scales linearly with
+ * How many times a panel (login window or LiveEditor) silently retries a
+ * failed main-frame load before surfacing the native recovery dialog. A
+ * never-loaded ("dead") panel must self-heal across a brief offline/DNS/5xx
+ * blip rather than stranding the user. Consumed by
+ * {@link WindowManager.recoverPanelFromLoadFailure}.
+ */
+export const PANEL_LOAD_MAX_RETRIES: number = 3
+
+/**
+ * Base backoff before a panel reload retry; the delay scales linearly with
  * the attempt number (800 → 1600 → 2400 ms). Quick enough to ride out a brief
  * blip, backed off enough not to hammer a still-unreachable origin.
  */
-export const FLOATING_LOAD_RETRY_BASE_MS: number = 800
+export const PANEL_LOAD_RETRY_BASE_MS: number = 800
 
 // ============================================================================
 // Auto-update download progress window
@@ -93,6 +103,26 @@ export const MIN_TCP_PORT = 1
 
 /** Highest valid TCP port (16-bit unsigned max) — upper bound for the debug port. */
 export const MAX_TCP_PORT = 65535
+
+// ============================================================================
+// Login window
+// ============================================================================
+
+/** Fixed width of the login window (`/login-shell`); not resizable, never persisted. */
+export const LOGIN_WINDOW_WIDTH_PX = 300
+
+/** Fixed height of the login window; fits the sign-in card below the native traffic lights. */
+export const LOGIN_WINDOW_HEIGHT_PX = 400
+
+// ============================================================================
+// Persisted window geometry
+// ============================================================================
+
+/** Cap on a restored window width when its config carries no max of its own. */
+export const WINDOW_STATE_MAX_WIDTH_PX = 2000
+
+/** Cap on every restored window height; guards against absurd persisted geometry. */
+export const WINDOW_STATE_MAX_HEIGHT_PX = 1500
 
 // ============================================================================
 // Settings popover window

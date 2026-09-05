@@ -35,15 +35,20 @@ function createCodeInspectorOptions(bundler) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   /**
-   * Redirects installed pre-rename Electron clients to the canonical LiveEditor route when they request the retired URL.
+   * Redirects installed pre-rename Electron clients to the canonical route when they request a retired URL.
    * @returns {Promise<Array<{source: string, destination: string, permanent: boolean}>>} Permanent compatibility redirects.
-   * @example await nextConfig.redirects() // => [{ source: '/braindump', destination: '/live-editor', permanent: true }]
+   * @example (await nextConfig.redirects())[1] // => { source: '/floating-navigator', destination: '/login-shell', permanent: true }
    */
   async redirects() {
     return [
       {
         source: '/braindump',
         destination: '/live-editor',
+        permanent: true,
+      },
+      {
+        source: '/floating-navigator',
+        destination: '/login-shell',
         permanent: true,
       },
     ]

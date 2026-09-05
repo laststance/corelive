@@ -6,7 +6,6 @@ import Link from 'next/link'
 import * as React from 'react'
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -64,8 +63,6 @@ import { cn } from '@/lib/utils'
 import { isApplePlatform } from '@/lib/utils/isApplePlatform'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
 
-import { getLiveEditorCategoryChangedChannel } from '../../../electron/utils/electron-client'
-
 import {
   type LiveEditorCompletedTitle,
   type LiveEditorLineIndex,
@@ -93,13 +90,6 @@ const DRAG_REGION_STYLE = {
 const NO_DRAG_REGION_STYLE = {
   WebkitAppRegion: 'no-drag',
 } as React.CSSProperties
-
-const categoryChangedPayloadSchema = z.object({
-  categoryId: z.number().int(),
-})
-
-/** Stable empty list so the web-only default-category effect is a no-op in the Electron panel. */
-const NO_CATEGORIES: CategoryWithCount[] = []
 
 /** Accessible name of the note field; the placeholder changes with platform and pointer, this does not. */
 const NOTE_FIELD_LABEL = 'Write one thing'
@@ -529,9 +519,8 @@ function showCompletionToast({
  *    400 ms debounce — offline-tolerant on purpose (device-local on the web).
  *  - Cmd/Ctrl+Enter (or the touch-only "Keep line" button) instantly records a
  *    keep and shows an Undo toast; Undo removes it and flips the line back.
- *  - The Electron panel can follow the FloatingNav category or pick one locally
- *    (`category.setLast`); the web follows the shared selection the sidebar
- *    uses, and a signed-out visitor writes into the implicit
+ *  - The Electron panel and the web both follow the shared category selection
+ *    the sidebar uses; a signed-out visitor writes into the implicit
  *    `LOCAL_CATEGORY_ID` category with clear-on-complete forced on.
  *
  * Why optimistic UI: the checkbox flip must feel instant — we mutate the
@@ -552,7 +541,7 @@ export const LiveEditor = function LiveEditor({
 }) {
   const queryClient = useQueryClient()
   const isMounted = useMounted()
-  // Auth gate follows the Floating pattern (`isLoaded` / `isSignedIn`), never
+  // Auth gate reads Clerk directly (`isLoaded` / `isSignedIn`), never
   // useClerkQueryReady — that is false while signed out, a first-class state here.
   const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
   // Read after mount so the server render (no preload) and the first client
@@ -564,17 +553,13 @@ export const LiveEditor = function LiveEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [opacity, setOpacity] = useState<number>(LIVE_EDITOR_OPACITY_MAX)
-  const [syncEnabled, setSyncEnabled] = useState<boolean>(true)
-  const [floatingCategoryId, setFloatingCategoryId] = useSelectedCategory()
-  // The web has no FloatingNavigator to pick a default category, so the editor
-  // does it itself; the Electron panel leaves that to the Floating window.
+  const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
+  // Nothing else picks a default category for the panel or the web, so the
+  // editor does it itself once the list arrives.
   useAutoSelectDefaultCategory(
-    floatingCategoryId,
-    setFloatingCategoryId,
-    isElectronPanel ? NO_CATEGORIES : categories,
-  )
-  const [localCategoryId, setLocalCategoryId] = useState<Category['id'] | null>(
-    null,
+    selectedCategoryId,
+    setSelectedCategoryId,
+    categories,
   )
   const [noteText, setNoteText] = useState<string>('')
   const [isLoadingNote, setIsLoadingNote] = useState<boolean>(false)
@@ -597,7 +582,6 @@ export const LiveEditor = function LiveEditor({
     useState<boolean>(false)
   const noteInputId = useId()
   const opacityInputId = useId()
-  const syncInputId = useId()
   const categoryInputId = useId()
   const spacesInputId = useId()
 
@@ -623,28 +607,25 @@ export const LiveEditor = function LiveEditor({
   const effectiveClearOnComplete = isSignedIn ? clearOnComplete : true
 
   // Shared device: the remembered id belongs to whoever was signed in when it
-  // was stored, and category ids are globally unique, so on the web it can point
-  // at the previous account's category — whose note this editor would then show
-  // and, on the next debounced flush, overwrite. `categories` is the CURRENT
+  // was stored, and category ids are globally unique, so it can point at the
+  // previous account's category — whose note this editor would then show and,
+  // on the next debounced flush, overwrite. `categories` is the CURRENT
   // account's list, so the pointer is only honoured once it appears there.
-  // The Electron panel follows the Floating window's selection instead and gets
-  // its list from another window, so it keeps the pointer as-is.
-  const isRememberedCategoryConfirmed =
-    isElectronPanel ||
-    categories.some((category) => category.id === floatingCategoryId)
+  const isRememberedCategoryConfirmed = categories.some(
+    (category) => category.id === selectedCategoryId,
+  )
 
   // Signed out, the implicit local category is set directly: useSelectedCategory
   // rejects the `0` sentinel by design (server ids are positive).
+  // gstack-shortcut(dec-52b0a642): Follow-OFF upgraders lose their per-panel category once (no lastCategoryId migration — the shared pick or the default wins); upgrade when a user reports losing the panel category
   const activeCategoryId =
     !isLiveEditorConfigReady || !isAuthLoaded
       ? null
       : isSignedOutWeb
         ? LOCAL_CATEGORY_ID
-        : syncEnabled
-          ? isRememberedCategoryConfirmed
-            ? floatingCategoryId
-            : null
-          : localCategoryId
+        : isRememberedCategoryConfirmed
+          ? selectedCategoryId
+          : null
   const checkedRowsRef = useRef<TrackedRowsByCategory<CheckedRowMemory>>(
     new Map(),
   )
@@ -977,24 +958,20 @@ export const LiveEditor = function LiveEditor({
     }
   }, [activeCategoryId])
 
-  // Initial pull of opacity + sync mode + Spaces tracking from the host (the
-  // main process, or the web host's instant defaults — which is what marks the
-  // browser editor ready with no preload).
+  // Initial pull of opacity + Spaces tracking from the host (the main process,
+  // or the web host's instant defaults — which is what marks the browser
+  // editor ready with no preload).
   useCycleEffect(() => {
     if (!isMounted) return
     let cancelled = false
     const api = getLiveEditorHost()
     void Promise.all([
       api.window.getOpacity(),
-      api.sync.getEnabled(),
-      api.category.getLast(),
       api.spaces?.getVisibleOnAllWorkspaces?.() ?? Promise.resolve(false),
     ])
-      .then(([opacityValue, enabled, lastCategoryId, followsSpaces]) => {
+      .then(([opacityValue, followsSpaces]) => {
         if (cancelled) return
         setOpacity(opacityValue)
-        setSyncEnabled(enabled)
-        setLocalCategoryId(lastCategoryId)
         setSpacesTrackingEnabled(followsSpaces)
         setIsLiveEditorConfigReady(true)
       })
@@ -1009,21 +986,6 @@ export const LiveEditor = function LiveEditor({
     return () => {
       cancelled = true
     }
-  }, [isMounted])
-
-  // Subscribe to main-process category broadcasts (e.g., when another window
-  // changes the active category and main updates the LiveEditor config).
-  useCycleEffect(() => {
-    if (!isMounted) return
-    return getLiveEditorHost().on(
-      getLiveEditorCategoryChangedChannel(),
-      (payload) => {
-        // Preload sanitizes args and strips the IpcRendererEvent — payload is
-        // the first user arg.
-        const parsed = categoryChangedPayloadSchema.safeParse(payload)
-        if (parsed.success) setLocalCategoryId(parsed.data.categoryId)
-      },
-    )
   }, [isMounted])
 
   // Move keyboard focus into the note editor whenever the LiveEditor window is
@@ -1160,16 +1122,6 @@ export const LiveEditor = function LiveEditor({
     }
   }, [activeCategoryId, isMounted, persistNoteDraft])
 
-  const handleToggleSync = (enabled: boolean) => {
-    setSyncEnabled(enabled)
-    void getLiveEditorHost().sync.setEnabled(enabled)
-  }
-
-  const handleManualCategoryChange = (id: Category['id']) => {
-    setLocalCategoryId(id)
-    void getLiveEditorHost().category.setLast(id)
-  }
-
   const handleOpacityChange = (next: number) => {
     const clamped = Math.max(
       LIVE_EDITOR_OPACITY_MIN,
@@ -1180,14 +1132,9 @@ export const LiveEditor = function LiveEditor({
   }
 
   const handleCategoryValueChange = (value: string) => {
-    const nextCategoryId = Number(value)
-    // The web has no FloatingNav: its picker writes the shared selection the
-    // sidebar reads, so /write and /home never disagree about the category.
-    if (!isElectronPanel) {
-      setFloatingCategoryId(nextCategoryId)
-      return
-    }
-    handleManualCategoryChange(nextCategoryId)
+    // The picker writes the shared selection the sidebar reads, so the panel,
+    // /write and /home never disagree about the category.
+    setSelectedCategoryId(Number(value))
   }
 
   const handleOpacityValueChange = (values: number[]) => {
@@ -2300,27 +2247,13 @@ export const LiveEditor = function LiveEditor({
           className="flex items-center gap-3 text-xs"
           style={NO_DRAG_REGION_STYLE}
         >
-          {isElectronPanel && (
-            <div className="flex items-center gap-2">
-              <Switch
-                id={syncInputId}
-                checked={syncEnabled}
-                onCheckedChange={handleToggleSync}
-              />
-
-              <Label htmlFor={syncInputId} className="cursor-pointer text-xs">
-                Follow FloatingNav
-              </Label>
-            </div>
-          )}
-
           {/* /write has no sidebar, so on the signed-in web this picker is the
               only category control (design review DR3); it writes the shared
               selection. Signed out there is one implicit category — no picker. */}
           <Select
             value={activeCategoryId === null ? '' : String(activeCategoryId)}
             onValueChange={handleCategoryValueChange}
-            disabled={(isElectronPanel && syncEnabled) || !hasCategories}
+            disabled={!hasCategories}
           >
             <SelectTrigger
               id={categoryInputId}

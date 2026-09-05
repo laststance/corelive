@@ -7,7 +7,7 @@
  *
  * SCOPE (D3): every singleton here is module-level = per-JS-context = per Electron
  * BrowserWindow. The one-in-flight guarantee is therefore PER WINDOW; we never
- * arbitrate audio across windows (main / floating / liveEditor each own their own
+ * arbitrate audio across windows (login / liveEditor / settings each own their own
  * engine). A single user's gestures serialize, so cross-window overlap is at most
  * a brief, quiet, sub-second edge — deliberately accepted, not a bug.
  *

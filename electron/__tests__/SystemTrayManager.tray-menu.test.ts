@@ -3,7 +3,6 @@ import type { MenuItemConstructorOptions, Tray } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SystemTrayManager } from '../SystemTrayManager'
-import type { TaskItem } from '../SystemTrayManager'
 import type { WindowManager } from '../WindowManager'
 
 // vitest hoists BOTH vi.mock calls above every import in this file, so the
@@ -46,17 +45,14 @@ function createManager(): {
   openSettings: ReturnType<typeof vi.fn>
   restoreFromTray: ReturnType<typeof vi.fn>
   toggleLiveEditor: ReturnType<typeof vi.fn>
-  toggleFloatingNavigator: ReturnType<typeof vi.fn>
 } {
   const openSettings = vi.fn()
   const restoreFromTray = vi.fn()
   const toggleLiveEditor = vi.fn()
-  const toggleFloatingNavigator = vi.fn()
   const stubWindowManager = {
     restoreFromTray,
     openSettings,
     toggleLiveEditor,
-    toggleFloatingNavigator,
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
   const manager = new SystemTrayManager(stubWindowManager)
@@ -68,7 +64,6 @@ function createManager(): {
     openSettings,
     restoreFromTray,
     toggleLiveEditor,
-    toggleFloatingNavigator,
   }
 }
 
@@ -101,12 +96,12 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager, toggleLiveEditor } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const liveEditorItem = findItem(lastBuiltTemplate(), 'Toggle LiveEditor')
     ;(liveEditorItem?.click as () => void)?.()
 
     // Assert: the item is the toggle (not the old one-way "Open LiveEditor")
-    // and it routes to the window toggle, matching Floating Navigator.
+    // and it routes to the window toggle.
     expect(liveEditorItem).toBeDefined()
     expect(findItem(lastBuiltTemplate(), 'Open LiveEditor')).toBeUndefined()
     expect(toggleLiveEditor).toHaveBeenCalledTimes(1)
@@ -117,7 +112,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager, restoreFromTray } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const browserItem = findItem(
       lastBuiltTemplate(),
       'Open full app in browser ↗',
@@ -132,7 +127,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
       'https://corelive.app/home',
     )
     // ...and it ONLY opens the browser — it must not also surface a native
-    // window (Floating) via restoreFromTray.
+    // window (LiveEditor / login) via restoreFromTray.
     expect(restoreFromTray).not.toHaveBeenCalled()
   })
 
@@ -141,7 +136,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager, openSettings } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const template = lastBuiltTemplate()
     const settingsItem = findItem(template, 'Settings')
     ;(settingsItem?.click as () => void)?.()
@@ -153,22 +148,18 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect(openSettings).toHaveBeenCalledTimes(1)
   })
 
-  it('shows each toggle item’s live hotkey supplied by the accelerator provider', () => {
+  it('shows the LiveEditor toggle item’s live hotkey supplied by the accelerator provider', () => {
     // Arrange
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
-      toggleFloatingNavigator: 'CommandOrControl+3',
       toggleLiveEditor: 'Alt+Space',
     }))
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const template = lastBuiltTemplate()
 
     // Assert
-    expect(findItem(template, 'Toggle Floating Navigator')?.accelerator).toBe(
-      'CommandOrControl+3',
-    )
     expect(findItem(template, 'Toggle LiveEditor')?.accelerator).toBe(
       'Alt+Space',
     )
@@ -178,12 +169,11 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     // Arrange: provider reports no LiveEditor binding (empty string disables it).
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
-      toggleFloatingNavigator: 'CommandOrControl+3',
       toggleLiveEditor: '',
     }))
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const liveEditorItem = findItem(lastBuiltTemplate(), 'Toggle LiveEditor')
 
     // Assert: no orphan accelerator glyph for an unbound shortcut.
@@ -196,41 +186,32 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     const { manager } = createManager()
 
     // Act
-    manager.updateTrayMenu([])
+    manager.updateTrayMenu()
     const template = lastBuiltTemplate()
 
-    // Assert: items render, just without accelerators — never a hardcoded ⌘3.
-    expect(
-      'accelerator' in findItem(template, 'Toggle Floating Navigator')!,
-    ).toBe(false)
+    // Assert: the item renders, just without an accelerator — never a hardcoded key.
     expect('accelerator' in findItem(template, 'Toggle LiveEditor')!).toBe(
       false,
     )
   })
 
-  it('refreshes the displayed hotkey after a rebind without losing recent tasks', () => {
-    // Arrange: first render shows the default LiveEditor hotkey with one task.
+  it('refreshes the displayed hotkey after a rebind', () => {
+    // Arrange: first render shows the default LiveEditor hotkey.
     const { manager } = createManager()
     let liveEditorAccelerator = 'Alt+Space'
     manager.setShortcutAcceleratorProvider(() => ({
       toggleLiveEditor: liveEditorAccelerator,
     }))
-    const tasks: TaskItem[] = [
-      { title: 'Write the release notes', completed: false },
-    ]
-    manager.updateTrayMenu(tasks)
+    manager.updateTrayMenu()
 
     // Act: the user rebinds LiveEditor, then a refresh re-renders the tray.
     liveEditorAccelerator = 'CommandOrControl+Shift+B'
     manager.refreshTrayMenu()
     const template = lastBuiltTemplate()
 
-    // Assert: the new hotkey shows AND the cached task survived the refresh.
+    // Assert: the new hotkey shows.
     expect(findItem(template, 'Toggle LiveEditor')?.accelerator).toBe(
       'CommandOrControl+Shift+B',
     )
-    expect(
-      template.some((item) => item.label?.includes('Write the release notes')),
-    ).toBe(true)
   })
 })

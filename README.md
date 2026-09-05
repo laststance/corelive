@@ -12,7 +12,7 @@ CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is 
 
 ## Documentation
 
-The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**.
+The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/).
 
 ## Platform Support
 
@@ -140,14 +140,17 @@ This project includes an Electron desktop application that wraps the Next.js web
 
 Beyond the web app, the macOS build adds native surfaces:
 
-- **Floating Navigator** — a compact, always-available quick-capture window
 - **LiveEditor** — a distraction-light freeform capture window
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens
+- **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
-- **Always-on-top** — per-window keep-on-top setting (Floating on by default)
+- **Always-on-top** — keep LiveEditor above other windows (off by default)
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default)
+- **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
+- **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog
 - **Auto-update** — signed, notarized releases update in place
 
 ### Electron Development

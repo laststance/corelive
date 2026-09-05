@@ -26,15 +26,16 @@ import type { ArgsOf } from './types'
  *   typedHandle('app-version', () => app.getVersion())
  *
  *   // Single-arg handler
- *   typedHandle('window-state-get', async (_event, target) => {
- *     // target: 'main' | 'floating'
- *     return await windowStateManager.get(target)
+ *   typedHandle('live-editor-note-get', (_event, categoryId) => {
+ *     // categoryId: number
+ *     return getLiveEditorNote(configManager, categoryId)
  *   })
  *
  *   // Tuple-arg handler (multiple positional args)
- *   typedHandle('window-state-set', async (_event, target, state) => {
- *     // target: 'main' | 'floating'; state: Partial<WindowState>
- *     return await windowStateManager.set(target, state)
+ *   typedHandle('live-editor-note-set', (_event, categoryId, text) => {
+ *     // categoryId: number; text: string
+ *     setLiveEditorNote(configManager, categoryId, text)
+ *     return true
  *   })
  */
 export function typedHandle<C extends IPCChannel>(

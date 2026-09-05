@@ -30,13 +30,13 @@ type OAuthState = {
 
 type OAuthAction =
   | { type: 'START_LOADING' }
-  | { type: 'SUCCESS' }
   | { type: 'ERROR'; error: string }
   | { type: 'RESET' }
 
 /**
  * Reduces the native-OAuth start gesture's transient UI state (one provider:
- * Google). START_LOADING on click, SUCCESS/ERROR from the main-process events.
+ * Google). START_LOADING on click, ERROR from the main-process event; a
+ * success clears loading by masking on the Clerk `user`, not by a dispatch.
  * @param state - Current loading/error state.
  * @param action - Lifecycle event for the in-flight sign-in.
  * @returns The next state.
@@ -48,8 +48,6 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
   switch (action.type) {
     case 'START_LOADING':
       return { isLoading: true, error: null }
-    case 'SUCCESS':
-      return { isLoading: false, error: null }
     case 'ERROR':
       return { isLoading: false, error: action.error }
     // Abandonment recovery: dispatched by the "Opening browser…" timeout backstop
@@ -63,7 +61,7 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
 }
 
 /**
- * The signed-out Floating front door's sign-in CTA — a single amber "Sign in
+ * The login window's signed-out sign-in CTA — a single amber "Sign in
  * with Google" button that launches the system-browser OAuth flow.
  *
  * Why Google-only: Google blocks OAuth inside a WebView, so Electron opens the
@@ -85,19 +83,19 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
   const { user } = useUser()
 
   // Clear transient state the instant Clerk reports a signed-in user (the token
-  // exchange completed) — the card is about to swap to the live navigator.
+  // exchange completed) — the main process closes this login window right after.
   const isLoading = user ? false : state.isLoading
   const error = user ? null : state.error
 
   useCycleEffect(() => {
     if (!isElectronEnvironment()) return
 
-    // Main-process OAuth outcome events (success/error) drive the button back
-    // out of its loading state.
-    const unsubscribeSuccess = window.electronAPI?.oauth?.onSuccess?.(() => {
-      dispatch({ type: 'SUCCESS' })
-    })
-
+    // Main-process OAuth error events drive the button back out of its
+    // loading state. There is no matching success event: the OAuth bridge's
+    // `onSuccess` lost its sender in v0.14.0 (the retired main window) and
+    // its listener was deleted in PR #178 as dead code. On success the CTA's
+    // loading state is cleared instead by `isLoading = user ? false : ...`
+    // above, the instant Clerk reports the newly signed-in user.
     const unsubscribeError = window.electronAPI?.oauth?.onError?.((data) => {
       dispatch({ type: 'ERROR', error: data.error || 'Authentication failed' })
     })
@@ -114,7 +112,6 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
     window.addEventListener('electron-oauth-error', handleCustomError)
 
     return () => {
-      unsubscribeSuccess?.()
       unsubscribeError?.()
       window.removeEventListener('electron-oauth-error', handleCustomError)
     }
@@ -154,16 +151,16 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
             error: result.error || 'Failed to start authentication',
           })
         }
-        // On success the system browser opens; the onSuccess/onError events (and
-        // the in-place Clerk re-render) take over from here.
+        // On success the system browser opens; the onError event (and the
+        // in-place Clerk re-render that masks isLoading) take over from here.
         //
         // ABANDONMENT (user closes the tab / picks no account) fires no event, so
         // the OAUTH_OPENING_BROWSER_TIMEOUT_MS backstop re-arms the CTA — the
         // retired main window (T18) is no longer a fallback path, so this would
         // otherwise dead-end at "Opening browser…" until window reopen. A timeout,
-        // not focus-regain: the Floating card is always-on-top so a closed-tab
-        // return won't reliably refocus it, and the success path itself refocuses
-        // the window (OAuthManager) — focus-regain would misfire on both.
+        // not focus-regain: a closed-tab return won't reliably refocus the login
+        // window, and the success path itself refocuses it (OAuthManager) —
+        // focus-regain would misfire on both.
       } catch {
         dispatch({ type: 'ERROR', error: 'Failed to start authentication' })
       }

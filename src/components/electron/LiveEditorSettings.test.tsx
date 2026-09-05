@@ -3,8 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LiveEditorSettings } from './LiveEditorSettings'
 
-const getSyncModeMock = vi.fn()
-const setSyncModeMock = vi.fn()
 const getOpacityMock = vi.fn()
 const setOpacityMock = vi.fn()
 const getShortcutMock = vi.fn()
@@ -15,8 +13,6 @@ const toggleMock = vi.fn()
 const openConfigMock = vi.fn()
 
 type LiveEditorBridge = {
-  getSyncMode: () => Promise<boolean>
-  setSyncMode: (enabled: boolean) => Promise<boolean>
   getOpacity: () => Promise<number>
   setOpacity: (value: number) => Promise<number>
   getShortcut: () => Promise<string>
@@ -59,10 +55,9 @@ function installElectronAPI(
  * @param saved - Persisted settings returned by the main process mocks.
  * @returns Nothing; prepares all LiveEditor mocks for a component render.
  * @example
- * installLiveEditorBridge({ syncMode: false, opacity: 0.7, shortcut: 'CommandOrControl+Shift+B' })
+ * installLiveEditorBridge({ opacity: 0.7, shortcut: 'CommandOrControl+Shift+B' })
  */
 function installLiveEditorBridge(saved: {
-  syncMode: boolean
   opacity: number
   shortcut: string
   /**
@@ -71,8 +66,6 @@ function installLiveEditorBridge(saved: {
    */
   secondaryShortcut?: string
 }): void {
-  getSyncModeMock.mockResolvedValue(saved.syncMode)
-  setSyncModeMock.mockResolvedValue(true)
   getOpacityMock.mockResolvedValue(saved.opacity)
   setOpacityMock.mockResolvedValue(saved.opacity)
   getShortcutMock.mockResolvedValue(saved.shortcut)
@@ -82,8 +75,6 @@ function installLiveEditorBridge(saved: {
 
   installElectronAPI({
     liveEditor: {
-      getSyncMode: getSyncModeMock,
-      setSyncMode: setSyncModeMock,
       getOpacity: getOpacityMock,
       setOpacity: setOpacityMock,
       getShortcut: getShortcutMock,
@@ -108,8 +99,6 @@ function installLiveEditorBridge(saved: {
 
 describe('LiveEditorSettings', () => {
   beforeEach(() => {
-    getSyncModeMock.mockReset()
-    setSyncModeMock.mockReset()
     getOpacityMock.mockReset()
     setOpacityMock.mockReset()
     getShortcutMock.mockReset()
@@ -127,7 +116,6 @@ describe('LiveEditorSettings', () => {
   it('shows saved LiveEditor settings after loading without changing hook order', async () => {
     // Arrange: the preload bridge resolves and flips the card from loading to ready.
     installLiveEditorBridge({
-      syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
@@ -154,7 +142,6 @@ describe('LiveEditorSettings', () => {
   it('binds a second key to the same toggle without disturbing the first', async () => {
     // Arrange: a desktop app whose bridge carries both slots.
     installLiveEditorBridge({
-      syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
       secondaryShortcut: '',
@@ -177,7 +164,6 @@ describe('LiveEditorSettings', () => {
     // bridge can carry the first slot only. Offering a box that cannot persist
     // would silently swallow the user's chord.
     installLiveEditorBridge({
-      syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
@@ -197,7 +183,6 @@ describe('LiveEditorSettings', () => {
   it('reverts the binding and explains why when the captured chord is already in use', async () => {
     // Arrange: load with Alt+Space bound, then make the next register attempt fail.
     installLiveEditorBridge({
-      syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
@@ -221,7 +206,7 @@ describe('LiveEditorSettings', () => {
 
   it('degrades gracefully when an old preload exposes liveEditor but not the settings getters', async () => {
     // Arrange: an OUTDATED desktop app exposes the `liveEditor` window-toggle bridge
-    // but predates the getSyncMode/getOpacity/getShortcut settings getters that
+    // but predates the getOpacity/getShortcut settings getters that
     // the load effect's Promise.all calls.
     installElectronAPI({ liveEditor: { toggle: toggleMock } })
 
@@ -251,15 +236,12 @@ describe('LiveEditorSettings', () => {
   })
 
   it('shows a loading state until the saved LiveEditor settings arrive', async () => {
-    // Arrange: getSyncMode never resolves, so the load Promise.all keeps the
-    // card in its loading state (all three getters exist, so the guards pass).
-    getSyncModeMock.mockReturnValue(new Promise<boolean>(() => {}))
-    getOpacityMock.mockResolvedValue(0.7)
+    // Arrange: getOpacity never resolves, so the load Promise.all keeps the
+    // card in its loading state (both getters exist, so the guards pass).
+    getOpacityMock.mockReturnValue(new Promise<number>(() => {}))
     getShortcutMock.mockResolvedValue('CommandOrControl+Shift+B')
     installElectronAPI({
       liveEditor: {
-        getSyncMode: getSyncModeMock,
-        setSyncMode: setSyncModeMock,
         getOpacity: getOpacityMock,
         setOpacity: setOpacityMock,
         getShortcut: getShortcutMock,
@@ -284,7 +266,6 @@ describe('LiveEditorSettings', () => {
   it('opens config.json via the main-process config bridge when the button is clicked', async () => {
     // Arrange
     installLiveEditorBridge({
-      syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
@@ -303,7 +284,6 @@ describe('LiveEditorSettings', () => {
   it('shows an error banner when opening config.json fails', async () => {
     // Arrange
     installLiveEditorBridge({
-      syncMode: false,
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })

@@ -16,8 +16,6 @@ vi.mock('electron', () => ({
   BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
   dialog: {
     showMessageBox: vi.fn(),
-    showOpenDialog: vi.fn(),
-    showSaveDialog: vi.fn(),
   },
   Menu: {
     buildFromTemplate: vi.fn((template) => ({ template })),
@@ -70,7 +68,7 @@ function collectLabels(items: MenuItemConstructorOptions[]): string[] {
  * @param label - The visible label to search for.
  * @returns The matching item, or undefined if none is found.
  * @example
- * findItemByLabel(template, 'Find')?.enabled // => false when no main window
+ * findItemByLabel(template, 'Settings...')?.click // => the app-menu Settings handler
  */
 function findItemByLabel(
   items: MenuItemConstructorOptions[],
@@ -93,14 +91,13 @@ function findItemByLabel(
 /**
  * Builds a WindowManager stub exposing only what the menu's click handlers read
  * (none of which run during a build) — the menu builds purely from static items,
- * so the stub just satisfies the `initialize` parameter type.
+ * so the stub just satisfies `initialize`'s parameter type.
  * @returns A WindowManager-shaped stub.
  */
 function createStubWindowManager(): WindowManager {
   return {
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
     openSettings: vi.fn(),
-    toggleFloatingNavigator: vi.fn(),
     toggleLiveEditor: vi.fn(),
   } as unknown as WindowManager
 }
@@ -115,17 +112,18 @@ describe('MenuManager builds the application menu without a main window', () => 
     vi.restoreAllMocks()
   })
 
-  it('installs the full menu with no dead main-window items when initialized with a null main window', () => {
-    // Arrange: companion mode — there is no main window to host the menu.
+  it('installs the full menu with the retired main-window-only items entirely absent', () => {
+    // Arrange: companion mode — there has been no main window to host the menu
+    // since T18; `initialize` takes no main-window reference at all.
     const menuManager = new MenuManager()
     const stubConfigManager = {} as unknown as ConfigManager
 
     // Act: the menu must still build (post-main-retirement / signed-out launch).
-    const buildMenuWithoutMain = () =>
-      menuManager.initialize(null, createStubWindowManager(), stubConfigManager)
+    const buildMenu = () =>
+      menuManager.initialize(createStubWindowManager(), stubConfigManager)
 
-    // Assert: it builds and installs a real menu — never throws on the null main.
-    expect(buildMenuWithoutMain).not.toThrow()
+    // Assert: it builds and installs a real menu.
+    expect(buildMenu).not.toThrow()
     expect(Menu.setApplicationMenu).toHaveBeenCalledTimes(1)
 
     // ...with the standard top-level menus present (not collapsed to a shell)...
@@ -138,12 +136,13 @@ describe('MenuManager builds the application menu without a main window', () => 
     // ...and no resurrected "Show Main Window" item the retired main left behind.
     expect(collectLabels(template)).not.toContain('Show Main Window')
 
-    // ...and the main-renderer-only actions (Import/Export/Find drive the main
-    // renderer over `menu-action`) are DISABLED, not dead-clickable, since no
-    // main window can receive that IPC.
-    expect(findItemByLabel(template, 'Import Tasks...')?.enabled).toBe(false)
-    expect(findItemByLabel(template, 'Export Tasks...')?.enabled).toBe(false)
-    expect(findItemByLabel(template, 'Find')?.enabled).toBe(false)
+    // ...and the main-renderer-only actions (Import/Export/Find drove the main
+    // renderer over `menu-action`, a channel with no renderer caller left) are
+    // gone from the menu entirely — not merely disabled, since a permanently
+    // dead click handler is worse than no item at all.
+    expect(findItemByLabel(template, 'Import Tasks...')).toBeUndefined()
+    expect(findItemByLabel(template, 'Export Tasks...')).toBeUndefined()
+    expect(findItemByLabel(template, 'Find')).toBeUndefined()
   })
 
   it('opens Settings from the app menu without exposing the retired Preferences label', () => {
@@ -151,7 +150,7 @@ describe('MenuManager builds the application menu without a main window', () => 
     const menuManager = new MenuManager()
     const stubWindowManager = createStubWindowManager()
     const stubConfigManager = {} as unknown as ConfigManager
-    menuManager.initialize(null, stubWindowManager, stubConfigManager)
+    menuManager.initialize(stubWindowManager, stubConfigManager)
     const appMenu = menuManager.createAppMenu()
 
     // Act: click the visible Settings item from the native app menu.
@@ -162,21 +161,6 @@ describe('MenuManager builds the application menu without a main window', () => 
     // the click reaches the dedicated Settings window exactly once.
     expect(settingsItem).toBeDefined()
     expect(collectLabels([appMenu])).not.toContain('Preferences...')
-    expect(stubWindowManager.openSettings).toHaveBeenCalledTimes(1)
-  })
-
-  it('opens Settings when an older hosted renderer sends open-preferences', () => {
-    // Arrange: an installed desktop shell may outlive the hosted renderer that
-    // still sends the legacy action name during a version-skew transition.
-    const menuManager = new MenuManager()
-    const stubWindowManager = createStubWindowManager()
-    const stubConfigManager = {} as unknown as ConfigManager
-    menuManager.initialize(null, stubWindowManager, stubConfigManager)
-
-    // Act: route the legacy action through the public menu-action dispatcher.
-    menuManager.handleMenuAction({ action: 'open-preferences' })
-
-    // Assert: compatibility preserves behavior while all visible copy says Settings.
     expect(stubWindowManager.openSettings).toHaveBeenCalledTimes(1)
   })
 })

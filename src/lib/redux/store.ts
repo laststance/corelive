@@ -101,7 +101,7 @@ export const store = configureStore({
       serializableCheck: false,
     })
       .concat(storageMiddleware)
-      // Mirror setting toggles across windows (web / Electron / Floating).
+      // Mirror setting toggles across windows (web / Electron panels).
       .concat(createUserSettingsSyncMiddleware()),
   devTools: process.env.NODE_ENV !== 'production',
 })

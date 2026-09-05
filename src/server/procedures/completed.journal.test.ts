@@ -15,7 +15,7 @@ import { describeIfDb } from './describeIfDb'
 /**
  * Real-DB harness for `completed.journal` — the permanent win journal that the
  * home "Completed Tasks" list reads. Each test seeds completions the way the two
- * real write paths do (paste-import → `Completed` table; the main/floating app →
+ * real write paths do (paste-import → `Completed` table; the retired todo UI →
  * a completed `Todo`) and asserts the merged, newest-first, paginated feed. The
  * bug this guards: before the journal, the list read only `todo.list` so
  * `Completed`-table wins (import + liveEditor) NEVER appeared. Several sequential

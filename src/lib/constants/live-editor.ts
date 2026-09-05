@@ -38,26 +38,6 @@ export const LIVE_EDITOR_NOTE_LINES_PER_CAP = 200
  */
 export type LiveEditorOpacity = number
 
-/**
- * Electron `globalShortcut` accelerator string. Empty string disables the
- * global shortcut. Validated only at registration time — invalid accelerators
- * fail silently when Electron rejects them.
- *
- * @example
- * const accelerator: LiveEditorShortcut = 'CommandOrControl+Shift+B'
- * const disabled: LiveEditorShortcut = ''
- */
-export type LiveEditorShortcut = string
-
-/**
- * Whether LiveEditor should follow the FloatingNavigator's selected category.
- * `true` mirrors the FloatingNav choice; `false` keeps a local selection.
- *
- * @example
- * const sync: LiveEditorSyncMode = true
- */
-export type LiveEditorSyncMode = boolean
-
 /* -------------------------------------------------------------------------- */
 /* LiveEditor editor text presentation (font family / size / color)            */
 /* -------------------------------------------------------------------------- */
@@ -226,17 +206,6 @@ export const LIVE_EDITOR_CLEAR_DELAY_STEP_MS = 100
  */
 export const DEFAULT_LIVE_EDITOR_CLEAR_DELAY_MS = 500
 
-/**
- * Clear-on-complete linger in ms, within
- * [{@link LIVE_EDITOR_CLEAR_DELAY_MIN_MS}, {@link LIVE_EDITOR_CLEAR_DELAY_MAX_MS}].
- * Type alias documents intent without changing the runtime shape.
- *
- * @example
- * const delay: LiveEditorClearDelayMs = 500
- * const instant: LiveEditorClearDelayMs = 0
- */
-export type LiveEditorClearDelayMs = number
-
 /* -------------------------------------------------------------------------- */
 /* LiveEditor completion-toast display duration (#109)                         */
 /* -------------------------------------------------------------------------- */
@@ -262,13 +231,3 @@ export const LIVE_EDITOR_TOAST_DURATION_MAX_MS = 10000
 
 /** Toast-duration slider granularity — 500 ms steps read cleanly without jitter. */
 export const LIVE_EDITOR_TOAST_DURATION_STEP_MS = 500
-
-/**
- * LiveEditor completion-toast display duration in ms, within
- * [{@link LIVE_EDITOR_TOAST_DURATION_MIN_MS}, {@link LIVE_EDITOR_TOAST_DURATION_MAX_MS}].
- * Type alias documents intent without changing the runtime shape.
- *
- * @example
- * const duration: LiveEditorToastDurationMs = 5000
- */
-export type LiveEditorToastDurationMs = number

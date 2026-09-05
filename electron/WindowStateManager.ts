@@ -22,6 +22,10 @@ import {
 } from 'electron'
 
 import type { ConfigManager, AppConfig } from './ConfigManager'
+import {
+  WINDOW_STATE_MAX_HEIGHT_PX,
+  WINDOW_STATE_MAX_WIDTH_PX,
+} from './constants'
 import { log } from './logger'
 
 // ============================================================================
@@ -55,42 +59,12 @@ export interface WindowState {
 /** All window states */
 interface WindowStates {
   main: WindowState
-  floating: WindowState
   liveEditor: WindowState
   [key: string]: WindowState
 }
 
 /** Window type */
-export type WindowType = 'main' | 'floating' | 'liveEditor'
-
-/** Snap edge type */
-export type SnapEdge =
-  | 'left'
-  | 'right'
-  | 'top'
-  | 'bottom'
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right'
-  | 'maximize'
-
-/** Display info */
-export interface DisplayInfo {
-  id: number
-  label: string
-  bounds: Rectangle
-  workArea: Rectangle
-  scaleFactor: number
-  rotation: number
-  touchSupport: string
-  monochrome: boolean
-  accelerometerSupport: string
-  colorSpace: string
-  colorDepth: number
-  depthPerComponent: number
-  isPrimary: boolean
-}
+export type WindowType = 'main' | 'liveEditor'
 
 /** Window options for BrowserWindow creation */
 export interface WindowOptions {
@@ -106,26 +80,6 @@ export interface WindowOptions {
   alwaysOnTop?: boolean
   resizable?: boolean
   skipTaskbar?: boolean
-}
-
-/** Window stats */
-export interface WindowStats {
-  windowCount: number
-  lastSaved: number
-  displays: Array<{
-    id: number
-    bounds: Rectangle
-    workArea: Rectangle
-    scaleFactor: number
-  }>
-  states: Record<
-    string,
-    {
-      bounds: WindowBounds
-      displayId: number
-      lastSaved: number
-    }
-  >
 }
 
 // ============================================================================
@@ -208,16 +162,9 @@ export class WindowStateManager {
       'window',
     ) as AppConfig['window']
     const mainConfig = windowConfig.main
-    const floatingConfig = windowConfig.floating
     const liveEditorConfig = this.configManager.getSection(
       'liveEditor',
     ) as AppConfig['liveEditor']
-    // Floating startup visibility now lives in behavior.startup.showFloating
-    // (migrated from the legacy window.floating.startVisible flag) so the
-    // settings UI and cold-start path share a single source of truth.
-    const behaviorConfig = this.configManager.getSection(
-      'behavior',
-    ) as AppConfig['behavior']
 
     return {
       main: {
@@ -226,20 +173,6 @@ export class WindowStateManager {
         x: Math.round((screenWidth - mainConfig.width) / 2),
         y: Math.round((screenHeight - mainConfig.height) / 2),
         isMaximized: mainConfig.startMaximized,
-        isMinimized: false,
-        isFullScreen: false,
-        displayId: primaryDisplay.id,
-        workArea: primaryDisplay.workArea,
-        lastSaved: Date.now(),
-      },
-      floating: {
-        width: floatingConfig.width,
-        height: floatingConfig.height,
-        x: screenWidth - floatingConfig.width - 50,
-        y: 50,
-        isVisible: behaviorConfig.startup.showFloating,
-        isAlwaysOnTop: floatingConfig.alwaysOnTop,
-        isMaximized: false,
         isMinimized: false,
         isFullScreen: false,
         displayId: primaryDisplay.id,
@@ -278,7 +211,6 @@ export class WindowStateManager {
     const defaultStates = this.getDefaultWindowStates()
     const validatedStates: WindowStates = {
       main: defaultStates.main,
-      floating: defaultStates.floating,
       liveEditor: defaultStates.liveEditor,
     }
 
@@ -288,21 +220,6 @@ export class WindowStateManager {
         defaultStates.main,
         'main',
       )
-    }
-
-    if (states.floating) {
-      validatedStates.floating = this.validateWindowState(
-        states.floating,
-        defaultStates.floating,
-        'floating',
-      )
-      // Floating startup visibility has a single source of truth:
-      // behavior.startup.showFloating (read into defaultStates.floating.isVisible
-      // by getDefaultWindowStates). A stale window-state.json must not override
-      // it, or an old isVisible:true would reopen the floating window even after
-      // the user turned it off in settings. Pin it back to the default; the
-      // persisted width/height applied above stay honored, so the pin is narrow.
-      validatedStates.floating.isVisible = defaultStates.floating.isVisible
     }
 
     // Previous releases stored this panel under `braindump`; accept it once so
@@ -352,11 +269,12 @@ export class WindowStateManager {
       const config = windowConfig[windowType]
       minWidth = 'minWidth' in config ? config.minWidth : 400
       minHeight = 'minHeight' in config ? config.minHeight : 300
-      maxWidth = 'maxWidth' in config ? config.maxWidth : 2000
+      // No remaining window config carries a max width; keep the historical cap.
+      maxWidth = WINDOW_STATE_MAX_WIDTH_PX
       shouldRememberPosition = config.rememberPosition
     }
 
-    const maxHeight = 1500
+    const maxHeight = WINDOW_STATE_MAX_HEIGHT_PX
 
     if (typeof state.width === 'number' && state.width >= minWidth) {
       validatedState.width = Math.min(state.width, maxWidth)
@@ -511,11 +429,6 @@ export class WindowStateManager {
         lastSaved: Date.now(),
       }
 
-      if (windowType === 'floating') {
-        this.windowStates[windowType].isAlwaysOnTop =
-          browserWindow.isAlwaysOnTop()
-      }
-
       return this.saveWindowStates()
     } catch (error) {
       log.error(`Failed to update ${windowType} window state:`, error)
@@ -540,15 +453,6 @@ export class WindowStateManager {
       lastSaved: Date.now(),
     }
 
-    return this.saveWindowStates()
-  }
-
-  /**
-   * Reset window state to defaults.
-   */
-  resetWindowState(windowType: WindowType): boolean {
-    const defaultStates = this.getDefaultWindowStates()
-    this.windowStates[windowType] = defaultStates[windowType]
     return this.saveWindowStates()
   }
 
@@ -673,7 +577,7 @@ export class WindowStateManager {
    * Get window creation options for BrowserWindow.
    *
    * LiveEditor options come from `liveEditor` config (frameless transparent
-   * panel) — main/floating come from `window` config as before.
+   * panel) — main comes from `window` config as before.
    */
   getWindowOptions(windowType: WindowType): WindowOptions {
     const state = this.getWindowState(windowType)
@@ -727,15 +631,6 @@ export class WindowStateManager {
       options.y = state.y
     }
 
-    if (windowType === 'floating') {
-      const floatingConfig = config as AppConfig['window']['floating']
-      options.maxWidth = floatingConfig.maxWidth
-      options.frame = floatingConfig.frame
-      options.alwaysOnTop = state.isAlwaysOnTop
-      options.resizable = floatingConfig.resizable
-      options.skipTaskbar = true
-    }
-
     return options
   }
 
@@ -753,253 +648,15 @@ export class WindowStateManager {
     }
 
     try {
-      if (state.isMaximized && windowType === 'main') {
-        browserWindow.maximize()
-      }
-
-      if (state.isFullScreen && windowType === 'main') {
-        browserWindow.setFullScreen(true)
-      }
-
-      if (
-        windowType === 'floating' &&
-        typeof state.isAlwaysOnTop === 'boolean'
-      ) {
-        browserWindow.setAlwaysOnTop(state.isAlwaysOnTop)
-      }
-
       // Visibility is owned by WindowManager's explicit show paths. Restoring
-      // it here would let stale window-state.json bypass startup config and the
-      // signed-out auth gate for auxiliary panels.
+      // it here would let stale window-state.json bypass the signed-out auth
+      // gate for the LiveEditor panel.
 
       return true
     } catch (error) {
       log.error(`Failed to apply ${windowType} window state:`, error)
       return false
     }
-  }
-
-  /**
-   * Get statistics about window states.
-   */
-  getStats(): WindowStats {
-    return {
-      windowCount: Object.keys(this.windowStates).length,
-      lastSaved: Math.max(
-        ...Object.values(this.windowStates).map((s) => s.lastSaved || 0),
-      ),
-      displays: screen.getAllDisplays().map((d) => ({
-        id: d.id,
-        bounds: d.bounds,
-        workArea: d.workArea,
-        scaleFactor: d.scaleFactor,
-      })),
-      states: Object.keys(this.windowStates).reduce(
-        (acc, key) => {
-          const state = this.windowStates[key]
-          if (state) {
-            acc[key] = {
-              bounds: {
-                x: state.x,
-                y: state.y,
-                width: state.width,
-                height: state.height,
-              },
-              displayId: state.displayId,
-              lastSaved: state.lastSaved,
-            }
-          }
-          return acc
-        },
-        {} as WindowStats['states'],
-      ),
-    }
-  }
-
-  /**
-   * Move window to specific display.
-   */
-  moveWindowToDisplay(
-    windowType: WindowType,
-    displayId: number,
-    browserWindow: BrowserWindow | null = null,
-  ): boolean {
-    const displays = screen.getAllDisplays()
-    const targetDisplay = displays.find((d) => d.id === displayId)
-
-    if (!targetDisplay) {
-      log.warn(`Display ${displayId} not found`)
-      return false
-    }
-
-    const state = this.getWindowState(windowType)
-    if (!state) {
-      log.warn(`Window state for ${windowType} not found`)
-      return false
-    }
-
-    const newPosition = this.calculateCenterPosition(
-      { width: state.width, height: state.height },
-      targetDisplay,
-    )
-
-    const success = this.setWindowState(windowType, {
-      x: newPosition.x,
-      y: newPosition.y,
-      displayId: targetDisplay.id,
-      workArea: targetDisplay.workArea,
-    })
-
-    if (success && browserWindow && !browserWindow.isDestroyed()) {
-      browserWindow.setBounds({
-        x: newPosition.x,
-        y: newPosition.y,
-        width: state.width,
-        height: state.height,
-      })
-    }
-
-    return success
-  }
-
-  /**
-   * Snap window to edge of current display.
-   */
-  snapWindowToEdge(
-    windowType: WindowType,
-    edge: SnapEdge,
-    browserWindow: BrowserWindow | null = null,
-  ): boolean {
-    const state = this.getWindowState(windowType)
-    if (!state) return false
-
-    const displays = screen.getAllDisplays()
-    const currentDisplay =
-      displays.find((d) => d.id === state.displayId) ||
-      screen.getPrimaryDisplay()
-    const {
-      x: displayX,
-      y: displayY,
-      width: displayWidth,
-      height: displayHeight,
-    } = currentDisplay.workArea
-
-    let newX = state.x
-    let newY = state.y
-    let newWidth = state.width
-    let newHeight = state.height
-
-    switch (edge) {
-      case 'left':
-        newX = displayX
-        newY = displayY
-        newWidth = Math.floor(displayWidth / 2)
-        newHeight = displayHeight
-        break
-      case 'right':
-        newX = displayX + Math.floor(displayWidth / 2)
-        newY = displayY
-        newWidth = Math.floor(displayWidth / 2)
-        newHeight = displayHeight
-        break
-      case 'top':
-        newX = displayX
-        newY = displayY
-        newWidth = displayWidth
-        newHeight = Math.floor(displayHeight / 2)
-        break
-      case 'bottom':
-        newX = displayX
-        newY = displayY + Math.floor(displayHeight / 2)
-        newWidth = displayWidth
-        newHeight = Math.floor(displayHeight / 2)
-        break
-      case 'top-left':
-        newX = displayX
-        newY = displayY
-        newWidth = Math.floor(displayWidth / 2)
-        newHeight = Math.floor(displayHeight / 2)
-        break
-      case 'top-right':
-        newX = displayX + Math.floor(displayWidth / 2)
-        newY = displayY
-        newWidth = Math.floor(displayWidth / 2)
-        newHeight = Math.floor(displayHeight / 2)
-        break
-      case 'bottom-left':
-        newX = displayX
-        newY = displayY + Math.floor(displayHeight / 2)
-        newWidth = Math.floor(displayWidth / 2)
-        newHeight = Math.floor(displayHeight / 2)
-        break
-      case 'bottom-right':
-        newX = displayX + Math.floor(displayWidth / 2)
-        newY = displayY + Math.floor(displayHeight / 2)
-        newWidth = Math.floor(displayWidth / 2)
-        newHeight = Math.floor(displayHeight / 2)
-        break
-      case 'maximize':
-        newX = displayX
-        newY = displayY
-        newWidth = displayWidth
-        newHeight = displayHeight
-        break
-      default:
-        return false
-    }
-
-    const success = this.setWindowState(windowType, {
-      x: newX,
-      y: newY,
-      width: newWidth,
-      height: newHeight,
-    })
-
-    if (success && browserWindow && !browserWindow.isDestroyed()) {
-      browserWindow.setBounds({
-        x: newX,
-        y: newY,
-        width: newWidth,
-        height: newHeight,
-      })
-    }
-
-    return success
-  }
-
-  /**
-   * Get display information for a window.
-   */
-  getWindowDisplay(windowType: WindowType): Display | null {
-    const state = this.getWindowState(windowType)
-    if (!state) return null
-
-    const displays = screen.getAllDisplays()
-    return (
-      displays.find((d) => d.id === state.displayId) ||
-      screen.getPrimaryDisplay()
-    )
-  }
-
-  /**
-   * Get all available displays with their information.
-   */
-  getAllDisplays(): DisplayInfo[] {
-    return screen.getAllDisplays().map((display) => ({
-      id: display.id,
-      label: display.label || `Display ${display.id}`,
-      bounds: display.bounds,
-      workArea: display.workArea,
-      scaleFactor: display.scaleFactor,
-      rotation: display.rotation,
-      touchSupport: display.touchSupport,
-      monochrome: display.monochrome,
-      accelerometerSupport: display.accelerometerSupport,
-      colorSpace: display.colorSpace,
-      colorDepth: display.colorDepth,
-      depthPerComponent: display.depthPerComponent,
-      isPrimary: display.id === screen.getPrimaryDisplay().id,
-    }))
   }
 
   /**
@@ -1046,11 +703,6 @@ export class WindowStateManager {
         displayId: display.id,
         workArea: display.workArea,
         lastSaved: Date.now(),
-      }
-
-      if (windowType === 'floating') {
-        this.windowStates[windowType].isAlwaysOnTop =
-          browserWindow.isAlwaysOnTop()
       }
 
       this.debouncedSaveWindowStates()

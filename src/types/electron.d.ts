@@ -4,14 +4,7 @@
 // than re-declaring the booleans here. This file is already a module (see the
 // `export type` lines at the bottom), so a top-level import is safe and does
 // not affect the `declare global` Window augmentation below.
-import type {
-  AuxWindowVisibility,
-  IPCResponse,
-  NativeTapStatus,
-  NotificationSettingsState,
-  StartupWindowConfig,
-  LegacyStartupWindowConfig,
-} from '@/electron/types/ipc'
+import type { IPCResponse } from '@/electron/types/ipc'
 
 interface ElectronAuthUser {
   /**
@@ -26,91 +19,6 @@ interface ElectronAuthUser {
 }
 
 interface ElectronAPI {
-  // Event handling
-  on: (
-    channel: string,
-    callback: (event: any, ...args: any[]) => void,
-  ) => () => void
-  removeListener: (channel: string, callback: Function) => void
-  removeAllListeners: (channel: string) => void
-
-  // Window operations
-  window?: {
-    toggleFloatingNavigator: () => Promise<void>
-    showFloatingNavigator: () => Promise<void>
-    hideFloatingNavigator: () => Promise<void>
-    getBounds?: () => any
-    setBounds?: (bounds: any) => void
-    isMinimized?: () => boolean
-    isMaximized?: () => boolean
-    isFullScreen?: () => boolean
-    isVisible?: () => boolean
-    isAlwaysOnTop?: () => boolean
-    focus?: () => void
-    show?: () => void
-    hide?: () => void
-    restore?: () => void
-    maximize?: () => void
-    unmaximize?: () => void
-    setFullScreen?: (flag: boolean) => void
-    setAlwaysOnTop?: (flag: boolean) => void
-    moveToDisplay?: (displayIndex: number) => void
-    /** Read which auxiliary windows (floating navigator, LiveEditor) are visible now */
-    getAuxVisibility?: () => Promise<AuxWindowVisibility>
-  }
-
-  // System integration
-  system?: {
-    showNotification: (
-      title: string,
-      body: string,
-      options?: any,
-    ) => Promise<void>
-    updateTrayMenu: (tasks: any[]) => Promise<void>
-    setTrayTooltip: (text: string) => Promise<void>
-    setTrayIconState: (state: string) => Promise<boolean>
-  }
-
-  // Menu management
-  menu?: {
-    triggerAction: (action: string) => Promise<void>
-  }
-
-  // Notifications
-  notifications?: {
-    show: (title: string, body: string, options?: any) => Promise<void>
-    getSettings?: () => Promise<NotificationSettingsState | null>
-    updateSettings?: (
-      settings: Partial<NotificationSettingsState>,
-    ) => Promise<NotificationSettingsState | null>
-    /** @deprecated Use getSettings; retained for installed-app version skew. */
-    getPreferences?: () => Promise<NotificationSettingsState | null>
-    /** @deprecated Use updateSettings; retained for installed-app version skew. */
-    updatePreferences?: (
-      settings: Partial<NotificationSettingsState>,
-    ) => Promise<NotificationSettingsState | null>
-    clearAll: () => Promise<void>
-    clear: (tag: string) => Promise<void>
-    isEnabled: () => Promise<boolean>
-    getActiveCount: () => Promise<number>
-  }
-
-  // Keyboard shortcuts
-  shortcuts?: {
-    getRegistered: () => Promise<any>
-    getDefaults: () => Promise<any>
-    update: (shortcuts: Record<string, string>) => Promise<boolean>
-    register: (accelerator: string, id: string) => Promise<boolean>
-    unregister: (id: string) => Promise<boolean>
-    isRegistered: (accelerator: string) => Promise<boolean>
-    enable: () => Promise<boolean>
-    disable: () => Promise<boolean>
-    getStats: () => Promise<any>
-    // Native key-tap freeze-safety (#125) — status + manual re-enable.
-    getNativeTapStatus: () => Promise<NativeTapStatus>
-    reenableNativeTap: () => Promise<NativeTapStatus>
-  }
-
   // Authentication
   auth?: {
     getUser: () => Promise<any>
@@ -133,18 +41,8 @@ interface ElectronAPI {
     getSupportedProviders: () => Promise<string[]>
     /** Cancel pending OAuth flow */
     cancel: (state?: string | null) => Promise<boolean>
-    /** Register callback for OAuth success */
-    onSuccess: (callback: (data: { user?: any }) => void) => () => void
     /** Register callback for OAuth error */
     onError: (callback: (data: { error: string }) => void) => () => void
-    /** Register callback for OAuth code exchange (used by web app) */
-    onCompleteExchange: (
-      callback: (data: {
-        code: string
-        verifier: string
-        provider: string
-      }) => void,
-    ) => () => void
     /**
      * Register callback for Clerk sign-in token from browser OAuth.
      * This token allows the WebView to create its own Clerk session
@@ -183,23 +81,14 @@ interface ElectronAPI {
     load: () => any
   }
 
-  // Window state
-  windowState?: {
-    get: (windowType: string) => Promise<any>
-    set: (windowType: string, properties: any) => Promise<boolean>
-    reset: (windowType: string) => Promise<boolean>
-    getStats: () => Promise<any>
-    moveToDisplay: (windowType: string, displayId: number) => Promise<boolean>
-    snapToEdge: (windowType: string, edge: string) => Promise<boolean>
-    getDisplay: (windowType: string) => Promise<any>
-    getAllDisplays: () => Promise<any[]>
-  }
-
-  // Shared floating panel behavior
+  /**
+   * LiveEditor panel controls. `floatingPanels` is the legacy wire name —
+   * frozen preloads expose it and the renderer reads it; do not rename.
+   */
   floatingPanels?: {
-    /** Read whether Floating Navigator and LiveEditor follow macOS Spaces */
+    /** Read whether LiveEditor follows macOS Spaces */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
-    /** Persist and apply whether both panels follow macOS Spaces */
+    /** Persist and apply whether LiveEditor follows macOS Spaces */
     setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
   }
 
@@ -209,29 +98,9 @@ interface ElectronAPI {
     quit: () => Promise<void>
   }
 
-  // Deep linking
-  deepLink?: {
-    generateUrl: (
-      action: string,
-      params?: Record<string, any>,
-    ) => Promise<string | null>
-    getExamples: () => Promise<Record<string, string>>
-    handleUrl: (url: string) => Promise<boolean>
-  }
-
-  // Generic invoke method (for settings IPC)
-  invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>
-
-  // Display management
-  display?: {
-    getAllDisplays?: () => any[]
-    getPrimaryDisplay?: () => any
-    getDisplayMatching?: (rect: any) => any
-  }
-
   /**
    * Electron-specific settings management.
-   * Controls app behavior like dock visibility and startup settings.
+   * Controls app behavior like dock visibility and login items.
    *
    * Note: Canonical type definition is in /electron/types/electron-api.d.ts
    * Keep this in sync with ElectronAPIInterface.settings
@@ -247,25 +116,10 @@ interface ElectronAPI {
     getLoginItemSettings: () => Promise<
       IPCResponse<'settings:getLoginItemSettings'>
     >
-    /**
-     * Persist which window(s) open at Electron launch (LiveEditor / floating
-     * navigator). The >=1-true invariant is enforced in the main process;
-     * resolves true even when an all-false request is repaired.
-     */
-    setStartupConfig: (
-      config: StartupWindowConfig | LegacyStartupWindowConfig,
-    ) => Promise<boolean>
-    /**
-     * Read the persisted startup-window config so the settings UI can show the
-     * saved choice. Returns the Floating-only default on failure, never all-off.
-     */
-    getStartupConfig: () => Promise<
-      StartupWindowConfig | LegacyStartupWindowConfig
-    >
   }
 
   /**
-   * LiveEditor window controls exposed to the main window's Settings UI.
+   * LiveEditor window controls exposed to the Settings window's UI.
    *
    * Minimal renderer-side mirror; the canonical surface lives in
    * /electron/types/electron-api.d.ts. Only includes what the settings page
@@ -288,12 +142,6 @@ declare global {
     electronEnv?: {
       isElectron: boolean
       platform: string
-      arch: string
-      versions: {
-        electron: string
-        node: string
-        chrome: string
-      }
     }
   }
 }

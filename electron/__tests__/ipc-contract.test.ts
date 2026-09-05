@@ -41,9 +41,6 @@ describe('IPC contract', () => {
       const voidChannels: IPCChannel[] = [
         'app-version',
         'app-quit',
-        'performance-get-metrics',
-        'performance-trigger-cleanup',
-        'window-get-aux-visibility',
         'auth-get-user',
         'auth-logout',
         'auth-is-authenticated',
@@ -95,47 +92,6 @@ describe('IPC contract', () => {
       expect(() => setHide.parse([])).toThrow(ZodError)
     })
 
-    it('requires both startup-window booleans for settings:setStartupConfig', () => {
-      // Arrange
-      const setStartupConfig = IPC_ARG_SCHEMAS['settings:setStartupConfig']
-
-      // Act + Assert: a complete two-boolean object passes the shape check.
-      expect(() =>
-        setStartupConfig.parse([{ showLiveEditor: true, showFloating: false }]),
-      ).not.toThrow()
-      // An all-false object still passes the *schema* — the >=1-true invariant
-      // is enforced in ConfigManager, not at the IPC boundary.
-      expect(() =>
-        setStartupConfig.parse([
-          { showLiveEditor: false, showFloating: false },
-        ]),
-      ).not.toThrow()
-      // A missing flag is rejected (renderer cannot send a partial config).
-      expect(() => setStartupConfig.parse([{ showLiveEditor: false }])).toThrow(
-        ZodError,
-      )
-      // A non-boolean flag is rejected.
-      expect(() =>
-        setStartupConfig.parse([
-          { showLiveEditor: false, showFloating: 'yes' },
-        ]),
-      ).toThrow(ZodError)
-      // An empty tuple is rejected.
-      expect(() => setStartupConfig.parse([])).toThrow(ZodError)
-    })
-
-    it('takes no arguments for settings:getStartupConfig', () => {
-      // Arrange
-      const getStartupConfig = IPC_ARG_SCHEMAS['settings:getStartupConfig']
-
-      // Act + Assert: the read side is a pure getter — an empty tuple passes.
-      expect(() => getStartupConfig.parse([])).not.toThrow()
-      // Any argument is rejected (the getter reads, it does not accept input).
-      expect(() => getStartupConfig.parse([{ showFloating: true }])).toThrow(
-        ZodError,
-      )
-    })
-
     it('takes no arguments for settings:resetPopoverSize', () => {
       // Arrange
       const resetPopoverSize = IPC_ARG_SCHEMAS['settings:resetPopoverSize']
@@ -147,36 +103,13 @@ describe('IPC contract', () => {
       expect(() => resetPopoverSize.parse([360])).toThrow(ZodError)
     })
 
-    it('requires boolean for floating panel desktop tracking', () => {
+    it('requires boolean for LiveEditor desktop tracking', () => {
       const setVisibleOnAllWorkspaces =
-        IPC_ARG_SCHEMAS['floating-window-set-visible-on-all-workspaces']
+        IPC_ARG_SCHEMAS['live-editor-set-visible-on-all-workspaces']
       expect(() => setVisibleOnAllWorkspaces.parse([true])).not.toThrow()
       expect(() => setVisibleOnAllWorkspaces.parse([false])).not.toThrow()
       expect(() => setVisibleOnAllWorkspaces.parse(['true'])).toThrow(ZodError)
       expect(() => setVisibleOnAllWorkspaces.parse([])).toThrow(ZodError)
-    })
-
-    it('requires boolean for floating-window-set-always-on-top', () => {
-      const setAlwaysOnTop =
-        IPC_ARG_SCHEMAS['floating-window-set-always-on-top']
-      expect(() => setAlwaysOnTop.parse([true])).not.toThrow()
-      expect(() => setAlwaysOnTop.parse([false])).not.toThrow()
-      // A malicious renderer cannot smuggle a non-boolean past the trust boundary.
-      expect(() => setAlwaysOnTop.parse(['true'])).toThrow(ZodError)
-      expect(() => setAlwaysOnTop.parse([])).toThrow(ZodError)
-    })
-
-    it('accepts empty string (disable shortcut) for floating-config-set-shortcut', () => {
-      const setShortcut = IPC_ARG_SCHEMAS['floating-config-set-shortcut']
-      // Empty string is the "disable the global toggle" sentinel.
-      expect(() => setShortcut.parse([''])).not.toThrow()
-      expect(() => setShortcut.parse(['CommandOrControl+3'])).not.toThrow()
-      // An over-length accelerator (> SHORTCUT_ACCELERATOR_MAX_LENGTH) is
-      // rejected, so a malicious renderer can't smuggle an unbounded string in.
-      expect(() => setShortcut.parse(['x'.repeat(65)])).toThrow(ZodError)
-      // A malicious renderer cannot smuggle a non-string past the trust boundary.
-      expect(() => setShortcut.parse([null])).toThrow(ZodError)
-      expect(() => setShortcut.parse([])).toThrow(ZodError)
     })
 
     it('requires boolean for live-editor-window-set-always-on-top', () => {
@@ -186,13 +119,6 @@ describe('IPC contract', () => {
       expect(() => setAlwaysOnTop.parse([false])).not.toThrow()
       expect(() => setAlwaysOnTop.parse(['true'])).toThrow(ZodError)
       expect(() => setAlwaysOnTop.parse([])).toThrow(ZodError)
-    })
-
-    it('accepts enum-constrained window state channel names', () => {
-      const windowStateGet = IPC_ARG_SCHEMAS['window-state-get']
-      expect(() => windowStateGet.parse(['main'])).not.toThrow()
-      expect(() => windowStateGet.parse(['floating'])).not.toThrow()
-      expect(() => windowStateGet.parse(['unknown-window'])).toThrow(ZodError)
     })
 
     it('accepts optional second arg for oauth-cancel', () => {
@@ -233,28 +159,16 @@ describe('IPC contract', () => {
       expect(() => setNote.parse([1.5, 'hello'])).toThrow(ZodError) // not int
     })
 
-    it('rejects non-boolean for live-editor-config-set-sync', () => {
-      const setSync = IPC_ARG_SCHEMAS['live-editor-config-set-sync']
-      expect(() => setSync.parse([true])).not.toThrow()
-      expect(() => setSync.parse([false])).not.toThrow()
-      expect(() => setSync.parse(['true'])).toThrow(ZodError)
-      expect(() => setSync.parse([])).toThrow(ZodError)
-    })
-
     it('accepts empty string (disable shortcut) for live-editor-config-set-shortcut', () => {
       const setShortcut = IPC_ARG_SCHEMAS['live-editor-config-set-shortcut']
       expect(() => setShortcut.parse([''])).not.toThrow()
       expect(() =>
         setShortcut.parse(['CommandOrControl+Shift+B']),
       ).not.toThrow()
+      // An over-length accelerator (> SHORTCUT_ACCELERATOR_MAX_LENGTH) is
+      // rejected, so a malicious renderer can't smuggle an unbounded string in.
+      expect(() => setShortcut.parse(['x'.repeat(65)])).toThrow(ZodError)
       expect(() => setShortcut.parse([null])).toThrow(ZodError)
-    })
-
-    it('requires positive int categoryId for live-editor-config-set-last-category', () => {
-      const setLast = IPC_ARG_SCHEMAS['live-editor-config-set-last-category']
-      expect(() => setLast.parse([1])).not.toThrow()
-      expect(() => setLast.parse(['1'])).toThrow(ZodError)
-      expect(() => setLast.parse([1.5])).toThrow(ZodError)
     })
   })
 })

@@ -43,7 +43,6 @@ describe('DeepLinkManager', () => {
   let DeepLinkManager
   let deepLinkManager
   let mockWindowManager
-  let mockApiBridge
   let mockNotificationManager
 
   beforeEach(async () => {
@@ -72,11 +71,6 @@ describe('DeepLinkManager', () => {
       getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
     }
 
-    mockApiBridge = {
-      getTodoById: vi.fn(),
-      createTodo: vi.fn(),
-    }
-
     mockNotificationManager = {
       showNotification: vi.fn(),
     }
@@ -90,9 +84,8 @@ describe('DeepLinkManager', () => {
     DeepLinkManager = module.default
     deepLinkManager = new DeepLinkManager(
       mockWindowManager,
-      mockApiBridge,
       mockNotificationManager,
-      mockApp, // Pass the mocked app as 4th parameter for dependency injection
+      mockApp, // Pass the mocked app as 3rd parameter for dependency injection
     )
   })
 
@@ -221,12 +214,11 @@ describe('DeepLinkManager', () => {
 
       // Assert: LiveEditor opens — Home is a read-only dashboard, so routing
       // there would dead-end the user. Prefill fields are dropped because
-      // LiveEditor is free text. No task is created, so a deep link never
-      // mutates the database.
+      // LiveEditor is free text; the deep link never touches a database
+      // (DeepLinkManager has no database bridge to call).
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/live-editor',
       )
-      expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
 
     it('opens LiveEditor in the browser when the deep link carries no fields', async () => {
@@ -239,7 +231,6 @@ describe('DeepLinkManager', () => {
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/live-editor',
       )
-      expect(mockApiBridge.createTodo).not.toHaveBeenCalled()
     })
   })
 
@@ -322,12 +313,71 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('surfaces the Floating front door (restoreFromTray) when a deep link arrives', () => {
-      // T18: the main window is retired, so every deep-link "show the app" path
-      // delegates to restoreFromTray — the Floating navigator is the front door.
-      deepLinkManager.ensureWindowVisible()
+    it('surfaces LiveEditor (restoreFromTray) when a view deep link arrives', async () => {
+      // Arrange: the main window is retired, so every deep-link "show the app"
+      // path delegates to restoreFromTray — LiveEditor (or the login window
+      // while signed out) is the front door.
 
-      expect(mockWindowManager.restoreFromTray).toHaveBeenCalled()
+      // Act: the real open-url path.
+      const handled = await deepLinkManager.handleDeepLink(
+        'corelive://view/home',
+      )
+
+      // Assert
+      expect(handled).toBe(true)
+      expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not surface LiveEditor before the OAuth callback ticket is delivered', async () => {
+      // Arrange: the OAuth deep link arrives while the app is still signed out.
+      // Surfacing LiveEditor first would load the protected route with the
+      // pre-login session; OAuthManager shows the initiating login window
+      // itself once the ticket validates.
+      const mockOAuthManager = {
+        handleOAuthCallback: vi.fn(async () => undefined),
+      }
+      deepLinkManager.setOAuthManager(mockOAuthManager)
+
+      // Act: the real open-url path, not the handler in isolation.
+      const handled = await deepLinkManager.handleDeepLink(
+        'corelive://oauth/callback?code=abc&state=xyz',
+      )
+
+      // Assert: the ticket reached OAuthManager and nothing pre-surfaced LiveEditor.
+      expect(handled).toBe(true)
+      expect(mockOAuthManager.handleOAuthCallback).toHaveBeenCalledTimes(1)
+      expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled()
+    })
+
+    it('surfaces the app on a plain second launch', () => {
+      // Act: the user opens the app again while it is already running.
+      deepLinkManager.handleSecondInstance(['/Applications/CoreLive.app'], '/')
+
+      // Assert
+      expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps LiveEditor hidden when a second launch carries the OAuth callback', async () => {
+      // Arrange
+      const mockOAuthManager = {
+        handleOAuthCallback: vi.fn(async () => undefined),
+      }
+      deepLinkManager.setOAuthManager(mockOAuthManager)
+
+      // Act: a protocol launch routed through the single-instance lock.
+      deepLinkManager.handleSecondInstance(
+        [
+          '/Applications/CoreLive.app',
+          'corelive://oauth/callback?code=abc&state=xyz',
+        ],
+        '/',
+      )
+      await vi.waitFor(() => {
+        expect(mockOAuthManager.handleOAuthCallback).toHaveBeenCalledTimes(1)
+      })
+
+      // Assert: the ticket was delivered without a pre-login LiveEditor load.
+      expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled()
     })
   })
 

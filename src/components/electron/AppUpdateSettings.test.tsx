@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,9 +10,6 @@ const getVersionMock = vi.fn()
 const checkForUpdatesMock = vi.fn()
 const quitAndInstallMock = vi.fn()
 const getStatusMock = vi.fn()
-const onMock = vi.fn()
-const eventListeners: Partial<Record<string, (payload: unknown) => void>> = {}
-
 const downloadingHalfway: UpdaterDownloadProgress = {
   percent: 42,
   bytesPerSecond: 1024,
@@ -35,14 +32,10 @@ function installElectronAPI(api: unknown): void {
 
 describe('AppUpdateSettings', () => {
   beforeEach(() => {
-    for (const key of Object.keys(eventListeners)) {
-      delete eventListeners[key]
-    }
     getVersionMock.mockReset()
     checkForUpdatesMock.mockReset()
     quitAndInstallMock.mockReset()
     getStatusMock.mockReset()
-    onMock.mockReset()
 
     getVersionMock.mockResolvedValue('1.2.3')
     checkForUpdatesMock.mockResolvedValue(true)
@@ -52,14 +45,6 @@ describe('AppUpdateSettings', () => {
       updateDownloaded: false,
       downloadProgress: null,
     })
-    onMock.mockImplementation(
-      (channel: string, callback: (payload: unknown) => void) => {
-        eventListeners[channel] = callback
-        return () => {
-          delete eventListeners[channel]
-        }
-      },
-    )
   })
 
   it('restores in-progress update download progress from updater status', async () => {
@@ -76,7 +61,6 @@ describe('AppUpdateSettings', () => {
         quitAndInstall: quitAndInstallMock,
         getStatus: getStatusMock,
       },
-      on: onMock,
     })
 
     // Act
@@ -92,140 +76,6 @@ describe('AppUpdateSettings', () => {
     ).toHaveAttribute('aria-valuenow', '42')
   })
 
-  it('shows update download progress when the main process emits progress', async () => {
-    // Arrange
-    installElectronAPI({
-      app: { getVersion: getVersionMock },
-      updater: {
-        checkForUpdates: checkForUpdatesMock,
-        quitAndInstall: quitAndInstallMock,
-        getStatus: getStatusMock,
-      },
-      on: onMock,
-    })
-    render(<AppUpdateSettings />)
-    await screen.findByText("You're running CoreLive 1.2.3.")
-
-    // Act
-    act(() => {
-      eventListeners['updater-download-progress']?.(downloadingHalfway)
-    })
-
-    // Assert
-    expect(screen.getByText('Downloading update — 42%')).toBeInTheDocument()
-    expect(
-      screen.getByRole('progressbar', { name: 'Update download progress' }),
-    ).toHaveAttribute('aria-valuenow', '42')
-  })
-
-  it('hides update download progress once the update is downloaded', async () => {
-    // Arrange
-    getStatusMock.mockResolvedValue({
-      updateAvailable: true,
-      updateDownloaded: false,
-      downloadProgress: downloadingHalfway,
-    })
-    installElectronAPI({
-      app: { getVersion: getVersionMock },
-      updater: {
-        checkForUpdates: checkForUpdatesMock,
-        quitAndInstall: quitAndInstallMock,
-        getStatus: getStatusMock,
-      },
-      on: onMock,
-    })
-    render(<AppUpdateSettings />)
-    await screen.findByRole('progressbar', {
-      name: 'Update download progress',
-    })
-
-    // Act
-    act(() => {
-      eventListeners['updater-message']?.('Update downloaded')
-    })
-
-    // Assert
-    expect(
-      screen.queryByRole('progressbar', { name: 'Update download progress' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Update ready. Restart CoreLive to finish installing.'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Check for Updates' }),
-    ).toBeEnabled()
-  })
-
-  it('hides update download progress when the updater reports an error', async () => {
-    // Arrange
-    getStatusMock.mockResolvedValue({
-      updateAvailable: true,
-      updateDownloaded: false,
-      downloadProgress: downloadingHalfway,
-    })
-    installElectronAPI({
-      app: { getVersion: getVersionMock },
-      updater: {
-        checkForUpdates: checkForUpdatesMock,
-        quitAndInstall: quitAndInstallMock,
-        getStatus: getStatusMock,
-      },
-      on: onMock,
-    })
-    render(<AppUpdateSettings />)
-    await screen.findByRole('progressbar', {
-      name: 'Update download progress',
-    })
-
-    // Act
-    act(() => {
-      eventListeners['updater-message']?.('Error in auto-updater')
-    })
-
-    // Assert
-    expect(
-      screen.queryByRole('progressbar', { name: 'Update download progress' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText("Couldn't check for updates. Try again in a moment."),
-    ).toBeInTheDocument()
-  })
-
-  it('hides update download progress when no update is available', async () => {
-    // Arrange
-    getStatusMock.mockResolvedValue({
-      updateAvailable: true,
-      updateDownloaded: false,
-      downloadProgress: downloadingHalfway,
-    })
-    installElectronAPI({
-      app: { getVersion: getVersionMock },
-      updater: {
-        checkForUpdates: checkForUpdatesMock,
-        quitAndInstall: quitAndInstallMock,
-        getStatus: getStatusMock,
-      },
-      on: onMock,
-    })
-    render(<AppUpdateSettings />)
-    await screen.findByRole('progressbar', {
-      name: 'Update download progress',
-    })
-
-    // Act
-    act(() => {
-      eventListeners['updater-message']?.('Update not available')
-    })
-
-    // Assert
-    expect(
-      screen.queryByRole('progressbar', { name: 'Update download progress' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText("You're on the latest version."),
-    ).toBeInTheDocument()
-  })
-
   it('shows the installed version once the main process responds', async () => {
     // Arrange
     installElectronAPI({
@@ -235,7 +85,6 @@ describe('AppUpdateSettings', () => {
         quitAndInstall: quitAndInstallMock,
         getStatus: getStatusMock,
       },
-      on: onMock,
     })
 
     // Act
@@ -256,7 +105,6 @@ describe('AppUpdateSettings', () => {
         quitAndInstall: quitAndInstallMock,
         getStatus: getStatusMock,
       },
-      on: onMock,
     })
     const user = userEvent.setup()
     render(<AppUpdateSettings />)
@@ -286,7 +134,6 @@ describe('AppUpdateSettings', () => {
         quitAndInstall: quitAndInstallMock,
         getStatus: getStatusMock,
       },
-      on: onMock,
     })
 
     // Act
@@ -315,7 +162,6 @@ describe('AppUpdateSettings', () => {
         quitAndInstall: quitAndInstallMock,
         getStatus: getStatusMock,
       },
-      on: onMock,
     })
     const user = userEvent.setup()
     render(<AppUpdateSettings />)

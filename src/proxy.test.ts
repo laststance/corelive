@@ -1,15 +1,14 @@
 /**
  * @fileoverview proxy.ts route-protection pin — the public-route carve-out guard.
  *
- * The sentinel: `/floating-navigator` MUST stay OUT of the protected matcher. It
- * is the Electron signed-out "front door" — the Floating window loads it while
- * signed out and Clerk re-renders it in place after a native OAuth sign-in. If a
- * future edit drops `/floating-navigator(.*)` into `createRouteMatcher`, a
- * signed-out load would bounce to `/login`, the card + navigator would never
- * render, and every SignedOutFloatingCard + DT7 recovery path would silently go
- * dark — with the rest of the suite still green. This test fails the instant
- * that carve-out is lost (and its sibling proves the carve-out is scoped, not a
- * blanket open door).
+ * The sentinel: `/login-shell` MUST stay OUT of the protected matcher. It is
+ * the Electron signed-out "front door" — the login window loads it while signed
+ * out and Clerk re-renders it in place after a native OAuth sign-in. If a
+ * future edit drops `/login-shell(.*)` into `createRouteMatcher`, a signed-out
+ * load would bounce to `/login`, the LoginShell card would never render, and
+ * every sign-in + DT7 recovery path would silently go dark — with the rest of
+ * the suite still green. This test fails the instant that carve-out is lost
+ * (and its sibling proves the carve-out is scoped, not a blanket open door).
  *
  * It drives the REAL Clerk `createRouteMatcher` (the matcher list is the thing
  * under test); only `clerkMiddleware` is unwrapped so the handler can be called
@@ -57,7 +56,7 @@ vi.mock('@clerk/nextjs/server', async (importOriginal) => {
  * the real Clerk matcher tests) and an absolute `url` (what the `/login`
  * redirect is constructed from).
  *
- * @param pathname - The request path, e.g. `/floating-navigator`.
+ * @param pathname - The request path, e.g. `/login-shell`.
  * @returns A request double carrying exactly those two fields.
  * @example
  *   requestFor('/home') // => { nextUrl: { pathname: '/home' }, url: 'https://corelive.app/home' }
@@ -78,13 +77,13 @@ describe('proxy route protection', () => {
     handler = proxyModule.default as unknown as ProxyHandler
   })
 
-  it('lets a signed-out visitor reach /floating-navigator instead of bouncing to /login', async () => {
-    // Arrange: a signed-out visitor — the Electron Floating front door loads
-    // this route before any sign-in exists.
+  it('lets a signed-out visitor reach /login-shell instead of bouncing to /login', async () => {
+    // Arrange: a signed-out visitor — the Electron login window loads this
+    // route before any sign-in exists.
     const auth = vi.fn(async () => ({ isAuthenticated: false }))
 
     // Act
-    const result = await handler(auth, requestFor('/floating-navigator'))
+    const result = await handler(auth, requestFor('/login-shell'))
 
     // Assert: no redirect response at all — the signed-out front door renders.
     // A protected route would have produced a /login redirect for this same
@@ -109,7 +108,7 @@ describe('proxy route protection', () => {
 
   it('keeps /live-editor protected so the Electron panel still gets its /login redirect', async () => {
     // Arrange: the packaged panel loads /live-editor; signed out it must bounce
-    // to /login (hide + Floating front door), exactly as before /write existed.
+    // to /login (hide + login window), exactly as before /write existed.
     const auth = vi.fn(async () => ({ isAuthenticated: false }))
 
     // Act
@@ -122,7 +121,7 @@ describe('proxy route protection', () => {
 
   it('still redirects a signed-out visitor on a protected route (/home) to /login', async () => {
     // Arrange: the same signed-out visitor, but on a protected route — proves
-    // the carve-out is scoped to /floating-navigator, not a blanket open door.
+    // the carve-out is scoped to /login-shell, not a blanket open door.
     const auth = vi.fn(async () => ({ isAuthenticated: false }))
 
     // Act

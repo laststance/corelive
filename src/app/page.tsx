@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: '%s | CoreLive',
     default: 'CoreLive',
   },
-  description: 'Personal Todo navigator for you.',
+  description: 'A quiet place to write your wins and watch the year add up.',
 }
 
 function Home() {

@@ -7,8 +7,7 @@ import type { IPCChannel } from '../types/ipc'
 // renderer constants change, update both this and `src/lib/constants/live-editor.ts`.
 const LIVE_EDITOR_NOTE_MAX_LENGTH = 255 * 200
 // Electron accelerator strings are short tokens like "CommandOrControl+Shift+B".
-// 64 is generous and bounds memory/log noise from malformed payloads. Shared by
-// the LiveEditor and Floating Navigator shortcut channels.
+// 64 is generous and bounds memory/log noise from malformed payloads.
 const SHORTCUT_ACCELERATOR_MAX_LENGTH = 64
 // Window dimension floor matches `WindowStateManager` minWidth/minHeight (320).
 // Ceiling is loose enough for 8K displays but rejects runaway values.
@@ -21,9 +20,7 @@ const RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS = new Set([
   'liveEditor.visibleOnAllWorkspaces',
   'liveEditor.alwaysOnTop',
   'liveEditor.opacity',
-  'liveEditor.syncMode',
   'liveEditor.shortcut',
-  'liveEditor.lastCategoryId',
 ])
 
 /** Allows generic renderer reads only for LiveEditor metadata so personal note text stays on its dedicated IPC channel.
@@ -60,125 +57,18 @@ const rendererReadableConfigPathSchema = z
  *
  * @example
  *   // Void-arg channel
- *   'performance-get-metrics': z.tuple([]),
+ *   'app-version': z.tuple([]),
  *   // Single-arg channel
  *   'config-get': z.tuple([z.string()]),
  *   // Tuple-arg channel (multiple positional args)
  *   'config-set': z.tuple([z.string(), z.unknown()]),
  */
-const notificationActionSchema = z.strictObject({
-  type: z.literal('button'),
-  text: z.string(),
-})
-
-const notificationOptionsSchema = z.strictObject({
-  type: z.enum(['info', 'warning', 'error', 'success']).optional(),
-  silent: z.boolean().optional(),
-  tag: z.string().optional(),
-  urgency: z.enum(['low', 'normal', 'critical']).optional(),
-  timeoutMs: z.number().optional(),
-  icon: z.string().optional(),
-  actions: z.array(notificationActionSchema).optional(),
-})
-
-const notificationSettingsUpdateSchema = z.strictObject({
-  enabled: z.boolean().optional(),
-  taskCreated: z.boolean().optional(),
-  taskCompleted: z.boolean().optional(),
-  taskUpdated: z.boolean().optional(),
-  taskDeleted: z.boolean().optional(),
-  sound: z.boolean().optional(),
-  showInTray: z.boolean().optional(),
-  autoHide: z.boolean().optional(),
-  autoHideDelay: z.number().optional(),
-  position: z
-    .enum(['topRight', 'topLeft', 'bottomRight', 'bottomLeft'])
-    .optional(),
-})
-
 export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // App (all void-arg)
   // ──────────────────────────────────────────────────────────────────────────
   'app-version': z.tuple([]),
   'app-quit': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Deep Linking
-  // ──────────────────────────────────────────────────────────────────────────
-  'deep-link-generate': z.tuple([
-    z.string(),
-    z.record(z.string(), z.unknown()).optional(),
-  ]),
-  'deep-link-get-examples': z.tuple([]),
-  'deep-link-handle-url': z.tuple([z.string()]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Menu
-  // ──────────────────────────────────────────────────────────────────────────
-  'menu-action': z.tuple([z.string()]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // System Tray
-  // ──────────────────────────────────────────────────────────────────────────
-  'tray-show-notification': z.tuple([
-    z.string(),
-    z.string(),
-    notificationOptionsSchema.optional(),
-  ]),
-  'tray-update-menu': z.tuple([
-    z.array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        completed: z.boolean().optional(),
-      }),
-    ),
-  ]),
-  'tray-set-tooltip': z.tuple([z.string()]),
-  'tray-set-icon-state': z.tuple([
-    z.enum(['default', 'active', 'notification', 'disabled']),
-  ]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Notifications
-  // ──────────────────────────────────────────────────────────────────────────
-  'notification-show': z.tuple([
-    z.string(),
-    z.string(),
-    notificationOptionsSchema.optional(),
-  ]),
-  'notification-get-settings': z.tuple([]),
-  'notification-update-settings': z.tuple([notificationSettingsUpdateSchema]),
-  'notification-clear-all': z.tuple([]),
-  'notification-clear': z.tuple([z.string()]),
-  'notification-is-enabled': z.tuple([]),
-  'notification-get-active-count': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Shortcuts
-  // ──────────────────────────────────────────────────────────────────────────
-  'shortcuts-get-registered': z.tuple([]),
-  'shortcuts-get-defaults': z.tuple([]),
-  'shortcuts-update': z.tuple([z.record(z.string(), z.string())]),
-  'shortcuts-register': z.tuple([
-    z.object({
-      id: z.string(),
-      accelerator: z.string(),
-      description: z.string(),
-      enabled: z.boolean(),
-      isGlobal: z.boolean(),
-    }),
-  ]),
-  'shortcuts-unregister': z.tuple([z.string()]),
-  'shortcuts-is-registered': z.tuple([z.string()]),
-  'shortcuts-enable': z.tuple([]),
-  'shortcuts-disable': z.tuple([]),
-  'shortcuts-get-stats': z.tuple([]),
-  // #125 native key-tap freeze-safety: query the tap's health and the manual
-  // re-enable after a latch-blocked launch. Both take no args.
-  'shortcuts-get-native-tap-status': z.tuple([]),
-  'shortcuts-reenable-native-tap': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
   // Configuration
@@ -196,7 +86,6 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'shortcuts',
       'general',
       'appearance',
-      'tray',
       'behavior',
       'advanced',
       'liveEditor',
@@ -211,7 +100,6 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       'shortcuts',
       'general',
       'appearance',
-      'tray',
       'behavior',
       'advanced',
       'liveEditor',
@@ -266,119 +154,18 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'updater-get-status': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Performance (all void-arg)
-  // ──────────────────────────────────────────────────────────────────────────
-  'performance-get-metrics': z.tuple([]),
-  'performance-trigger-cleanup': z.tuple([]),
-  'performance-get-startup-time': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Settings
   // ──────────────────────────────────────────────────────────────────────────
-  'settings:open': z.tuple([]),
-  'settings:close': z.tuple([]),
   'settings:setHideAppIcon': z.tuple([z.boolean()]),
   'settings:setShowInMenuBar': z.tuple([z.boolean()]),
   'settings:setStartAtLogin': z.tuple([z.boolean()]),
   'settings:getLoginItemSettings': z.tuple([]),
-  // The >=1-true invariant is enforced in ConfigManager, not here; this schema
-  // only guarantees the shape (two booleans) crossing the IPC boundary.
-  'settings:setStartupConfig': z.tuple([
-    z.object({
-      showLiveEditor: z.boolean(),
-      showFloating: z.boolean(),
-    }),
-  ]),
-  // The read side of the startup-window pair takes no arguments; the response
-  // shape (three booleans) is enforced by the typed IPC contract, not here.
-  'settings:getStartupConfig': z.tuple([]),
   // Reset Settings popover to default size + re-anchor to tray; no arguments.
   'settings:resetPopoverSize': z.tuple([]),
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Window Management (all void-arg)
-  // ──────────────────────────────────────────────────────────────────────────
-  'window-toggle-floating-navigator': z.tuple([]),
-  'window-show-floating-navigator': z.tuple([]),
-  'window-hide-floating-navigator': z.tuple([]),
-  'window-show-main': z.tuple([]),
-  'window-get-aux-visibility': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Floating Window
-  // ──────────────────────────────────────────────────────────────────────────
-  'floating-window-get-visible-on-all-workspaces': z.tuple([]),
-  'floating-window-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
-  'floating-window-close': z.tuple([]),
-  'floating-window-minimize': z.tuple([]),
-  'floating-window-toggle-always-on-top': z.tuple([]),
-  'floating-window-get-bounds': z.tuple([]),
-  'floating-window-set-bounds': z.tuple([
-    z.object({
-      x: z.number(),
-      y: z.number(),
-      width: z.number(),
-      height: z.number(),
-    }),
-  ]),
-  'floating-window-is-always-on-top': z.tuple([]),
-  'floating-window-get-always-on-top': z.tuple([]),
-  'floating-window-set-always-on-top': z.tuple([z.boolean()]),
-  'floating-config-get-shortcut': z.tuple([]),
-  'floating-config-set-shortcut': z.tuple([
-    z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
-  ]),
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Window State Management
-  // ──────────────────────────────────────────────────────────────────────────
-  'window-state-get': z.tuple([z.enum(['main', 'floating', 'liveEditor'])]),
-  'window-state-set': z.tuple([
-    z.enum(['main', 'floating', 'liveEditor']),
-    z
-      .object({
-        x: z.number().optional(),
-        y: z.number().optional(),
-        width: z.number().optional(),
-        height: z.number().optional(),
-        isMaximized: z.boolean().optional(),
-        isFullScreen: z.boolean().optional(),
-        isMinimized: z.boolean().optional(),
-        alwaysOnTop: z.boolean().optional(),
-        displayId: z.number().optional(),
-        lastSaved: z.number().optional(),
-      })
-      .passthrough(),
-  ]),
-  'window-state-reset': z.tuple([z.enum(['main', 'floating', 'liveEditor'])]),
-  'window-state-get-stats': z.tuple([]),
-  'window-state-move-to-display': z.tuple([
-    z.enum(['main', 'floating', 'liveEditor']),
-    z.number(),
-  ]),
-  'window-state-snap-to-edge': z.tuple([
-    z.enum(['main', 'floating', 'liveEditor']),
-    z.enum([
-      'left',
-      'right',
-      'top',
-      'bottom',
-      'top-left',
-      'top-right',
-      'bottom-left',
-      'bottom-right',
-      'maximize',
-    ]),
-  ]),
-  'window-state-get-display': z.tuple([
-    z.enum(['main', 'floating', 'liveEditor']),
-  ]),
-  'window-state-get-all-displays': z.tuple([]),
-
-  // ──────────────────────────────────────────────────────────────────────────
   // LiveEditor
   // ──────────────────────────────────────────────────────────────────────────
-  'window-toggle-live-editor': z.tuple([]),
   'live-editor-window-toggle': z.tuple([]),
   'live-editor-window-show': z.tuple([]),
   'live-editor-window-hide': z.tuple([]),
@@ -403,6 +190,8 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
         .max(LIVE_EDITOR_WINDOW_DIMENSION_MAX),
     }),
   ]),
+  'live-editor-get-visible-on-all-workspaces': z.tuple([]),
+  'live-editor-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
 
   'live-editor-note-get': z.tuple([z.number().int().positive()]),
   // Cap text length to mirror the renderer textarea `maxLength`. A compromised
@@ -412,8 +201,6 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
     z.string().max(LIVE_EDITOR_NOTE_MAX_LENGTH),
   ]),
 
-  'live-editor-config-get-sync': z.tuple([]),
-  'live-editor-config-set-sync': z.tuple([z.boolean()]),
   'live-editor-config-get-shortcut': z.tuple([]),
   'live-editor-config-set-shortcut': z.tuple([
     z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
@@ -421,9 +208,5 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   'live-editor-config-get-shortcut-secondary': z.tuple([]),
   'live-editor-config-set-shortcut-secondary': z.tuple([
     z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
-  ]),
-  'live-editor-config-get-last-category': z.tuple([]),
-  'live-editor-config-set-last-category': z.tuple([
-    z.number().int().positive(),
   ]),
 }

@@ -3,12 +3,12 @@
 /**
  * @fileoverview Shared status-card scaffold for the Electron Settings page.
  *
- * The Startup / Floating / LiveEditor settings cards each render the SAME small
- * header-only Card in three non-interactive states — desktop-app-only, an
- * "update CoreLive" version-skew notice, and a loading placeholder. This extracts
- * that repeated `<Card><CardHeader>` scaffold so the three components stay in
- * lockstep (one icon + title + one-line description) and their degraded/loading
- * copy renders identically instead of drifting apart per component.
+ * A settings card (LiveEditor today) renders the SAME small header-only Card in
+ * three non-interactive states — desktop-app-only, an "update CoreLive"
+ * version-skew notice, and a loading placeholder. This extracts that repeated
+ * `<Card><CardHeader>` scaffold so every card stays in lockstep (one icon +
+ * title + one-line description) and the degraded/loading copy renders
+ * identically instead of drifting apart per component.
  *
  * @module components/electron/SettingsStateCard
  */
@@ -25,7 +25,7 @@ import {
 interface SettingsStateCardProps {
   /** Lucide icon shown beside the title (the same glyph the live card uses). */
   icon: LucideIcon
-  /** Card title — the feature name (e.g. "On launch", "LiveEditor Note"). */
+  /** Card title — the feature name (e.g. "LiveEditor Note"). */
   title: string
   /** One-line status message (desktop-only / update-prompt / loading). */
   description: string
@@ -43,7 +43,7 @@ interface SettingsStateCardProps {
  * @param props - icon, title, description, and optional className
  * @returns A Card with an icon + title header and a one-line description
  * @example
- * <SettingsStateCard icon={Sunrise} title="On launch" description="Loading startup window settings…" />
+ * <SettingsStateCard icon={Brain} title="LiveEditor Note" description="Loading LiveEditor settings…" />
  */
 export const SettingsStateCard = function SettingsStateCard({
   icon: Icon,

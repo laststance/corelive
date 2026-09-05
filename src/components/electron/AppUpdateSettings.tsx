@@ -4,9 +4,12 @@
  * @fileoverview Manual app-update controls for the Electron Settings page.
  *
  * Surfaces a "Check for Updates" action when auto-update does not fire on its
- * own. Status text comes from the main-process `updater-message` IPC channel;
- * when a download finishes, a "Restart to Update" button calls
- * `updater.quitAndInstall()`.
+ * own. Status text comes from a one-time `updater.getStatus()` fetch on mount
+ * plus the optimistic message set locally when the user presses the button —
+ * the main process stopped sending live `updater-message` /
+ * `updater-download-progress` events in PR #178, when the retired main window
+ * (T18) that received them was cleaned up. When a download finishes, a
+ * "Restart to Update" button calls `updater.quitAndInstall()`.
  *
  * @module components/electron/AppUpdateSettings
  */
@@ -30,26 +33,6 @@ import { cn } from '@/lib/utils'
 
 interface AppUpdateSettingsProps {
   className?: string
-}
-
-/**
- * Verifies the updater progress event payload before rendering the fallback bar.
- * @param value - Unknown IPC payload from the generic Electron event bridge.
- * @returns True when value has the numeric progress fields AppUpdateSettings needs.
- * @example
- * isUpdaterDownloadProgress({ percent: 42, bytesPerSecond: 1, transferred: 2, total: 4 }) // => true
- */
-function isUpdaterDownloadProgress(
-  value: unknown,
-): value is UpdaterDownloadProgress {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Partial<UpdaterDownloadProgress>
-  return (
-    typeof candidate.percent === 'number' &&
-    typeof candidate.bytesPerSecond === 'number' &&
-    typeof candidate.transferred === 'number' &&
-    typeof candidate.total === 'number'
-  )
 }
 
 /** User-facing copy derived from main-process updater status strings. */
@@ -159,58 +142,8 @@ export const AppUpdateSettings = function AppUpdateSettings({
         log.error('Failed to load updater status:', statusError)
       })
 
-    const cleanupMessage = window.electronAPI?.on(
-      'updater-message',
-      (message: unknown) => {
-        if (typeof message !== 'string') return
-
-        setStatusMessage(formatUpdaterStatus(message))
-        setIsChecking(message.startsWith('Checking for update'))
-
-        if (message.startsWith('Checking for update')) {
-          setDownloadProgress(null)
-        }
-
-        if (message === 'Update downloaded') {
-          setUpdateDownloaded(true)
-          setIsChecking(false)
-          setDownloadProgress(null)
-        }
-
-        if (
-          message === 'Update not available' ||
-          message === 'Error in auto-updater' ||
-          message === 'Failed to download update'
-        ) {
-          setIsChecking(false)
-          setDownloadProgress(null)
-        }
-
-        if (message.startsWith('Downloading update:')) {
-          setIsChecking(true)
-        }
-
-        if (message === 'Update available') {
-          setIsChecking(false)
-          setDownloadProgress(null)
-        }
-      },
-    )
-
-    const cleanupProgress = window.electronAPI?.on(
-      'updater-download-progress',
-      (progress: unknown) => {
-        if (!isUpdaterDownloadProgress(progress)) return
-        setDownloadProgress(progress)
-        setStatusMessage(formatUpdaterDownloadProgress(progress))
-        setIsChecking(true)
-      },
-    )
-
     return () => {
       cancelled = true
-      cleanupMessage?.()
-      cleanupProgress?.()
     }
   }, [])
 

@@ -18,22 +18,6 @@ import { trayShortcutMenuFields } from './utils/trayShortcutMenuFields'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
-// Type Definitions
-// ============================================================================
-
-/** Task item for tray menu */
-export interface TaskItem {
-  title: string
-  completed: boolean
-}
-
-/** Notification options */
-interface TrayNotificationOptions {
-  silent?: boolean
-  onClick?: () => void
-}
-
-// ============================================================================
 // System Tray Manager Class
 // ============================================================================
 
@@ -69,20 +53,12 @@ export class SystemTrayManager {
    */
   private getShortcutAccelerators?: () => Record<string, string>
 
-  /**
-   * Last task list passed to updateTrayMenu, cached so a shortcut-triggered
-   * refreshTrayMenu() re-renders with current accelerators without wiping the
-   * recent-tasks section.
-   */
-  private lastTasks: TaskItem[]
-
   constructor(windowManager: WindowManager) {
     this.windowManager = windowManager
     this.tray = null
     this.trayCreationPromise = null
     this.isQuitting = false
     this.fallbackMode = false
-    this.lastTasks = []
   }
 
   /**
@@ -152,7 +128,7 @@ export class SystemTrayManager {
         return null
       }
 
-      this.setTrayTooltipSafely('TODO Desktop App')
+      this.setTrayTooltipSafely('CoreLive')
 
       if (!this.setupTrayMenuSafely()) {
         log.warn('Failed to setup tray menu, using minimal functionality')
@@ -379,19 +355,13 @@ export class SystemTrayManager {
   }
 
   /**
-   * Single writer for fallback mode: keeps this manager's flag and the
-   * WindowManager's close-routing flag in lockstep, so window-close never tries
-   * to `.hide()` into a tray that no longer exists.
-   * @param enabled - true routes window-close to minimize; false restores hide-to-tray.
+   * Single writer for this manager's fallback-mode flag.
+   * @param enabled - Whether the tray is unavailable and fallback UI should be used.
    * @example
-   * this.setFallbackMode(true) // tray gone → minimize on close instead of hide
+   * this.setFallbackMode(true) // tray gone → fallback mode on
    */
   private setFallbackMode(enabled: boolean): void {
     this.fallbackMode = enabled
-
-    if (this.windowManager) {
-      this.windowManager.setTrayFallbackMode(enabled)
-    }
   }
 
   /**
@@ -502,33 +472,28 @@ export class SystemTrayManager {
   }
 
   /**
-   * Re-render the tray menu with the last tasks + current accelerators.
+   * Re-render the tray menu with current accelerators.
    * Triggered after a shortcut rebind so a displayed hotkey never goes stale.
    *
    * @returns True when the menu was rebuilt, false when no tray is available.
    */
   refreshTrayMenu(): boolean {
-    return this.updateTrayMenu(this.lastTasks)
+    return this.updateTrayMenu()
   }
 
   /**
    * Update tray context menu.
    */
-  updateTrayMenu(tasks: TaskItem[] = []): boolean {
+  updateTrayMenu(): boolean {
     if (!this.tray || this.tray.isDestroyed()) {
       log.warn('Cannot update tray menu: tray not available')
       return false
     }
 
-    // Cache so refreshTrayMenu() can re-render with live accelerators without
-    // losing the recent-tasks section.
-    this.lastTasks = tasks
-
     try {
-      // Live, display-only hotkeys; an empty/absent value omits the accelerator
+      // Live, display-only hotkey; an empty/absent value omits the accelerator
       // so a rebound or unset shortcut never shows a stale or orphan glyph.
       const accelerators = this.getShortcutAccelerators?.() ?? {}
-      const floatingNavigatorAccelerator = accelerators.toggleFloatingNavigator
       const liveEditorAccelerator = accelerators.toggleLiveEditor
 
       const template: MenuItemConstructorOptions[] = [
@@ -545,19 +510,6 @@ export class SystemTrayManager {
         {
           // A native lone-modifier binding renders as a label glyph, not an
           // Electron accelerator (which can't parse 'lone-modifier:*').
-          ...trayShortcutMenuFields(
-            'Toggle Floating Navigator',
-            floatingNavigatorAccelerator,
-          ),
-          click: () => {
-            try {
-              this.windowManager.toggleFloatingNavigator()
-            } catch (error) {
-              log.error('Failed to toggle floating navigator:', error)
-            }
-          },
-        },
-        {
           ...trayShortcutMenuFields('Toggle LiveEditor', liveEditorAccelerator),
           click: () => {
             try {
@@ -578,8 +530,6 @@ export class SystemTrayManager {
             }
           },
         },
-        { type: 'separator' },
-        ...this.buildTaskMenuItems(tasks),
         { type: 'separator' },
         {
           label: 'Quit',
@@ -641,29 +591,6 @@ export class SystemTrayManager {
   }
 
   /**
-   * Build menu items for recent tasks.
-   */
-  buildTaskMenuItems(tasks: TaskItem[]): MenuItemConstructorOptions[] {
-    if (!tasks || tasks.length === 0) {
-      return [
-        {
-          label: 'No recent tasks',
-          enabled: false,
-        },
-      ]
-    }
-
-    const recentTasks = tasks.slice(0, 5)
-
-    return recentTasks.map((task) => ({
-      label: `${task.completed ? '✓' : '○'} ${task.title.substring(0, 30)}${task.title.length > 30 ? '...' : ''}`,
-      click: () => {
-        this.windowManager.restoreFromTray()
-      },
-    }))
-  }
-
-  /**
    * Setup tray event handlers for macOS.
    */
   setupTrayEvents(): void {
@@ -672,50 +599,6 @@ export class SystemTrayManager {
     this.tray.on('double-click', () => {
       this.windowManager.restoreFromTray()
     })
-  }
-
-  /**
-   * Show native notification with error handling.
-   */
-  showNotification(
-    title: string,
-    body: string,
-    options: TrayNotificationOptions = {},
-  ): Notification | null {
-    try {
-      if (!Notification.isSupported()) {
-        log.warn('Notifications are not supported on this system')
-        return null
-      }
-
-      const notification = new Notification({
-        title,
-        body,
-        icon: this.getTrayIconPath() ?? undefined,
-        silent: options.silent || false,
-      })
-
-      notification.on('click', () => {
-        try {
-          this.windowManager.restoreFromTray()
-          if (options.onClick) {
-            options.onClick()
-          }
-        } catch (error) {
-          log.error('Failed to handle notification click:', error)
-        }
-      })
-
-      notification.on('failed', (_event, error) => {
-        log.error('Notification failed:', error)
-      })
-
-      notification.show()
-      return notification
-    } catch (error) {
-      log.error('Failed to show notification:', error)
-      return null
-    }
   }
 
   /**

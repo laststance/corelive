@@ -26,13 +26,10 @@ function fakeBridge() {
       setBounds: vi.fn(),
     },
     note: { get: vi.fn(), set: vi.fn() },
-    sync: { getEnabled: vi.fn(), setEnabled: vi.fn() },
-    category: { getLast: vi.fn(), setLast: vi.fn() },
     spaces: {
       getVisibleOnAllWorkspaces: vi.fn(),
       setVisibleOnAllWorkspaces: vi.fn(),
     },
-    on: vi.fn(),
   }
 }
 
@@ -105,12 +102,12 @@ describe('LiveEditor host resolver', () => {
     // Arrange
     const host = getLiveEditorHost()
 
-    // Act / Assert: follow-the-shared-selection on, no remembered category,
-    // fully opaque, no main-process events to subscribe to.
-    await expect(host.sync.getEnabled()).resolves.toBe(true)
-    await expect(host.category.getLast()).resolves.toBeNull()
-    await expect(host.window.getOpacity()).resolves.toBe(1)
-    await expect(host.spaces.getVisibleOnAllWorkspaces()).resolves.toBe(false)
-    expect(host.on('live-editor-category-changed', () => {})).toBeUndefined()
+    // Act
+    const opacity = host.window.getOpacity()
+    const visibleOnAllWorkspaces = host.spaces.getVisibleOnAllWorkspaces()
+
+    // Assert: fully opaque and not pinned to every Space.
+    await expect(opacity).resolves.toBe(1)
+    await expect(visibleOnAllWorkspaces).resolves.toBe(false)
   })
 })

@@ -56,25 +56,6 @@ export interface MemorySnapshot {
   totalHeapUsed: number
 }
 
-/** Memory statistics */
-export interface MemoryStatistics {
-  current: MemorySnapshot
-  average: number
-  peak: number
-  minimum: number
-  trend: 'increasing' | 'decreasing' | 'stable'
-  historySize: number
-}
-
-/** Memory report */
-export interface MemoryReport {
-  timestamp: number
-  statistics: MemoryStatistics | null
-  history: MemorySnapshot[]
-  options: Required<MemoryProfilerOptions>
-  isMonitoring: boolean
-}
-
 /** Cleanup level */
 type CleanupLevel = 'warning' | 'critical' | 'system-warning' | 'manual'
 
@@ -392,50 +373,6 @@ export class MemoryProfiler extends EventEmitter {
   }
 
   /**
-   * Get memory statistics.
-   */
-  getStatistics(): MemoryStatistics | null {
-    if (this.memoryHistory.length === 0) {
-      return null
-    }
-
-    const recent = this.memoryHistory.slice(-10)
-    const totalMemoryValues = recent.map((s) => s.totalHeapUsed)
-    const current = this.memoryHistory[this.memoryHistory.length - 1]!
-
-    return {
-      current,
-      average:
-        totalMemoryValues.reduce((a, b) => a + b, 0) / totalMemoryValues.length,
-      peak: Math.max(...totalMemoryValues),
-      minimum: Math.min(...totalMemoryValues),
-      trend: this.calculateTrend(totalMemoryValues),
-      historySize: this.memoryHistory.length,
-    }
-  }
-
-  /**
-   * Calculate memory usage trend.
-   */
-  private calculateTrend(
-    values: number[],
-  ): 'increasing' | 'decreasing' | 'stable' {
-    if (values.length < 2) return 'stable'
-
-    const first = values[0]!
-    const last = values[values.length - 1]!
-
-    // Guard against division by zero
-    if (first === 0) return 'stable'
-
-    const change = (last - first) / first
-
-    if (change > 0.1) return 'increasing'
-    if (change < -0.1) return 'decreasing'
-    return 'stable'
-  }
-
-  /**
    * Log memory usage.
    */
   private logMemoryUsage(snapshot: MemorySnapshot): void {
@@ -455,19 +392,6 @@ export class MemoryProfiler extends EventEmitter {
     const i = Math.floor(Math.log(bytes) / Math.log(k))
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-  }
-
-  /**
-   * Export memory report.
-   */
-  exportReport(): MemoryReport {
-    return {
-      timestamp: Date.now(),
-      statistics: this.getStatistics(),
-      history: this.memoryHistory,
-      options: this.options,
-      isMonitoring: this.isMonitoring,
-    }
   }
 
   /**

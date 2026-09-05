@@ -24,12 +24,6 @@ import type { WindowManager } from './WindowManager'
 // Type Definitions
 // ============================================================================
 
-/** API Bridge interface for task operations */
-interface APIBridge {
-  getTodoById(id: string): Promise<unknown>
-  createTodo(data: unknown): Promise<unknown>
-}
-
 /** Parsed deep link URL */
 interface ParsedDeepLink {
   action: string
@@ -58,18 +52,6 @@ export class DeepLinkManager {
   /** Window manager reference */
   private windowManager: WindowManager
 
-  /**
-   * API bridge for task operations.
-   *
-   * VESTIGIAL after T15: main.ts already constructs this manager with `null`
-   * (WebView architecture has no in-process task store), and T15 dropped the
-   * last `getTodoById`/`createTodo` reads, so this field is now written-only.
-   * Kept (with the `APIBridge` interface + constructor param) so T18 can delete
-   * the whole apiBridge plumbing in one Phase-2 sweep without touching the
-   * constructor call here first.
-   */
-  private apiBridge: APIBridge | null
-
   /** Notification manager reference */
   private notificationManager: NotificationManager | null
 
@@ -93,12 +75,10 @@ export class DeepLinkManager {
    */
   constructor(
     windowManager: WindowManager,
-    apiBridge: APIBridge | null,
     notificationManager: NotificationManager | null,
     app: App | null = null,
   ) {
     this.windowManager = windowManager
-    this.apiBridge = apiBridge
     this.notificationManager = notificationManager
     this.app = app || electronApp
     this.protocol = 'corelive'
@@ -201,16 +181,18 @@ export class DeepLinkManager {
    * Handle second instance launch.
    */
   handleSecondInstance(commandLine: string[], _workingDirectory: string): void {
-    // Main window retired (T18): a second instance surfaces the Floating front door.
-    if (this.windowManager) {
-      this.windowManager.restoreFromTray()
-    }
-
     const urlArg = commandLine.find((arg) =>
       arg.startsWith(`${this.protocol}://`),
     )
+    // A deep link decides its own visibility in {@link handleDeepLink} (an OAuth
+    // callback must not pre-surface LiveEditor); a plain relaunch just surfaces
+    // LiveEditor, or the login window while signed out.
     if (urlArg) {
       this.handleDeepLink(urlArg)
+      return
+    }
+    if (this.windowManager) {
+      this.windowManager.restoreFromTray()
     }
   }
 
@@ -237,7 +219,13 @@ export class DeepLinkManager {
         return false
       }
 
-      this.ensureWindowVisible()
+      // An OAuth callback must not pre-surface LiveEditor: that would load the
+      // protected route with the pre-login session. OAuthManager shows the
+      // initiating login window once the ticket validates, and LiveEditor only
+      // loads after completeLogin.
+      if (parsedUrl.action !== 'oauth') {
+        this.ensureWindowVisible()
+      }
 
       const handled = await this.routeDeepLink(parsedUrl)
       return handled
@@ -340,8 +328,8 @@ export class DeepLinkManager {
       hasState: !!params.state,
     })
 
-    this.ensureWindowVisible()
-
+    // No ensureWindowVisible() on this path either: see the `oauth` gate in
+    // {@link handleDeepLink}.
     if (!this.oauthManager) {
       log.error('OAuth manager not initialized')
       if (this.notificationManager) {
@@ -466,14 +454,18 @@ export class DeepLinkManager {
   }
 
   /**
-   * Ensure main window is visible and focused.
+   * Surface the app for a non-OAuth deep link: LiveEditor, or the login window while signed out ({@link WindowManager.restoreFromTray} decides).
+   * @returns Nothing; a no-op until the WindowManager exists.
+   * @example
+   * this.ensureWindowVisible()
    */
   ensureWindowVisible(): void {
     if (!this.windowManager) {
       return
     }
 
-    // Main window retired (T18): always surface the Floating front door.
+    // Main window retired (T18): surface LiveEditor, or the login window while
+    // signed out (WindowManager decides).
     this.windowManager.restoreFromTray()
   }
 
