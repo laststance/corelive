@@ -1,14 +1,3 @@
-/**
- * Checkbox amber-fill duration on completion — the short tier (150–250ms) from
- * DESIGN.md, locked to ~200ms (D10). Mirrored by the Tailwind `duration-200`
- * utility applied to the checkbox in useCompletionFeedback; this constant is the
- * documented source of truth (Storybook / tests reference it). It is
- * deliberately NOT the heatmap hero fill (400ms radial-sweep) — the checkbox
- * fill is the quiet, repeatable acknowledgment, the heatmap stays the single
- * performative moment.
- */
-export const CHECKBOX_COMPLETION_FILL_MS = 200
-
 // --- Opt-in completion sound (synthesized; soft / warm / non-melodic) ---
 // Default OFF (DESIGN.md opt-in-sound exception). Synthesized via Web Audio so
 // no asset needs bundling/hosting (the asset choice is an open product question);
