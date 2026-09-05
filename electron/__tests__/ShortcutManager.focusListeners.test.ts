@@ -169,6 +169,22 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
+  it('binds Cmd+N at boot when a CoreLive window is already focused before shortcuts initialize', () => {
+    // Arrange: the startup panel (or the login window) took focus before the
+    // deferred ShortcutManager.initialize() ran, so no focus event is coming.
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+
+    // Act
+    shortcutManager.initialize()
+
+    // Assert: bound now, not only after the next focus-away-and-back.
+    expect(registerMock).toHaveBeenCalledWith(
+      NEW_TASK_ACCELERATOR,
+      expect.any(Function),
+    )
+  })
+
   it('re-binds Cmd+M after disable() → enable() while a window stays focused, and ignores focus while disabled', () => {
     // Arrange: focused and bound.
     const shortcutManager = new ShortcutManager(createWindowManager(), null)

@@ -1315,9 +1315,8 @@ function setupIPCHandlers(): void {
       // Persist so the main process re-applies this at the NEXT boot, before any
       // window shows — the renderer round-trip (ElectronStartupSync) that pushes
       // this can be slow or never run on a cold Start-at-Login restart (#112).
-      // Guarded like the sibling settings:setStartupConfig handler. This write is
-      // also what SEEDS config for an existing user whose hideAppIcon only ever
-      // lived in renderer localStorage.
+      // This write is also what SEEDS config for an existing user whose
+      // hideAppIcon only ever lived in renderer localStorage.
       //
       // Propagate the write result: if it fails (unwritable userData / full disk)
       // the runtime policy still applied, but the next cold restart would read the

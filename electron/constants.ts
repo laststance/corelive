@@ -1,11 +1,11 @@
 /**
  * @fileoverview Shared constants for the Electron main process.
  *
- * Why this module exists: the startup-window nav-watch (`WindowManager`) must
- * compare a panel's final navigated URL against Clerk's auth pages and ignore
- * Chromium's "intentionally aborted" load errors. Centralizing those strings
- * and the magic error code keeps them out of `WindowManager` as bare literals
- * and gives later commits (e.g. the cold-boot pill) a single source of truth.
+ * Why this module exists: the panel nav-watch (`WindowManager`) must compare a
+ * panel's final navigated URL against Clerk's auth pages and ignore Chromium's
+ * "intentionally aborted" load errors. Centralizing those strings, the magic
+ * error code and the fixed window sizes keeps them out of `WindowManager` as
+ * bare literals.
  *
  * @module electron/constants
  */
@@ -21,9 +21,9 @@ export const LOGIN_PATHNAME = '/login'
 export const SIGN_UP_PATHNAME = '/sign-up'
 
 /**
- * Pathnames that mean "the user is not yet authenticated" when a startup panel
- * lands on them. A panel that ends up here was redirected by `proxy.ts`, so the
- * nav-watch surfaces the main window instead of an empty panel.
+ * Pathnames that mean "the user is not yet authenticated" when a panel lands on
+ * them. A panel that ends up here was redirected by `proxy.ts`, so the nav-watch
+ * keeps it hidden and surfaces the login window instead of an empty panel.
  */
 export const AUTH_PATHNAMES: readonly string[] = [
   LOGIN_PATHNAME,
@@ -94,6 +94,16 @@ export const MIN_TCP_PORT = 1
 
 /** Highest valid TCP port (16-bit unsigned max) — upper bound for the debug port. */
 export const MAX_TCP_PORT = 65535
+
+// ============================================================================
+// Login window
+// ============================================================================
+
+/** Fixed width of the login window (`/login-shell`); not resizable, never persisted. */
+export const LOGIN_WINDOW_WIDTH_PX = 300
+
+/** Fixed height of the login window; fits the sign-in card below the native traffic lights. */
+export const LOGIN_WINDOW_HEIGHT_PX = 400
 
 // ============================================================================
 // Settings popover window

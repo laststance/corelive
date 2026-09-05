@@ -24,6 +24,8 @@ import type { ConfigManager } from './ConfigManager'
 import {
   AUTH_PATHNAMES,
   ERR_ABORTED,
+  LOGIN_WINDOW_HEIGHT_PX,
+  LOGIN_WINDOW_WIDTH_PX,
   PANEL_LOAD_MAX_RETRIES,
   PANEL_LOAD_RETRY_BASE_MS,
   SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
@@ -371,8 +373,9 @@ export class WindowManager {
   // ==========================================================================
 
   /**
-   * Create the login window: a fixed 300×400 shell that loads `/login-shell`,
-   * the only signed-out surface. Nothing about it is persisted (no config, no
+   * Create the login window: a fixed-size shell ({@link LOGIN_WINDOW_WIDTH_PX} ×
+   * {@link LOGIN_WINDOW_HEIGHT_PX}) that loads `/login-shell`, the only
+   * signed-out surface. Nothing about it is persisted (no config, no
    * window-state); it is created hidden so callers decide when it appears.
    *
    * @returns The (possibly already-existing) login BrowserWindow.
@@ -387,8 +390,8 @@ export class WindowManager {
     log.debug('Creating login window...', { isDev: this.isDev })
 
     const loginWindow = new BrowserWindow({
-      width: 300,
-      height: 400,
+      width: LOGIN_WINDOW_WIDTH_PX,
+      height: LOGIN_WINDOW_HEIGHT_PX,
       resizable: false,
       center: true,
       // Framed with hidden title bar: the native traffic lights stay visible
@@ -520,7 +523,15 @@ export class WindowManager {
     loginWindow.focus()
   }
 
-  /** Whether the login window currently exists (and is not destroyed). */
+  /**
+   * Whether the login window currently exists (and is not destroyed). A
+   * test-observability seam; no production code reads it (`restoreFromTray`
+   * deliberately does not short-circuit on it, see its docstring).
+   *
+   * @returns true while a live login window exists.
+   * @example
+   * expect(windowManager.hasLoginWindow()).toBe(true)
+   */
   hasLoginWindow(): boolean {
     return this.loginWindow !== null && !this.loginWindow.isDestroyed()
   }
@@ -830,6 +841,10 @@ export class WindowManager {
 
     if (this.liveEditorRevealPending) {
       this.cancelPendingLiveEditorReveal()
+      // A user cancel ends any login handoff riding on this load; the next
+      // sign-in must be able to hand off again (the latch only guards a load
+      // that is still in flight).
+      this.loginHandoffPending = false
       return false
     }
 
@@ -978,8 +993,11 @@ export class WindowManager {
         retry: () => {
           if (!decided) panel.loadURL(this.getPanelUrl('liveEditor'))
         },
-        // Close keeps the error page hidden; the next open reloads the route.
+        // Close ends this open: drop the still-armed watch so the next toggle
+        // starts a fresh load instead of cancelling a reveal that never comes,
+        // and keep the error page hidden until that reload.
         dismiss: () => {
+          this.cancelPendingLiveEditorReveal()
           this.liveEditorNeedsReloadBeforeReveal = true
         },
         parent: null,

@@ -701,6 +701,34 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(2)
     })
 
+    it('lets a later sign-in hand off again after the toggle shortcut cancels the load a handoff started', () => {
+      // Arrange: a handoff is loading LiveEditor hidden.
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.showLoginWindow()
+      const loginWindow = getWindow(0)
+      windowManager.completeLogin(senderOf(loginWindow))
+      const liveEditorWindow = getWindow(1)
+
+      // Act: the toggle shortcut lands mid-load and cancels the pending reveal.
+      const didOpen = windowManager.toggleLiveEditor()
+
+      // Assert: cancelled, still hidden.
+      expect(didOpen).toBe(false)
+      expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
+
+      // Act: the next open bounces to /login (session lost), the login window
+      // comes back, and the user signs in again.
+      windowManager.toggleLiveEditor()
+      liveEditorWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
+      const showLiveEditor = vi.spyOn(windowManager, 'showLiveEditor')
+      windowManager.completeLogin(senderOf(loginWindow))
+
+      // Assert: the cancelled handoff released the latch, so this sign-in hands
+      // off instead of being ignored with a dead login window on screen.
+      expect(loginWindow.win.show).toHaveBeenCalledTimes(2)
+      expect(showLiveEditor).toHaveBeenCalledTimes(1)
+    })
+
     it('reuses the existing login window when showLoginWindow runs twice', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
@@ -920,7 +948,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(createdWindows).toHaveLength(1)
     })
 
-    it('shows a parentless recovery dialog after three failed LiveEditor retries, where Retry reloads and Close does nothing', async () => {
+    it('shows a parentless recovery dialog after three failed LiveEditor retries, where Retry reloads and Close leaves the panel hidden', async () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLiveEditor()
@@ -951,7 +979,9 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
       expect(liveEditorWindow.win.close).not.toHaveBeenCalled()
 
-      // Arrange: next time the user picks Retry.
+      // Arrange: Close ended that watch, so the user opens LiveEditor again
+      // (one fresh load) and this time picks Retry on the dialog.
+      windowManager.showLiveEditor()
       vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({
         response: 0,
         checkboxChecked: false,
@@ -967,8 +997,41 @@ describe('WindowManager startup panel nav-watch', () => {
       fireHttpErrorNavigation(liveEditorWindow, LIVE_EDITOR_URL, 503)
       await vi.runOnlyPendingTimersAsync()
 
-      // Assert: Retry reloaded the route once more (4 + 3 + 1 = 8 loads).
-      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledTimes(8)
+      // Assert: the reopen loaded once, then Retry reloaded the route once more
+      // after three backoff retries (4 + 1 + 3 + 1 = 9 loads).
+      expect(dialog.showMessageBox).toHaveBeenCalledTimes(2)
+      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledTimes(9)
+    })
+
+    it('starts a fresh LiveEditor load on the next toggle after Close on the recovery dialog instead of swallowing the press', async () => {
+      // Arrange: a manual open exhausts its retries and the user picks Close
+      // (the mock's default, response 1).
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.showLiveEditor()
+      const liveEditorWindow = getWindow(0)
+      fireHttpErrorNavigation(liveEditorWindow, LIVE_EDITOR_URL, 503)
+      vi.runOnlyPendingTimers()
+      fireHttpErrorNavigation(liveEditorWindow, LIVE_EDITOR_URL, 503)
+      vi.runOnlyPendingTimers()
+      fireHttpErrorNavigation(liveEditorWindow, LIVE_EDITOR_URL, 503)
+      vi.runOnlyPendingTimers()
+      fireHttpErrorNavigation(liveEditorWindow, LIVE_EDITOR_URL, 503) // exhausted
+      await vi.runOnlyPendingTimersAsync() // Close
+      liveEditorWindow.win.loadURL.mockClear()
+
+      // Act: one press of the toggle shortcut, and this time the route loads.
+      const didOpen = windowManager.toggleLiveEditor()
+      liveEditorWindow.fireWebContents('did-navigate', {}, LIVE_EDITOR_URL)
+      liveEditorWindow.fireWebContents('did-finish-load')
+
+      // Assert: the press opened a fresh load that revealed the panel, rather
+      // than cancelling a reveal the dead watch could never deliver.
+      expect(didOpen).toBe(true)
+      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledTimes(1)
+      expect(liveEditorWindow.win.loadURL).toHaveBeenLastCalledWith(
+        LIVE_EDITOR_URL,
+      )
+      expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
     })
 
     it('reveals LiveEditor once a retry finally lands on the editor route', () => {

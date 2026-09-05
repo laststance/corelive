@@ -201,17 +201,18 @@ export class DeepLinkManager {
    * Handle second instance launch.
    */
   handleSecondInstance(commandLine: string[], _workingDirectory: string): void {
-    // Main window retired (T18): a second instance surfaces LiveEditor (or the
-    // login window while signed out).
-    if (this.windowManager) {
-      this.windowManager.restoreFromTray()
-    }
-
     const urlArg = commandLine.find((arg) =>
       arg.startsWith(`${this.protocol}://`),
     )
+    // A deep link decides its own visibility in {@link handleDeepLink} (an OAuth
+    // callback must not pre-surface LiveEditor); a plain relaunch just surfaces
+    // LiveEditor, or the login window while signed out.
     if (urlArg) {
       this.handleDeepLink(urlArg)
+      return
+    }
+    if (this.windowManager) {
+      this.windowManager.restoreFromTray()
     }
   }
 
@@ -238,7 +239,13 @@ export class DeepLinkManager {
         return false
       }
 
-      this.ensureWindowVisible()
+      // An OAuth callback must not pre-surface LiveEditor: that would load the
+      // protected route with the pre-login session. OAuthManager shows the
+      // initiating login window once the ticket validates, and LiveEditor only
+      // loads after completeLogin.
+      if (parsedUrl.action !== 'oauth') {
+        this.ensureWindowVisible()
+      }
 
       const handled = await this.routeDeepLink(parsedUrl)
       return handled
@@ -341,9 +348,8 @@ export class DeepLinkManager {
       hasState: !!params.state,
     })
 
-    // No ensureWindowVisible() here: OAuthManager shows the initiating login
-    // window once the ticket validates, and surfacing LiveEditor before that
-    // would load the protected route with the pre-login session.
+    // No ensureWindowVisible() on this path either: see the `oauth` gate in
+    // {@link handleDeepLink}.
     if (!this.oauthManager) {
       log.error('OAuth manager not initialized')
       if (this.notificationManager) {
@@ -468,7 +474,9 @@ export class DeepLinkManager {
   }
 
   /**
-   * Ensure main window is visible and focused.
+   * Surface the app for a non-OAuth deep link: LiveEditor, or the login window while signed out ({@link WindowManager.restoreFromTray} decides).
+   * @example
+   * this.ensureWindowVisible()
    */
   ensureWindowVisible(): void {
     if (!this.windowManager) {

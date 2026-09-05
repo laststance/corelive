@@ -223,8 +223,11 @@ export class ShortcutManager {
 
       const results = this.registerGlobalShortcuts()
 
-      // Setup focus listeners for contextual shortcuts
+      // Setup focus listeners for contextual shortcuts, then resolve the CURRENT
+      // focus: the startup panel or login window may already be focused, and no
+      // focus event will fire for it.
       this.setupFocusListeners()
+      this.syncContextualShortcuts()
 
       const successCount = results.filter((r) => r.success).length
       const totalCount = results.length
@@ -281,7 +284,7 @@ export class ShortcutManager {
 
   /**
    * Binds contextual shortcuts while any CoreLive window is focused and releases them otherwise.
-   * Runs on every app focus/blur event and once from {@link enable}; no-op while shortcuts are disabled.
+   * Runs on every app focus/blur event and once from {@link initialize} / {@link enable}; no-op while shortcuts are disabled.
    * @example
    * shortcutManager.syncContextualShortcuts() // focused window → Cmd+N / Cmd+M bound
    */
