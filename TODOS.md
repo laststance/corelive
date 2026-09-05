@@ -16,8 +16,9 @@
 
 ## Post-Floating-Navigator cleanup residue (plan eng review, 2026-09-05)
 
-Four items found while auditing the codebase for Floating-Navigator residue (PR #178).
-None belong in that deletion PR; all four are verified against `86ef29e1`.
+Eight items found while auditing the codebase for Floating-Navigator residue (PR #178)
+and during that PR's review rounds. None belong in that deletion PR; all are pre-existing
+conditions or follow-up work, not defects it introduced.
 
 ### "Checking…" spins forever on the Updates settings screen
 
@@ -98,6 +99,18 @@ None belong in that deletion PR; all four are verified against `86ef29e1`.
 **Why:** Raised by CodeRabbit on PR #178 as a Major finding, but verified byte-identical at the merge base (`e50888dc:176-183`) — this drift predates the PR and is not part of its diff. Fixing it means reconciling the mirror against `electron/types/electron-api.d.ts` and the real preload surface, which is the same two-d.ts reconciliation the PR already did for the `oauth` namespace and would widen a subtractive diff into unrelated territory.
 
 **Context:** `skipLibCheck` hides `TS2717` on duplicate `Window` augmentations, so nothing in CI catches this class of drift. The four-column table method (implementation / canonical d.ts / mirror d.ts / renderer caller) that PR #178 used for `oauth` is the tool for it; the `config` namespace is the next candidate.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** nothing.
+
+### `retryFailedShortcuts()` can re-register a shortcut the user has since disabled
+
+**What:** `ShortcutManager.retryFailedShortcuts()` (`electron/ShortcutManager.ts:816`) replays every entry in `failedShortcuts` using the accelerator captured at failure time, and never re-reads the current config. That re-arms a disabled shortcut on this sequence: a LiveEditor accelerator fails to register → it is stored in `failedShortcuts` → the user clears it in Settings (`''` is the disabled sentinel `registerGlobalShortcuts()` skips) → `SystemIntegrationErrorHandler.ts:516` calls `retryFailedShortcuts()` during an integration retry → the stale accelerator binds again.
+
+**Why:** Raised by CodeRabbit on PR #178 as a Minor finding, but the method is byte-identical at the merge base (`e50888dc`) and so is its only caller, so it predates the PR and is out of scope for a subtractive diff. The PR's own shortcut deletions cannot reach it either: `getHandlerForShortcut(id)` returns undefined for a retired id and the `if (handler)` guard skips the entry.
+
+**Context:** The fix is to compare `failedShortcut.accelerator` against `this.shortcuts[id]` inside the retry loop and drop entries that are empty or no longer match. The regression belongs in `ShortcutManager.liveEditorTwoSlots.test.ts`, which already covers the empty-string disabled sentinel, and needs a stateful `globalShortcut` mock so a failed registration can be observed.
 
 **Effort:** S
 **Priority:** P3
