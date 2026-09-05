@@ -7,21 +7,9 @@
  * @module electron/types/ipc
  */
 
-import type { IpcMainInvokeEvent } from 'electron'
-
 // ============================================================================
 // Shared Types
 // ============================================================================
-
-/** User data structure synchronized between Electron and web app */
-export interface ElectronUser {
-  id: string
-  clerkId: string
-  email: string
-  firstName?: string | null
-  lastName?: string | null
-  imageUrl?: string | null
-}
 
 /**
  * Auth user payload exchanged on auth IPC channels.
@@ -434,85 +422,9 @@ export interface IPCChannels {
 // ============================================================================
 
 export interface IPCEventChannels {
-  // OAuth events
-  'oauth-success': { user: unknown }
+  // Sent by {@link OAuthManager}; received in preload-shared/auth-oauth-bridge.ts.
   'oauth-error': { error: string }
-  'oauth-complete-exchange': {
-    code: string
-    verifier: string
-    provider: string
-  }
   'clerk-sign-in-token': { token: string; provider: string }
-
-  // Auth events
-  'auth-state-changed': { isAuthenticated: boolean; user: ElectronUser | null }
-
-  // Window events
-  'window-focus': void
-  'window-blur': void
-
-  // App events
-  'app-update-available': { version: string; releaseNotes?: string }
-  'app-update-downloaded': { version: string }
-  'updater-message': string
-  'updater-download-progress': UpdaterDownloadProgress
-
-  // Task events (from shortcuts/deep links)
-  'focus-task': { taskId: string }
-  'mark-task-complete': { taskId: string }
-  'shortcut-new-task': void
-  'shortcut-search': void
-
-  // Menu events
-  'menu-action': { action: string; filePath?: string }
-
-  // Notification fallback events (renderer hook-up pending)
-  'notification-permission-denied': { reason?: string; guidance?: string }
-  'show-fallback-notification': {
-    title: string
-    body: string
-    options?: SerializableNotificationOptions
-  }
-
-  // System integration status broadcast (from SystemIntegrationErrorHandler)
-  'system-integration-status': {
-    status: 'full' | 'partial' | 'minimal' | 'failed' | undefined
-    title: string
-    message: string
-    issues: string[]
-    integrationStatus: {
-      tray: { available: boolean; fallbackMode: boolean; error: string | null }
-      notifications: {
-        available: boolean
-        fallbackMode: boolean
-        error: string | null
-      }
-      shortcuts: {
-        available: boolean
-        partiallyAvailable: boolean
-        failedCount: number
-        error: string | null
-      }
-    }
-  }
-
-  // Deep link events — `task` passes through raw Todo shape; `id`/`title` are
-  // guaranteed, additional Clerk-style fields are accepted via index signature.
-  'deep-link-focus-task': {
-    task: { id: string; title: string; [extra: string]: unknown }
-    params: Record<string, string>
-  }
-  'deep-link-create-task': {
-    title?: string
-    description?: string
-    priority?: string
-    dueDate?: string
-  }
-  'deep-link-task-created': {
-    task: { id: string; title: string; [extra: string]: unknown }
-  }
-  'deep-link-navigate': { view: string; params: Record<string, string> }
-  'deep-link-search': { query: string; filter?: string }
 }
 
 // ============================================================================
@@ -525,48 +437,5 @@ export type IPCChannel = keyof IPCChannels
 /** Extract all event channel names */
 export type IPCEventChannel = keyof IPCEventChannels
 
-/** Extract request type for a channel */
-export type IPCRequest<C extends IPCChannel> = IPCChannels[C]['request']
-
 /** Extract response type for a channel */
 export type IPCResponse<C extends IPCChannel> = IPCChannels[C]['response']
-
-/** Extract event data type for an event channel */
-export type IPCEventData<C extends IPCEventChannel> = IPCEventChannels[C]
-
-// ============================================================================
-// Typed IPC Handler Utilities
-// ============================================================================
-
-/**
- * Type-safe IPC handler function signature.
- *
- * @example
- * ```typescript
- * const handler: IPCHandler<'auth-get-user'> = async (event) => {
- *   return authManager.getCurrentUser()
- * }
- * ```
- */
-export type IPCHandler<C extends IPCChannel> = (
-  event: IpcMainInvokeEvent,
-  ...args: IPCRequest<C> extends void
-    ? []
-    : IPCRequest<C> extends unknown[]
-      ? IPCRequest<C>
-      : [IPCRequest<C>]
-) => Promise<IPCResponse<C>> | IPCResponse<C>
-
-/**
- * Type-safe event listener function signature.
- *
- * @example
- * ```typescript
- * const listener: IPCEventListener<'oauth-success'> = (data) => {
- *   console.log('OAuth success:', data.provider)
- * }
- * ```
- */
-export type IPCEventListener<C extends IPCEventChannel> = (
-  data: IPCEventData<C>,
-) => void
