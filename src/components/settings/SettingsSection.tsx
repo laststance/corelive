@@ -5,7 +5,7 @@ import * as React from 'react'
  * uppercase, 0.05em tracking. `text-foreground` keeps the section `<h2>` the
  * strongest caption on the page, so the hierarchy reads Section `<h2>` ＞ row.
  */
-export const SETTINGS_SECTION_LABEL_CLASS =
+const SETTINGS_SECTION_LABEL_CLASS =
   'text-xs font-medium uppercase tracking-[0.05em] text-foreground'
 
 /**

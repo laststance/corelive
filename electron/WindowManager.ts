@@ -1502,13 +1502,6 @@ export class WindowManager {
   }
 
   /**
-   * Check if settings window exists and is not destroyed
-   */
-  hasSettingsWindow(): boolean {
-    return this.settingsWindow !== null && !this.settingsWindow.isDestroyed()
-  }
-
-  /**
    * Resets the Settings popover to default size and re-anchors it to the tray.
    * Called by the "Restore default size" IPC handler. Persists the reset so the
    * next open also uses default dimensions.

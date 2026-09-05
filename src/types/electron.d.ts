@@ -172,9 +172,6 @@ interface ElectronAPI {
     handleUrl: (url: string) => Promise<boolean>
   }
 
-  // Generic invoke method (for settings IPC)
-  invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>
-
   /**
    * Electron-specific settings management.
    * Controls app behavior like dock visibility and login items.
