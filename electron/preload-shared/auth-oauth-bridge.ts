@@ -205,29 +205,6 @@ export function createOAuthBridge() {
     },
 
     /**
-     * Register callback for OAuth success.
-     */
-    onSuccess: (callback: (data: OAuthCallbackData) => void): (() => void) => {
-      if (typeof callback !== 'function') {
-        throw new Error('Callback must be a function')
-      }
-
-      const wrappedCallback = (
-        _event: IpcRendererEvent,
-        data: OAuthCallbackData,
-      ): void => {
-        try {
-          callback(sanitizeData(data))
-        } catch (error) {
-          log.error('Error in OAuth success callback:', error)
-        }
-      }
-
-      ipcRenderer.on('oauth-success', wrappedCallback)
-      return () => ipcRenderer.removeListener('oauth-success', wrappedCallback)
-    },
-
-    /**
      * Register callback for OAuth error.
      */
     onError: (callback: (data: OAuthCallbackData) => void): (() => void) => {
@@ -248,33 +225,6 @@ export function createOAuthBridge() {
 
       ipcRenderer.on('oauth-error', wrappedCallback)
       return () => ipcRenderer.removeListener('oauth-error', wrappedCallback)
-    },
-
-    /**
-     * Register callback for OAuth code exchange completion.
-     * (Used by web app to complete the Clerk session setup)
-     */
-    onCompleteExchange: (
-      callback: (data: OAuthCallbackData) => void,
-    ): (() => void) => {
-      if (typeof callback !== 'function') {
-        throw new Error('Callback must be a function')
-      }
-
-      const wrappedCallback = (
-        _event: IpcRendererEvent,
-        data: OAuthCallbackData,
-      ): void => {
-        try {
-          callback(sanitizeData(data))
-        } catch (error) {
-          log.error('Error in OAuth exchange callback:', error)
-        }
-      }
-
-      ipcRenderer.on('oauth-complete-exchange', wrappedCallback)
-      return () =>
-        ipcRenderer.removeListener('oauth-complete-exchange', wrappedCallback)
     },
 
     /**

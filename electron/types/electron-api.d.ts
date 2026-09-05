@@ -152,8 +152,6 @@ export interface ElectronAPI {
     getSupportedProviders: () => Promise<OAuthProvider[]>
     /** Cancel pending OAuth flow */
     cancel: () => Promise<void>
-    /** Listen for OAuth success */
-    onSuccess: (callback: (result: OAuthResult) => void) => () => void
     /** Listen for OAuth error */
     onError: (
       callback: (data: { provider: OAuthProvider; error: string }) => void,

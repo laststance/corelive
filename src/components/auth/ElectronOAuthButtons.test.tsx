@@ -46,7 +46,6 @@ function plantOAuthBridge(result: OAuthStartResult) {
     value: {
       oauth: {
         start,
-        onSuccess: vi.fn(() => () => {}),
         onError: vi.fn(() => () => {}),
       },
     } as unknown as Window['electronAPI'],
@@ -112,11 +111,11 @@ describe('ElectronOAuthButtons', () => {
   it('re-arms the sign-in button after an abandoned browser flow times out', async () => {
     // Arrange: fake timers so we can fast-forward the abandonment backstop. The
     // flow STARTS successfully (the system browser opens), but the user then
-    // ABANDONS it — closes the tab / picks no account — so neither onSuccess nor
-    // onError ever fires (the bridge's listeners are registered but never
-    // invoked). Without the backstop the CTA would sit dead at "Opening browser…"
-    // until the window is reopened, which post-main-window-retirement (T18) is
-    // the only other escape.
+    // ABANDONS it — closes the tab / picks no account — so onError never fires
+    // (the bridge's listener is registered but never invoked). Without the
+    // backstop the CTA would sit dead at "Opening browser…" until the window
+    // is reopened, which post-main-window-retirement (T18) is the only other
+    // escape.
     vi.useFakeTimers()
     try {
       const start = plantOAuthBridge({ success: true })

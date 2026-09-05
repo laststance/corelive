@@ -182,3 +182,42 @@ describe('OAuthManager initiator targeting', () => {
     })
   })
 })
+
+describe('OAuthManager emitted channel surface', () => {
+  beforeEach(() => {
+    vi.mocked(typedSend).mockClear()
+  })
+
+  it('never emits oauth-success or oauth-complete-exchange on any OAuth outcome', async () => {
+    // Arrange: one manager driven through BOTH live outcomes — a granted flow
+    // that yields a sign-in ticket, and a provider denial that yields an error.
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+    const loginRenderer = fakeRenderer(11)
+
+    // Act: success path, then failure path.
+    oauthManager.sendSignInToken('tok_login', 'google', loginRenderer)
+    const { state } = await oauthManager.startOAuthFlow('google', loginRenderer)
+    await oauthManager.handleOAuthCallback(
+      new URL(
+        `corelive://oauth/callback?state=${state}&error=access_denied&error_description=User+denied+access`,
+      ),
+    )
+
+    // Assert: the emitted channel set is exactly the two the preload bridge
+    // still listens for. `oauth-success` and `oauth-complete-exchange` lost
+    // their senders in v0.14.0 and their listeners in v0.22.0; re-adding a send
+    // without a listener would silently drop the sign-in, so this pins the set
+    // rather than asserting one absence.
+    const emittedChannels = vi
+      .mocked(typedSend)
+      .mock.calls.map((call) => call[1])
+    expect(new Set(emittedChannels)).toEqual(
+      new Set(['clerk-sign-in-token', 'oauth-error']),
+    )
+    expect(emittedChannels).not.toContain('oauth-success')
+    expect(emittedChannels).not.toContain('oauth-complete-exchange')
+  })
+})

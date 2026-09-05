@@ -105,18 +105,8 @@ interface ElectronAPI {
     getSupportedProviders: () => Promise<string[]>
     /** Cancel pending OAuth flow */
     cancel: (state?: string | null) => Promise<boolean>
-    /** Register callback for OAuth success */
-    onSuccess: (callback: (data: { user?: any }) => void) => () => void
     /** Register callback for OAuth error */
     onError: (callback: (data: { error: string }) => void) => () => void
-    /** Register callback for OAuth code exchange (used by web app) */
-    onCompleteExchange: (
-      callback: (data: {
-        code: string
-        verifier: string
-        provider: string
-      }) => void,
-    ) => () => void
     /**
      * Register callback for Clerk sign-in token from browser OAuth.
      * This token allows the WebView to create its own Clerk session
