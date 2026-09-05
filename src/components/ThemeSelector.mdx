@@ -92,11 +92,13 @@ export function MyComponent() {
 
 ## Adding a new theme family
 
-1. Add a \`DerivedTheme\` seed (one per light/dark) to \`THEME_REGISTRY\` in
+1. Add a \`DerivedTheme\` seed — or a \`StaticTheme\` with literal \`tokens\`,
+   the way the stock shadcn \`default\` family is registered — (one per
+   light/dark) to \`THEME_REGISTRY\` in
    \`src/lib/themes/registry.ts\`, and its label to \`THEME_FAMILY_LABEL\`. \`THEMES\`,
    \`THEME_META\`, the picker, and \`useThemeAxis\` all derive from the registry —
    never edit them directly.
-2. Regenerate the static CSS — the build-time generator emits the colored family's
+2. Regenerate the static CSS — the build-time generator emits the family's
    token block; the default Warm Cathedral stays hand-authored in \`globals.css\`:
 
 <Source

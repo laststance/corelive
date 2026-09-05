@@ -3,8 +3,12 @@ import { describe, it, expect } from 'vitest'
 import {
   THEME_REGISTRY,
   THEME_IDS,
+  THEME_FAMILY_IDS,
+  THEME_FAMILY_LABEL,
   DEFAULT_THEME_ID,
   isThemeId,
+  isDerivedTheme,
+  isStaticTheme,
   getThemeMode,
   getThemeId,
 } from './registry'
@@ -18,10 +22,13 @@ describe('theme registry', () => {
     expect(THEME_REGISTRY.dark.family).toBe('cathedral')
   })
 
-  it('registers exactly the twelve shipped themes (cathedral + five colored families × two modes)', () => {
+  it('registers exactly the fourteen shipped themes (Default + cathedral + five colored families × two modes)', () => {
     // Arrange / Act / Assert — the full shipped set, hard-coded so an accidental
-    // add or drop of a family/mode is caught (cathedral first, then colored families)
+    // add or drop of a family/mode is caught (Default first, then cathedral, then
+    // the colored families)
     expect(THEME_IDS).toEqual([
+      'default-light',
+      'default-dark',
       'light',
       'dark',
       'harbor-light',
@@ -47,8 +54,8 @@ describe('theme registry', () => {
       modesByFamily.set(family, modes)
     }
 
-    // Assert — six families, each with both a light and a dark
-    expect(modesByFamily.size).toBe(6)
+    // Assert — seven families, each with both a light and a dark
+    expect(modesByFamily.size).toBe(7)
     for (const [family, modes] of modesByFamily) {
       expect(modes, `family ${family}`).toEqual(new Set(['light', 'dark']))
     }
@@ -63,15 +70,51 @@ describe('theme registry', () => {
     }
   })
 
-  it('marks cathedral preserved and every colored family derived', () => {
+  it('marks cathedral preserved and every other family generator-emitted', () => {
     // Arrange / Act / Assert — preserve drives whether the generator emits the CSS
-    const colored = THEME_IDS.filter(
+    const emitted = THEME_IDS.filter(
       (id) => THEME_REGISTRY[id].family !== 'cathedral',
     )
-    expect(colored).toHaveLength(10)
-    for (const id of colored) {
+    expect(emitted).toHaveLength(12)
+    for (const id of emitted) {
       expect(THEME_REGISTRY[id].preserve, id).toBe(false)
     }
+  })
+
+  it('lists the stock shadcn Default family first in the palette picker', () => {
+    // Arrange / Act / Assert — THEME_FAMILY_LABEL insertion order IS the picker order
+    expect(THEME_FAMILY_IDS[0]).toBe('default')
+    expect(THEME_FAMILY_LABEL.default).toBe('Default')
+    expect(THEME_FAMILY_IDS[1]).toBe('cathedral')
+  })
+
+  it('ships the shadcn neutral palette verbatim as the Default family, static not derived', () => {
+    // Arrange / Act / Assert — hard-coded from ui.shadcn.com/r/colors/neutral.json
+    expect(THEME_REGISTRY['default-light'].tokens['--background']).toBe(
+      'oklch(1 0 0)',
+    )
+    expect(THEME_REGISTRY['default-light'].tokens['--primary']).toBe(
+      'oklch(0.205 0 0)',
+    )
+    expect(THEME_REGISTRY['default-dark'].tokens['--background']).toBe(
+      'oklch(0.145 0 0)',
+    )
+    expect(THEME_REGISTRY['default-dark'].tokens['--primary']).toBe(
+      'oklch(0.922 0 0)',
+    )
+    // The kind guards are what the generator / preview / a11y tests branch on
+    expect(isStaticTheme(THEME_REGISTRY['default-light'])).toBe(true)
+    expect(isDerivedTheme(THEME_REGISTRY['default-light'])).toBe(false)
+    expect(isStaticTheme(THEME_REGISTRY['harbor-light'])).toBe(false)
+    expect(isDerivedTheme(THEME_REGISTRY['harbor-light'])).toBe(true)
+    expect(isStaticTheme(THEME_REGISTRY.light)).toBe(false)
+    expect(isDerivedTheme(THEME_REGISTRY.light)).toBe(false)
+  })
+
+  it('keeps Warm Cathedral as the applied default even though Default is listed first', () => {
+    // Arrange / Act / Assert — a fresh install still gets the brand pair
+    expect(DEFAULT_THEME_ID).toBe('light')
+    expect(THEME_REGISTRY[DEFAULT_THEME_ID].family).toBe('cathedral')
   })
 
   it('locks each default theme name, preview swatch, id, and mode', () => {
@@ -115,6 +158,7 @@ describe('isThemeId — guards persisted and unknown ids', () => {
     expect(isThemeId('dark')).toBe(true)
     expect(isThemeId('harbor-dark')).toBe(true)
     expect(isThemeId('graphite-light')).toBe(true)
+    expect(isThemeId('default-dark')).toBe(true)
   })
 
   it('rejects an unregistered id so a stale localStorage value cannot apply', () => {
@@ -139,6 +183,7 @@ describe('getThemeMode — resolves a theme id to its light/dark axis', () => {
     // Arrange / Act / Assert
     expect(getThemeMode('dark')).toBe('dark')
     expect(getThemeMode('harbor-dark')).toBe('dark')
+    expect(getThemeMode('default-dark')).toBe('dark')
   })
 
   it('reads light from the light id and any non-dark id', () => {

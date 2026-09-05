@@ -233,7 +233,7 @@ export const SundayDigestCard = function SundayDigestCard({
             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
               a quiet sunday recap
             </p>
-            <p className="font-serif text-base italic text-foreground">
+            <p className="text-base italic text-foreground">
               {weekStats.totalCompleted === 0
                 ? 'the room was quiet this week — that is fine too.'
                 : `${weekStats.totalCompleted} things made it onto the wall.`}

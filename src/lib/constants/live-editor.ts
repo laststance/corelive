@@ -74,18 +74,20 @@ export type LiveEditorFontFamilyId =
   (typeof LIVE_EDITOR_FONT_FAMILY_IDS)[number]
 
 /**
- * id → CSS value (the globals.css font vars, which resolve to the brand 3-font
- * stack on every route). The SINGLE source for the font CSS — read by both the
- * Settings preview label and the editor's inline style — so the mapping can't
- * drift between picker and surface.
+ * id → Tailwind font utility (the stock `--font-sans` / `--font-serif` /
+ * `--font-mono` system stacks — no web font is loaded). The SINGLE source for the
+ * face — read by both the Settings preview label and the editor textarea — so the
+ * mapping can't drift between picker and surface. Utility classes (not an inline
+ * `var(--font-*)`) because Tailwind v4 only emits a theme variable a utility
+ * actually uses; a bare `var(--font-serif)` would resolve to nothing.
  */
-export const LIVE_EDITOR_FONT_FAMILY_CSS: Record<
+export const LIVE_EDITOR_FONT_FAMILY_CLASS: Record<
   LiveEditorFontFamilyId,
   string
 > = {
-  mono: 'var(--font-mono)',
-  sans: 'var(--font-sans)',
-  serif: 'var(--font-serif)',
+  mono: 'font-mono',
+  sans: 'font-sans',
+  serif: 'font-serif',
 }
 
 /** Settings-selector metadata for a font family (label only; CSS via the map). */
@@ -120,7 +122,7 @@ export const LIVE_EDITOR_FONT_FAMILIES: readonly LiveEditorFontFamilyOption[] =
   }))
 
 /**
- * Default editor font — Inter Tight, the DESIGN.md Body tier. Geist Mono is the
+ * Default editor font — the app's default sans (DESIGN.md Body tier). Mono is the
  * Data / Code tier there, so it stays an option rather than the surface a
  * stranger meets first on `/write`.
  */

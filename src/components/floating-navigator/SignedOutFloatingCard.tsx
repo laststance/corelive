@@ -64,7 +64,7 @@ export const SignedOutFloatingCard = function SignedOutFloatingCard() {
 
       {/* Editorial hero: the north-star invitation, serif display per DESIGN.md. */}
       <div className="mt-5 space-y-2">
-        <h1 className="font-serif text-3xl font-semibold leading-tight text-foreground">
+        <h1 className="text-3xl font-semibold leading-tight text-foreground">
           Your year is waiting
         </h1>
         <p className="text-sm text-muted-foreground">

@@ -268,7 +268,7 @@ export const DayDetailDialog = function DayDetailDialog({
                 />
 
                 <div className="flex flex-col items-start gap-0.5">
-                  <DialogTitle className="font-serif text-2xl italic text-foreground">
+                  <DialogTitle className="text-2xl italic text-foreground">
                     {state.name}
                   </DialogTitle>
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
@@ -316,7 +316,7 @@ export const DayDetailDialog = function DayDetailDialog({
                   )}
                 </div>
               </div>
-              <DialogDescription className="pt-1 font-serif text-sm italic text-muted-foreground">
+              <DialogDescription className="pt-1 text-sm italic text-muted-foreground">
                 {state.voice}
               </DialogDescription>
             </DialogHeader>
@@ -324,7 +324,7 @@ export const DayDetailDialog = function DayDetailDialog({
             {isLoading || isPlaceholderData ? (
               <p className="text-sm text-muted-foreground">…</p>
             ) : dayCount === 0 ? (
-              <p className="font-serif text-sm italic text-muted-foreground">
+              <p className="text-sm italic text-muted-foreground">
                 {isToday
                   ? 'today is still open — there is no shape to it yet.'
                   : 'no tasks landed on this day. rest is a choice, not a void.'}

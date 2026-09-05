@@ -24,7 +24,7 @@ import {
   LIVE_EDITOR_CLEAR_DELAY_MIN_MS,
   LIVE_EDITOR_CLEAR_DELAY_STEP_MS,
   LIVE_EDITOR_FONT_FAMILIES,
-  LIVE_EDITOR_FONT_FAMILY_CSS,
+  LIVE_EDITOR_FONT_FAMILY_CLASS,
   LIVE_EDITOR_FONT_SIZE_MAX_PX,
   LIVE_EDITOR_FONT_SIZE_MIN_PX,
   LIVE_EDITOR_FONT_SIZE_STEP_PX,
@@ -243,7 +243,7 @@ export const LiveEditorAppearance =
           </p>
         </div>
 
-        {/* Font family — the three brand fonts; each label previews its face. */}
+        {/* Font family — the three stock faces; each label previews its own. */}
         <div className="space-y-2">
           <span className="text-sm font-medium">Font</span>
           <RadioGroup
@@ -263,14 +263,9 @@ export const LiveEditorAppearance =
                   htmlFor={`live-editor-font-${family.id}`}
                   className="text-sm font-normal"
                 >
-                  {/* Preview each option in its own face. Inline style sits on
-                     this intrinsic span (not the Label component) — a fresh
-                     object on a DOM element is free and needs no useMemo. */}
-                  <span
-                    style={{
-                      fontFamily: LIVE_EDITOR_FONT_FAMILY_CSS[family.id],
-                    }}
-                  >
+                  {/* Preview each option in its own face via the same utility
+                     class the editor applies, so picker and surface agree. */}
+                  <span className={LIVE_EDITOR_FONT_FAMILY_CLASS[family.id]}>
                     {family.label}
                   </span>
                 </Label>

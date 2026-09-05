@@ -18,7 +18,12 @@ import {
 } from '../../../scripts/generate-theme-css'
 
 import { AA_LARGE_CONTRAST } from './contrast'
-import { THEME_IDS, THEME_REGISTRY, type ThemeSeed } from './registry'
+import {
+  isStaticTheme,
+  THEME_IDS,
+  THEME_REGISTRY,
+  type ThemeSeed,
+} from './registry'
 
 const toOklch = converter('oklch')
 const toRgb = converter('rgb')
@@ -105,9 +110,10 @@ function controlBorderContrast(
   return wcagContrast(composited, surfaceCss)
 }
 
-/** A theme's resolved token map — cathedral is hand-authored, families are derived. */
+/** A theme's resolved token map — cathedral is hand-authored, Default is literal, families are derived. */
 function themeTokens(seed: ThemeSeed): Record<string, string> {
-  return seed.preserve ? CATHEDRAL[seed.mode] : deriveThemeTokens(seed)
+  if (seed.preserve) return CATHEDRAL[seed.mode]
+  return isStaticTheme(seed) ? seed.tokens : deriveThemeTokens(seed)
 }
 
 /** Reads a required token, failing loudly if a theme is missing it. */

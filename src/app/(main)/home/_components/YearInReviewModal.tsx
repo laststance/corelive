@@ -206,10 +206,10 @@ export const YearInReviewModal = function YearInReviewModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif text-2xl">
+          <DialogTitle className="text-2xl">
             A year of showing up.
           </DialogTitle>
-          <DialogDescription className="font-serif italic text-muted-foreground">
+          <DialogDescription className="italic text-muted-foreground">
             this is yours now — {summary.year} in quiet review.
           </DialogDescription>
         </DialogHeader>
@@ -266,7 +266,7 @@ export const YearInReviewModal = function YearInReviewModal({
             </div>
           )}
 
-          <p className="font-serif text-sm italic text-muted-foreground">
+          <p className="text-sm italic text-muted-foreground">
             the cathedral remembers. thank you for keeping the light on.
           </p>
         </div>
@@ -276,7 +276,7 @@ export const YearInReviewModal = function YearInReviewModal({
             type="button"
             variant="ghost"
             onClick={handleClose}
-            className="font-serif italic"
+            className="italic"
           >
             close
           </Button>
@@ -287,7 +287,7 @@ export const YearInReviewModal = function YearInReviewModal({
 }
 
 /**
- * Single stat tile inside the modal. Geist Mono tabular numbers + serif
+ * Single stat tile inside the modal. Mono tabular numbers + italic
  * caption so the number reads steady and the label reads warm.
  *
  * @example
@@ -313,7 +313,7 @@ const Stat = function Stat({
       >
         {isLoading ? '—' : value}
       </p>
-      <p className="font-serif text-xs italic text-muted-foreground">{label}</p>
+      <p className="text-xs italic text-muted-foreground">{label}</p>
     </div>
   )
 }

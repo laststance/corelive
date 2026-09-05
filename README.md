@@ -125,7 +125,7 @@ Open [http://localhost:4991](http://localhost:4991) with your browser to see the
 
 You can start editing the page by modifying files under `src/app/`. The page auto-updates as you edit.
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to optimize and load its three-font stack: **Inter Tight** (body/UI), **Newsreader** (display serif), and **Geist Mono** (data/code).
+This project loads no web fonts: text renders in the stock shadcn/ui + Tailwind system font stacks (`font-sans` for UI, `font-mono` for data).
 
 ### Ngrok
 
