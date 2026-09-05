@@ -16,7 +16,6 @@ import type {
   NotificationOptions,
   NotificationSettingsState,
 } from './types/ipc'
-import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 // NotificationSettingsState and NotificationOptions are the canonical contract
 // types from ./types/ipc.ts — imported here so the manager stays aligned with
 // the IPC boundary contract (single source of truth).
@@ -28,9 +27,6 @@ import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 /** Window manager interface (minimal) */
 interface WindowManager {
   restoreFromTray(): void
-  // Origin of the full web app (dev localhost / prod corelive.app) for routing
-  // notification click-through to the browser task view.
-  getWebAppOrigin(): string
 }
 
 /** System tray manager interface (minimal) */
@@ -38,22 +34,6 @@ interface SystemTrayManager {
   hasTray(): boolean
   setTrayTooltip(text: string): void
   getTrayIconPath(): string | undefined
-}
-
-/** Task structure */
-interface Task {
-  id: string
-  title: string
-  completed?: boolean
-  description?: string
-  dueDate?: Date
-}
-
-/** Task changes */
-interface TaskChanges {
-  title?: boolean
-  description?: boolean
-  dueDate?: boolean
 }
 
 export type { NotificationSettingsState, NotificationOptions }
@@ -367,95 +347,6 @@ export class NotificationManager {
   }
 
   /**
-   * Show notification for task creation.
-   */
-  showTaskCreatedNotification(task: Task): Notification | null {
-    if (!this.shouldShowNotification('taskCreated')) {
-      return null
-    }
-
-    const title = 'Task Created'
-    const body = `"${task.title}" has been added to your TODO list`
-
-    return this.showNotification(title, body, {
-      silent: !this.settings.sound,
-      tag: `task-created-${task.id}`,
-      onClick: async () => this.handleTaskNotificationClick(task.id),
-      onAction: async (actionIndex) =>
-        this.handleTaskCreatedAction(task, actionIndex),
-    })
-  }
-
-  /**
-   * Show notification for task completion.
-   */
-  showTaskCompletedNotification(task: Task): Notification | null {
-    if (!this.shouldShowNotification('taskCompleted')) {
-      return null
-    }
-
-    const title = task.completed ? 'Task Completed' : 'Task Reopened'
-    const body = task.completed
-      ? `"${task.title}" has been marked as complete`
-      : `"${task.title}" has been reopened`
-
-    return this.showNotification(title, body, {
-      silent: !this.settings.sound,
-      tag: `task-completed-${task.id}`,
-      onClick: async () => this.handleTaskNotificationClick(task.id),
-      onAction: async (actionIndex) =>
-        this.handleTaskCompletedAction(task, actionIndex),
-    })
-  }
-
-  /**
-   * Show notification for task updates.
-   */
-  showTaskUpdatedNotification(
-    task: Task,
-    changes: TaskChanges,
-  ): Notification | null {
-    if (!this.shouldShowNotification('taskUpdated')) {
-      return null
-    }
-
-    const title = 'Task Updated'
-    let body = `"${task.title}" has been updated`
-
-    if (changes.title) {
-      body = `Task renamed to "${task.title}"`
-    } else if (changes.description) {
-      body = `"${task.title}" description updated`
-    } else if (changes.dueDate) {
-      body = `"${task.title}" due date updated`
-    }
-
-    return this.showNotification(title, body, {
-      silent: !this.settings.sound,
-      tag: `task-updated-${task.id}`,
-      onClick: async () => this.handleTaskNotificationClick(task.id),
-      onAction: async () => this.handleTaskNotificationClick(task.id),
-    })
-  }
-
-  /**
-   * Show notification for task deletion.
-   */
-  showTaskDeletedNotification(task: Task): Notification | null {
-    if (!this.shouldShowNotification('taskDeleted')) {
-      return null
-    }
-
-    const title = 'Task Deleted'
-    const body = `"${task.title}" has been removed from your TODO list`
-
-    return this.showNotification(title, body, {
-      silent: !this.settings.sound,
-      tag: `task-deleted-${task.id}`,
-    })
-  }
-
-  /**
    * Show custom notification.
    */
   showNotification(
@@ -518,82 +409,6 @@ export class NotificationManager {
   }
 
   /**
-   * Handle task notification click.
-   */
-  private async handleTaskNotificationClick(_taskId: string): Promise<void> {
-    try {
-      // Surface LiveEditor (or the login window), then route to the full task view in
-      // the browser — the task UI lives at corelive.app now, not an Electron
-      // window. The old `focus-task` IPC had no renderer listener even before the
-      // cut; its type def (types/ipc.ts) + preload allowlist are orphaned, slated
-      // for T18/T19 removal. No per-task web route exists, so we open `/home`.
-      this.windowManager.restoreFromTray()
-      openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
-    } catch (error) {
-      log.error('Failed to handle task notification click:', error)
-    }
-  }
-
-  /**
-   * Handle task created notification actions.
-   */
-  private async handleTaskCreatedAction(
-    task: Task,
-    actionIndex: number,
-  ): Promise<void> {
-    try {
-      switch (actionIndex) {
-        case 0:
-          await this.handleTaskNotificationClick(task.id)
-          break
-        case 1:
-          await this.markTaskComplete(task.id)
-          break
-        default:
-          log.warn('Unknown action index:', actionIndex)
-      }
-    } catch (error) {
-      log.error('Failed to handle task created action:', error)
-    }
-  }
-
-  /**
-   * Handle task completed notification actions.
-   */
-  private async handleTaskCompletedAction(
-    task: Task,
-    actionIndex: number,
-  ): Promise<void> {
-    try {
-      switch (actionIndex) {
-        case 0:
-          await this.handleTaskNotificationClick(task.id)
-          break
-        case 1:
-          if (!task.completed) {
-            await this.markTaskComplete(task.id)
-          }
-          break
-        default:
-          log.warn('Unknown action index:', actionIndex)
-      }
-    } catch (error) {
-      log.error('Failed to handle task completed action:', error)
-    }
-  }
-
-  /**
-   * Mark task as complete via IPC.
-   */
-  private async markTaskComplete(_taskId: string): Promise<void> {
-    // Inert by design: the `mark-task-complete` channel never had a renderer
-    // listener, and with the main window retired (T18) there is no surface to
-    // route it to. Completing a task from a notification has no web contract, so
-    // this stays a deliberate no-op rather than a re-implemented mutation. The
-    // notification action is kept so its UX is unchanged.
-  }
-
-  /**
    * Get notification icon.
    */
   private getNotificationIcon(): NativeImage | null {
@@ -614,38 +429,6 @@ export class NotificationManager {
   }
 
   /**
-   * Check if notification should be shown.
-   */
-  private shouldShowNotification(
-    type: keyof NotificationSettingsState,
-  ): boolean {
-    return this.settings.enabled && !!this.settings[type]
-  }
-
-  /**
-   * Update notification settings.
-   */
-  updateSettings(newSettings: Partial<NotificationSettingsState>): void {
-    this.settings = {
-      ...this.settings,
-      ...newSettings,
-    }
-
-    if (this.configManager) {
-      for (const [key, value] of Object.entries(newSettings)) {
-        this.configManager.set(`notifications.${key}`, value)
-      }
-    }
-  }
-
-  /**
-   * Get current notification settings.
-   */
-  getSettings(): NotificationSettingsState {
-    return { ...this.settings }
-  }
-
-  /**
    * Clear all active notifications.
    */
   clearAllNotifications(): void {
@@ -657,28 +440,6 @@ export class NotificationManager {
       }
     }
     this.activeNotifications.clear()
-  }
-
-  /**
-   * Clear specific notification by tag.
-   */
-  clearNotification(tag: string): void {
-    const notification = this.activeNotifications.get(tag)
-    if (notification) {
-      try {
-        notification.close()
-        this.activeNotifications.delete(tag)
-      } catch (error) {
-        log.warn(`Failed to close notification ${tag}:`, error)
-      }
-    }
-  }
-
-  /**
-   * Get count of active notifications.
-   */
-  getActiveNotificationCount(): number {
-    return this.activeNotifications.size
   }
 
   /**

@@ -163,8 +163,6 @@ let ipcHandlersInitialized = false
 let autoUpdater: AutoUpdaterType | null = null
 let systemTrayManager: SystemTrayManagerType | null = null
 let notificationManager: NotificationManagerType | null = null
-/** Promise to track in-flight NotificationManager initialization (prevents race conditions) */
-let notificationManagerPromise: Promise<NotificationManagerType> | null = null
 let shortcutManager: ShortcutManagerType | null = null
 /**
  * Guards the one-time attachment of the #125 native key-tap `powerMonitor`
@@ -320,50 +318,6 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
   }
 
   return manager
-}
-
-/**
- * Ensures the NotificationManager is initialized when needed.
- * Uses a Promise tracker to prevent race conditions from concurrent calls.
- *
- * @returns The initialized NotificationManager
- * @throws Error if initialization fails
- */
-async function ensureNotificationManager(): Promise<NotificationManagerType> {
-  // Return existing instance if available
-  if (notificationManager) {
-    return notificationManager
-  }
-
-  // Wait for in-flight initialization if one exists (prevents race condition)
-  if (notificationManagerPromise) {
-    return notificationManagerPromise
-  }
-
-  // Start new initialization and track the promise
-  notificationManagerPromise = (async () => {
-    try {
-      const NotificationManagerCls = (await lazyLoadManager.loadComponent(
-        'NotificationManager',
-      )) as new (...args: unknown[]) => NotificationManagerType
-      notificationManager = new NotificationManagerCls(
-        windowManager,
-        systemTrayManager,
-        configManager,
-      )
-      return notificationManager
-    } catch (error) {
-      // Clear promise on failure to allow retry
-      notificationManagerPromise = null
-      log.warn(
-        'Failed to load notification manager:',
-        error instanceof Error ? error.message : String(error),
-      )
-      throw new Error('Notification manager not available')
-    }
-  })()
-
-  return notificationManagerPromise
 }
 
 /**
@@ -1040,44 +994,6 @@ function setupIPCHandlers(): void {
     (_event, accelerator) =>
       setLiveEditorShortcutSlot('toggleLiveEditorSecondary', accelerator),
   )
-
-  // Notification management IPC handlers (Zod-validated, lazy-loaded)
-  typedHandle('notification-show', async (_event, title, body, options) => {
-    const manager = await ensureNotificationManager()
-    const notif = manager.showNotification(title, body, options || {})
-    return notif ? { id: String(Date.now()) } : null
-  })
-
-  typedHandle('notification-get-settings', () => {
-    if (notificationManager) {
-      return notificationManager.getSettings()
-    }
-    return null
-  })
-
-  typedHandle('notification-update-settings', (_event, settings) => {
-    if (notificationManager) {
-      notificationManager.updateSettings(settings)
-      return notificationManager.getSettings()
-    }
-    return null
-  })
-
-  typedHandle('notification-clear-all', () => {
-    notificationManager?.clearAllNotifications()
-  })
-
-  typedHandle('notification-clear', (_event, tag) => {
-    notificationManager?.clearNotification(tag)
-  })
-
-  typedHandle('notification-is-enabled', () => {
-    return notificationManager?.isEnabled() ?? false
-  })
-
-  typedHandle('notification-get-active-count', () => {
-    return notificationManager?.getActiveNotificationCount() ?? 0
-  })
 
   // Configuration management IPC handlers (Zod-validated)
   typedHandle('config-get', (_event, path, defaultValue) => {
