@@ -83,7 +83,7 @@
     "entitlementsInherit": "build/entitlements.mac.plist",
     "notarize": true,
     "type": "distribution",
-    "minimumSystemVersion": "10.15.0",
+    "minimumSystemVersion": "13.0.0",
     "icon": "build/icons/icon.icns"
   },
   "dmg": {

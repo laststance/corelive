@@ -39,7 +39,7 @@ type Story = StoryObj<typeof ConstellationCanvas>
  * createSkillNodeId(1)
  */
 function createSkillNodeId(value: number): SkillNodeId {
-  return value as SkillNodeId
+  return value
 }
 
 /**
@@ -50,7 +50,7 @@ function createSkillNodeId(value: number): SkillNodeId {
  * createSkillNodeName('HTTP')
  */
 function createSkillNodeName(value: string): SkillNodeName {
-  return value as SkillNodeName
+  return value
 }
 
 /**
@@ -61,7 +61,7 @@ function createSkillNodeName(value: string): SkillNodeName {
  * createNodeCoordinate(0.2)
  */
 function createNodeCoordinate(value: number): NodeCoordinate {
-  return value as NodeCoordinate
+  return value
 }
 
 /**
@@ -72,7 +72,7 @@ function createNodeCoordinate(value: number): NodeCoordinate {
  * createNodeXp(75)
  */
 function createNodeXp(value: number): NodeXp {
-  return value as NodeXp
+  return value
 }
 
 /**
@@ -83,7 +83,7 @@ function createNodeXp(value: number): NodeXp {
  * createNodeEdgeId(1)
  */
 function createNodeEdgeId(value: number): NodeEdgeId {
-  return value as NodeEdgeId
+  return value
 }
 
 /**
@@ -94,7 +94,7 @@ function createNodeEdgeId(value: number): NodeEdgeId {
  * createEdgeFromNodeId(1)
  */
 function createEdgeFromNodeId(value: number): EdgeFromNodeId {
-  return value as EdgeFromNodeId
+  return value
 }
 
 /**
@@ -105,7 +105,7 @@ function createEdgeFromNodeId(value: number): EdgeFromNodeId {
  * createEdgeToNodeId(2)
  */
 function createEdgeToNodeId(value: number): EdgeToNodeId {
-  return value as EdgeToNodeId
+  return value
 }
 
 const sampleNodes = [

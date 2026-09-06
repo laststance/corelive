@@ -48,7 +48,7 @@ function plantOAuthBridge(result: OAuthStartResult) {
         start,
         onError: vi.fn(() => () => {}),
       },
-    } as unknown as Window['electronAPI'],
+    },
   })
   return start
 }

@@ -7,15 +7,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import WritePage from './page'
 
-const { clerkUserRef, useQueryMock } = vi.hoisted(() => ({
-  clerkUserRef: {
-    current: { isLoaded: false, isSignedIn: undefined } as {
-      isLoaded: boolean
-      isSignedIn: boolean | undefined
-    },
-  },
-  useQueryMock: vi.fn(),
-}))
+const { clerkUserRef, useQueryMock } = vi.hoisted(() => {
+  const clerkUserRef: {
+    current: { isLoaded: boolean; isSignedIn: boolean | undefined }
+  } = {
+    current: { isLoaded: false, isSignedIn: undefined },
+  }
+  return { clerkUserRef, useQueryMock: vi.fn() }
+})
 
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => clerkUserRef.current,

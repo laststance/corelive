@@ -21,19 +21,28 @@ import type {
 
 import { LocalKeepMergeSync } from './LocalKeepMergeSync'
 
-const { clerkUserRef, importLocalFn } = vi.hoisted(() => ({
-  clerkUserRef: {
+const { clerkUserRef, importLocalFn } = vi.hoisted(() => {
+  const clerkUserRef: {
+    current: {
+      isLoaded: boolean
+      isSignedIn: boolean
+      user: { id: string } | undefined
+    }
+  } = {
     current: {
       isLoaded: true,
       isSignedIn: true,
-      user: { id: 'user_a' } as { id: string } | undefined,
+      user: { id: 'user_a' },
     },
-  },
+  }
   // Typed from the procedure's own schema, so a batch missing a required field
   // fails to compile here instead of passing on a count alone.
-  importLocalFn:
-    vi.fn<(input: ImportLocalInput) => Promise<ImportLocalResponse>>(),
-}))
+  return {
+    clerkUserRef,
+    importLocalFn:
+      vi.fn<(input: ImportLocalInput) => Promise<ImportLocalResponse>>(),
+  }
+})
 
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => clerkUserRef.current,

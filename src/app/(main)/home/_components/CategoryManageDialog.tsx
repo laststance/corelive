@@ -93,7 +93,7 @@ export const CategoryManageDialog = function CategoryManageDialog({
   const startEditing = (category: CategoryWithCount) => {
     setEditingId(category.id)
     setEditName(category.name)
-    setEditColor(category.color as CategoryColor)
+    setEditColor(category.color)
   }
 
   /**

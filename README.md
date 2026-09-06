@@ -28,7 +28,8 @@ This project supports:
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [Node.js](https://nodejs.org/) (version 24+; CI uses 24.13.0)
+- [Node.js](https://nodejs.org/) (24.20.0; pinned in `mise.toml` and CI)
+- [mise](https://mise.jdx.dev/) for installing the pinned Node.js version
 - [pnpm](https://pnpm.io/)
 - [Clerk](https://clerk.com/)
 - [ngrok](https://ngrok.com/) (for local development see [Clerk docs](https://clerk.com/docs/webhooks/sync-data#set-up-ngrok))
@@ -36,7 +37,8 @@ This project supports:
 ### Install dependencies
 
 1. Clone the repository
-2. Run `pnpm install` to install the dependencies
+2. Run `mise install` to install the pinned Node.js version
+3. Run `mise exec -- pnpm install` to install the dependencies
 
 ### Environment Variables
 

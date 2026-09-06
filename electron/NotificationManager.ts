@@ -12,6 +12,7 @@ import { Notification, nativeImage, type NativeImage } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
+import type { SystemTrayManager as SystemTrayManagerType } from './SystemTrayManager'
 import type {
   NotificationOptions,
   NotificationSettingsState,
@@ -29,12 +30,11 @@ interface WindowManager {
   restoreFromTray(): void
 }
 
-/** System tray manager interface (minimal) */
-interface SystemTrayManager {
-  hasTray(): boolean
-  setTrayTooltip(text: string): void
-  getTrayIconPath(): string | undefined
-}
+/** Keeps notification dependencies aligned with the real tray manager's nullable icon path. */
+type SystemTrayManager = Pick<
+  SystemTrayManagerType,
+  'hasTray' | 'setTrayTooltip' | 'getTrayIconPath'
+>
 
 export type { NotificationSettingsState, NotificationOptions }
 
@@ -139,7 +139,7 @@ export class NotificationManager {
         this.settings = {
           ...this.settings,
           ...savedSettings,
-        } as NotificationSettingsState
+        }
       }
     }
   }

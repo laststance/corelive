@@ -86,7 +86,7 @@ function mockRequestState({
   mockedHeaders.mockResolvedValue(
     new Headers(
       geoTimeZone !== undefined ? { 'x-vercel-ip-timezone': geoTimeZone } : {},
-    ) as Awaited<ReturnType<typeof headers>>,
+    ),
   )
 }
 

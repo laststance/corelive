@@ -21,7 +21,7 @@ import {
   type Rectangle,
 } from 'electron'
 
-import type { ConfigManager, AppConfig } from './ConfigManager'
+import type { ConfigManager } from './ConfigManager'
 import {
   WINDOW_STATE_MAX_HEIGHT_PX,
   WINDOW_STATE_MAX_WIDTH_PX,
@@ -158,13 +158,9 @@ export class WindowStateManager {
     const { width: screenWidth, height: screenHeight } =
       primaryDisplay.workAreaSize
 
-    const windowConfig = this.configManager.getSection(
-      'window',
-    ) as AppConfig['window']
+    const windowConfig = this.configManager.getSection('window')
     const mainConfig = windowConfig.main
-    const liveEditorConfig = this.configManager.getSection(
-      'liveEditor',
-    ) as AppConfig['liveEditor']
+    const liveEditorConfig = this.configManager.getSection('liveEditor')
 
     return {
       main: {
@@ -224,8 +220,7 @@ export class WindowStateManager {
 
     // Previous releases stored this panel under `braindump`; accept it once so
     // an update keeps the user's size and position instead of resetting them.
-    const liveEditorState =
-      states.liveEditor ?? (states['braindump'] as WindowState | undefined)
+    const liveEditorState = states.liveEditor ?? states['braindump']
     if (liveEditorState) {
       validatedStates.liveEditor = this.validateWindowState(
         liveEditorState,
@@ -263,9 +258,7 @@ export class WindowStateManager {
       maxWidth = 1200
       shouldRememberPosition = true
     } else {
-      const windowConfig = this.configManager.getSection(
-        'window',
-      ) as AppConfig['window']
+      const windowConfig = this.configManager.getSection('window')
       const config = windowConfig[windowType]
       minWidth = 'minWidth' in config ? config.minWidth : 400
       minHeight = 'minHeight' in config ? config.minHeight : 300
@@ -609,9 +602,7 @@ export class WindowStateManager {
       } satisfies WindowOptions
     }
 
-    const windowConfig = this.configManager.getSection(
-      'window',
-    ) as AppConfig['window']
+    const windowConfig = this.configManager.getSection('window')
     const config = windowConfig[windowType]
 
     if (!config) {

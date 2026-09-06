@@ -2,6 +2,16 @@ import { resolve } from 'path'
 
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
+import packageJson from './package.json' with { type: 'json' }
+
+// Declare runtime dependencies before Vite 8 normalizes the legacy plugin's options.
+const dependencyNames = Object.keys(packageJson.dependencies)
+const externalDependencies = [
+  'electron',
+  ...dependencyNames,
+  new RegExp(`^(${dependencyNames.join('|')})/`),
+]
+
 /**
  * electron-vite configuration for TypeScript compilation.
  *
@@ -18,6 +28,18 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
+        // Keep separately emitted manager files as runtime imports under Vite 8.
+        external: [
+          ...externalDependencies,
+          './OAuthManager.cjs',
+          './DeepLinkManager.cjs',
+          './SystemTrayManager.cjs',
+          './NotificationManager.cjs',
+          './ShortcutManager.cjs',
+          './AutoUpdater.cjs',
+          './MenuManager.cjs',
+          './SystemIntegrationErrorHandler.cjs',
+        ],
         input: {
           index: resolve(__dirname, 'electron/main.ts'),
           // Add lazy-loaded modules as separate entry points so they're built as separate files
@@ -41,6 +63,7 @@ export default defineConfig({
         },
         output: {
           format: 'cjs',
+          exports: 'named',
           entryFileNames: '[name].cjs',
           preserveModules: true,
           preserveModulesRoot: resolve(__dirname, 'electron'),
@@ -62,6 +85,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
+        external: externalDependencies,
         input: {
           preload: resolve(__dirname, 'electron/preload.ts'),
           'preload-login': resolve(__dirname, 'electron/preload-login.ts'),
