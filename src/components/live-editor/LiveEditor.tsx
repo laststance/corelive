@@ -57,12 +57,14 @@ import {
   selectLiveEditorFontSize,
   selectLiveEditorTextColor,
   selectLiveEditorToastDurationMs,
+  selectShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 import { broadcastTodoSync } from '@/lib/todo-sync-channel'
 import { cn } from '@/lib/utils'
 import { isApplePlatform } from '@/lib/utils/isApplePlatform'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
 
+import { LiveEditorTodayEmber } from './LiveEditorTodayEmber'
 import {
   type LiveEditorCompletedTitle,
   type LiveEditorLineIndex,
@@ -589,6 +591,7 @@ export const LiveEditor = function LiveEditor({
   // hydrated from localStorage + live-synced across windows by the settings sync
   // middleware). Read here and applied inline to the editor surface.
   const liveEditorFontFamily = useAppSelector(selectLiveEditorFontFamily)
+  const showTodayEmber = useAppSelector(selectShowTodayEmber)
   const liveEditorFontSize = useAppSelector(selectLiveEditorFontSize)
   const liveEditorTextColor = useAppSelector(selectLiveEditorTextColor)
   // When ON, a finished line is dropped once its undo window closes (see the
@@ -2241,6 +2244,9 @@ export const LiveEditor = function LiveEditor({
           )}
         </div>
       )}
+
+      {/* Unmount the count observer when disabled, so Ember makes no background reads. */}
+      {showTodayEmber && <LiveEditorTodayEmber compact={isElectronPanel} />}
 
       {(isElectronPanel || isSignedIn) && (
         <div

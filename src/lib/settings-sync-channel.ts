@@ -13,6 +13,7 @@ import {
   setLiveEditorToastDurationMs,
   setCompletionSound,
   setRetainCompletedInList,
+  setShowTodayEmber,
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
@@ -43,6 +44,7 @@ type UserSettingsSyncMessage = Readonly<{
 const BROADCASTABLE_ACTION_TYPES = new Set<string>([
   setCompletionSound.type,
   setRetainCompletedInList.type,
+  setShowTodayEmber.type,
   setSoundMoment.type,
   setAllSoundMoments.type,
   setSoundTimbre.type,

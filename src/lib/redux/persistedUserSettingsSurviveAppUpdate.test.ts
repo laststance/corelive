@@ -16,7 +16,7 @@
  * the `deepMerge` reconciler.
  */
 import { configureStore } from '@reduxjs/toolkit'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, test } from 'vitest'
 
 import { STORAGE_SCHEMA_VERSION } from './migratePersistedState'
 import { selectShowInMenuBar } from './slices/electronSettingsSlice'
@@ -85,7 +85,26 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
     expect(state.settings.liveEditorFontSize).toBe(16)
     expect(state.settings.liveEditorTextColor).toBe('var(--foreground)')
     expect(state.settings.liveEditorClearOnComplete).toBe(false)
+    expect(state.settings.showTodayEmber).toBe(false)
   })
+
+  test.each([true, false])(
+    'preserves Today Ember set to %s after reopening the app',
+    async (showTodayEmber) => {
+      // Arrange
+      const seed = {
+        version: STORAGE_SCHEMA_VERSION,
+        state: { settings: { showTodayEmber, soundVolume: 0.3 } },
+      }
+
+      // Act
+      const state = await rehydrateFromSeed(seed)
+
+      // Assert
+      expect(state.settings.showTodayEmber).toBe(showTodayEmber)
+      expect(state.settings.soundVolume).toBe(0.3)
+    },
+  )
 
   it('restores the menu-bar default when an older blob predates that electron setting', async () => {
     // Arrange — an electronSettings blob missing `showInMenuBar` (stand-in for

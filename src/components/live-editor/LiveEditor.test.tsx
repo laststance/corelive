@@ -5,7 +5,7 @@ import type { ReactElement } from 'react'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
 import type { ToastT } from 'sonner'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest'
 
 import {
   useAutoSelectDefaultCategory,
@@ -18,6 +18,7 @@ import {
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
 import userSettingsReducer, {
   initialState as userSettingsInitialState,
+  setShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 import type { UserSettingsState } from '@/lib/schemas/settings'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -31,11 +32,13 @@ const {
   completedDeleteMutationOptions,
   completedMutateAsync,
   deleteCompletedMutateAsync,
+  todayHeatmapQuery,
 } = vi.hoisted(() => ({
   completedCreateMutationOptions: {},
   completedDeleteMutationOptions: {},
   completedMutateAsync: vi.fn(),
   deleteCompletedMutateAsync: vi.fn(),
+  todayHeatmapQuery: vi.fn(() => ({ data: { total: 0 }, isError: false })),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -47,7 +50,9 @@ vi.mock('@tanstack/react-query', () => ({
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    setQueryData: vi.fn(),
   }),
+  useQuery: todayHeatmapQuery,
 }))
 
 vi.mock('sonner', () => ({
@@ -242,7 +247,7 @@ function renderEditorWithCategories(
       settings: { ...userSettingsInitialState, ...settingOverrides },
     },
   })
-  return render(
+  const editor = render(
     <Provider store={store}>
       <LiveEditor
         categories={editorCategories}
@@ -250,6 +255,7 @@ function renderEditorWithCategories(
       />
     </Provider>,
   )
+  return { ...editor, store }
 }
 
 beforeEach(() => {
@@ -658,6 +664,131 @@ describe('LiveEditor web host (/write)', () => {
     expect(
       screen.queryByRole('link', { name: 'Sign in' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('Today Ember setting in the LiveEditor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    liveEditorEnvironmentRef.current = false
+    clerkUserRef.current = { isLoaded: true, isSignedIn: false, user: null }
+  })
+
+  afterEach(() => {
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_1' },
+    }
+  })
+
+  test('makes no Ember query while the default setting is off', async () => {
+    // Arrange / Act
+    renderEditor()
+    await waitForLiveEditorReady(
+      await screen.findByRole<HTMLTextAreaElement>('textbox'),
+    )
+
+    // Assert
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(todayHeatmapQuery).not.toHaveBeenCalled()
+  })
+
+  test('shows and hides Ember immediately without replacing an unfinished note', async () => {
+    // Arrange
+    const { store } = renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    fireEvent.change(noteField, { target: { value: 'An unfinished thought' } })
+
+    // Act
+    act(() => {
+      store.dispatch(setShowTodayEmber(true))
+    })
+
+    // Assert
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Nothing kept yet today',
+    )
+    expect(noteField).toHaveValue('An unfinished thought')
+
+    // Act
+    act(() => {
+      store.dispatch(setShowTodayEmber(false))
+    })
+
+    // Assert
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(noteField).toHaveValue('An unfinished thought')
+  })
+
+  test('lights Ember on a keep and darkens it on Undo when enabled', async () => {
+    // Arrange
+    renderEditor({ showTodayEmber: true, liveEditorClearDelayMs: 0 })
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    const ember = screen.getByRole('status')
+    expect(ember).toHaveTextContent('Nothing kept yet today')
+
+    // Act
+    fireCompleteCommandOnFirstLine(noteField, 'ship the thing\nnext')
+
+    // Assert
+    await waitFor(() => {
+      expect(ember).toHaveTextContent('1 thing kept today')
+    })
+    expect(ember.querySelector('[data-lit]')).toHaveAttribute(
+      'data-lit',
+      'true',
+    )
+
+    // Act
+    const undoAction = vi.mocked(toast.success).mock.calls.at(-1)?.[1]?.action
+    if (
+      typeof undoAction !== 'object' ||
+      undoAction === null ||
+      !('onClick' in undoAction)
+    ) {
+      throw new Error('The completed line must offer an Undo action')
+    }
+    render(<button onClick={undoAction.onClick}>Undo keep</button>)
+    await userEvent.click(screen.getByRole('button', { name: 'Undo keep' }))
+
+    // Assert
+    await waitFor(() => {
+      expect(ember).toHaveTextContent('Nothing kept yet today')
+    })
+    expect(ember.querySelector('[data-lit]')).toHaveAttribute(
+      'data-lit',
+      'false',
+    )
+  })
+
+  test('shows the compact Ember in the Electron panel when enabled', async () => {
+    // Arrange
+    liveEditorEnvironmentRef.current = true
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_1' },
+    }
+    installLiveEditorAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+
+    // Act
+    renderEditor({ showTodayEmber: true })
+    await waitForLiveEditorReady(
+      await screen.findByRole<HTMLTextAreaElement>('textbox'),
+    )
+
+    // Assert
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Nothing kept yet today',
+    )
+    expect(screen.queryByText('Your day starts here.')).not.toBeInTheDocument()
   })
 })
 

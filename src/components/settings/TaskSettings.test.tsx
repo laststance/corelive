@@ -2,7 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 
 import { TaskSettings } from '@/components/settings/TaskSettings'
 import userSettingsReducer, {
@@ -33,6 +33,46 @@ function renderTaskSettings(overrides: Partial<UserSettingsState> = {}) {
 }
 
 describe('TaskSettings', () => {
+  test('keeps Today Ember hidden until its switch is enabled', () => {
+    // Arrange / Act
+    renderTaskSettings()
+
+    // Assert
+    expect(
+      screen.getByRole('switch', { name: 'Show Today Ember' }),
+    ).not.toBeChecked()
+  })
+
+  test('saves both on and off choices from the Today Ember switch', async () => {
+    // Arrange
+    const { store, user } = renderTaskSettings()
+    const emberSwitch = screen.getByRole('switch', { name: 'Show Today Ember' })
+
+    // Act
+    await user.click(emberSwitch)
+
+    // Assert
+    expect(emberSwitch).toBeChecked()
+    expect(store.getState().settings.showTodayEmber).toBe(true)
+
+    // Act
+    await user.click(emberSwitch)
+
+    // Assert
+    expect(emberSwitch).not.toBeChecked()
+    expect(store.getState().settings.showTodayEmber).toBe(false)
+  })
+
+  test('shows a previously enabled Today Ember setting on reopening settings', () => {
+    // Arrange / Act
+    renderTaskSettings({ showTodayEmber: true })
+
+    // Assert
+    expect(
+      screen.getByRole('switch', { name: 'Show Today Ember' }),
+    ).toBeChecked()
+  })
+
   it('moves finished tasks to Completed by default — keep-in-list starts off', () => {
     // Arrange / Act — a fresh install.
     renderTaskSettings()

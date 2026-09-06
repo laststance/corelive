@@ -6,8 +6,10 @@ import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import {
   selectRetainCompletedInList,
   selectShowCompletedTaskStrikethrough,
+  selectShowTodayEmber,
   setRetainCompletedInList,
   setShowCompletedTaskStrikethrough,
+  setShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 
 /**
@@ -22,6 +24,7 @@ import {
 export const TaskSettings = function TaskSettings() {
   const dispatch = useAppDispatch()
   const retainCompletedInList = useAppSelector(selectRetainCompletedInList)
+  const showTodayEmber = useAppSelector(selectShowTodayEmber)
   const showCompletedTaskStrikethrough = useAppSelector(
     selectShowCompletedTaskStrikethrough,
   )
@@ -46,6 +49,17 @@ export const TaskSettings = function TaskSettings() {
    */
   const handleStrikethroughChange = (checked: boolean): void => {
     dispatch(setShowCompletedTaskStrikethrough(checked))
+  }
+
+  /**
+   * Updates the shared Ember visibility when its settings switch changes.
+   * @param checked - Whether the LiveEditor should show today's keeps.
+   * @returns Nothing after dispatching the persisted setting.
+   * @example
+   * handleTodayEmberChange(true)
+   */
+  const handleTodayEmberChange = (checked: boolean): void => {
+    dispatch(setShowTodayEmber(checked))
   }
 
   return (
@@ -88,6 +102,26 @@ export const TaskSettings = function TaskSettings() {
           id="show-completed-task-strikethrough"
           checked={showCompletedTaskStrikethrough}
           onCheckedChange={handleStrikethroughChange}
+        />
+      </div>
+      {/* Shared by the web editor and the desktop panel through settings sync. */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-0.5">
+          <Label htmlFor="show-today-ember" className="text-sm font-medium">
+            Show Today Ember
+          </Label>
+          <p
+            id="today-ember-description"
+            className="text-xs text-muted-foreground"
+          >
+            Show today's keeps and a warm glow above the LiveEditor.
+          </p>
+        </div>
+        <Switch
+          id="show-today-ember"
+          aria-describedby="today-ember-description"
+          checked={showTodayEmber}
+          onCheckedChange={handleTodayEmberChange}
         />
       </div>
     </div>
