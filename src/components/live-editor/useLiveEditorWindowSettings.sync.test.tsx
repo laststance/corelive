@@ -91,6 +91,7 @@ test('a rejected opacity save restores the last native value instead of leaving 
   act(() => result.current.handleOpacityValueChange([0.5]))
 
   // Assert
+  expect(result.current.opacity).toBe(0.5)
   await waitFor(() => expect(result.current.opacity).toBe(0.95))
   expect(persisted.opacity).toBe(0.95)
 })

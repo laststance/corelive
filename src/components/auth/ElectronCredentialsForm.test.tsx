@@ -102,3 +102,24 @@ test('Electron password visibility is reachable and reversible from the keyboard
   await user.keyboard(' ')
   expect(passwordField).toHaveAttribute('type', 'password')
 })
+
+test('Electron credential form displays the sign-in error so the user can correct the credentials', () => {
+  // Arrange
+  const form = (
+    <ElectronCredentialsForm
+      state={{ email: '', password: '', showPassword: false, error: null }}
+      dispatch={() => {}}
+      flow="sign-in"
+      disabled={false}
+      isLoading={false}
+      error="Invalid email or password"
+      onSubmit={(event) => event.preventDefault()}
+    />
+  )
+
+  // Act
+  render(form)
+
+  // Assert
+  expect(screen.getByText('Invalid email or password')).toBeInTheDocument()
+})
