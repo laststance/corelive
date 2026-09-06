@@ -81,13 +81,12 @@ jobs:
 
       - name: Build Electron app (macOS) — signed release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        run: pnpm electron:build:mac
+        # Reuse the imported keychain; electron-builder's reimport mixes keychain and certificate passwords.
+        run: CSC_KEYCHAIN="$HOME/Library/Keychains/signing_temp.keychain-db" pnpm electron:build:mac
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATES_P12 }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Electron app (macOS) — unsigned PR check
