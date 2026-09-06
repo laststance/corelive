@@ -1,9 +1,9 @@
 /**
  * @fileoverview Signed-out keep store — the device-local record behind `/write`.
- * If these fail, a stranger's Cmd+Enter either loses the keep, double-counts it,
- * crashes on a corrupt key, or a second tab stops hearing the write.
+ * If these fail, a stranger's Cmd+Enter either loses the keep, double-counts test,
+ * crashes on a corrupt key, or the second tab's ember stops agreeing.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { LOCAL_COMPLETIONS_STORAGE_KEY } from './constants'
 import type * as LocalCompletionStoreNamespace from './localCompletionStore'
@@ -83,7 +83,7 @@ beforeEach(() => {
 })
 
 describe('local completion store — a signed-out keep stays on this device', () => {
-  it('keeps a line and hands back the id Undo will need', async () => {
+  test('keeps a line and hands back the id Undo will need', async () => {
     // Arrange
     const { store } = await loadFreshStore()
 
@@ -107,7 +107,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     })
   })
 
-  it('keeps a repeated title twice — repetition is XP, never deduplicated', async () => {
+  test('keeps a repeated title twice — repetition is XP, never deduplicated', async () => {
     // Arrange
     const { store } = await loadFreshStore()
 
@@ -123,7 +123,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     expect(items[0]?.id).not.toBe(items[1]?.id)
   })
 
-  it('removes exactly the undone keep and leaves its siblings', async () => {
+  test('removes exactly the undone keep and leaves its siblings', async () => {
     // Arrange
     const { store } = await loadFreshStore()
     const first = store.addLocalCompletion('first')
@@ -140,7 +140,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     ).toEqual([second.id])
   })
 
-  it('reads corrupt or foreign storage as empty instead of throwing', async () => {
+  test('reads corrupt or foreign storage as empty instead of throwing', async () => {
     // Arrange
     const { store } = await loadFreshStore()
 
@@ -153,7 +153,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     expect(store.parseLocalCompletions(null)).toEqual([])
   })
 
-  it('overwrites a corrupt key on the next keep', async () => {
+  test('overwrites a corrupt key on the next keep', async () => {
     // Arrange
     const { store } = await loadFreshStore()
     localStorage.setItem(LOCAL_COMPLETIONS_STORAGE_KEY, '{broken')
@@ -168,7 +168,42 @@ describe('local completion store — a signed-out keep stays on this device', ()
     })
   })
 
-  it('notifies same-tab subscribers on every keep and undo', async () => {
+  test("counts only today's unmerged keeps in the visitor's zone", async () => {
+    // Arrange: 01:00 JST on the 4th (counted), 00:30 JST on the 5th (not
+    // today), a merged keep (the account already counts it), a garbage date.
+    const { store } = await loadFreshStore()
+    const items = [
+      {
+        id: 'a',
+        title: 'late night',
+        completedAt: '2026-09-03T16:00:00.000Z',
+      },
+      {
+        id: 'b',
+        title: 'past midnight',
+        completedAt: '2026-09-04T15:30:00.000Z',
+      },
+      {
+        id: 'c',
+        title: 'merged',
+        completedAt: '2026-09-04T01:00:00.000Z',
+        mergedBatchId: 'batch-1',
+      },
+      { id: 'd', title: 'garbage', completedAt: 'not a date' },
+    ]
+
+    // Act
+    const count = store.countLocalCompletionsOnDay(
+      items,
+      '2026-09-04',
+      'Asia/Tokyo',
+    )
+
+    // Assert
+    expect(count).toBe(1)
+  })
+
+  test('notifies same-tab subscribers on every keep and undo', async () => {
     // Arrange
     const { store } = await loadFreshStore()
     const listener = vi.fn()
@@ -184,7 +219,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     expect(listener).toHaveBeenCalledTimes(2)
   })
 
-  it('hears another tab write the key (storage event) so both tabs agree', async () => {
+  test('hears another tab write the key (storage event) so both embers agree', async () => {
     // Arrange
     const { store } = await loadFreshStore()
     const listener = vi.fn()
@@ -200,7 +235,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     expect(listener).toHaveBeenCalledTimes(1)
   })
 
-  it('falls back to memory for the session when storage refuses the probe (private mode)', async () => {
+  test('falls back to memory for the session when storage refuses the probe (private mode)', async () => {
     // Arrange
     installThrowingLocalStorage(null)
     const { store, slot } = await loadFreshStore()
@@ -208,7 +243,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     // Act
     const item = store.addLocalCompletion('still counts')
 
-    // Assert: the keep is readable for this session and the footer can say why.
+    // Assert: the keep is readable for this session and the ember can say why.
     expect(slot.getLocalStorageAvailability()).toBe('unavailable')
     expect(
       store
@@ -217,7 +252,7 @@ describe('local completion store — a signed-out keep stays on this device', ()
     ).toEqual([item.id])
   })
 
-  it('degrades to memory without losing earlier keeps when the quota runs out mid-session', async () => {
+  test('degrades to memory without losing earlier keeps when the quota runs out mid-session', async () => {
     // Arrange: the probe passed and one keep landed on disk.
     const { store, slot } = await loadFreshStore()
     const first = store.addLocalCompletion('on disk')

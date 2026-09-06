@@ -20,6 +20,19 @@
 @custom-variant dark (&:where([data-theme$=dark], [data-theme$=dark] *));
 
 @theme inline {
+  /* A keep lights the Ember in 400ms; reduced-motion users get an instant fill. */
+  --animate-ember-sweep: ember-sweep 400ms ease-out both;
+  @keyframes ember-sweep {
+    from {
+      clip-path: circle(0% at 50% 50%);
+      filter: brightness(1.35);
+    }
+    to {
+      clip-path: circle(75% at 50% 50%);
+      filter: brightness(1);
+    }
+  }
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

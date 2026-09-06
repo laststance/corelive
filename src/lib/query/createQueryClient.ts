@@ -19,7 +19,11 @@ export function createQueryClient(): QueryClient {
         gcTime: QUERY_CACHE_RETENTION_MS,
       },
       dehydrate: {
-        shouldDehydrateQuery: defaultShouldDehydrateQuery,
+        // `meta: { persist: false }` keeps a query out of the persisted cache and
+        // SSR dehydration — for day-relative answers (the Today Ember's one-day
+        // total) that must never be replayed from an older day.
+        shouldDehydrateQuery: (query) =>
+          defaultShouldDehydrateQuery(query) && query.meta?.persist !== false,
         serializeData(data) {
           const [json, meta] = serializer.serialize(data)
           return { json, meta }
