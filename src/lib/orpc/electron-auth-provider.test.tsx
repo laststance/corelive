@@ -106,6 +106,33 @@ describe('ElectronAuthProvider', () => {
     } as unknown as Window['electronAPI']
   })
 
+  test('keeps rejected sign-in tickets out of error logs', async () => {
+    // Arrange
+    mockCreate.mockRejectedValue(
+      new Error('Rejected ticket: sensitive-ticket-for-log-regression'),
+    )
+    render(
+      <ElectronAuthProvider>
+        <div>child</div>
+      </ElectronAuthProvider>,
+    )
+
+    // Act
+    await act(async () => {
+      await signInTokenListener?.({
+        provider: 'google',
+        token: 'sensitive-ticket-for-log-regression',
+      })
+    })
+
+    // Assert
+    expect(loggerMocks.error).toHaveBeenCalledExactlyOnceWith(
+      '[OAuth] Token exchange failed:',
+      { provider: 'google' },
+    )
+    expect(mockSetActive).not.toHaveBeenCalled()
+  })
+
   test.each(['live listener', 'main-process backlog', 'temporary listener'])(
     'keeps sign-in tickets out of logs when received through the %s',
     async (deliveryPath) => {

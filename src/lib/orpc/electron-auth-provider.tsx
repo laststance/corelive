@@ -222,7 +222,8 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
           `Google sign-in did not complete in Electron. Clerk status: ${signInAttempt.status ?? 'unknown'}`,
         )
       } catch (error) {
-        log.error('[OAuth] Token exchange failed:', error)
+        // SDK errors can contain the one-time ticket, so log only the provider.
+        log.error('[OAuth] Token exchange failed:', { provider })
         dispatchOAuthError(
           error instanceof Error ? error.message : 'Token exchange failed',
         )
