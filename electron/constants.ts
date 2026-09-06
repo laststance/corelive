@@ -297,3 +297,12 @@ export type LiveEditorShortcutId = (typeof LIVE_EDITOR_SHORTCUT_IDS)[number]
  * right after launch) small and one-click recoverable.
  */
 export const NATIVE_TAP_STABILITY_WINDOW_MS = 5000
+
+/** Maximum readiness requests before development startup fails. */
+export const DEV_SERVER_MAX_ATTEMPTS = 30
+
+/** Bound each readiness request so an unresponsive server cannot stall startup. */
+export const DEV_SERVER_REQUEST_TIMEOUT_MS = 2000
+
+/** Let Next.js finish compiling between development readiness requests. */
+export const DEV_SERVER_RETRY_INTERVAL_MS = 1000

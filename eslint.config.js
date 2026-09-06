@@ -1,5 +1,3 @@
-// For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
-
 import { defineConfig } from 'eslint/config'
 import tsPrefixer from 'eslint-config-ts-prefixer'
 import reactHooks from 'eslint-plugin-react-hooks'
@@ -116,10 +114,6 @@ export default defineConfig([
             'window-drag-region',
             'no-drag',
             'drag-handle',
-            // Custom animation CSS classes (defined in animations.css)
-            'achievement-*',
-            'level-up-*',
-            'confetti-*',
             // Custom utility classes (defined in globals.css @layer utilities)
             'cathedral-lit',
             'tap-target-24',

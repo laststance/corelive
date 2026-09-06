@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { spawn } from 'child_process'
-import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -17,9 +16,8 @@ const port = process.env.PORT || 4991
  * This script:
  * 1. Builds Electron code with electron-vite
  * 2. Starts the Next.js development server
- * 3. Waits for Next.js to be ready
- * 4. Starts Electron in development mode
- * 5. Handles graceful shutdown
+ * 3. Starts the Electron runner, which waits for Next.js
+ * 4. Handles graceful shutdown
  */
 
 let nextProcess = null
@@ -50,45 +48,6 @@ function cleanup() {
 process.on('SIGINT', cleanup)
 process.on('SIGTERM', cleanup)
 process.on('exit', cleanup)
-
-// Check if server is ready
-async function checkServer(_url, maxAttempts = 30, interval = 1000) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0
-
-    const check = () => {
-      attempts++
-
-      const testReq = http.get(`http://localhost:${port}`, (res) => {
-        if (res.statusCode === 200) {
-          resolve()
-        } else {
-          scheduleNextCheck()
-        }
-      })
-
-      testReq.on('error', () => {
-        scheduleNextCheck()
-      })
-
-      testReq.setTimeout(2000, () => {
-        testReq.destroy()
-        scheduleNextCheck()
-      })
-    }
-
-    const scheduleNextCheck = () => {
-      if (attempts >= maxAttempts) {
-        reject(new Error(`Server not ready after ${maxAttempts} attempts`))
-        return
-      }
-
-      setTimeout(check, interval)
-    }
-
-    check()
-  })
-}
 
 async function startDevelopment() {
   try {
@@ -152,9 +111,6 @@ async function startDevelopment() {
         cleanup()
       }
     })
-
-    // Wait for Next.js server to be ready
-    await checkServer(`http://localhost:${port}`)
 
     // Start Electron
 

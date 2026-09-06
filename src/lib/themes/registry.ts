@@ -38,9 +38,7 @@ export type ThemeFamilyId =
  * template auto-expands when a family is added to `ThemeFamilyId`).
  */
 export type ThemeId =
-  | 'light'
-  | 'dark'
-  | `${Exclude<ThemeFamilyId, 'cathedral'>}-${ThemeMode}`
+  'light' | 'dark' | `${Exclude<ThemeFamilyId, 'cathedral'>}-${ThemeMode}`
 
 /** Identity + picker metadata carried by every theme, preserved or derived. */
 interface ThemeBase {
@@ -348,9 +346,8 @@ export const THEME_REGISTRY = {
   // Grove — forest green. light accentL nudged 0.55→0.54 to clear the AA gate
   // (0.55 → 4.48, below 4.5; 0.54 → 4.67). Accent hue 145 sits by the fixed
   // `--chart-2` (145) and `--color-success` (149 light / 162 dark). Design-review
-  // (2026-06-11) cleared this: `--color-success` is consumed only by the
-  // (orphaned) confetti animation — there is no persistent success-colored UI to
-  // collide with — and the accent stays separable by chroma/lightness anyway.
+  // (2026-06-11) cleared this: there is no persistent success-colored UI to collide
+  // with, and the accent stays separable by chroma/lightness.
   'grove-light': {
     family: 'grove',
     mode: 'light',

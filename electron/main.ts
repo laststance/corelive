@@ -29,7 +29,6 @@ import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
 import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
 import { registerAuthHandlers } from './ipc/registerAuthHandlers'
 import { typedHandle } from './ipc/typedHandle'
-import { IPCErrorHandler } from './IPCErrorHandler'
 import { lazyLoadManager } from './LazyLoadManager'
 import { getLiveEditorNote, setLiveEditorNote } from './LiveEditorNoteStore'
 import { log } from './logger'
@@ -37,7 +36,6 @@ import { memoryProfiler } from './MemoryProfiler'
 import type { MenuManager as MenuManagerType } from './MenuManager'
 import type { NotificationManager as NotificationManagerType } from './NotificationManager'
 import type { OAuthManager as OAuthManagerType } from './OAuthManager'
-import { performanceOptimizer, OPTIMIZATION_LEVELS } from './performance-config'
 import type { ShortcutManager as ShortcutManagerType } from './ShortcutManager'
 import type { SystemIntegrationErrorHandler as SystemIntegrationErrorHandlerType } from './SystemIntegrationErrorHandler'
 import type { SystemTrayManager as SystemTrayManagerType } from './SystemTrayManager'
@@ -60,12 +58,6 @@ import { WindowStateManager } from './WindowStateManager'
 // ============================================================================
 
 // `AuthUserPayload` from `./types/ipc` is the canonical shape — single source of truth.
-
-/** Performance optimization configuration */
-interface OptimizationConfig {
-  enableMemoryMonitoring: boolean
-  [key: string]: unknown
-}
 
 // ============================================================================
 // Remote Debugging (opt-in debug — Issue #61)
@@ -111,17 +103,6 @@ if (remoteDebuggingPort) {
  */
 const isDev = process.env.NODE_ENV === 'development'
 
-/**
- * Performance optimization level selection.
- * Development mode prioritizes debugging, production mode prioritizes speed.
- */
-const optimizationLevel: 'development' | 'production' = isDev
-  ? 'development'
-  : 'production'
-const config = OPTIMIZATION_LEVELS[
-  optimizationLevel
-] as unknown as OptimizationConfig
-
 // ============================================================================
 // Manager Instances
 // ============================================================================
@@ -139,7 +120,6 @@ const config = OPTIMIZATION_LEVELS[
 let configManager: ConfigManager
 let windowStateManager: WindowStateManager
 let windowManager: WindowManager
-let ipcErrorHandler: IPCErrorHandler
 
 /**
  * Guards setupIPCHandlers against a second run. IPC handlers bind the
@@ -497,9 +477,9 @@ function setupSecurity(): void {
  */
 async function loadSystemIntegrationStack(): Promise<void> {
   log.info('🔧 [DEFERRED] Loading SystemIntegrationErrorHandler...')
-  const SystemIntegrationErrorHandlerCls = await lazyLoadManager.loadComponent<
-    typeof SystemIntegrationErrorHandlerType
-  >('SystemIntegrationErrorHandler')
+  const SystemIntegrationErrorHandlerCls = await lazyLoadManager.loadComponent(
+    'SystemIntegrationErrorHandler',
+  )
   systemIntegrationErrorHandler = new SystemIntegrationErrorHandlerCls(
     configManager,
   )
@@ -507,9 +487,7 @@ async function loadSystemIntegrationStack(): Promise<void> {
 
   log.info('🔧 [DEFERRED] Loading SystemTrayManager...')
   const SystemTrayManagerCls =
-    await lazyLoadManager.loadComponent<typeof SystemTrayManagerType>(
-      'SystemTrayManager',
-    )
+    await lazyLoadManager.loadComponent('SystemTrayManager')
   systemTrayManager = new SystemTrayManagerCls(windowManager)
   windowManager.setTrayBoundsProvider(
     () => systemTrayManager?.getTrayBounds() ?? null,
@@ -517,9 +495,9 @@ async function loadSystemIntegrationStack(): Promise<void> {
   log.info('✅ [DEFERRED] SystemTrayManager loaded')
 
   log.info('🔧 [DEFERRED] Loading NotificationManager...')
-  const NotificationManagerCls = await lazyLoadManager.loadComponent<
-    typeof NotificationManagerType
-  >('NotificationManager')
+  const NotificationManagerCls = await lazyLoadManager.loadComponent(
+    'NotificationManager',
+  )
   notificationManager = new NotificationManagerCls(
     windowManager,
     systemTrayManager,
@@ -529,9 +507,7 @@ async function loadSystemIntegrationStack(): Promise<void> {
 
   log.info('🔧 [DEFERRED] Loading ShortcutManager...')
   const ShortcutManagerCls =
-    await lazyLoadManager.loadComponent<typeof ShortcutManagerType>(
-      'ShortcutManager',
-    )
+    await lazyLoadManager.loadComponent('ShortcutManager')
   // Inject the uiohook tap so lone-modifier bindings (e.g. Right ⌥) can register
   // natively; if the native module can't load it degrades to the no-op engine and
   // those binds fall back to chords (existing accelerator behavior is untouched).
@@ -611,10 +587,8 @@ async function loadDeepLinkStack(): Promise<void> {
 }
 
 async function createWindow(): Promise<void> {
-  // Start performance monitoring early to track startup metrics
-  if (config.enableMemoryMonitoring) {
-    memoryProfiler.startMonitoring()
-  }
+  // Monitor memory in both development and packaged runs.
+  memoryProfiler.startMonitoring()
 
   /**
    * Critical initialization phase - these must complete before showing window.
@@ -623,13 +597,6 @@ async function createWindow(): Promise<void> {
   const criticalInit = async (): Promise<{
     serverUrl: string
   }> => {
-    // Initialize IPC error handler first
-    ipcErrorHandler = new IPCErrorHandler({
-      maxRetries: 3,
-      baseDelay: 1000,
-      enableLogging: true,
-    })
-
     // Initialize configuration manager
     configManager = new ConfigManager()
 
@@ -664,7 +631,6 @@ async function createWindow(): Promise<void> {
     // window (WindowManager nav-watch); a load failure self-heals via the panel
     // recovery dialog.
     windowManager.openStartupPanel()
-    performanceOptimizer.startupMetrics.windowsCreated += 1
 
     return { serverUrl }
   }
@@ -674,10 +640,7 @@ async function createWindow(): Promise<void> {
     try {
       // MenuManager always loads (works under xvfb)
       log.info('🔧 [DEFERRED] Loading MenuManager...')
-      const MenuManagerCls =
-        await lazyLoadManager.loadComponent<typeof MenuManagerType>(
-          'MenuManager',
-        )
+      const MenuManagerCls = await lazyLoadManager.loadComponent('MenuManager')
       menuManager = new MenuManagerCls()
 
       // The menu bar is companion chrome after main-window retirement (T18):
@@ -696,9 +659,7 @@ async function createWindow(): Promise<void> {
         // Keep updater startup isolated so a failure cannot block the app.
         try {
           const AutoUpdaterCls =
-            await lazyLoadManager.loadComponent<typeof AutoUpdaterType>(
-              'AutoUpdater',
-            )
+            await lazyLoadManager.loadComponent('AutoUpdater')
           autoUpdater = new AutoUpdaterCls()
           // No main window to bind dialogs to after T18; the updater surfaces
           // through its own notifications.
@@ -1527,14 +1488,8 @@ app.on('before-quit', async () => {
     windowManager.cleanup() // Closes all windows
   }
 
-  // Communication layer
-  if (ipcErrorHandler) {
-    ipcErrorHandler.cleanup()
-  }
-
   // Final performance cleanup
   lazyLoadManager.cleanup()
-  performanceOptimizer.cleanup()
   memoryProfiler.cleanup()
 })
 

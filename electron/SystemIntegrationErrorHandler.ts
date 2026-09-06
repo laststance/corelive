@@ -38,13 +38,6 @@ interface IntegrationStatuses {
   shortcuts: ShortcutIntegrationStatus
 }
 
-/** User notification tracking */
-interface UserNotified {
-  tray: boolean
-  notifications: boolean
-  shortcuts: boolean
-}
-
 /** Initialization result for a component */
 interface InitializationResult {
   success: boolean
@@ -61,24 +54,6 @@ interface InitializationResults {
   tray: InitializationResult
   notifications: InitializationResult
   shortcuts: InitializationResult
-}
-
-/** Status report for a component */
-interface ComponentStatusReport {
-  status: 'working' | 'fallback' | 'failed' | 'partial'
-  message: string
-}
-
-/** Full status report */
-interface StatusReport {
-  overall: string
-  summary: string
-  components: {
-    tray: ComponentStatusReport
-    notifications: ComponentStatusReport
-    shortcuts: ComponentStatusReport
-  }
-  recommendations: string[]
 }
 
 /** Overall status type */
@@ -107,10 +82,6 @@ export class SystemIntegrationErrorHandler {
   /** Integration status for each feature */
   private integrationStatus: IntegrationStatuses
 
-  /** Track user notifications about failures - stored for future use */
-  // @ts-ignore - Intentionally unused, stored for future features
-  private _userNotified: UserNotified
-
   /** Overall status */
   private overallStatus: OverallStatus
 
@@ -133,12 +104,6 @@ export class SystemIntegrationErrorHandler {
         failedCount: 0,
         error: null,
       },
-    }
-
-    this._userNotified = {
-      tray: false,
-      notifications: false,
-      shortcuts: false,
     }
 
     this.overallStatus = undefined
@@ -479,70 +444,6 @@ export class SystemIntegrationErrorHandler {
   }
 
   /**
-   * Get current integration status.
-   */
-  getIntegrationStatus(): {
-    overall: OverallStatus
-    issues: string[]
-    components: IntegrationStatuses
-  } {
-    return {
-      overall: this.overallStatus,
-      issues: this.issues,
-      components: this.integrationStatus,
-    }
-  }
-
-  /**
-   * Retry failed integrations.
-   */
-  async retryFailedIntegrations(): Promise<Partial<InitializationResults>> {
-    const retryResults: Partial<InitializationResults> = {}
-
-    if (!this.integrationStatus.tray.available) {
-      retryResults.tray = await this.initializeTrayWithErrorHandling()
-    }
-
-    if (!this.integrationStatus.notifications.available) {
-      retryResults.notifications =
-        await this.initializeNotificationsWithErrorHandling()
-    }
-
-    if (
-      !this.integrationStatus.shortcuts.available ||
-      this.integrationStatus.shortcuts.partiallyAvailable
-    ) {
-      if (this.shortcutManager) {
-        const shortcutRetry = this.shortcutManager.retryFailedShortcuts()
-        retryResults.shortcuts = {
-          success: shortcutRetry.success,
-          component: 'shortcuts',
-          error: shortcutRetry.message,
-        }
-      }
-    }
-
-    if (Object.keys(retryResults).length > 0) {
-      this.analyzeIntegrationStatus({
-        tray: retryResults.tray || {
-          success: this.integrationStatus.tray.available,
-          component: 'tray',
-        },
-        notifications: retryResults.notifications || {
-          success: this.integrationStatus.notifications.available,
-          component: 'notifications',
-        },
-        shortcuts: retryResults.shortcuts || {
-          success: this.integrationStatus.shortcuts.available,
-          component: 'shortcuts',
-        },
-      })
-    }
-
-    return retryResults
-  }
-
-  /**
    * Handle app quit - cleanup integration components.
    */
   handleAppQuit(): void {
@@ -569,138 +470,6 @@ export class SystemIntegrationErrorHandler {
     } catch (error) {
       log.warn('Error cleaning up system tray:', error)
     }
-  }
-
-  /**
-   * Get user-friendly status report.
-   */
-  getStatusReport(): StatusReport {
-    return {
-      overall: this.overallStatus || 'unknown',
-      summary: this.getStatusSummary(),
-      components: {
-        tray: this.getTrayStatusReport(),
-        notifications: this.getNotificationStatusReport(),
-        shortcuts: this.getShortcutStatusReport(),
-      },
-      recommendations: this.getRecommendations(),
-    }
-  }
-
-  /**
-   * Get overall status summary.
-   */
-  getStatusSummary(): string {
-    switch (this.overallStatus) {
-      case 'full':
-        return 'All desktop integration features are working properly.'
-      case 'partial':
-        return 'Most desktop features are working. Some features may use alternative methods.'
-      case 'minimal':
-        return 'Basic desktop functionality is available. Some features are unavailable.'
-      case 'failed':
-        return 'Desktop integration features are not available on this system.'
-      default:
-        return 'Desktop integration status unknown.'
-    }
-  }
-
-  /**
-   * Get tray status report.
-   */
-  getTrayStatusReport(): ComponentStatusReport {
-    const status = this.integrationStatus.tray
-
-    if (status.available) {
-      return {
-        status: 'working',
-        message: 'System tray is available and working.',
-      }
-    } else if (status.fallbackMode) {
-      return {
-        status: 'fallback',
-        message:
-          'System tray unavailable. App will minimize normally instead of to tray.',
-      }
-    } else {
-      return {
-        status: 'failed',
-        message: `System tray failed: ${status.error}`,
-      }
-    }
-  }
-
-  /**
-   * Get notification status report.
-   */
-  getNotificationStatusReport(): ComponentStatusReport {
-    const status = this.integrationStatus.notifications
-
-    if (status.available) {
-      return { status: 'working', message: 'Native notifications are working.' }
-    } else if (status.fallbackMode) {
-      return {
-        status: 'fallback',
-        message:
-          'Native notifications unavailable. Using alternative notification methods.',
-      }
-    } else {
-      return {
-        status: 'failed',
-        message: `Notifications failed: ${status.error}`,
-      }
-    }
-  }
-
-  /**
-   * Get shortcut status report.
-   */
-  getShortcutStatusReport(): ComponentStatusReport {
-    const status = this.integrationStatus.shortcuts
-
-    if (status.available && !status.partiallyAvailable) {
-      return {
-        status: 'working',
-        message: 'All keyboard shortcuts are working.',
-      }
-    } else if (status.partiallyAvailable) {
-      return {
-        status: 'partial',
-        message: `Most shortcuts working. ${status.failedCount} shortcuts unavailable due to conflicts.`,
-      }
-    } else {
-      return {
-        status: 'failed',
-        message: `Shortcuts failed: ${status.error}`,
-      }
-    }
-  }
-
-  /**
-   * Get recommendations for improving integration.
-   */
-  getRecommendations(): string[] {
-    const recommendations: string[] = []
-
-    if (!this.integrationStatus.tray.available) {
-      recommendations.push(
-        'Check if your desktop environment supports system tray icons.',
-      )
-    }
-
-    if (!this.integrationStatus.notifications.available) {
-      recommendations.push(
-        'Enable notifications in your system settings for better task alerts.',
-      )
-    }
-
-    if (this.integrationStatus.shortcuts.partiallyAvailable) {
-      recommendations.push(
-        'Some keyboard shortcuts conflict with system shortcuts. Check shortcut settings to see alternatives.',
-      )
-    }
-
-    return recommendations
   }
 }
 
