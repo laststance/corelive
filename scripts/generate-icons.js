@@ -271,6 +271,42 @@ class IconGenerator {
     )
   }
 
+  /** Resizes the source consistently for PNG, web, and app-store generation.
+   * @param size - Output width and height in pixels.
+   * @param background - Transparent for app icons, white for favicons.
+   * @returns A PNG pipeline ready for the caller's output path.
+   * @example this.resizeAppIcon(32, { r: 0, g: 0, b: 0, alpha: 0 })
+   */
+  resizeAppIcon(size, background) {
+    return sharp(this.appSourceIcon)
+      .resize(size, size, {
+        kernel: sharp.kernel.lanczos3,
+        fit: 'contain',
+        background,
+      })
+      .png({ quality: 100, compressionLevel: 9 })
+  }
+
+  /** Writes a resized icon with consistent success/error reporting for each output family.
+   * @param size - Square output dimension in pixels.
+   * @param outputPath - Generated icon destination.
+   * @param label - Existing user-facing output name.
+   * @param background - Family-specific background color.
+   * @returns Promise that settles after the write attempt is reported.
+   * @example await this.writeAppIcon(32, outputPath, 'PNG', background)
+   */
+  async writeAppIcon(size, outputPath, label, background) {
+    try {
+      await this.resizeAppIcon(size, background).toFile(outputPath)
+      log.warn(`  ✅ Generated ${size}x${size} ${label}`)
+    } catch (error) {
+      log.error(
+        `  ❌ Failed to generate ${size}x${size} ${label}:`,
+        error.message,
+      )
+    }
+  }
+
   async generatePNGIcons() {
     log.warn('\n📸 Generating PNG icons...')
     const allSizes = new Set([
@@ -281,19 +317,12 @@ class IconGenerator {
 
     for (const size of allSizes) {
       const outputPath = path.join(this.outputDir, `icon-${size}x${size}.png`)
-      try {
-        await sharp(this.appSourceIcon)
-          .resize(size, size, {
-            kernel: sharp.kernel.lanczos3,
-            fit: 'contain',
-            background: { r: 0, g: 0, b: 0, alpha: 0 },
-          })
-          .png({ quality: 100, compressionLevel: 9 })
-          .toFile(outputPath)
-        log.warn(`  ✅ Generated ${size}x${size} PNG`)
-      } catch (error) {
-        log.error(`  ❌ Failed to generate ${size}x${size} PNG:`, error.message)
-      }
+      await this.writeAppIcon(size, outputPath, 'PNG', {
+        r: 0,
+        g: 0,
+        b: 0,
+        alpha: 0,
+      })
     }
   }
 
@@ -364,22 +393,12 @@ class IconGenerator {
 
     for (const size of faviconSizes) {
       const outputPath = path.join(webDir, `favicon-${size}x${size}.png`)
-      try {
-        await sharp(this.appSourceIcon)
-          .resize(size, size, {
-            kernel: sharp.kernel.lanczos3,
-            fit: 'contain',
-            background: { r: 255, g: 255, b: 255, alpha: 1 },
-          })
-          .png({ quality: 100, compressionLevel: 9 })
-          .toFile(outputPath)
-        log.warn(`  ✅ Generated ${size}x${size} favicon`)
-      } catch (error) {
-        log.error(
-          `  ❌ Failed to generate ${size}x${size} favicon:`,
-          error.message,
-        )
-      }
+      await this.writeAppIcon(size, outputPath, 'favicon', {
+        r: 255,
+        g: 255,
+        b: 255,
+        alpha: 1,
+      })
     }
 
     // Generate standard favicon.ico (16x16)
@@ -407,22 +426,12 @@ class IconGenerator {
         this.outputDir,
         `app-icon-${size}x${size}.png`,
       )
-      try {
-        await sharp(this.appSourceIcon)
-          .resize(size, size, {
-            kernel: sharp.kernel.lanczos3,
-            fit: 'contain',
-            background: { r: 0, g: 0, b: 0, alpha: 0 },
-          })
-          .png({ quality: 100, compressionLevel: 9 })
-          .toFile(outputPath)
-        log.warn(`  ✅ Generated ${size}x${size} app icon`)
-      } catch (error) {
-        log.error(
-          `  ❌ Failed to generate ${size}x${size} app icon:`,
-          error.message,
-        )
-      }
+      await this.writeAppIcon(size, outputPath, 'app icon', {
+        r: 0,
+        g: 0,
+        b: 0,
+        alpha: 0,
+      })
     }
   }
 

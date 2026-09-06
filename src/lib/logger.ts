@@ -77,7 +77,7 @@ const createLogger = (): pino.Logger => {
  * const childLogger = logger.child({ module: 'board' })
  * childLogger.info({ boardId }, 'Board loaded')
  */
-export const logger = createLogger()
+const logger = createLogger()
 
 /**
  * Creates a child logger with module context.
@@ -141,5 +141,3 @@ export const log = {
     }
   },
 }
-
-export default logger

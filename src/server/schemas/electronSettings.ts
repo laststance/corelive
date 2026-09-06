@@ -35,11 +35,6 @@ export const ElectronSettingsSchema = z.object({
 })
 
 /**
- * Type inferred from ElectronSettingsSchema.
- */
-export type ElectronSettings = z.infer<typeof ElectronSettingsSchema>
-
-/**
  * Schema for updating Electron settings.
  * All fields are optional for partial updates.
  */
@@ -48,13 +43,6 @@ export const UpdateElectronSettingsSchema = z.object({
   showInMenuBar: z.boolean().optional(),
   startAtLogin: z.boolean().optional(),
 })
-
-/**
- * Type inferred from UpdateElectronSettingsSchema.
- */
-export type UpdateElectronSettings = z.infer<
-  typeof UpdateElectronSettingsSchema
->
 
 /**
  * Default values for Electron settings.

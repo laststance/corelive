@@ -6,7 +6,7 @@
  */
 import { Command } from 'commander'
 
-import { runSync } from './sync.js'
+import { runSync, type SyncResult } from './sync.js'
 
 const program = new Command()
 
@@ -32,31 +32,7 @@ program
       })
 
       if (options.check && !result.success) {
-        console.log('\n❌ Check failed - inconsistencies found:\n')
-
-        if (result.added.length > 0) {
-          console.log('Missing in config:')
-          for (const name of result.added) {
-            console.log(`  - ${name}`)
-          }
-        }
-
-        if (result.removed.length > 0) {
-          console.log('\nExtra in config:')
-          for (const name of result.removed) {
-            console.log(`  - ${name}`)
-          }
-        }
-
-        if (result.inconsistencies.length > 0) {
-          console.log('\nInconsistencies:')
-          for (const inc of result.inconsistencies) {
-            console.log(
-              `  - ${inc.name}: config has "${inc.configValue}", should be "var(${inc.cssValue})"`,
-            )
-          }
-        }
-
+        printCheckFailure(result)
         process.exit(1)
       }
 
@@ -70,3 +46,35 @@ program
   })
 
 program.parse()
+
+/** Explains failed token checks for the CLI action before it exits.
+ * @param result - Detected additions, removals, and mismatched values.
+ * @returns Nothing; writes the diagnostic groups to stdout.
+ * @example printCheckFailure(result)
+ */
+function printCheckFailure(result: SyncResult): void {
+  console.log('\n❌ Check failed - inconsistencies found:\n')
+
+  if (result.added.length > 0) {
+    console.log('Missing in config:')
+    for (const name of result.added) {
+      console.log(`  - ${name}`)
+    }
+  }
+
+  if (result.removed.length > 0) {
+    console.log('\nExtra in config:')
+    for (const name of result.removed) {
+      console.log(`  - ${name}`)
+    }
+  }
+
+  if (result.inconsistencies.length > 0) {
+    console.log('\nInconsistencies:')
+    for (const inc of result.inconsistencies) {
+      console.log(
+        `  - ${inc.name}: config has "${inc.configValue}", should be "var(${inc.cssValue})"`,
+      )
+    }
+  }
+}

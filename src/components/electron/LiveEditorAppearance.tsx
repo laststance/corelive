@@ -355,5 +355,3 @@ export const LiveEditorAppearance =
       </div>
     )
   }
-
-export default LiveEditorAppearance

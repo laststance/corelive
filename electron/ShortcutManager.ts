@@ -960,6 +960,47 @@ export class ShortcutManager {
     this.shortcutOpenSoundController.play(selection)
   }
 
+  /** Removes outdated bindings before {@link updateShortcuts} registers a batch, preserving focused shortcuts.
+   * @param newShortcuts - Requested settings changes.
+   * @returns Nothing; unchanged contextual bindings remain active.
+   * @example this.unregisterChangedShortcuts(newShortcuts)
+   */
+  private unregisterChangedShortcuts(newShortcuts: ShortcutConfig): void {
+    // Pass 1 — drop the old registration of EVERY id in the batch before
+    // registering any of them, so the new accelerator (or empty string =
+    // disabled) takes effect. Doing this per-id inside the register loop made
+    // a batch collide with itself: swapping two accelerators would still find
+    // the second id holding the first's new key, and `registerShortcut` reads
+    // that as an outside conflict and silently substitutes a fallback.
+    for (const [id, accelerator] of Object.entries(newShortcuts)) {
+      if (id === 'enabled' || typeof accelerator !== 'string') continue
+
+      // A full settings save carries EVERY id, contextual ones included, and
+      // pass 2 deliberately never re-registers those (they belong to a focus
+      // listener). Dropping one whose accelerator did not change would kill it
+      // until the next blur→focus. One that DID change still has to go, or the
+      // stale accelerator keeps firing until then.
+      //
+      // "Unchanged" has to accept BOTH sides of a conflict substitution: the
+      // settings screen submits what is live (`accelerator`), while a caller
+      // reading persisted config submits what was asked for
+      // (`originalAccelerator`). Comparing against only one of them unregisters
+      // the shortcut on every save made by the other caller.
+      const registration = this.registeredShortcuts.get(id)
+      if (
+        this.contextualShortcuts.has(id) &&
+        (isSameAccelerator(accelerator, registration?.accelerator) ||
+          isSameAccelerator(accelerator, registration?.originalAccelerator))
+      ) {
+        continue
+      }
+
+      if (this.registeredShortcuts.has(id)) {
+        this.unregisterShortcut(id)
+      }
+    }
+  }
+
   /**
    * Update shortcuts with new configuration.
    *
@@ -1013,39 +1054,7 @@ export class ShortcutManager {
       // like success to callers who use this return value to roll back.
       let allRegistered = true
 
-      // Pass 1 — drop the old registration of EVERY id in the batch before
-      // registering any of them, so the new accelerator (or empty string =
-      // disabled) takes effect. Doing this per-id inside the register loop made
-      // a batch collide with itself: swapping two accelerators would still find
-      // the second id holding the first's new key, and `registerShortcut` reads
-      // that as an outside conflict and silently substitutes a fallback.
-      for (const [id, accelerator] of Object.entries(newShortcuts)) {
-        if (id === 'enabled' || typeof accelerator !== 'string') continue
-
-        // A full settings save carries EVERY id, contextual ones included, and
-        // pass 2 deliberately never re-registers those (they belong to a focus
-        // listener). Dropping one whose accelerator did not change would kill it
-        // until the next blur→focus. One that DID change still has to go, or the
-        // stale accelerator keeps firing until then.
-        //
-        // "Unchanged" has to accept BOTH sides of a conflict substitution: the
-        // settings screen submits what is live (`accelerator`), while a caller
-        // reading persisted config submits what was asked for
-        // (`originalAccelerator`). Comparing against only one of them unregisters
-        // the shortcut on every save made by the other caller.
-        const registration = this.registeredShortcuts.get(id)
-        if (
-          this.contextualShortcuts.has(id) &&
-          (isSameAccelerator(accelerator, registration?.accelerator) ||
-            isSameAccelerator(accelerator, registration?.originalAccelerator))
-        ) {
-          continue
-        }
-
-        if (this.registeredShortcuts.has(id)) {
-          this.unregisterShortcut(id)
-        }
-      }
+      this.unregisterChangedShortcuts(newShortcuts)
 
       // Pass 2 — bind the new accelerators.
       for (const [id, accelerator] of Object.entries(newShortcuts)) {

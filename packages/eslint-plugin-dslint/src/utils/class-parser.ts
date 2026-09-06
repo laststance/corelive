@@ -68,7 +68,7 @@ export function isCalcExpression(className: string): boolean {
  * extractArbitraryValue('bg-[#ff0000]') // '#ff0000'
  * extractArbitraryValue('text-sm') // null
  */
-export function extractArbitraryValue(className: string): string | null {
+function extractArbitraryValue(className: string): string | null {
   const match = className.match(/\[([^\]]+)\]/)
   return match ? (match[1] ?? null) : null
 }
@@ -81,7 +81,7 @@ export function extractArbitraryValue(className: string): string | null {
  * getUtilityPrefix('bg-[#fff]') // 'bg'
  * getUtilityPrefix('hover:text-red-500') // 'text'
  */
-export function getUtilityPrefix(className: string): string | null {
+function getUtilityPrefix(className: string): string | null {
   // Remove modifiers first
   const baseClass = className.replace(/^([\w-]+:)+/, '')
 
@@ -196,21 +196,4 @@ export function categorizeArbitraryValue(
   }
 
   return 'other'
-}
-
-/**
- * Check if a class has responsive or state modifiers
- * @param className - The class name
- * @returns Array of modifiers
- * @example
- * getModifiers('hover:bg-red-500') // ['hover']
- * getModifiers('md:hover:text-white') // ['md', 'hover']
- */
-export function getModifiers(className: string): string[] {
-  const match = className.match(/^(([\w-]+):)+/)
-  if (!match) {
-    return []
-  }
-
-  return match[0].slice(0, -1).split(':')
 }

@@ -8,9 +8,10 @@ import {
   aggregateLastSevenDays,
   type WeeklyTrend,
 } from '@/lib/aggregate-last-seven-days'
-import { getColorDotClass } from '@/lib/category-colors'
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { cn } from '@/lib/utils'
+
+import { CategoryTotalChip } from './CategoryTotalChip'
 
 interface WeeklySummaryCardProps {
   /**
@@ -113,23 +114,7 @@ export const WeeklySummaryCard = function WeeklySummaryCard({
         {stats.topCategories.length > 0 && (
           <ul className="flex flex-wrap gap-1.5 pt-1">
             {stats.topCategories.map((category) => (
-              <li
-                key={category.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs"
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    'inline-block size-1.5 rounded-full',
-                    getColorDotClass(category.color),
-                  )}
-                />
-
-                <span className="text-foreground">{category.name}</span>
-                <span className="font-mono tabular-nums text-muted-foreground">
-                  {category.count}
-                </span>
-              </li>
+              <CategoryTotalChip key={category.id} category={category} />
             ))}
           </ul>
         )}

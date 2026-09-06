@@ -26,7 +26,7 @@ import {
 import { log } from './logger'
 
 /** Request passed to the injectable process launcher. */
-export interface ShortcutOpenSoundLaunchRequest {
+interface ShortcutOpenSoundLaunchRequest {
   executablePath: string
   arguments: string[]
 }
@@ -312,5 +312,3 @@ export class ShortcutOpenSoundPlayer implements ShortcutOpenSoundController {
     }
   }
 }
-
-export default ShortcutOpenSoundPlayer

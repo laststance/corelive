@@ -19,6 +19,7 @@ import {
   aggregateYearInReview,
   parseForceDate,
   shouldAutoOpenYir,
+  type YearInReview,
 } from '@/lib/aggregate-year-in-review'
 import { getColorDotClass } from '@/lib/category-colors'
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
@@ -174,11 +175,8 @@ export const YearInReviewModal = function YearInReviewModal({
       return
     }
 
-    if (!shouldAutoOpenYir(todayIso, summary)) return
-
     const storageKey = `${STORAGE_KEY_PREFIX}${userId}`
-    const storedYear = readStoredYear(storageKey)
-    if (storedYear >= summary.year) return // already shown this year
+    if (!canShowAutomaticReview(todayIso, summary, storageKey)) return
 
     setOpen(true)
     writeStoredYear(storageKey, summary.year)
@@ -206,9 +204,7 @@ export const YearInReviewModal = function YearInReviewModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-2xl">
-            A year of showing up.
-          </DialogTitle>
+          <DialogTitle className="text-2xl">A year of showing up.</DialogTitle>
           <DialogDescription className="italic text-muted-foreground">
             this is yours now — {summary.year} in quiet review.
           </DialogDescription>
@@ -315,5 +311,23 @@ const Stat = function Stat({
       </p>
       <p className="text-xs italic text-muted-foreground">{label}</p>
     </div>
+  )
+}
+
+/** Applies the calendar/activity and per-account dismissal gates for {@link YearInReviewModal}.
+ * @param todayIso - Today's local date.
+ * @param summary - Current year totals.
+ * @param storageKey - Account-specific previously shown year key.
+ * @returns Whether a normal automatic opening is still due.
+ * @example canShowAutomaticReview('2026-12-15', summary, storageKey)
+ */
+function canShowAutomaticReview(
+  todayIso: string,
+  summary: YearInReview,
+  storageKey: string,
+): boolean {
+  return (
+    shouldAutoOpenYir(todayIso, summary) &&
+    readStoredYear(storageKey) < summary.year
   )
 }

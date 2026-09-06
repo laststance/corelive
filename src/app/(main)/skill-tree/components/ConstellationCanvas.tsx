@@ -188,17 +188,10 @@ export const ConstellationCanvas = function ConstellationCanvas({
           const toNode = nodes.find((n) => n.id === edge.toNodeId)
           if (!fromNode || !toNode) return null
 
-          // Edge style based on endpoint activation
-          const bothActive = fromNode.xp >= 5 && toNode.xp >= 5
-          const oneActive = fromNode.xp >= 5 || toNode.xp >= 5
-          const stroke = bothActive
-            ? 'var(--st-gold)'
-            : oneActive
-              ? 'var(--st-cream)'
-              : 'var(--st-muted)'
-          const strokeWidth = bothActive ? 3 : oneActive ? 2 : 1.6
-          const opacity = bothActive ? 0.6 : oneActive ? 0.45 : 0.4
-          const dash = bothActive || oneActive ? undefined : '4,6'
+          const { stroke, strokeWidth, opacity, dash } = getEdgeAppearance(
+            fromNode.xp,
+            toNode.xp,
+          )
 
           return (
             <line
@@ -232,4 +225,33 @@ export const ConstellationCanvas = function ConstellationCanvas({
       </g>
     </svg>
   )
+}
+
+/** Selects an edge's visual activation state for {@link ConstellationCanvas}.
+ * @param fromXp - Starting node's completion count.
+ * @param toXp - Ending node's completion count.
+ * @returns Existing color, weight, opacity, and dash styling for the endpoints.
+ * @example getEdgeAppearance(5, 0)
+ */
+function getEdgeAppearance(fromXp: NodeXp, toXp: NodeXp) {
+  if (fromXp >= 5 && toXp >= 5)
+    return {
+      stroke: 'var(--st-gold)',
+      strokeWidth: 3,
+      opacity: 0.6,
+      dash: undefined,
+    }
+  if (fromXp >= 5 || toXp >= 5)
+    return {
+      stroke: 'var(--st-cream)',
+      strokeWidth: 2,
+      opacity: 0.45,
+      dash: undefined,
+    }
+  return {
+    stroke: 'var(--st-muted)',
+    strokeWidth: 1.6,
+    opacity: 0.4,
+    dash: '4,6',
+  }
 }

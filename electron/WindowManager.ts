@@ -1502,13 +1502,6 @@ export class WindowManager {
   }
 
   /**
-   * Get settings window instance
-   */
-  getSettingsWindow(): BrowserWindow | null {
-    return this.settingsWindow
-  }
-
-  /**
    * Resets the Settings popover to default size and re-anchors it to the tray.
    * Called by the "Restore default size" IPC handler. Persists the reset so the
    * next open also uses default dimensions.
@@ -1559,5 +1552,3 @@ export class WindowManager {
     }
   }
 }
-
-export default WindowManager

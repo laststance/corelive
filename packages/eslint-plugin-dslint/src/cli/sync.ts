@@ -7,6 +7,8 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 
+import { parseConfigStringEntries } from '../utils/parse-config-string-entries.js'
+
 import {
   parseCSSVariables,
   extractColorVariables,
@@ -52,19 +54,7 @@ function parseExistingColors(configPath: string): Map<string, string> {
     return colors
   }
 
-  const colorsStr = colorsMatch[1]
-
-  // Match key-value pairs
-  const pairRegex = /['"]?([a-zA-Z-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g
-  let match
-  while ((match = pairRegex.exec(colorsStr ?? '')) !== null) {
-    const [, key, value] = match
-    if (key && value) {
-      colors.set(key, value)
-    }
-  }
-
-  return colors
+  return new Map(Object.entries(parseConfigStringEntries(colorsMatch[1] ?? '')))
 }
 
 /**
@@ -116,6 +106,107 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
   // Get existing colors from config
   const existingColors = parseExistingColors(configPath)
 
+  compareColors(colorVariables, existingColors, result)
+
+  // Check mode - only report, don't modify
+  if (options.check) {
+    if (
+      result.added.length > 0 ||
+      result.removed.length > 0 ||
+      result.inconsistencies.length > 0
+    ) {
+      result.success = false
+    }
+    return result
+  }
+
+  // Dry run mode - show what would change
+  if (options.dryRun) {
+    printDryRun(result)
+    return result
+  }
+
+  // Actually sync - update the config file
+  if (!existsSync(configPath)) {
+    console.error(`Config file not found: ${configPath}`)
+    result.success = false
+    return result
+  }
+
+  let configContent = readFileSync(configPath, 'utf-8')
+
+  // Generate new colors object
+  const newColorsStr = generateColorsObject(colorVariables)
+
+  // Replace the colors object in the config
+  const colorsRegex = /(colors:\s*\{)([^}]+(?:\{[^}]*\}[^}]*)*)(\})/s
+  const newColorsSection = `$1\n${newColorsStr}\n      $3`
+
+  if (colorsRegex.test(configContent)) {
+    configContent = configContent.replace(colorsRegex, newColorsSection)
+  } else {
+    console.warn(
+      'Could not find colors section in config. Manual update may be required.',
+    )
+    result.success = false
+    return result
+  }
+
+  writeFileSync(configPath, configContent, 'utf-8')
+
+  printSyncSuccess(result)
+
+  return result
+}
+
+/** Prints planned token changes when {@link runSync} is called in dry-run mode.
+ * @param result - Compared CSS and config values.
+ * @returns Nothing; reports changes without editing files.
+ * @example printDryRun(result)
+ */
+function printDryRun(result: SyncResult): void {
+  console.log('\n📋 Dry run - no changes will be made\n')
+
+  if (result.added.length > 0) {
+    console.log('➕ Would add:')
+    for (const name of result.added) {
+      console.log(`   ${name}`)
+    }
+  }
+
+  if (result.removed.length > 0) {
+    console.log('➖ Would remove:')
+    for (const name of result.removed) {
+      console.log(`   ${name}`)
+    }
+  }
+
+  if (result.inconsistencies.length > 0) {
+    console.log('⚠️  Inconsistencies:')
+    for (const inc of result.inconsistencies) {
+      console.log(
+        `   ${inc.name}: config has "${inc.configValue}", CSS has "${inc.cssValue}"`,
+      )
+    }
+  }
+
+  if (result.unchanged.length > 0) {
+    console.log(`✅ ${result.unchanged.length} colors already in sync`)
+  }
+}
+
+/** Classifies color changes for {@link runSync} before check, preview, or write.
+ * @param colorVariables - Parsed CSS colors.
+ * @param existingColors - Current config values by color name.
+ * @param result - Comparison result to populate.
+ * @returns Nothing; fills the change lists.
+ * @example compareColors(variables, colors, result)
+ */
+function compareColors(
+  colorVariables: CSSVariable[],
+  existingColors: Map<string, string>,
+  result: SyncResult,
+): void {
   // Compare and find differences
   const cssColorNames = new Set(
     colorVariables.map((v) => varNameToColorName(v.name)),
@@ -155,81 +246,14 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
       }
     }
   }
+}
 
-  // Check mode - only report, don't modify
-  if (options.check) {
-    if (
-      result.added.length > 0 ||
-      result.removed.length > 0 ||
-      result.inconsistencies.length > 0
-    ) {
-      result.success = false
-    }
-    return result
-  }
-
-  // Dry run mode - show what would change
-  if (options.dryRun) {
-    console.log('\n📋 Dry run - no changes will be made\n')
-
-    if (result.added.length > 0) {
-      console.log('➕ Would add:')
-      for (const name of result.added) {
-        console.log(`   ${name}`)
-      }
-    }
-
-    if (result.removed.length > 0) {
-      console.log('➖ Would remove:')
-      for (const name of result.removed) {
-        console.log(`   ${name}`)
-      }
-    }
-
-    if (result.inconsistencies.length > 0) {
-      console.log('⚠️  Inconsistencies:')
-      for (const inc of result.inconsistencies) {
-        console.log(
-          `   ${inc.name}: config has "${inc.configValue}", CSS has "${inc.cssValue}"`,
-        )
-      }
-    }
-
-    if (result.unchanged.length > 0) {
-      console.log(`✅ ${result.unchanged.length} colors already in sync`)
-    }
-
-    return result
-  }
-
-  // Actually sync - update the config file
-  if (!existsSync(configPath)) {
-    console.error(`Config file not found: ${configPath}`)
-    result.success = false
-    return result
-  }
-
-  let configContent = readFileSync(configPath, 'utf-8')
-
-  // Generate new colors object
-  const newColorsStr = generateColorsObject(colorVariables)
-
-  // Replace the colors object in the config
-  const colorsRegex = /(colors:\s*\{)([^}]+(?:\{[^}]*\}[^}]*)*)(\})/s
-  const newColorsSection = `$1\n${newColorsStr}\n      $3`
-
-  if (colorsRegex.test(configContent)) {
-    configContent = configContent.replace(colorsRegex, newColorsSection)
-  } else {
-    console.warn(
-      'Could not find colors section in config. Manual update may be required.',
-    )
-    result.success = false
-    return result
-  }
-
-  writeFileSync(configPath, configContent, 'utf-8')
-
+/** Reports the saved token changes after {@link runSync} writes the config.
+ * @param result - Completed sync result.
+ * @returns Nothing; writes the success summary.
+ * @example printSyncSuccess(result)
+ */
+function printSyncSuccess(result: SyncResult): void {
   console.log('\n✅ Sync complete!\n')
   if (result.added.length > 0) {
     console.log(`➕ Added: ${result.added.join(', ')}`)
@@ -237,6 +261,4 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
   if (result.removed.length > 0) {
     console.log(`➖ Removed: ${result.removed.join(', ')}`)
   }
-
-  return result
 }

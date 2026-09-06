@@ -17,7 +17,7 @@ import { log } from './logger'
 // ============================================================================
 
 /** Memory profiler options */
-export interface MemoryProfilerOptions {
+interface MemoryProfilerOptions {
   monitoringInterval?: number
   warningThreshold?: number
   criticalThreshold?: number
@@ -49,7 +49,7 @@ interface RendererMemory {
 }
 
 /** Memory snapshot */
-export interface MemorySnapshot {
+interface MemorySnapshot {
   timestamp: number
   mainProcess: MainProcessMemory
   rendererProcesses: RendererMemory
@@ -69,7 +69,7 @@ type CleanupCallback = (level: CleanupLevel) => void
 /**
  * Monitors memory usage and triggers cleanup operations.
  */
-export class MemoryProfiler extends EventEmitter {
+class MemoryProfiler extends EventEmitter {
   /** Configuration options */
   private options: Required<MemoryProfilerOptions>
 

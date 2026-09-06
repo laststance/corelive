@@ -86,52 +86,44 @@ export interface DerivedTheme extends ThemeBase {
   heatmapHues: readonly [number, number, number, number, number]
 }
 
-/**
- * Every color token a theme block declares, in globals.css (cathedral) order.
- * `--hm-0..4` are CoreLive's heatmap ramp — not a shadcn token — so a static
- * theme must supply them too.
- */
-export const THEME_TOKENS = [
-  '--background',
-  '--foreground',
-  '--card',
-  '--card-foreground',
-  '--popover',
-  '--popover-foreground',
-  '--primary',
-  '--primary-foreground',
-  '--secondary',
-  '--secondary-foreground',
-  '--muted',
-  '--muted-foreground',
-  '--accent',
-  '--accent-foreground',
-  '--destructive',
-  '--border',
-  '--input',
-  '--ring',
-  '--chart-1',
-  '--chart-2',
-  '--chart-3',
-  '--chart-4',
-  '--chart-5',
-  '--sidebar',
-  '--sidebar-foreground',
-  '--sidebar-primary',
-  '--sidebar-primary-foreground',
-  '--sidebar-accent',
-  '--sidebar-accent-foreground',
-  '--sidebar-border',
-  '--sidebar-ring',
-  '--hm-0',
-  '--hm-1',
-  '--hm-2',
-  '--hm-3',
-  '--hm-4',
-] as const
-
-/** A color token name a theme block declares (`--background`, `--hm-4`, …). */
-export type ThemeToken = (typeof THEME_TOKENS)[number]
+/** Color token names required by every generated theme, including the heatmap ramp. */
+export type ThemeToken =
+  | '--background'
+  | '--foreground'
+  | '--card'
+  | '--card-foreground'
+  | '--popover'
+  | '--popover-foreground'
+  | '--primary'
+  | '--primary-foreground'
+  | '--secondary'
+  | '--secondary-foreground'
+  | '--muted'
+  | '--muted-foreground'
+  | '--accent'
+  | '--accent-foreground'
+  | '--destructive'
+  | '--border'
+  | '--input'
+  | '--ring'
+  | '--chart-1'
+  | '--chart-2'
+  | '--chart-3'
+  | '--chart-4'
+  | '--chart-5'
+  | '--sidebar'
+  | '--sidebar-foreground'
+  | '--sidebar-primary'
+  | '--sidebar-primary-foreground'
+  | '--sidebar-accent'
+  | '--sidebar-accent-foreground'
+  | '--sidebar-border'
+  | '--sidebar-ring'
+  | '--hm-0'
+  | '--hm-1'
+  | '--hm-2'
+  | '--hm-3'
+  | '--hm-4'
 
 /**
  * A verbatim theme: its tokens are literal values (the stock shadcn neutral

@@ -7,6 +7,8 @@
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 
+import { parseConfigStringEntries } from './parse-config-string-entries.js'
+
 export interface DesignTokens {
   colors: string[]
   borderRadius: string[]
@@ -86,7 +88,7 @@ const DEFAULT_BORDER_RADIUS = [
  * Tailwind utility classes that don't depend on design tokens.
  * These are always allowed.
  */
-export const TAILWIND_CORE_UTILITIES = [
+const TAILWIND_CORE_UTILITIES = [
   // Layout
   'block',
   'inline-block',
@@ -1455,37 +1457,9 @@ function parseConfigFile(configPath: string): Record<string, unknown> | null {
     return null
   }
 
-  // Parse the colors object
-  const colorsStr = colorsMatch[1]
-  const colors: Record<string, string> = {}
-
-  // Match key-value pairs like: background: 'var(--background)'
-  const pairRegex = /['"]?([a-zA-Z-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g
-  let match
-  while ((match = pairRegex.exec(colorsStr ?? '')) !== null) {
-    const key = match[1]
-    const value = match[2]
-    if (key !== undefined && value !== undefined) {
-      colors[key] = value
-    }
-  }
-
-  // Extract borderRadius
+  const colors = parseConfigStringEntries(colorsMatch[1] ?? '')
   const radiusMatch = content.match(/borderRadius:\s*\{([^}]+)\}/s)
-  const borderRadius: Record<string, string> = {}
-  if (radiusMatch) {
-    const radiusStr = radiusMatch[1] ?? ''
-    // Reset regex lastIndex for reuse
-    const radiusPairRegex = /['"]?([a-zA-Z-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g
-    let radiusMatchItem
-    while ((radiusMatchItem = radiusPairRegex.exec(radiusStr)) !== null) {
-      const key = radiusMatchItem[1]
-      const value = radiusMatchItem[2]
-      if (key !== undefined && value !== undefined) {
-        borderRadius[key] = value
-      }
-    }
-  }
+  const borderRadius = parseConfigStringEntries(radiusMatch?.[1] ?? '')
 
   return {
     theme: {

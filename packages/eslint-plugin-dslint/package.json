@@ -35,7 +35,9 @@
   "devDependencies": {
     "@types/css-tree": "^3.2.0",
     "@types/eslint": "^9.6.1",
+    "@types/estree": "1.0.9",
     "@types/node": "^26.4.1",
+    "eslint-config-ts-prefixer": "5.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.0",
     "vitest": "^5.0.0"

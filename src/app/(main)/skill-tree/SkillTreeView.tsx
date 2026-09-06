@@ -6,7 +6,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOptimistic, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
@@ -18,12 +18,15 @@ import { ConstellationCanvas } from './components/ConstellationCanvas'
 import { DragOverlayCard } from './components/DragOverlayCard'
 import { NodePopover } from './components/NodePopover'
 import { TaskPoolDrawer } from './components/TaskPoolDrawer'
-import type { SkillNodeId, TodoId, TodoText } from './lib/domain-types'
+import { buildActiveNodeDetails } from './lib/buildActiveNodeDetails'
+import { buildSkillTreeCanvasData } from './lib/buildSkillTreeCanvasData'
+import type { SkillNodeId, TodoId } from './lib/domain-types'
 import {
   applyAssignment,
   buildInitialState,
   type OptimisticState,
 } from './lib/optimistic'
+import { useSkillTreeQueries } from './useSkillTreeQueries'
 import './styles.css'
 
 /**
@@ -55,46 +58,17 @@ export const SkillTreeView = function SkillTreeView() {
     useState<SkillNodeId | null>(null)
   const [, startTransition] = useTransition()
 
-  const {
-    data: tree,
-    isLoading: treeLoading,
-    isError: treeError,
-  } = useQuery(orpc.skillTree.getMyTree.queryOptions())
-  const {
-    data: pool,
-    isLoading: poolLoading,
-    isError: poolError,
-  } = useQuery(orpc.skillTree.getUnassignedPool.queryOptions())
+  const { tree, pool, isLoading, isError } = useSkillTreeQueries()
 
-  const baseState: OptimisticState =
-    !tree || !pool
-      ? { assignmentsByNode: {}, unassignedTodoIds: [] }
-      : buildInitialState(
-          tree.nodes.map((n) => ({ id: n.id, assignments: n.assignments })),
-          pool.map((t) => t.id),
-        )
+  const baseState = getInitialAssignmentState(
+    tree?.nodes,
+    pool?.map((todo) => todo.id),
+  )
 
   const [optimisticState, applyOptimistic] = useOptimistic(
     baseState,
     applyAssignment,
   )
-
-  // Lookup for rendering task text anywhere — pool card, popover list, drag
-  // overlay. Must include BOTH the pool (newly-completed, not yet assigned)
-  // AND the tree assignments (already assigned, may not be in the pool at
-  // all). Without the tree half, unassigning a server-loaded assignment would
-  // surface a card with "Task #${id}" placeholder until the next full refetch.
-  // The tree side uses the `todoText` snapshot column which is populated at
-  // assign time and survives the source todo being deleted.
-  const todoTextById = new Map<TodoId, TodoText>()
-  pool?.forEach((t) => todoTextById.set(t.id, t.text))
-  tree?.nodes.forEach((node) => {
-    node.assignments.forEach((a) => {
-      if (a.todoId !== null) {
-        todoTextById.set(a.todoId, a.todoText)
-      }
-    })
-  })
 
   // Invalidation lives in `onSettled` (not `onSuccess`) so failed mutations
   // also reconcile optimistic state. On error: refetch → baseState updates →
@@ -198,73 +172,27 @@ export const SkillTreeView = function SkillTreeView() {
     setDrawerOpen(open)
   }
 
-  const canvasNodes =
-    tree?.nodes.map((n) => {
-      const orphanedCount = n.assignments.filter(
-        (a) => a.todoId === null,
-      ).length
-      const activeCount = optimisticState.assignmentsByNode[n.id]?.length ?? 0
-      return {
-        id: n.id,
-        name: n.name,
-        x: n.x,
-        y: n.y,
-        xp: activeCount + orphanedCount,
-      }
-    }) ?? []
+  const {
+    todoTextById,
+    canvasNodes,
+    canvasEdges,
+    poolTodos,
+    hasAnyCompletedTodos,
+    activeTodoText,
+  } = buildSkillTreeCanvasData(tree, pool, optimisticState, activeDragId)
 
-  const canvasEdges =
-    tree?.edges.map((e) => ({
-      id: e.id,
-      fromNodeId: e.fromNodeId,
-      toNodeId: e.toNodeId,
-    })) ?? []
-
-  const poolTodos = optimisticState.unassignedTodoIds.map((id) => ({
-    id,
-    text: todoTextById.get(id) ?? `Task #${id}`,
-  }))
-
-  const hasAnyCompletedTodos =
-    optimisticState.unassignedTodoIds.length > 0 ||
-    Object.values(optimisticState.assignmentsByNode).some(
-      (a) => a.length > 0,
-    ) ||
-    (tree?.nodes.some((n) => n.assignments.some((a) => a.todoId === null)) ??
-      false)
-
-  const activeTodoText =
-    activeDragId !== null
-      ? (todoTextById.get(activeDragId) ?? `Task #${activeDragId}`)
-      : ''
-
-  const activePopoverNode = tree?.nodes.find(
-    (n) => n.id === activePopoverNodeId,
+  const {
+    activePopoverNode,
+    assignedTodosForPopover,
+    activePopoverNodeSummary,
+  } = buildActiveNodeDetails(
+    tree?.nodes ?? [],
+    activePopoverNodeId,
+    optimisticState,
+    todoTextById,
   )
 
-  const assignedTodosForPopover = activePopoverNode
-    ? (optimisticState.assignmentsByNode[activePopoverNode.id] ?? []).map(
-        (a) => ({
-          id: a.todoId,
-          text: todoTextById.get(a.todoId) ?? `Task #${a.todoId}`,
-        }),
-      )
-    : []
-
-  const activePopoverNodeXp = activePopoverNode
-    ? assignedTodosForPopover.length +
-      activePopoverNode.assignments.filter((a) => a.todoId === null).length
-    : 0
-
-  const activePopoverNodeSummary = activePopoverNode
-    ? {
-        id: activePopoverNode.id,
-        name: activePopoverNode.name,
-        xp: activePopoverNodeXp,
-      }
-    : null
-
-  if (treeError || poolError) {
+  if (isError) {
     return (
       <div
         data-skill-tree="true"
@@ -279,7 +207,7 @@ export const SkillTreeView = function SkillTreeView() {
     )
   }
 
-  if (treeLoading || poolLoading || !tree || !pool) {
+  if (isLoading) {
     return (
       <div
         data-skill-tree="true"
@@ -436,4 +364,19 @@ function parseNodeDropId(
   if (!s.startsWith('node-')) return null
   const n = Number(s.slice('node-'.length))
   return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/** Keeps optimistic assignments empty until both queries needed by {@link SkillTreeView} are available.
+ * @param nodes - Loaded tree nodes, or undefined while loading.
+ * @param todoIds - Loaded unassigned task IDs, or undefined while loading.
+ * @returns The original all-or-nothing initial assignment state.
+ * @example getInitialAssignmentState(undefined, undefined)
+ */
+function getInitialAssignmentState(
+  nodes: Parameters<typeof buildInitialState>[0] | undefined,
+  todoIds: TodoId[] | undefined,
+): OptimisticState {
+  if (!nodes || !todoIds)
+    return { assignmentsByNode: {}, unassignedTodoIds: [] }
+  return buildInitialState(nodes, todoIds)
 }

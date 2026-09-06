@@ -134,5 +134,3 @@ export const BACKEND_DEVELOPER_CORE_TEMPLATE = {
     ['integration-tests', 'ci-cd'],
   ] as const satisfies ReadonlyArray<readonly [string, string]>,
 } as const
-
-export type SkillTreeTemplate = typeof BACKEND_DEVELOPER_CORE_TEMPLATE

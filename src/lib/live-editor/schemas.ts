@@ -11,7 +11,7 @@ import {
  * @example
  * { id: '5b1c…', title: 'buy milk', completedAt: '2026-09-04T09:12:00.000Z' }
  */
-export const localCompletionSchema = z.object({
+const localCompletionSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   /** ISO timestamp; validated as a date when counted, never at parse time. */

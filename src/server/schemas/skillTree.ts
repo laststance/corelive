@@ -27,7 +27,7 @@ const AssignmentRowSchema = z.object({
 })
 
 /** A skill node with its assignments. Maps to Prisma SkillNode + NodeAssignment[]. */
-export const SkillNodeSchema = z.object({
+const SkillNodeSchema = z.object({
   id: z.number().int().positive(),
   skillTreeId: z.number().int().positive(),
   name: z.string(),
@@ -39,7 +39,7 @@ export const SkillNodeSchema = z.object({
 })
 
 /** An edge between two skill nodes. */
-export const NodeEdgeSchema = z.object({
+const NodeEdgeSchema = z.object({
   id: z.number().int().positive(),
   skillTreeId: z.number().int().positive(),
   fromNodeId: z.number().int().positive(),
@@ -64,7 +64,7 @@ export const SkillTreeSchema = z.object({
  * avoids dragging PII (notes, categoryId, userId) into the skill tree cache
  * and into the localStorage persister.
  */
-export const UnassignedPoolItemSchema = z.object({
+const UnassignedPoolItemSchema = z.object({
   id: z.number().int().positive(),
   text: z.string(),
 })
@@ -78,7 +78,5 @@ export const AssignTaskInputSchema = z.object({
 
 /** A single NodeAssignment row, returned by assign/unassign. */
 export const NodeAssignmentSchema = AssignmentRowSchema
-
-export type SkillTree = z.infer<typeof SkillTreeSchema>
 export type SkillNode = z.infer<typeof SkillNodeSchema>
 export type NodeEdge = z.infer<typeof NodeEdgeSchema>

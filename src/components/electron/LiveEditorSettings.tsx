@@ -353,5 +353,3 @@ export const LiveEditorSettings = function LiveEditorSettings({
     </div>
   )
 }
-
-export default LiveEditorSettings

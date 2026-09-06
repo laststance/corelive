@@ -4,6 +4,7 @@ import {
   LOCAL_COMPLETIONS_SCHEMA_VERSION,
   LOCAL_COMPLETIONS_STORAGE_KEY,
 } from './constants'
+import { createLocalId } from './createLocalId'
 import { createLocalStorageSlot } from './localStorageSlot'
 import { type LocalCompletion, localCompletionsFileSchema } from './schemas'
 
@@ -43,23 +44,6 @@ function writeLocalCompletions(items: LocalCompletion[]): void {
 }
 
 /**
- * Generates a local completion id — a uuid where the platform offers one, else
- * a time + random string (insecure LAN origins have no `crypto.randomUUID`).
- * @returns A non-empty id unique enough for one device's keeps.
- * @example
- * createLocalCompletionId() // => '7d0c1a2e-…'
- */
-function createLocalCompletionId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-/**
  * Records a signed-out keep. Read-modify-write on the raw string so items a
  * sibling tab wrote since the last read survive. Called by `useCompletionWriter`.
  * @param title - Normalised completed title (repeats are kept, never deduplicated).
@@ -73,7 +57,7 @@ export function addLocalCompletion(
   completedAt: Date = new Date(),
 ): LocalCompletion {
   const item: LocalCompletion = {
-    id: createLocalCompletionId(),
+    id: createLocalId(),
     title,
     completedAt: completedAt.toISOString(),
   }

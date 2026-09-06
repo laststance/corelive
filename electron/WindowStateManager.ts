@@ -33,7 +33,7 @@ import { log } from './logger'
 // ============================================================================
 
 /** Window bounds */
-export interface WindowBounds {
+interface WindowBounds {
   x: number
   y: number
   width: number
@@ -392,6 +392,35 @@ export class WindowStateManager {
       : null
   }
 
+  /** Captures native geometry for immediate and debounced window-state saves.
+   * @param windowType - Window whose saved placement is updated.
+   * @param browserWindow - Live native window to read.
+   * @returns Nothing; records the current geometry without writing to disk.
+   * @example this.captureWindowState('liveEditor', window)
+   */
+  private captureWindowState(
+    windowType: WindowType,
+    browserWindow: BrowserWindow,
+  ): void {
+    const bounds = browserWindow.getBounds()
+    const display = screen.getDisplayMatching(bounds)
+
+    this.windowStates[windowType] = {
+      ...this.windowStates[windowType],
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: browserWindow.isMaximized(),
+      isMinimized: browserWindow.isMinimized(),
+      isFullScreen: browserWindow.isFullScreen(),
+      isVisible: browserWindow.isVisible(),
+      displayId: display.id,
+      workArea: display.workArea,
+      lastSaved: Date.now(),
+    }
+  }
+
   /**
    * Update window state from BrowserWindow instance.
    */
@@ -404,23 +433,7 @@ export class WindowStateManager {
     }
 
     try {
-      const bounds = browserWindow.getBounds()
-      const display = screen.getDisplayMatching(bounds)
-
-      this.windowStates[windowType] = {
-        ...this.windowStates[windowType],
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y,
-        isMaximized: browserWindow.isMaximized(),
-        isMinimized: browserWindow.isMinimized(),
-        isFullScreen: browserWindow.isFullScreen(),
-        isVisible: browserWindow.isVisible(),
-        displayId: display.id,
-        workArea: display.workArea,
-        lastSaved: Date.now(),
-      }
+      this.captureWindowState(windowType, browserWindow)
 
       return this.saveWindowStates()
     } catch (error) {
@@ -678,23 +691,7 @@ export class WindowStateManager {
     }
 
     try {
-      const bounds = browserWindow.getBounds()
-      const display = screen.getDisplayMatching(bounds)
-
-      this.windowStates[windowType] = {
-        ...this.windowStates[windowType],
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y,
-        isMaximized: browserWindow.isMaximized(),
-        isMinimized: browserWindow.isMinimized(),
-        isFullScreen: browserWindow.isFullScreen(),
-        isVisible: browserWindow.isVisible(),
-        displayId: display.id,
-        workArea: display.workArea,
-        lastSaved: Date.now(),
-      }
+      this.captureWindowState(windowType, browserWindow)
 
       this.debouncedSaveWindowStates()
       return true
@@ -714,9 +711,3 @@ export class WindowStateManager {
     this.saveWindowStates()
   }
 }
-
-// ============================================================================
-// Default Export
-// ============================================================================
-
-export default WindowStateManager

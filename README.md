@@ -131,6 +131,18 @@ You can start editing the page by modifying files under `src/app/`. The page aut
 
 This project loads no web fonts: text renders in the stock shadcn/ui + Tailwind system font stacks (`font-sans` for UI, `font-mono` for data).
 
+### Code quality
+
+Run `pnpm validate` before committing. Alongside tests, lint, the build, and type checks, it runs three [Fallow](https://github.com/fallow-rs/fallow) gates:
+
+| Command                 | Checks                                                |
+| ----------------------- | ----------------------------------------------------- |
+| `pnpm fallow:dead-code` | Unused files, exports, types, and dependency problems |
+| `pnpm fallow:dupes`     | Duplicated source code                                |
+| `pnpm fallow:health`    | Function complexity and estimated change risk         |
+
+The same three checks run for pull requests and pushes to `main` in `.github/workflows/fallow.yml`, following the setup in [Skills Desktop](https://github.com/laststance/skills-desktop). Fallow is pinned in `package.json`; `.fallowrc.jsonc` uses its installed schema and documents the Electron entry points, generated files, indirect runtime dependencies, and component-catalog exports. Tests and Storybook examples remain in the dependency graph, but their repeated fixtures are excluded from duplication checks. Complexity limits are 40 cyclomatic, 40 cognitive, and 120 CRAP, using Fallow's static coverage estimate rather than a machine-local coverage report.
+
 ### Ngrok
 
 Need ngrok to recive create.user event [webhook](https://clerk.com/docs/webhooks/overview) from Clerk in local.  

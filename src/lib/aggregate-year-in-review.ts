@@ -1,6 +1,7 @@
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
 import { calcStreak } from './calc-streak'
+import { compareCategoryTotals } from './compareCategoryTotals'
 
 /**
  * Minimum distinct active UTC days a user must have within the trailing
@@ -114,12 +115,7 @@ export function aggregateYearInReview(
   }
 
   const topCategories = Array.from(categoryTotals.values())
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count
-      // Deterministic tie-break — same locale-insensitive 'en' compare
-      // used elsewhere so CI runners stay consistent.
-      return a.name.localeCompare(b.name, 'en')
-    })
+    .sort(compareCategoryTotals)
     .slice(0, TOP_CATEGORIES_COUNT)
 
   // Year-scoped streak: filter dataByDate to the review year before passing

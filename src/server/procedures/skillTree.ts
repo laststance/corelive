@@ -4,6 +4,8 @@ import type { Prisma } from '@prisma/client'
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '@/app/(main)/skill-tree/lib/template'
 import { createModuleLogger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
+import { buildDefaultSkillEdges } from '@/server/buildDefaultSkillEdges'
+import { buildDefaultSkillNodes } from '@/server/buildDefaultSkillNodes'
 
 import { authMiddleware } from '../middleware/auth'
 import {
@@ -65,13 +67,7 @@ async function importDefaultTemplate(userId: number) {
 
     // Batch insert all nodes in one round-trip.
     await tx.skillNode.createMany({
-      data: BACKEND_DEVELOPER_CORE_TEMPLATE.nodes.map((node) => ({
-        skillTreeId: tree.id,
-        name: node.name,
-        icon: node.icon,
-        x: node.x,
-        y: node.y,
-      })),
+      data: buildDefaultSkillNodes(tree.id),
     })
 
     // Re-read to resolve slug → node ID. `createMany` doesn't return IDs, and
@@ -81,31 +77,7 @@ async function importDefaultTemplate(userId: number) {
       where: { skillTreeId: tree.id },
       select: { id: true, name: true },
     })
-    const nameToId = new Map(createdNodes.map((n) => [n.name, n.id]))
-    const slugToId = new Map<string, number>()
-    for (const tplNode of BACKEND_DEVELOPER_CORE_TEMPLATE.nodes) {
-      const id = nameToId.get(tplNode.name)
-      if (id === undefined) {
-        throw new Error(
-          `Template node "${tplNode.name}" missing after createMany`,
-        )
-      }
-      slugToId.set(tplNode.slug, id)
-    }
-
-    // Batch insert all edges in one round-trip.
-    const edgeRows = BACKEND_DEVELOPER_CORE_TEMPLATE.edges.map(
-      ([fromSlug, toSlug]) => {
-        const fromNodeId = slugToId.get(fromSlug)
-        const toNodeId = slugToId.get(toSlug)
-        if (fromNodeId === undefined || toNodeId === undefined) {
-          throw new Error(
-            `Template edge references unknown slug: ${fromSlug} → ${toSlug}`,
-          )
-        }
-        return { skillTreeId: tree.id, fromNodeId, toNodeId }
-      },
-    )
+    const edgeRows = buildDefaultSkillEdges(tree.id, createdNodes)
     if (edgeRows.length > 0) {
       await tx.nodeEdge.createMany({ data: edgeRows })
     }
