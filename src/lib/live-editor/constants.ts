@@ -44,3 +44,9 @@ export const LOCAL_PENDING_MERGE_SCHEMA_VERSION = 1
  * that tags nothing (ids drifted underneath) from looping forever.
  */
 export const MAX_LOCAL_MERGE_PASSES = 10
+
+/** Recent completion days retained so Undo near midnight updates the correct day's Ember. */
+export const REMEMBERED_COMPLETION_DAYS_LIMIT = 32
+
+/** Today Ember requests one calendar day from the account heatmap. */
+export const TODAY_HEATMAP_DAYS = 1

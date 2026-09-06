@@ -67,6 +67,8 @@ export const UserSettingsStateSchema = z.object({
   retainCompletedInList: z.boolean().default(false),
   /** Show a line through completed task titles across every task surface. */
   showCompletedTaskStrikethrough: z.boolean().default(true),
+  /** Opt-in Today Ember above both LiveEditor hosts; existing installs keep it hidden. */
+  showTodayEmber: z.boolean().default(false),
   /** Per-moment sound toggles (task-create / complete / clear), all default OFF. */
   soundMoments: SoundMomentsSchema,
   /** The selected timbre id. `.catch` (not `.default`) so a MISSING *or* unknown

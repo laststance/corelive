@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, test } from 'vitest'
 
 import userSettingsReducer, {
   hydrateUserSettings,
@@ -14,6 +14,7 @@ import userSettingsReducer, {
   setSoundMoment,
   setSoundTimbre,
   setSoundVolume,
+  setShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 import {
   createUserSettingsSyncMiddleware,
@@ -91,6 +92,24 @@ describe('settings cross-window sync', () => {
 
   afterEach(() => {
     globalThis.BroadcastChannel = originalBroadcastChannel
+  })
+
+  test('shows and hides Today Ember in an already-open editor when settings change in another window', () => {
+    // Arrange
+    const settingsWindow = makeWindowStore()
+    const editorWindow = makeWindowStore()
+
+    // Act
+    settingsWindow.dispatch(setShowTodayEmber(true))
+
+    // Assert
+    expect(editorWindow.getState().settings.showTodayEmber).toBe(true)
+
+    // Act
+    settingsWindow.dispatch(setShowTodayEmber(false))
+
+    // Assert
+    expect(editorWindow.getState().settings.showTodayEmber).toBe(false)
   })
 
   it('keeps the existing wire identifiers so tabs from the previous release still sync', () => {

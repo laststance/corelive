@@ -94,6 +94,18 @@ export const userSettingsSlice = createSlice({
     },
 
     /**
+     * Saves Ember visibility when {@link TaskSettings} toggles the shared LiveEditor feedback.
+     * @param state - Current settings.
+     * @param action - Whether Today Ember should be visible.
+     * @returns Nothing; Redux Toolkit records the setting change.
+     * @example
+     * dispatch(setShowTodayEmber(true))
+     */
+    setShowTodayEmber: (state, action: PayloadAction<boolean>) => {
+      state.showTodayEmber = action.payload
+    },
+
+    /**
      * Sets ON/OFF for a single sound moment (task-create / complete / clear).
      * Coalesces a missing soundMoments object to the default before writing, so
      * the first toggle never reads `undefined[moment]`. deepMerge normally fills
@@ -283,6 +295,7 @@ export const {
   setCompletionSound,
   setRetainCompletedInList,
   setShowCompletedTaskStrikethrough,
+  setShowTodayEmber,
   setSoundMoment,
   setAllSoundMoments,
   setSoundTimbre,
@@ -328,6 +341,16 @@ export const selectShowCompletedTaskStrikethrough = (
 ): boolean =>
   state.settings.showCompletedTaskStrikethrough ??
   DEFAULT_SETTINGS.showCompletedTaskStrikethrough
+
+/**
+ * Reads the opt-in Ember setting for {@link LiveEditor} and {@link TaskSettings}, including older saved settings.
+ * @param state - Root state.
+ * @returns True only for an explicitly enabled Ember; missing or corrupt values stay off.
+ * @example
+ * selectShowTodayEmber(state) // => false on a fresh install
+ */
+export const selectShowTodayEmber = (state: RootState): boolean =>
+  state.settings.showTodayEmber === true
 
 /**
  * Selects whether a given sound moment should play, with legacy migration: a
@@ -440,6 +463,7 @@ export const selectUserSettings = (state: RootState): UserSettingsState => ({
   completionSound: selectCompletionSound(state),
   retainCompletedInList: selectRetainCompletedInList(state),
   showCompletedTaskStrikethrough: selectShowCompletedTaskStrikethrough(state),
+  showTodayEmber: selectShowTodayEmber(state),
   soundMoments: {
     'task-create': selectSoundMoment(state, 'task-create'),
     complete: selectSoundMoment(state, 'complete'),
