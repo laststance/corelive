@@ -3,6 +3,10 @@ import { toast } from 'sonner'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import {
+  notifyNativeWindowPreferencesChanged,
+  useNativeWindowPreferencesVersion,
+} from '@/hooks/useNativeWindowPreferencesVersion'
+import {
   LIVE_EDITOR_OPACITY_MAX,
   LIVE_EDITOR_OPACITY_MIN,
 } from '@/lib/constants/live-editor'
@@ -15,6 +19,7 @@ import { log } from '@/lib/logger'
  * @example useLiveEditorWindowSettings(isMounted)
  */
 export function useLiveEditorWindowSettings(isMounted: boolean) {
+  const preferencesVersion = useNativeWindowPreferencesVersion()
   const [opacity, setOpacity] = useState<number>(LIVE_EDITOR_OPACITY_MAX)
   const [isLiveEditorConfigReady, setIsLiveEditorConfigReady] =
     useState<boolean>(false)
@@ -25,7 +30,7 @@ export function useLiveEditorWindowSettings(isMounted: boolean) {
   // Synchronous guard because state-driven disabled UI applies after render.
   const isUpdatingSpacesTrackingRef = useRef<boolean>(false)
 
-  // Initial pull of opacity + Spaces tracking from the host (the main process,
+  // Pull opacity + Spaces tracking on mount and after a native settings save (the main process,
   // or the web host's instant defaults — which is what marks the browser
   // editor ready with no preload).
   useCycleEffect(() => {
@@ -53,20 +58,31 @@ export function useLiveEditorWindowSettings(isMounted: boolean) {
     return () => {
       cancelled = true
     }
-  }, [isMounted])
+  }, [isMounted, preferencesVersion])
 
-  const handleOpacityChange = (next: number) => {
+  const handleOpacityChange = async (next: number): Promise<void> => {
     const clamped = Math.max(
       LIVE_EDITOR_OPACITY_MIN,
       Math.min(LIVE_EDITOR_OPACITY_MAX, next),
     )
     setOpacity(clamped)
-    void getLiveEditorHost().window.setOpacity(clamped)
+    try {
+      await getLiveEditorHost().window.setOpacity(clamped)
+      notifyNativeWindowPreferencesChanged()
+    } catch (error) {
+      log.error('LiveEditor opacity update failed', error)
+      toast.error('Failed to update window opacity')
+      // Reload the last confirmed native value after a failed optimistic update.
+      const restored = await getLiveEditorHost()
+        .window.getOpacity()
+        .catch(() => opacity)
+      setOpacity(restored)
+    }
   }
 
   const handleOpacityValueChange = (values: number[]) => {
     const next = values[0]
-    if (next !== undefined) handleOpacityChange(next)
+    if (next !== undefined) void handleOpacityChange(next)
   }
 
   /**
@@ -91,6 +107,7 @@ export function useLiveEditorWindowSettings(isMounted: boolean) {
       const applied =
         await getLiveEditorHost().spaces?.setVisibleOnAllWorkspaces(enabled)
       setSpacesTrackingEnabled(applied ?? enabled)
+      notifyNativeWindowPreferencesChanged()
     } catch (error) {
       setSpacesTrackingEnabled(previous)
       toast.error('Failed to update desktop tracking')

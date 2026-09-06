@@ -1,7 +1,11 @@
 import { useState } from 'react'
 
-import { useInitialEffect } from '@/hooks/use-initial-effect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
+import {
+  notifyNativeWindowPreferencesChanged,
+  useNativeWindowPreferencesVersion,
+} from '@/hooks/useNativeWindowPreferencesVersion'
 import { log } from '@/lib/logger'
 
 /**
@@ -53,8 +57,7 @@ export interface PanelSetting {
  * on an outdated preload. Shared by the LiveEditor pin and the Application
  * "show on all desktops" toggle.
  *
- * Intentionally load-once + apply-with-rollback only; §6d's cross-window pin sync
- * lives in the TARGET windows, not this Settings-side hook, so it grafts on later.
+ * Reloads confirmed native values after a save in either Settings or LiveEditor.
  *
  * @param config - The descriptor (default + get/set/available) for this setting.
  * @returns The setting's value + status + an `apply` setter.
@@ -63,16 +66,17 @@ export interface PanelSetting {
  * <Switch checked={pin.value} disabled={pin.isSaving} onCheckedChange={pin.apply} />
  */
 export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
+  const preferencesVersion = useNativeWindowPreferencesVersion()
   const hasMounted = useMounted()
   const [value, setValue] = useState(config.defaultValue)
   const [isReady, setIsReady] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Load once on mount. The availability guard means web / outdated-preload
+  // Reload on mount and cross-window saves. The availability guard means web / outdated-preload
   // renderers simply never flip `isReady` and the consumer hides the row.
   // `floatingPanels` is the legacy wire name — frozen preloads expose it; do not rename.
-  useInitialEffect(() => {
+  useCycleEffect(() => {
     const api =
       typeof window === 'undefined'
         ? undefined
@@ -98,7 +102,7 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
     return () => {
       cancelled = true
     }
-  })
+  }, [config, preferencesVersion])
 
   const apply = async (next: boolean): Promise<void> => {
     const api = window.electronAPI?.floatingPanels
@@ -112,6 +116,7 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
     try {
       const applied = await config.set(api, next)
       setValue(applied)
+      notifyNativeWindowPreferencesChanged()
     } catch (saveError: unknown) {
       log.error('Failed to update panel setting:', saveError)
       setValue(previous)

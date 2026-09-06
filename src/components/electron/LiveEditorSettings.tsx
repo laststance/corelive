@@ -11,6 +11,10 @@ import { Slider } from '@/components/ui/slider'
 import { getLiveEditorSettingsAPI } from '@/electron/utils/electron-client'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
+import {
+  notifyNativeWindowPreferencesChanged,
+  useNativeWindowPreferencesVersion,
+} from '@/hooks/useNativeWindowPreferencesVersion'
 import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import {
   type LiveEditorOpacity,
@@ -57,6 +61,7 @@ interface LiveEditorSettingsProps {
 export const LiveEditorSettings = function LiveEditorSettings({
   className,
 }: LiveEditorSettingsProps): React.ReactElement {
+  const preferencesVersion = useNativeWindowPreferencesVersion()
   const opacityId = useId()
   const shortcutId = useId()
   const secondaryShortcutId = useId()
@@ -100,8 +105,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
     onError: setError,
   })
 
-  // Compute inside the effect so the dependency array stays stable across
-  // renders and the env check runs only once on mount.
+  // Reload native values on mount and after a save in either open window.
   // The non-Electron branch is rendered via the early-return below, so it
   // never observes `isReady`; we only flip it after the IPC fetch resolves.
   useCycleEffect(() => {
@@ -147,7 +151,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [preferencesVersion])
 
   const handleOpacityChange = (values: number[]): void => {
     const next = values[0]
@@ -164,6 +168,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
       const persisted = typeof applied === 'number' ? applied : next
       setOpacity(persisted)
       lastGoodOpacityRef.current = persisted
+      notifyNativeWindowPreferencesChanged()
     } catch (err) {
       log.error('Failed to update LiveEditor opacity:', err)
       // Roll back to the last value the main process confirmed, not the

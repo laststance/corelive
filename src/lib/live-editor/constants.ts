@@ -50,3 +50,7 @@ export const REMEMBERED_COMPLETION_DAYS_LIMIT = 32
 
 /** Today Ember requests one calendar day from the account heatmap. */
 export const TODAY_HEATMAP_DAYS = 1
+
+/** Cross-window invalidation marker; native window preference values stay in the main process. */
+export const NATIVE_WINDOW_PREFERENCES_STORAGE_KEY =
+  'corelive.native-window-preferences.version'
