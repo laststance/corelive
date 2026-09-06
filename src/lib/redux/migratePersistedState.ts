@@ -1,11 +1,18 @@
 import { type UserSettingsState } from '@/lib/schemas/settings'
 
-import { foldLegacyCompletionSoundIntoMoments } from './foldLegacyCompletionSoundIntoMoments'
 import { type ElectronSettingsState } from './slices/electronSettingsSlice'
 
-/** Current persisted-state schema version. Bump (and add a matching fold/branch
- * to `migratePersistedState`) whenever a persisted shape changes incompatibly. */
-export const STORAGE_SCHEMA_VERSION = 3
+/** Current persisted-state version; {@link migratePersistedState} removes retired settings when an older store hydrates. */
+export const STORAGE_SCHEMA_VERSION = 4
+
+/** Only these unused preferences are removed; unrelated saved values survive. */
+const RETIRED_USER_SETTING_KEYS = [
+  'retainCompletedInList',
+  'completionSound',
+  'soundMoments',
+  'soundTimbre',
+  'soundVolume',
+] as const
 
 /** Pre-rename renderer setting keys retained only as migration input. */
 type LegacyLiveEditorSettings = {
@@ -21,8 +28,12 @@ type LegacyLiveEditorSettings = {
 type MigratablePersistedState = {
   [key: string]: unknown
   electronSettings?: Partial<ElectronSettingsState>
-  settings?: Partial<UserSettingsState> & LegacyLiveEditorSettings
-  preferences?: Partial<UserSettingsState> & LegacyLiveEditorSettings
+  settings?: Partial<UserSettingsState> &
+    LegacyLiveEditorSettings &
+    Record<string, unknown>
+  preferences?: Partial<UserSettingsState> &
+    LegacyLiveEditorSettings &
+    Record<string, unknown>
 }
 
 /** The canonical persisted shape exposed to the typed storage middleware. */
@@ -52,7 +63,7 @@ const LEGACY_LIVE_EDITOR_SETTING_KEYS = {
 /**
  * Moves pre-rename renderer preferences to LiveEditor keys during v2→v3 rehydration so a web deploy cannot reset appearance or completion behavior.
  * @param persistedSettings - Untrusted persisted settings slice after object narrowing.
- * @returns A cloned settings object containing only canonical LiveEditor keys.
+ * @returns A cloned settings object with canonical LiveEditor keys and unrelated values preserved.
  * @example
  * migrateLegacyLiveEditorSettings({ braindumpFontSize: 18 }) // => { liveEditorFontSize: 18 }
  */
@@ -78,22 +89,17 @@ export const migrateLegacyLiveEditorSettings = (
 }
 
 /**
- * Storage-schema version + migration orchestrator for the persisted Redux state.
- * Bumping `STORAGE_SCHEMA_VERSION` makes redux-storage-middleware run this
- * `migrate` once on the next rehydrate; v0 materializes sound moments, then v1
- * moves the persisted root key to `settings`, then v2 renames LiveEditor fields. Every unrelated root field rides
- * through unchanged. It MUST stay total: any throw makes the middleware wipe
- * ALL persisted state.
+ * Preserves user choices during storage hydration by renaming legacy keys and removing unused preferences without validating the whole slice.
  *
  * @param persistedState - The raw persisted state from storage (untrusted; fields may be partial/absent).
  * @param oldVersion - The schema version the blob was stored at.
  * @returns
  * - The unchanged state when already current or no user-settings key exists.
  * - A cleaned state when the root or user-settings slice is corrupt.
- * - A migrated v3 state with sound moments folded, the root key moved, and LiveEditor settings preserved.
+ * - A migrated v4 state with retired keys removed and unrelated values preserved.
  * @example
- * migratePersistedState({ preferences: { completionSound: true } }, 0)
- * // => { settings: { completionSound: true, soundMoments: { 'task-create': false, complete: true, clear: false } } }
+ * migratePersistedState({ preferences: { completionSound: true, braindumpFontSize: 18 } }, 0)
+ * // => { settings: { liveEditorFontSize: 18 } }
  * migratePersistedState({ electronSettings: { hideAppIcon: true } }, 0)
  * // => unchanged (no settings to migrate; electronSettings preserved)
  */
@@ -138,18 +144,15 @@ export function migratePersistedState(
     return persistedState
   }
 
-  // Only v0 predates the per-moment sound palette; v1 already stores it.
-  const migratedSoundMoments =
-    oldVersion < 1
-      ? foldLegacyCompletionSoundIntoMoments(persistedSettings)
-      : undefined
-  const settingsWithSoundMoments = migratedSoundMoments
-    ? { ...persistedSettings, soundMoments: migratedSoundMoments }
-    : persistedSettings
   const migratedSettings =
     oldVersion < 3
-      ? migrateLegacyLiveEditorSettings(settingsWithSoundMoments)
-      : settingsWithSoundMoments
+      ? migrateLegacyLiveEditorSettings(persistedSettings)
+      : { ...persistedSettings }
+
+  // Remove only retired keys so a malformed preference cannot reset other choices.
+  for (const retiredKey of RETIRED_USER_SETTING_KEYS) {
+    delete migratedSettings[retiredKey]
+  }
   const migratedState: Record<string, unknown> = {
     ...rawPersistedState,
     settings: migratedSettings,

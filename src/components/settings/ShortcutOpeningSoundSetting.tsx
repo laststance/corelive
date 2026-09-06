@@ -100,7 +100,7 @@ function createShortcutOpenSoundPreviewUrl(cueFilename: string): string {
 }
 
 /**
- * Renders the default-on shortcut cue controls only when SoundSettings runs with the Electron config bridge.
+ * Renders default-on shortcut cue controls when {@link ElectronSettingsPage} has an Electron config bridge.
  * @returns The Electron shortcut cue rows, or null for SSR, web, and outdated preloads.
  * @example
  * <ShortcutOpeningSoundSetting /> // => Electron-only switch + cue picker + preview button
@@ -357,7 +357,7 @@ export const ShortcutOpeningSoundSetting =
     if (!isAvailable) return null
 
     return (
-      <div className="space-y-3 border-t pt-4">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label

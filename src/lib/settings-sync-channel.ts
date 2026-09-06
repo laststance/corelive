@@ -1,22 +1,16 @@
 import type { Middleware } from '@reduxjs/toolkit'
 
-import { foldLegacyCompletionSoundIntoMoments } from '@/lib/redux/foldLegacyCompletionSoundIntoMoments'
 import { migrateLegacyLiveEditorSettings } from '@/lib/redux/migratePersistedState'
 import {
   hydrateUserSettings,
-  setAllSoundMoments,
   setLiveEditorClearDelayMs,
   setLiveEditorClearOnComplete,
   setLiveEditorFontFamily,
   setLiveEditorFontSize,
   setLiveEditorTextColor,
   setLiveEditorToastDurationMs,
-  setCompletionSound,
-  setRetainCompletedInList,
+  setShowCompletedTaskStrikethrough,
   setShowTodayEmber,
-  setSoundMoment,
-  setSoundTimbre,
-  setSoundVolume,
 } from '@/lib/redux/slices/settingsSlice'
 import {
   type UserSettingsState,
@@ -42,13 +36,8 @@ type UserSettingsSyncMessage = Readonly<{
 // added here (the Zod schema validates payloads but does NOT decide which
 // actions broadcast).
 const BROADCASTABLE_ACTION_TYPES = new Set<string>([
-  setCompletionSound.type,
-  setRetainCompletedInList.type,
+  setShowCompletedTaskStrikethrough.type,
   setShowTodayEmber.type,
-  setSoundMoment.type,
-  setAllSoundMoments.type,
-  setSoundTimbre.type,
-  setSoundVolume.type,
   setLiveEditorFontFamily.type,
   setLiveEditorFontSize.type,
   setLiveEditorTextColor.type,
@@ -128,24 +117,10 @@ export const createUserSettingsSyncMiddleware = (): Middleware<
               event.data.state as Record<string, unknown>,
             )
           : event.data.state
-      // Validate + coalesce the inbound state through the Zod SSoT: a legacy
-      // payload is accepted with new fields defaulted, an out-of-range
-      // soundVolume is CLAMPED, and malformed junk (wrong types) is rejected
-      // wholesale. Dispatch the PARSED snapshot so we never persist raw,
-      // out-of-range, or partial data into Redux.
+      // Validate retained preferences and drop unused keys sent by older windows.
       const parsed = UserSettingsStateSchema.safeParse(inboundState)
       if (parsed.success) {
-        // A cross-version inbound payload (e.g. an old cached web tab on the
-        // same origin) may carry only the legacy `completionSound:true` with no
-        // `soundMoments`; the schema would default `complete` to false and drop
-        // that intent. Fold the legacy flag in first — mirrors the persisted
-        // migratePersistedState path so inbound and on-disk legacy agree.
-        const foldedMoments = foldLegacyCompletionSoundIntoMoments(inboundState)
-        const nextSettings =
-          foldedMoments === undefined
-            ? parsed.data
-            : { ...parsed.data, soundMoments: foldedMoments }
-        store.dispatch(hydrateUserSettings(nextSettings))
+        store.dispatch(hydrateUserSettings(parsed.data))
       }
     })
 

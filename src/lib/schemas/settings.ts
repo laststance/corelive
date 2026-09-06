@@ -26,59 +26,15 @@ import {
   DEFAULT_LIVE_EDITOR_TEXT_COLOR,
   DEFAULT_LIVE_EDITOR_TOAST_DURATION_MS,
 } from '@/lib/constants/live-editor'
-import {
-  DEFAULT_SOUND_VOLUME,
-  DEFAULT_TIMBRE_ID,
-  type SoundMomentId,
-  TIMBRE_IDS,
-} from '@/lib/constants/sound'
 
 /**
- * Per-moment ON/OFF toggles, all default OFF so the app is SILENT on a fresh
- * install. The whole object defaults too, so a persisted/synced blob that predates
- * the field validates and fills these in (forward-compat). The default literal is
- * `satisfies Record<SoundMomentId, boolean>` to fail compilation if the moment set
- * drifts from SOUND_MOMENT_IDS.
- */
-const SoundMomentsSchema = z
-  .object({
-    'task-create': z.boolean().default(false),
-    complete: z.boolean().default(false),
-    clear: z.boolean().default(false),
-  })
-  .default({
-    'task-create': false,
-    complete: false,
-    clear: false,
-  } satisfies Record<SoundMomentId, boolean>)
-
-/**
- * The core user-settings schema. Every field has a default so `parse({})`
- * yields the full default state and a smaller-but-valid legacy payload (only the
- * original two booleans) is accepted with the new fields defaulted — never
- * rejected. `soundVolume` clamps an out-of-range NUMBER into [0,1] but still
- * rejects a non-number (so a malformed sync payload fails wholesale).
+ * Validates incoming settings for window sync, filling missing preferences and dropping retired keys from older windows.
  */
 export const UserSettingsStateSchema = z.object({
-  /** Legacy single completion-sound toggle. RETAINED as a read-only fallback that
-   * the `complete`-moment selector migrates from; the new UI writes soundMoments. */
-  completionSound: z.boolean().default(false),
-  /** 居残りモード — keep checked todos in the active list (default OFF). */
-  retainCompletedInList: z.boolean().default(false),
-  /** Show a line through completed task titles across every task surface. */
+  /** Show a line through task titles in Home's completed history. */
   showCompletedTaskStrikethrough: z.boolean().default(true),
   /** Opt-in Today Ember above both LiveEditor hosts; existing installs keep it hidden. */
   showTodayEmber: z.boolean().default(false),
-  /** Per-moment sound toggles (task-create / complete / clear), all default OFF. */
-  soundMoments: SoundMomentsSchema,
-  /** The selected timbre id. `.catch` (not `.default`) so a MISSING *or* unknown
-   * value both self-heal to the default rather than rejecting the whole payload. */
-  soundTimbre: z.enum(TIMBRE_IDS).catch(DEFAULT_TIMBRE_ID),
-  /** Master volume; a valid number is clamped to [0,1], a non-number is rejected. */
-  soundVolume: z
-    .number()
-    .transform((value) => Math.min(1, Math.max(0, value)))
-    .default(DEFAULT_SOUND_VOLUME),
   /** LiveEditor editor font family. `.catch` (not `.default`) so a MISSING *or*
    * unknown id self-heals to the default rather than rejecting the whole payload. */
   liveEditorFontFamily: z

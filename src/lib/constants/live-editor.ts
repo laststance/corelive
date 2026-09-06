@@ -45,7 +45,7 @@ export type LiveEditorOpacity = number
 /**
  * Selectable LiveEditor editor font-family ids. `as const` so the union type AND
  * `z.enum(LIVE_EDITOR_FONT_FAMILY_IDS)` both derive from this one tuple (no drift),
- * mirroring the sound-palette `TIMBRE_IDS` pattern.
+ * keeping the schema, selectors, and controls on the same supported ids.
  */
 export const LIVE_EDITOR_FONT_FAMILY_IDS = ['mono', 'sans', 'serif'] as const
 
@@ -80,7 +80,7 @@ export interface LiveEditorFontFamilyOption {
  * id → human label. The label source of truth; the ordered options list below
  * derives from the id tuple, so adding a font to {@link LIVE_EDITOR_FONT_FAMILY_IDS}
  * can't silently miss the Settings selector (no drift — same guarantee the tuple
- * docstring promises, mirroring `sound.ts`'s `SOUND_TIMBRE_LIST`).
+ * docstring promises).
  */
 export const LIVE_EDITOR_FONT_FAMILY_LABELS: Record<
   LiveEditorFontFamilyId,

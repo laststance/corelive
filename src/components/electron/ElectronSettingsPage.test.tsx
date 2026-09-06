@@ -17,7 +17,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 
 import electronSettingsReducer from '@/lib/redux/slices/electronSettingsSlice'
 
@@ -110,6 +110,59 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     resetPopoverSizeMock.mockResolvedValue(true)
   })
 
+  test('keeps the working shortcut cue in an Electron-only Sound section', async () => {
+    // Arrange
+    installElectronAPI({
+      config: {
+        get: vi.fn(async (path: string) =>
+          path === 'behavior.shortcutOpenSoundEnabled' ? true : 'shuffle',
+        ),
+        set: vi.fn(async () => true),
+      },
+    })
+
+    // Act
+    render(withStore(<ElectronSettingsPage />))
+
+    // Assert
+    expect(screen.getByRole('heading', { name: 'Sound' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('switch', { name: 'Shortcut opening sound' }),
+    ).toBeChecked()
+    expect(
+      screen.queryByRole('switch', { name: 'All cues' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('slider', { name: 'Sound volume' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test.each([
+    { missing: 'config bridge', config: undefined },
+    { missing: 'read method', config: { set: vi.fn() } },
+    { missing: 'write method', config: { get: vi.fn() } },
+  ])(
+    'omits the empty Sound section when the preload lacks its $missing',
+    ({ config }) => {
+      // Arrange
+      installElectronAPI({ config })
+
+      // Act
+      render(withStore(<ElectronSettingsPage />))
+
+      // Assert
+      expect(
+        screen.queryByRole('heading', { name: 'Sound' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('switch', { name: 'Shortcut opening sound' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Application' }),
+      ).toBeInTheDocument()
+    },
+  )
+
   it('folds the Window size control into the Application section in Electron', () => {
     // Arrange
     installFullSettingsBridge()
@@ -139,6 +192,9 @@ describe('ElectronSettingsPage — folded Window size control', () => {
 
     // Assert: nothing is rendered — not even the Application section heading.
     expect(container).toBeEmptyDOMElement()
+    expect(
+      screen.queryByRole('heading', { name: 'Sound' }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Application' }),
     ).not.toBeInTheDocument()

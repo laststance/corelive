@@ -13,7 +13,6 @@ import * as React from 'react'
 import { ElectronSettingsPage } from '@/components/electron/ElectronSettingsPage'
 import { SettingsBackButton } from '@/components/settings/SettingsBackButton'
 import { SettingsSection } from '@/components/settings/SettingsSection'
-import { SoundSettings } from '@/components/settings/SoundSettings'
 import { TaskSettings } from '@/components/settings/TaskSettings'
 import { ThemeSelector } from '@/components/ThemeSelector'
 
@@ -37,16 +36,13 @@ const SettingsPage = function SettingsPage(): React.ReactNode {
            (essential in Electron, which has no browser chrome). */}
       <SettingsBackButton />
       {/* Concern-based sections, web-common first. 48px (space-y-12) between
-           sections per DESIGN.md. Only the 3 web-common headers live here;
+           sections per DESIGN.md. Only the 2 web-common headers live here;
            ElectronSettingsPage appends its own Electron sections (or renders
            nothing on web) — keeping Electron labels out of this server page
            avoids orphaned headers with no content under them on web. */}
       <div className="space-y-12 px-4 pb-12 pt-2">
         <SettingsSection label="Tasks">
           <TaskSettings />
-        </SettingsSection>
-        <SettingsSection label="Sound">
-          <SoundSettings />
         </SettingsSection>
         <SettingsSection label="Appearance">
           <ThemeSelector />

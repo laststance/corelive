@@ -1,19 +1,16 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { afterEach, beforeEach, describe, expect, it, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
 import userSettingsReducer, {
   hydrateUserSettings,
   initialState,
-  setAllSoundMoments,
   setLiveEditorClearDelayMs,
   setLiveEditorClearOnComplete,
   setLiveEditorFontFamily,
   setLiveEditorFontSize,
   setLiveEditorTextColor,
   setLiveEditorToastDurationMs,
-  setSoundMoment,
-  setSoundTimbre,
-  setSoundVolume,
+  setShowCompletedTaskStrikethrough,
   setShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 import {
@@ -112,7 +109,7 @@ describe('settings cross-window sync', () => {
     expect(editorWindow.getState().settings.showTodayEmber).toBe(false)
   })
 
-  it('keeps the existing wire identifiers so tabs from the previous release still sync', () => {
+  test('keeps the existing wire identifiers so tabs from the previous release still sync', () => {
     // Arrange / Act — read the deployed protocol identifiers.
     const channelName = SETTINGS_SYNC_CHANNEL_NAME
     const eventType = SETTINGS_SYNC_EVENT_TYPE
@@ -122,59 +119,66 @@ describe('settings cross-window sync', () => {
     expect(eventType).toBe('preferences-sync')
   })
 
-  it('propagates a sound-moment toggle to another window', () => {
-    // Arrange — two windows, each with its own store + sync middleware.
-    const windowA = makeWindowStore()
-    const windowB = makeWindowStore()
+  test('updates completed-history strikethrough in both windows without reloading', () => {
+    // Arrange
+    const firstWindow = makeWindowStore()
+    const secondWindow = makeWindowStore()
 
-    // Act — turn the "clear" cue ON in window A.
-    windowA.dispatch(setSoundMoment({ moment: 'clear', enabled: true }))
+    // Act
+    firstWindow.dispatch(setShowCompletedTaskStrikethrough(false))
 
-    // Assert — window B sees the same toggle without a reload.
-    expect(windowB.getState().settings.soundMoments.clear).toBe(true)
+    // Assert
+    expect(
+      secondWindow.getState().settings.showCompletedTaskStrikethrough,
+    ).toBe(false)
+
+    // Act
+    secondWindow.dispatch(setShowCompletedTaskStrikethrough(true))
+
+    // Assert
+    expect(firstWindow.getState().settings.showCompletedTaskStrikethrough).toBe(
+      true,
+    )
   })
 
-  it('propagates a master all-cues toggle to another window', () => {
-    // Arrange — two windows, each with its own store + sync middleware.
-    const windowA = makeWindowStore()
-    const windowB = makeWindowStore()
+  test('accepts older windows without restoring retired settings or losing current choices', () => {
+    // Arrange
+    const receiver = makeWindowStore()
+    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
 
-    // Act — flip every cue ON via the master toggle in window A.
-    windowA.dispatch(setAllSoundMoments(true))
+    // Act
+    sender.postMessage({
+      type: 'preferences-sync',
+      state: {
+        retainCompletedInList: true,
+        completionSound: true,
+        soundMoments: { complete: true },
+        soundTimbre: 'paper',
+        soundVolume: 'corrupt retired value',
+        showCompletedTaskStrikethrough: false,
+        braindumpFontFamily: 'serif',
+        braindumpFontSize: 21,
+        braindumpTextColor: '#c2410c',
+        braindumpClearOnComplete: true,
+        braindumpClearDelayMs: 1200,
+        braindumpToastDurationMs: 6400,
+      },
+    })
 
-    // Assert — window B sees all three cues enabled without a reload.
-    expect(windowB.getState().settings.soundMoments).toEqual({
-      'task-create': true,
-      complete: true,
-      clear: true,
+    // Assert
+    expect(receiver.getState().settings).toEqual({
+      showCompletedTaskStrikethrough: false,
+      showTodayEmber: false,
+      liveEditorFontFamily: 'serif',
+      liveEditorFontSize: 21,
+      liveEditorTextColor: '#c2410c',
+      liveEditorClearOnComplete: true,
+      liveEditorClearDelayMs: 1200,
+      liveEditorToastDurationMs: 6400,
     })
   })
 
-  it('propagates a timbre change to another window', () => {
-    // Arrange
-    const windowA = makeWindowStore()
-    const windowB = makeWindowStore()
-
-    // Act
-    windowA.dispatch(setSoundTimbre('wood'))
-
-    // Assert
-    expect(windowB.getState().settings.soundTimbre).toBe('wood')
-  })
-
-  it('propagates a volume change to another window', () => {
-    // Arrange
-    const windowA = makeWindowStore()
-    const windowB = makeWindowStore()
-
-    // Act
-    windowA.dispatch(setSoundVolume(0.25))
-
-    // Assert
-    expect(windowB.getState().settings.soundVolume).toBe(0.25)
-  })
-
-  it('propagates a LiveEditor font-family change to another window', () => {
+  test('propagates a LiveEditor font-family change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -187,7 +191,7 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.liveEditorFontFamily).toBe('serif')
   })
 
-  it('propagates a LiveEditor font-size change to another window', () => {
+  test('propagates a LiveEditor font-size change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -199,7 +203,7 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.liveEditorFontSize).toBe(20)
   })
 
-  it('propagates a LiveEditor text-color change to another window', () => {
+  test('propagates a LiveEditor text-color change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -213,7 +217,7 @@ describe('settings cross-window sync', () => {
     )
   })
 
-  it('propagates a LiveEditor clear-on-complete toggle to another window', () => {
+  test('propagates a LiveEditor clear-on-complete toggle to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -226,7 +230,7 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.liveEditorClearOnComplete).toBe(true)
   })
 
-  it('propagates a LiveEditor clear-delay change to another window', () => {
+  test('propagates a LiveEditor clear-delay change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -239,7 +243,7 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.liveEditorClearDelayMs).toBe(1500)
   })
 
-  it('propagates a LiveEditor toast-duration change to another window', () => {
+  test('propagates a LiveEditor toast-duration change to another window', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -253,22 +257,7 @@ describe('settings cross-window sync', () => {
     expect(windowB.getState().settings.liveEditorToastDurationMs).toBe(8000)
   })
 
-  it('clamps an out-of-range inbound volume when applying a raw broadcast', () => {
-    // Arrange — a window plus a raw sender on the same wire protocol.
-    const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
-
-    // Act — push a payload whose volume is well above the [0,1] range.
-    sender.postMessage({
-      type: SETTINGS_SYNC_EVENT_TYPE,
-      state: { soundVolume: 50 },
-    })
-
-    // Assert — the receiver applies the CLAMPED value, never the raw 50.
-    expect(windowB.getState().settings.soundVolume).toBe(1)
-  })
-
-  it('clamps and heals out-of-range inbound LiveEditor fields when applying a raw broadcast', () => {
+  test('clamps and heals out-of-range inbound LiveEditor fields when applying a raw broadcast', () => {
     // Arrange — a window plus a raw sender on the same wire protocol.
     const windowB = makeWindowStore()
     const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
@@ -293,26 +282,7 @@ describe('settings cross-window sync', () => {
     )
   })
 
-  it('folds a legacy-only inbound payload so the completion cue is not silently lost', () => {
-    // Arrange — a window plus a raw sender posting a pre-palette snapshot that
-    // carries ONLY the legacy completionSound flag (no soundMoments at all),
-    // exactly what an old cached web tab on the same origin would broadcast.
-    const windowB = makeWindowStore()
-    const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
-
-    // Act — push the cross-version legacy payload.
-    sender.postMessage({
-      type: SETTINGS_SYNC_EVENT_TYPE,
-      state: { completionSound: true },
-    })
-
-    // Assert — the legacy "completion sound ON" intent survives as complete:true
-    // instead of being defaulted to false by the schema (the fold mirrors the
-    // persisted migratePersistedState path).
-    expect(windowB.getState().settings.soundMoments.complete).toBe(true)
-  })
-
-  it('preserves every pre-rename LiveEditor preference received from an older window', () => {
+  test('preserves every pre-rename LiveEditor preference received from an older window', () => {
     // Arrange — a current window plus a raw sender that still uses v2 keys.
     const windowB = makeWindowStore()
     const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
@@ -341,23 +311,23 @@ describe('settings cross-window sync', () => {
     })
   })
 
-  it('ignores a malformed inbound payload, leaving the receiver state unchanged', () => {
+  test('ignores a malformed inbound payload, leaving the receiver state unchanged', () => {
     // Arrange
     const windowB = makeWindowStore()
     const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
     const before = windowB.getState().settings
 
-    // Act — a wrong-typed volume must fail validation wholesale.
+    // Act — a wrong-typed retained preference must fail validation wholesale.
     sender.postMessage({
       type: SETTINGS_SYNC_EVENT_TYPE,
-      state: { soundVolume: 'loud' },
+      state: { showCompletedTaskStrikethrough: 'yes' },
     })
 
     // Assert — nothing was applied.
     expect(windowB.getState().settings).toEqual(before)
   })
 
-  it('ignores a message with the wrong type tag', () => {
+  test('ignores a message with the wrong type tag', () => {
     // Arrange
     const windowB = makeWindowStore()
     const sender = new FakeBroadcastChannel(SETTINGS_SYNC_CHANNEL_NAME)
@@ -366,14 +336,14 @@ describe('settings cross-window sync', () => {
     // Act — a foreign message on the same channel name.
     sender.postMessage({
       type: 'some-other-event',
-      state: { soundTimbre: 'paper' },
+      state: { showCompletedTaskStrikethrough: false },
     })
 
     // Assert
     expect(windowB.getState().settings).toEqual(before)
   })
 
-  it('does not re-broadcast an applied snapshot (hydrateUserSettings is the loop guard)', () => {
+  test('does not re-broadcast an applied snapshot (hydrateUserSettings is the loop guard)', () => {
     // Arrange
     const windowA = makeWindowStore()
     const windowB = makeWindowStore()
@@ -381,10 +351,15 @@ describe('settings cross-window sync', () => {
     // Act — hydrateUserSettings is the APPLY action, not a user toggle, so it must
     // never trigger an outgoing broadcast (otherwise windows would echo forever).
     windowA.dispatch(
-      hydrateUserSettings({ ...initialState, soundTimbre: 'paper' }),
+      hydrateUserSettings({
+        ...initialState,
+        showCompletedTaskStrikethrough: false,
+      }),
     )
 
-    // Assert — window B never received it; it keeps its own default timbre.
-    expect(windowB.getState().settings.soundTimbre).toBe('felt')
+    // Assert — window B never received it; it keeps its own decoration preference.
+    expect(windowB.getState().settings.showCompletedTaskStrikethrough).toBe(
+      true,
+    )
   })
 })

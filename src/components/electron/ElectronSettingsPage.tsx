@@ -30,6 +30,7 @@ import {
   VISIBLE_ON_ALL_WORKSPACES_SETTING,
 } from '@/components/electron/PanelToggle'
 import { SettingsSection } from '@/components/settings/SettingsSection'
+import { ShortcutOpeningSoundSetting } from '@/components/settings/ShortcutOpeningSoundSetting'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -206,6 +207,13 @@ export const ElectronSettingsPage =
       return null
     }
 
+    // Older preloads must hide the heading together with unavailable sound controls.
+    const configAPI =
+      typeof window === 'undefined' ? undefined : window.electronAPI?.config
+    const canConfigureShortcutSound =
+      typeof configAPI?.get === 'function' &&
+      typeof configAPI.set === 'function'
+
     // Electron is macOS-only in production, but keep the defensive guard: the
     // Spaces toggle only applies on macOS.
     const platform =
@@ -217,6 +225,13 @@ export const ElectronSettingsPage =
       // siblings of the web-common sections in page.tsx's `space-y-12` flow, so
       // all six settings sections share one 48px rhythm (DESIGN.md 2xl).
       <>
+        {/* Native shortcut feedback is the only sound preference with an active consumer. */}
+        {canConfigureShortcutSound ? (
+          <SettingsSection label="Sound">
+            <ShortcutOpeningSoundSetting />
+          </SettingsSection>
+        ) : null}
+
         {/* LIVEEDITOR — note behavior, look-and-feel, and its keep-on-top pin.
             Three independent siblings (advisor): the note card degrades on the
             `liveEditor` preload, the appearance is pure Redux, and the pin lives

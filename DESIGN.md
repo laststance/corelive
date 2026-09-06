@@ -243,25 +243,17 @@ Intentional choreography. Most motion is in the 150–250ms range. The one motio
 
 - Bounce springs (any `cubic-bezier` with overshoot >1.05 except modals)
 - Confetti, particle bursts, screen-flash
-- SFX, haptics — EXCEPT an opt-in palette of soft sounds at a few earned moments (default OFF; see note below)
+- SFX, haptics — EXCEPT the configurable Electron shortcut opening cue below
 - Scroll-driven hero animations
 - Loading spinners that exceed 3s without progress text
 
-> **Opt-in sound palette (2026-06-04 single completion sound → 2026-06-13
-> widened to a palette).** The one sanctioned exception to the SFX ban: a small,
-> opt-in palette of soft, warm, **non-melodic** cues at a few _earned_ task-life
-> moments — creating a task, completing, and clearing completed. Each cue is a
-> single short organic texture (≤~400ms), chosen from 3–5 selectable timbres at a
-> user-set volume, **off by default and toggled per moment**. It is a quiet
-> companion's acknowledgment — never a gamified "level-up" chime, never a melodic
-> run, and never plays by default. OS mute is honored by the OS (the app does not
-> detect it). At most one cue plays at a time — a rapid second action cuts/restarts
-> rather than layering (scoped per window). High-frequency UI manipulation
-> (reorder, category-switch) is deliberately excluded to keep these moments feeling
-> earned.
+> **Task sound palette retired (2026-09-06).** Task creation, completion, and
+> clearing no longer have playback consumers. Their toggles, master switch,
+> timbre picker, volume slider, and four audio assets are removed. The shared
+> settings page contains Tasks and Appearance; Sound is an Electron-only section.
 >
 > **Shortcut opening cue (2026-07-23; user-approved default-ON exception).**
-> This Electron-only utility cue is separate from the earned-moment palette: one
+> This Electron-only utility cue is independent of task completion: one
 > of ten brief, non-melodic keyboard textures plays only when a global shortcut
 > actually transitions LiveEditor from hidden to shown.
 > The default `Shuffle all` mode avoids repeating the immediately previous texture;
