@@ -1,6 +1,3 @@
-export type AnyFunction = (...args: any[]) => any
-export type TODO = any
-
 // https://stackoverflow.com/a/69288824/8440230
 export type Expand<T> = T extends (...args: infer A) => infer R
   ? (...args: Expand<A>) => Expand<R>

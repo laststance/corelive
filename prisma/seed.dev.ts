@@ -9,6 +9,8 @@ import { PrismaClient } from '@prisma/client'
 // `importDefaultTemplate` / `@/lib/prisma` — those rely on the server Prisma
 // singleton + logger + auth middleware and would throw inside a tsx script.
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../src/app/(main)/skill-tree/lib/template'
+import { buildDefaultSkillEdges } from '../src/server/buildDefaultSkillEdges'
+import { buildDefaultSkillNodes } from '../src/server/buildDefaultSkillNodes'
 
 // Shared seeded-user identity (single source of truth with prisma/seed.ts).
 import { SEED_USER_CLERK_ID, SEED_USER_EMAIL } from './seedUser'
@@ -608,13 +610,7 @@ async function seedDev(): Promise<void> {
     },
   })
   await prisma.skillNode.createMany({
-    data: BACKEND_DEVELOPER_CORE_TEMPLATE.nodes.map((node) => ({
-      skillTreeId: tree.id,
-      name: node.name,
-      icon: node.icon,
-      x: node.x,
-      y: node.y,
-    })),
+    data: buildDefaultSkillNodes(tree.id),
   })
   // Re-read by name to resolve node ids (template names are unique).
   const createdNodes = await prisma.skillNode.findMany({
@@ -622,29 +618,7 @@ async function seedDev(): Promise<void> {
     select: { id: true, name: true },
   })
   const nodeNameToId = new Map(createdNodes.map((node) => [node.name, node.id]))
-  const slugToId = new Map<string, number>()
-  for (const tplNode of BACKEND_DEVELOPER_CORE_TEMPLATE.nodes) {
-    const id = nodeNameToId.get(tplNode.name)
-    if (id === undefined) {
-      throw new Error(
-        `Template node "${tplNode.name}" missing after createMany`,
-      )
-    }
-    slugToId.set(tplNode.slug, id)
-  }
-  // Bulk-insert edges, resolving each slug pair to node ids.
-  const edgeRows = BACKEND_DEVELOPER_CORE_TEMPLATE.edges.map(
-    ([fromSlug, toSlug]) => {
-      const fromNodeId = slugToId.get(fromSlug)
-      const toNodeId = slugToId.get(toSlug)
-      if (fromNodeId === undefined || toNodeId === undefined) {
-        throw new Error(
-          `Template edge references unknown slug: ${fromSlug} → ${toSlug}`,
-        )
-      }
-      return { skillTreeId: tree.id, fromNodeId, toNodeId }
-    },
-  )
+  const edgeRows = buildDefaultSkillEdges(tree.id, createdNodes)
   await prisma.nodeEdge.createMany({ data: edgeRows })
 
   // ── 8. XP distribution: orphan NodeAssignment rows across every level band ──

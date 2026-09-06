@@ -53,7 +53,7 @@ export const initialState = { ...DEFAULT_SETTINGS }
  * Redux slice for core user settings: task presentation and
  * LiveEditor appearance/behavior shared by web and Electron renderers.
  */
-export const userSettingsSlice = createSlice({
+const userSettingsSlice = createSlice({
   name: 'settings',
   initialState,
   reducers: {

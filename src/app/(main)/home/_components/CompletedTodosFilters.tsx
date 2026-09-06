@@ -1,12 +1,11 @@
 'use client'
 
 import { format, startOfDay } from 'date-fns'
-import { ArrowLeft, Check, ChevronDown, RotateCcw } from 'lucide-react'
+import { Check, ChevronDown, RotateCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 
 import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
 import {
   Popover,
   PopoverContent,
@@ -27,6 +26,8 @@ import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { cn } from '@/lib/utils'
 import type { CompletedPeriod } from '@/lib/utils/resolveCompletedJournalDateRange'
 import type { CategoryWithCount } from '@/server/schemas/category'
+
+import { CompletedDateRangePicker } from './CompletedDateRangePicker'
 
 export type CompletedFilterCategory = Pick<
   CategoryWithCount,
@@ -89,17 +90,11 @@ export function CompletedTodosFilters({
     (periodOption) => periodOption === period,
   )
   const isCustomPickerVisible = draftCustomDateRange !== null
-  const isCustomRangeComplete =
-    draftCustomDateRange?.from !== undefined &&
-    draftCustomDateRange.to !== undefined
-  const morePeriodLabel =
-    period === 'custom' &&
-    customDateRange?.from !== undefined &&
-    customDateRange.to !== undefined
-      ? `${format(customDateRange.from, 'MMM d')} – ${format(customDateRange.to, 'MMM d')}`
-      : isMorePeriodSelected
-        ? PERIOD_LABELS[period]
-        : 'More'
+  const morePeriodLabel = getMorePeriodLabel(
+    period,
+    customDateRange,
+    isMorePeriodSelected,
+  )
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -209,73 +204,20 @@ export function CompletedTodosFilters({
             ))}
           </div>
 
-          <div className={cn(!isCustomPickerVisible && 'hidden')}>
-            <div className="flex items-start gap-1 px-1 pb-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label="Back to period choices"
-                onClick={() => setDraftCustomDateRange(null)}
-              >
-                <ArrowLeft className="size-4" aria-hidden="true" />
-              </Button>
-              <div className="pt-1">
-                <p className="text-sm font-medium text-foreground">
-                  Choose a date range
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Pick a start and end date. Both days are included.
-                </p>
-              </div>
-            </div>
-            <Calendar
-              mode="range"
-              selected={draftCustomDateRange ?? undefined}
-              defaultMonth={
-                draftCustomDateRange?.from ?? customDateRange?.from ?? today
-              }
-              disabled={{ after: today }}
-              excludeDisabled
-              resetOnSelect
-              onSelect={(nextDateRange) =>
-                setDraftCustomDateRange(
-                  nextDateRange ?? EMPTY_CUSTOM_DATE_RANGE,
-                )
-              }
-            />
-            <div className="flex justify-end gap-2 px-2 pb-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsMoreOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!isCustomRangeComplete}
-                onClick={() => {
-                  if (
-                    draftCustomDateRange?.from === undefined ||
-                    draftCustomDateRange.to === undefined
-                  ) {
-                    return
-                  }
-
-                  onCustomDateRangeChange(draftCustomDateRange)
-                  onPeriodChange('custom')
-                  setDraftCustomDateRange(null)
-                  setIsMoreOpen(false)
-                }}
-              >
-                Apply range
-              </Button>
-            </div>
-          </div>
+          <CompletedDateRangePicker
+            visible={isCustomPickerVisible}
+            dateRange={draftCustomDateRange}
+            fallbackMonth={customDateRange?.from ?? today}
+            today={today}
+            onDateRangeChange={setDraftCustomDateRange}
+            onCancel={() => setIsMoreOpen(false)}
+            onApply={(range) => {
+              onCustomDateRangeChange(range)
+              onPeriodChange('custom')
+              setDraftCustomDateRange(null)
+              setIsMoreOpen(false)
+            }}
+          />
         </PopoverContent>
       </Popover>
 
@@ -329,4 +271,25 @@ export function CompletedTodosFilters({
       ) : null}
     </div>
   )
+}
+
+/** Formats the active extended period for {@link CompletedTodosFilters}.
+ * @param period - Current period selection.
+ * @param range - Applied custom range.
+ * @param isMoreSelected - Whether the active period belongs in More.
+ * @returns The date interval, named period, or More label.
+ * @example getMorePeriodLabel('year', undefined, true)
+ */
+function getMorePeriodLabel(
+  period: CompletedPeriod,
+  range: DateRange | undefined,
+  isMoreSelected: boolean,
+): string {
+  if (
+    period === 'custom' &&
+    range?.from !== undefined &&
+    range.to !== undefined
+  )
+    return `${format(range.from, 'MMM d')} – ${format(range.to, 'MMM d')}`
+  return isMoreSelected ? PERIOD_LABELS[period] : 'More'
 }

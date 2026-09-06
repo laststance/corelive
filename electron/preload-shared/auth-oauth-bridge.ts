@@ -24,13 +24,13 @@ import { log } from '../logger'
 import { sanitizeData } from './sanitize-data'
 
 /** User data payload pushed from the renderer to the main process. */
-export interface ElectronUserData {
+interface ElectronUserData {
   clerkId: string
   [key: string]: unknown
 }
 
 /** OAuth callback payload delivered to renderer event listeners. */
-export interface OAuthCallbackData {
+interface OAuthCallbackData {
   [key: string]: unknown
 }
 

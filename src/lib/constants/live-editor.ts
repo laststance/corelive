@@ -82,10 +82,7 @@ export interface LiveEditorFontFamilyOption {
  * can't silently miss the Settings selector (no drift — same guarantee the tuple
  * docstring promises).
  */
-export const LIVE_EDITOR_FONT_FAMILY_LABELS: Record<
-  LiveEditorFontFamilyId,
-  string
-> = {
+const LIVE_EDITOR_FONT_FAMILY_LABELS: Record<LiveEditorFontFamilyId, string> = {
   mono: 'Monospace',
   sans: 'Sans-serif',
   serif: 'Serif',
@@ -174,13 +171,10 @@ export const LIVE_EDITOR_TEXT_COLOR_PATTERN =
 /* -------------------------------------------------------------------------- */
 
 /**
- * How long the "Undo" toast stays up after a clear-on-complete, and the SOLE
- * source for the clear-delay ceiling below. Renderer-only (the toast lives in
- * `LiveEditor`), so — unlike the opacity bounds — this is a real import,
- * not a synced duplicate — `LiveEditor` imports it directly for the toast
- * `duration` (the old local `TOAST_UNDO_MS` alias was retired in #108).
+ * Caps the configurable clear delay at the original five-second Undo window.
+ * Toast duration is configured separately through {@link DEFAULT_LIVE_EDITOR_TOAST_DURATION_MS}.
  */
-export const LIVE_EDITOR_TOAST_UNDO_MS = 5000
+const LIVE_EDITOR_TOAST_UNDO_MS = 5000
 
 /** Fastest clear — 0 ms removes the line the instant the task is completed. */
 export const LIVE_EDITOR_CLEAR_DELAY_MIN_MS = 0

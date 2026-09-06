@@ -1,0 +1,71 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+  // These roots are launched by subprocesses, electron-builder, or separate Vitest configs.
+  "entry": ["electron/dev-runner.ts", "scripts/after-build.js"],
+  "framework": [
+    {
+      "name": "corelive-electron-tests",
+      "enablers": ["vitest"],
+      "entryPoints": [
+        "electron/**/*.{test,spec}.{ts,mjs}",
+        "scripts/**/*.{test,spec}.{ts,mjs}",
+      ],
+      "entryPointRole": "test",
+    },
+    {
+      "name": "corelive-storybook-docs",
+      "enablers": ["storybook"],
+      "entryPoints": ["src/**/*.mdx"],
+      "entryPointRole": "support",
+    },
+  ],
+  // Next.js generates route declarations; theme:generate owns the repeated theme CSS.
+  "ignorePatterns": ["next-env.d.ts", "src/lib/themes/generated.css"],
+  "ignoreDependencies": [
+    // Next.js loads the CSS optimizer by name.
+    "critters",
+    // Explicit packaged dependencies: electron-builder must retain these transitive runtime modules.
+    "ms",
+    "node-gyp-build",
+    "pino-pretty",
+    "thread-stream",
+    "wrappy",
+    // Storybook's MDX renderer and documentation prebundling load these indirectly.
+    "@mdx-js/react",
+    "markdown-to-jsx",
+  ],
+  // electron-vite emits these .ts entry points as .cjs; the output is absent in a fresh checkout.
+  "ignoreUnresolvedImports": [
+    "./SystemTrayManager.cjs",
+    "./NotificationManager.cjs",
+    "./ShortcutManager.cjs",
+    "./AutoUpdater.cjs",
+    "./MenuManager.cjs",
+    "./SystemIntegrationErrorHandler.cjs",
+    "./OAuthManager.cjs",
+    "./DeepLinkManager.cjs",
+  ],
+  // The documented shadcn component catalog intentionally exposes its composition primitives.
+  "ignoreExports": [{ "file": "src/components/ui/**", "exports": ["*"] }],
+  "duplicates": {
+    // Test cases repeat setup and expected values so each scenario remains readable.
+    "ignore": [
+      "**/*.{test,spec,stories}.{ts,tsx,mjs}",
+      "**/__tests__/**",
+      "src/**/*.mdx",
+    ],
+  },
+  "health": {
+    // Match the structural complexity budget used by Skills Desktop.
+    "maxCyclomatic": 40,
+    "maxCognitive": 40,
+    "maxCrap": 120,
+    "ignore": [
+      "**/*.{test,spec}.{ts,tsx,mjs}",
+      "**/__tests__/**",
+      ".storybook/**",
+      "scripts/**",
+      "prisma/seed*.ts",
+    ],
+  },
+}

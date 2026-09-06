@@ -15,10 +15,10 @@
  * `NEXT_PUBLIC_CLERK_SIGN_IN_URL`. Hard-coded here because `NEXT_PUBLIC_*` vars
  * are renderer-time only and must not be read from the main process at runtime.
  */
-export const LOGIN_PATHNAME = '/login'
+const LOGIN_PATHNAME = '/login'
 
 /** Clerk sign-up route. Mirrors `NEXT_PUBLIC_CLERK_SIGN_UP_URL`. */
-export const SIGN_UP_PATHNAME = '/sign-up'
+const SIGN_UP_PATHNAME = '/sign-up'
 
 /**
  * Pathnames that mean "the user is not yet authenticated" when a panel lands on

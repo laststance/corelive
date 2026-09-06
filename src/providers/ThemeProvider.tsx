@@ -21,8 +21,6 @@ import { ThemeTransition } from './ThemeTransition'
  */
 export const THEMES = THEME_IDS
 
-export type { ThemeId }
-
 /**
  * Theme display metadata for picker UI, derived from the registry so it never
  * drifts from the source of truth and automatically includes new families.

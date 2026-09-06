@@ -316,41 +316,6 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
 }
 
 /**
- * Hook to check if running in Electron and get Electron-specific auth state
- */
-export function useElectronAuth() {
-  const isElectron = isElectronEnvironment()
-
-  const getElectronUser = async () => {
-    if (!isElectron) return null
-
-    try {
-      return await window.electronAPI?.auth?.getUser()
-    } catch (error) {
-      log.error('Failed to get Electron user:', error)
-      return null
-    }
-  }
-
-  const isElectronAuthenticated = async () => {
-    if (!isElectron) return false
-
-    try {
-      return await window.electronAPI?.auth?.isAuthenticated()
-    } catch (error) {
-      log.error('Failed to check Electron authentication:', error)
-      return false
-    }
-  }
-
-  return {
-    isElectron,
-    getElectronUser,
-    isElectronAuthenticated,
-  }
-}
-
-/**
  * Convert Clerk sign-in statuses into user-facing Electron OAuth errors.
  *
  * @param status - Current Clerk sign-in status.

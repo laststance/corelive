@@ -8,10 +8,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useMounted } from '@/hooks/use-mounted'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { aggregateLastSevenDays } from '@/lib/aggregate-last-seven-days'
-import { getColorDotClass } from '@/lib/category-colors'
 import { log } from '@/lib/logger'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
-import { cn } from '@/lib/utils'
+
+import { CategoryTotalChip } from './CategoryTotalChip'
 
 /**
  * Window the digest summarises. Anchored to the *local* Sunday so the user's
@@ -268,23 +268,7 @@ export const SundayDigestCard = function SundayDigestCard({
             className="flex flex-wrap gap-1.5"
           >
             {weekStats.topCategories.map((category) => (
-              <li
-                key={category.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs"
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    'inline-block size-1.5 rounded-full',
-                    getColorDotClass(category.color),
-                  )}
-                />
-
-                <span className="text-foreground">{category.name}</span>
-                <span className="font-mono tabular-nums text-muted-foreground">
-                  {category.count}
-                </span>
-              </li>
+              <CategoryTotalChip key={category.id} category={category} />
             ))}
           </ul>
         )}

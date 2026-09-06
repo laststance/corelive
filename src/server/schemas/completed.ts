@@ -72,7 +72,7 @@ export type Completed = z.infer<typeof CompletedSchema>
  * @example
  * { id: 1, name: "CoreLive", color: "blue", count: 3 }
  */
-export const HeatmapCategorySchema = z.object({
+const HeatmapCategorySchema = z.object({
   id: z.number().int(),
   name: z.string(),
   color: z.string(),
@@ -84,7 +84,7 @@ export const HeatmapCategorySchema = z.object({
  * @example
  * { date: "2026-03-24", count: 5, categories: [...] }
  */
-export const HeatmapDaySchema = z.object({
+const HeatmapDaySchema = z.object({
   date: z.string(),
   count: z.number().int(),
   categories: z.array(HeatmapCategorySchema),
@@ -145,7 +145,7 @@ export const DayDetailInputSchema = z.object({
  * @example
  * { source: 'completed', id: 7, title: "buy milk", completedAt: Date, category: null }
  */
-export const DayDetailTaskSchema = z.object({
+const DayDetailTaskSchema = z.object({
   source: z.enum(['todo', 'completed']),
   id: z.number().int(),
   title: z.string(),
@@ -227,15 +227,6 @@ export const CompletedJournalResponseSchema = z.object({
   hasMore: z.boolean(),
   nextOffset: z.number().int().min(0).optional(),
 })
-
-/**
- * Inferred type of one `completed.journal` page. Shared so the optimistic
- * toggle in `useTodoMutations` can type its `setQueriesData` cache writes
- * against the exact response shape instead of re-declaring it.
- */
-export type CompletedJournalResponse = z.infer<
-  typeof CompletedJournalResponseSchema
->
 
 /**
  * Input schema for `completed.importLocal` — the one-time merge of a device's

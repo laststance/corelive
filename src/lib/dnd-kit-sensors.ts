@@ -4,8 +4,6 @@ import {
   PointerSensor,
   type Sensors,
 } from '@dnd-kit/dom'
-
-const TODO_SORT_DISTANCE = 8
 const SKILL_TREE_MOUSE_DISTANCE = 6
 const SKILL_TREE_TOUCH_DELAY_MS = 250
 const SKILL_TREE_TOUCH_TOLERANCE = 5
@@ -36,19 +34,6 @@ function createDistanceConstraint(value: number) {
 function createDelayConstraint(value: number, tolerance: number) {
   return new PointerActivationConstraints.Delay({ value, tolerance })
 }
-
-/**
- * Preserves the todo-list sortable drag threshold from the legacy dnd-kit API.
- * @returns The shared sensor list consumed by DragDropProvider.
- * @example
- * <DragDropProvider sensors={todoSortableSensors} />
- */
-export const todoSortableSensors: Sensors = [
-  PointerSensor.configure({
-    activationConstraints: () => [createDistanceConstraint(TODO_SORT_DISTANCE)],
-  }),
-  KeyboardSensor,
-]
 
 /**
  * Builds skill-tree pointer constraints with mouse and touch parity.

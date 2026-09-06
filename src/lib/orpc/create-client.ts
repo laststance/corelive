@@ -13,7 +13,7 @@ import { log } from '../logger'
  * @returns RPCLink configured for the current origin's /api/orpc endpoint
  * @throws Error if called on the server side (SSR)
  */
-export function createLink() {
+function createLink() {
   return new RPCLink({
     url: () => {
       if (typeof window === 'undefined') {

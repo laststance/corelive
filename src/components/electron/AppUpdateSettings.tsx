@@ -262,5 +262,3 @@ export const AppUpdateSettings = function AppUpdateSettings({
     </div>
   )
 }
-
-export default AppUpdateSettings

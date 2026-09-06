@@ -16,7 +16,7 @@ import type { HomeBootstrapInput } from '@/server/schemas/home'
  */
 
 /** Builds the heatmap input `useHeatmapData` sends for the given zone, keeping SSR writes aligned with the client's `{ days, timezone }` property order. @param timezone - IANA zone the viewer buckets local days by. @returns The canonical heatmap query input. @example `buildHomeHeatmapInput('Asia/Tokyo') // => { days: 365, timezone: 'Asia/Tokyo' }` */
-export function buildHomeHeatmapInput(timezone: string) {
+function buildHomeHeatmapInput(timezone: string) {
   return {
     days: HOME_HEATMAP_DAYS,
     timezone,

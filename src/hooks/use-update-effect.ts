@@ -53,5 +53,3 @@ export function useUpdateEffect(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- forwarded deps
   }, deps)
 }
-
-export default useUpdateEffect

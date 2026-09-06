@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  SKILL_EDGE_ACTIVATION_XP,
+  SKILL_EDGE_WIDTH_PX,
+  SKILL_EDGE_OPACITY,
+  SKILL_EDGE_INACTIVE_DASH_PX,
+} from '../lib/constants'
 import type {
   EdgeFromNodeId,
   EdgeToNodeId,
@@ -188,17 +194,10 @@ export const ConstellationCanvas = function ConstellationCanvas({
           const toNode = nodes.find((n) => n.id === edge.toNodeId)
           if (!fromNode || !toNode) return null
 
-          // Edge style based on endpoint activation
-          const bothActive = fromNode.xp >= 5 && toNode.xp >= 5
-          const oneActive = fromNode.xp >= 5 || toNode.xp >= 5
-          const stroke = bothActive
-            ? 'var(--st-gold)'
-            : oneActive
-              ? 'var(--st-cream)'
-              : 'var(--st-muted)'
-          const strokeWidth = bothActive ? 3 : oneActive ? 2 : 1.6
-          const opacity = bothActive ? 0.6 : oneActive ? 0.45 : 0.4
-          const dash = bothActive || oneActive ? undefined : '4,6'
+          const { stroke, strokeWidth, opacity, dash } = getEdgeAppearance(
+            fromNode.xp,
+            toNode.xp,
+          )
 
           return (
             <line
@@ -232,4 +231,33 @@ export const ConstellationCanvas = function ConstellationCanvas({
       </g>
     </svg>
   )
+}
+
+/** Selects an edge's visual activation state for {@link ConstellationCanvas}.
+ * @param fromXp - Starting node's completion count.
+ * @param toXp - Ending node's completion count.
+ * @returns Existing color, weight, opacity, and dash styling for the endpoints.
+ * @example getEdgeAppearance(5, 0)
+ */
+function getEdgeAppearance(fromXp: NodeXp, toXp: NodeXp) {
+  if (fromXp >= SKILL_EDGE_ACTIVATION_XP && toXp >= SKILL_EDGE_ACTIVATION_XP)
+    return {
+      stroke: 'var(--st-gold)',
+      strokeWidth: SKILL_EDGE_WIDTH_PX.bothActive,
+      opacity: SKILL_EDGE_OPACITY.bothActive,
+      dash: undefined,
+    }
+  if (fromXp >= SKILL_EDGE_ACTIVATION_XP || toXp >= SKILL_EDGE_ACTIVATION_XP)
+    return {
+      stroke: 'var(--st-cream)',
+      strokeWidth: SKILL_EDGE_WIDTH_PX.oneActive,
+      opacity: SKILL_EDGE_OPACITY.oneActive,
+      dash: undefined,
+    }
+  return {
+    stroke: 'var(--st-muted)',
+    strokeWidth: SKILL_EDGE_WIDTH_PX.inactive,
+    opacity: SKILL_EDGE_OPACITY.inactive,
+    dash: SKILL_EDGE_INACTIVE_DASH_PX,
+  }
 }

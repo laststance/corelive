@@ -59,5 +59,3 @@ export const SettingsSection = function SettingsSection({
     </section>
   )
 }
-
-export default SettingsSection

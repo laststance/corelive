@@ -750,6 +750,25 @@ export class ConfigManager {
     return current as T
   }
 
+  /** Applies a safe dotted path for {@link set} and {@link update} before either caller saves.
+   * @param configPath - Dot-separated destination in the current configuration.
+   * @param value - New value for the destination.
+   * @returns Whether the entire path is safe and was applied.
+   * @example this.assignConfigValue('liveEditor.opacity', 0.8)
+   */
+  private assignConfigValue(configPath: string, value: unknown): boolean {
+    const keys = configPath.split('.')
+    // Reject the whole path before creating objects, so unsafe segments cannot redirect a write.
+    if (keys.some(isUnsafeKey)) return false
+    let current: Record<string, unknown> = this.config
+    for (const key of keys.slice(0, -1)) {
+      if (!current[key] || typeof current[key] !== 'object') current[key] = {}
+      current = current[key] as Record<string, unknown>
+    }
+    current[keys[keys.length - 1]!] = value
+    return true
+  }
+
   /**
    * Sets a configuration value using dot notation path.
    *
@@ -763,28 +782,7 @@ export class ConfigManager {
    * ```
    */
   set(configPath: string, value: unknown): boolean {
-    const keys = configPath.split('.')
-    let current: Record<string, unknown> = this.config
-
-    for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i]!
-      // Block prototype pollution attacks
-      if (isUnsafeKey(key)) {
-        return false
-      }
-      if (!current[key] || typeof current[key] !== 'object') {
-        current[key] = {}
-      }
-      current = current[key] as Record<string, unknown>
-    }
-
-    const lastKey = keys[keys.length - 1]!
-    // Block prototype pollution attacks on the final key
-    if (isUnsafeKey(lastKey)) {
-      return false
-    }
-    current[lastKey] = value
-    return this.saveConfig()
+    return this.assignConfigValue(configPath, value) && this.saveConfig()
   }
 
   /**
@@ -796,27 +794,7 @@ export class ConfigManager {
    */
   update(updates: Record<string, unknown>): boolean {
     for (const [configPath, value] of Object.entries(updates)) {
-      // Set value in memory without saving to disk
-      const keys = configPath.split('.')
-      let current: Record<string, unknown> = this.config
-
-      for (let i = 0; i < keys.length - 1; i++) {
-        const key = keys[i]!
-        // Block prototype pollution attacks
-        if (isUnsafeKey(key)) {
-          continue
-        }
-        if (!current[key] || typeof current[key] !== 'object') {
-          current[key] = {}
-        }
-        current = current[key] as Record<string, unknown>
-      }
-
-      const lastKey = keys[keys.length - 1]!
-      // Block prototype pollution attacks on the final key
-      if (!isUnsafeKey(lastKey)) {
-        current[lastKey] = value
-      }
+      this.assignConfigValue(configPath, value)
     }
     // Single disk write after all updates
     return this.saveConfig()
@@ -992,48 +970,4 @@ export class ConfigManager {
       return null
     }
   }
-
-  /**
-   * Clean up old backup files (keep only the latest 5).
-   */
-  cleanupBackups(): number {
-    try {
-      const files = fs.readdirSync(this.configDir)
-      const backupFiles = files
-        .filter(
-          (file) => file.startsWith('config-backup-') && file.endsWith('.json'),
-        )
-        .flatMap((file) => {
-          // Handle race condition: file may be deleted between readdirSync and statSync
-          const filePath = path.join(this.configDir, file)
-          try {
-            const stat = fs.statSync(filePath)
-            return [{ name: file, path: filePath, stat }]
-          } catch {
-            // File was likely deleted between listing and stat - skip it
-            log.debug(`Skipping backup file (stat failed): ${file}`)
-            return []
-          }
-        })
-        .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime())
-
-      // Keep only the latest 5 backups
-      const filesToDelete = backupFiles.slice(5)
-
-      for (const file of filesToDelete) {
-        fs.unlinkSync(file.path)
-      }
-
-      return filesToDelete.length
-    } catch (error) {
-      log.error('Failed to cleanup backups:', error)
-      return 0
-    }
-  }
 }
-
-// ============================================================================
-// Default Export
-// ============================================================================
-
-export default ConfigManager

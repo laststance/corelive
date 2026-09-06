@@ -1,5 +1,6 @@
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
+import { compareCategoryTotals } from './compareCategoryTotals'
 import { shiftIsoDate } from './shiftIsoDate'
 
 /**
@@ -167,12 +168,7 @@ export function aggregateLastSevenDays(
   const prior = sumWindow(dataByDate, priorWindowEnd, WOW_PRIOR_WINDOW_DAYS)
 
   const topCategories = Array.from(current.categoryCounts.values())
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count
-      // Stable alphabetical tie-break; locale-insensitive `localeCompare` keeps
-      // deterministic ordering across CI runners with different default locales.
-      return a.name.localeCompare(b.name, 'en')
-    })
+    .sort(compareCategoryTotals)
     .slice(0, TOP_CATEGORIES_COUNT)
 
   // First-week heuristic: dataByDate has no entries anywhere in the 14-day

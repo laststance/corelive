@@ -10,7 +10,6 @@ import { useEffect, type EffectCallback, type DependencyList } from 'react'
  *   - `useInitialEffect`  → mount only (deps = `[]`)
  *   - `useUpdateEffect`   → every re-render only (skips mount)
  *   - `useUnmountEffect`  → unmount only
- *   - `useRenderEffect`   → every render, or mount + non-empty deps changes
  *   - `useCycleEffect`    → 1:1 alias of `useEffect` (this hook)
  *
  * Behavior is identical to the underlying `useEffect`:

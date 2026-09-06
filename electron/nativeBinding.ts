@@ -46,7 +46,7 @@ export interface LoneModifierBinding {
  * `+`-separated modifier/key tokens and never contain a colon, so this prefix
  * cannot collide with a real accelerator.
  */
-export const NATIVE_BINDING_PREFIX = 'lone-modifier:'
+const NATIVE_BINDING_PREFIX = 'lone-modifier:'
 
 /** Lone-modifier id → macOS display label (side word + modifier glyph). */
 export const LONE_MODIFIER_DISPLAY: Record<LoneModifierId, string> = {

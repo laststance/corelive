@@ -5,11 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 import { ServerTiming } from '@/server/timing/ServerTiming'
 
-export interface AuthContext {
-  user: User
-  serverTiming: ServerTiming
-}
-
 interface AuthInitialContext {
   headers: Headers
   serverTiming?: ServerTiming

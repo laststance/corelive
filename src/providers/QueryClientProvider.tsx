@@ -24,9 +24,6 @@ function createPersister() {
     : undefined
 }
 
-// Re-export orpc from client-query for convenience
-export { orpc } from '@/lib/orpc/client-query'
-
 /**
  * Watches Clerk auth state and fires `onSessionReset` on every signed-in →
  * signed-out transition. The callback is responsible for wiping both the

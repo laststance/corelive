@@ -269,7 +269,9 @@ export class ShortcutManager {
     if (this.appFocusListener) return
     // `browser-window-focus` / `browser-window-blur` are not ordered on a
     // window-to-window switch, so both events run the same state resolver.
-    const listener = (): void => this.syncContextualShortcuts()
+    const listener = (): void => {
+      this.syncContextualShortcuts()
+    }
     app.on('browser-window-focus', listener)
     app.on('browser-window-blur', listener)
     this.appFocusListener = listener
@@ -277,20 +279,20 @@ export class ShortcutManager {
 
   /**
    * Binds contextual shortcuts while any CoreLive window is focused and releases them otherwise.
-   * Runs on every app focus/blur event and once from {@link initialize} / {@link enable}; no-op while shortcuts are disabled.
-   * @returns Nothing; `registeredShortcuts` stays the only registration truth.
+   * Runs on focus changes and {@link initialize}, {@link enable}, or {@link updateShortcuts}; no-op while disabled.
+   * @returns Registration results for missing bindings in a focused window.
    * @example
    * shortcutManager.syncContextualShortcuts() // focused window → Cmd+N / Cmd+M bound
    */
-  private syncContextualShortcuts(): void {
-    if (!this.isEnabled) return
+  private syncContextualShortcuts(): ShortcutRegistrationResult[] {
+    if (!this.isEnabled) return []
     // `registeredShortcuts` is the only registration truth: register skips
     // already-bound ids and unregister only touches bound ones.
     if (BrowserWindow.getFocusedWindow()) {
-      this.registerContextualShortcuts()
-    } else {
-      this.unregisterContextualShortcuts()
+      return this.registerContextualShortcuts()
     }
+    this.unregisterContextualShortcuts()
+    return []
   }
 
   /**
@@ -333,39 +335,23 @@ export class ShortcutManager {
     const shortcuts = this.shortcuts
     const results: ShortcutRegistrationResult[] = []
 
-    // Check if any contextual shortcut is already registered
-    const hasRegisteredContextual = Array.from(this.contextualShortcuts).some(
-      (id) => this.registeredShortcuts.has(id),
-    )
-    if (hasRegisteredContextual) {
-      log.debug('[ShortcutManager] Contextual shortcuts already registered')
-      return results
-    }
+    // Restore each missing binding independently; another unchanged binding must not block it.
+    for (const id of this.contextualShortcuts) {
+      const accelerator = shortcuts[id]
+      if (
+        this.registeredShortcuts.has(id) ||
+        typeof accelerator !== 'string' ||
+        accelerator.trim() === ''
+      )
+        continue
 
-    if (this.contextualShortcuts.has('newTask')) {
-      results.push({
-        id: 'newTask',
-        success: this.registerShortcut(
-          shortcuts.newTask as string,
-          'newTask',
-          () => {
-            this.handleNewTaskShortcut()
-          },
-        ),
-      })
-    }
-
-    if (this.contextualShortcuts.has('minimize')) {
-      results.push({
-        id: 'minimize',
-        success: this.registerShortcut(
-          shortcuts.minimize as string,
-          'minimize',
-          () => {
-            this.handleMinimizeWindow()
-          },
-        ),
-      })
+      const handler = this.getHandlerForShortcut(id)
+      if (handler) {
+        results.push({
+          id,
+          success: this.registerShortcut(accelerator, id, handler),
+        })
+      }
     }
 
     const successCount = results.filter((r) => r.success).length
@@ -960,13 +946,53 @@ export class ShortcutManager {
     this.shortcutOpenSoundController.play(selection)
   }
 
+  /** Removes outdated bindings before {@link updateShortcuts} registers a batch, preserving focused shortcuts.
+   * @param newShortcuts - Requested settings changes.
+   * @returns Nothing; unchanged contextual bindings remain active.
+   * @example this.unregisterChangedShortcuts(newShortcuts)
+   */
+  private unregisterChangedShortcuts(newShortcuts: ShortcutConfig): void {
+    // Pass 1 — drop the old registration of EVERY id in the batch before
+    // registering any of them, so the new accelerator (or empty string =
+    // disabled) takes effect. Doing this per-id inside the register loop made
+    // a batch collide with itself: swapping two accelerators would still find
+    // the second id holding the first's new key, and `registerShortcut` reads
+    // that as an outside conflict and silently substitutes a fallback.
+    for (const [id, accelerator] of Object.entries(newShortcuts)) {
+      if (id === 'enabled' || typeof accelerator !== 'string') continue
+
+      // A full settings save carries EVERY id, contextual ones included, and
+      // focus-aware synchronization skips bindings that are already correct.
+      // Keep unchanged keys active; remove changed keys before any replacement
+      // binds so a swap cannot collide with another old accelerator.
+      //
+      // "Unchanged" has to accept BOTH sides of a conflict substitution: the
+      // settings screen submits what is live (`accelerator`), while a caller
+      // reading persisted config submits what was asked for
+      // (`originalAccelerator`). Comparing against only one of them unregisters
+      // the shortcut on every save made by the other caller.
+      const registration = this.registeredShortcuts.get(id)
+      if (
+        this.contextualShortcuts.has(id) &&
+        (isSameAccelerator(accelerator, registration?.accelerator) ||
+          isSameAccelerator(accelerator, registration?.originalAccelerator))
+      ) {
+        continue
+      }
+
+      if (this.registeredShortcuts.has(id)) {
+        this.unregisterShortcut(id)
+      }
+    }
+  }
+
   /**
    * Update shortcuts with new configuration.
    *
    * Only the shortcuts named in `newShortcuts` are re-registered. Contextual
-   * shortcuts (`newTask`, `minimize`, etc.) stay scoped to their focus
-   * listeners — re-registering them globally would hijack keys like Cmd+N
-   * and Cmd+M system-wide.
+   * shortcuts (`newTask`, `minimize`, etc.) synchronize with current focus
+   * after the save, preventing keys like Cmd+N and Cmd+M from binding while
+   * another app is focused.
    *
    * Empty-string accelerators are treated as "disable this shortcut" — the
    * old binding is removed and nothing is registered in its place.
@@ -1013,39 +1039,13 @@ export class ShortcutManager {
       // like success to callers who use this return value to roll back.
       let allRegistered = true
 
-      // Pass 1 — drop the old registration of EVERY id in the batch before
-      // registering any of them, so the new accelerator (or empty string =
-      // disabled) takes effect. Doing this per-id inside the register loop made
-      // a batch collide with itself: swapping two accelerators would still find
-      // the second id holding the first's new key, and `registerShortcut` reads
-      // that as an outside conflict and silently substitutes a fallback.
-      for (const [id, accelerator] of Object.entries(newShortcuts)) {
-        if (id === 'enabled' || typeof accelerator !== 'string') continue
-
-        // A full settings save carries EVERY id, contextual ones included, and
-        // pass 2 deliberately never re-registers those (they belong to a focus
-        // listener). Dropping one whose accelerator did not change would kill it
-        // until the next blur→focus. One that DID change still has to go, or the
-        // stale accelerator keeps firing until then.
-        //
-        // "Unchanged" has to accept BOTH sides of a conflict substitution: the
-        // settings screen submits what is live (`accelerator`), while a caller
-        // reading persisted config submits what was asked for
-        // (`originalAccelerator`). Comparing against only one of them unregisters
-        // the shortcut on every save made by the other caller.
-        const registration = this.registeredShortcuts.get(id)
-        if (
-          this.contextualShortcuts.has(id) &&
-          (isSameAccelerator(accelerator, registration?.accelerator) ||
-            isSameAccelerator(accelerator, registration?.originalAccelerator))
-        ) {
-          continue
-        }
-
-        if (this.registeredShortcuts.has(id)) {
-          this.unregisterShortcut(id)
-        }
+      // Saving the master switch off releases every binding immediately, including focused-window keys.
+      if (!this.isEnabled) {
+        this.unregisterAllShortcuts()
+        return true
       }
+
+      this.unregisterChangedShortcuts(newShortcuts)
 
       // Pass 2 — bind the new accelerators.
       for (const [id, accelerator] of Object.entries(newShortcuts)) {
@@ -1053,8 +1053,7 @@ export class ShortcutManager {
 
         if (accelerator === '') continue
 
-        // Contextual shortcuts only ever register on focus; re-registering
-        // them here would promote them to global accelerators.
+        // Focus-aware synchronization below owns contextual shortcuts.
         if (this.contextualShortcuts.has(id)) continue
 
         const handler = this.getHandlerForShortcut(id)
@@ -1072,6 +1071,11 @@ export class ShortcutManager {
         const anyFailed = results.some((r) => !r.success)
         allRegistered = allRegistered && !anyFailed
       }
+
+      // Settings can keep focus during a save, so apply changed contextual keys without waiting for another focus event.
+      const contextualResults = this.syncContextualShortcuts()
+      allRegistered =
+        allRegistered && contextualResults.every((result) => result.success)
 
       return allRegistered
     } catch (error) {

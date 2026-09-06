@@ -40,7 +40,7 @@ export interface ElectronSettingsState {
  * Used as initial state and for reset operations.
  * Matches server-side DEFAULT_ELECTRON_SETTINGS to prevent drift.
  */
-export const initialState: ElectronSettingsState = {
+const initialState: ElectronSettingsState = {
   ...DEFAULT_ELECTRON_SETTINGS,
 }
 
@@ -48,7 +48,7 @@ export const initialState: ElectronSettingsState = {
  * Redux slice for Electron settings.
  * Manages dock icon visibility, menu bar presence, and startup behavior.
  */
-export const electronSettingsSlice = createSlice({
+const electronSettingsSlice = createSlice({
   name: 'electronSettings',
   initialState,
   reducers: {
@@ -98,12 +98,8 @@ export const electronSettingsSlice = createSlice({
 })
 
 // Export actions
-export const {
-  setHideAppIcon,
-  setShowInMenuBar,
-  setStartAtLogin,
-  resetSettings,
-} = electronSettingsSlice.actions
+export const { setHideAppIcon, setShowInMenuBar, setStartAtLogin } =
+  electronSettingsSlice.actions
 
 // Selectors
 /**
@@ -132,15 +128,5 @@ export const selectShowInMenuBar = (state: RootState): boolean =>
  */
 export const selectStartAtLogin = (state: RootState): boolean =>
   state.electronSettings.startAtLogin
-
-/**
- * Selects all Electron settings from the Redux state.
- *
- * @param state - Root state
- * @returns All Electron settings
- */
-export const selectElectronSettings = (
-  state: RootState,
-): ElectronSettingsState => state.electronSettings
 
 export default electronSettingsSlice.reducer

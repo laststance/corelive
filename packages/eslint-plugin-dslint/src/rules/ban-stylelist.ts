@@ -11,13 +11,6 @@
 import type { Rule } from 'eslint'
 
 import {
-  extractStringValues,
-  isStringLiteral,
-  isTemplateLiteral,
-  isClassUtilityCall,
-  CLASS_UTILITY_NAMES,
-} from '../utils/ast-utils.js'
-import {
   parseClassString,
   hasArbitraryValue,
   isCSSVariableValue,
@@ -25,6 +18,7 @@ import {
   categorizeArbitraryValue,
   type ArbitraryCategory,
 } from '../utils/class-parser.js'
+import { createClassVisitors } from '../utils/create-class-visitors.js'
 
 interface ForbidConfig {
   colors?: boolean
@@ -128,18 +122,13 @@ export const banStylelist: Rule.RuleModule = {
      * Check if a category is forbidden
      */
     function isForbidden(category: ArbitraryCategory): boolean {
-      switch (category) {
-        case 'color':
-          return forbid?.colors ?? true
-        case 'spacing':
-          return forbid?.spacing ?? true
-        case 'sizing':
-          return forbid?.sizing ?? true
-        case 'other':
-          return forbid?.other ?? true
-        default:
-          return false
-      }
+      const optionKeys = {
+        color: 'colors',
+        spacing: 'spacing',
+        sizing: 'sizing',
+        other: 'other',
+      } as const
+      return forbid?.[optionKeys[category]] ?? true
     }
 
     /**
@@ -182,60 +171,6 @@ export const banStylelist: Rule.RuleModule = {
       }
     }
 
-    /**
-     * Check all string values extracted from a node
-     */
-    function checkNode(node: Rule.Node): void {
-      const values = extractStringValues(node)
-      for (const value of values) {
-        checkClassString(node, value)
-      }
-    }
-
-    return {
-      // Handle className="..."
-      'JSXAttribute[name.name="className"] > Literal'(node: Rule.Node) {
-        if (isStringLiteral(node)) {
-          const value = (node as unknown as { value: string }).value
-          checkClassString(node, value)
-        }
-      },
-
-      // Handle className={`...`}
-      'JSXAttribute[name.name="className"] > JSXExpressionContainer > TemplateLiteral'(
-        node: Rule.Node,
-      ) {
-        if (isTemplateLiteral(node)) {
-          const tl = node as unknown as import('estree').TemplateLiteral
-          for (const quasi of tl.quasis) {
-            if (quasi.value.raw) {
-              checkClassString(node, quasi.value.raw)
-            }
-          }
-        }
-      },
-
-      // Handle className={cn(...)} / clsx(...) / cva(...)
-      'JSXAttribute[name.name="className"] > JSXExpressionContainer > CallExpression'(
-        node: Rule.Node,
-      ) {
-        const ce = node as unknown as import('estree').CallExpression
-        if (isClassUtilityCall(ce)) {
-          checkNode(node)
-        }
-      },
-
-      // Handle direct cn(...) calls
-      [`CallExpression[callee.name=/^(${CLASS_UTILITY_NAMES.join('|')})$/]`](
-        node: Rule.Node,
-      ) {
-        checkNode(node)
-      },
-
-      // Handle cva() definitions
-      'CallExpression[callee.name="cva"]'(node: Rule.Node) {
-        checkNode(node)
-      },
-    }
+    return createClassVisitors(checkClassString)
   },
 }

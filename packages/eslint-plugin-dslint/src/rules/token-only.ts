@@ -10,18 +10,12 @@
 import type { Rule } from 'eslint'
 
 import {
-  extractStringValues,
-  isStringLiteral,
-  isTemplateLiteral,
-  isClassUtilityCall,
-  CLASS_UTILITY_NAMES,
-} from '../utils/ast-utils.js'
-import {
   parseClassString,
   hasArbitraryValue,
   isCSSVariableValue,
   isCalcExpression,
 } from '../utils/class-parser.js'
+import { createClassVisitors } from '../utils/create-class-visitors.js'
 import {
   resolveTokens,
   buildAllowedClasses,
@@ -126,60 +120,6 @@ export const tokenOnly: Rule.RuleModule = {
       }
     }
 
-    /**
-     * Check all string values extracted from a node
-     */
-    function checkNode(node: Rule.Node): void {
-      const values = extractStringValues(node)
-      for (const value of values) {
-        checkClassString(node, value)
-      }
-    }
-
-    return {
-      // Handle className="..."
-      'JSXAttribute[name.name="className"] > Literal'(node: Rule.Node) {
-        if (isStringLiteral(node)) {
-          const value = (node as unknown as { value: string }).value
-          checkClassString(node, value)
-        }
-      },
-
-      // Handle className={`...`}
-      'JSXAttribute[name.name="className"] > JSXExpressionContainer > TemplateLiteral'(
-        node: Rule.Node,
-      ) {
-        if (isTemplateLiteral(node)) {
-          const tl = node as unknown as import('estree').TemplateLiteral
-          for (const quasi of tl.quasis) {
-            if (quasi.value.raw) {
-              checkClassString(node, quasi.value.raw)
-            }
-          }
-        }
-      },
-
-      // Handle className={cn(...)} / clsx(...) / cva(...)
-      'JSXAttribute[name.name="className"] > JSXExpressionContainer > CallExpression'(
-        node: Rule.Node,
-      ) {
-        const ce = node as unknown as import('estree').CallExpression
-        if (isClassUtilityCall(ce)) {
-          checkNode(node)
-        }
-      },
-
-      // Handle direct cn(...) calls (not in JSX context)
-      [`CallExpression[callee.name=/^(${CLASS_UTILITY_NAMES.join('|')})$/]`](
-        node: Rule.Node,
-      ) {
-        checkNode(node)
-      },
-
-      // Handle cva() definitions
-      'CallExpression[callee.name="cva"]'(node: Rule.Node) {
-        checkNode(node)
-      },
-    }
+    return createClassVisitors(checkClassString)
   },
 }

@@ -1,0 +1,42 @@
+name: Fallow
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fallow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Fallow (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dead-code
+            command: dead-code
+            args: ''
+          - name: dupes
+            command: dupes
+            args: ''
+          - name: health
+            command: health
+            args: --complexity
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare
+      - name: Build workspace ESLint plugin
+        run: pnpm --filter eslint-plugin-dslint build
+      - name: Analyze repository
+        run: pnpm exec fallow ${{ matrix.command }} ${{ matrix.args }} --fail-on-issues --no-cache --format compact

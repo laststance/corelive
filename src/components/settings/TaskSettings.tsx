@@ -89,5 +89,3 @@ export const TaskSettings = function TaskSettings() {
     </div>
   )
 }
-
-export default TaskSettings

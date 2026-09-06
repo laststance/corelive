@@ -9,7 +9,7 @@
 import type { CategoryColor } from '@/server/schemas/category'
 
 /** Tailwind background color classes mapped to category color names */
-export const COLOR_DOT_CLASSES: Record<CategoryColor, string> = {
+const COLOR_DOT_CLASSES: Record<CategoryColor, string> = {
   blue: 'bg-blue-500',
   green: 'bg-green-500',
   amber: 'bg-amber-500',

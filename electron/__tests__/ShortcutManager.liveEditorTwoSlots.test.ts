@@ -21,7 +21,7 @@ import type { WindowManager } from '../WindowManager'
 const heldAccelerators = vi.hoisted(() => new Set<string>())
 
 vi.mock('electron', () => ({
-  BrowserWindow: vi.fn(),
+  BrowserWindow: { getFocusedWindow: vi.fn(() => ({})) },
   globalShortcut: {
     isRegistered: vi.fn((accelerator: string) =>
       heldAccelerators.has(accelerator),

@@ -361,5 +361,3 @@ export const ElectronSettingsPage =
       </>
     )
   }
-
-export default ElectronSettingsPage

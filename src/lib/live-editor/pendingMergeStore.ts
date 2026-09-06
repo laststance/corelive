@@ -2,6 +2,7 @@ import {
   LOCAL_PENDING_MERGE_SCHEMA_VERSION,
   LOCAL_PENDING_MERGE_STORAGE_KEY,
 } from './constants'
+import { createLocalId } from './createLocalId'
 import { createLocalStorageSlot } from './localStorageSlot'
 import { type PendingMerge, pendingMergeSchema } from './schemas'
 
@@ -13,7 +14,7 @@ const slot = createLocalStorageSlot(LOCAL_PENDING_MERGE_STORAGE_KEY)
  * @example
  * readPendingMerge() // => { batchId: '7d0c…', ids: ['5b1c…'] }
  */
-export function readPendingMerge(): PendingMerge | null {
+function readPendingMerge(): PendingMerge | null {
   const raw = slot.read()
   if (raw === null || raw === '') return null
   try {
@@ -65,7 +66,7 @@ export function readOrCreatePendingMerge(
   const claimed: PendingMerge = {
     version: LOCAL_PENDING_MERGE_SCHEMA_VERSION,
     clerkId,
-    batchId: createBatchId(),
+    batchId: createLocalId(),
     ids: candidateIds,
   }
   slot.write(JSON.stringify(claimed))
@@ -82,21 +83,4 @@ export function readOrCreatePendingMerge(
  */
 export function clearPendingMerge(): void {
   slot.write('')
-}
-
-/**
- * Generates the client batch id — a uuid where the platform offers one, else a
- * time + random string (insecure LAN origins have no `crypto.randomUUID`).
- * @returns A non-empty id; the server namespaces it per user before storing.
- * @example
- * createBatchId() // => '7d0c1a2e-…'
- */
-function createBatchId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }

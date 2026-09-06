@@ -93,5 +93,3 @@ export const SettingsBackButton = function SettingsBackButton() {
     </div>
   )
 }
-
-export default SettingsBackButton

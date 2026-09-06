@@ -63,5 +63,3 @@ export const SettingsStateCard = function SettingsStateCard({
     </Card>
   )
 }
-
-export default SettingsStateCard

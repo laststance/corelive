@@ -18,7 +18,7 @@ export const CATEGORY_COLORS = [
   'orange',
 ] as const
 
-export const CategoryColorSchema = z.enum(CATEGORY_COLORS)
+const CategoryColorSchema = z.enum(CATEGORY_COLORS)
 
 export type CategoryColor = z.infer<typeof CategoryColorSchema>
 
@@ -76,7 +76,7 @@ export const UpdateCategorySchema = z.object({
 /**
  * Category with todo count, returned from the list endpoint.
  */
-export const CategoryWithCountSchema = CategorySchema.extend({
+const CategoryWithCountSchema = CategorySchema.extend({
   _count: z.object({
     todos: z.number().int().min(0),
   }),

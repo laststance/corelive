@@ -28,7 +28,7 @@ import type { Completed } from '@/server/schemas/completed'
  * LiveEditor caller shares one source of truth for checkbox detection instead
  * of redefining the grammar.
  */
-export const CHECKBOX_LINE_REGEX = /^([ \t]*)- \[([ x])\] (.+)$/
+const CHECKBOX_LINE_REGEX = /^([ \t]*)- \[([ x])\] (.+)$/
 
 /** Maximum allowed Completed.title length, mirroring `CreateCompletedSchema`. */
 export const COMPLETED_TITLE_MAX_LENGTH = 255
