@@ -137,6 +137,32 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     ).not.toBeInTheDocument()
   })
 
+  test.each([
+    { missing: 'config bridge', config: undefined },
+    { missing: 'read method', config: { set: vi.fn() } },
+    { missing: 'write method', config: { get: vi.fn() } },
+  ])(
+    'omits the empty Sound section when the preload lacks its $missing',
+    ({ config }) => {
+      // Arrange
+      installElectronAPI({ config })
+
+      // Act
+      render(withStore(<ElectronSettingsPage />))
+
+      // Assert
+      expect(
+        screen.queryByRole('heading', { name: 'Sound' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('switch', { name: 'Shortcut opening sound' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Application' }),
+      ).toBeInTheDocument()
+    },
+  )
+
   it('folds the Window size control into the Application section in Electron', () => {
     // Arrange
     installFullSettingsBridge()

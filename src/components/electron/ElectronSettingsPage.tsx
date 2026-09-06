@@ -207,6 +207,13 @@ export const ElectronSettingsPage =
       return null
     }
 
+    // Older preloads must hide the heading together with unavailable sound controls.
+    const configAPI =
+      typeof window === 'undefined' ? undefined : window.electronAPI?.config
+    const canConfigureShortcutSound =
+      typeof configAPI?.get === 'function' &&
+      typeof configAPI.set === 'function'
+
     // Electron is macOS-only in production, but keep the defensive guard: the
     // Spaces toggle only applies on macOS.
     const platform =
@@ -219,9 +226,11 @@ export const ElectronSettingsPage =
       // all six settings sections share one 48px rhythm (DESIGN.md 2xl).
       <>
         {/* Native shortcut feedback is the only sound preference with an active consumer. */}
-        <SettingsSection label="Sound">
-          <ShortcutOpeningSoundSetting />
-        </SettingsSection>
+        {canConfigureShortcutSound ? (
+          <SettingsSection label="Sound">
+            <ShortcutOpeningSoundSetting />
+          </SettingsSection>
+        ) : null}
 
         {/* LIVEEDITOR — note behavior, look-and-feel, and its keep-on-top pin.
             Three independent siblings (advisor): the note card degrades on the
