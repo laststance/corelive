@@ -544,10 +544,7 @@ export class ConfigManager {
     // Deep-clone the defaults before merging so the merged result never
     // aliases nested objects (e.g., `liveEditor.notes` shared with the
     // factory defaults — mutating it would silently pollute reset()).
-    return merge(
-      structuredClone(this.defaultConfig) as unknown as Record<string, unknown>,
-      loadedConfig as unknown as Record<string, unknown>,
-    ) as AppConfig
+    return merge(structuredClone(this.defaultConfig), loadedConfig) as AppConfig
   }
 
   /**
@@ -767,10 +764,7 @@ export class ConfigManager {
    */
   set(configPath: string, value: unknown): boolean {
     const keys = configPath.split('.')
-    let current: Record<string, unknown> = this.config as unknown as Record<
-      string,
-      unknown
-    >
+    let current: Record<string, unknown> = this.config
 
     for (let i = 0; i < keys.length - 1; i++) {
       const key = keys[i]!
@@ -804,10 +798,7 @@ export class ConfigManager {
     for (const [configPath, value] of Object.entries(updates)) {
       // Set value in memory without saving to disk
       const keys = configPath.split('.')
-      let current: Record<string, unknown> = this.config as unknown as Record<
-        string,
-        unknown
-      >
+      let current: Record<string, unknown> = this.config
 
       for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i]!
@@ -850,9 +841,7 @@ export class ConfigManager {
   resetSection(section: keyof AppConfig): boolean {
     const defaultSection = this.defaultConfig[section]
     if (defaultSection && typeof defaultSection === 'object') {
-      this.config[section] = structuredClone(
-        defaultSection,
-      ) as AppConfig[typeof section]
+      this.config[section] = structuredClone(defaultSection)
       return this.saveConfig()
     }
     return false
@@ -871,7 +860,7 @@ export class ConfigManager {
   getSection<K extends keyof AppConfig>(section: K): AppConfig[K] {
     const sectionValue = this.config[section]
     if (sectionValue && typeof sectionValue === 'object') {
-      return { ...sectionValue } as AppConfig[K]
+      return { ...sectionValue }
     }
     return sectionValue
   }

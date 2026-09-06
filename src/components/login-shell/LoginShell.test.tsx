@@ -18,13 +18,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { LoginShell } from './LoginShell'
 
-type ClerkUserState = { isLoaded: boolean; isSignedIn: boolean }
-
 // Clerk session, controllable per spec. Signed out by default: that is the
 // state the login window exists for.
 const { clerkUserRef } = vi.hoisted(() => ({
   clerkUserRef: {
-    current: { isLoaded: true, isSignedIn: false } as ClerkUserState,
+    current: { isLoaded: true, isSignedIn: false },
   },
 }))
 

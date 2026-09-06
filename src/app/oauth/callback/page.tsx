@@ -25,11 +25,7 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
  */
 
 type CallbackStatus =
-  | 'loading'
-  | 'creating-token'
-  | 'redirecting'
-  | 'success'
-  | 'error'
+  'loading' | 'creating-token' | 'redirecting' | 'success' | 'error'
 
 const OAuthCallbackContent = function OAuthCallbackContent() {
   const searchParams = useSearchParams()
@@ -83,6 +79,7 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
         }
 
         // Build deep link with both state (for validation) and token (for sign-in)
+        // eslint-disable-next-line browser-security/no-credentials-in-query-params -- Desktop sign-in uses a state-bound, short-lived Clerk token in its custom-protocol callback.
         const deepLink = `corelive://oauth/callback?state=${encodeURIComponent(state)}&token=${encodeURIComponent(token)}`
 
         if (!isMounted) return

@@ -140,7 +140,7 @@ export class AutoUpdater {
       error: (...args) => (log.error as LogMethod)(...args),
       debug: (...args) => (log.debug as LogMethod)(...args),
     }
-    autoUpdater.logger = updaterLogger as typeof autoUpdater.logger
+    autoUpdater.logger = updaterLogger
 
     this.setupAutoUpdater()
   }

@@ -177,6 +177,7 @@ export function buildShareCard(input: ExportDayInput): {
     'border-radius: 16px',
   ].join('; ')
 
+  // eslint-disable-next-line browser-security/no-innerhtml -- User text passes through {@link escapeHtml}; other values are numbers or fixed palette strings.
   card.innerHTML = `
     <div>
       <p style="font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: ${SHARE_COLORS.mutedForeground}; margin: 0 0 24px 0;">

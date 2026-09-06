@@ -69,21 +69,22 @@ vi.mock('@/hooks/use-mounted', () => ({
 
 // Clerk session, controllable per spec. Signed-in by default so every Electron
 // spec stays on the account path; the web-host suite flips it to signed out.
-type ClerkUserState = {
-  isLoaded: boolean
-  isSignedIn: boolean
-  user: { id: string } | null
-}
-
-const { clerkUserRef } = vi.hoisted(() => ({
-  clerkUserRef: {
+const { clerkUserRef } = vi.hoisted(() => {
+  const clerkUserRef: {
+    current: {
+      isLoaded: boolean
+      isSignedIn: boolean
+      user: { id: string } | null
+    }
+  } = {
     current: {
       isLoaded: true,
       isSignedIn: true,
       user: { id: 'user_1' },
-    } as ClerkUserState,
-  },
-}))
+    },
+  }
+  return { clerkUserRef }
+})
 
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => clerkUserRef.current,
@@ -93,7 +94,7 @@ vi.mock('@clerk/nextjs', () => ({
 // mid-test (it drives activeCategoryId). Defaults to 1 so every existing spec
 // keeps the single "General" category active.
 const { selectedCategoryRef, setSelectedCategory } = vi.hoisted(() => ({
-  selectedCategoryRef: { current: 1 as number },
+  selectedCategoryRef: { current: 1 },
   setSelectedCategory: vi.fn(),
 }))
 
@@ -134,7 +135,7 @@ vi.mock('@/lib/todo-sync-channel', () => ({
 // so the footer's "session only" wording can be exercised without a private
 // window. The stores themselves keep using the real slot.
 const { storageAvailabilityRef } = vi.hoisted(() => ({
-  storageAvailabilityRef: { current: 'ok' as 'ok' | 'unavailable' },
+  storageAvailabilityRef: { current: 'ok' },
 }))
 
 vi.mock('@/lib/live-editor/localStorageSlot', async (importOriginal) => {
@@ -670,6 +671,7 @@ describe('LiveEditor web host (/write)', () => {
 describe('Today Ember setting in the LiveEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    completedMutateAsync.mockReset().mockResolvedValue({ id: 1 })
     localStorage.clear()
     liveEditorEnvironmentRef.current = false
     clerkUserRef.current = { isLoaded: true, isSignedIn: false, user: null }

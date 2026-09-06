@@ -19,6 +19,12 @@ const adapter = new PrismaPg({
 
 const prisma = new PrismaClient({ adapter })
 
+/**
+ * Handles signed Clerk events from Next.js and creates each new user's default category.
+ * @param req - Incoming Clerk webhook request.
+ * @returns A 201 response after handling the event, or 400 when verification fails.
+ * @example await POST(signedClerkRequest) // Response with status 201
+ */
 export async function POST(req: Request) {
   // Header access
   const headerPayload = await headers()
@@ -36,19 +42,20 @@ export async function POST(req: Request) {
     })
   }
 
-  const payload = await req.json()
-  const body = JSON.stringify(payload)
+  const body = await req.text()
 
   // Create a new Svix instance with your secret.
   const wh = new Webhook(WEBHOOK_SECRET)
 
   let evt: WebhookEvent
   try {
-    evt = wh.verify(body, {
+    // Svix 2 verifies the original bytes; parse the event only after signature validation.
+    wh.verify(body, {
       'svix-id': svix_id,
       'svix-timestamp': svix_timestamp,
       'svix-signature': svix_signature,
-    }) as WebhookEvent
+    })
+    evt = JSON.parse(body) as WebhookEvent
   } catch (err) {
     log.error('Error verifying webhook:', err)
     return new Response('Error occured', {

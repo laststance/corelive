@@ -374,7 +374,6 @@ export class OAuthManager {
   ): void {
     log.info('[OAuth] Sending sign-in token to WebView', {
       provider,
-      tokenPrefix: token.slice(0, 10) + '...',
       hasInitiator: !!(initiator && !initiator.isDestroyed()),
     })
 
@@ -444,7 +443,6 @@ export class OAuthManager {
     this.pendingSignInToken = null
     log.info('[OAuth] Returning pending sign-in token', {
       provider,
-      tokenPrefix: token.slice(0, 10) + '...',
       ageMs: age,
     })
     return { token, provider }

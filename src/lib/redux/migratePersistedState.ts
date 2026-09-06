@@ -139,7 +139,7 @@ export function migratePersistedState(
       const cleanedState = { ...rawPersistedState }
       delete cleanedState.settings
       delete cleanedState.preferences
-      return cleanedState as MigratablePersistedState
+      return cleanedState
     }
     return persistedState
   }
@@ -160,5 +160,5 @@ export function migratePersistedState(
 
   // Remove the v1 key so the next save contains one canonical settings slice.
   delete migratedState.preferences
-  return migratedState as MigratablePersistedState
+  return migratedState
 }

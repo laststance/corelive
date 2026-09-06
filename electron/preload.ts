@@ -150,7 +150,7 @@ const electronAPI = {
       try {
         return (await typedInvoke(
           'config-get',
-          sanitizedPath as string,
+          sanitizedPath,
           sanitizedDefault,
         )) as T
       } catch (error) {
@@ -197,11 +197,7 @@ const electronAPI = {
       const sanitizedValue = sanitizeData(value)
 
       try {
-        return await typedInvoke(
-          'config-set',
-          sanitizedPath as string,
-          sanitizedValue,
-        )
+        return await typedInvoke('config-set', sanitizedPath, sanitizedValue)
       } catch (error) {
         log.error('Failed to set config value:', error)
         throw new Error('Failed to update configuration')
@@ -230,7 +226,7 @@ const electronAPI = {
         throw new Error('Configuration section is required')
       }
 
-      const sanitizedSection = sanitizeData(section) as ConfigSection
+      const sanitizedSection = sanitizeData(section)
 
       try {
         const result = await typedInvoke('config-get-section', sanitizedSection)
@@ -249,7 +245,7 @@ const electronAPI = {
         throw new Error('Configuration updates must be an object')
       }
 
-      const sanitizedUpdates = sanitizeData(updates) as Record<string, unknown>
+      const sanitizedUpdates = sanitizeData(updates)
 
       try {
         return await typedInvoke('config-update', sanitizedUpdates)
@@ -279,7 +275,7 @@ const electronAPI = {
         throw new Error('Configuration section is required')
       }
 
-      const sanitizedSection = sanitizeData(section) as ConfigSection
+      const sanitizedSection = sanitizeData(section)
 
       try {
         await typedInvoke('config-reset-section', sanitizedSection)

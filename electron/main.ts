@@ -497,18 +497,19 @@ function setupSecurity(): void {
  */
 async function loadSystemIntegrationStack(): Promise<void> {
   log.info('🔧 [DEFERRED] Loading SystemIntegrationErrorHandler...')
-  const SystemIntegrationErrorHandlerCls = (await lazyLoadManager.loadComponent(
-    'SystemIntegrationErrorHandler',
-  )) as new (...args: unknown[]) => SystemIntegrationErrorHandlerType
+  const SystemIntegrationErrorHandlerCls = await lazyLoadManager.loadComponent<
+    typeof SystemIntegrationErrorHandlerType
+  >('SystemIntegrationErrorHandler')
   systemIntegrationErrorHandler = new SystemIntegrationErrorHandlerCls(
     configManager,
   )
   log.info('✅ [DEFERRED] SystemIntegrationErrorHandler loaded')
 
   log.info('🔧 [DEFERRED] Loading SystemTrayManager...')
-  const SystemTrayManagerCls = (await lazyLoadManager.loadComponent(
-    'SystemTrayManager',
-  )) as new (...args: unknown[]) => SystemTrayManagerType
+  const SystemTrayManagerCls =
+    await lazyLoadManager.loadComponent<typeof SystemTrayManagerType>(
+      'SystemTrayManager',
+    )
   systemTrayManager = new SystemTrayManagerCls(windowManager)
   windowManager.setTrayBoundsProvider(
     () => systemTrayManager?.getTrayBounds() ?? null,
@@ -516,9 +517,9 @@ async function loadSystemIntegrationStack(): Promise<void> {
   log.info('✅ [DEFERRED] SystemTrayManager loaded')
 
   log.info('🔧 [DEFERRED] Loading NotificationManager...')
-  const NotificationManagerCls = (await lazyLoadManager.loadComponent(
-    'NotificationManager',
-  )) as new (...args: unknown[]) => NotificationManagerType
+  const NotificationManagerCls = await lazyLoadManager.loadComponent<
+    typeof NotificationManagerType
+  >('NotificationManager')
   notificationManager = new NotificationManagerCls(
     windowManager,
     systemTrayManager,
@@ -527,9 +528,10 @@ async function loadSystemIntegrationStack(): Promise<void> {
   log.info('✅ [DEFERRED] NotificationManager loaded')
 
   log.info('🔧 [DEFERRED] Loading ShortcutManager...')
-  const ShortcutManagerCls = (await lazyLoadManager.loadComponent(
-    'ShortcutManager',
-  )) as new (...args: unknown[]) => ShortcutManagerType
+  const ShortcutManagerCls =
+    await lazyLoadManager.loadComponent<typeof ShortcutManagerType>(
+      'ShortcutManager',
+    )
   // Inject the uiohook tap so lone-modifier bindings (e.g. Right ⌥) can register
   // natively; if the native module can't load it degrades to the no-op engine and
   // those binds fall back to chords (existing accelerator behavior is untouched).
@@ -672,9 +674,10 @@ async function createWindow(): Promise<void> {
     try {
       // MenuManager always loads (works under xvfb)
       log.info('🔧 [DEFERRED] Loading MenuManager...')
-      const MenuManagerCls = (await lazyLoadManager.loadComponent(
-        'MenuManager',
-      )) as new (...args: unknown[]) => MenuManagerType
+      const MenuManagerCls =
+        await lazyLoadManager.loadComponent<typeof MenuManagerType>(
+          'MenuManager',
+        )
       menuManager = new MenuManagerCls()
 
       // The menu bar is companion chrome after main-window retirement (T18):
@@ -692,9 +695,10 @@ async function createWindow(): Promise<void> {
       if (app.isPackaged) {
         // Keep updater startup isolated so a failure cannot block the app.
         try {
-          const AutoUpdaterCls = (await lazyLoadManager.loadComponent(
-            'AutoUpdater',
-          )) as new (...args: unknown[]) => AutoUpdaterType
+          const AutoUpdaterCls =
+            await lazyLoadManager.loadComponent<typeof AutoUpdaterType>(
+              'AutoUpdater',
+            )
           autoUpdater = new AutoUpdaterCls()
           // No main window to bind dialogs to after T18; the updater surfaces
           // through its own notifications.
@@ -1020,24 +1024,20 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return {}
     }
-    return redactLiveEditorNotes(
-      configManager.getAll() as Record<string, unknown>,
-    )
+    return redactLiveEditorNotes(configManager.getAll())
   })
 
   typedHandle('config-get-section', (_event, section) => {
     if (!configManager) {
       return null
     }
-    const result = configManager.getSection(
-      section as keyof ReturnType<typeof configManager.getAll>,
-    )
+    const result = configManager.getSection(section)
     if (section === 'liveEditor' && result && typeof result === 'object') {
       // Strip free-text notes from the generic getter; anyone asking for the
       // LiveEditor section gets only metadata. The dedicated `live-editor-note-get`
       // channel is the single read path for note text.
       const { notes: _notes, ...rest } = result as Record<string, unknown>
-      return rest as Record<string, unknown>
+      return rest
     }
     return result as Record<string, unknown> | null
   })
@@ -1060,9 +1060,7 @@ function setupIPCHandlers(): void {
     if (!configManager) {
       return false
     }
-    return configManager.resetSection(
-      section as keyof ReturnType<typeof configManager.getAll>,
-    )
+    return configManager.resetSection(section)
   })
 
   typedHandle('config-validate', () => {
@@ -1219,7 +1217,6 @@ function setupIPCHandlers(): void {
     try {
       app.setLoginItemSettings({
         openAtLogin: startAtLogin,
-        openAsHidden: false,
       })
       log.info(`Start at login setting changed: ${startAtLogin}`)
       return true

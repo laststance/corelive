@@ -384,7 +384,7 @@ export interface IPCChannels {
   }
   'settings:getLoginItemSettings': {
     request: void
-    response: { openAtLogin: boolean; openAsHidden?: boolean }
+    response: { openAtLogin: boolean }
   }
   /**
    * Reset the Settings popover window to its default size (360×380) and

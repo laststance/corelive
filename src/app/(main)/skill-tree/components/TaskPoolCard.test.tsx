@@ -19,7 +19,7 @@ function wrap(ui: React.ReactNode) {
  * createTodoId(1)
  */
 function createTodoId(value: number): TodoId {
-  return value as TodoId
+  return value
 }
 
 /**
@@ -30,7 +30,7 @@ function createTodoId(value: number): TodoId {
  * createTodoText('Fix login bug')
  */
 function createTodoText(value: string): TodoText {
-  return value as TodoText
+  return value
 }
 
 describe('<TaskPoolCard>', () => {

@@ -4,14 +4,7 @@
  * Helpers for extracting class names from ESLint AST nodes.
  */
 import type { Rule } from 'eslint'
-import type {
-  Node,
-  CallExpression,
-  Literal,
-  TemplateLiteral,
-  ObjectExpression,
-  Property,
-} from 'estree'
+import type { Node, CallExpression, Literal, TemplateLiteral } from 'estree'
 
 /**
  * Utility function names that accept class names
@@ -32,7 +25,7 @@ export const CLASS_UTILITY_NAMES = [
 export function isStringLiteral(
   node: Node,
 ): node is Literal & { value: string } {
-  return node.type === 'Literal' && typeof (node as Literal).value === 'string'
+  return node.type === 'Literal' && typeof node.value === 'string'
 }
 
 /**
@@ -70,13 +63,13 @@ export function extractStringValues(node: Node): string[] {
   function visit(n: Node): void {
     switch (n.type) {
       case 'Literal':
-        if (typeof (n as Literal).value === 'string') {
-          values.push((n as Literal).value as string)
+        if (typeof n.value === 'string') {
+          values.push(n.value)
         }
         break
 
       case 'TemplateLiteral': {
-        const tl = n as TemplateLiteral
+        const tl = n
         // Extract static parts from template literal
         for (const quasi of tl.quasis) {
           if (quasi.value.raw) {
@@ -99,12 +92,12 @@ export function extractStringValues(node: Node): string[] {
       }
 
       case 'ObjectExpression': {
-        const oe = n as ObjectExpression
+        const oe = n
         // For objects like cn({flex: true, 'items-center': isActive})
         // The keys are the class names
         for (const prop of oe.properties) {
           if (prop.type === 'Property') {
-            const p = prop as Property
+            const p = prop
             // Object key is a class name
             if (p.key.type === 'Literal' && typeof p.key.value === 'string') {
               values.push(p.key.value)

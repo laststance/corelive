@@ -59,7 +59,7 @@ export const SkillNodeCircle = function SkillNodeCircle({
 
   return (
     <g
-      ref={ref as React.Ref<SVGGElement>}
+      ref={ref}
       // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
       className="st-node-group"
       role="button"

@@ -19,7 +19,7 @@ The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIG
 This project supports:
 
 - **Web**: Browser-based application accessible via web browsers
-- **Desktop (macOS only)**: Electron-based desktop application for macOS
+- **Desktop (macOS 13+)**: Electron-based desktop application for macOS 13 or later
 
 > **Note**: Desktop builds are currently limited to macOS. Windows and Linux support has been removed.
 
@@ -28,7 +28,8 @@ This project supports:
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [Node.js](https://nodejs.org/) (version 24+; CI uses 24.13.0)
+- [Node.js](https://nodejs.org/) (24.20.0; pinned in `mise.toml` and CI)
+- [mise](https://mise.jdx.dev/getting-started.html), installed and activated in your shell so all development commands use the pinned Node.js version
 - [pnpm](https://pnpm.io/)
 - [Clerk](https://clerk.com/)
 - [ngrok](https://ngrok.com/) (for local development see [Clerk docs](https://clerk.com/docs/webhooks/sync-data#set-up-ngrok))
@@ -36,7 +37,10 @@ This project supports:
 ### Install dependencies
 
 1. Clone the repository
-2. Run `pnpm install` to install the dependencies
+2. Run `mise install` to install the pinned Node.js version
+3. Run `mise exec -- pnpm install` to install the dependencies
+
+The commands below assume mise is activated in your shell. After `mise install`, confirm that `node --version` prints `v24.20.0` before continuing.
 
 ### Environment Variables
 
@@ -132,9 +136,9 @@ This project loads no web fonts: text renders in the stock shadcn/ui + Tailwind 
 Need ngrok to recive create.user event [webhook](https://clerk.com/docs/webhooks/overview) from Clerk in local.  
 like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
-## Desktop Application (Electron - macOS only)
+## Desktop Application (Electron - macOS 13+)
 
-This project includes an Electron desktop application that wraps the Next.js web app. **Desktop builds are currently limited to macOS only.**
+This project includes an Electron desktop application that wraps the Next.js web app. **Desktop builds require macOS 13 or later.**
 
 ### Desktop features
 

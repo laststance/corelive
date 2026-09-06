@@ -186,9 +186,7 @@ export const banStylelist: Rule.RuleModule = {
      * Check all string values extracted from a node
      */
     function checkNode(node: Rule.Node): void {
-      const values = extractStringValues(
-        node as unknown as import('estree').Node,
-      )
+      const values = extractStringValues(node)
       for (const value of values) {
         checkClassString(node, value)
       }
@@ -197,7 +195,7 @@ export const banStylelist: Rule.RuleModule = {
     return {
       // Handle className="..."
       'JSXAttribute[name.name="className"] > Literal'(node: Rule.Node) {
-        if (isStringLiteral(node as unknown as import('estree').Node)) {
+        if (isStringLiteral(node)) {
           const value = (node as unknown as { value: string }).value
           checkClassString(node, value)
         }
@@ -207,7 +205,7 @@ export const banStylelist: Rule.RuleModule = {
       'JSXAttribute[name.name="className"] > JSXExpressionContainer > TemplateLiteral'(
         node: Rule.Node,
       ) {
-        if (isTemplateLiteral(node as unknown as import('estree').Node)) {
+        if (isTemplateLiteral(node)) {
           const tl = node as unknown as import('estree').TemplateLiteral
           for (const quasi of tl.quasis) {
             if (quasi.value.raw) {

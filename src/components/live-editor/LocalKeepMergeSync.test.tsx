@@ -16,6 +16,7 @@ import {
   LOCAL_PENDING_MERGE_STORAGE_KEY,
 } from '@/lib/live-editor/constants'
 import { parseLocalCompletions } from '@/lib/live-editor/localCompletionStore'
+import type * as ClientQueryModule from '@/lib/orpc/client-query'
 import { getTodayHeatmapQueryKey } from '@/lib/query/todayHeatmapQuery'
 import type {
   ImportLocalInput,
@@ -24,42 +25,49 @@ import type {
 
 import { LocalKeepMergeSync } from './LocalKeepMergeSync'
 
-const { clerkUserRef, importLocalFn } = vi.hoisted(() => ({
-  clerkUserRef: {
+const { clerkUserRef, importLocalFn } = vi.hoisted(() => {
+  const clerkUserRef: {
+    current: {
+      isLoaded: boolean
+      isSignedIn: boolean
+      user: { id: string } | undefined
+    }
+  } = {
     current: {
       isLoaded: true,
       isSignedIn: true,
-      user: { id: 'user_a' } as { id: string } | undefined,
+      user: { id: 'user_a' },
     },
-  },
+  }
   // Typed from the procedure's own schema, so a batch missing a required field
   // fails to compile here instead of passing on a count alone.
-  importLocalFn:
-    vi.fn<(input: ImportLocalInput) => Promise<ImportLocalResponse>>(),
-}))
+  return {
+    clerkUserRef,
+    importLocalFn:
+      vi.fn<(input: ImportLocalInput) => Promise<ImportLocalResponse>>(),
+  }
+})
 
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => clerkUserRef.current,
 }))
 
-// Real TanStack `useMutation` over a fake mutation function; the heatmap key
-// mirrors the real utils' shape so the cache bump targets the same entry
-// `useTodayKeeps` reads.
-vi.mock('@/lib/orpc/client-query', () => ({
-  orpc: {
-    completed: {
-      key: () => ['completed'],
-      importLocal: {
-        mutationOptions: () => ({ mutationFn: importLocalFn }),
-      },
-      heatmap: {
-        queryOptions: ({ input }: { input: unknown }) => ({
-          queryKey: ['completed', 'heatmap', { input }],
-        }),
+// Fake only the merge request; real oRPC keys keep cache assertions aligned
+// with the account query read by {@link useTodayKeeps}.
+vi.mock('@/lib/orpc/client-query', async (importOriginal) => {
+  const original = await importOriginal<typeof ClientQueryModule>()
+  return {
+    orpc: {
+      completed: {
+        key: original.orpc.completed.key,
+        importLocal: {
+          mutationOptions: () => ({ mutationFn: importLocalFn }),
+        },
+        heatmap: original.orpc.completed.heatmap,
       },
     },
-  },
-}))
+  }
+})
 
 const todayHeatmapKey = getTodayHeatmapQueryKey(getLocalTodayIsoDate())
 
