@@ -13,9 +13,9 @@ export function OAuthError({
   return (
     <>
       <div className="mb-4 flex justify-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+        <div className="bg-destructive/10 flex h-12 w-12 items-center justify-center rounded-full">
           <svg
-            className="h-8 w-8 text-red-500"
+            className="h-8 w-8 text-destructive"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -29,14 +29,14 @@ export function OAuthError({
           </svg>
         </div>
       </div>
-      <h1 className="mb-2 text-center text-xl font-semibold text-gray-900">
+      <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
         {title}
       </h1>
-      <p className="mb-4 text-center text-gray-600">{errorMessage}</p>
+      <p className="mb-4 text-center text-muted-foreground">{errorMessage}</p>
       <div className="flex justify-center">
         <button
           onClick={() => window.close()}
-          className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition hover:bg-gray-200"
+          className="rounded-lg bg-secondary px-4 py-2 text-secondary-foreground transition hover:bg-accent"
         >
           Close this window
         </button>

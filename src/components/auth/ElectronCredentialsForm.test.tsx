@@ -66,8 +66,11 @@ test('Electron sign-in enables submission only after both credential fields are 
 })
 
 test('Electron sign-up retains account-creation copy and new-password autocomplete', () => {
-  // Arrange + Act
-  render(<CredentialsHarness flow="sign-up" />)
+  // Arrange
+  const form = <CredentialsHarness flow="sign-up" />
+
+  // Act
+  render(form)
 
   // Assert
   expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled()

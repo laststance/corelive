@@ -38,7 +38,7 @@ export function ElectronGoogleOAuth({
         disabled={disabled}
       >
         {isGoogleLoading ? (
-          <div className="h-5 w-5 rounded-full border-2 border-gray-300 border-t-gray-600 motion-safe:animate-spin" />
+          <div className="h-5 w-5 rounded-full border-2 border-border border-t-muted-foreground motion-safe:animate-spin" />
         ) : (
           <svg className="h-5 w-5" viewBox="0 0 24 24">
             <path
