@@ -122,19 +122,19 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
   }, [state, error, errorDescription])
 
   return (
-    <div className="bg-linear-to-b flex min-h-screen flex-col items-center justify-center from-gray-50 to-gray-100 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md rounded-lg bg-card p-8 shadow-lg">
         {(status === 'loading' || status === 'creating-token') && (
           <>
             <div className="mb-4 flex justify-center">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+              <div className="h-12 w-12 rounded-full border-4 border-border border-t-primary motion-safe:animate-spin" />
             </div>
-            <h1 className="mb-2 text-center text-xl font-semibold text-gray-900">
+            <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
               {status === 'loading'
                 ? 'Processing Authentication'
                 : 'Creating Session'}
             </h1>
-            <p className="text-center text-gray-600">
+            <p className="text-center text-muted-foreground">
               {status === 'loading'
                 ? 'Please wait while we complete your sign-in...'
                 : 'Preparing secure token for the app...'}
@@ -145,9 +145,9 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
         {status === 'redirecting' && (
           <>
             <div className="mb-4 flex justify-center">
-              <div className="h-12 w-12 animate-pulse rounded-full bg-blue-100">
+              <div className="bg-primary/10 h-12 w-12 rounded-full motion-safe:animate-pulse">
                 <svg
-                  className="h-12 w-12 text-blue-500"
+                  className="h-12 w-12 text-primary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -161,10 +161,10 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
                 </svg>
               </div>
             </div>
-            <h1 className="mb-2 text-center text-xl font-semibold text-gray-900">
+            <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
               Returning to CoreLive
             </h1>
-            <p className="text-center text-gray-600">
+            <p className="text-center text-muted-foreground">
               Opening the desktop app...
             </p>
           </>
@@ -173,9 +173,9 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
         {status === 'success' && (
           <>
             <div className="mb-4 flex justify-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <div className="bg-primary/10 flex h-12 w-12 items-center justify-center rounded-full">
                 <svg
-                  className="h-8 w-8 text-green-500"
+                  className="h-8 w-8 text-primary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -189,13 +189,13 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
                 </svg>
               </div>
             </div>
-            <h1 className="mb-2 text-center text-xl font-semibold text-gray-900">
+            <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
               Authentication Complete
             </h1>
-            <p className="mb-4 text-center text-gray-600">
+            <p className="mb-4 text-center text-muted-foreground">
               You can now return to the CoreLive desktop app.
             </p>
-            <p className="text-center text-sm text-gray-500">
+            <p className="text-center text-sm text-muted-foreground">
               If the app didn&apos;t open automatically, please switch to it
               manually.
             </p>
@@ -210,7 +210,7 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
         )}
       </div>
 
-      <p className="mt-4 text-center text-xs text-gray-400">
+      <p className="mt-4 text-center text-xs text-muted-foreground">
         CoreLive - Task Management for Productivity
       </p>
     </div>
@@ -227,7 +227,7 @@ const OAuthCallbackPage = function OAuthCallbackPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+          <div className="h-12 w-12 rounded-full border-4 border-border border-t-primary motion-safe:animate-spin" />
         </div>
       }
     >

@@ -115,19 +115,19 @@ const OAuthStartContent = function OAuthStartContent() {
   }, [client, isUserLoaded, provider, state, user])
 
   return (
-    <div className="bg-linear-to-b flex min-h-screen flex-col items-center justify-center from-gray-50 to-gray-100 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md rounded-lg bg-card p-8 shadow-lg">
         {(status === 'loading' || status === 'starting') && (
           <>
             <div className="mb-4 flex justify-center">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+              <div className="h-12 w-12 rounded-full border-4 border-border border-t-primary motion-safe:animate-spin" />
             </div>
-            <h1 className="mb-2 text-center text-xl font-semibold text-gray-900">
+            <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
               {status === 'loading'
                 ? 'Preparing Authentication'
                 : `Connecting to ${provider === 'google' ? 'Google' : 'GitHub'}`}
             </h1>
-            <p className="text-center text-gray-600">
+            <p className="text-center text-muted-foreground">
               {status === 'loading'
                 ? 'Please wait...'
                 : 'You will be redirected to sign in...'}
@@ -143,7 +143,7 @@ const OAuthStartContent = function OAuthStartContent() {
         )}
       </div>
 
-      <p className="mt-4 text-center text-xs text-gray-400">
+      <p className="mt-4 text-center text-xs text-muted-foreground">
         CoreLive - Task Management for Productivity
       </p>
     </div>
@@ -226,7 +226,7 @@ const OAuthStartPage = function OAuthStartPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+          <div className="h-12 w-12 rounded-full border-4 border-border border-t-primary motion-safe:animate-spin" />
         </div>
       }
     >
