@@ -671,6 +671,7 @@ describe('LiveEditor web host (/write)', () => {
 describe('Today Ember setting in the LiveEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    completedMutateAsync.mockReset().mockResolvedValue({ id: 1 })
     localStorage.clear()
     liveEditorEnvironmentRef.current = false
     clerkUserRef.current = { isLoaded: true, isSignedIn: false, user: null }

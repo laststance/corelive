@@ -8,9 +8,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
+import { DAY_MS } from '@/lib/constants/date'
 import { LOCAL_COMPLETIONS_STORAGE_KEY } from '@/lib/live-editor/constants'
 import { addLocalCompletion } from '@/lib/live-editor/localCompletionStore'
 
+import type * as LocalDayKeyModule from './useLocalDayKey'
 import { useTodayKeeps } from './useTodayKeeps'
 
 const { clerkUserRef, heatmapQueryFn, dayKeyRef } = vi.hoisted(() => {
@@ -20,11 +22,12 @@ const { clerkUserRef, heatmapQueryFn, dayKeyRef } = vi.hoisted(() => {
       isSignedIn: boolean | undefined
     }
   } = { current: { isLoaded: true, isSignedIn: false } }
+  const dayKeyRef: { current: string | null } = { current: null }
 
   return {
     clerkUserRef,
     heatmapQueryFn: vi.fn(),
-    dayKeyRef: { current: null as string | null },
+    dayKeyRef,
   }
 })
 
@@ -49,11 +52,10 @@ vi.mock('@/lib/orpc/client-query', () => ({
 
 // The local calendar day, overridable per spec to stand at "after midnight".
 vi.mock('./useLocalDayKey', async (importOriginal) => {
-  const original = await importOriginal<Record<string, unknown>>()
+  const original = await importOriginal<typeof LocalDayKeyModule>()
   return {
     ...original,
-    useLocalDayKey: () =>
-      dayKeyRef.current ?? (original.useLocalDayKey as () => string)(),
+    useLocalDayKey: () => dayKeyRef.current ?? original.useLocalDayKey(),
   }
 })
 
@@ -72,8 +74,6 @@ function renderTodayKeeps() {
   )
   return { ...renderHook(() => useTodayKeeps(), { wrapper }), queryClient }
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000
 
 beforeEach(() => {
   localStorage.clear()

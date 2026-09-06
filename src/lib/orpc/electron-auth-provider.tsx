@@ -133,7 +133,6 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
         if (mainProcessToken && !isProcessingToken.current) {
           log.info('[OAuth] Found pending token in main process', {
             provider: mainProcessToken.provider,
-            tokenPrefix: mainProcessToken.token.slice(0, 10) + '...',
           })
           await processSignInToken(
             mainProcessToken.token,
@@ -182,7 +181,6 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
       isProcessingToken.current = true
       log.info('[OAuth] Processing sign-in token from browser OAuth', {
         provider,
-        tokenPrefix: token.slice(0, 10) + '...',
       })
 
       try {
@@ -237,7 +235,6 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
       async (data: { token: string; provider: string }) => {
         log.info('[OAuth] Main listener received token', {
           provider: data.provider,
-          tokenPrefix: data.token.slice(0, 10) + '...',
         })
         await processSignInToken(data.token, data.provider)
       },
@@ -267,7 +264,6 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
       (data: { token: string; provider: string }) => {
         log.info('[OAuth] Temp listener received token, storing for later', {
           provider: data.provider,
-          tokenPrefix: data.token.slice(0, 10) + '...',
         })
         pendingToken.current = data
       },

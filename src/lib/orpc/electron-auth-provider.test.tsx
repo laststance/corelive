@@ -1,5 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 
 import { ElectronAuthProvider } from './electron-auth-provider'
 
@@ -105,6 +105,69 @@ describe('ElectronAuthProvider', () => {
       },
     } as unknown as Window['electronAPI']
   })
+
+  test.each(['live listener', 'main-process backlog', 'temporary listener'])(
+    'keeps sign-in tickets out of logs when received through the %s',
+    async (deliveryPath) => {
+      // Arrange
+      mockCreate.mockResolvedValue({
+        createdSessionId: 'sess_log_safe',
+        status: 'complete',
+      })
+      mockSetActive.mockResolvedValue(undefined)
+      if (deliveryPath === 'main-process backlog') {
+        // Model a ticket that arrived before this renderer mounted.
+        mockGetPendingToken.mockResolvedValue({
+          provider: 'google',
+          token: 'sensitive-ticket-for-log-regression',
+        })
+      }
+      if (deliveryPath === 'temporary listener') {
+        // Hold Clerk readiness until the temporary listener receives the ticket.
+        clerkState.signIn = null
+      }
+      const { rerender } = render(
+        <ElectronAuthProvider>
+          <div>child</div>
+        </ElectronAuthProvider>,
+      )
+
+      // Act
+      if (deliveryPath !== 'main-process backlog') {
+        await act(async () => {
+          await signInTokenListener?.({
+            provider: 'google',
+            token: 'sensitive-ticket-for-log-regression',
+          })
+        })
+      }
+      if (deliveryPath === 'temporary listener') {
+        // Finish Clerk initialization so the stored ticket is exchanged.
+        clerkState.signIn = { status: 'needs_identifier' }
+        rerender(
+          <ElectronAuthProvider>
+            <div>child</div>
+          </ElectronAuthProvider>,
+        )
+      }
+
+      // Assert
+      await waitFor(() => {
+        expect(mockSetActive).toHaveBeenCalledTimes(1)
+      })
+      expect(mockCreate).toHaveBeenCalledWith({
+        strategy: 'ticket',
+        ticket: 'sensitive-ticket-for-log-regression',
+      })
+      expect(
+        JSON.stringify([
+          ...loggerMocks.info.mock.calls,
+          ...loggerMocks.debug.mock.calls,
+          ...loggerMocks.error.mock.calls,
+        ]),
+      ).not.toContain('sensitive-')
+    },
+  )
 
   it('consumes the Electron sign-in token with Clerk ticket strategy', async () => {
     mockCreate.mockResolvedValue({

@@ -1304,7 +1304,7 @@ function extractColorNames(colors: Record<string, unknown>): string[] {
       names.push(key)
     } else if (typeof value === 'object' && value !== null) {
       // Handle nested colors like gray-100, gray-200, etc.
-      for (const shade of Object.keys(value as object)) {
+      for (const shade of Object.keys(value)) {
         names.push(`${key}-${shade}`)
       }
     }

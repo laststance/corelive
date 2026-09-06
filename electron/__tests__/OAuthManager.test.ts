@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 
 import { typedSend } from '../ipc/typedSend'
+import { log } from '../logger'
 import { OAuthManager } from '../OAuthManager'
 
 vi.mock('electron', () => ({
@@ -13,6 +14,15 @@ vi.mock('electron', () => ({
 // and the error routing) is observable without a real Electron WebContents.
 vi.mock('../ipc/typedSend', () => ({
   typedSend: vi.fn(),
+}))
+
+vi.mock('../logger', () => ({
+  log: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }))
 
 /**
@@ -49,6 +59,37 @@ function fakeRenderer(id: number) {
 }
 
 describe('OAuthManager', () => {
+  test('keeps sign-in tickets out of logs during delivery and retrieval', () => {
+    // Arrange
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+    const loginRenderer = fakeRenderer(11)
+
+    // Act
+    oauthManager.sendSignInToken(
+      'sensitive-ticket-for-log-regression',
+      'google',
+      loginRenderer,
+    )
+    const deliveredTicket = oauthManager.getPendingSignInToken(loginRenderer)
+
+    // Assert
+    expect(deliveredTicket).toEqual({
+      token: 'sensitive-ticket-for-log-regression',
+      provider: 'google',
+    })
+    expect(
+      JSON.stringify([
+        ...vi.mocked(log.info).mock.calls,
+        ...vi.mocked(log.debug).mock.calls,
+        ...vi.mocked(log.warn).mock.calls,
+        ...vi.mocked(log.error).mock.calls,
+      ]),
+    ).not.toContain('sensitive-')
+  })
+
   it('builds the OAuth start URL from the dev web-app origin', () => {
     const oauthManager = new OAuthManager(
       createWindowManagerMock('http://localhost:4991') as never,
