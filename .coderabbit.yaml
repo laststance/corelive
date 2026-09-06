@@ -4,7 +4,7 @@
 # Next.js 16 App Router + Electron (macOS) + oRPC + Clerk + Prisma
 
 language: ja-JP
-early_access: false
+early_access: true
 
 chat:
   auto_reply: true
