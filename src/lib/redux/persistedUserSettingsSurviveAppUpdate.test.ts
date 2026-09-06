@@ -88,23 +88,35 @@ describe('settings survive an app update (no silent revert to defaults)', () => 
     expect(state.settings.showTodayEmber).toBe(false)
   })
 
-  test.each([true, false])(
-    'preserves Today Ember set to %s after reopening the app',
-    async (showTodayEmber) => {
-      // Arrange
-      const seed = {
-        version: STORAGE_SCHEMA_VERSION,
-        state: { settings: { showTodayEmber, soundVolume: 0.3 } },
-      }
+  test('keeps Today Ember enabled after reopening the app', async () => {
+    // Arrange
+    const seed = {
+      version: STORAGE_SCHEMA_VERSION,
+      state: { settings: { showTodayEmber: true, soundVolume: 0.3 } },
+    }
 
-      // Act
-      const state = await rehydrateFromSeed(seed)
+    // Act
+    const state = await rehydrateFromSeed(seed)
 
-      // Assert
-      expect(state.settings.showTodayEmber).toBe(showTodayEmber)
-      expect(state.settings.soundVolume).toBe(0.3)
-    },
-  )
+    // Assert
+    expect(state.settings.showTodayEmber).toBe(true)
+    expect(state.settings.soundVolume).toBe(0.3)
+  })
+
+  test('keeps Today Ember disabled after reopening the app', async () => {
+    // Arrange
+    const seed = {
+      version: STORAGE_SCHEMA_VERSION,
+      state: { settings: { showTodayEmber: false, soundVolume: 0.3 } },
+    }
+
+    // Act
+    const state = await rehydrateFromSeed(seed)
+
+    // Assert
+    expect(state.settings.showTodayEmber).toBe(false)
+    expect(state.settings.soundVolume).toBe(0.3)
+  })
 
   it('restores the menu-bar default when an older blob predates that electron setting', async () => {
     // Arrange — an electronSettings blob missing `showInMenuBar` (stand-in for
