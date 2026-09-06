@@ -8,7 +8,7 @@ export function parseConfigStringEntries(
 ): Record<string, string> {
   const values: Record<string, string> = {}
   const pairs = source.matchAll(
-    /['"]?([a-zA-Z-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g,
+    /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g,
   )
   for (const [, key, value] of pairs) {
     // Malformed entries have no complete key/value pair to retain.

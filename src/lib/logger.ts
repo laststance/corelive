@@ -63,19 +63,8 @@ const createLogger = (): pino.Logger => {
   })
 }
 
-/**
- * Main logger instance for server-side code.
- *
- * @example
- * // Basic usage
- * logger.info('Server started')
- *
- * // With context object
- * logger.error({ error, userId }, 'Failed to process request')
- *
- * // Creating child logger with bound context
- * const childLogger = logger.child({ module: 'board' })
- * childLogger.info({ boardId }, 'Board loaded')
+/** Backs the public {@link log} facade and {@link createModuleLogger} with one server logger.
+ * @example createModuleLogger('board').info({ boardId: 1 }, 'Board loaded')
  */
 const logger = createLogger()
 

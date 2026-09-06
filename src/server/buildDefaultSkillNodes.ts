@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../app/(main)/skill-tree/lib/template'
 
 /** Builds the same default node rows for first-use import and development seeding.
@@ -5,7 +7,9 @@ import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../app/(main)/skill-tree/lib/te
  * @returns Node rows for Prisma's bulk insert.
  * @example buildDefaultSkillNodes(1)
  */
-export function buildDefaultSkillNodes(skillTreeId: number) {
+export function buildDefaultSkillNodes(
+  skillTreeId: number,
+): Prisma.SkillNodeCreateManyInput[] {
   return BACKEND_DEVELOPER_CORE_TEMPLATE.nodes.map(({ name, icon, x, y }) => ({
     skillTreeId,
     name,

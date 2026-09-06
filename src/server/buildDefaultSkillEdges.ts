@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../app/(main)/skill-tree/lib/template'
 
 /** Resolves template edges after node creation for first-use import and development seeding.
@@ -8,8 +10,10 @@ import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../app/(main)/skill-tree/lib/te
  */
 export function buildDefaultSkillEdges(
   skillTreeId: number,
-  createdNodes: { id: number; name: string }[],
-) {
+  createdNodes: Prisma.SkillNodeGetPayload<{
+    select: { id: true; name: true }
+  }>[],
+): Prisma.NodeEdgeCreateManyInput[] {
   const nameToId = new Map(createdNodes.map(({ name, id }) => [name, id]))
   const slugToId = new Map<string, number>()
   for (const node of BACKEND_DEVELOPER_CORE_TEMPLATE.nodes) {

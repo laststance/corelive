@@ -80,3 +80,22 @@ test('Electron sign-up retains account-creation copy and new-password autocomple
     'password',
   )
 })
+
+test('Electron password visibility is reachable and reversible from the keyboard', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  render(<CredentialsHarness flow="sign-in" />)
+  const passwordField = screen.getByLabelText('Password', { exact: true })
+  passwordField.focus()
+
+  // Act
+  await user.tab()
+
+  // Assert
+  expect(screen.getByRole('button', { name: 'Show password' })).toHaveFocus()
+  await user.keyboard(' ')
+  expect(passwordField).toHaveAttribute('type', 'text')
+  expect(screen.getByRole('button', { name: 'Hide password' })).toHaveFocus()
+  await user.keyboard(' ')
+  expect(passwordField).toHaveAttribute('type', 'password')
+})

@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  SKILL_EDGE_ACTIVATION_XP,
+  SKILL_EDGE_WIDTH_PX,
+  SKILL_EDGE_OPACITY,
+  SKILL_EDGE_INACTIVE_DASH_PX,
+} from '../lib/constants'
 import type {
   EdgeFromNodeId,
   EdgeToNodeId,
@@ -234,24 +240,24 @@ export const ConstellationCanvas = function ConstellationCanvas({
  * @example getEdgeAppearance(5, 0)
  */
 function getEdgeAppearance(fromXp: NodeXp, toXp: NodeXp) {
-  if (fromXp >= 5 && toXp >= 5)
+  if (fromXp >= SKILL_EDGE_ACTIVATION_XP && toXp >= SKILL_EDGE_ACTIVATION_XP)
     return {
       stroke: 'var(--st-gold)',
-      strokeWidth: 3,
-      opacity: 0.6,
+      strokeWidth: SKILL_EDGE_WIDTH_PX.bothActive,
+      opacity: SKILL_EDGE_OPACITY.bothActive,
       dash: undefined,
     }
-  if (fromXp >= 5 || toXp >= 5)
+  if (fromXp >= SKILL_EDGE_ACTIVATION_XP || toXp >= SKILL_EDGE_ACTIVATION_XP)
     return {
       stroke: 'var(--st-cream)',
-      strokeWidth: 2,
-      opacity: 0.45,
+      strokeWidth: SKILL_EDGE_WIDTH_PX.oneActive,
+      opacity: SKILL_EDGE_OPACITY.oneActive,
       dash: undefined,
     }
   return {
     stroke: 'var(--st-muted)',
-    strokeWidth: 1.6,
-    opacity: 0.4,
-    dash: '4,6',
+    strokeWidth: SKILL_EDGE_WIDTH_PX.inactive,
+    opacity: SKILL_EDGE_OPACITY.inactive,
+    dash: SKILL_EDGE_INACTIVE_DASH_PX,
   }
 }

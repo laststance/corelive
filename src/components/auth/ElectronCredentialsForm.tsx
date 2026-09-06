@@ -87,8 +87,7 @@ export function ElectronCredentialsForm({
           <button
             type="button"
             onClick={() => dispatch({ type: 'TOGGLE_PASSWORD_VISIBILITY' })}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
-            tabIndex={-1}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? (
@@ -114,7 +113,7 @@ export function ElectronCredentialsForm({
       >
         {isLoading ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
             <span>{loadingLabel}</span>
           </>
         ) : (
