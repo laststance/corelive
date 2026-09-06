@@ -2,7 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
-import { describe, expect, it, test } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { TaskSettings } from '@/components/settings/TaskSettings'
 import userSettingsReducer, {
@@ -73,30 +73,22 @@ describe('TaskSettings', () => {
     ).toBeChecked()
   })
 
-  it('moves finished tasks to Completed by default — keep-in-list starts off', () => {
-    // Arrange / Act — a fresh install.
+  test('offers completed-history decoration without the unused keep-in-list setting', () => {
+    // Arrange / Act
     renderTaskSettings()
 
-    // Assert — the keep-finished-tasks switch is off (default behavior moves them out).
+    // Assert
+    expect(screen.getAllByRole('switch')).toHaveLength(2)
     expect(
-      screen.getByRole('switch', { name: 'Keep finished tasks in the list' }),
-    ).not.toBeChecked()
+      screen.queryByRole('switch', { name: 'Keep finished tasks in the list' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Draw a line through task titles in your completed history.',
+      ),
+    ).toBeInTheDocument()
   })
-
-  it('keeps finished tasks in place when the switch is turned on', async () => {
-    // Arrange
-    const { store, user } = renderTaskSettings()
-
-    // Act — turn on "Keep finished tasks in the list".
-    await user.click(
-      screen.getByRole('switch', { name: 'Keep finished tasks in the list' }),
-    )
-
-    // Assert — 居残りモード is now enabled in the settings slice.
-    expect(store.getState().settings.retainCompletedInList).toBe(true)
-  })
-
-  it('shows completed task strikethrough by default', () => {
+  test('shows completed task strikethrough by default', () => {
     // Arrange / Act — render a fresh install.
     renderTaskSettings()
 
@@ -108,7 +100,7 @@ describe('TaskSettings', () => {
     ).toBeChecked()
   })
 
-  it('removes completed task strikethrough when the switch is turned off', async () => {
+  test('removes completed task strikethrough when the switch is turned off', async () => {
     // Arrange
     const { store, user } = renderTaskSettings()
 

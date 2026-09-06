@@ -1,39 +1,18 @@
-/**
- * Spec: a saved setting must survive an app version-up. It must never
- * silently revert to its default, and a setting field introduced by a newer
- * app version must read back at its default — not `undefined`.
- *
- * Regresses the hydration bug where the persistence middleware's default
- * `shallowMerge` replaced each persisted slice wholesale (`{ ...current,
- * ...persisted }`), so any field ADDED after a user first persisted was dropped:
- * Sound, LiveEditor, and Electron settings read back as "reset to default"
- * after an update. The fix opts the store into `deepMerge`
- * (`createPersistenceMiddleware` in `./store`), which fills every missing field
- * from the current defaults while preserving all user-set values.
- *
- * These tests drive the EXACT production persistence config via the shared
- * `createPersistenceMiddleware` factory, so they fail if production ever drops
- * the `deepMerge` reconciler.
- */
+/** Saved user choices survive application updates through the production persistence middleware. */
 import { configureStore } from '@reduxjs/toolkit'
-import { afterEach, beforeEach, describe, expect, it, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { STORAGE_SCHEMA_VERSION } from './migratePersistedState'
 import { selectShowInMenuBar } from './slices/electronSettingsSlice'
-import {
-  createPersistenceMiddleware,
-  type RootState,
-  STORAGE_KEY,
-} from './store'
+import { setShowCompletedTaskStrikethrough } from './slices/settingsSlice'
+import { createPersistenceMiddleware, STORAGE_KEY } from './store'
 
-/**
- * Seeds localStorage with a persisted blob and rehydrates a fresh store through
- * the real production persistence middleware (deepMerge + migrate).
- * @param seed - The `{ version, state }` envelope to write to {@link STORAGE_KEY}.
- * @returns The store's state after hydration completes.
+/** Hydrates a fresh store through the production migration and merge configuration for upgrade tests.
+ * @returns The hydrated store.
+ * @example
+ * const { store } = await rehydrateSavedSettings()
  */
-async function rehydrateFromSeed(seed: unknown): Promise<RootState> {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed))
+async function rehydrateSavedSettings() {
   const { middleware, reducer, api } = createPersistenceMiddleware()
   const store = configureStore({
     reducer,
@@ -41,127 +20,241 @@ async function rehydrateFromSeed(seed: unknown): Promise<RootState> {
       getDefaultMiddleware({ serializableCheck: false }).concat(middleware),
   })
   await api.rehydrate()
-  return store.getState()
+  return { store }
 }
 
-describe('settings survive an app update (no silent revert to defaults)', () => {
+describe('settings survive an app update', () => {
   beforeEach(() => window.localStorage.clear())
   afterEach(() => window.localStorage.clear())
 
-  it('keeps saved Sound settings and fills new LiveEditor fields with defaults', async () => {
-    // Arrange — a current-version blob from a user who set Sound + retain-completed mode
-    // BEFORE the LiveEditor editor fields (font / size / color / clear-on-complete)
-    // shipped, so the persisted `settings` predates those fields entirely.
-    const seed = {
-      version: STORAGE_SCHEMA_VERSION,
-      state: {
-        settings: {
-          completionSound: false,
-          retainCompletedInList: true,
-          soundMoments: { 'task-create': true, complete: true, clear: false },
-          soundTimbre: 'wood',
-          soundVolume: 0.3,
-        },
-      },
-    }
+  test.each([0, 1, 2, 3])(
+    'upgrades v%s and preserves choices after another save and reload',
+    async (version) => {
+      // Arrange
+      const settings = {
+        completionSound: true,
+        retainCompletedInList: true,
+        soundMoments: { 'task-create': true, complete: true, clear: true },
+        soundTimbre: 'wood',
+        soundVolume: 0.3,
+        showCompletedTaskStrikethrough: false,
+        showTodayEmber: true,
+        ...(version < 3
+          ? {
+              braindumpFontFamily: 'serif',
+              braindumpFontSize: 21,
+              braindumpTextColor: '#c2410c',
+              braindumpClearOnComplete: true,
+              braindumpClearDelayMs: 1200,
+              braindumpToastDurationMs: 6400,
+            }
+          : {
+              liveEditorFontFamily: 'serif',
+              liveEditorFontSize: 21,
+              liveEditorTextColor: '#c2410c',
+              liveEditorClearOnComplete: true,
+              liveEditorClearDelayMs: 1200,
+              liveEditorToastDurationMs: 6400,
+            }),
+      }
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          version,
+          state: {
+            ...(version < 2 ? { preferences: settings } : { settings }),
+            electronSettings: {
+              hideAppIcon: true,
+              showInMenuBar: false,
+              startAtLogin: true,
+            },
+          },
+        }),
+      )
+      window.localStorage.setItem('corelive-theme', 'dark')
+      window.localStorage.setItem('unrelated-note', 'Keep my note')
+
+      // Act
+      const first = await rehydrateSavedSettings()
+      first.store.dispatch(setShowCompletedTaskStrikethrough(true))
+      await vi.waitFor(() => {
+        expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
+          '"version":4',
+        )
+        expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
+          '"showCompletedTaskStrikethrough":true',
+        )
+        expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
+          'soundMoments',
+        )
+      })
+      const reloaded = await rehydrateSavedSettings()
+
+      // Assert
+      expect(reloaded.store.getState().settings).toEqual({
+        showCompletedTaskStrikethrough: true,
+        showTodayEmber: true,
+        liveEditorFontFamily: 'serif',
+        liveEditorFontSize: 21,
+        liveEditorTextColor: '#c2410c',
+        liveEditorClearOnComplete: true,
+        liveEditorClearDelayMs: 1200,
+        liveEditorToastDurationMs: 6400,
+      })
+      expect(reloaded.store.getState().electronSettings).toEqual({
+        hideAppIcon: true,
+        showInMenuBar: false,
+        startAtLogin: true,
+      })
+      expect(window.localStorage.getItem('corelive-theme')).toBe('dark')
+      expect(window.localStorage.getItem('unrelated-note')).toBe('Keep my note')
+      expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
+        'soundMoments',
+      )
+      expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
+        'retainCompletedInList',
+      )
+    },
+  )
+
+  test('keeps a saved decoration choice while filling missing editor fields', async () => {
+    // Arrange
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: STORAGE_SCHEMA_VERSION,
+        state: { settings: { showCompletedTaskStrikethrough: false } },
+      }),
+    )
 
     // Act
-    const state = await rehydrateFromSeed(seed)
+    const { store } = await rehydrateSavedSettings()
 
-    // Assert — every saved value is preserved (no revert)…
-    expect(state.settings.soundTimbre).toBe('wood')
-    expect(state.settings.soundVolume).toBe(0.3)
-    expect(state.settings.retainCompletedInList).toBe(true)
-    expect(state.settings.showCompletedTaskStrikethrough).toBe(true)
-    expect(state.settings.completionSound).toBe(false)
-    expect(state.settings.soundMoments).toEqual({
-      'task-create': true,
-      complete: true,
-      clear: false,
+    // Assert
+    expect(store.getState().settings).toEqual({
+      showCompletedTaskStrikethrough: false,
+      showTodayEmber: false,
+      liveEditorFontFamily: 'sans',
+      liveEditorFontSize: 16,
+      liveEditorTextColor: 'var(--foreground)',
+      liveEditorClearOnComplete: false,
+      liveEditorClearDelayMs: 500,
+      liveEditorToastDurationMs: 5000,
     })
-    // …and the newer fields are MATERIALIZED at their defaults in raw state,
-    // not left `undefined` (the shallow-merge drop this regresses).
-    expect(state.settings.liveEditorFontFamily).toBe('sans')
-    expect(state.settings.liveEditorFontSize).toBe(16)
-    expect(state.settings.liveEditorTextColor).toBe('var(--foreground)')
-    expect(state.settings.liveEditorClearOnComplete).toBe(false)
-    expect(state.settings.showTodayEmber).toBe(false)
   })
 
   test('keeps Today Ember enabled after reopening the app', async () => {
     // Arrange
-    const seed = {
-      version: STORAGE_SCHEMA_VERSION,
-      state: { settings: { showTodayEmber: true, soundVolume: 0.3 } },
-    }
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: STORAGE_SCHEMA_VERSION,
+        state: { settings: { showTodayEmber: true, liveEditorFontSize: 21 } },
+      }),
+    )
 
     // Act
-    const state = await rehydrateFromSeed(seed)
+    const { store } = await rehydrateSavedSettings()
 
     // Assert
-    expect(state.settings.showTodayEmber).toBe(true)
-    expect(state.settings.soundVolume).toBe(0.3)
+    expect(store.getState().settings.showTodayEmber).toBe(true)
+    expect(store.getState().settings.liveEditorFontSize).toBe(21)
   })
 
   test('keeps Today Ember disabled after reopening the app', async () => {
     // Arrange
-    const seed = {
-      version: STORAGE_SCHEMA_VERSION,
-      state: { settings: { showTodayEmber: false, soundVolume: 0.3 } },
-    }
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: STORAGE_SCHEMA_VERSION,
+        state: { settings: { showTodayEmber: false, liveEditorFontSize: 21 } },
+      }),
+    )
 
     // Act
-    const state = await rehydrateFromSeed(seed)
+    const { store } = await rehydrateSavedSettings()
 
     // Assert
-    expect(state.settings.showTodayEmber).toBe(false)
-    expect(state.settings.soundVolume).toBe(0.3)
+    expect(store.getState().settings.showTodayEmber).toBe(false)
+    expect(store.getState().settings.liveEditorFontSize).toBe(21)
   })
 
-  it('restores the menu-bar default when an older blob predates that electron setting', async () => {
-    // Arrange — an electronSettings blob missing `showInMenuBar` (stand-in for
-    // ANY field a user persisted before it existed). electronSettings selectors
-    // have no `?? default` guard, so under shallow-merge this read back undefined.
-    const seed = {
-      version: STORAGE_SCHEMA_VERSION,
-      state: {
-        electronSettings: { hideAppIcon: true, startAtLogin: false },
-        settings: {},
-      },
-    }
-
-    // Act
-    const state = await rehydrateFromSeed(seed)
-
-    // Assert — the absent field is filled from its default (true), not undefined;
-    // the saved field is preserved.
-    expect(selectShowInMenuBar(state)).toBe(true)
-    expect(state.electronSettings.showInMenuBar).toBe(true)
-    expect(state.electronSettings.hideAppIcon).toBe(true)
-    expect(state.electronSettings.startAtLogin).toBe(false)
-  })
-
-  it('keeps the other saved settings when one persisted field is the wrong type', async () => {
-    // Arrange — one corrupt field (wrong type). A reconciler that re-parsed the
-    // slice through Zod would reject the WHOLE slice and reset every setting;
-    // deepMerge preserves the good values (the corrupt one self-heals via its
-    // selector). Locks the deepMerge-over-Zod choice for the hydration boundary.
-    const seed = {
-      version: STORAGE_SCHEMA_VERSION,
-      state: {
-        settings: {
-          retainCompletedInList: 'yes', // corrupt: must be a boolean
-          soundTimbre: 'wood',
-          soundVolume: 0.3,
+  test('restores the menu-bar default when an older blob predates that setting', async () => {
+    // Arrange
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        state: {
+          electronSettings: { hideAppIcon: true, startAtLogin: false },
+          settings: {},
         },
-      },
-    }
+      }),
+    )
 
     // Act
-    const state = await rehydrateFromSeed(seed)
+    const { store } = await rehydrateSavedSettings()
+    const state = store.getState()
 
-    // Assert — the good saved values survive (NOT reset to defaults).
-    expect(state.settings.soundTimbre).toBe('wood')
-    expect(state.settings.soundVolume).toBe(0.3)
+    // Assert
+    expect(selectShowInMenuBar(state)).toBe(true)
+    expect(state.electronSettings).toEqual({
+      hideAppIcon: true,
+      showInMenuBar: true,
+      startAtLogin: false,
+    })
+  })
+
+  test('keeps valid choices when one retained preference has the wrong type', async () => {
+    // Arrange: validating the entire saved slice would lose these valid choices.
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        state: {
+          settings: {
+            showCompletedTaskStrikethrough: 'yes',
+            liveEditorFontFamily: 'serif',
+            liveEditorFontSize: 22,
+          },
+        },
+      }),
+    )
+
+    // Act
+    const { store } = await rehydrateSavedSettings()
+
+    // Assert
+    expect(store.getState().settings.liveEditorFontFamily).toBe('serif')
+    expect(store.getState().settings.liveEditorFontSize).toBe(22)
+  })
+
+  test('recovers from a corrupt settings slice without wiping native choices', async () => {
+    // Arrange
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        state: {
+          settings: null,
+          electronSettings: {
+            hideAppIcon: true,
+            showInMenuBar: false,
+            startAtLogin: true,
+          },
+        },
+      }),
+    )
+
+    // Act
+    const { store } = await rehydrateSavedSettings()
+
+    // Assert
+    expect(store.getState().settings.showCompletedTaskStrikethrough).toBe(true)
+    expect(store.getState().electronSettings).toEqual({
+      hideAppIcon: true,
+      showInMenuBar: false,
+      startAtLogin: true,
+    })
   })
 })
