@@ -107,6 +107,5 @@
       "height": 380
     }
   },
-  "afterSign": "scripts/notarize.js",
   "afterAllArtifactBuild": "scripts/after-build.js"
 }

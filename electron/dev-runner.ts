@@ -26,66 +26,11 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process'
-import http from 'http'
 import path from 'path'
 
 import { ensureDevProtocolRegistration } from './devProtocol'
 import { log } from './logger'
-
-/**
- * Checks if the Next.js development server is ready.
- *
- * The dev server needs time to:
- * - Compile TypeScript
- * - Bundle JavaScript
- * - Process CSS
- * - Start the HTTP server
- *
- * This can take 5-30 seconds depending on project size.
- *
- * @param url - URL to check (http://localhost:4991)
- * @param retries - Max attempts (default: 30 = 30 seconds)
- * @returns Promise that resolves when server is ready
- */
-async function checkServer(url: string, retries = 30): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let lastError: Error | null = null
-
-    const check = (attempt: number): void => {
-      http
-        .get(url, (res) => {
-          // Always consume the response stream to free the socket
-          res.resume()
-
-          if (res.statusCode === 200) {
-            resolve()
-          } else {
-            lastError = new Error(
-              `Server returned non-200 status: ${res.statusCode}`,
-            )
-            retry(attempt)
-          }
-        })
-        .on('error', (err: Error) => {
-          lastError = err
-          retry(attempt)
-        })
-    }
-
-    const retry = (attempt: number): void => {
-      if (attempt < retries) {
-        setTimeout(() => check(attempt + 1), 1000)
-      } else {
-        const message = lastError
-          ? `Next.js dev server failed to start: ${lastError.message}`
-          : 'Next.js dev server failed to start after maximum retries'
-        reject(new Error(message))
-      }
-    }
-
-    check(0)
-  })
-}
+import { waitForDevServer } from './utils/waitForDevServer'
 
 /**
  * Starts Electron after ensuring Next.js is ready.
@@ -105,7 +50,7 @@ async function startElectron(): Promise<void> {
   try {
     // Wait for Next.js to be fully ready
     log.info('⏳ Waiting for Next.js dev server...')
-    await checkServer('http://localhost:4991')
+    await waitForDevServer('http://localhost:4991')
     log.info('✅ Next.js is ready')
 
     // macOS only: stamp the unpackaged dev Electron with a unique bundle id so

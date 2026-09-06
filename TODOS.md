@@ -56,9 +56,9 @@ conditions or follow-up work, not defects it introduced.
 **Priority:** P3
 **Depends on:** PR #178 merged.
 
-### Streak residue in the animation and year-in-review surfaces
+### Streak residue in the year-in-review surface
 
-**What:** `src/components/animations/AchievementAnimation.tsx` keeps a streak branch and `YearInReviewModal` keeps a "longest streak" line. The `useStreakNotifications` hook is deleted by PR #178; these two are not.
+**What:** `YearInReviewModal` keeps a "longest streak" line. The unused achievement animation and `useStreakNotifications` hook have been removed.
 
 **Why:** `DESIGN.md`'s north star rules out streaks, completion rates, grading, and social comparison. A visible streak counter contradicts it directly.
 

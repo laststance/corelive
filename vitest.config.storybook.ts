@@ -93,7 +93,6 @@ export default defineConfig({
       'date-fns',
       'react-day-picker',
       'react-hook-form',
-      '@hookform/resolvers',
       'zod',
       'next-themes',
       'sonner',
