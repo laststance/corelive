@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { orpc } from '@/lib/orpc/client-query'
 
 /** Loads both data sources for {@link SkillTreeView} and keeps their shared readiness contract in one place.
@@ -7,16 +8,23 @@ import { orpc } from '@/lib/orpc/client-query'
  * @example useSkillTreeQueries()
  */
 export function useSkillTreeQueries() {
+  const isClerkQueryReady = useClerkQueryReady()
   const {
     data: tree,
     isLoading: treeLoading,
     isError: treeError,
-  } = useQuery(orpc.skillTree.getMyTree.queryOptions())
+  } = useQuery({
+    ...orpc.skillTree.getMyTree.queryOptions(),
+    enabled: isClerkQueryReady,
+  })
   const {
     data: pool,
     isLoading: poolLoading,
     isError: poolError,
-  } = useQuery(orpc.skillTree.getUnassignedPool.queryOptions())
+  } = useQuery({
+    ...orpc.skillTree.getUnassignedPool.queryOptions(),
+    enabled: isClerkQueryReady,
+  })
 
   return {
     tree,
