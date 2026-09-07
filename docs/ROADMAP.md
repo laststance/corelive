@@ -24,14 +24,15 @@ Design record: [docs/design/roadmap-2026-09-no-login-live-editor.md](design/road
 - Watch one named person use the signed-out page for 15 minutes, silently.
 - Signed-out parity inside the packaged Electron LiveEditor panel (needs a main-process release; then point the panel at `/write`).
 - Per-record keys for `localCompletionStore` / `localNoteStore` (PR #171 review, accepted-and-deferred 2026-09-05). Two tabs writing simultaneously read the same slot and one entry is lost; the spread narrows the window to sub-milliseconds but does not make read-modify-write atomic. Deferred because `completed.importLocal` retires `localStorage` as the record, and the rewrite is a heavy lift for a single-user app. Revisit if `/write` ever grows real multi-tab use.
+- Cross-host category sync and draft rescue (PR #184, accepted-and-deferred 2026-09-07). `broadcastCategorySync` rides `BroadcastChannel`, which is same-browser-context only, so the Electron LiveEditor panel and a browser tab never see each other's category edits — inside one browser they do. The same boundary bounds the delete-time draft rescue: deleting a category moves the unsaved draft into the default category on the host that issued the delete, not on the other one. Upgrade path: relay the channel over IPC (needs a main-process release) and unify the two note stores (`localStorage` on the web, `config.json` in the panel).
 - skill-tree: keep or delete, decided by the criterion.
 - Streak residue sweep: the Year-in-Review "longest streak" line. `useStreakNotifications` was deleted in PR #178. `calculateStreaks` and `calc-streak` are still LIVE (the journal and the year-in-review aggregation read them), so sweeping them means changing what those surfaces show, not deleting dead code.
-- #120 drag a finished task onto Completed.
 
 ## Cut (unless the criterion changes)
 
 - #53 paste-import + AI auto-labeling.
 - #124 side-distinct modifier chords.
+- #120 drag a finished task onto Completed. Closed 2026-09-07: the Floating Navigator (retired v0.22.0) and the `todo.*` vertical (deleted v0.21.0) it targeted are both gone.
 
 ## How this file is used
 

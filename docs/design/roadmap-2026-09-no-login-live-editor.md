@@ -336,6 +336,24 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
 > `createQueryClient` keeps such queries out of dehydration. Not exercised: the
 > packaged app (it loads production, which does not have this branch yet) and
 > the signed-out Electron front door (unchanged by this work).
+>
+> **Category management from the picker (2026-09-07, PR #184)** — unplanned,
+> outside T1–T14. The category `Select` DR3 put on `/write` and in the panel
+> could only pick; it now carries a "Manage categories…" footer row that opens
+> `/home`'s `CategoryManageDialog`, which gained a create row plus a height
+> ceiling and a scrolling list so its confirm controls stay reachable at the
+> panel's 320×320 floor (`WindowManager.ts:708`). Two pre-existing defects went
+> with it: all three category mutations rolled back **silently** on error and
+> now raise a toast (this repairs `/home`'s rename and delete too), and
+> `subscribeToCategorySync` had exactly one listener (`/home`'s sidebar), so a
+> category deleted in one window lingered in another's picker — `/write`,
+> `/live-editor` and `/home` now all mount the new `useCategorySync`. Deleting a
+> category first moves its unsaved draft into the default category's note:
+> LiveEditor drafts are keyed by category id, so the delete used to orphan the
+> text for good. Ceiling: rescue and sync are both per-host (`BroadcastChannel`
+> is same-browser-context only, and `getLiveEditorHost()` resolves to one store
+> per host), recorded in `docs/ROADMAP.md`'s Later list. Still open: `/home`
+> keeps two category-create paths.
 
 - [x] **T1 (P1, human: ~3h / CC: ~20min)** — live-editor host — Add `src/lib/live-editor/liveEditorHost.ts` (`getLiveEditorHost()`, `isElectronLiveEditorPanel()`) and swap the 15 `getLiveEditorAPI()` sites in `LiveEditor.tsx`
   - Surfaced by: Architecture D1 + D7
