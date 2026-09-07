@@ -3,11 +3,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import {
+  useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
   type MouseEvent,
 } from 'react'
+import { toast } from 'sonner'
 
 import {
   AlertDialog,
@@ -31,6 +33,8 @@ import { Input } from '@/components/ui/input'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { getColorDotClass } from '@/lib/category-colors'
+import { appendCategoryDraft } from '@/lib/live-editor/appendCategoryDraft'
+import { getLiveEditorHost } from '@/lib/live-editor/liveEditorHost'
 import { orpc } from '@/lib/orpc/client-query'
 import {
   CATEGORY_COLORS,
@@ -44,8 +48,20 @@ interface CategoryManageDialogProps {
 }
 
 /**
- * Dialog for managing categories: inline rename, color change, and delete with confirmation.
- * When a category is deleted, its tasks become uncategorized.
+ * Tells a settled category from one whose create is still in flight.
+ * {@link useCategoryMutations} gives an optimistic row `id: -Date.now()`, and the
+ * server only answers to real ids, so a pending row must stay inert.
+ * @param category - Any row from the category list cache.
+ * @returns true once the server has assigned a real id.
+ * @example
+ * hasServerId({ id: -1788781333000, … }) // => false
+ */
+const hasServerId = (category: CategoryWithCount): boolean => category.id > 0
+
+/**
+ * Dialog for managing categories: create, inline rename, color change, and
+ * delete with confirmation. Deleting a category reassigns its tasks to the
+ * default category and carries its unsaved draft over with them.
  *
  * @param open - Whether the dialog is visible
  * @param onOpenChange - Callback to toggle dialog visibility
@@ -54,8 +70,12 @@ export const CategoryManageDialog = function CategoryManageDialog({
   open,
   onOpenChange,
 }: CategoryManageDialogProps) {
-  const { updateMutation, deleteMutation } = useCategoryMutations()
+  const { createMutation, updateMutation, deleteMutation } =
+    useCategoryMutations()
   const isClerkQueryReady = useClerkQueryReady()
+
+  // Create row state
+  const [newName, setNewName] = useState('')
 
   // Editing state
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -66,6 +86,19 @@ export const CategoryManageDialog = function CategoryManageDialog({
   const [deleteTarget, setDeleteTarget] = useState<CategoryWithCount | null>(
     null,
   )
+  // Categories whose draft has already been handed to the default one. A
+  // rejected delete deliberately leaves the doomed copy in place, so a retry
+  // would otherwise append the same text a second time.
+  // ponytail: dialog-scoped, so a remount forgets it; the content check in
+  // rescueDraft is the backstop for that. What neither covers is text the user
+  // adds to the doomed category AFTER a failed rescue — the whole draft is
+  // appended, so the earlier part shows up twice. Upgrade when the rescue moves
+  // out of the UI.
+  const rescuedCategoryIdsRef = useRef<Set<number>>(new Set())
+  // Categories whose rescue is still in flight. Distinct from the set above on
+  // purpose: "already rescued" must still issue the delete (that is the retry
+  // path), while "still rescuing" must issue nothing at all.
+  const rescuingCategoryIdsRef = useRef<Set<number>>(new Set())
 
   // Fetch categories
   const { data } = useQuery({
@@ -73,6 +106,8 @@ export const CategoryManageDialog = function CategoryManageDialog({
     enabled: open && isClerkQueryReady,
   })
   const categories: CategoryWithCount[] = data?.categories ?? []
+  const defaultCategory = categories.find((category) => category.isDefault)
+  const defaultCategoryName = defaultCategory?.name ?? 'the default category'
 
   /**
    * Wraps onOpenChange to reset editing state when the dialog closes.
@@ -83,8 +118,31 @@ export const CategoryManageDialog = function CategoryManageDialog({
       setEditingId(null)
       setEditName('')
       setEditColor('blue')
+      setNewName('')
     }
     onOpenChange(nextOpen)
+  }
+
+  /**
+   * Adds the typed category. Colour is omitted on purpose — the schema defaults
+   * it to blue and the pencil row recolours afterwards.
+   */
+  const createCategory = () => {
+    const name = newName.trim()
+    if (!name) return
+
+    createMutation.mutate({ name })
+    // Cleared here, not in onSuccess: the add is optimistic, so an onSuccess
+    // clear lands a round trip later and would wipe a second name mid-typing.
+    setNewName('')
+  }
+
+  const handleNewNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setNewName(event.target.value)
+  }
+
+  const handleNewNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') createCategory()
   }
 
   /**
@@ -121,14 +179,99 @@ export const CategoryManageDialog = function CategoryManageDialog({
   }
 
   /**
-   * Confirms and executes category deletion.
+   * Hands the doomed category's unsaved draft to the default one, before the
+   * delete is issued. The server reassigns Todo and Completed rows, but the
+   * in-progress text lives per-category on the device (localStorage on the web,
+   * config.json in the panel) and nothing would ever reach it again.
+   * @param doomedCategoryId - The category about to be deleted.
+   * @returns Nothing; resolves once the draft is safe in the default category.
+   * @example
+   * await rescueDraft(12) // appends category 12's draft to the default's
+   */
+  const rescueDraft = async (doomedCategoryId: number) => {
+    if (!defaultCategory || defaultCategory.id === doomedCategoryId) return
+    if (rescuedCategoryIdsRef.current.has(doomedCategoryId)) return
+
+    // Reads the store, not whichever editor is on screen. Three known ceilings,
+    // all pre-existing, none of them a loss:
+    // ponytail: (1) per-host — a browser tab carries the browser's draft, not
+    // the Electron panel's copy in config.json; (2) a second browser tab
+    // showing the default holds its own React copy and overwrites this merge on
+    // its next keystroke; (3) a note.set that failed earlier leaves the store
+    // behind the editor, so stale text is carried. Upgrade when the two note
+    // stores are unified and note changes broadcast between tabs.
+    const doomedDraft = (
+      await getLiveEditorHost().note.get(doomedCategoryId)
+    ).trim()
+    if (!doomedDraft) return
+
+    // Remount backstop: `rescuedCategoryIdsRef` dies with the dialog, so a
+    // rejected delete, a close, and a retry would otherwise append the same
+    // draft a second time. The default's own copy is the only record of the
+    // first attempt that survives a remount. A same-mount retry is faster than
+    // the editor's debounced save and is covered by the ref, not by this.
+    // Matched line by line, never as a substring: a note reading "milk" is not
+    // already rescued just because the default says "buy milk today", and
+    // skipping it there would orphan the only copy — the loss this whole path
+    // exists to prevent. Appends always land as whole lines, so anchoring on
+    // newlines still recognises the text it did move.
+    // ponytail: editing the rescued line itself stops it matching, so a retry
+    // appends again. `trimEnd` covers trailing whitespace while that line is
+    // still the last one. A visible duplicate, which is the direction this
+    // file errs in on purpose.
+    const rescuedDraft = await getLiveEditorHost().note.get(defaultCategory.id)
+    if (`\n${rescuedDraft.trimEnd()}\n`.includes(`\n${doomedDraft}\n`)) return
+
+    // Before the delete, never after: the delete is optimistic, so `onMutate`
+    // drops the row at once and useAutoSelectDefaultCategory flips the editor
+    // to the default. An append issued after that races the default category's
+    // in-flight note load, which would resolve with the pre-merge text.
+    await appendCategoryDraft(defaultCategory.id, doomedDraft)
+    rescuedCategoryIdsRef.current.add(doomedCategoryId)
+  }
+
+  /**
+   * Confirms deletion, but only once the doomed category's draft is safe.
+   * Radix's action button is a Close, so this confirmation is already gone by
+   * the time the rescue resolves — a toast is the only channel left to report on.
    */
   const confirmDelete = () => {
     if (!deleteTarget || deleteMutation.isPending) return
 
-    deleteMutation.mutate(
-      { id: deleteTarget.id },
-      { onSuccess: () => setDeleteTarget(null) },
+    const doomedCategoryId = deleteTarget.id
+    // Claimed synchronously, because `isPending` cannot cover this window: the
+    // action button is a Close, so the confirmation is gone while the rescue is
+    // still reading, and `mutate` has not run yet. Re-confirming in that gap
+    // would read the same draft again and append it to the default twice.
+    if (rescuingCategoryIdsRef.current.has(doomedCategoryId)) return
+    rescuingCategoryIdsRef.current.add(doomedCategoryId)
+
+    // The delete waits on the draft landing, and is abandoned if it does not.
+    // The Electron bridge re-throws a failed note read/write by design
+    // (electron/preload-live-editor.ts), precisely so this can decline to
+    // delete; going ahead would strand the text under an unreachable id.
+    void rescueDraft(doomedCategoryId).then(
+      () => {
+        // The doomed copy stays where it is, on purpose. Wiping it was the one
+        // path here that could destroy text: a rejected delete restores the
+        // category with its draft, and a retry skips the re-append, so a clear
+        // on the next success would take away the last reachable copy.
+        // ponytail: the orphan is unreachable but harmless — Postgres identity
+        // ids never repeat, so nothing can surface it. Sweep it if dead drafts
+        // ever cost anything.
+        deleteMutation.mutate({ id: doomedCategoryId })
+        // Released only now. Re-arming the confirmation costs a click and a
+        // render — by then `isPending` is the guard, and after a rejected
+        // delete the retry needs to get back in here.
+        rescuingCategoryIdsRef.current.delete(doomedCategoryId)
+      },
+      () => {
+        // Nothing landed, so the retry has to be able to read the draft again.
+        rescuingCategoryIdsRef.current.delete(doomedCategoryId)
+        toast.error(
+          "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
+        )
+      },
     )
   }
 
@@ -160,19 +303,49 @@ export const CategoryManageDialog = function CategoryManageDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        {/* The panel floor is 320px tall (WindowManager minHeight) and
+            DialogContent sets no height cap, so the title clips off the top and
+            the list runs past the bottom. Cap the dialog, not the list: the
+            three rows are header / create row / list, and giving the last one
+            `minmax(0,1fr)` lets it absorb whatever is left and scroll. A
+            viewport-relative cap is the point — no spacing token can express
+            "as tall as whatever window this dialog happens to be in". */}
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)] sm:max-w-md" // eslint-disable-line dslint/token-only -- viewport-relative by necessity
+        >
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>
             <DialogDescription>
-              Rename, recolor, or delete categories. Deleting a category moves
-              its tasks to the default category.
+              Add, rename, recolor, or delete categories. Nothing you wrote is
+              lost — deleting a category moves its tasks to{' '}
+              {defaultCategoryName}.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2 py-4">
+          <div className="flex items-center gap-2">
+            <Input
+              value={newName}
+              onChange={handleNewNameChange}
+              onKeyDown={handleNewNameKeyDown}
+              className="h-8 flex-1"
+              maxLength={30}
+              placeholder="New category"
+              aria-label="New category name"
+            />
+            <Button
+              size="sm"
+              className="h-8"
+              onClick={createCategory}
+              disabled={!newName.trim() || createMutation.isPending}
+            >
+              Add
+            </Button>
+          </div>
+
+          <div className="space-y-2 overflow-y-auto py-4">
             {categories.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                No categories yet. Add one from the sidebar.
+                No categories yet. Add your first one above.
               </p>
             ) : (
               categories.map((category) => (
@@ -205,6 +378,11 @@ export const CategoryManageDialog = function CategoryManageDialog({
                         onKeyDown={handleEditNameKeyDown}
                         className="h-8 flex-1"
                         maxLength={30}
+                        // Not "Category name": that is a substring of the create
+                        // row's "New category name", and Playwright's role-name
+                        // matching is substring-based, so the two would be
+                        // ambiguous to every browser-driven test.
+                        aria-label="Rename category"
                         autoFocus
                       />
 
@@ -237,25 +415,34 @@ export const CategoryManageDialog = function CategoryManageDialog({
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {category._count.todos} tasks
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground"
-                        data-category-id={category.id}
-                        onClick={handleEditCategoryClick}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      {!category.isDefault && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          data-category-id={category.id}
-                          onClick={handleDeleteCategoryClick}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      {/* A row still waiting on its real id has nothing the
+                          server would answer to — rename and delete would come
+                          back "Category not found" on a row just created. */}
+                      {hasServerId(category) && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground"
+                            data-category-id={category.id}
+                            onClick={handleEditCategoryClick}
+                            aria-label={`Rename ${category.name}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          {!category.isDefault && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              data-category-id={category.id}
+                              onClick={handleDeleteCategoryClick}
+                              aria-label={`Delete ${category.name}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </>
                       )}
                     </>
                   )}
@@ -273,19 +460,13 @@ export const CategoryManageDialog = function CategoryManageDialog({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this category?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget && (
                 <>
-                  <strong>{deleteTarget.name}</strong> will be deleted.
-                  {deleteTarget._count.todos > 0 && (
-                    <>
-                      {' '}
-                      {deleteTarget._count.todos} task
-                      {deleteTarget._count.todos > 1 ? 's' : ''} will be moved
-                      to the default category.
-                    </>
-                  )}
+                  <strong>{deleteTarget.name}</strong> will be removed. Your
+                  record stays — its tasks move to{' '}
+                  <strong>{defaultCategoryName}</strong>.
                 </>
               )}
             </AlertDialogDescription>

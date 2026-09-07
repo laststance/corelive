@@ -11,7 +11,9 @@ import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
+import { appendCategoryDraft } from '@/lib/live-editor/appendCategoryDraft'
 import {
+  LOCAL_CATEGORY_ID,
   LOCAL_COMPLETIONS_STORAGE_KEY,
   LOCAL_NOTE_STORAGE_KEY,
 } from '@/lib/live-editor/constants'
@@ -42,11 +44,15 @@ const {
 }))
 
 vi.mock('@tanstack/react-query', () => ({
+  // `mutate`/`isPending` are for the category manager, which mounts only when
+  // the picker's "Manage categories…" row is chosen.
   useMutation: (options: unknown) => ({
     mutateAsync:
       options === completedDeleteMutationOptions
         ? deleteCompletedMutateAsync
         : completedMutateAsync,
+    mutate: vi.fn(),
+    isPending: false,
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
@@ -110,6 +116,16 @@ vi.mock('@/hooks/useSelectedCategory', () => ({
 
 vi.mock('@/lib/orpc/client-query', () => ({
   orpc: {
+    // Reached only through the category manager the picker footer opens.
+    category: {
+      list: {
+        queryOptions: vi.fn(() => ({ queryKey: ['category', 'list'] })),
+        key: vi.fn(() => ['category', 'list']),
+      },
+      create: { mutationOptions: vi.fn(() => ({})) },
+      update: { mutationOptions: vi.fn(() => ({})) },
+      delete: { mutationOptions: vi.fn(() => ({})) },
+    },
     completed: {
       create: {
         mutationOptions: vi.fn(() => completedCreateMutationOptions),
@@ -500,6 +516,35 @@ describe('LiveEditor web host (/write)', () => {
     })
   })
 
+  test('keeps a draft rescued into the category the editor is showing', async () => {
+    // Arrange — the editor is open on the category a deleted one hands its
+    // draft to. This component holds the whole note in React state, so a write
+    // straight to the note store is invisible to it.
+    const user = userEvent.setup()
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    await user.type(noteField, 'my own line')
+    await waitFor(() => {
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'my own line' })
+    })
+
+    // Act — a category delete hands its draft over, then the user types on.
+    await act(async () => {
+      await appendCategoryDraft(LOCAL_CATEGORY_ID, 'rescued from Work')
+    })
+    fireEvent.change(noteField, { target: { value: `${noteField.value}!` } })
+
+    // Assert — the next keystroke must not overwrite what was handed over.
+    await waitFor(() => {
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'my own line\nrescued from Work!' })
+    })
+  })
+
   it('says so when the browser refuses storage: keeps stay for this session only', async () => {
     // Arrange
     storageAvailabilityRef.current = 'unavailable'
@@ -665,6 +710,123 @@ describe('LiveEditor web host (/write)', () => {
     expect(
       screen.queryByRole('link', { name: 'Sign in' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('LiveEditor category manager entry point', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    liveEditorEnvironmentRef.current = false
+    delete window.liveEditorAPI
+    delete window.brainDumpAPI
+    storageAvailabilityRef.current = 'ok'
+    selectedCategoryRef.current = 1
+    clerkUserRef.current = {
+      isLoaded: true,
+      isSignedIn: true,
+      user: { id: 'user_A' },
+    }
+  })
+
+  test('opens the category manager from the picker footer', async () => {
+    // Arrange — /write has no sidebar, so this row is the only way in (DR3).
+    const user = userEvent.setup()
+    renderEditor()
+
+    // Act
+    await user.click(screen.getByRole('combobox', { name: 'Active category' }))
+    await user.click(
+      await screen.findByRole('option', { name: 'Manage categories…' }),
+    )
+
+    // Assert
+    expect(await screen.findByText('Manage Categories')).toBeVisible()
+  })
+
+  test('choosing Manage categories leaves the active category alone', async () => {
+    // Arrange — the row lives in the Select's value space, so a naive handler
+    // would write Number('__manage_categories__') === NaN to the shared selection
+    // that /home and the sidebar also read.
+    const user = userEvent.setup()
+    renderEditor()
+
+    // Act
+    await user.click(screen.getByRole('combobox', { name: 'Active category' }))
+    await user.click(
+      await screen.findByRole('option', { name: 'Manage categories…' }),
+    )
+
+    // Assert
+    expect(setSelectedCategory).not.toHaveBeenCalled()
+  })
+
+  test('typing a letter on the closed picker does not open the manager', async () => {
+    // Arrange — Radix runs typeahead on the CLOSED trigger and its match handler
+    // calls onValueChange without opening the menu, so an alphabetic label would
+    // open the manager on a bare keypress.
+    const user = userEvent.setup()
+    renderEditor()
+    const picker = screen.getByRole('combobox', { name: 'Active category' })
+
+    // Act
+    picker.focus()
+    await user.keyboard('m')
+
+    // Assert
+    expect(screen.queryByText('Manage Categories')).not.toBeInTheDocument()
+    expect(setSelectedCategory).not.toHaveBeenCalled()
+  })
+
+  test('keeps the picker openable while the category list is still loading', async () => {
+    // Arrange — signed in on /write, the list round trip has not landed, so
+    // `categories` is []. The manage row is the only thing in the picker, and
+    // it must not be locked behind the data it manages.
+    renderEditorWithCategories([], {}, true)
+
+    // Assert
+    const picker = await screen.findByRole('combobox', {
+      name: 'Active category',
+    })
+    expect(picker).toBeEnabled()
+  })
+
+  test('returns focus to the picker after the manager closes', async () => {
+    // Arrange — the manager is mounted conditionally rather than kept alive, so
+    // Radix never runs its own focus restore on close. Without the explicit
+    // refocus a keyboard user lands on <body> with nothing selected, which is
+    // the accepted cost of the conditional mount and the reason this guard exists.
+    const user = userEvent.setup()
+    renderEditor()
+    const picker = screen.getByRole('combobox', { name: 'Active category' })
+
+    // Act
+    await user.click(picker)
+    await user.click(
+      await screen.findByRole('option', { name: 'Manage categories…' }),
+    )
+    expect(await screen.findByText('Manage Categories')).toBeVisible()
+    await user.keyboard('{Escape}')
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.queryByText('Manage Categories')).not.toBeInTheDocument()
+    })
+    expect(picker).toHaveFocus()
+  })
+
+  test('hides the manage row from a picker the signed-out web never gets', async () => {
+    // Arrange — every category write needs a Clerk bearer. Signed out on the
+    // web there is no picker at all, so there is nothing to manage from.
+    clerkUserRef.current = { isLoaded: true, isSignedIn: false, user: null }
+
+    // Act
+    renderEditor()
+    await screen.findByRole('textbox')
+
+    // Assert
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByText('Manage Categories')).not.toBeInTheDocument()
   })
 })
 

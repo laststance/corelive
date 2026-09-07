@@ -5,6 +5,8 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useCategorySync } from '@/hooks/useCategorySync'
+
 import WritePage from './page'
 
 const { clerkUserRef, useQueryMock } = vi.hoisted(() => {
@@ -30,6 +32,14 @@ vi.mock('@/lib/orpc/client-query', () => ({
       list: { queryOptions: () => ({ queryKey: ['category', 'list'] }) },
     },
   },
+}))
+
+// Cross-window invalidation is its own concern (useCategorySync.test.tsx drives
+// the real BroadcastChannel); this suite pins what the page hands the editor,
+// and the real hook would need a QueryClient. Stubbed, but still asserted below
+// — dropping the call here would otherwise leave every suite green.
+vi.mock('@/hooks/useCategorySync', () => ({
+  useCategorySync: vi.fn(),
 }))
 
 // The editor has its own suite; here it only reports what the page handed it.
@@ -126,5 +136,17 @@ describe('/write page', () => {
       expect.objectContaining({ enabled: true }),
     )
     expect(screen.getByTestId('live-editor')).toHaveTextContent('Today,Work')
+  })
+
+  it('listens for categories changed in another window', () => {
+    // Arrange — /write has no sidebar, so this subscription is the only thing
+    // that clears a category deleted elsewhere out of its picker.
+    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+
+    // Act
+    render(<WritePage />)
+
+    // Assert
+    expect(useCategorySync).toHaveBeenCalled()
   })
 })
