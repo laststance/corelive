@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { cn } from '@/lib/utils'
 import type { Category, CategoryWithCount } from '@/server/schemas/category'
 
@@ -67,21 +68,16 @@ export const LiveEditorCategoryPicker = function LiveEditorCategoryPicker({
     onCategoryValueChange(value)
   }
 
-  /**
-   * Closes the manager and hands focus back to the picker. Unmounting the dialog
-   * skips Radix's own focus restore, so keyboard users would otherwise land on
-   * `<body>` with nothing selected.
-   * @param nextOpen - Radix's requested open state.
-   * @returns Nothing.
-   * @example
-   * handleManageDialogOpenChange(false) // closes, refocuses the picker
-   */
-  const handleManageDialogOpenChange = (nextOpen: boolean) => {
-    setIsManageDialogOpen(nextOpen)
-    if (!nextOpen) {
+  // Hand focus back to the picker AFTER the close commits. Unmounting the
+  // dialog skips Radix's own focus restore, and focusing from inside the
+  // onOpenChange handler is too early: that runs before React unmounts the
+  // dialog, and FocusScope's unmount cleanup then drops focus on `<body>` —
+  // the exact landing spot this exists to prevent.
+  useUpdateEffect(() => {
+    if (!isManageDialogOpen) {
       document.getElementById(categoryInputId)?.focus()
     }
-  }
+  }, [isManageDialogOpen, categoryInputId])
 
   return (
     <>
@@ -140,10 +136,7 @@ export const LiveEditorCategoryPicker = function LiveEditorCategoryPicker({
           every keystroke in the editor. Its own state resets on close anyway,
           so there is nothing to preserve. */}
       {isManageDialogOpen && (
-        <CategoryManageDialog
-          open
-          onOpenChange={handleManageDialogOpenChange}
-        />
+        <CategoryManageDialog open onOpenChange={setIsManageDialogOpen} />
       )}
     </>
   )

@@ -23,6 +23,7 @@ import {
 import { getLocalNote, setLocalNote } from '@/lib/live-editor/localNoteStore'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import {
+  armNetworkFailure,
   holdRequests,
   orpcServer,
   readCategories,
@@ -389,6 +390,66 @@ describe('CategoryManageDialog draft rescue', () => {
     })
     expect(notes.get(1)).toBe('half a thought')
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  test('leaves the draft in its own category when the delete is rejected', async () => {
+    // Arrange — the server refuses the delete. Wiping the doomed copy before
+    // knowing that would take the draft away from a category that still
+    // exists: the same loss the rescue is here to prevent, only quieter.
+    const user = userEvent.setup()
+    setLocalNote(1, 'already here')
+    setLocalNote(12, 'half a thought')
+    await renderDialog([defaultCategory, buildCategory()])
+    // Armed after renderDialog, never before: it calls resetOrpcServer, which disarms.
+    armNetworkFailure()
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert — Work is still there, and still holds the text only it can reach.
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't save that change — try again.",
+      )
+    })
+    expect(readCategories().map((category) => category.name)).toEqual([
+      'General',
+      'Work',
+    ])
+    expect(getLocalNote(12)).toBe('half a thought')
+    // The default carries a duplicate until the delete is retried. A copy the
+    // user can see and remove beats text nothing can reach again.
+    expect(getLocalNote(1)).toBe('already here\nhalf a thought')
+  })
+
+  test('carries the rescued draft over once when a rejected delete is retried', async () => {
+    // Arrange — the first attempt already appended to the default and left the
+    // doomed copy alone, so a second read of that untouched key must not append
+    // the same text again.
+    const user = userEvent.setup()
+    setLocalNote(1, 'already here')
+    setLocalNote(12, 'half a thought')
+    await renderDialog([defaultCategory, buildCategory()])
+    armNetworkFailure()
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Delete Work' })).toBeVisible()
+    })
+
+    // Act — retry, this time against a server that answers.
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert — one copy of the draft in the default, not two.
+    await waitFor(() => {
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+      ])
+    })
+    expect(getLocalNote(1)).toBe('already here\nhalf a thought')
+    expect(getLocalNote(12)).toBe('')
   })
 
   test('deletes an empty category without touching the default draft', async () => {

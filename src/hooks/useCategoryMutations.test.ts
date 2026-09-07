@@ -19,6 +19,7 @@ import {
   vi,
 } from 'vitest'
 
+import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import {
@@ -176,6 +177,51 @@ describe('category writes the server rejects', () => {
       )?.categories,
     ).toEqual([defaultCategory])
   })
+
+  test('puts the old name back when a rename is rejected', async () => {
+    // Arrange — the optimistic rename is written straight into the list cache,
+    // so without the rollback the user keeps reading a name the server refused.
+    const { result, queryClient } = renderCategoryMutations()
+    queryClient.setQueryData(categoryListKey, {
+      categories: [defaultCategory, buildCategory()],
+    })
+
+    // Act — "General" is taken, so renaming "Work" onto it conflicts.
+    result.current.updateMutation.mutate({ id: 12, data: { name: 'General' } })
+
+    // Assert
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled()
+    })
+    expect(
+      queryClient
+        .getQueryData<{ categories: CategoryWithCount[] }>(categoryListKey)
+        ?.categories.map((category) => category.name),
+    ).toEqual(['General', 'Work'])
+  })
+
+  test('puts the removed row back when a delete is rejected', async () => {
+    // Arrange — the optimistic delete filters the row out of the cache, so
+    // without the rollback a category the server kept vanishes from the picker.
+    armNetworkFailure()
+    const { result, queryClient } = renderCategoryMutations()
+    queryClient.setQueryData(categoryListKey, {
+      categories: [defaultCategory, buildCategory()],
+    })
+
+    // Act
+    result.current.deleteMutation.mutate({ id: 12 })
+
+    // Assert
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled()
+    })
+    expect(
+      queryClient
+        .getQueryData<{ categories: CategoryWithCount[] }>(categoryListKey)
+        ?.categories.map((category) => category.name),
+    ).toEqual(['General', 'Work'])
+  })
 })
 
 describe('category writes the server accepts', () => {
@@ -209,5 +255,52 @@ describe('category writes the server accepts', () => {
       ])
     })
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  test('stores the colour picked in the dialog', async () => {
+    // Arrange — recolour is the one update the create path cannot reach: new
+    // categories are always blue and only the pencil row changes that.
+    const { result } = renderCategoryMutations()
+
+    // Act
+    result.current.updateMutation.mutate({ id: 12, data: { color: 'green' } })
+
+    // Assert — read back from the server's table, not the client's belief.
+    await waitFor(() => {
+      expect(
+        readCategories().find((category) => category.id === 12),
+      ).toMatchObject({ name: 'Work', color: 'green' })
+    })
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    [
+      'create',
+      (m: ReturnType<typeof useCategoryMutations>) =>
+        m.createMutation.mutate({ name: 'Reading' }),
+    ],
+    [
+      'rename',
+      (m: ReturnType<typeof useCategoryMutations>) =>
+        m.updateMutation.mutate({ id: 12, data: { name: 'Errands' } }),
+    ],
+    [
+      'delete',
+      (m: ReturnType<typeof useCategoryMutations>) =>
+        m.deleteMutation.mutate({ id: 12 }),
+    ],
+  ])('tells other windows about a %s', async (_label, fire) => {
+    // Arrange — the listening half is useCategorySync; without this call a
+    // category changed here stays in the other window's picker.
+    const { result } = renderCategoryMutations()
+
+    // Act
+    fire(result.current)
+
+    // Assert
+    await waitFor(() => {
+      expect(broadcastCategorySync).toHaveBeenCalled()
+    })
   })
 })

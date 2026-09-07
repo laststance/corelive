@@ -14,8 +14,12 @@ import {
 
 /**
  * In-memory stand-in for the `Category` table. Each spec seeds it, and the
- * procedures below reject the same writes `src/server/procedures/category.ts`
- * rejects — same conflicts, same guards, same error codes.
+ * procedures below mirror the conflict and guard shape of
+ * `src/server/procedures/category.ts` — same conflicts, same error codes.
+ * Deliberately NOT mirrored, because no spec needs them: the real `list` seeds
+ * `DEFAULT_CATEGORY_SEED` when the table comes back empty, and every real
+ * procedure runs behind `authMiddleware`. Nothing enforces this parity, so a
+ * new guard on the real procedure has to be copied here by hand.
  */
 let categories: CategoryWithCount[] = []
 let nextCategoryId = 1

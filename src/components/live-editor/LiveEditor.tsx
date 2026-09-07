@@ -16,6 +16,7 @@ import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
+import { registerLiveDraftAppender } from '@/lib/live-editor/appendCategoryDraft'
 import { LOCAL_CATEGORY_ID } from '@/lib/live-editor/constants'
 import {
   getLiveEditorHost,
@@ -444,6 +445,41 @@ function showCompletionToast({
 }
 
 /**
+ * Builds the claim handler {@link registerLiveDraftAppender} calls when a
+ * deleted category hands its draft over, so the merge lands in the visible note
+ * instead of behind it. Module-level on purpose: {@link LiveEditor} already sits
+ * at the repo's cognitive-complexity ceiling, and every branch here would count
+ * against it.
+ * @param activeCategoryIdRef - Category currently on screen.
+ * @param noteWritableCategoryRef - Category whose `note.get` has settled; before
+ *   that the pending load would replace anything merged in now.
+ * @param noteTextRef - The visible draft to append to.
+ * @param applyDraft - {@link LiveEditor}'s own `setNoteDraft`; the merge is
+ *   marked dirty because it lives only in React state until the debounce saves it.
+ * @returns The handler: true once it absorbed the text, false for any other category.
+ * @example
+ * createLiveDraftAppender(activeIdRef, writableRef, textRef, setNoteDraft)(1, 'rescued')
+ */
+function createLiveDraftAppender(
+  activeCategoryIdRef: React.RefObject<Category['id'] | null>,
+  noteWritableCategoryRef: React.RefObject<Category['id'] | null>,
+  noteTextRef: React.RefObject<string>,
+  applyDraft: (text: string, options: NoteDraftUpdateOptions) => void,
+): (categoryId: Category['id'], text: string) => boolean {
+  return (categoryId, text) => {
+    if (categoryId !== activeCategoryIdRef.current) return false
+    if (noteWritableCategoryRef.current !== categoryId) return false
+
+    const keptDraft = noteTextRef.current
+    applyDraft(keptDraft ? `${keptDraft.trimEnd()}\n${text}` : text, {
+      categoryId,
+      dirty: true,
+    })
+    return true
+  }
+}
+
+/**
  * LiveEditor — the one surface that creates keeps. It renders inside the
  * frameless Electron panel AND on the public `/write` page: `getLiveEditorHost()`
  * hides the persistence difference (preload bridge vs. localStorage),
@@ -820,6 +856,20 @@ export const LiveEditor = function LiveEditor({
 
   useCycleEffect(() => {
     noteTextRef.current = noteText
+    // A deleted category hands its rescued draft to the appender rather than
+    // writing the note store behind us: this component holds the whole note in
+    // React state, so a store write it never sees is erased by the next
+    // keystroke's debounced save. Registered from this effect instead of one of
+    // its own because LiveEditor is at the cognitive-complexity ceiling and any
+    // extra hook call breaches `fallow health`.
+    return registerLiveDraftAppender(
+      createLiveDraftAppender(
+        activeCategoryIdRef,
+        noteWritableCategoryRef,
+        noteTextRef,
+        setNoteDraft,
+      ),
+    )
   }, [noteText])
 
   // Keep the category ref in step so async create handlers compare against the

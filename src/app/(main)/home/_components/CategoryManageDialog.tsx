@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import {
+  useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
@@ -32,6 +33,7 @@ import { Input } from '@/components/ui/input'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { getColorDotClass } from '@/lib/category-colors'
+import { appendCategoryDraft } from '@/lib/live-editor/appendCategoryDraft'
 import { getLiveEditorHost } from '@/lib/live-editor/liveEditorHost'
 import { orpc } from '@/lib/orpc/client-query'
 import {
@@ -84,6 +86,12 @@ export const CategoryManageDialog = function CategoryManageDialog({
   const [deleteTarget, setDeleteTarget] = useState<CategoryWithCount | null>(
     null,
   )
+  // Categories whose draft has already been handed to the default one. A
+  // rejected delete deliberately leaves the doomed copy in place, so a retry
+  // would otherwise append the same text a second time.
+  // ponytail: dialog-scoped — closing and reopening the manager between two
+  // attempts still double-appends. Upgrade when the rescue moves out of the UI.
+  const rescuedCategoryIdsRef = useRef<Set<number>>(new Set())
 
   // Fetch categories
   const { data } = useQuery({
@@ -164,37 +172,50 @@ export const CategoryManageDialog = function CategoryManageDialog({
   }
 
   /**
-   * Moves the doomed category's unsaved draft into the default category before
-   * the row disappears. The server reassigns Todo and Completed rows, but the
+   * Hands the doomed category's unsaved draft to the default one, before the
+   * delete is issued. The server reassigns Todo and Completed rows, but the
    * in-progress text lives per-category on the device (localStorage on the web,
    * config.json in the panel) and nothing would ever reach it again.
    * @param doomedCategoryId - The category about to be deleted.
-   * @returns Nothing; resolves once the draft has been carried over.
+   * @returns Nothing; resolves once the draft is safe in the default category.
    * @example
    * await rescueDraft(12) // appends category 12's draft to the default's
    */
   const rescueDraft = async (doomedCategoryId: number) => {
     if (!defaultCategory || defaultCategory.id === doomedCategoryId) return
+    if (rescuedCategoryIdsRef.current.has(doomedCategoryId)) return
 
     // ponytail: per-host rescue — deleting from a browser tab carries the
     // browser's draft, not the Electron panel's copy in config.json. Upgrade
     // when the two note stores are unified.
-    const host = getLiveEditorHost()
-    const doomedDraft = (await host.note.get(doomedCategoryId)).trim()
+    const doomedDraft = (
+      await getLiveEditorHost().note.get(doomedCategoryId)
+    ).trim()
     if (!doomedDraft) return
 
-    const keptDraft = await host.note.get(defaultCategory.id)
-    await host.note.set(
-      defaultCategory.id,
-      keptDraft ? `${keptDraft.trimEnd()}\n${doomedDraft}` : doomedDraft,
-    )
-    // Past this line the draft is already safe in the default category, so a
-    // failed cleanup must not abort the delete: a retry would re-read the
-    // still-populated doomed key and append the same text a second time.
+    // Before the delete, never after: the delete is optimistic, so `onMutate`
+    // drops the row at once and useAutoSelectDefaultCategory flips the editor
+    // to the default. An append issued after that races the default category's
+    // in-flight note load, which would resolve with the pre-merge text.
+    await appendCategoryDraft(defaultCategory.id, doomedDraft)
+    rescuedCategoryIdsRef.current.add(doomedCategoryId)
+  }
+
+  /**
+   * Drops the doomed category's now-duplicated draft once the row is really
+   * gone. Called from the delete's `onSuccess`, so a rejected delete leaves the
+   * text in the category it still belongs to.
+   * @param doomedCategoryId - The category the server just deleted.
+   * @returns Nothing; a failed clear leaves an unreachable copy, never a loss.
+   * @example
+   * await clearRescuedDraft(12)
+   */
+  const clearRescuedDraft = async (doomedCategoryId: number) => {
+    if (!rescuedCategoryIdsRef.current.has(doomedCategoryId)) return
     try {
-      await host.note.set(doomedCategoryId, '')
+      await getLiveEditorHost().note.set(doomedCategoryId, '')
     } catch {
-      // Nothing to recover — the text survived, only the old copy lingers.
+      // Nothing to recover — the text already reached the default category.
     }
   }
 
@@ -215,7 +236,7 @@ export const CategoryManageDialog = function CategoryManageDialog({
       () => {
         deleteMutation.mutate(
           { id: doomedCategoryId },
-          { onSuccess: () => setDeleteTarget(null) },
+          { onSuccess: () => void clearRescuedDraft(doomedCategoryId) },
         )
       },
       () => {

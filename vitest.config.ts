@@ -27,6 +27,9 @@ export default defineConfig({
       exclude: [
         'src/**/*.{test,spec}.{ts,tsx}',
         'src/**/__tests__/**',
+        // Test-only helpers that live under src/ because specs import them by
+        // alias; counting the MSW fake server as app code understates coverage.
+        'src/test/**',
         'src/**/*.stories.{ts,tsx}',
         'src/types/**',
         '**/*.d.ts',
