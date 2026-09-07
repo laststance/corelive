@@ -92,6 +92,10 @@ export const CategoryManageDialog = function CategoryManageDialog({
   // ponytail: dialog-scoped — closing and reopening the manager between two
   // attempts still double-appends. Upgrade when the rescue moves out of the UI.
   const rescuedCategoryIdsRef = useRef<Set<number>>(new Set())
+  // Categories whose rescue is still in flight. Distinct from the set above on
+  // purpose: "already rescued" must still issue the delete (that is the retry
+  // path), while "still rescuing" must issue nothing at all.
+  const rescuingCategoryIdsRef = useRef<Set<number>>(new Set())
 
   // Fetch categories
   const { data } = useQuery({
@@ -215,6 +219,13 @@ export const CategoryManageDialog = function CategoryManageDialog({
     if (!deleteTarget || deleteMutation.isPending) return
 
     const doomedCategoryId = deleteTarget.id
+    // Claimed synchronously, because `isPending` cannot cover this window: the
+    // action button is a Close, so the confirmation is gone while the rescue is
+    // still reading, and `mutate` has not run yet. Re-confirming in that gap
+    // would read the same draft again and append it to the default twice.
+    if (rescuingCategoryIdsRef.current.has(doomedCategoryId)) return
+    rescuingCategoryIdsRef.current.add(doomedCategoryId)
+
     // The delete waits on the draft landing, and is abandoned if it does not.
     // The Electron bridge re-throws a failed note read/write by design
     // (electron/preload-live-editor.ts), precisely so this can decline to
@@ -229,8 +240,14 @@ export const CategoryManageDialog = function CategoryManageDialog({
         // ids never repeat, so nothing can surface it. Sweep it if dead drafts
         // ever cost anything.
         deleteMutation.mutate({ id: doomedCategoryId })
+        // Released only now. Re-arming the confirmation costs a click and a
+        // render — by then `isPending` is the guard, and after a rejected
+        // delete the retry needs to get back in here.
+        rescuingCategoryIdsRef.current.delete(doomedCategoryId)
       },
       () => {
+        // Nothing landed, so the retry has to be able to read the draft again.
+        rescuingCategoryIdsRef.current.delete(doomedCategoryId)
         toast.error(
           "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
         )
@@ -341,6 +358,11 @@ export const CategoryManageDialog = function CategoryManageDialog({
                         onKeyDown={handleEditNameKeyDown}
                         className="h-8 flex-1"
                         maxLength={30}
+                        // Not "Category name": that is a substring of the create
+                        // row's "New category name", and Playwright's role-name
+                        // matching is substring-based, so the two would be
+                        // ambiguous to every browser-driven test.
+                        aria-label="Rename category"
                         autoFocus
                       />
 

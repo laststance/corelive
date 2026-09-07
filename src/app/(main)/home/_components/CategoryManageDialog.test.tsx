@@ -78,8 +78,8 @@ const defaultCategory = buildCategory({
  * write does. `preload-live-editor.ts` re-throws both by design, and the web
  * host cannot reject at all (localStorage degrades to memory), so this is the
  * only shape that reaches the rescue's failure path.
- * @param failingCall - `'read'` fails every read; `'clear'` fails only the final
- *   wipe of the doomed key, after the default category already holds the text.
+ * @param failingCall - `'read'` fails every read; `'write'` fails every write,
+ *   so the text never reaches the default category.
  * @returns The bridge's note table, to assert what survived on the device.
  * @example
  * const notes = installFailingLiveEditorBridge('read')
@@ -113,6 +113,54 @@ function installFailingLiveEditorBridge(
     },
   }
   return notes
+}
+
+/**
+ * Installs a bridge that never resolves the doomed category's read until the
+ * spec releases it, making the window between confirming a delete and the
+ * rescue finishing real enough to click into.
+ * @returns The bridge's note table, plus one resolver per read it was asked
+ *   for — the count is how many rescues actually started.
+ * @example
+ * const { notes, heldReads } = installHeldReadLiveEditorBridge()
+ */
+function installHeldReadLiveEditorBridge(): {
+  notes: Map<number, string>
+  heldReads: Array<(text: string) => void>
+} {
+  const notes = new Map<number, string>([
+    [1, 'already here'],
+    [12, 'half a thought'],
+  ])
+  const heldReads: Array<(text: string) => void> = []
+  window.liveEditorAPI = {
+    window: {
+      close: async () => {},
+      toggle: async () => {},
+      setOpacity: async () => {},
+      getOpacity: async () => 1,
+      getBounds: async () => null,
+      setBounds: async () => {},
+    },
+    note: {
+      // Only the doomed category hangs; the default still reads normally, so
+      // the append itself is never what this spec is waiting on.
+      get: async (categoryId) =>
+        categoryId === 12
+          ? new Promise<string>((resolve) => {
+              heldReads.push(resolve)
+            })
+          : Promise.resolve(notes.get(categoryId) ?? ''),
+      set: async (categoryId, text) => {
+        notes.set(categoryId, text)
+      },
+    },
+    spaces: {
+      getVisibleOnAllWorkspaces: async () => false,
+      setVisibleOnAllWorkspaces: async (enabled) => enabled,
+    },
+  }
+  return { notes, heldReads }
 }
 
 /**
@@ -285,7 +333,10 @@ describe('CategoryManageDialog row actions', () => {
     // Act
     await user.click(screen.getByRole('button', { name: 'Rename Work' }))
     await user.clear(screen.getByDisplayValue('Work'))
-    await user.type(screen.getByRole('textbox', { name: '' }), 'Reading{Enter}')
+    await user.type(
+      screen.getByRole('textbox', { name: 'Rename category' }),
+      'Reading{Enter}',
+    )
 
     // Assert
     await waitFor(() => {
@@ -338,6 +389,41 @@ describe('CategoryManageDialog draft rescue', () => {
     // draft, and the retry skips the re-append, so the wipe would take away the
     // last reachable copy. The orphan is unreachable and ids never repeat.
     expect(getLocalNote(12)).toBe('half a thought')
+    await waitFor(() => {
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+      ])
+    })
+  })
+
+  test('appends the rescued draft once when the delete is confirmed twice', async () => {
+    // Arrange — the doomed read is held open on purpose. A bridge that resolves
+    // normally finishes the whole rescue between the two clicks, and this spec
+    // would then pass against code with no guard at all.
+    const user = userEvent.setup()
+    const { notes, heldReads } = installHeldReadLiveEditorBridge()
+    await renderDialog([defaultCategory, buildCategory()])
+
+    // Act — confirm, then confirm again while the first rescue is still
+    // reading. The action button is a Close, so the confirmation is already
+    // gone, the row is still listed, and `isPending` is still false.
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert — the second confirmation started no second rescue. Counting reads
+    // rather than diffing the merged text keeps this independent of how two
+    // concurrent appends would happen to interleave.
+    expect(heldReads).toHaveLength(1)
+
+    // And the one rescue that did run lands the draft exactly once.
+    heldReads.forEach((releaseRead) => releaseRead('half a thought'))
+    await waitFor(() => {
+      expect(notes.get(1)).toBe('already here\nhalf a thought')
+    })
+    // The ignored confirmation is silent: nothing failed, so nothing is said.
+    expect(toast.error).not.toHaveBeenCalled()
     await waitFor(() => {
       expect(readCategories().map((category) => category.name)).toEqual([
         'General',
