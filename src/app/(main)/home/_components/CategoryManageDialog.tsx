@@ -185,9 +185,14 @@ export const CategoryManageDialog = function CategoryManageDialog({
     if (!defaultCategory || defaultCategory.id === doomedCategoryId) return
     if (rescuedCategoryIdsRef.current.has(doomedCategoryId)) return
 
-    // ponytail: per-host rescue — deleting from a browser tab carries the
-    // browser's draft, not the Electron panel's copy in config.json. Upgrade
-    // when the two note stores are unified.
+    // Reads the store, not whichever editor is on screen. Three known ceilings,
+    // all pre-existing, none of them a loss:
+    // ponytail: (1) per-host — a browser tab carries the browser's draft, not
+    // the Electron panel's copy in config.json; (2) a second browser tab
+    // showing the default holds its own React copy and overwrites this merge on
+    // its next keystroke; (3) a note.set that failed earlier leaves the store
+    // behind the editor, so stale text is carried. Upgrade when the two note
+    // stores are unified and note changes broadcast between tabs.
     const doomedDraft = (
       await getLiveEditorHost().note.get(doomedCategoryId)
     ).trim()
@@ -199,24 +204,6 @@ export const CategoryManageDialog = function CategoryManageDialog({
     // in-flight note load, which would resolve with the pre-merge text.
     await appendCategoryDraft(defaultCategory.id, doomedDraft)
     rescuedCategoryIdsRef.current.add(doomedCategoryId)
-  }
-
-  /**
-   * Drops the doomed category's now-duplicated draft once the row is really
-   * gone. Called from the delete's `onSuccess`, so a rejected delete leaves the
-   * text in the category it still belongs to.
-   * @param doomedCategoryId - The category the server just deleted.
-   * @returns Nothing; a failed clear leaves an unreachable copy, never a loss.
-   * @example
-   * await clearRescuedDraft(12)
-   */
-  const clearRescuedDraft = async (doomedCategoryId: number) => {
-    if (!rescuedCategoryIdsRef.current.has(doomedCategoryId)) return
-    try {
-      await getLiveEditorHost().note.set(doomedCategoryId, '')
-    } catch {
-      // Nothing to recover — the text already reached the default category.
-    }
   }
 
   /**
@@ -234,10 +221,14 @@ export const CategoryManageDialog = function CategoryManageDialog({
     // delete; going ahead would strand the text under an unreachable id.
     void rescueDraft(doomedCategoryId).then(
       () => {
-        deleteMutation.mutate(
-          { id: doomedCategoryId },
-          { onSuccess: () => void clearRescuedDraft(doomedCategoryId) },
-        )
+        // The doomed copy stays where it is, on purpose. Wiping it was the one
+        // path here that could destroy text: a rejected delete restores the
+        // category with its draft, and a retry skips the re-append, so a clear
+        // on the next success would take away the last reachable copy.
+        // ponytail: the orphan is unreachable but harmless — Postgres identity
+        // ids never repeat, so nothing can surface it. Sweep it if dead drafts
+        // ever cost anything.
+        deleteMutation.mutate({ id: doomedCategoryId })
       },
       () => {
         toast.error(
@@ -275,7 +266,16 @@ export const CategoryManageDialog = function CategoryManageDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        {/* The panel floor is 320px tall (WindowManager minHeight) and
+            DialogContent sets no height cap, so the title clips off the top and
+            the list runs past the bottom. Cap the dialog, not the list: the
+            three rows are header / create row / list, and giving the last one
+            `minmax(0,1fr)` lets it absorb whatever is left and scroll. A
+            viewport-relative cap is the point — no spacing token can express
+            "as tall as whatever window this dialog happens to be in". */}
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)] sm:max-w-md" // eslint-disable-line dslint/token-only -- viewport-relative by necessity
+        >
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>
             <DialogDescription>
@@ -305,14 +305,7 @@ export const CategoryManageDialog = function CategoryManageDialog({
             </Button>
           </div>
 
-          {/* The panel floor is 320px tall (WindowManager minHeight), and
-              DialogContent sets no height cap, so a long list would push the
-              confirm controls off-screen with no way back. A viewport-relative
-              cap is the point here — no spacing token can express "half of
-              whatever window this dialog happens to be in". */}
-          <div
-            className="max-h-[50vh] space-y-2 overflow-y-auto py-4" // eslint-disable-line dslint/token-only -- viewport-relative by necessity
-          >
+          <div className="space-y-2 overflow-y-auto py-4">
             {categories.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No categories yet. Add your first one above.

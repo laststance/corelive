@@ -85,7 +85,7 @@ const defaultCategory = buildCategory({
  * const notes = installFailingLiveEditorBridge('read')
  */
 function installFailingLiveEditorBridge(
-  failingCall: 'read' | 'clear',
+  failingCall: 'read' | 'write',
 ): Map<number, string> {
   const notes = new Map<number, string>([[12, 'half a thought']])
   window.liveEditorAPI = {
@@ -103,9 +103,7 @@ function installFailingLiveEditorBridge(
         return notes.get(categoryId) ?? ''
       },
       set: async (categoryId, text) => {
-        if (failingCall === 'clear' && text === '') {
-          throw new Error('Failed to write note')
-        }
+        if (failingCall === 'write') throw new Error('Failed to write note')
         notes.set(categoryId, text)
       },
     },
@@ -335,7 +333,11 @@ describe('CategoryManageDialog draft rescue', () => {
     await waitFor(() => {
       expect(getLocalNote(1)).toBe('already here\nhalf a thought')
     })
-    expect(getLocalNote(12)).toBe('')
+    // The doomed copy is left behind on purpose. Wiping it is the one move here
+    // that can destroy text: a rejected delete restores the category with its
+    // draft, and the retry skips the re-append, so the wipe would take away the
+    // last reachable copy. The orphan is unreachable and ids never repeat.
+    expect(getLocalNote(12)).toBe('half a thought')
     await waitFor(() => {
       expect(readCategories().map((category) => category.name)).toEqual([
         'General',
@@ -370,26 +372,29 @@ describe('CategoryManageDialog draft rescue', () => {
     ])
   })
 
-  test('deletes anyway when only the old copy of a rescued draft lingers', async () => {
-    // Arrange — the merge into the default landed and only the wipe of the old
-    // key failed. Aborting here would be a false alarm, and a retry would read
-    // the still-populated doomed key and append the same text a second time.
+  test('keeps the category when the rescued draft cannot be written to the default', async () => {
+    // Arrange — the read works but the write into the default rejects, so the
+    // text reached nowhere. Deleting on a half-finished rescue would strand it
+    // under an id nothing can reach, same as a failed read.
     const user = userEvent.setup()
-    const notes = installFailingLiveEditorBridge('clear')
+    const notes = installFailingLiveEditorBridge('write')
     await renderDialog([defaultCategory, buildCategory()])
 
     // Act
     await user.click(screen.getByRole('button', { name: 'Delete Work' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
-    // Assert
+    // Assert — Work survives, still holding the only copy of its draft.
     await waitFor(() => {
-      expect(readCategories().map((category) => category.name)).toEqual([
-        'General',
-      ])
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
+      )
     })
-    expect(notes.get(1)).toBe('half a thought')
-    expect(toast.error).not.toHaveBeenCalled()
+    expect(readCategories().map((category) => category.name)).toEqual([
+      'General',
+      'Work',
+    ])
+    expect(notes.get(12)).toBe('half a thought')
   })
 
   test('leaves the draft in its own category when the delete is rejected', async () => {
@@ -449,7 +454,8 @@ describe('CategoryManageDialog draft rescue', () => {
       ])
     })
     expect(getLocalNote(1)).toBe('already here\nhalf a thought')
-    expect(getLocalNote(12)).toBe('')
+    // Never wiped, on either attempt — the copy the retry relies on.
+    expect(getLocalNote(12)).toBe('half a thought')
   })
 
   test('deletes an empty category without touching the default draft', async () => {
