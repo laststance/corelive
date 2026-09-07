@@ -4,6 +4,7 @@ import { useUser } from '@clerk/nextjs'
 import { useQuery } from '@tanstack/react-query'
 
 import { LiveEditor } from '@/components/live-editor/LiveEditor'
+import { useCategorySync } from '@/hooks/useCategorySync'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
@@ -27,6 +28,10 @@ const WritePage = function WritePage() {
   // A disabled query reports `isPending` forever, so the signed-in check is what
   // separates "the round trip has not landed yet" from "there is nothing to fetch".
   const isCategoryListPending = isSignedIn === true && isPending
+
+  // Another tab (or the /home sidebar) can rename or delete a category while
+  // this one sits open on it.
+  useCategorySync()
 
   return (
     <main className="min-h-dvh w-full bg-background text-foreground">

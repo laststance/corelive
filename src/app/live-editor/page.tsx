@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { LiveEditor } from '@/components/live-editor/LiveEditor'
+import { useCategorySync } from '@/hooks/useCategorySync'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -23,6 +24,10 @@ const LiveEditorPage = function LiveEditorPage() {
     enabled: isClerkReady,
   })
   const categories: CategoryWithCount[] = data?.categories ?? []
+
+  // The panel outlives a /home edit in another window; without this it keeps
+  // offering a category that was renamed or deleted somewhere else.
+  useCategorySync()
 
   if (isLoading || !isClerkReady) {
     return (

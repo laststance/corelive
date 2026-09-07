@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, Settings } from 'lucide-react'
 import {
   useState,
@@ -27,15 +27,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
+import { useCategorySync } from '@/hooks/useCategorySync'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
 import { getColorDotClass } from '@/lib/category-colors'
-import { subscribeToCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import {
   CATEGORY_COLORS,
@@ -59,7 +58,6 @@ export const Category = function Category({
 }: {
   onOpenManageAction: () => void
 }) {
-  const queryClient = useQueryClient()
   const { setOpenMobile, isMobile } = useSidebar()
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
   const { createMutation } = useCategoryMutations()
@@ -85,13 +83,7 @@ export const Category = function Category({
   )
 
   // Cross-tab sync for categories
-  useCycleEffect(() => {
-    return subscribeToCategorySync(() => {
-      queryClient.invalidateQueries({
-        queryKey: orpc.category.list.key(),
-      })
-    })
-  }, [queryClient])
+  useCategorySync()
 
   /**
    * Handles selecting a category and closing mobile sidebar.

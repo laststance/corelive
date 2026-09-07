@@ -3,15 +3,9 @@ import Link from 'next/link'
 import * as React from 'react'
 import { useId, useState } from 'react'
 
+import { LiveEditorCategoryPicker } from '@/components/live-editor/LiveEditorCategoryPicker'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer'
@@ -170,7 +164,6 @@ export function LiveEditorSurface({
   })
   const noteInputId = useId()
   const opacityInputId = useId()
-  const categoryInputId = useId()
   const spacesInputId = useId()
 
   // LiveEditor text-presentation settings (shared via the settings slice,
@@ -181,7 +174,6 @@ export function LiveEditorSurface({
   const liveEditorFontSize = useAppSelector(selectLiveEditorFontSize)
   const liveEditorTextColor = useAppSelector(selectLiveEditorTextColor)
   const opacityValue = [opacity]
-  const hasCategories = categories.length > 0
   // The field is disabled until its note is ready. On the web that disabled
   // field IS the first-paint stand-in (design review DR5) — same placeholder,
   // same styling, no spinner — and turns live once Clerk resolves.
@@ -295,32 +287,13 @@ export function LiveEditorSurface({
           {/* /write has no sidebar, so on the signed-in web this picker is the
               only category control (design review DR3); it writes the shared
               selection. Signed out there is one implicit category — no picker. */}
-          <Select
-            value={activeCategoryId === null ? '' : String(activeCategoryId)}
-            onValueChange={handleCategoryValueChange}
-            disabled={!hasCategories}
-          >
-            <SelectTrigger
-              id={categoryInputId}
-              aria-label="Active category"
-              className={cn(
-                'text-xs',
-                // 44px touch target on the web (/write is the phone surface).
-                // `min-h-11`, not `h-11`: SelectTrigger's own
-                // `data-[size=default]:h-9` outranks a plain height.
-                isElectronPanel ? 'h-7 w-32' : 'min-h-11 w-44',
-              )}
-            >
-              <SelectValue placeholder="No categories" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((category) => (
-                <SelectItem key={category.id} value={String(category.id)}>
-                  {category.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LiveEditorCategoryPicker
+            categories={categories}
+            activeCategoryId={activeCategoryId}
+            isSignedIn={isSignedIn}
+            isElectronPanel={isElectronPanel}
+            onCategoryValueChange={handleCategoryValueChange}
+          />
 
           {isElectronPanel && (
             <div className="flex flex-1 items-center gap-2">

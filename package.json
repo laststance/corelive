@@ -204,6 +204,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.5.0",
     "markdown-to-jsx": "^9.10.2",
+    "msw": "^2.15.0",
     "postcss": "^8.5.28",
     "postcss-load-config": "6.0.1",
     "prettier": "^3.9.6",

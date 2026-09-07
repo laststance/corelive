@@ -1,6 +1,8 @@
 'use client'
 
+import { ORPCError } from '@orpc/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
@@ -14,12 +16,34 @@ interface CategoryListResponse {
   categories: CategoryWithCount[]
 }
 
+/** Shown when the failure never reached a handler, so no server sentence exists. */
+const CATEGORY_WRITE_FALLBACK_MESSAGE = "Couldn't save that change — try again."
+
+/**
+ * Explains a failed category write in the user's language, so an optimistic row
+ * never just appears and vanishes. Called from every mutation's `onError`.
+ * @param error - Whatever the mutation rejected with.
+ * @returns Nothing; raises a toast.
+ * @example
+ * notifyCategoryWriteFailed(new ORPCError('CONFLICT', { message: 'Category "Work" already exists' }))
+ * // => toast: 'Category "Work" already exists'
+ */
+const notifyCategoryWriteFailed = (error: unknown): void => {
+  // Server messages are written for humans and oRPC transmits them by design;
+  // a transport failure ("Failed to fetch") is not, so it gets our own words.
+  toast.error(
+    error instanceof ORPCError
+      ? error.message
+      : CATEGORY_WRITE_FALLBACK_MESSAGE,
+  )
+}
+
 /**
  * Custom hook providing category mutations with optimistic updates.
  *
  * Follows the same optimistic update pattern as useTodoMutations:
  * 1. onMutate: Cancel queries -> Snapshot -> Apply optimistic update
- * 2. onError: Rollback using snapshot
+ * 2. onError: Rollback using snapshot, then say why via {@link notifyCategoryWriteFailed}
  * 3. onSettled: Always invalidate to sync with server + broadcast
  *
  * @returns Object containing all category mutations
@@ -71,10 +95,11 @@ export function useCategoryMutations() {
 
       return { previousCategories }
     },
-    onError: (_err, _newCategory, context) => {
+    onError: (error, _newCategory, context) => {
       if (context?.previousCategories) {
         queryClient.setQueryData(categoryKey, context.previousCategories)
       }
+      notifyCategoryWriteFailed(error)
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: categoryKey })
@@ -105,10 +130,11 @@ export function useCategoryMutations() {
 
       return { previousCategories }
     },
-    onError: (_err, _input, context) => {
+    onError: (error, _input, context) => {
       if (context?.previousCategories) {
         queryClient.setQueryData(categoryKey, context.previousCategories)
       }
+      notifyCategoryWriteFailed(error)
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: categoryKey })
@@ -137,10 +163,11 @@ export function useCategoryMutations() {
 
       return { previousCategories }
     },
-    onError: (_err, _input, context) => {
+    onError: (error, _input, context) => {
       if (context?.previousCategories) {
         queryClient.setQueryData(categoryKey, context.previousCategories)
       }
+      notifyCategoryWriteFailed(error)
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: categoryKey })

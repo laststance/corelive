@@ -32,6 +32,12 @@ vi.mock('@/lib/orpc/client-query', () => ({
   },
 }))
 
+// Cross-window invalidation is its own concern; this suite pins what the page
+// hands the editor, and the real hook would need a QueryClient to do it.
+vi.mock('@/hooks/useCategorySync', () => ({
+  useCategorySync: vi.fn(),
+}))
+
 // The editor has its own suite; here it only reports what the page handed it.
 vi.mock('@/components/live-editor/LiveEditor', () => ({
   LiveEditor: ({
