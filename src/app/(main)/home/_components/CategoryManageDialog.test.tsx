@@ -5,7 +5,13 @@
  * a stubbed mutation would report the call and prove nothing landed.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { toast } from 'sonner'
@@ -542,6 +548,39 @@ describe('CategoryManageDialog draft rescue', () => {
     expect(getLocalNote(1)).toBe('already here\nhalf a thought')
     // Never wiped, on either attempt — the copy the retry relies on.
     expect(getLocalNote(12)).toBe('half a thought')
+  })
+
+  test('appends the rescued draft once when the manager is reopened between two delete attempts', async () => {
+    // Arrange — the first attempt fails, so the doomed copy is deliberately
+    // left where it is. Closing the manager empties the in-memory "already
+    // rescued" set, and that lost state is the whole point of this spec.
+    const user = userEvent.setup()
+    setLocalNote(1, 'already here')
+    setLocalNote(12, 'half a thought')
+    await renderDialog([defaultCategory, buildCategory()])
+    armNetworkFailure()
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    // Waits on the append itself, not on the row returning: the retry must not
+    // repeat work that has already landed.
+    await waitFor(() => {
+      expect(getLocalNote(1)).toBe('already here\nhalf a thought')
+    })
+
+    // Act — unmount the manager, mount a fresh one, retry against a server
+    // that answers. Nothing in React remembers the first attempt.
+    cleanup()
+    await renderDialog([defaultCategory, buildCategory()])
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert — the draft the first attempt already moved is not moved twice.
+    await waitFor(() => {
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+      ])
+    })
+    expect(getLocalNote(1)).toBe('already here\nhalf a thought')
   })
 
   test('deletes an empty category without touching the default draft', async () => {

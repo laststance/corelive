@@ -89,8 +89,11 @@ export const CategoryManageDialog = function CategoryManageDialog({
   // Categories whose draft has already been handed to the default one. A
   // rejected delete deliberately leaves the doomed copy in place, so a retry
   // would otherwise append the same text a second time.
-  // ponytail: dialog-scoped — closing and reopening the manager between two
-  // attempts still double-appends. Upgrade when the rescue moves out of the UI.
+  // ponytail: dialog-scoped, so a remount forgets it; the content check in
+  // rescueDraft is the backstop for that. What neither covers is text the user
+  // adds to the doomed category AFTER a failed rescue — the whole draft is
+  // appended, so the earlier part shows up twice. Upgrade when the rescue moves
+  // out of the UI.
   const rescuedCategoryIdsRef = useRef<Set<number>>(new Set())
   // Categories whose rescue is still in flight. Distinct from the set above on
   // purpose: "already rescued" must still issue the delete (that is the retry
@@ -201,6 +204,16 @@ export const CategoryManageDialog = function CategoryManageDialog({
       await getLiveEditorHost().note.get(doomedCategoryId)
     ).trim()
     if (!doomedDraft) return
+
+    // Remount backstop: `rescuedCategoryIdsRef` dies with the dialog, so a
+    // rejected delete, a close, and a retry would otherwise append the same
+    // draft a second time. The default's own copy is the only record of the
+    // first attempt that survives a remount. A same-mount retry is faster than
+    // the editor's debounced save and is covered by the ref, not by this.
+    // ponytail: substring match — a one-word draft that already appears in the
+    // default's prose is skipped. Far smaller than the double-append it closes.
+    const rescuedDraft = await getLiveEditorHost().note.get(defaultCategory.id)
+    if (rescuedDraft.includes(doomedDraft)) return
 
     // Before the delete, never after: the delete is optimistic, so `onMutate`
     // drops the row at once and useAutoSelectDefaultCategory flips the editor
