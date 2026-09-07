@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
 import {
   afterAll,
   afterEach,
@@ -72,6 +73,50 @@ const defaultCategory = buildCategory({
 })
 
 /**
+ * Installs an Electron bridge whose note store fails the way a bad disk read or
+ * write does. `preload-live-editor.ts` re-throws both by design, and the web
+ * host cannot reject at all (localStorage degrades to memory), so this is the
+ * only shape that reaches the rescue's failure path.
+ * @param failingCall - `'read'` fails every read; `'clear'` fails only the final
+ *   wipe of the doomed key, after the default category already holds the text.
+ * @returns The bridge's note table, to assert what survived on the device.
+ * @example
+ * const notes = installFailingLiveEditorBridge('read')
+ */
+function installFailingLiveEditorBridge(
+  failingCall: 'read' | 'clear',
+): Map<number, string> {
+  const notes = new Map<number, string>([[12, 'half a thought']])
+  window.liveEditorAPI = {
+    window: {
+      close: async () => {},
+      toggle: async () => {},
+      setOpacity: async () => {},
+      getOpacity: async () => 1,
+      getBounds: async () => null,
+      setBounds: async () => {},
+    },
+    note: {
+      get: async (categoryId) => {
+        if (failingCall === 'read') throw new Error('Failed to read note')
+        return notes.get(categoryId) ?? ''
+      },
+      set: async (categoryId, text) => {
+        if (failingCall === 'clear' && text === '') {
+          throw new Error('Failed to write note')
+        }
+        notes.set(categoryId, text)
+      },
+    },
+    spaces: {
+      getVisibleOnAllWorkspaces: async () => false,
+      setVisibleOnAllWorkspaces: async (enabled) => enabled,
+    },
+  }
+  return notes
+}
+
+/**
  * Opens the dialog over a server holding the given rows and waits for the list
  * to arrive, so no spec asserts against an empty first render.
  * @param categories - Rows the fake `category.list` should return.
@@ -104,6 +149,9 @@ beforeEach(() => {
   resetOrpcServer()
   // The draft store is real localStorage, and happy-dom keeps one per file.
   localStorage.clear()
+  // Back to the web host; a spec that installed a failing bridge keeps it
+  // otherwise, and happy-dom's window outlives the test.
+  delete window.liveEditorAPI
 })
 
 describe('CategoryManageDialog create row', () => {
@@ -292,6 +340,55 @@ describe('CategoryManageDialog draft rescue', () => {
         'General',
       ])
     })
+  })
+
+  test('keeps the category when its draft cannot be moved off the device', async () => {
+    // Arrange — the Electron note bridge rejects, so nothing reached safety.
+    // Deleting anyway would strand the text under an id nothing can reach,
+    // which is the loss the dialog promises does not happen.
+    const user = userEvent.setup()
+    installFailingLiveEditorBridge('read')
+    await renderDialog([defaultCategory, buildCategory()])
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert — the confirmation is a Radix Close, so it is already gone by the
+    // time the rescue rejects; the toast is the only channel left to say the
+    // delete was abandoned. Asserted, because the source comment claims it.
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
+      )
+    })
+    expect(readCategories().map((category) => category.name)).toEqual([
+      'General',
+      'Work',
+    ])
+  })
+
+  test('deletes anyway when only the old copy of a rescued draft lingers', async () => {
+    // Arrange — the merge into the default landed and only the wipe of the old
+    // key failed. Aborting here would be a false alarm, and a retry would read
+    // the still-populated doomed key and append the same text a second time.
+    const user = userEvent.setup()
+    const notes = installFailingLiveEditorBridge('clear')
+    await renderDialog([defaultCategory, buildCategory()])
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert
+    await waitFor(() => {
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+      ])
+    })
+    expect(notes.get(1)).toBe('half a thought')
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   test('deletes an empty category without touching the default draft', async () => {

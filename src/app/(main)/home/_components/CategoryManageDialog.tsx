@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react'
+import { toast } from 'sonner'
 
 import {
   AlertDialog,
@@ -187,24 +188,42 @@ export const CategoryManageDialog = function CategoryManageDialog({
       defaultCategory.id,
       keptDraft ? `${keptDraft.trimEnd()}\n${doomedDraft}` : doomedDraft,
     )
-    await host.note.set(doomedCategoryId, '')
+    // Past this line the draft is already safe in the default category, so a
+    // failed cleanup must not abort the delete: a retry would re-read the
+    // still-populated doomed key and append the same text a second time.
+    try {
+      await host.note.set(doomedCategoryId, '')
+    } catch {
+      // Nothing to recover — the text survived, only the old copy lingers.
+    }
   }
 
   /**
-   * Confirms and executes category deletion.
+   * Confirms deletion, but only once the doomed category's draft is safe.
+   * Radix's action button is a Close, so this confirmation is already gone by
+   * the time the rescue resolves — a toast is the only channel left to report on.
    */
   const confirmDelete = () => {
     if (!deleteTarget || deleteMutation.isPending) return
 
     const doomedCategoryId = deleteTarget.id
-    // The draft moves first: if the delete lands and this had not run, the text
-    // would still be on disk with no category left to reach it from.
-    void rescueDraft(doomedCategoryId).finally(() => {
-      deleteMutation.mutate(
-        { id: doomedCategoryId },
-        { onSuccess: () => setDeleteTarget(null) },
-      )
-    })
+    // The delete waits on the draft landing, and is abandoned if it does not.
+    // The Electron bridge re-throws a failed note read/write by design
+    // (electron/preload-live-editor.ts), precisely so this can decline to
+    // delete; going ahead would strand the text under an unreachable id.
+    void rescueDraft(doomedCategoryId).then(
+      () => {
+        deleteMutation.mutate(
+          { id: doomedCategoryId },
+          { onSuccess: () => setDeleteTarget(null) },
+        )
+      },
+      () => {
+        toast.error(
+          "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
+        )
+      },
+    )
   }
 
   const handleEditNameChange = (event: ChangeEvent<HTMLInputElement>) => {
