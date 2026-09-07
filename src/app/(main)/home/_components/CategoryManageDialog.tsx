@@ -215,9 +215,10 @@ export const CategoryManageDialog = function CategoryManageDialog({
     // skipping it there would orphan the only copy — the loss this whole path
     // exists to prevent. Appends always land as whole lines, so anchoring on
     // newlines still recognises the text it did move.
-    // ponytail: trailing whitespace typed after the merge makes the last line
-    // stop matching, so a retry appends again. A visible duplicate, which is
-    // the direction this file errs in on purpose.
+    // ponytail: editing the rescued line itself stops it matching, so a retry
+    // appends again. `trimEnd` covers trailing whitespace while that line is
+    // still the last one. A visible duplicate, which is the direction this
+    // file errs in on purpose.
     const rescuedDraft = await getLiveEditorHost().note.get(defaultCategory.id)
     if (`\n${rescuedDraft.trimEnd()}\n`.includes(`\n${doomedDraft}\n`)) return
 

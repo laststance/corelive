@@ -416,13 +416,15 @@ describe('CategoryManageDialog draft rescue', () => {
     await user.click(screen.getByRole('button', { name: 'Delete Work' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
-    // Assert — it arrives as its own line, because it is its own note.
+    // Assert — it arrives as its own line, because it is its own note. Both
+    // reads are polled: `readCategories` hits the MSW table, and the server
+    // delete lands after the append, so asserting it outside the wait races.
     await waitFor(() => {
       expect(getLocalNote(1)).toBe('buy milk today\nmilk')
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+      ])
     })
-    expect(readCategories().map((category) => category.name)).toEqual([
-      'General',
-    ])
   })
 
   test('appends the rescued draft once when the delete is confirmed twice', async () => {
