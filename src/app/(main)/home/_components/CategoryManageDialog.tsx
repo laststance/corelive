@@ -210,10 +210,16 @@ export const CategoryManageDialog = function CategoryManageDialog({
     // draft a second time. The default's own copy is the only record of the
     // first attempt that survives a remount. A same-mount retry is faster than
     // the editor's debounced save and is covered by the ref, not by this.
-    // ponytail: substring match — a one-word draft that already appears in the
-    // default's prose is skipped. Far smaller than the double-append it closes.
+    // Matched line by line, never as a substring: a note reading "milk" is not
+    // already rescued just because the default says "buy milk today", and
+    // skipping it there would orphan the only copy — the loss this whole path
+    // exists to prevent. Appends always land as whole lines, so anchoring on
+    // newlines still recognises the text it did move.
+    // ponytail: trailing whitespace typed after the merge makes the last line
+    // stop matching, so a retry appends again. A visible duplicate, which is
+    // the direction this file errs in on purpose.
     const rescuedDraft = await getLiveEditorHost().note.get(defaultCategory.id)
-    if (rescuedDraft.includes(doomedDraft)) return
+    if (`\n${rescuedDraft.trimEnd()}\n`.includes(`\n${doomedDraft}\n`)) return
 
     // Before the delete, never after: the delete is optimistic, so `onMutate`
     // drops the row at once and useAutoSelectDefaultCategory flips the editor

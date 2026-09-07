@@ -402,6 +402,29 @@ describe('CategoryManageDialog draft rescue', () => {
     })
   })
 
+  test('rescues a draft that is only a fragment of a line the default already holds', async () => {
+    // Arrange — the guard against re-appending compares the doomed draft with
+    // the default's text. Compare it loosely and notes disappear: "milk" reads
+    // as already rescued because "buy milk today" contains those letters, and
+    // the delete then orphans the only copy of it.
+    const user = userEvent.setup()
+    setLocalNote(1, 'buy milk today')
+    setLocalNote(12, 'milk')
+    await renderDialog([defaultCategory, buildCategory()])
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert — it arrives as its own line, because it is its own note.
+    await waitFor(() => {
+      expect(getLocalNote(1)).toBe('buy milk today\nmilk')
+    })
+    expect(readCategories().map((category) => category.name)).toEqual([
+      'General',
+    ])
+  })
+
   test('appends the rescued draft once when the delete is confirmed twice', async () => {
     // Arrange — the doomed read is held open on purpose. A bridge that resolves
     // normally finishes the whole rescue between the two clicks, and this spec
