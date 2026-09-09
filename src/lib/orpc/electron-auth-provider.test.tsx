@@ -1,5 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { ElectronAuthProvider } from './electron-auth-provider'
 
@@ -196,7 +196,7 @@ describe('ElectronAuthProvider', () => {
     },
   )
 
-  it('consumes the Electron sign-in token with Clerk ticket strategy', async () => {
+  test('consumes the Electron sign-in token with Clerk ticket strategy', async () => {
     mockCreate.mockResolvedValue({
       createdSessionId: 'sess_123',
       status: 'complete',
@@ -228,7 +228,7 @@ describe('ElectronAuthProvider', () => {
     )
   })
 
-  it('emits an OAuth error when Clerk requires second factor after ticket exchange', async () => {
+  test('emits an OAuth error when Clerk requires second factor after ticket exchange', async () => {
     const receivedErrors: string[] = []
 
     mockCreate.mockResolvedValue({

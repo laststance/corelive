@@ -2,7 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { LiveEditorAppearance } from '@/components/electron/LiveEditorAppearance'
 import userSettingsReducer, {
@@ -56,7 +56,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     vi.clearAllMocks()
   })
 
-  it('saves the chosen LiveEditor font family when a face is picked', async () => {
+  test('saves the chosen LiveEditor font family when a face is picked', async () => {
     // Arrange — the default editor face is monospace.
     const { store, user } = renderLiveEditorAppearance()
 
@@ -67,7 +67,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(store.getState().settings.liveEditorFontFamily).toBe('serif')
   })
 
-  it('shows the LiveEditor font-size slider at the saved size on its [12,24] track', () => {
+  test('shows the LiveEditor font-size slider at the saved size on its [12,24] track', () => {
     // Arrange / Act — a non-default saved size.
     renderLiveEditorAppearance({ liveEditorFontSize: 20 })
 
@@ -79,7 +79,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(fontSizeSlider).toHaveAttribute('aria-valuemax', '24')
   })
 
-  it('saves the chosen LiveEditor text color when a preset is picked', async () => {
+  test('saves the chosen LiveEditor text color when a preset is picked', async () => {
     // Arrange — the default editor color is the theme foreground.
     const { store, user } = renderLiveEditorAppearance()
 
@@ -90,7 +90,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(store.getState().settings.liveEditorTextColor).toBe('var(--primary)')
   })
 
-  it('saves a custom LiveEditor text color chosen from the native color picker', () => {
+  test('saves a custom LiveEditor text color chosen from the native color picker', () => {
     // Arrange
     const { store } = renderLiveEditorAppearance()
     const customColorInput = screen.getByLabelText(
@@ -104,7 +104,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(store.getState().settings.liveEditorTextColor).toBe('#abcdef')
   })
 
-  it('shows a saved custom hex in the LiveEditor color picker', () => {
+  test('shows a saved custom hex in the LiveEditor color picker', () => {
     // Arrange / Act — a saved 6-digit hex should populate the native picker.
     renderLiveEditorAppearance({ liveEditorTextColor: '#123456' })
 
@@ -114,7 +114,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     )
   })
 
-  it('falls the color picker back to #000000 with no preset selected for a non-hex custom color', () => {
+  test('falls the color picker back to #000000 with no preset selected for a non-hex custom color', () => {
     // Arrange / Act — a theme token that is NOT one of the presets makes the
     // selection "custom": no preset radio is active, and the native picker (which
     // can only display a hex) cannot render a var() token so it shows #000000.
@@ -130,7 +130,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     )
   })
 
-  it('keeps finished LiveEditor lines in place by default — clear-on-complete starts off', () => {
+  test('keeps finished LiveEditor lines in place by default — clear-on-complete starts off', () => {
     // Arrange / Act — a fresh install keeps the on-concept behavior.
     renderLiveEditorAppearance()
 
@@ -140,7 +140,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     ).not.toBeChecked()
   })
 
-  it('opts into clearing finished LiveEditor lines when its switch is turned on', async () => {
+  test('opts into clearing finished LiveEditor lines when its switch is turned on', async () => {
     // Arrange
     const { store, user } = renderLiveEditorAppearance()
 
@@ -153,7 +153,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(store.getState().settings.liveEditorClearOnComplete).toBe(true)
   })
 
-  it('shows the LiveEditor clear-delay slider at the saved delay on its [0,5000] track', () => {
+  test('shows the LiveEditor clear-delay slider at the saved delay on its [0,5000] track', () => {
     // Arrange / Act — clearing is on, with a non-default saved linger.
     renderLiveEditorAppearance({
       liveEditorClearOnComplete: true,
@@ -167,7 +167,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(clearDelaySlider).toHaveAttribute('aria-valuemax', '5000')
   })
 
-  it('reads out the LiveEditor clear delay in milliseconds when it is non-zero', () => {
+  test('reads out the LiveEditor clear delay in milliseconds when it is non-zero', () => {
     // Arrange / Act
     renderLiveEditorAppearance({
       liveEditorClearOnComplete: true,
@@ -178,7 +178,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(screen.getByText('1500 ms')).toBeInTheDocument()
   })
 
-  it('reads out the LiveEditor clear delay as Instant at zero', () => {
+  test('reads out the LiveEditor clear delay as Instant at zero', () => {
     // Arrange / Act — a 0 ms delay means remove the line the instant it completes.
     renderLiveEditorAppearance({
       liveEditorClearOnComplete: true,
@@ -190,7 +190,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(screen.getAllByText('Instant')).toHaveLength(2)
   })
 
-  it('disables the clear-delay slider and nudges to enable it while clear-on-complete is off', () => {
+  test('disables the clear-delay slider and nudges to enable it while clear-on-complete is off', () => {
     // Arrange / Act — the default: finished lines stay, so the delay is moot.
     renderLiveEditorAppearance({ liveEditorClearOnComplete: false })
 
@@ -202,7 +202,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     ).toBeInTheDocument()
   })
 
-  it('enables the clear-delay slider and drops the nudge once clear-on-complete is on', () => {
+  test('enables the clear-delay slider and drops the nudge once clear-on-complete is on', () => {
     // Arrange / Act — opting into clearing makes the delay meaningful.
     renderLiveEditorAppearance({ liveEditorClearOnComplete: true })
 
@@ -214,7 +214,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('raises the saved clear delay by one 100 ms step when the slider is nudged right', () => {
+  test('raises the saved clear delay by one 100 ms step when the slider is nudged right', () => {
     // Arrange — clearing on, at a known 500 ms so a single step lands on 600.
     const { store } = renderLiveEditorAppearance({
       liveEditorClearOnComplete: true,
@@ -231,7 +231,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(store.getState().settings.liveEditorClearDelayMs).toBe(600)
   })
 
-  it('shows the LiveEditor toast-duration slider at the saved duration on its [2000,10000] track', () => {
+  test('shows the LiveEditor toast-duration slider at the saved duration on its [2000,10000] track', () => {
     // Arrange / Act — a non-default saved confirmation duration.
     renderLiveEditorAppearance({ liveEditorToastDurationMs: 6000 })
 
@@ -243,7 +243,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(toastDurationSlider).toHaveAttribute('aria-valuemax', '10000')
   })
 
-  it('reads out the LiveEditor toast duration in milliseconds', () => {
+  test('reads out the LiveEditor toast duration in milliseconds', () => {
     // Arrange / Act
     renderLiveEditorAppearance({ liveEditorToastDurationMs: 6000 })
 
@@ -251,7 +251,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(screen.getByText('6000 ms')).toBeInTheDocument()
   })
 
-  it('keeps the toast-duration slider enabled even when clear-on-complete is off', () => {
+  test('keeps the toast-duration slider enabled even when clear-on-complete is off', () => {
     // Arrange / Act — the toast shows on EVERY completion, so its duration is
     // always meaningful, unlike the clear delay which is moot when lines stay.
     renderLiveEditorAppearance({ liveEditorClearOnComplete: false })
@@ -261,7 +261,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     expect(toastDurationSlider).not.toHaveAttribute('data-disabled')
   })
 
-  it('raises the saved toast duration by one 500 ms step when the slider is nudged right', () => {
+  test('raises the saved toast duration by one 500 ms step when the slider is nudged right', () => {
     // Arrange — a known 6000 ms so a single step lands on 6500.
     const { store } = renderLiveEditorAppearance({
       liveEditorToastDurationMs: 6000,

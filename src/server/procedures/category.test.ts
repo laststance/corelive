@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
@@ -50,7 +50,7 @@ afterEach(async () => {
 describeIfDb(
   'category.list — first sign-in always has somewhere to write',
   () => {
-    it('seeds "General" for an account the webhook never reached, so /write is not locked on "No categories"', async () => {
+    test('seeds "General" for an account the webhook never reached, so /write is not locked on "No categories"', async () => {
       // Arrange — a clerkId the DB has never seen (the lazy-upsert path).
       const clerkId = freshClerkId()
 
@@ -71,7 +71,7 @@ describeIfDb(
       })
     })
 
-    it('seeds "General" only once — a second list returns the same single row', async () => {
+    test('seeds "General" only once — a second list returns the same single row', async () => {
       // Arrange
       const clerkId = freshClerkId()
       const first = await call(listCategories, undefined, authContext(clerkId))
@@ -85,7 +85,7 @@ describeIfDb(
       )
     })
 
-    it('creates the account with "General" already attached, so a first call to any other procedure leaves somewhere to write', async () => {
+    test('creates the account with "General" already attached, so a first call to any other procedure leaves somewhere to write', async () => {
       // Arrange — a clerkId the DB has never seen.
       const clerkId = freshClerkId()
 
@@ -100,7 +100,7 @@ describeIfDb(
       expect(seeded.map((category) => category.name)).toEqual(['General'])
     })
 
-    it('two first lists racing on one new account still leave exactly one "General"', async () => {
+    test('two first lists racing on one new account still leave exactly one "General"', async () => {
       // Arrange — a clerkId the DB has never seen, hit twice at once.
       const clerkId = freshClerkId()
 
@@ -116,7 +116,7 @@ describeIfDb(
       expect(first.categories[0]?.id).toBe(second.categories[0]?.id)
     })
 
-    it('leaves an account that already has categories alone (no surprise "General")', async () => {
+    test('leaves an account that already has categories alone (no surprise "General")', async () => {
       // Arrange — the user exists with one hand-made category and no default.
       const clerkId = freshClerkId()
       const user = await prisma.user.create({ data: { clerkId } })

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, globalShortcut } from 'electron'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import ShortcutManager from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
@@ -78,7 +78,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     getFocusedWindowMock.mockReturnValue(null)
   })
 
-  it('registers the app focus/blur listeners once even when setup runs twice', () => {
+  test('registers the app focus/blur listeners once even when setup runs twice', () => {
     // Arrange
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
 
@@ -97,7 +97,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     expect(blurRegistrations).toHaveLength(1)
   })
 
-  it('binds Cmd+N when a CoreLive window gains focus and releases it when focus leaves the app', () => {
+  test('binds Cmd+N when a CoreLive window gains focus and releases it when focus leaves the app', () => {
     // Arrange
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
     shortcutManager.setupFocusListeners()
@@ -123,7 +123,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
-  it('stays registered across a LiveEditor → Settings switch whether focus fires before or after blur', () => {
+  test('stays registered across a LiveEditor → Settings switch whether focus fires before or after blur', () => {
     // Arrange: LiveEditor is focused and bound.
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
     shortcutManager.setupFocusListeners()
@@ -154,7 +154,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
-  it('binds contextual shortcuts immediately on enable() when a window is already focused', () => {
+  test('binds contextual shortcuts immediately on enable() when a window is already focused', () => {
     // Arrange: a window is focused before shortcuts are enabled.
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
     getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
@@ -169,7 +169,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
-  it('binds Cmd+N at boot when a CoreLive window is already focused before shortcuts initialize', () => {
+  test('binds Cmd+N at boot when a CoreLive window is already focused before shortcuts initialize', () => {
     // Arrange: the startup panel (or the login window) took focus before the
     // deferred ShortcutManager.initialize() ran, so no focus event is coming.
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
@@ -185,7 +185,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
-  it('re-binds Cmd+M after disable() → enable() while a window stays focused, and ignores focus while disabled', () => {
+  test('re-binds Cmd+M after disable() → enable() while a window stays focused, and ignores focus while disabled', () => {
     // Arrange: focused and bound.
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
     shortcutManager.setupFocusListeners()
@@ -214,7 +214,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
-  it('removes both app listeners on cleanup', () => {
+  test('removes both app listeners on cleanup', () => {
     // Arrange
     const shortcutManager = new ShortcutManager(createWindowManager(), null)
     shortcutManager.setupFocusListeners()
@@ -235,7 +235,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
   })
 
-  it('minimizes whichever CoreLive window is focused on Cmd+M', () => {
+  test('minimizes whichever CoreLive window is focused on Cmd+M', () => {
     // Arrange
     const minimize = vi.fn()
     const focusedWindow = { minimize } as unknown as BrowserWindow

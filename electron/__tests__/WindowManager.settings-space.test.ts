@@ -18,7 +18,7 @@
  * @example
  *   pnpm test:electron -- WindowManager.settings-space
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
 
@@ -103,7 +103,7 @@ describe('WindowManager settings popover Spaces-following', () => {
     }
   })
 
-  it('opens Settings on the current desktop by following the active macOS Space', () => {
+  test('opens Settings on the current desktop by following the active macOS Space', () => {
     // Arrange: a macOS runtime, where the Spaces-following behavior is meaningful.
     setPlatform('darwin')
     const windowManager = new WindowManager(SERVER_URL)
@@ -122,7 +122,7 @@ describe('WindowManager settings popover Spaces-following', () => {
     )
   })
 
-  it('skips the Spaces call on non-macOS so Windows/Linux never hit the no-op API', () => {
+  test('skips the Spaces call on non-macOS so Windows/Linux never hit the no-op API', () => {
     // Arrange: a non-darwin runtime; setVisibleOnAllWorkspaces is macOS-only.
     setPlatform('linux')
     const windowManager = new WindowManager(SERVER_URL)

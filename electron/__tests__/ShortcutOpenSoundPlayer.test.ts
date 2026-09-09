@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 const spawnMock = vi.hoisted(() => vi.fn())
 
@@ -61,7 +61,7 @@ function createAudioProcess(
 }
 
 describe('ShortcutOpenSoundPlayer', () => {
-  it('ships exactly ten stable and unique cue identifiers and filenames', () => {
+  test('ships exactly ten stable and unique cue identifiers and filenames', () => {
     // Arrange / Act
     const cueIds = SHORTCUT_OPEN_SOUND_CUES.map((cue) => cue.id)
     const filenames = SHORTCUT_OPEN_SOUND_CUES.map((cue) => cue.filename)
@@ -95,7 +95,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     expect(new Set(filenames).size).toBe(10)
   })
 
-  it('has a real source asset for every cue that can be bundled into the packaged app', () => {
+  test('has a real source asset for every cue that can be bundled into the packaged app', () => {
     // Arrange
     const soundDirectory = path.resolve(
       process.cwd(),
@@ -113,7 +113,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     expect(missingAssetFilenames).toEqual([])
   })
 
-  it('plays the exact bundled cue the user selected through the macOS audio player', () => {
+  test('plays the exact bundled cue the user selected through the macOS audio player', () => {
     // Arrange
     const audioProcess = createAudioProcess()
     const launchProcess = vi.fn(() => audioProcess)
@@ -139,7 +139,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     })
   })
 
-  it('waits for the previous cue to stop before replaying so rapid shortcuts never layer sounds', () => {
+  test('waits for the previous cue to stop before replaying so rapid shortcuts never layer sounds', () => {
     // Arrange
     const firstProcess = createAudioProcess()
     const secondProcess = createAudioProcess()
@@ -175,7 +175,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     expect(secondProcess.stop).not.toHaveBeenCalled()
   })
 
-  it('launches one replacement without losing it when stop settles synchronously', () => {
+  test('launches one replacement without losing it when stop settles synchronously', () => {
     // Arrange
     const firstProcess = createAudioProcess(true)
     const secondProcess = createAudioProcess()
@@ -205,7 +205,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     expect(secondProcess.stop).not.toHaveBeenCalled()
   })
 
-  it('continues playing future shortcuts after afplay exits before lifecycle subscription', () => {
+  test('continues playing future shortcuts after afplay exits before lifecycle subscription', () => {
     // Arrange
     spawnMock.mockReset()
     spawnMock
@@ -225,7 +225,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     expect(spawnMock).toHaveBeenCalledTimes(2)
   })
 
-  it('never repeats the previous cue when shuffled playback receives the same random position', () => {
+  test('never repeats the previous cue when shuffled playback receives the same random position', () => {
     // Arrange
     const firstProcess = createAudioProcess()
     const secondProcess = createAudioProcess()
@@ -257,7 +257,7 @@ describe('ShortcutOpenSoundPlayer', () => {
     })
   })
 
-  it('keeps opening the window silently when the packaged sound asset is unavailable', () => {
+  test('keeps opening the window silently when the packaged sound asset is unavailable', () => {
     // Arrange
     const launchProcess = vi.fn()
     const player = new ShortcutOpenSoundPlayer({

@@ -2,7 +2,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock can resolve a fresh temp
 // userData directory per test (vi.mock factories cannot close over later-
@@ -141,7 +141,7 @@ describe('ConfigManager legacy migrations', () => {
     fs.rmSync(userDataDir.current, { recursive: true, force: true })
   })
 
-  it('keeps the original config file when a later migration rejects its version', () => {
+  test('keeps the original config file when a later migration rejects its version', () => {
     // Arrange: the rename migration runs first, then the invalid numeric version
     // makes compareVersions abort before the loaded config is accepted.
     writeConfigFile({
@@ -163,7 +163,7 @@ describe('ConfigManager legacy migrations', () => {
     expect(fs.readFileSync(configPath, 'utf8')).toBe(originalConfig)
   })
 
-  it('preserves panel notes and shortcuts across the LiveEditor rename', () => {
+  test('preserves panel notes and shortcuts across the LiveEditor rename', () => {
     // Arrange: simulate the exact config shape written by the previous release.
     writeConfigFile({
       braindump: {
@@ -194,7 +194,7 @@ describe('ConfigManager legacy migrations', () => {
     expect('braindump' in persisted).toBe(false)
   })
 
-  it('keeps every category note when interrupted migration data contains both panel sections', () => {
+  test('keeps every category note when interrupted migration data contains both panel sections', () => {
     // Arrange: the legacy and canonical sections each own a different category;
     // the duplicate category proves canonical text wins deterministically.
     writeConfigFile({
@@ -218,7 +218,7 @@ describe('ConfigManager legacy migrations', () => {
   })
 
   describe('pruneRetiredConfigKeys (Floating Navigator retirement)', () => {
-    it('strips every retired key from an upgraded config.json on load, in memory and on disk', () => {
+    test('strips every retired key from an upgraded config.json on load, in memory and on disk', () => {
       // Arrange: a config written by a Floating-era release.
       writeConfigFile(RETIRED_CONFIG_FIXTURE)
 
@@ -238,7 +238,7 @@ describe('ConfigManager legacy migrations', () => {
       })
     })
 
-    it('strips every retired key from an imported config file', () => {
+    test('strips every retired key from an imported config file', () => {
       // Arrange
       const configManager = new ConfigManager()
       const importPath = writeImportFile(RETIRED_CONFIG_FIXTURE)
@@ -255,7 +255,7 @@ describe('ConfigManager legacy migrations', () => {
       })
     })
 
-    it('does not throw when a section holding a retired key is not an object', () => {
+    test('does not throw when a section holding a retired key is not an object', () => {
       // Arrange: hand-edited garbage where sections should be.
       writeConfigFile({
         window: [],
@@ -274,7 +274,7 @@ describe('ConfigManager legacy migrations', () => {
       expect(configManager.get('behavior.startOnLogin', false)).toBe(true)
     })
 
-    it('keeps behavior.startup so reinstalling v0.21.0 still opens the panel the user chose', () => {
+    test('keeps behavior.startup so reinstalling v0.21.0 still opens the panel the user chose', () => {
       // Arrange: a config written by v0.21.0, where the user turned the
       // Floating window off and LiveEditor on.
       writeConfigFile(RETIRED_CONFIG_FIXTURE)
@@ -295,7 +295,7 @@ describe('ConfigManager legacy migrations', () => {
       expect(readPersistedConfig().behavior).toHaveProperty('startup')
     })
 
-    it('leaves a pristine config.json untouched (no rewrite when nothing was pruned)', () => {
+    test('leaves a pristine config.json untouched (no rewrite when nothing was pruned)', () => {
       // Arrange: a config in the current shape, exactly as the app would save it.
       const pristineConfig = new ConfigManager().getDefaultConfig()
       writeConfigFile(pristineConfig)
@@ -309,7 +309,7 @@ describe('ConfigManager legacy migrations', () => {
       expect(fs.readFileSync(configPath, 'utf8')).toBe(before)
     })
 
-    it('prunes syncMode/lastCategoryId even when they arrive through the legacy braindump section', () => {
+    test('prunes syncMode/lastCategoryId even when they arrive through the legacy braindump section', () => {
       // Arrange: a pre-rename config. The braindump → liveEditor migration
       // spreads the whole section, so the prune must run AFTER it.
       const legacyConfig = {
@@ -357,7 +357,7 @@ describe('ConfigManager legacy migrations', () => {
   })
 
   describe('pruneRetiredConfigKeys (tray section retirement)', () => {
-    it('strips all 7 legacy tray keys from config.json while leaving other sections untouched', () => {
+    test('strips all 7 legacy tray keys from config.json while leaving other sections untouched', () => {
       // Arrange: a config written before the tray section was retired — none
       // of these 7 keys were ever read anywhere, but old installs still have
       // them on disk.

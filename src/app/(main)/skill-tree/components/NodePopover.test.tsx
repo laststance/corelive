@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import { NodePopover } from './NodePopover'
 
@@ -9,7 +9,7 @@ describe('<NodePopover>', () => {
     { id: 11, text: 'Write tests' },
   ]
 
-  it('shows assigned todos', () => {
+  test('shows assigned todos', () => {
     render(
       <NodePopover
         open
@@ -25,7 +25,7 @@ describe('<NodePopover>', () => {
     expect(screen.getByText('Write tests')).toBeInTheDocument()
   })
 
-  it('fires onUnassign with correct todoId when × is clicked', () => {
+  test('fires onUnassign with correct todoId when × is clicked', () => {
     const onUnassign = vi.fn()
     render(
       <NodePopover
@@ -47,7 +47,7 @@ describe('<NodePopover>', () => {
     expect(onUnassign).toHaveBeenCalledWith(10)
   })
 
-  it('shows empty state when no tasks are assigned', () => {
+  test('shows empty state when no tasks are assigned', () => {
     render(
       <NodePopover
         open

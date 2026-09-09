@@ -2,7 +2,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock resolves a fresh temp userData
 // directory per test (vi.mock factories cannot close over later-declared vars).
@@ -34,7 +34,7 @@ describe('ConfigManager appearance config', () => {
     fs.rmSync(userDataDir.current, { recursive: true, force: true })
   })
 
-  it('does not carry a native theme or accent color — the web app owns theme via localStorage', () => {
+  test('does not carry a native theme or accent color — the web app owns theme via localStorage', () => {
     // Arrange
     const configManager = new ConfigManager()
 
@@ -47,7 +47,7 @@ describe('ConfigManager appearance config', () => {
     expect(appearance).not.toHaveProperty('accentColor')
   })
 
-  it('still exposes the surviving appearance settings (fontSize, compactMode)', () => {
+  test('still exposes the surviving appearance settings (fontSize, compactMode)', () => {
     // Arrange
     const configManager = new ConfigManager()
 
@@ -62,7 +62,7 @@ describe('ConfigManager appearance config', () => {
     })
   })
 
-  it('strips legacy theme/accentColor from an existing config.json on load', () => {
+  test('strips legacy theme/accentColor from an existing config.json on load', () => {
     // Arrange: a pre-T9 config.json that still carries the removed native theme
     // fields alongside a NON-default fontSize (the load-actually-happened proof).
     fs.writeFileSync(
@@ -92,7 +92,7 @@ describe('ConfigManager appearance config', () => {
     expect(persisted).not.toHaveProperty('appearance.accentColor')
   })
 
-  it('strips legacy theme/accentColor from an imported config file', () => {
+  test('strips legacy theme/accentColor from an imported config file', () => {
     // Arrange: an export from an older build, carrying the removed keys plus a
     // non-default fontSize so we can prove the import path ran (not the load).
     const importPath = path.join(userDataDir.current, 'imported.json')

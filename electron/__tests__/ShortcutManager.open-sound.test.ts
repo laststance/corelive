@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   app: { on: vi.fn(), removeListener: vi.fn() },
@@ -98,7 +98,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     vi.clearAllMocks()
   })
 
-  it('plays after LiveEditor becomes visible and again when the shortcut closes it', () => {
+  test('plays after LiveEditor becomes visible and again when the shortcut closes it', () => {
     // Arrange
     let onShown: (() => void) | undefined
     const toggleLiveEditor = vi
@@ -136,7 +136,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(2)
   })
 
-  it('plays the selected fixed cue instead of a shuffled one', () => {
+  test('plays the selected fixed cue instead of a shuffled one', () => {
     // Arrange
     const toggleLiveEditor = vi.fn((onShown?: () => void) => {
       onShown?.()
@@ -159,7 +159,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledWith('walnut-desk-thock')
   })
 
-  it('plays once when a second LiveEditor toggle cancels its pending reveal', () => {
+  test('plays once when a second LiveEditor toggle cancels its pending reveal', () => {
     // Arrange
     const toggleLiveEditor = vi
       .fn()
@@ -182,7 +182,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(1)
   })
 
-  it('does not crash after LiveEditor becomes visible when opening sound playback fails', () => {
+  test('does not crash after LiveEditor becomes visible when opening sound playback fails', () => {
     // Arrange
     let onShown: (() => void) | undefined
     const toggleLiveEditor = vi.fn((nextOnShown?: () => void) => {
@@ -209,7 +209,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).toHaveBeenCalledTimes(1)
   })
 
-  it('opens LiveEditor silently after the user turns the cue off', () => {
+  test('opens LiveEditor silently after the user turns the cue off', () => {
     // Arrange
     const toggleLiveEditor = vi.fn((onShown?: () => void) => {
       onShown?.()
@@ -231,7 +231,7 @@ describe('ShortcutManager shortcut opening sound', () => {
     expect(soundController.play).not.toHaveBeenCalled()
   })
 
-  it('keeps LiveEditor silent when the enabled setting is malformed', () => {
+  test('keeps LiveEditor silent when the enabled setting is malformed', () => {
     // Arrange
     const soundController = createSoundController()
     const shortcutManager = new ShortcutManager(
@@ -260,7 +260,7 @@ describe('ShortcutManager new-task shortcut', () => {
     vi.clearAllMocks()
   })
 
-  it('opens /live-editor in the browser without surfacing any Electron window (regression)', () => {
+  test('opens /live-editor in the browser without surfacing any Electron window (regression)', () => {
     // Arrange: Cmd+N used to call restoreFromTray, which now shows LiveEditor —
     // that would open the panel AND the browser tab at once.
     const harness = createWindowManager(vi.fn(() => true))

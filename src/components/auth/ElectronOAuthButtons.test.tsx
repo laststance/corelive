@@ -15,7 +15,7 @@
  *   pnpm test -- ElectronOAuthButtons
  */
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { ElectronOAuthButtons } from './ElectronOAuthButtons'
 
@@ -59,7 +59,7 @@ describe('ElectronOAuthButtons', () => {
     vi.clearAllMocks()
   })
 
-  it('launches the Google system-browser sign-in when the front-door button is pressed', async () => {
+  test('launches the Google system-browser sign-in when the front-door button is pressed', async () => {
     // Arrange: the login preload exposes a working oauth bridge.
     const start = plantOAuthBridge({ success: true })
     render(<ElectronOAuthButtons />)
@@ -83,7 +83,7 @@ describe('ElectronOAuthButtons', () => {
     expect(start).toHaveBeenCalledTimes(1)
   })
 
-  it('surfaces a calm error when the native flow fails to start', async () => {
+  test('surfaces a calm error when the native flow fails to start', async () => {
     // Arrange: the main process reports it could not start the flow, with a
     // specific reason. Using a distinct message (not the generic fallback) pins
     // that we surface the SERVER's reason verbatim — proving this is the
@@ -108,7 +108,7 @@ describe('ElectronOAuthButtons', () => {
     ).toBeEnabled()
   })
 
-  it('re-arms the sign-in button after an abandoned browser flow times out', async () => {
+  test('re-arms the sign-in button after an abandoned browser flow times out', async () => {
     // Arrange: fake timers so we can fast-forward the abandonment backstop. The
     // flow STARTS successfully (the system browser opens), but the user then
     // ABANDONS it — closes the tab / picks no account — so onError never fires

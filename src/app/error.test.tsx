@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { log } from '@/lib/logger'
 
@@ -12,7 +12,7 @@ describe('RouteError (route-level error boundary)', () => {
     vi.spyOn(log, 'error').mockImplementation(() => {})
   })
 
-  it('shows a reassuring recovery card instead of a stark crash screen', () => {
+  test('shows a reassuring recovery card instead of a stark crash screen', () => {
     // Arrange: a caught client error, e.g. an outdated preload throwing.
     const reset = vi.fn()
 
@@ -26,7 +26,7 @@ describe('RouteError (route-level error boundary)', () => {
     ).toBeInTheDocument()
   })
 
-  it('surfaces the real error to the logger for telemetry', () => {
+  test('surfaces the real error to the logger for telemetry', () => {
     // Arrange
     const caught = new Error('boom')
 
@@ -40,7 +40,7 @@ describe('RouteError (route-level error boundary)', () => {
     )
   })
 
-  it('retries the crashed segment when "Try again" is pressed', async () => {
+  test('retries the crashed segment when "Try again" is pressed', async () => {
     // Arrange
     const reset = vi.fn()
     const user = userEvent.setup()
@@ -53,7 +53,7 @@ describe('RouteError (route-level error boundary)', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
-  it('escapes to home with a hard navigation when "Back to home" is pressed', async () => {
+  test('escapes to home with a hard navigation when "Back to home" is pressed', async () => {
     // Arrange: reset() re-renders the SAME crashed segment, so a deterministic
     // throw (e.g. a stale preload) dead-ends — the secondary action must leave
     // the route via a hard nav (fresh document + fresh bundle), never reset().
@@ -73,7 +73,7 @@ describe('RouteError (route-level error boundary)', () => {
     assignToHome.mockRestore()
   })
 
-  it('does not throw when mounting through the real (unmocked) logger', () => {
+  test('does not throw when mounting through the real (unmocked) logger', () => {
     // Lock the last-line-of-defense invariant: the boundary's own mount-time
     // logging must run through the REAL logger without throwing, or the
     // recovery UI would itself crash and defeat the boundary. Drop the

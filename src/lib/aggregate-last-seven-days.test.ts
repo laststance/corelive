@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
@@ -26,7 +26,7 @@ function buildHeatmapDay(
 }
 
 describe('aggregateLastSevenDays', () => {
-  it('returns firstWeek when the heatmap response is empty', () => {
+  test('returns firstWeek when the heatmap response is empty', () => {
     const stats = aggregateLastSevenDays(new Map(), TODAY_ISO)
     expect(stats).toEqual({
       totalCompleted: 0,
@@ -36,7 +36,7 @@ describe('aggregateLastSevenDays', () => {
     })
   })
 
-  it('returns flat when both windows are zero but older activity exists', () => {
+  test('returns flat when both windows are zero but older activity exists', () => {
     // One entry outside the 14-day inspection window (30 days ago). Both the
     // current and prior windows are empty, but `dataByDate.size > 0`, so the
     // copy should be "quiet week" rather than "your first week".
@@ -49,7 +49,7 @@ describe('aggregateLastSevenDays', () => {
     expect(stats.trend).toEqual({ kind: 'flat' })
   })
 
-  it('returns kind: new when prior window is empty and current window is non-zero', () => {
+  test('returns kind: new when prior window is empty and current window is non-zero', () => {
     // Current window (2026-05-05 .. 2026-05-11), prior window
     // (2026-04-28 .. 2026-05-04). Only put activity in the current window.
     const dataByDate = new Map<string, HeatmapDay>([
@@ -61,7 +61,7 @@ describe('aggregateLastSevenDays', () => {
     expect(stats.trend).toEqual({ kind: 'new' })
   })
 
-  it('returns percent value 0 when current and prior totals match', () => {
+  test('returns percent value 0 when current and prior totals match', () => {
     const dataByDate = new Map<string, HeatmapDay>([
       buildHeatmapDay('2026-05-08', 5), // current window
       buildHeatmapDay('2026-05-01', 5), // prior window
@@ -72,7 +72,7 @@ describe('aggregateLastSevenDays', () => {
     expect(stats.trend).toEqual({ kind: 'percent', value: 0 })
   })
 
-  it('returns percent value 100 when current doubles prior', () => {
+  test('returns percent value 100 when current doubles prior', () => {
     const dataByDate = new Map<string, HeatmapDay>([
       buildHeatmapDay('2026-05-08', 10),
       buildHeatmapDay('2026-05-01', 5),
@@ -83,7 +83,7 @@ describe('aggregateLastSevenDays', () => {
     expect(stats.trend).toEqual({ kind: 'percent', value: 100 })
   })
 
-  it('returns negative percent when current is below prior', () => {
+  test('returns negative percent when current is below prior', () => {
     const dataByDate = new Map<string, HeatmapDay>([
       buildHeatmapDay('2026-05-08', 4),
       buildHeatmapDay('2026-05-01', 8),
@@ -92,7 +92,7 @@ describe('aggregateLastSevenDays', () => {
     expect(stats.trend).toEqual({ kind: 'percent', value: -50 })
   })
 
-  it('rolls up top categories by count and surfaces the top 3', () => {
+  test('rolls up top categories by count and surfaces the top 3', () => {
     // Single day with four categories so we exercise the slice(0, 3) cutoff.
     const dataByDate = new Map<string, HeatmapDay>([
       [
@@ -115,7 +115,7 @@ describe('aggregateLastSevenDays', () => {
     ])
   })
 
-  it('breaks rank ties alphabetically by name', () => {
+  test('breaks rank ties alphabetically by name', () => {
     // Three categories tied at count=3; alphabetical order: amber, blue,
     // charlie. The fourth ("delta", count 1) is below the cutoff.
     const dataByDate = new Map<string, HeatmapDay>([
@@ -141,7 +141,7 @@ describe('aggregateLastSevenDays', () => {
     ])
   })
 
-  it('rounds percent to the nearest integer', () => {
+  test('rounds percent to the nearest integer', () => {
     // 7 / 3 → 133.33% increase (1.333… × 100). Math.round → 133.
     const dataByDate = new Map<string, HeatmapDay>([
       buildHeatmapDay('2026-05-08', 7),

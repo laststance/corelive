@@ -1,6 +1,6 @@
 import { render, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import OAuthStartPage from './page'
 
@@ -38,7 +38,7 @@ describe('OAuthStartPage', () => {
     mockAuthenticateWithRedirect.mockResolvedValue(undefined)
   })
 
-  it('starts Google OAuth using Clerk redirect flow', async () => {
+  test('starts Google OAuth using Clerk redirect flow', async () => {
     render(
       <StrictMode>
         <OAuthStartPage />
@@ -55,7 +55,7 @@ describe('OAuthStartPage', () => {
     expect(mockAuthenticateWithRedirect).toHaveBeenCalledTimes(1)
   })
 
-  it('continues directly to the callback page when the browser is already signed in', async () => {
+  test('continues directly to the callback page when the browser is already signed in', async () => {
     clerkState.user = { id: 'user_123' }
     const replaceSpy = vi
       .spyOn(window.location, 'replace')

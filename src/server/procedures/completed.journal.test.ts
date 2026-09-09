@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
@@ -142,7 +142,7 @@ afterEach(async () => {
 })
 
 describeIfDb('completed.journal (permanent win journal)', () => {
-  it('surfaces wins from BOTH the Todo lifecycle and the Completed table in one feed', async () => {
+  test('surfaces wins from BOTH the Todo lifecycle and the Completed table in one feed', async () => {
     // Arrange — one imported Completed-table win (older) and one Todo-lifecycle
     // win (newer). Pre-journal the list read only todo.list, so the import never
     // showed; this is the exact regression.
@@ -178,7 +178,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(page.hasMore).toBe(false)
   })
 
-  it('orders the merged feed newest-completed first regardless of source', async () => {
+  test('orders the merged feed newest-completed first regardless of source', async () => {
     // Arrange — three wins interleaved across the two sources at distinct times.
     const clerkId = freshClerkId()
     await seedCompletedRowAt(
@@ -212,7 +212,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     ])
   })
 
-  it('paginates with limit/offset and reports total, hasMore, and nextOffset', async () => {
+  test('paginates with limit/offset and reports total, hasMore, and nextOffset', async () => {
     // Arrange — three Completed-table wins at distinct ascending times.
     const clerkId = freshClerkId()
     await seedCompletedRowAt(
@@ -257,7 +257,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(secondPage.nextOffset).toBeUndefined()
   })
 
-  it('filters both completion sources by a half-open period and category before pagination', async () => {
+  test('filters both completion sources by a half-open period and category before pagination', async () => {
     // Arrange — create the real user/default category through the import path,
     // then add a second category with rows on each date boundary and source.
     const clerkId = freshClerkId()
@@ -333,7 +333,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(page.nextOffset).toBeUndefined()
   })
 
-  it('agrees with fetchCompletedEntries (the heatmap source of truth) on what counts as a completion', async () => {
+  test('agrees with fetchCompletedEntries (the heatmap source of truth) on what counts as a completion', async () => {
     // Arrange — a cross-source mix at distinct times (no ties, so both orderings
     // are pure completedAt and reverse-match cleanly).
     const clerkId = freshClerkId()

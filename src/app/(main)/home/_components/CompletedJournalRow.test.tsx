@@ -1,7 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { render, screen } from '@testing-library/react'
 import { Provider } from 'react-redux'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import userSettingsReducer, {
   initialState,
@@ -42,7 +42,7 @@ function renderCompletedJournalRow(
 }
 
 describe('CompletedJournalRow title presentation', () => {
-  it('keeps the existing strikethrough on a fresh install', () => {
+  test('keeps the existing strikethrough on a fresh install', () => {
     // Arrange
     const settingsOverrides: Partial<UserSettingsState> = {}
 
@@ -53,7 +53,7 @@ describe('CompletedJournalRow title presentation', () => {
     expect(screen.getByText('Ship the update')).toHaveClass('line-through')
   })
 
-  it('shows a completed journal title without a line when strikethrough is off', () => {
+  test('shows a completed journal title without a line when strikethrough is off', () => {
     // Arrange
     const settingsOverrides = { showCompletedTaskStrikethrough: false }
 

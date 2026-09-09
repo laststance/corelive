@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { openConfigFile } from '../utils/openConfigFile'
 
@@ -23,7 +23,7 @@ describe('openConfigFile', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns true when shell.openPath resolves with an empty string', async () => {
+  test('returns true when shell.openPath resolves with an empty string', async () => {
     // Arrange
     vi.mocked(shell.openPath).mockResolvedValueOnce('')
 
@@ -36,7 +36,7 @@ describe('openConfigFile', () => {
     expect(shell.openPath).toHaveBeenCalledWith(configPath)
   })
 
-  it('returns false without throwing when shell.openPath reports an error', async () => {
+  test('returns false without throwing when shell.openPath reports an error', async () => {
     // Arrange
     vi.mocked(shell.openPath).mockResolvedValueOnce('Failed to open path')
 

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { orpc } from '@/lib/orpc/client-query'
 import { serializer } from '@/lib/orpc/serializer'
@@ -19,7 +19,7 @@ function hashLikeAppQueryClient(queryKey: unknown): string {
 }
 
 describe('home bootstrap query keys', () => {
-  it('hydrates category data onto the key every category consumer queries with empty input', () => {
+  test('hydrates category data onto the key every category consumer queries with empty input', () => {
     // Arrange
     const categoryClientKey = orpc.category.list.queryOptions({}).queryKey
 
@@ -33,7 +33,7 @@ describe('home bootstrap query keys', () => {
     )
   })
 
-  it('hydrates heatmap data onto the key useHeatmapData builds for the same zone', () => {
+  test('hydrates heatmap data onto the key useHeatmapData builds for the same zone', () => {
     // Arrange — mirror useHeatmapData's `{ days, timezone }` input order
     const heatmapClientKey = orpc.completed.heatmap.queryOptions({
       input: { days: 365, timezone: 'Asia/Tokyo' },
@@ -52,7 +52,7 @@ describe('home bootstrap query keys', () => {
     )
   })
 
-  it('seeds journal page one onto the infinite key CompletedTodos reads unfiltered', () => {
+  test('seeds journal page one onto the infinite key CompletedTodos reads unfiltered', () => {
     // Arrange — mirror CompletedTodos' infinite options at default filters
     // (period 'all' spreads {}, categoryId null spreads {})
     const journalClientKey = orpc.completed.journal.infiniteOptions({
@@ -76,7 +76,7 @@ describe('home bootstrap query keys', () => {
     )
   })
 
-  it('sends the bootstrap procedure the same three inputs the client queries send individually', () => {
+  test('sends the bootstrap procedure the same three inputs the client queries send individually', () => {
     // Arrange
     const timezone = 'Asia/Tokyo'
 

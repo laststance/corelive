@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   app: { on: vi.fn(), removeListener: vi.fn() },
@@ -32,7 +32,7 @@ describe('ShortcutManager default shortcuts', () => {
     vi.clearAllMocks()
   })
 
-  it('ships Option+Space for the LiveEditor toggle and no other global toggle', () => {
+  test('ships Option+Space for the LiveEditor toggle and no other global toggle', () => {
     // Arrange
     const shortcutManager = new ShortcutManager(createWindowManagerStub(), null)
 

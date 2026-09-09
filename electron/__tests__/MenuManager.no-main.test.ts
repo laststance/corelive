@@ -1,6 +1,6 @@
 import { Menu } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ConfigManager } from '../ConfigManager'
 import { MenuManager } from '../MenuManager'
@@ -112,7 +112,7 @@ describe('MenuManager builds the application menu without a main window', () => 
     vi.restoreAllMocks()
   })
 
-  it('installs the full menu with the retired main-window-only items entirely absent', () => {
+  test('installs the full menu with the retired main-window-only items entirely absent', () => {
     // Arrange: companion mode — there has been no main window to host the menu
     // since T18; `initialize` takes no main-window reference at all.
     const menuManager = new MenuManager()
@@ -145,7 +145,7 @@ describe('MenuManager builds the application menu without a main window', () => 
     expect(findItemByLabel(template, 'Find')).toBeUndefined()
   })
 
-  it('opens Settings from the app menu without exposing the retired Preferences label', () => {
+  test('opens Settings from the app menu without exposing the retired Preferences label', () => {
     // Arrange: initialize the manager so the app-menu click can reach WindowManager.
     const menuManager = new MenuManager()
     const stubWindowManager = createStubWindowManager()

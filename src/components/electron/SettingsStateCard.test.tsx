@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import { Brain } from 'lucide-react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { SettingsStateCard } from './SettingsStateCard'
 
 describe('SettingsStateCard', () => {
-  it('shows the feature title and the one-line status copy', () => {
+  test('shows the feature title and the one-line status copy', () => {
     // Arrange / Act
     render(
       <SettingsStateCard
@@ -20,7 +20,7 @@ describe('SettingsStateCard', () => {
     expect(screen.getByText('Loading LiveEditor settings…')).toBeInTheDocument()
   })
 
-  it('forwards className to the card so the parent keeps control of spacing', () => {
+  test('forwards className to the card so the parent keeps control of spacing', () => {
     // Arrange / Act
     const { container } = render(
       <SettingsStateCard

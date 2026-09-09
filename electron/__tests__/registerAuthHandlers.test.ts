@@ -1,5 +1,5 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { registerAuthHandlers } from '../ipc/registerAuthHandlers'
 import type { AuthUserPayload } from '../types/ipc'
@@ -83,7 +83,7 @@ describe('registerAuthHandlers', () => {
     vi.clearAllMocks()
   })
 
-  it('hands the login window off to LiveEditor after auth-set-user stores the user', async () => {
+  test('hands the login window off to LiveEditor after auth-set-user stores the user', async () => {
     // Arrange
     const windowManager = createWindowManagerStub()
     const { deps, setActiveUser } = createDeps(
@@ -104,7 +104,7 @@ describe('registerAuthHandlers', () => {
     expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
   })
 
-  it('keeps the login window open until the user is actually stored', async () => {
+  test('keeps the login window open until the user is actually stored', async () => {
     // Arrange: the store stays pending until this spec releases it.
     const windowManager = createWindowManagerStub()
     const { deps, setActiveUser } = createDeps(
@@ -135,7 +135,7 @@ describe('registerAuthHandlers', () => {
     expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
   })
 
-  it('does not hand off and propagates the error when the user payload is rejected', async () => {
+  test('does not hand off and propagates the error when the user payload is rejected', async () => {
     // Arrange
     const windowManager = createWindowManagerStub()
     const { deps, setActiveUser } = createDeps(
@@ -153,7 +153,7 @@ describe('registerAuthHandlers', () => {
     expect(windowManager.completeLogin).not.toHaveBeenCalled()
   })
 
-  it('clears the stored user and the pending handoff on auth-logout', async () => {
+  test('clears the stored user and the pending handoff on auth-logout', async () => {
     // Arrange
     const windowManager = createWindowManagerStub()
     const { deps, clearActiveUser } = createDeps(
@@ -170,7 +170,7 @@ describe('registerAuthHandlers', () => {
     expect(windowManager.clearLoginHandoff).toHaveBeenCalledTimes(1)
   })
 
-  it('still stores the user when no WindowManager exists yet', async () => {
+  test('still stores the user when no WindowManager exists yet', async () => {
     // Arrange: auth can arrive before deferredInit built the WindowManager.
     const { deps, setActiveUser } = createDeps(null)
     registerAuthHandlers(deps)

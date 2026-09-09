@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // Create mock objects that will be reused
 const mockLog = {
@@ -96,7 +96,7 @@ describe('DeepLinkManager', () => {
   })
 
   describe('initialization', () => {
-    it('should initialize deep linking correctly', () => {
+    test('should initialize deep linking correctly', () => {
       deepLinkManager.initialize()
 
       expect(mockApp.setAsDefaultProtocolClient).toHaveBeenCalledWith(
@@ -111,7 +111,7 @@ describe('DeepLinkManager', () => {
       expect(deepLinkManager.isInitialized).toBe(true)
     })
 
-    it('should not initialize twice', () => {
+    test('should not initialize twice', () => {
       deepLinkManager.initialize()
       deepLinkManager.initialize()
 
@@ -124,7 +124,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should parse valid deep link URLs', () => {
+    test('should parse valid deep link URLs', () => {
       const url = 'corelive://task/123?priority=high'
       const parsed = deepLinkManager.parseDeepLinkUrl(url)
 
@@ -137,14 +137,14 @@ describe('DeepLinkManager', () => {
       })
     })
 
-    it('should return null for invalid URLs', () => {
+    test('should return null for invalid URLs', () => {
       const url = 'https://example.com/task/123'
       const parsed = deepLinkManager.parseDeepLinkUrl(url)
 
       expect(parsed).toBeNull()
     })
 
-    it('should handle URLs without parameters', () => {
+    test('should handle URLs without parameters', () => {
       const url = 'corelive://view/completed'
       const parsed = deepLinkManager.parseDeepLinkUrl(url)
 
@@ -163,7 +163,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('opens the task in the browser at /home?focus=<id>', async () => {
+    test('opens the task in the browser at /home?focus=<id>', async () => {
       // Arrange: a `corelive://task/123` deep link (path `/123`, no params).
 
       // Act
@@ -175,7 +175,7 @@ describe('DeepLinkManager', () => {
       )
     })
 
-    it('percent-encodes an untrusted task id before opening the browser', async () => {
+    test('percent-encodes an untrusted task id before opening the browser', async () => {
       // Arrange: a deep-link path id carrying URL-significant characters.
 
       // Act
@@ -187,7 +187,7 @@ describe('DeepLinkManager', () => {
       )
     })
 
-    it('does nothing when the deep link carries no task id', async () => {
+    test('does nothing when the deep link carries no task id', async () => {
       // Arrange: empty path and no `id` param.
 
       // Act
@@ -203,7 +203,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('opens LiveEditor in the browser, never a Home page that cannot create tasks', async () => {
+    test('opens LiveEditor in the browser, never a Home page that cannot create tasks', async () => {
       // Arrange: a `corelive://create?title=...&description=...` deep link.
 
       // Act
@@ -221,7 +221,7 @@ describe('DeepLinkManager', () => {
       )
     })
 
-    it('opens LiveEditor in the browser when the deep link carries no fields', async () => {
+    test('opens LiveEditor in the browser when the deep link carries no fields', async () => {
       // Arrange: a bare `corelive://create` deep link (no params).
 
       // Act
@@ -239,7 +239,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('opens the view in the browser at /<view> with its params', async () => {
+    test('opens the view in the browser at /<view> with its params', async () => {
       // Arrange: a `corelive://view/completed?filter=recent` deep link.
 
       // Act
@@ -257,7 +257,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('opens search results in the browser at /home?search=<query>', async () => {
+    test('opens search results in the browser at /home?search=<query>', async () => {
       // Arrange: a `corelive://search?query=important&filter=pending` deep link.
 
       // Act
@@ -278,12 +278,12 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('should generate deep link URLs', () => {
+    test('should generate deep link URLs', () => {
       const url = deepLinkManager.generateDeepLink('task', { id: '123' })
       expect(url).toBe('corelive://task?id=123')
     })
 
-    it('should handle URL encoding', () => {
+    test('should handle URL encoding', () => {
       const url = deepLinkManager.generateDeepLink('create', {
         title: 'Task with spaces',
         description: 'Description & symbols',
@@ -293,7 +293,7 @@ describe('DeepLinkManager', () => {
       )
     })
 
-    it('should provide example URLs', () => {
+    test('should provide example URLs', () => {
       const examples = deepLinkManager.getExampleUrls()
 
       expect(examples).toHaveProperty('openTask')
@@ -313,7 +313,7 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    it('surfaces LiveEditor (restoreFromTray) when a view deep link arrives', async () => {
+    test('surfaces LiveEditor (restoreFromTray) when a view deep link arrives', async () => {
       // Arrange: the main window is retired, so every deep-link "show the app"
       // path delegates to restoreFromTray — LiveEditor (or the login window
       // while signed out) is the front door.
@@ -328,7 +328,7 @@ describe('DeepLinkManager', () => {
       expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
     })
 
-    it('does not surface LiveEditor before the OAuth callback ticket is delivered', async () => {
+    test('does not surface LiveEditor before the OAuth callback ticket is delivered', async () => {
       // Arrange: the OAuth deep link arrives while the app is still signed out.
       // Surfacing LiveEditor first would load the protected route with the
       // pre-login session; OAuthManager shows the initiating login window
@@ -349,7 +349,7 @@ describe('DeepLinkManager', () => {
       expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled()
     })
 
-    it('surfaces the app on a plain second launch', () => {
+    test('surfaces the app on a plain second launch', () => {
       // Act: the user opens the app again while it is already running.
       deepLinkManager.handleSecondInstance(['/Applications/CoreLive.app'], '/')
 
@@ -357,7 +357,7 @@ describe('DeepLinkManager', () => {
       expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
     })
 
-    it('keeps LiveEditor hidden when a second launch carries the OAuth callback', async () => {
+    test('keeps LiveEditor hidden when a second launch carries the OAuth callback', async () => {
       // Arrange
       const mockOAuthManager = {
         handleOAuthCallback: vi.fn(async () => undefined),
@@ -382,7 +382,7 @@ describe('DeepLinkManager', () => {
   })
 
   describe('cleanup', () => {
-    it('should cleanup properly', () => {
+    test('should cleanup properly', () => {
       deepLinkManager.initialize()
       deepLinkManager.cleanup()
 

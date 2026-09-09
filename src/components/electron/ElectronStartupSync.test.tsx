@@ -2,7 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import electronSettingsReducer, {
   setHideAppIcon,
@@ -74,7 +74,7 @@ describe('ElectronStartupSync', () => {
     })
   })
 
-  it.each([true, false])(
+  test.each([true, false])(
     'forwards persisted hideAppIcon=%s to the main process on mount',
     async (hideAppIcon) => {
       render(wrapWithStore(<ElectronStartupSync />, hideAppIcon))
@@ -89,7 +89,7 @@ describe('ElectronStartupSync', () => {
     },
   )
 
-  it.each([true, false])(
+  test.each([true, false])(
     'forwards persisted showInMenuBar=%s to the main process on mount',
     async (showInMenuBar) => {
       render(wrapWithStore(<ElectronStartupSync />, false, showInMenuBar))
@@ -103,7 +103,7 @@ describe('ElectronStartupSync', () => {
     },
   )
 
-  it('does not call IPC when not running in Electron', async () => {
+  test('does not call IPC when not running in Electron', async () => {
     isElectronMock.value = false
 
     render(wrapWithStore(<ElectronStartupSync />, true))
@@ -114,7 +114,7 @@ describe('ElectronStartupSync', () => {
     expect(setShowInMenuBarMock).not.toHaveBeenCalled()
   })
 
-  it('does not throw when window.electronAPI is undefined', async () => {
+  test('does not throw when window.electronAPI is undefined', async () => {
     installElectronAPI(undefined)
 
     expect(() =>
@@ -125,7 +125,7 @@ describe('ElectronStartupSync', () => {
     expect(setShowInMenuBarMock).not.toHaveBeenCalled()
   })
 
-  it('does not throw when an old preload exposes settings but not setHideAppIcon', async () => {
+  test('does not throw when an old preload exposes settings but not setHideAppIcon', async () => {
     // Arrange: an OUTDATED desktop app exposes the `settings` namespace but
     // predates the `setHideAppIcon` method this effect calls. Mounted in the
     // root layout, a synchronous TypeError here would bubble past error.tsx to
@@ -144,7 +144,7 @@ describe('ElectronStartupSync', () => {
     expect(setHideAppIconMock).not.toHaveBeenCalled()
   })
 
-  it('does not throw when an old preload exposes settings but not setShowInMenuBar', async () => {
+  test('does not throw when an old preload exposes settings but not setShowInMenuBar', async () => {
     // Arrange: the mirror case — an OUTDATED preload has setHideAppIcon but not
     // the newer setShowInMenuBar. The menu-bar guard must skip its call without
     // suppressing the hideAppIcon sync (independent per-method guards).
@@ -161,7 +161,7 @@ describe('ElectronStartupSync', () => {
     expect(setShowInMenuBarMock).not.toHaveBeenCalled()
   })
 
-  it('logs an error when setHideAppIcon rejects', async () => {
+  test('logs an error when setHideAppIcon rejects', async () => {
     // Surface IPC failures so main-process regressions don't go silent.
     // Without this test, a future refactor could remove the .catch handler
     // and the suite would still pass.
@@ -183,7 +183,7 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('logs an error when setShowInMenuBar rejects', async () => {
+  test('logs an error when setShowInMenuBar rejects', async () => {
     // Mirror of the hideAppIcon failure path: a rejected menu-bar sync must be
     // surfaced under its own label so the two settings' failures are
     // distinguishable in logs.
@@ -205,7 +205,7 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('logs an error when setHideAppIcon resolves to false', async () => {
+  test('logs an error when setHideAppIcon resolves to false', async () => {
     // The preload bridge swallows thrown errors and returns `false` instead
     // of rejecting (electron/preload.ts:1491-1502). Without this test, the
     // .then/false-check could be removed and the rejection-only test above
@@ -226,7 +226,7 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('logs an error when setShowInMenuBar resolves to false', async () => {
+  test('logs an error when setShowInMenuBar resolves to false', async () => {
     // Same false-return contract as hideAppIcon: a `false` resolution means the
     // tray never appeared, so it must be reported (not silently treated as ok).
     setShowInMenuBarMock.mockResolvedValueOnce(false)
@@ -245,7 +245,7 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('does not log an error when setHideAppIcon resolves to true', async () => {
+  test('does not log an error when setHideAppIcon resolves to true', async () => {
     // Guard against false-positive logging: the success path must stay quiet.
     // If someone flipped the boolean check (`ok === true` instead of `ok === false`),
     // this test catches it.
@@ -264,7 +264,7 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('does not log an error when setShowInMenuBar resolves to true', async () => {
+  test('does not log an error when setShowInMenuBar resolves to true', async () => {
     // Mirror of the hideAppIcon success-quiet test, but for the tray-OFF success
     // path (showInMenuBar=false persisted, sync succeeds). The shared
     // reportSyncFailure helper only runs through the hideAppIcon quiet test with
@@ -285,7 +285,7 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('re-syncs when hideAppIcon changes after mount', async () => {
+  test('re-syncs when hideAppIcon changes after mount', async () => {
     // Locks down the [hideAppIcon] dependency in the effect — if someone
     // changes it to [] (mount-only), this test fails. Important because
     // the Settings UI updates the Redux value at runtime and the dock
@@ -319,7 +319,7 @@ describe('ElectronStartupSync', () => {
     expect(setHideAppIconMock).toHaveBeenCalledTimes(2)
   })
 
-  it('re-syncs when showInMenuBar changes after mount', async () => {
+  test('re-syncs when showInMenuBar changes after mount', async () => {
     // Mirror dep-lock for the menu-bar effect: a [showInMenuBar] → [] regression
     // would strand the tray out of sync after a runtime toggle. Also confirms
     // the menu-bar effect is independent of hideAppIcon — toggling the menu bar

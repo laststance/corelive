@@ -1,6 +1,6 @@
 import { call } from '@orpc/server'
 import { Prisma, type User } from '@prisma/client'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
@@ -59,7 +59,7 @@ beforeEach(() => {
 })
 
 describe('authMiddleware user resolution', () => {
-  it('reuses a webhook-synchronized user without writing on an authenticated query', async () => {
+  test('reuses a webhook-synchronized user without writing on an authenticated query', async () => {
     // Arrange
     mockedFindUnique.mockResolvedValue(EXISTING_USER)
 
@@ -75,7 +75,7 @@ describe('authMiddleware user resolution', () => {
     expect(mockedCreate).not.toHaveBeenCalled()
   })
 
-  it('creates the user only when the Clerk webhook row is genuinely missing, with "General" attached so the editor is never locked on "No categories"', async () => {
+  test('creates the user only when the Clerk webhook row is genuinely missing, with "General" attached so the editor is never locked on "No categories"', async () => {
     // Arrange
     mockedFindUnique.mockResolvedValue(null)
     mockedCreate.mockResolvedValue(CONCURRENT_USER)
@@ -99,7 +99,7 @@ describe('authMiddleware user resolution', () => {
     })
   })
 
-  it('uses the winning webhook row when a concurrent create hits the Clerk ID unique constraint', async () => {
+  test('uses the winning webhook row when a concurrent create hits the Clerk ID unique constraint', async () => {
     // Arrange
     mockedFindUnique
       .mockResolvedValueOnce(null)
@@ -123,7 +123,7 @@ describe('authMiddleware user resolution', () => {
     expect(mockedFindUnique).toHaveBeenCalledTimes(2)
   })
 
-  it('rejects an unauthenticated query before opening a database connection', async () => {
+  test('rejects an unauthenticated query before opening a database connection', async () => {
     // Arrange
     const operation = call(readAuthenticatedUser, undefined, {
       context: { headers: new Headers() },
@@ -135,7 +135,7 @@ describe('authMiddleware user resolution', () => {
     expect(mockedFindUnique).not.toHaveBeenCalled()
   })
 
-  it('reuses a bootstrap-resolved user without repeating connection or user lookup work', async () => {
+  test('reuses a bootstrap-resolved user without repeating connection or user lookup work', async () => {
     // Arrange
     const options = {
       context: {

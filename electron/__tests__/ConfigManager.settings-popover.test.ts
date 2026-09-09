@@ -17,7 +17,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 const userDataDir = vi.hoisted(() => ({ current: '' }))
 
@@ -59,7 +59,7 @@ afterEach(() => {
 })
 
 describe('ConfigManager settingsPopover defaults', () => {
-  it('defaults to width=360 and height=380 on a fresh install', () => {
+  test('defaults to width=360 and height=380 on a fresh install', () => {
     // Arrange + Act
     const configManager = new ConfigManager()
 
@@ -68,7 +68,7 @@ describe('ConfigManager settingsPopover defaults', () => {
     expect(configManager.get('settingsPopover.height')).toBe(380)
   })
 
-  it('fills missing settingsPopover from a legacy config.json via mergeWithDefaults', () => {
+  test('fills missing settingsPopover from a legacy config.json via mergeWithDefaults', () => {
     // Arrange: old config that predates the settingsPopover key
     writeConfigFile({
       version: '1.0.0',
@@ -83,7 +83,7 @@ describe('ConfigManager settingsPopover defaults', () => {
     expect(configManager.get('settingsPopover.height')).toBe(380)
   })
 
-  it('preserves a valid persisted settingsPopover from config.json', () => {
+  test('preserves a valid persisted settingsPopover from config.json', () => {
     // Arrange: user previously resized to 500×600
     writeConfigFile({
       version: '1.0.0',
@@ -98,7 +98,7 @@ describe('ConfigManager settingsPopover defaults', () => {
     expect(configManager.get('settingsPopover.height')).toBe(600)
   })
 
-  it('backfills missing height when only width is present in config.json (partial-key migration)', () => {
+  test('backfills missing height when only width is present in config.json (partial-key migration)', () => {
     // Arrange: hypothetical config.json that has only width (e.g. written by an
     // older in-dev build before height was added to the schema).
     writeConfigFile({

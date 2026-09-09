@@ -14,7 +14,7 @@
  * @example
  *   pnpm test:electron -- WindowManager.web-app-origin
  */
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import { WindowManager } from '../WindowManager'
 
@@ -39,7 +39,7 @@ vi.mock('../logger', () => ({
 }))
 
 describe('WindowManager.getWebAppOrigin', () => {
-  it('defaults to the production origin when no server URL is configured', () => {
+  test('defaults to the production origin when no server URL is configured', () => {
     // Arrange: no server URL (the packaged app passes null — it points at prod).
     const windowManager = new WindowManager(null)
 
@@ -50,7 +50,7 @@ describe('WindowManager.getWebAppOrigin', () => {
     expect(origin).toBe('https://corelive.app')
   })
 
-  it("uses the dev server's origin, stripping any path, when a server URL is configured", () => {
+  test("uses the dev server's origin, stripping any path, when a server URL is configured", () => {
     // Arrange: dev passes the full local URL (with a path) as the server URL.
     const windowManager = new WindowManager('http://localhost:4991/home')
 
@@ -62,7 +62,7 @@ describe('WindowManager.getWebAppOrigin', () => {
     expect(origin).toBe('http://localhost:4991')
   })
 
-  it('falls back to the production origin when the configured server URL is unparseable', () => {
+  test('falls back to the production origin when the configured server URL is unparseable', () => {
     // Arrange: a malformed server URL that `new URL()` cannot parse.
     const windowManager = new WindowManager('not a url')
 

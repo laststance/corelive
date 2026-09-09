@@ -17,7 +17,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock resolves a fresh temp userData
 // directory per test (vi.mock factories cannot close over later-declared vars).
@@ -64,7 +64,7 @@ describe('ConfigManager hideAppIcon', () => {
     vi.clearAllMocks()
   })
 
-  it('ships with the dock icon shown by default (hideAppIcon=false)', () => {
+  test('ships with the dock icon shown by default (hideAppIcon=false)', () => {
     // Arrange
     const configManager = new ConfigManager()
 
@@ -76,7 +76,7 @@ describe('ConfigManager hideAppIcon', () => {
     expect(behavior.hideAppIcon).toBe(false)
   })
 
-  it('persists a hideAppIcon=true toggle so the next boot reads it back', () => {
+  test('persists a hideAppIcon=true toggle so the next boot reads it back', () => {
     // Arrange: a running app where the user hid the dock icon.
     const configManager = new ConfigManager()
     configManager.set('behavior.hideAppIcon', true)
@@ -90,7 +90,7 @@ describe('ConfigManager hideAppIcon', () => {
     expect(afterRestart.get('behavior.hideAppIcon', false)).toBe(true)
   })
 
-  it('persists a hideAppIcon=false toggle (un-hide survives a restart too)', () => {
+  test('persists a hideAppIcon=false toggle (un-hide survives a restart too)', () => {
     // Arrange: a user who hid then re-showed the icon.
     const configManager = new ConfigManager()
     configManager.set('behavior.hideAppIcon', true)
@@ -104,7 +104,7 @@ describe('ConfigManager hideAppIcon', () => {
     expect(afterRestart.get('behavior.hideAppIcon', true)).toBe(false)
   })
 
-  it('merges a pre-feature config without behavior.hideAppIcon to false, never stale-true', () => {
+  test('merges a pre-feature config without behavior.hideAppIcon to false, never stale-true', () => {
     // Arrange: a config.json written before the field existed — its behavior block
     // carries a sibling key BUT not hideAppIcon (no migration step is added; the
     // default-merge must fill it).
@@ -120,7 +120,7 @@ describe('ConfigManager hideAppIcon', () => {
     expect(configManager.get('behavior.startOnLogin', false)).toBe(true)
   })
 
-  it('preserves an explicit behavior.hideAppIcon=true from a saved config', () => {
+  test('preserves an explicit behavior.hideAppIcon=true from a saved config', () => {
     // Arrange: a user who turned dock-icon hiding on persists true.
     writeConfigFile({ behavior: { hideAppIcon: true } })
 

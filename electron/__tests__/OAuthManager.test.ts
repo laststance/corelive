@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { typedSend } from '../ipc/typedSend'
 import { log } from '../logger'
@@ -90,7 +90,7 @@ describe('OAuthManager', () => {
     ).not.toContain('sensitive-')
   })
 
-  it('builds the OAuth start URL from the dev web-app origin', () => {
+  test('builds the OAuth start URL from the dev web-app origin', () => {
     const oauthManager = new OAuthManager(
       createWindowManagerMock('http://localhost:4991') as never,
       null,
@@ -101,7 +101,7 @@ describe('OAuthManager', () => {
     )
   })
 
-  it('builds the OAuth start URL from the production web-app origin', () => {
+  test('builds the OAuth start URL from the production web-app origin', () => {
     const oauthManager = new OAuthManager(
       createWindowManagerMock('https://corelive.app') as never,
       null,
@@ -121,7 +121,7 @@ describe('OAuthManager initiator targeting', () => {
     vi.mocked(typedSend).mockClear()
   })
 
-  it('routes a provider-denied callback error to the window that started the flow', async () => {
+  test('routes a provider-denied callback error to the window that started the flow', async () => {
     // Arrange: the login-window renderer (id 11) starts a Google flow.
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
@@ -144,7 +144,7 @@ describe('OAuthManager initiator targeting', () => {
     })
   })
 
-  it('hands the pending sign-in ticket only to the window that initiated it', () => {
+  test('hands the pending sign-in ticket only to the window that initiated it', () => {
     // Arrange: a ticket bound to the login-window renderer (id 11).
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
@@ -162,7 +162,7 @@ describe('OAuthManager initiator targeting', () => {
     })
   })
 
-  it('pushes the sign-in ticket to the initiating window with no main-window fallback', () => {
+  test('pushes the sign-in ticket to the initiating window with no main-window fallback', () => {
     // Arrange: a login-window-initiated flow (id 11); no main window exists (T18).
     const oauthManager = new OAuthManager(
       createWindowManagerMock() as never,
@@ -185,7 +185,7 @@ describe('OAuthManager initiator targeting', () => {
     )
   })
 
-  it('leaves an initiator-less ticket in the PULL store with no push, so a surviving panel claims it on mount', () => {
+  test('leaves an initiator-less ticket in the PULL store with no push, so a surviving panel claims it on mount', () => {
     // Arrange: a cold-boot OAuth callback arrives before any panel painted, so
     // there is no live initiator to push to and the main window is retired (T18).
     const oauthManager = new OAuthManager(
@@ -206,7 +206,7 @@ describe('OAuthManager initiator targeting', () => {
     })
   })
 
-  it('keeps an unbound ticket window-agnostic so a cold-boot panel can pull it', () => {
+  test('keeps an unbound ticket window-agnostic so a cold-boot panel can pull it', () => {
     // Arrange: a push with no initiator (a cold-boot callback before any panel
     // painted), the durable path now that the main window is retired.
     const oauthManager = new OAuthManager(
@@ -229,7 +229,7 @@ describe('OAuthManager emitted channel surface', () => {
     vi.mocked(typedSend).mockClear()
   })
 
-  it('never emits oauth-success or oauth-complete-exchange on any OAuth outcome', async () => {
+  test('never emits oauth-success or oauth-complete-exchange on any OAuth outcome', async () => {
     // Arrange: one manager driven through BOTH live outcomes — a granted flow
     // that yields a sign-in ticket, and a provider denial that yields an error.
     const oauthManager = new OAuthManager(

@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import nextConfig from '../../../next.config.js'
 
@@ -88,7 +88,7 @@ function getTurbopackInspectorOptions(): CodeInspectorLoaderOptions[] {
 }
 
 describe('CodeInspectorClient', () => {
-  it('pins Turbopack inspector injection to the global client mount', () => {
+  test('pins Turbopack inspector injection to the global client mount', () => {
     const inspectorOptions = getTurbopackInspectorOptions()
 
     expect(inspectorOptions).not.toHaveLength(0)
@@ -99,7 +99,7 @@ describe('CodeInspectorClient', () => {
     ).toBe(true)
   })
 
-  it('pins Webpack inspector injection to the same global client mount', () => {
+  test('pins Webpack inspector injection to the same global client mount', () => {
     const configureWebpack = nextConfig.webpack
     const webpackConfig: MinimalWebpackConfig = {
       externals: [],

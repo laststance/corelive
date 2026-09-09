@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { SettingsBackButton } from './SettingsBackButton'
 
@@ -34,7 +34,7 @@ describe('SettingsBackButton', () => {
     delete (window.history as unknown as { length?: number }).length
   })
 
-  it('returns to the previous screen when Settings was opened from the sidebar', async () => {
+  test('returns to the previous screen when Settings was opened from the sidebar', async () => {
     // Arrange: reached via in-app navigation, so a prior history entry exists.
     setHistoryLength(2)
     const user = userEvent.setup()
@@ -48,7 +48,7 @@ describe('SettingsBackButton', () => {
     expect(backMock).toHaveBeenCalledTimes(1)
   })
 
-  it('renders nothing in the tray popover, where there is no screen to go back to', () => {
+  test('renders nothing in the tray popover, where there is no screen to go back to', () => {
     // Arrange: a fresh loadURL of /settings (the frameless tray popover) leaves
     // history.length at 1 — back() would be a no-op.
     setHistoryLength(1)

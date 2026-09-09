@@ -8,7 +8,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 const userDataDir = vi.hoisted(() => ({ current: '' }))
 
@@ -51,7 +51,7 @@ afterEach(() => {
 })
 
 describe('ConfigManager shortcut opening sound', () => {
-  it('plays the shortcut opening cue by default on a fresh install', () => {
+  test('plays the shortcut opening cue by default on a fresh install', () => {
     // Arrange / Act
     const configManager = new ConfigManager()
 
@@ -62,7 +62,7 @@ describe('ConfigManager shortcut opening sound', () => {
     )
   })
 
-  it('turns the cue on after an app update when a legacy config has no sound choice', () => {
+  test('turns the cue on after an app update when a legacy config has no sound choice', () => {
     // Arrange
     writeConfigFile({
       version: '1.0.0',
@@ -79,7 +79,7 @@ describe('ConfigManager shortcut opening sound', () => {
     )
   })
 
-  it('uses the shuffled rotation when a saved sound identifier is no longer bundled', () => {
+  test('uses the shuffled rotation when a saved sound identifier is no longer bundled', () => {
     // Arrange
     writeConfigFile({
       version: '1.0.0',
@@ -98,7 +98,7 @@ describe('ConfigManager shortcut opening sound', () => {
     )
   })
 
-  it('keeps shortcut playback silent when a persisted enabled value is malformed', () => {
+  test('keeps shortcut playback silent when a persisted enabled value is malformed', () => {
     // Arrange
     writeConfigFile({
       version: '1.0.0',
@@ -115,7 +115,7 @@ describe('ConfigManager shortcut opening sound', () => {
     expect(configManager.get('behavior.shortcutOpenSoundEnabled')).toBe(false)
   })
 
-  it('keeps the shortcut opening cue off across restarts after the user disables it', () => {
+  test('keeps the shortcut opening cue off across restarts after the user disables it', () => {
     // Arrange
     const configManager = new ConfigManager()
 
@@ -127,7 +127,7 @@ describe('ConfigManager shortcut opening sound', () => {
     expect(afterRestart.get('behavior.shortcutOpenSoundEnabled')).toBe(false)
   })
 
-  it('keeps one exact bundled cue across restarts after the user pins it', () => {
+  test('keeps one exact bundled cue across restarts after the user pins it', () => {
     // Arrange
     const configManager = new ConfigManager()
 

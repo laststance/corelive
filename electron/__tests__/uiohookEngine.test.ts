@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 // Silence the real pino logger so tap start/re-arm info lines never spew here.
 vi.mock('../logger', () => ({
@@ -85,7 +85,7 @@ describe('createUiohookShortcutEngine', () => {
     vi.clearAllMocks()
   })
 
-  it('reports available when the native module loads', () => {
+  test('reports available when the native module loads', () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -97,7 +97,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(engine.isAvailable()).toBe(true)
   })
 
-  it('reports unavailable and refuses to bind when the native module is absent', () => {
+  test('reports unavailable and refuses to bind when the native module is absent', () => {
     // Arrange: the prebuilt is missing / wrong arch, so the loader returns null.
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => null, latch)
@@ -114,7 +114,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(didRegister).toBe(false)
   })
 
-  it('reports unavailable when loading the native module throws', () => {
+  test('reports unavailable when loading the native module throws', () => {
     // Arrange: a corrupt binary makes require() throw — must not crash construction.
     const { latch } = createFakeLatch()
     const engine = createUiohookShortcutEngine(() => {
@@ -125,7 +125,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(engine.isAvailable()).toBe(false)
   })
 
-  it('refuses the bind and degrades when the global tap fails to start', () => {
+  test('refuses the bind and degrades when the global tap fails to start', () => {
     // Arrange: the module loads, but start() throws (e.g. macOS denied the event
     // tap), so the lone-modifier bind must roll back rather than record a dead bind.
     const startThrowingModule: UiohookModule = {
@@ -151,7 +151,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(clear).toHaveBeenCalled()
   })
 
-  it('fires the shortcut when its lone modifier is pressed and released by itself', async () => {
+  test('fires the shortcut when its lone modifier is pressed and released by itself', async () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -168,7 +168,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).toHaveBeenCalledTimes(1)
   })
 
-  it('dispatches the shortcut via setImmediate, not synchronously on the tap thread', async () => {
+  test('dispatches the shortcut via setImmediate, not synchronously on the tap thread', async () => {
     // Arrange: heavy window work must never run on the native tap's emit path
     // (codex #1) — the callback is deferred to the next main-loop tick.
     const fake = createFakeUiohook()
@@ -188,7 +188,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).toHaveBeenCalledTimes(1)
   })
 
-  it('does not fire when another key is pressed between the modifier press and release', async () => {
+  test('does not fire when another key is pressed between the modifier press and release', async () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -206,7 +206,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).not.toHaveBeenCalled()
   })
 
-  it('does not fire after the binding is unregistered', async () => {
+  test('does not fire after the binding is unregistered', async () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -224,7 +224,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).not.toHaveBeenCalled()
   })
 
-  it('rebinds an id to a new modifier without the old key still firing it', async () => {
+  test('rebinds an id to a new modifier without the old key still firing it', async () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -244,7 +244,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).toHaveBeenCalledTimes(1)
   })
 
-  it('starts the global tap on the first bind and stops it after the last unbind', () => {
+  test('starts the global tap on the first bind and stops it after the last unbind', () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -264,7 +264,7 @@ describe('createUiohookShortcutEngine', () => {
   // Freeze-safety (#125): brick-proof latch, attach-once reArm, pressed reset
   // ──────────────────────────────────────────────────────────────────────────
 
-  it('arms the brick-proof latch before starting the tap', () => {
+  test('arms the brick-proof latch before starting the tap', () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch, arm } = createFakeLatch()
@@ -278,7 +278,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.start).toHaveBeenCalledTimes(1)
   })
 
-  it('refuses to start the tap when the latch cannot be armed', () => {
+  test('refuses to start the tap when the latch cannot be armed', () => {
     // Arrange: arming the brick-guard fails (e.g. fsync write didn't land), so the
     // tap must NOT start unguarded — a freeze with no marker would brick relaunch.
     const fake = createFakeUiohook()
@@ -298,7 +298,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.start).not.toHaveBeenCalled()
   })
 
-  it('starts the lone modifier INACTIVE when a prior arming was left unconfirmed', () => {
+  test('starts the lone modifier INACTIVE when a prior arming was left unconfirmed', () => {
     // Arrange: the latch marker is still set from a prior launch that armed but
     // never confirmed stability (it may have wedged the app) — do NOT re-arm.
     const fake = createFakeUiohook()
@@ -318,7 +318,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.start).not.toHaveBeenCalled()
   })
 
-  it('re-enables a latch-blocked tap once the block is manually cleared', () => {
+  test('re-enables a latch-blocked tap once the block is manually cleared', () => {
     // Arrange: a latch-blocked launch left the binding inactive.
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch(true)
@@ -341,7 +341,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.start).toHaveBeenCalledTimes(1)
   })
 
-  it('re-arms without duplicating listeners — 10 reArms still fire the shortcut once', async () => {
+  test('re-arms without duplicating listeners — 10 reArms still fire the shortcut once', async () => {
     // Arrange: reArm() used to attach listeners on each start, so a stop+start
     // stacked duplicate keydown/keyup handlers and fired each binding N times.
     const fake = createFakeUiohook()
@@ -361,7 +361,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).toHaveBeenCalledTimes(1)
   })
 
-  it('stops and restarts the tap on reArm (reviving a possibly-silent tap)', () => {
+  test('stops and restarts the tap on reArm (reviving a possibly-silent tap)', () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch, arm } = createFakeLatch()
@@ -379,7 +379,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(arm).toHaveBeenCalledTimes(2)
   })
 
-  it('does nothing on reArm when no binding is active', () => {
+  test('does nothing on reArm when no binding is active', () => {
     // Arrange: an unbound engine has no tap to revive.
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -393,7 +393,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.stop).not.toHaveBeenCalled()
   })
 
-  it('clears a modifier held across sleep so its dangling release does not fire (reArm)', async () => {
+  test('clears a modifier held across sleep so its dangling release does not fire (reArm)', async () => {
     // Arrange: the modifier goes down, then the machine sleeps; reArm() on wake
     // must reset the pressed-alone state so the post-wake release can't mis-fire.
     const fake = createFakeUiohook()
@@ -412,7 +412,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).not.toHaveBeenCalled()
   })
 
-  it('drops in-flight pressed state on resetPressedState without restarting the tap', async () => {
+  test('drops in-flight pressed state on resetPressedState without restarting the tap', async () => {
     // Arrange: suspend/lock-screen resets pressed-state but leaves the tap running.
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -431,7 +431,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(fake.stop).not.toHaveBeenCalled()
   })
 
-  it('clears the brick-proof latch on a clean stop (a confirmed-healthy session)', () => {
+  test('clears the brick-proof latch on a clean stop (a confirmed-healthy session)', () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch, clear } = createFakeLatch()
@@ -446,7 +446,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(clear).toHaveBeenCalled()
   })
 
-  it('cancels a deferred shortcut whose binding is unregistered before the immediate runs', async () => {
+  test('cancels a deferred shortcut whose binding is unregistered before the immediate runs', async () => {
     // Arrange: the toggle is dispatched via setImmediate (codex #1), so a window
     // exists where the binding can be torn down between keyup and the next tick.
     // A stale callback firing after unregister/stop would be a use-after-free
@@ -468,7 +468,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(callback).not.toHaveBeenCalled()
   })
 
-  it('skips the reArm restart when stop throws, so a wedged tap is not double-started', () => {
+  test('skips the reArm restart when stop throws, so a wedged tap is not double-started', () => {
     // Arrange: stop() throws on re-arm, so the old CGEventTap's state is unknown.
     // Starting again could double-start the OS tap (codex #4) — reArm must bail.
     const start = vi.fn()
@@ -491,7 +491,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(start).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the brick-guard set and the tap un-restartable when stop throws on the last unbind', () => {
+  test('keeps the brick-guard set and the tap un-restartable when stop throws on the last unbind', () => {
     // Arrange: stop() throws when the final binding is removed, so the old tap's
     // state is unknown. Treating that as a clean shutdown (clearing the guard and
     // flipping isTapRunning) would let a later register() start() a SECOND
@@ -519,7 +519,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(start).toHaveBeenCalledTimes(1)
   })
 
-  it('reports isActive true while a binding is registered and the tap is running', () => {
+  test('reports isActive true while a binding is registered and the tap is running', () => {
     // Arrange
     const fake = createFakeUiohook()
     const { latch } = createFakeLatch()
@@ -532,7 +532,7 @@ describe('createUiohookShortcutEngine', () => {
     expect(engine.isActive()).toBe(true)
   })
 
-  it('reports isActive false after a re-arm whose restart fails, though the binding stays registered', () => {
+  test('reports isActive false after a re-arm whose restart fails, though the binding stays registered', () => {
     // Arrange: the initial start succeeds but the start during reArm throws, so
     // the tap is down while the binding remains registered. isActive must read
     // RUNTIME state (tap down), not registration intent, or the renderer would

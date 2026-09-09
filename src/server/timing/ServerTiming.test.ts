@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import { ServerTiming } from './ServerTiming'
 
 describe('ServerTiming', () => {
-  it('exposes accumulated Home bootstrap phases as a valid Server-Timing value', async () => {
+  test('exposes accumulated Home bootstrap phases as a valid Server-Timing value', async () => {
     // Arrange
     const now = vi
       .spyOn(performance, 'now')
@@ -25,7 +25,7 @@ describe('ServerTiming', () => {
     now.mockRestore()
   })
 
-  it('still records a failed phase so production errors remain diagnosable', async () => {
+  test('still records a failed phase so production errors remain diagnosable', async () => {
     // Arrange
     const now = vi
       .spyOn(performance, 'now')

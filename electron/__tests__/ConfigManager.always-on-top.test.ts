@@ -15,7 +15,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock resolves a fresh temp userData
 // directory per test (vi.mock factories cannot close over later-declared vars).
@@ -62,7 +62,7 @@ describe('ConfigManager LiveEditor always-on-top', () => {
     vi.clearAllMocks()
   })
 
-  it('ships LiveEditor unpinned by default', () => {
+  test('ships LiveEditor unpinned by default', () => {
     // Arrange
     const configManager = new ConfigManager()
 
@@ -74,7 +74,7 @@ describe('ConfigManager LiveEditor always-on-top', () => {
     expect(liveEditor.alwaysOnTop).toBe(false)
   })
 
-  it('migrates a pre-feature config without liveEditor.alwaysOnTop to false, never stale-true', () => {
+  test('migrates a pre-feature config without liveEditor.alwaysOnTop to false, never stale-true', () => {
     // Arrange: a config.json written before the field existed — its liveEditor
     // block carries every sibling key BUT alwaysOnTop.
     writeConfigFile({
@@ -97,7 +97,7 @@ describe('ConfigManager LiveEditor always-on-top', () => {
     expect(configManager.get('liveEditor.alwaysOnTop', true)).toBe(false)
   })
 
-  it('preserves an explicit liveEditor.alwaysOnTop=true opt-in from a saved config', () => {
+  test('preserves an explicit liveEditor.alwaysOnTop=true opt-in from a saved config', () => {
     // Arrange: a user who turned LiveEditor pinning on persists true.
     writeConfigFile({ liveEditor: { alwaysOnTop: true } })
 

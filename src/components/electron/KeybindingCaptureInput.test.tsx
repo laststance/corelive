@@ -1,6 +1,6 @@
 import { createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import { KeybindingCaptureInput } from './KeybindingCaptureInput'
 
@@ -34,7 +34,7 @@ function renderCaptureBox(initialValue = ''): {
 }
 
 describe('KeybindingCaptureInput', () => {
-  it('shows the empty invite, then the recording prompt once activated', () => {
+  test('shows the empty invite, then the recording prompt once activated', () => {
     // Arrange
     const { button } = renderCaptureBox()
 
@@ -48,7 +48,7 @@ describe('KeybindingCaptureInput', () => {
     expect(button).toHaveTextContent('Press keys…')
   })
 
-  it('captures ⌘+3 as a CommandOrControl accelerator', () => {
+  test('captures ⌘+3 as a CommandOrControl accelerator', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -60,7 +60,7 @@ describe('KeybindingCaptureInput', () => {
     expect(onChange).toHaveBeenCalledWith('CommandOrControl+3')
   })
 
-  it('captures Alt+Space even though Space would otherwise activate the button', () => {
+  test('captures Alt+Space even though Space would otherwise activate the button', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -72,7 +72,7 @@ describe('KeybindingCaptureInput', () => {
     expect(onChange).toHaveBeenCalledWith('Alt+Space')
   })
 
-  it('keeps recording when an incomplete chord (bare Space, no modifier) is pressed', () => {
+  test('keeps recording when an incomplete chord (bare Space, no modifier) is pressed', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -86,7 +86,7 @@ describe('KeybindingCaptureInput', () => {
     expect(button).toHaveTextContent('Press keys…')
   })
 
-  it('does not capture the activation keypress that precedes recording', () => {
+  test('does not capture the activation keypress that precedes recording', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -100,7 +100,7 @@ describe('KeybindingCaptureInput', () => {
     expect(enter.defaultPrevented).toBe(false)
   })
 
-  it('traps Tab while recording but releases it after Escape (keyboard escape hatch)', () => {
+  test('traps Tab while recording but releases it after Escape (keyboard escape hatch)', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox('Alt+Space')
     fireEvent.click(button)
@@ -122,7 +122,7 @@ describe('KeybindingCaptureInput', () => {
     expect(tabAfterEscape.defaultPrevented).toBe(false)
   })
 
-  it('clears the binding when Backspace is pressed while recording', () => {
+  test('clears the binding when Backspace is pressed while recording', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox('Alt+Space')
 
@@ -134,7 +134,7 @@ describe('KeybindingCaptureInput', () => {
     expect(onChange).toHaveBeenCalledWith('')
   })
 
-  it('clears the binding when Delete is pressed while recording', () => {
+  test('clears the binding when Delete is pressed while recording', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox('Alt+Space')
 
@@ -146,7 +146,7 @@ describe('KeybindingCaptureInput', () => {
     expect(onChange).toHaveBeenCalledWith('')
   })
 
-  it('ignores keydowns while an IME is composing so it never hijacks voice/IME input', () => {
+  test('ignores keydowns while an IME is composing so it never hijacks voice/IME input', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
     fireEvent.click(button)
@@ -165,7 +165,7 @@ describe('KeybindingCaptureInput', () => {
     expect(composing.defaultPrevented).toBe(false)
   })
 
-  it('captures a lone Right Option pressed and released by itself', () => {
+  test('captures a lone Right Option pressed and released by itself', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -180,7 +180,7 @@ describe('KeybindingCaptureInput', () => {
     expect(button).toHaveTextContent('Right ⌥')
   })
 
-  it('distinguishes the left modifier from the right when captured alone', () => {
+  test('distinguishes the left modifier from the right when captured alone', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -193,7 +193,7 @@ describe('KeybindingCaptureInput', () => {
     expect(onChange).toHaveBeenCalledWith('lone-modifier:leftShift')
   })
 
-  it('binds the chord, not a lone modifier, when a key follows the held modifier', () => {
+  test('binds the chord, not a lone modifier, when a key follows the held modifier', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -208,7 +208,7 @@ describe('KeybindingCaptureInput', () => {
     expect(onChange).not.toHaveBeenCalledWith('lone-modifier:rightOption')
   })
 
-  it('captures nothing when two modifiers are held together then released', () => {
+  test('captures nothing when two modifiers are held together then released', () => {
     // Arrange
     const { onChange, button } = renderCaptureBox()
 
@@ -229,7 +229,7 @@ describe('KeybindingCaptureInput', () => {
     expect(button).toHaveTextContent('Press keys…')
   })
 
-  it('does not start recording when disabled', () => {
+  test('does not start recording when disabled', () => {
     // Arrange
     const onChange = vi.fn()
     render(

@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
@@ -61,7 +61,7 @@ afterEach(async () => {
 })
 
 describeIfDb('completed.importLocal', () => {
-  it('imports every repeated title as its own row instead of collapsing them', async () => {
+  test('imports every repeated title as its own row instead of collapsing them', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const user = await ensureUser(clerkId)
@@ -101,7 +101,7 @@ describeIfDb('completed.importLocal', () => {
     expect(rows).toHaveLength(3)
   })
 
-  it('files each imported keep on the day it happened, not the day it was imported', async () => {
+  test('files each imported keep on the day it happened, not the day it was imported', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const user = await ensureUser(clerkId)
@@ -124,7 +124,7 @@ describeIfDb('completed.importLocal', () => {
     expect(row.completedAt?.toISOString()).toBe('2026-07-04T12:34:56.000Z')
   })
 
-  it('re-sending a batch after a lost response imports nothing a second time', async () => {
+  test('re-sending a batch after a lost response imports nothing a second time', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const user = await ensureUser(clerkId)
@@ -159,7 +159,7 @@ describeIfDb('completed.importLocal', () => {
     expect(rows).toHaveLength(2)
   })
 
-  it('two accounts can import under the same client batch id without blocking each other', async () => {
+  test('two accounts can import under the same client batch id without blocking each other', async () => {
     // Arrange
     const firstClerkId = freshClerkId()
     const secondClerkId = freshClerkId()
@@ -196,7 +196,7 @@ describeIfDb('completed.importLocal', () => {
     ).toBe(1)
   })
 
-  it('a keep re-sent under a fresh batch id lands once, not twice', async () => {
+  test('a keep re-sent under a fresh batch id lands once, not twice', async () => {
     // Arrange — the first batch committed but its tag was lost (or a second
     // tab claimed the same keep under its own batch id), so the keep comes back
     // under a NEW batch id. Batch-level dedup cannot see this; only the keep's
@@ -232,7 +232,7 @@ describeIfDb('completed.importLocal', () => {
     expect(rows).toHaveLength(1)
   })
 
-  it('merges into a freshly seeded category when the account has none', async () => {
+  test('merges into a freshly seeded category when the account has none', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const user = await ensureUser(clerkId)

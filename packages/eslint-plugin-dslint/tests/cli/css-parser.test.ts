@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import {
   parseCSSContent,
@@ -39,7 +39,7 @@ const MULTI_THEME_CSS = `
 `
 
 describe('parseCSSContent — theme tagging', () => {
-  it('tags :root variables as the default-light palette', () => {
+  test('tags :root variables as the default-light palette', () => {
     // Arrange — a stylesheet whose :root holds the default-light tokens
 
     // Act
@@ -53,7 +53,7 @@ describe('parseCSSContent — theme tagging', () => {
     expect(lightNames).toEqual(['--accent', '--background'])
   })
 
-  it("tags a [data-theme='dark'] block with the 'dark' id", () => {
+  test("tags a [data-theme='dark'] block with the 'dark' id", () => {
     // Arrange — the stylesheet declares a dark family
 
     // Act
@@ -67,7 +67,7 @@ describe('parseCSSContent — theme tagging', () => {
     expect(darkNames).toEqual(['--background'])
   })
 
-  it('tags a colored family with its own id instead of collapsing it to base', () => {
+  test('tags a colored family with its own id instead of collapsing it to base', () => {
     // Arrange — a non-dark colored family the old parser would mis-tag as 'base'
 
     // Act
@@ -81,7 +81,7 @@ describe('parseCSSContent — theme tagging', () => {
     expect(harborNames).toEqual(['--accent', '--background'])
   })
 
-  it('tags a dark-variant family by its full data-theme id', () => {
+  test('tags a dark-variant family by its full data-theme id', () => {
     // Arrange — a `*-dark` family id, not just the bare 'dark'
 
     // Act
@@ -95,7 +95,7 @@ describe('parseCSSContent — theme tagging', () => {
     expect(harborDarkNames).toEqual(['--background'])
   })
 
-  it('leaves variables outside any theme block as base', () => {
+  test('leaves variables outside any theme block as base', () => {
     // Arrange — the `@theme inline` alias sits in no theme block
 
     // Act
@@ -109,7 +109,7 @@ describe('parseCSSContent — theme tagging', () => {
     expect(baseNames).toEqual(['--color-background'])
   })
 
-  it('ignores the @custom-variant dark line so no phantom theme is created', () => {
+  test('ignores the @custom-variant dark line so no phantom theme is created', () => {
     // Arrange — `[data-theme$=dark]` appears in @custom-variant, not as a block
 
     // Act
@@ -126,7 +126,7 @@ describe('parseCSSContent — theme tagging', () => {
     ])
   })
 
-  it('scopes a variable overridden by only some families to those families', () => {
+  test('scopes a variable overridden by only some families to those families', () => {
     // Arrange — `--accent` is defined in :root and harbor, but not the dark families
 
     // Act
@@ -140,7 +140,7 @@ describe('parseCSSContent — theme tagging', () => {
     expect(accentThemes).toEqual(['harbor', 'light'])
   })
 
-  it("binds each block's own value to that block's theme, not a sibling's", () => {
+  test("binds each block's own value to that block's theme, not a sibling's", () => {
     // Arrange — --background carries a distinct value in every family, so a
     // cross-theme mis-association would surface as a swapped value (which the
     // name-only assertions above cannot catch)
@@ -161,7 +161,7 @@ describe('parseCSSContent — theme tagging', () => {
 })
 
 describe('parseCSSContent — generator contract', () => {
-  it('leaves no light definition for a token in a combined :root selector list, so the generator must keep :root standalone', () => {
+  test('leaves no light definition for a token in a combined :root selector list, so the generator must keep :root standalone', () => {
     // Arrange — a combined `:root, [data-theme='dawn']` block. The :root matcher
     // requires `:root` immediately before `{`, so the comma-list is not a :root
     // match; the shared token is tagged 'dawn' (neither 'light' nor 'base'), so
@@ -180,7 +180,7 @@ describe('parseCSSContent — generator contract', () => {
     expect(lightShared).toBeUndefined()
   })
 
-  it("tags a compound :root[data-theme='id'] block (the generator's real output) by its id, not light", () => {
+  test("tags a compound :root[data-theme='id'] block (the generator's real output) by its id, not light", () => {
     // Arrange — generated.css emits `:root[data-theme='harbor-light']` (specificity
     // 0,2,0, so a derived theme outranks cathedral's :root regardless of @import
     // order). The :root matcher requires `:root` immediately before `{`, so the
@@ -200,7 +200,7 @@ describe('parseCSSContent — generator contract', () => {
 })
 
 describe('extractColorVariables', () => {
-  it('keeps color-valued variables and drops var() aliases and calc() values', () => {
+  test('keeps color-valued variables and drops var() aliases and calc() values', () => {
     // Arrange — two color forms plus a var alias and a calc expression. The
     // alias references `--brand` (not a color-keyword name) so it cannot trip the
     // value's naive substring match for color functions.
@@ -224,7 +224,7 @@ describe('extractColorVariables', () => {
 })
 
 describe('varNameToColorName', () => {
-  it('strips the leading -- to yield the Tailwind color name', () => {
+  test('strips the leading -- to yield the Tailwind color name', () => {
     // Arrange / Act / Assert
     expect(varNameToColorName('--background')).toBe('background')
     expect(varNameToColorName('--sidebar-primary-foreground')).toBe(

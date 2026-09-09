@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { AutoUpdater, normalizeDownloadProgress } from '../AutoUpdater'
 import {
@@ -134,7 +134,7 @@ describe('AutoUpdater download progress', () => {
     vi.useRealTimers()
   })
 
-  it('clamps raw electron-updater progress into the renderer payload range', () => {
+  test('clamps raw electron-updater progress into the renderer payload range', () => {
     // Arrange + Act
     const overMax = normalizeDownloadProgress({
       percent: 140,
@@ -170,7 +170,7 @@ describe('AutoUpdater download progress', () => {
     expect(invalidMetrics.total).toBe(0)
   })
 
-  it('creates a passive native window on download-progress, sized to the primary display', () => {
+  test('creates a passive native window on download-progress, sized to the primary display', () => {
     // Arrange: constructing AutoUpdater wires its `download-progress`
     // listener as a side effect; no main window exists (retired T18), so the
     // progress window is always positioned against the primary display.
@@ -200,7 +200,7 @@ describe('AutoUpdater download progress', () => {
     )
   })
 
-  it('destroys the native progress window after update-downloaded', () => {
+  test('destroys the native progress window after update-downloaded', () => {
     // Arrange: constructing AutoUpdater wires its listeners as a side effect.
     new AutoUpdater()
     electronMocks.mockAutoUpdater.emit('download-progress', {
@@ -221,7 +221,7 @@ describe('AutoUpdater download progress', () => {
     expect(progressWindow.destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('destroys the native progress window during cleanup', () => {
+  test('destroys the native progress window during cleanup', () => {
     // Arrange
     const updater = new AutoUpdater()
     electronMocks.mockAutoUpdater.emit('download-progress', {
@@ -261,7 +261,7 @@ describe('AutoUpdater update dialogs', () => {
     vi.useRealTimers()
   })
 
-  it('shows the update-available prompt with the parentless overload — there is no main window to anchor to', () => {
+  test('shows the update-available prompt with the parentless overload — there is no main window to anchor to', () => {
     // Arrange: companion mode is the only mode — the main window was retired
     // in T18, so AutoUpdater never has one to anchor a dialog to.
     const updater = new AutoUpdater()
@@ -279,7 +279,7 @@ describe('AutoUpdater update dialogs', () => {
     updater.cleanup()
   })
 
-  it('surfaces the restart prompt even when no main window is open', () => {
+  test('surfaces the restart prompt even when no main window is open', () => {
     // Arrange: companion mode — no main window hosts the downloaded-update dialog.
     const updater = new AutoUpdater()
 

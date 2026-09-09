@@ -5,7 +5,7 @@
  * makes the proxy's `redirect_url` deterministic — and still `/home` without it.
  */
 import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import LoginPage from './page'
 
@@ -43,7 +43,7 @@ beforeEach(() => {
 })
 
 describe('login page post-sign-in destination', () => {
-  it('sends a /write visitor back to /write after signing in', () => {
+  test('sends a /write visitor back to /write after signing in', () => {
     // Arrange
     visitLogin('?redirect_url=/write')
 
@@ -55,7 +55,7 @@ describe('login page post-sign-in destination', () => {
     expect(signInProps.current).toEqual({ forceRedirectUrl: '/write' })
   })
 
-  it('still lands on /home when no redirect_url was given', () => {
+  test('still lands on /home when no redirect_url was given', () => {
     // Arrange
     visitLogin('')
 
@@ -66,7 +66,7 @@ describe('login page post-sign-in destination', () => {
     expect(signInProps.current).toEqual({ forceRedirectUrl: '/home' })
   })
 
-  it('refuses a cross-origin redirect_url and falls back to /home', () => {
+  test('refuses a cross-origin redirect_url and falls back to /home', () => {
     // Arrange
     visitLogin('?redirect_url=https://evil.example/phish')
 
@@ -77,7 +77,7 @@ describe('login page post-sign-in destination', () => {
     expect(signInProps.current).toEqual({ forceRedirectUrl: '/home' })
   })
 
-  it('refuses a same-origin redirect_url whose path is itself protocol-relative, so /login cannot bounce anyone off-site', () => {
+  test('refuses a same-origin redirect_url whose path is itself protocol-relative, so /login cannot bounce anyone off-site', () => {
     // Arrange: `/..//evil.example` parses against our own origin, but leaves the
     // path `//evil.example` — which a browser follows as https://evil.example/.
     visitLogin('?redirect_url=/..//evil.example')
@@ -89,7 +89,7 @@ describe('login page post-sign-in destination', () => {
     expect(signInProps.current).toEqual({ forceRedirectUrl: '/home' })
   })
 
-  it('refuses the same trick spelled with our own origin in front of it', () => {
+  test('refuses the same trick spelled with our own origin in front of it', () => {
     // Arrange: same-origin absolute URL, so only the path guard can reject it.
     visitLogin(
       `?redirect_url=${encodeURIComponent(`${window.location.origin}//evil.example`)}`,

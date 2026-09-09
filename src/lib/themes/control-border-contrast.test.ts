@@ -10,7 +10,7 @@
  * neutral-token tweak that quietly drops the stroke below 3:1 fails CI.
  */
 import { converter, wcagContrast } from 'culori'
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import {
   CATHEDRAL,
@@ -125,7 +125,7 @@ function tokenOf(tokens: Record<string, string>, name: string): string {
 
 describe('control-border stroke meets WCAG 1.4.11 (≥3:1) on every theme', () => {
   for (const id of THEME_IDS) {
-    it(`${id}: an unchecked checkbox is distinguishable from its surface`, () => {
+    test(`${id}: an unchecked checkbox is distinguishable from its surface`, () => {
       // Arrange
       const tokens = themeTokens(THEME_REGISTRY[id])
       const input = tokenOf(tokens, '--input')

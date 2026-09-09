@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, test } from 'vitest'
 
 import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
 import { HOME_HEATMAP_DAYS } from '@/lib/constants/home'
@@ -34,7 +34,7 @@ afterEach(async () => {
 })
 
 describeIfDb('home.bootstrap', () => {
-  it('returns every critical Home region through one authenticated procedure call', async () => {
+  test('returns every critical Home region through one authenticated procedure call', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const user = await prisma.user.create({ data: { clerkId } })

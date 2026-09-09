@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { buildShareCard } from './export-day-as-image'
 
@@ -18,7 +18,7 @@ import { buildShareCard } from './export-day-as-image'
  * for a fade-in cannot silently reintroduce the blank-PNG bug.
  */
 describe('buildShareCard', () => {
-  it('card style must not contain any hiding property (regression: blank PNG)', () => {
+  test('card style must not contain any hiding property (regression: blank PNG)', () => {
     const { card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 8,
@@ -40,7 +40,7 @@ describe('buildShareCard', () => {
     expect(cssText).not.toMatch(/(^|;\s*|^\s*)clip-path\s*:/i)
   })
 
-  it('wrapper carries the hiding styles (0×0 fixed + overflow hidden)', () => {
+  test('wrapper carries the hiding styles (0×0 fixed + overflow hidden)', () => {
     const { wrapper } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 1,
@@ -57,7 +57,7 @@ describe('buildShareCard', () => {
     expect(wrapper.getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('wrapper contains the card as its only child', () => {
+  test('wrapper contains the card as its only child', () => {
     const { wrapper, card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 4,
@@ -66,7 +66,7 @@ describe('buildShareCard', () => {
     expect(wrapper.firstElementChild).toBe(card)
   })
 
-  it('card preserves full 480×600 dimensions for html-to-image capture', () => {
+  test('card preserves full 480×600 dimensions for html-to-image capture', () => {
     const { card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 3,
@@ -76,7 +76,7 @@ describe('buildShareCard', () => {
     expect(cssText).toMatch(/height\s*:\s*600px/i)
   })
 
-  it('renders singular copy when totalCompleted is 1', () => {
+  test('renders singular copy when totalCompleted is 1', () => {
     const { card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 1,
@@ -85,7 +85,7 @@ describe('buildShareCard', () => {
     expect(card.innerHTML).not.toContain('things done')
   })
 
-  it('renders plural copy when totalCompleted is not 1', () => {
+  test('renders plural copy when totalCompleted is not 1', () => {
     const { card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 8,
@@ -93,7 +93,7 @@ describe('buildShareCard', () => {
     expect(card.innerHTML).toContain('things done — a good day.')
   })
 
-  it('omits the "mostly <category>" line when topCategoryName is missing', () => {
+  test('omits the "mostly <category>" line when topCategoryName is missing', () => {
     const { card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 3,
@@ -101,7 +101,7 @@ describe('buildShareCard', () => {
     expect(card.innerHTML).not.toContain('mostly')
   })
 
-  it('escapes HTML in topCategoryName to prevent injection via category names', () => {
+  test('escapes HTML in topCategoryName to prevent injection via category names', () => {
     const { card } = buildShareCard({
       isoDate: '2026-05-12',
       totalCompleted: 3,

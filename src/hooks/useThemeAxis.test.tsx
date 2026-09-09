@@ -1,5 +1,5 @@
 import { render, fireEvent, waitFor, screen } from '@testing-library/react'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
@@ -66,7 +66,7 @@ describe('useThemeAxis — two-axis (family × mode) theme selection', () => {
     document.documentElement.removeAttribute('data-theme')
   })
 
-  it('applies the matching theme id when a family is chosen and keeps the family when the mode is toggled', async () => {
+  test('applies the matching theme id when a family is chosen and keeps the family when the mode is toggled', async () => {
     // Arrange — default state is Warm Cathedral light
     renderHarness()
     await waitFor(() =>
@@ -92,7 +92,7 @@ describe('useThemeAxis — two-axis (family × mode) theme selection', () => {
     expect(screen.getByTestId('family')).toHaveTextContent('harbor')
   })
 
-  it('treats System as the OS-managed Warm Cathedral pair, offered only for the default family', async () => {
+  test('treats System as the OS-managed Warm Cathedral pair, offered only for the default family', async () => {
     // Arrange — start on the default family, which exposes System
     renderHarness()
     await waitFor(() =>
@@ -112,7 +112,7 @@ describe('useThemeAxis — two-axis (family × mode) theme selection', () => {
     expect(screen.getByTestId('family')).toHaveTextContent('cathedral')
   })
 
-  it('drops System for colored families and collapses a System selection to an explicit id', async () => {
+  test('drops System for colored families and collapses a System selection to an explicit id', async () => {
     // Arrange — begin on System (default family, OS-managed)
     renderHarness()
     await waitFor(() =>
@@ -137,7 +137,7 @@ describe('useThemeAxis — two-axis (family × mode) theme selection', () => {
     expect(screen.getByTestId('modes')).not.toHaveTextContent('system')
   })
 
-  it('maps the default family back to the FLAT light/dark id (never cathedral-dark) and restores System', async () => {
+  test('maps the default family back to the FLAT light/dark id (never cathedral-dark) and restores System', async () => {
     // Arrange — move onto a colored family in dark mode (harbor-dark)
     renderHarness()
     await waitFor(() =>

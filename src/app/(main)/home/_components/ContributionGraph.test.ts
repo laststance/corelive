@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { calculateHeatmapLayout } from './ContributionGraph'
 
@@ -12,7 +12,7 @@ import { calculateHeatmapLayout } from './ContributionGraph'
 const WEEKS_IN_TRAILING_YEAR = 53
 
 describe('Activity heatmap sizing', () => {
-  it('fits the whole year inside the card at desktop content width, so no horizontal scrollbar appears', () => {
+  test('fits the whole year inside the card at desktop content width, so no horizontal scrollbar appears', () => {
     // Arrange — the home page now gives the heatmap the full ~1180px content width.
     const containerWidth = 1180
 
@@ -28,7 +28,7 @@ describe('Activity heatmap sizing', () => {
     expect(layout.width).toBeLessThanOrEqual(containerWidth)
   })
 
-  it('keeps all seven weekday rows inside the SVG when desktop width enlarges the cells', () => {
+  test('keeps all seven weekday rows inside the SVG when desktop width enlarges the cells', () => {
     // Arrange — 1180px grows each cell to 19px, taller than the SVG browser default allows.
     const containerWidth = 1180
 
@@ -42,7 +42,7 @@ describe('Activity heatmap sizing', () => {
     expect(layout).toEqual({ rectSize: 19, width: 1141, height: 167 })
   })
 
-  it('never grows cells past the 32px Cathedral maximum even in an unusually wide card', () => {
+  test('never grows cells past the 32px Cathedral maximum even in an unusually wide card', () => {
     // Arrange — a very wide container that could otherwise over-grow the cells.
     const containerWidth = 3000
 
@@ -57,7 +57,7 @@ describe('Activity heatmap sizing', () => {
     expect(layout.height).toBe(258)
   })
 
-  it('holds the 12px minimum cell and lets the grid overflow when the card is narrower than a full year', () => {
+  test('holds the 12px minimum cell and lets the grid overflow when the card is narrower than a full year', () => {
     // Arrange — the old half-width column (~578px) cannot fit 53 weeks at the 12px floor.
     const containerWidth = 578
 
@@ -74,7 +74,7 @@ describe('Activity heatmap sizing', () => {
     expect(layout.width).toBeGreaterThan(containerWidth)
   })
 
-  it('falls back to the minimum-size layout before the container width has been measured', () => {
+  test('falls back to the minimum-size layout before the container width has been measured', () => {
     // Arrange — width is null on the first render, before the ResizeObserver fires.
     const unmeasuredWidth = null
 

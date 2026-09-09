@@ -15,7 +15,7 @@
 // The mocked electron `dialog`, asserted on by the recovery tests (the
 // `vi.mock('electron')` factory below is hoisted above this import by Vitest).
 import { dialog, type WebContents } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
 
@@ -198,7 +198,7 @@ describe('WindowManager startup panel nav-watch', () => {
     vi.clearAllMocks()
   })
 
-  it('keeps a signed-out startup LiveEditor hidden and opens the login window instead', () => {
+  test('keeps a signed-out startup LiveEditor hidden and opens the login window instead', () => {
     // Arrange: cold boot opens the LiveEditor panel hidden.
     const windowManager = new WindowManager(SERVER_URL)
     // Stub the login window so this unit asserts the delegation, not its own job.
@@ -217,7 +217,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.hasStartupAuthFallback()).toBe(true)
   })
 
-  it('waits for the panel load to settle so auth redirects can win', () => {
+  test('waits for the panel load to settle so auth redirects can win', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const showLoginWindow = vi
@@ -237,7 +237,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.hasStartupAuthFallback()).toBe(true)
   })
 
-  it('treats a /sign-up landing as unauthenticated and opens the login window', () => {
+  test('treats a /sign-up landing as unauthenticated and opens the login window', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const showLoginWindow = vi
@@ -255,7 +255,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.hasStartupAuthFallback()).toBe(true)
   })
 
-  it('opens the login window when the startup LiveEditor load fails (offline)', () => {
+  test('opens the login window when the startup LiveEditor load fails (offline)', () => {
     // Arrange: LiveEditor has no network-failure recovery of its own, so a
     // failed load falls back to the login window (which owns the retry dialog).
     const windowManager = new WindowManager(SERVER_URL)
@@ -274,7 +274,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.hasStartupAuthFallback()).toBe(true)
   })
 
-  it('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
+  test('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.openStartupPanel()
@@ -295,7 +295,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.hasStartupAuthFallback()).toBe(false)
   })
 
-  it('ignores subresource load failures (isMainFrame false)', () => {
+  test('ignores subresource load failures (isMainFrame false)', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.openStartupPanel()
@@ -316,7 +316,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(windowManager.hasStartupAuthFallback()).toBe(false)
   })
 
-  it('opens the LiveEditor panel at its own route on startup and reveals it once authenticated', () => {
+  test('opens the LiveEditor panel at its own route on startup and reveals it once authenticated', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -333,7 +333,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(createdWindows).toHaveLength(1)
   })
 
-  it('keeps a signed-out manual LiveEditor open hidden and opens the login window', () => {
+  test('keeps a signed-out manual LiveEditor open hidden and opens the login window', () => {
     // Arrange: a menu/shortcut/manual LiveEditor open does not go through the
     // startup-only gate, so WindowManager must guard this path itself.
     const windowManager = new WindowManager(SERVER_URL)
@@ -352,7 +352,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(showLoginWindow).toHaveBeenCalledTimes(1)
   })
 
-  it('reports a shortcut LiveEditor open only after the authenticated panel is visible', () => {
+  test('reports a shortcut LiveEditor open only after the authenticated panel is visible', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const onShown = vi.fn()
@@ -373,7 +373,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(onShown).toHaveBeenCalledTimes(1)
   })
 
-  it('does not report a shortcut LiveEditor open when auth keeps the panel hidden', () => {
+  test('does not report a shortcut LiveEditor open when auth keeps the panel hidden', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     vi.spyOn(windowManager, 'showLoginWindow').mockImplementation(() => {})
@@ -389,7 +389,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(onShown).not.toHaveBeenCalled()
   })
 
-  it('cancels a pending manual LiveEditor reveal when toggled off before load settles', () => {
+  test('cancels a pending manual LiveEditor reveal when toggled off before load settles', () => {
     // Arrange: the first toggle starts a hidden LiveEditor load guarded by the
     // manual auth watcher, but the route has not settled yet.
     const windowManager = new WindowManager(SERVER_URL)
@@ -410,7 +410,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
   })
 
-  it('keeps LiveEditor hidden when app cleanup interrupts a pending reveal', () => {
+  test('keeps LiveEditor hidden when app cleanup interrupts a pending reveal', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const onShown = vi.fn()
@@ -429,7 +429,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(onShown).not.toHaveBeenCalled()
   })
 
-  it('does not reveal or open the login window when startup loads settle after cleanup', () => {
+  test('does not reveal or open the login window when startup loads settle after cleanup', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     const showLoginWindow = vi
@@ -449,7 +449,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(showLoginWindow).not.toHaveBeenCalled()
   })
 
-  it('reloads LiveEditor on the next open after canceling a pending reveal', () => {
+  test('reloads LiveEditor on the next open after canceling a pending reveal', () => {
     // Arrange: a hidden LiveEditor load is canceled, then the old navigation
     // settles after its listeners were removed.
     const windowManager = new WindowManager(SERVER_URL)
@@ -479,7 +479,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
   })
 
-  it('reloads a suppressed LiveEditor back to its route before revealing it after sign-in', () => {
+  test('reloads a suppressed LiveEditor back to its route before revealing it after sign-in', () => {
     // Arrange: the first open is signed out, leaving the hidden LiveEditor window
     // sitting on /login until the user signs in from the login window.
     const windowManager = new WindowManager(SERVER_URL)
@@ -507,7 +507,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
   })
 
-  it('locks in the first navigation decision and ignores a later load failure', () => {
+  test('locks in the first navigation decision and ignores a later load failure', () => {
     // Arrange: a panel-only cold boot.
     const windowManager = new WindowManager(SERVER_URL)
     const showLoginWindow = vi
@@ -530,7 +530,7 @@ describe('WindowManager startup panel nav-watch', () => {
   })
 
   describe('restoreFromTray (tray / dock / notification / deep link)', () => {
-    it('opens LiveEditor and reveals it once its protected route lands', () => {
+    test('opens LiveEditor and reveals it once its protected route lands', () => {
       // Arrange: a tray-resident boot — no window has been created yet.
       const windowManager = new WindowManager(SERVER_URL)
 
@@ -548,7 +548,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(createdWindows).toHaveLength(1)
     })
 
-    it('opens the real login window instead of LiveEditor while signed out (regression)', () => {
+    test('opens the real login window instead of LiveEditor while signed out (regression)', () => {
       // Arrange: signed-out tray click. No spies — this proves the fallback
       // creates and shows a real /login-shell window, not a stub.
       const windowManager = new WindowManager(SERVER_URL)
@@ -569,7 +569,7 @@ describe('WindowManager startup panel nav-watch', () => {
   })
 
   describe('login window handoff (completeLogin)', () => {
-    it('closes the login window and shows LiveEditor when the login window reports sign-in', () => {
+    test('closes the login window and shows LiveEditor when the login window reports sign-in', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLoginWindow()
@@ -588,7 +588,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
     })
 
-    it('ignores a sign-in report from any window other than the login window', () => {
+    test('ignores a sign-in report from any window other than the login window', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLoginWindow()
@@ -604,7 +604,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(createdWindows).toHaveLength(1)
     })
 
-    it('does nothing when there is no login window or it is already destroyed', () => {
+    test('does nothing when there is no login window or it is already destroyed', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       const showLiveEditor = vi.spyOn(windowManager, 'showLiveEditor')
@@ -629,7 +629,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(loginWindow.win.close).not.toHaveBeenCalled()
     })
 
-    it('ignores a second sign-in report while the first handoff is still pending (no ping-pong)', () => {
+    test('ignores a second sign-in report while the first handoff is still pending (no ping-pong)', () => {
       // Arrange: first handoff started; LiveEditor is still loading.
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLoginWindow()
@@ -646,7 +646,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(showLiveEditor).toHaveBeenCalledTimes(1)
     })
 
-    it('hands off again after logout clears the latch, and a successful reveal closes any leftover login window', () => {
+    test('hands off again after logout clears the latch, and a successful reveal closes any leftover login window', () => {
       // Arrange: first handoff is pending, then the user logs out.
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLoginWindow()
@@ -672,7 +672,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(loginWindow.win.close).toHaveBeenCalledTimes(1)
     })
 
-    it('clears the latch on a cached reveal so a later sign-in can hand off again', () => {
+    test('clears the latch on a cached reveal so a later sign-in can hand off again', () => {
       // Arrange: LiveEditor already loaded once (cached), then it was hidden.
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLiveEditor()
@@ -701,7 +701,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(2)
     })
 
-    it('lets a later sign-in hand off again after the toggle shortcut cancels the load a handoff started', () => {
+    test('lets a later sign-in hand off again after the toggle shortcut cancels the load a handoff started', () => {
       // Arrange: a handoff is loading LiveEditor hidden.
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLoginWindow()
@@ -729,7 +729,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(showLiveEditor).toHaveBeenCalledTimes(1)
     })
 
-    it('reuses the existing login window when showLoginWindow runs twice', () => {
+    test('reuses the existing login window when showLoginWindow runs twice', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
 
@@ -762,7 +762,7 @@ describe('WindowManager startup panel nav-watch', () => {
       vi.useRealTimers()
     })
 
-    it('retries the failed login window load and surfaces a native recovery dialog once retries are exhausted', async () => {
+    test('retries the failed login window load and surfaces a native recovery dialog once retries are exhausted', async () => {
       // Arrange: a login window whose load keeps failing (offline).
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.createLoginWindow()
@@ -798,7 +798,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(loginWindow.win.close).toHaveBeenCalledTimes(1)
     })
 
-    it('binds the retry timer to the window that failed, not its replacement', () => {
+    test('binds the retry timer to the window that failed, not its replacement', () => {
       // Arrange: a login window fails once, scheduling a backed-off reload.
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.createLoginWindow()
@@ -819,7 +819,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(secondLoginWindow.win.webContents.loadURL).not.toHaveBeenCalled()
     })
 
-    it('reloads the login window after a single failure instead of giving up immediately', () => {
+    test('reloads the login window after a single failure instead of giving up immediately', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.createLoginWindow()
@@ -836,7 +836,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
-    it('stops main-process retries once the login window has loaded successfully', () => {
+    test('stops main-process retries once the login window has loaded successfully', () => {
       // Arrange: the window loaded once, so its renderer is alive.
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.createLoginWindow()
@@ -853,7 +853,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
-    it('counts a retry that outran the error-page commit as a real load', () => {
+    test('counts a retry that outran the error-page commit as a real load', () => {
       // Arrange: a main-frame failure whose chrome-error page never commits,
       // because the backoff retry's loadURL outraces it. No did-finish-load
       // arrives to consume the pending-error marker.
@@ -883,7 +883,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
-    it('restarts the recovery cycle when the user picks Retry in the login window dialog', async () => {
+    test('restarts the recovery cycle when the user picks Retry in the login window dialog', async () => {
       // Arrange: the dialog will return "Retry" (response 0) this time.
       vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({
         response: 0,
@@ -907,7 +907,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(loginWindow.win.webContents.loadURL).toHaveBeenCalledTimes(4)
     })
 
-    it('keeps retrying when Chromium commits an error page (did-finish-load) after each failure', async () => {
+    test('keeps retrying when Chromium commits an error page (did-finish-load) after each failure', async () => {
       // Arrange: the REAL Electron runtime commits a chrome-error page after
       // every main-frame failure and fires did-finish-load for THAT page. The
       // error page is not the app, so it must NOT latch loaded-once.
@@ -935,7 +935,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).toHaveBeenCalledTimes(1)
     })
 
-    it('recovers the login window from an HTTP 500 page and does not treat its did-finish-load as a real load', () => {
+    test('recovers the login window from an HTTP 500 page and does not treat its did-finish-load as a real load', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.createLoginWindow()
@@ -955,7 +955,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
-    it('keeps a manual LiveEditor open hidden on a 503 and retries the route without opening the login window', () => {
+    test('keeps a manual LiveEditor open hidden on a 503 and retries the route without opening the login window', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       const showLoginWindow = vi
@@ -978,7 +978,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(createdWindows).toHaveLength(1)
     })
 
-    it('shows a parentless recovery dialog after three failed LiveEditor retries, where Retry reloads and Close leaves the panel hidden', async () => {
+    test('shows a parentless recovery dialog after three failed LiveEditor retries, where Retry reloads and Close leaves the panel hidden', async () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       windowManager.showLiveEditor()
@@ -1033,7 +1033,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.loadURL).toHaveBeenCalledTimes(9)
     })
 
-    it('starts a fresh LiveEditor load on the next toggle after Close on the recovery dialog instead of swallowing the press', async () => {
+    test('starts a fresh LiveEditor load on the next toggle after Close on the recovery dialog instead of swallowing the press', async () => {
       // Arrange: a manual open exhausts its retries and the user picks Close
       // (the mock's default, response 1).
       const windowManager = new WindowManager(SERVER_URL)
@@ -1064,7 +1064,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
     })
 
-    it('reveals LiveEditor once a retry finally lands on the editor route', () => {
+    test('reveals LiveEditor once a retry finally lands on the editor route', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       const onShown = vi.fn()
@@ -1084,7 +1084,7 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(dialog.showMessageBox).not.toHaveBeenCalled()
     })
 
-    it('keeps the startup LiveEditor hidden on a 503 and retries instead of opening the login window', () => {
+    test('keeps the startup LiveEditor hidden on a 503 and retries instead of opening the login window', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)
       const showLoginWindow = vi

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, test, expect, beforeEach, vi } from 'vitest'
 
 import { sanitizeData } from '../preload-shared/sanitize-data.ts'
 
@@ -31,7 +31,7 @@ describe('Preload Script Security Tests', () => {
   })
 
   describe('Data Sanitization', () => {
-    it('should sanitize string data correctly', () => {
+    test('should sanitize string data correctly', () => {
       const sanitizeData = (data) => {
         if (typeof data === 'string') {
           return data.trim()
@@ -86,7 +86,7 @@ describe('Preload Script Security Tests', () => {
       expect(sanitized.metadata.updated).toBeNull()
     })
 
-    it('should handle edge cases in sanitization', () => {
+    test('should handle edge cases in sanitization', () => {
       const sanitizeData = (data) => {
         if (typeof data === 'string') {
           return data.trim()
@@ -155,7 +155,7 @@ describe('Preload Script Security Tests', () => {
   })
 
   describe('Prototype pollution hardening (shared preload sanitizer)', () => {
-    it('strips __proto__/constructor/prototype and returns a null-prototype object', () => {
+    test('strips __proto__/constructor/prototype and returns a null-prototype object', () => {
       // Arrange: a payload carrying an own __proto__ key, as JSON.parse yields —
       // the attacker shape a naive sanitizer would copy into the result.
       const malicious = JSON.parse(
@@ -175,7 +175,7 @@ describe('Preload Script Security Tests', () => {
   })
 
   describe('Input Validation', () => {
-    it('should validate todo data correctly', () => {
+    test('should validate todo data correctly', () => {
       const validateTodoData = (todoData) => {
         if (!todoData || typeof todoData !== 'object') {
           return { isValid: false, error: 'Invalid todo data' }
@@ -224,7 +224,7 @@ describe('Preload Script Security Tests', () => {
       })
     })
 
-    it('should validate notification data correctly', () => {
+    test('should validate notification data correctly', () => {
       const validateNotificationData = (title, body) => {
         if (!title || typeof title !== 'string' || title.trim().length === 0) {
           return { isValid: false, error: 'Notification title is required' }
@@ -266,7 +266,7 @@ describe('Preload Script Security Tests', () => {
   })
 
   describe('Context Bridge Security', () => {
-    it('should expose only whitelisted APIs to renderer', () => {
+    test('should expose only whitelisted APIs to renderer', () => {
       // Simulate the contextBridge.exposeInMainWorld call
       const mockAPI = {
         todos: {
@@ -302,7 +302,7 @@ describe('Preload Script Security Tests', () => {
       expect(mockAPI.eval).toBeUndefined()
     })
 
-    it('should validate context bridge exposure parameters', () => {
+    test('should validate context bridge exposure parameters', () => {
       const validateContextBridgeExposure = (worldName, api) => {
         if (!worldName || typeof worldName !== 'string') {
           return { isValid: false, error: 'World name must be a string' }
@@ -370,7 +370,7 @@ describe('Preload Script Security Tests', () => {
   })
 
   describe('Node.js Access Prevention', () => {
-    it('should not expose Node.js globals in renderer process', () => {
+    test('should not expose Node.js globals in renderer process', () => {
       // In a properly configured Electron app with context isolation,
       // these should not be available in the renderer process
       const dangerousGlobals = [
@@ -425,7 +425,7 @@ describe('Preload Script Security Tests', () => {
       })
     })
 
-    it('should validate webPreferences security settings', () => {
+    test('should validate webPreferences security settings', () => {
       const validateWebPreferences = (webPreferences) => {
         const securityChecks = {
           nodeIntegration: webPreferences.nodeIntegration === false,

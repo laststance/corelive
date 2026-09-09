@@ -12,7 +12,7 @@
  * @example
  *   pnpm test:electron -- resolveHideAppIcon
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import {
   HIDE_APP_ICON_CONFIG_PATH,
@@ -33,7 +33,7 @@ function readerReturning(value: unknown): { get(path: string): unknown } {
 }
 
 describe('resolveHideAppIcon (boot dock-policy decision)', () => {
-  it('hides the icon only for a real boolean true', () => {
+  test('hides the icon only for a real boolean true', () => {
     // Arrange
     const reader = readerReturning(true)
 
@@ -41,7 +41,7 @@ describe('resolveHideAppIcon (boot dock-policy decision)', () => {
     expect(resolveHideAppIcon(reader)).toBe(true)
   })
 
-  it.each<[label: string, value: unknown]>([
+  test.each<[label: string, value: unknown]>([
     ['boolean false', false],
     ['missing key (undefined)', undefined],
     ['the string "false"', 'false'],
@@ -58,7 +58,7 @@ describe('resolveHideAppIcon (boot dock-policy decision)', () => {
     expect(resolveHideAppIcon(reader)).toBe(false)
   })
 
-  it('reads the hideAppIcon value from the behavior.hideAppIcon path', () => {
+  test('reads the hideAppIcon value from the behavior.hideAppIcon path', () => {
     // Arrange: a reader that only answers `true` for the canonical dot-path.
     let queriedPath = ''
     const reader = {

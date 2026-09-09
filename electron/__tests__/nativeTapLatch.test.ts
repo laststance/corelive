@@ -16,7 +16,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock resolves a fresh temp userData
 // directory per test (vi.mock factories cannot close over later-declared vars).
@@ -61,12 +61,12 @@ describe('nativeTapLatch', () => {
     vi.clearAllMocks()
   })
 
-  it('reports not-set when no prior arming left a marker', () => {
+  test('reports not-set when no prior arming left a marker', () => {
     // Act + Assert: a clean userData dir means the tap is safe to arm.
     expect(isNativeTapLatchSet()).toBe(false)
   })
 
-  it('arms a durable marker that then reads as set', () => {
+  test('arms a durable marker that then reads as set', () => {
     // Act
     const didArm = armNativeTapLatch()
 
@@ -76,7 +76,7 @@ describe('nativeTapLatch', () => {
     expect(isNativeTapLatchSet()).toBe(true)
   })
 
-  it('writes a valid JSON marker carrying the arm timestamp', () => {
+  test('writes a valid JSON marker carrying the arm timestamp', () => {
     // Act
     armNativeTapLatch()
 
@@ -85,7 +85,7 @@ describe('nativeTapLatch', () => {
     expect(typeof parsed.armedAt).toBe('number')
   })
 
-  it('clears the marker after a confirmed-healthy session so the next launch is unblocked', () => {
+  test('clears the marker after a confirmed-healthy session so the next launch is unblocked', () => {
     // Arrange
     armNativeTapLatch()
     expect(isNativeTapLatchSet()).toBe(true)
@@ -98,13 +98,13 @@ describe('nativeTapLatch', () => {
     expect(isNativeTapLatchSet()).toBe(false)
   })
 
-  it('treats clearing a missing marker as success (idempotent)', () => {
+  test('treats clearing a missing marker as success (idempotent)', () => {
     // Act + Assert: clearing when nothing is armed must not throw.
     expect(() => clearNativeTapLatch()).not.toThrow()
     expect(isNativeTapLatchSet()).toBe(false)
   })
 
-  it('blocks on a corrupt marker — presence alone means "armed, unconfirmed"', () => {
+  test('blocks on a corrupt marker — presence alone means "armed, unconfirmed"', () => {
     // Arrange: a prior arming wrote garbage / was interrupted mid-write.
     fs.writeFileSync(markerPath(), 'not-json{{{')
 
@@ -112,7 +112,7 @@ describe('nativeTapLatch', () => {
     expect(isNativeTapLatchSet()).toBe(true)
   })
 
-  it('treats a permission/IO stat error as SET, not absent (fail-safe over re-bricking)', () => {
+  test('treats a permission/IO stat error as SET, not absent (fail-safe over re-bricking)', () => {
     // Arrange: statSync fails with a NON-ENOENT error (e.g. permission/IO). The
     // old existsSync collapsed this to "false" (not armed) and would re-brick;
     // statSync lets us treat the ambiguity as armed instead (codex #2).
@@ -126,7 +126,7 @@ describe('nativeTapLatch', () => {
     expect(isNativeTapLatchSet()).toBe(true)
   })
 
-  it('rolls back and returns false when a real IO error breaks the directory fsync', () => {
+  test('rolls back and returns false when a real IO error breaks the directory fsync', () => {
     // Arrange: the temp write + atomic rename succeed, but flushing the directory
     // metadata hits a real IO error, so the rename may not be crash-durable. arm()
     // must refuse (return false) AND leave no unconfirmed marker behind (codex #1).
@@ -147,7 +147,7 @@ describe('nativeTapLatch', () => {
     expect(fs.existsSync(markerPath())).toBe(false)
   })
 
-  it('still arms when the filesystem cannot fsync a directory (EINVAL is benign)', () => {
+  test('still arms when the filesystem cannot fsync a directory (EINVAL is benign)', () => {
     // Arrange: some filesystems reject directory fsync outright — that is NOT a
     // durability failure of our write, so the lone-modifier feature must keep
     // working there: arm() still succeeds and the marker persists (codex #1).
@@ -169,7 +169,7 @@ describe('nativeTapLatch', () => {
     expect(fs.existsSync(markerPath())).toBe(true)
   })
 
-  it('returns false from arm when the marker write fails (refuse to start unguarded)', () => {
+  test('returns false from arm when the marker write fails (refuse to start unguarded)', () => {
     // Arrange: the atomic rename into place fails, so the guard never lands.
     vi.spyOn(fs, 'renameSync').mockImplementation(() => {
       throw new Error('ENOSPC: no space')
@@ -182,7 +182,7 @@ describe('nativeTapLatch', () => {
     expect(didArm).toBe(false)
   })
 
-  it('exposes the fs-backed lifecycle through the default injectable latch', () => {
+  test('exposes the fs-backed lifecycle through the default injectable latch', () => {
     // Act: drive the same arm → set → clear cycle via the injected default.
     expect(defaultNativeTapLatch.isSet()).toBe(false)
     expect(defaultNativeTapLatch.arm()).toBe(true)

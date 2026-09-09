@@ -4,7 +4,7 @@
  * misread as a browser, every keep and note would land in localStorage instead of
  * the account and the panel's config file — no error, just quietly wrong.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { LOCAL_NOTE_STORAGE_KEY } from './constants'
 import { getLiveEditorHost, isElectronLiveEditorPanel } from './liveEditorHost'
@@ -62,7 +62,7 @@ afterEach(() => {
 })
 
 describe('LiveEditor host resolver', () => {
-  it('returns the preload bridge inside the Electron panel', () => {
+  test('returns the preload bridge inside the Electron panel', () => {
     // Arrange
     const bridge = fakeBridge()
     installBridge('liveEditorAPI', bridge)
@@ -72,7 +72,7 @@ describe('LiveEditor host resolver', () => {
     expect(isElectronLiveEditorPanel()).toBe(true)
   })
 
-  it('still honours an older install that only exposes the legacy brainDumpAPI name', () => {
+  test('still honours an older install that only exposes the legacy brainDumpAPI name', () => {
     // Arrange
     const bridge = fakeBridge()
     installBridge('brainDumpAPI', bridge)
@@ -83,7 +83,7 @@ describe('LiveEditor host resolver', () => {
     expect(isElectronLiveEditorPanel()).toBe(true)
   })
 
-  it('falls back to the web host in a plain browser tab and keeps notes on the device', async () => {
+  test('falls back to the web host in a plain browser tab and keeps notes on the device', async () => {
     // Arrange
     const host = getLiveEditorHost()
 
@@ -98,7 +98,7 @@ describe('LiveEditor host resolver', () => {
     )
   })
 
-  it('reports web defaults that mark the editor ready with no preload', async () => {
+  test('reports web defaults that mark the editor ready with no preload', async () => {
     // Arrange
     const host = getLiveEditorHost()
 

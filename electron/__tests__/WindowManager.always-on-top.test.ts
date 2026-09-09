@@ -11,7 +11,7 @@
  * @example
  *   pnpm test:electron -- WindowManager.always-on-top
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
 
@@ -118,7 +118,7 @@ describe('WindowManager always-on-top', () => {
   })
 
   describe('setLiveEditorAlwaysOnTop', () => {
-    it('persists to config and applies to the open LiveEditor window', () => {
+    test('persists to config and applies to the open LiveEditor window', () => {
       // Arrange: LiveEditor starts unpinned, then is opened.
       const { configManager, set } = createConfigStub({
         'liveEditor.alwaysOnTop': false,
@@ -137,7 +137,7 @@ describe('WindowManager always-on-top', () => {
       expect(liveEditorWindow.win.setAlwaysOnTop).toHaveBeenCalledWith(true)
     })
 
-    it('does not throw when LiveEditor is closed', () => {
+    test('does not throw when LiveEditor is closed', () => {
       // Arrange: no window open — only config can be written.
       const { configManager, set } = createConfigStub()
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
@@ -150,7 +150,7 @@ describe('WindowManager always-on-top', () => {
   })
 
   describe('getLiveEditorAlwaysOnTop', () => {
-    it('reads the persisted LiveEditor pin from config', () => {
+    test('reads the persisted LiveEditor pin from config', () => {
       // Arrange: a user who opted in.
       const { configManager } = createConfigStub({
         'liveEditor.alwaysOnTop': true,
@@ -161,7 +161,7 @@ describe('WindowManager always-on-top', () => {
       expect(windowManager.getLiveEditorAlwaysOnTop()).toBe(true)
     })
 
-    it('defaults to unpinned when config has no LiveEditor pin', () => {
+    test('defaults to unpinned when config has no LiveEditor pin', () => {
       // Arrange: a fresh install with no saved value.
       const { configManager } = createConfigStub()
       const windowManager = new WindowManager(SERVER_URL, configManager, null)
@@ -172,7 +172,7 @@ describe('WindowManager always-on-top', () => {
   })
 
   describe('createLiveEditorWindow', () => {
-    it('constructs the LiveEditor window unpinned when config is off (no hardcoded shadow)', () => {
+    test('constructs the LiveEditor window unpinned when config is off (no hardcoded shadow)', () => {
       // Arrange: LiveEditor pin OFF in config; no WindowStateManager, so the
       // constructor path (not getWindowOptions) decides alwaysOnTop.
       const { configManager } = createConfigStub({
@@ -189,7 +189,7 @@ describe('WindowManager always-on-top', () => {
       expect(createdWindows[0]?.options.alwaysOnTop).toBe(false)
     })
 
-    it('constructs the LiveEditor window pinned when config opts in', () => {
+    test('constructs the LiveEditor window pinned when config opts in', () => {
       // Arrange: LiveEditor pin ON in config.
       const { configManager } = createConfigStub({
         'liveEditor.alwaysOnTop': true,

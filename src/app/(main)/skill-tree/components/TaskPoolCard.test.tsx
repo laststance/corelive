@@ -1,7 +1,7 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { render, screen } from '@testing-library/react'
 import * as React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import type { TodoId, TodoText } from '../lib/domain-types'
 
@@ -34,7 +34,7 @@ function createTodoText(value: string): TodoText {
 }
 
 describe('<TaskPoolCard>', () => {
-  it('shows the todo text', () => {
+  test('shows the todo text', () => {
     render(
       wrap(
         <TaskPoolCard
@@ -46,7 +46,7 @@ describe('<TaskPoolCard>', () => {
     expect(screen.getByText('Fix login bug')).toBeInTheDocument()
   })
 
-  it('is a button with role and is tabbable', () => {
+  test('is a button with role and is tabbable', () => {
     render(
       wrap(
         <TaskPoolCard

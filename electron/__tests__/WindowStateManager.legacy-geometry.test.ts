@@ -17,7 +17,7 @@ import os from 'os'
 import path from 'path'
 
 import type { BrowserWindow } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock can resolve a fresh temp
 // userData directory per test (vi.mock factories cannot close over later-
@@ -103,7 +103,7 @@ describe('WindowStateManager legacy geometry', () => {
     vi.clearAllMocks()
   })
 
-  it('preserves saved LiveEditor geometry written before the panel rename', () => {
+  test('preserves saved LiveEditor geometry written before the panel rename', () => {
     // Arrange: previous releases stored the panel under this legacy wire key.
     writeWindowStateFile({
       braindump: { x: 120, y: 90, width: 620, height: 710 },
@@ -154,7 +154,7 @@ describe('WindowStateManager persisted visibility', () => {
     vi.clearAllMocks()
   })
 
-  it('does not reveal the LiveEditor panel while applying persisted state', () => {
+  test('does not reveal the LiveEditor panel while applying persisted state', () => {
     // Arrange: a stale state file claims the panel was visible last session.
     // Restoring that here would show the panel before the signed-out auth gate
     // in WindowManager has had any say.

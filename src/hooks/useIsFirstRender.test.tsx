@@ -3,7 +3,7 @@ import { render } from '@testing-library/react'
 import { useIsFirstRender } from './useIsFirstRender'
 
 describe('useIsFirstRender', () => {
-  it('should return true on first render and false on subsequent renders', () => {
+  test('should return true on first render and false on subsequent renders', () => {
     const values: boolean[] = []
 
     function Probe() {

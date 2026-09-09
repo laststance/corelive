@@ -17,7 +17,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
-import { beforeEach, describe, expect, it, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import electronSettingsReducer from '@/lib/redux/slices/electronSettingsSlice'
 
@@ -163,7 +163,7 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     },
   )
 
-  it('folds the Window size control into the Application section in Electron', () => {
+  test('folds the Window size control into the Application section in Electron', () => {
     // Arrange
     installFullSettingsBridge()
 
@@ -182,7 +182,7 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     ).toBeInTheDocument()
   })
 
-  it('returns null and renders no settings sections outside Electron', () => {
+  test('returns null and renders no settings sections outside Electron', () => {
     // Arrange: web renderer — no electronAPI and isElectron = false.
     isElectronMock.value = false
     installElectronAPI(undefined)
@@ -200,7 +200,7 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('calls resetPopoverSize IPC when the button is clicked', async () => {
+  test('calls resetPopoverSize IPC when the button is clicked', async () => {
     // Arrange
     installFullSettingsBridge()
     const user = userEvent.setup()
@@ -217,7 +217,7 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     })
   })
 
-  it('skips the IPC call when the preload method is absent (version-skew guard)', async () => {
+  test('skips the IPC call when the preload method is absent (version-skew guard)', async () => {
     // Arrange: old preload that has `settings` but not `resetPopoverSize`.
     installElectronAPI({ settings: {} })
     const user = userEvent.setup()

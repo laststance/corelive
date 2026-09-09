@@ -15,7 +15,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder so the hoisted electron mock resolves a fresh temp userData
 // directory per test (vi.mock factories cannot close over later-declared vars).
@@ -48,7 +48,7 @@ describe('ConfigManager shortcut validation', () => {
     vi.clearAllMocks()
   })
 
-  it('accepts a config where more than one shortcut is disabled', () => {
+  test('accepts a config where more than one shortcut is disabled', () => {
     // Arrange: the second LiveEditor slot ships disabled; the user disables one
     // more key. Two empty strings must not read as a duplicated accelerator.
     const configManager = new ConfigManager()
@@ -63,7 +63,7 @@ describe('ConfigManager shortcut validation', () => {
     expect(result.isValid).toBe(true)
   })
 
-  it('still reports two shortcuts sharing one accelerator', () => {
+  test('still reports two shortcuts sharing one accelerator', () => {
     // Arrange
     const configManager = new ConfigManager()
     configManager.set('shortcuts.toggleLiveEditor', 'Alt+Space')

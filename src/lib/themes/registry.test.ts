@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import {
   THEME_REGISTRY,
@@ -14,7 +14,7 @@ import {
 } from './registry'
 
 describe('theme registry', () => {
-  it('ships the Warm Cathedral light and dark as the default family', () => {
+  test('ships the Warm Cathedral light and dark as the default family', () => {
     // Arrange / Act / Assert — cathedral keeps the flat ids and is the default family
     expect(THEME_IDS).toContain('light')
     expect(THEME_IDS).toContain('dark')
@@ -22,7 +22,7 @@ describe('theme registry', () => {
     expect(THEME_REGISTRY.dark.family).toBe('cathedral')
   })
 
-  it('registers exactly the fourteen shipped themes (Default + cathedral + five colored families × two modes)', () => {
+  test('registers exactly the fourteen shipped themes (Default + cathedral + five colored families × two modes)', () => {
     // Arrange / Act / Assert — the full shipped set, hard-coded so an accidental
     // add or drop of a family/mode is caught (Default first, then cathedral, then
     // the colored families)
@@ -44,7 +44,7 @@ describe('theme registry', () => {
     ])
   })
 
-  it('pairs a light and a dark theme for every family', () => {
+  test('pairs a light and a dark theme for every family', () => {
     // Arrange — collect the modes registered under each family
     const modesByFamily = new Map<string, Set<string>>()
     for (const id of THEME_IDS) {
@@ -61,7 +61,7 @@ describe('theme registry', () => {
     }
   })
 
-  it('keys every entry by the id its family and mode produce', () => {
+  test('keys every entry by the id its family and mode produce', () => {
     // Arrange / Act / Assert — the map key, the `id` field, and getThemeId all agree
     for (const id of THEME_IDS) {
       const theme = THEME_REGISTRY[id]
@@ -70,7 +70,7 @@ describe('theme registry', () => {
     }
   })
 
-  it('marks cathedral preserved and every other family generator-emitted', () => {
+  test('marks cathedral preserved and every other family generator-emitted', () => {
     // Arrange / Act / Assert — preserve drives whether the generator emits the CSS
     const emitted = THEME_IDS.filter(
       (id) => THEME_REGISTRY[id].family !== 'cathedral',
@@ -81,14 +81,14 @@ describe('theme registry', () => {
     }
   })
 
-  it('lists the stock shadcn Default family first in the palette picker', () => {
+  test('lists the stock shadcn Default family first in the palette picker', () => {
     // Arrange / Act / Assert — THEME_FAMILY_LABEL insertion order IS the picker order
     expect(THEME_FAMILY_IDS[0]).toBe('default')
     expect(THEME_FAMILY_LABEL.default).toBe('Default')
     expect(THEME_FAMILY_IDS[1]).toBe('cathedral')
   })
 
-  it('ships the shadcn neutral palette verbatim as the Default family, static not derived', () => {
+  test('ships the shadcn neutral palette verbatim as the Default family, static not derived', () => {
     // Arrange / Act / Assert — hard-coded from ui.shadcn.com/r/colors/neutral.json
     expect(THEME_REGISTRY['default-light'].tokens['--background']).toBe(
       'oklch(1 0 0)',
@@ -111,13 +111,13 @@ describe('theme registry', () => {
     expect(isDerivedTheme(THEME_REGISTRY.light)).toBe(false)
   })
 
-  it('keeps Warm Cathedral as the applied default even though Default is listed first', () => {
+  test('keeps Warm Cathedral as the applied default even though Default is listed first', () => {
     // Arrange / Act / Assert — a fresh install still gets the brand pair
     expect(DEFAULT_THEME_ID).toBe('light')
     expect(THEME_REGISTRY[DEFAULT_THEME_ID].family).toBe('cathedral')
   })
 
-  it('locks each default theme name, preview swatch, id, and mode', () => {
+  test('locks each default theme name, preview swatch, id, and mode', () => {
     // Arrange / Act / Assert — load-bearing display + self-referential fields
     expect(THEME_REGISTRY.light).toMatchObject({
       id: 'light',
@@ -133,26 +133,26 @@ describe('theme registry', () => {
     })
   })
 
-  it('preserves every default theme byte-for-byte so the brand never drifts', () => {
+  test('preserves every default theme byte-for-byte so the brand never drifts', () => {
     // Arrange / Act / Assert — cathedral CSS is hand-authored, never regenerated
     expect(THEME_REGISTRY.light.preserve).toBe(true)
     expect(THEME_REGISTRY.dark.preserve).toBe(true)
   })
 
-  it('pairs each theme with a matching color-scheme', () => {
+  test('pairs each theme with a matching color-scheme', () => {
     // Arrange / Act / Assert
     expect(THEME_REGISTRY.light.colorScheme).toBe('light')
     expect(THEME_REGISTRY.dark.colorScheme).toBe('dark')
   })
 
-  it('applies light when nothing has been chosen', () => {
+  test('applies light when nothing has been chosen', () => {
     // Arrange / Act / Assert
     expect(DEFAULT_THEME_ID).toBe('light')
   })
 })
 
 describe('isThemeId — guards persisted and unknown ids', () => {
-  it('accepts a registered theme id', () => {
+  test('accepts a registered theme id', () => {
     // Arrange / Act / Assert — cathedral flat ids and colored family ids alike
     expect(isThemeId('light')).toBe(true)
     expect(isThemeId('dark')).toBe(true)
@@ -161,14 +161,14 @@ describe('isThemeId — guards persisted and unknown ids', () => {
     expect(isThemeId('default-dark')).toBe(true)
   })
 
-  it('rejects an unregistered id so a stale localStorage value cannot apply', () => {
+  test('rejects an unregistered id so a stale localStorage value cannot apply', () => {
     // Arrange / Act / Assert — a bare family name is not an id; a dropped family is gone
     expect(isThemeId('harbor')).toBe(false)
     expect(isThemeId('sunset-dark')).toBe(false)
     expect(isThemeId('bogus')).toBe(false)
   })
 
-  it('rejects non-strings and inherited object keys', () => {
+  test('rejects non-strings and inherited object keys', () => {
     // Arrange / Act / Assert
     expect(isThemeId(undefined)).toBe(false)
     expect(isThemeId(null)).toBe(false)
@@ -179,34 +179,34 @@ describe('isThemeId — guards persisted and unknown ids', () => {
 })
 
 describe('getThemeMode — resolves a theme id to its light/dark axis', () => {
-  it('reads dark from the dark id and any -dark suffix', () => {
+  test('reads dark from the dark id and any -dark suffix', () => {
     // Arrange / Act / Assert
     expect(getThemeMode('dark')).toBe('dark')
     expect(getThemeMode('harbor-dark')).toBe('dark')
     expect(getThemeMode('default-dark')).toBe('dark')
   })
 
-  it('reads light from the light id and any non-dark id', () => {
+  test('reads light from the light id and any non-dark id', () => {
     // Arrange / Act / Assert
     expect(getThemeMode('light')).toBe('light')
     expect(getThemeMode('harbor-light')).toBe('light')
     expect(getThemeMode('grove-light')).toBe('light')
   })
 
-  it('falls back to light before hydration when the id is undefined', () => {
+  test('falls back to light before hydration when the id is undefined', () => {
     // Arrange / Act / Assert
     expect(getThemeMode(undefined)).toBe('light')
   })
 })
 
 describe('getThemeId — builds the stored id for a (family, mode) pair', () => {
-  it('maps the cathedral family to the flat light and dark ids', () => {
+  test('maps the cathedral family to the flat light and dark ids', () => {
     // Arrange / Act / Assert — cathedral keeps the flat ids (zero migration)
     expect(getThemeId('cathedral', 'light')).toBe('light')
     expect(getThemeId('cathedral', 'dark')).toBe('dark')
   })
 
-  it('builds a hyphenated id for a colored family and mode', () => {
+  test('builds a hyphenated id for a colored family and mode', () => {
     // Arrange / Act / Assert — the two-axis picker turns (family, mode) into an id
     expect(getThemeId('harbor', 'dark')).toBe('harbor-dark')
     expect(getThemeId('grove', 'light')).toBe('grove-light')

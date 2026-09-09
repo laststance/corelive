@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
@@ -103,7 +103,7 @@ afterEach(async () => {
 })
 
 describeIfDb('completed.getDayDetail local-day bucketing (L3)', () => {
-  it('buckets a completion to its UTC calendar day when no timezone is supplied (legacy fallback)', async () => {
+  test('buckets a completion to its UTC calendar day when no timezone is supplied (legacy fallback)', async () => {
     // Arrange — one completion at 15:30 UTC on 2026-05-12.
     const clerkId = freshClerkId()
     await seedCompletionAt(
@@ -124,7 +124,7 @@ describeIfDb('completed.getDayDetail local-day bucketing (L3)', () => {
     expect(detail.tasks.map((task) => task.title)).toEqual(['evening reading'])
   })
 
-  it('rolls a late-UTC completion forward to the next local day under a positive-offset zone (JST)', async () => {
+  test('rolls a late-UTC completion forward to the next local day under a positive-offset zone (JST)', async () => {
     // Arrange — 15:30 UTC on 2026-05-12 is 00:30 JST on 2026-05-13.
     const clerkId = freshClerkId()
     await seedCompletionAt(
@@ -155,7 +155,7 @@ describeIfDb('completed.getDayDetail local-day bucketing (L3)', () => {
     expect(onUtcDay.count).toBe(0)
   })
 
-  it('rolls an early-UTC completion back to the previous local day under a negative-offset zone (America/New_York)', async () => {
+  test('rolls an early-UTC completion back to the previous local day under a negative-offset zone (America/New_York)', async () => {
     // Arrange — 02:30 UTC on 2026-05-12 is 22:30 EDT on 2026-05-11.
     const clerkId = freshClerkId()
     await seedCompletionAt(

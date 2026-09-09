@@ -1,5 +1,5 @@
 import type { Tray } from 'electron'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 // SystemTrayManager imports { app, Menu, nativeImage, Notification, Tray } from
 // 'electron' at module load, so stub the module to let it import under Vitest.
@@ -63,7 +63,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     vi.restoreAllMocks()
   })
 
-  it('hides the menu bar by tearing down the existing tray', async () => {
+  test('hides the menu bar by tearing down the existing tray', async () => {
     // Arrange: a tray is already on screen, so this exercises the real
     // tear-down path rather than a no-op hide over an absent tray.
     const { manager } = createManager()
@@ -83,7 +83,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     expect(didApply).toBe(true)
   })
 
-  it('shows the menu bar by creating a tray when none exists', async () => {
+  test('shows the menu bar by creating a tray when none exists', async () => {
     // Arrange
     const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
@@ -101,7 +101,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     expect(didApply).toBe(true)
   })
 
-  it('never leaks a second tray icon when shown while already visible', async () => {
+  test('never leaks a second tray icon when shown while already visible', async () => {
     // Arrange: a tray is already on screen (createTray previously set it).
     const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
@@ -118,7 +118,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     expect(didApply).toBe(true)
   })
 
-  it('treats showing on a platform without tray support as a successful no-op', async () => {
+  test('treats showing on a platform without tray support as a successful no-op', async () => {
     // Arrange
     const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(false)
@@ -133,7 +133,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     expect(didApply).toBe(true)
   })
 
-  it('reports failure when the tray cannot be created', async () => {
+  test('reports failure when the tray cannot be created', async () => {
     // Arrange: createTray fails (e.g. icon load failure) and returns null.
     const { manager } = createManager()
     vi.spyOn(manager, 'isSystemTraySupported').mockReturnValue(true)
@@ -146,7 +146,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     expect(didApply).toBe(false)
   })
 
-  it('createTray() keeps the existing tray instead of leaking a second one', async () => {
+  test('createTray() keeps the existing tray instead of leaking a second one', async () => {
     // Arrange: a tray is already on screen. createTray() is reached from BOTH
     // boot (SystemIntegrationErrorHandler) and the live toggle / startup sync,
     // and those paths can interleave — a second build would overwrite this.tray
@@ -164,7 +164,7 @@ describe('SystemTrayManager.setMenuBarVisible (Show in Menu Bar toggle)', () => 
     expect(supportedSpy).not.toHaveBeenCalled()
   })
 
-  it('createTray() builds only one native tray when two creations race in flight', async () => {
+  test('createTray() builds only one native tray when two creations race in flight', async () => {
     // Arrange: NO tray exists yet, so the sync hasTray() guard does not apply.
     // Let createTray run for real (the other tests prime a tray or mock it
     // wholesale) and make createTrayWithRetry yield once before returning — that

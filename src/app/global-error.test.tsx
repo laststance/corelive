@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import GlobalError from './global-error'
 
@@ -9,7 +9,7 @@ describe('GlobalError (root-layout error boundary)', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders a standalone reassuring recovery screen with no design-system deps', () => {
+  test('renders a standalone reassuring recovery screen with no design-system deps', () => {
     // Arrange: global-error replaces the root layout, so it must render its own
     // shell with only inline styles — no globals.css, no shadcn, no logger.
     // Spy console.error for hygiene (React warns about nested <html>).
@@ -25,7 +25,7 @@ describe('GlobalError (root-layout error boundary)', () => {
     ).toBeInTheDocument()
   })
 
-  it('surfaces the caught error to console for telemetry', () => {
+  test('surfaces the caught error to console for telemetry', () => {
     // Arrange: console is the only sink global-error trusts at this layer.
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -42,7 +42,7 @@ describe('GlobalError (root-layout error boundary)', () => {
     )
   })
 
-  it('retries the app shell when "Try again" is pressed', async () => {
+  test('retries the app shell when "Try again" is pressed', async () => {
     // Arrange
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const reset = vi.fn()
@@ -56,7 +56,7 @@ describe('GlobalError (root-layout error boundary)', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
-  it('reloads a fresh bundle when "Reload the app" is pressed', async () => {
+  test('reloads a fresh bundle when "Reload the app" is pressed', async () => {
     // Arrange: the root layout is universal, so reset() re-renders the SAME
     // failing layout and a "go home" nav can't escape it either — only a full
     // reload fetches a fresh bundle (the stale-preload fix). Spy reload to

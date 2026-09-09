@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import {
   DEEP_LINK_SCHEME,
@@ -14,7 +14,7 @@ vi.mock('../logger', () => ({
 }))
 
 describe('plistBuddyCommandPlan', () => {
-  it('sets a unique bundle id and declares the corelive URL scheme', () => {
+  test('sets a unique bundle id and declares the corelive URL scheme', () => {
     // Arrange
     const bundleId = 'com.corelive.app.dev'
     const scheme = 'corelive'
@@ -34,7 +34,7 @@ describe('plistBuddyCommandPlan', () => {
     ])
   })
 
-  it('marks only the pre-clear Delete step as error-tolerant so a re-run is safe', () => {
+  test('marks only the pre-clear Delete step as error-tolerant so a re-run is safe', () => {
     // Arrange + Act
     const plan = plistBuddyCommandPlan({
       bundleId: DEV_BUNDLE_ID,
@@ -50,7 +50,7 @@ describe('plistBuddyCommandPlan', () => {
 })
 
 describe('ensureDevProtocolRegistration', () => {
-  it('does nothing on non-macOS platforms because deep links bind by path there', () => {
+  test('does nothing on non-macOS platforms because deep links bind by path there', () => {
     // Arrange
     const runCommand = vi.fn((_file: string, _args: string[]) => '')
 
@@ -67,7 +67,7 @@ describe('ensureDevProtocolRegistration', () => {
     expect(runCommand).not.toHaveBeenCalled()
   })
 
-  it('rewrites the shared com.github.Electron bundle id to a unique one on macOS', () => {
+  test('rewrites the shared com.github.Electron bundle id to a unique one on macOS', () => {
     // Arrange — simulate the buggy starting state: generic shared bundle id
     const runCommand = vi.fn((_file: string, _args: string[]) => '')
 
@@ -91,7 +91,7 @@ describe('ensureDevProtocolRegistration', () => {
     ])
   })
 
-  it('reports patch failed and skips re-signing when a required PlistBuddy step throws', () => {
+  test('reports patch failed and skips re-signing when a required PlistBuddy step throws', () => {
     // Arrange — the bundle-id Set fails (e.g. a read-only plist); without an
     // honest failure path the function would still claim success.
     const runCommand = vi.fn((_file: string, args: string[]) => {
@@ -117,7 +117,7 @@ describe('ensureDevProtocolRegistration', () => {
     expect(codesignCalls).toHaveLength(0)
   })
 
-  it('skips work when the dev Electron is already stamped with the unique id', () => {
+  test('skips work when the dev Electron is already stamped with the unique id', () => {
     // Arrange — idempotency: a second `pnpm electron:dev` must not re-sign
     const runCommand = vi.fn((_file: string, _args: string[]) => '')
 
@@ -134,7 +134,7 @@ describe('ensureDevProtocolRegistration', () => {
     expect(runCommand).not.toHaveBeenCalled()
   })
 
-  it('skips when the Electron.app path does not exist instead of throwing', () => {
+  test('skips when the Electron.app path does not exist instead of throwing', () => {
     // Arrange
     const runCommand = vi.fn((_file: string, _args: string[]) => '')
 

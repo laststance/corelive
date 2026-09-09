@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import {
   createNativeBinding,
@@ -11,7 +11,7 @@ import {
 } from '../nativeBinding'
 
 describe('native lone-modifier binding model', () => {
-  it('routes a lone-modifier value down the native path and an accelerator down the globalShortcut path', () => {
+  test('routes a lone-modifier value down the native path and an accelerator down the globalShortcut path', () => {
     // Arrange
     const loneModifierValue = 'lone-modifier:rightOption'
     const acceleratorValue = 'CommandOrControl+B'
@@ -25,7 +25,7 @@ describe('native lone-modifier binding model', () => {
     expect(acceleratorIsNative).toBe(false)
   })
 
-  it('treats the empty/disabled value as a non-native binding', () => {
+  test('treats the empty/disabled value as a non-native binding', () => {
     // Arrange
     const disabledValue = ''
 
@@ -36,7 +36,7 @@ describe('native lone-modifier binding model', () => {
     expect(result).toBe(false)
   })
 
-  it('builds a Right Option binding as a sentinel-prefixed compat string', () => {
+  test('builds a Right Option binding as a sentinel-prefixed compat string', () => {
     // Arrange
     const modifier: LoneModifierId = 'rightOption'
 
@@ -47,7 +47,7 @@ describe('native lone-modifier binding model', () => {
     expect(persistedValue).toBe('lone-modifier:rightOption')
   })
 
-  it('parses a Right Option binding into its structured modifier', () => {
+  test('parses a Right Option binding into its structured modifier', () => {
     // Arrange
     const persistedValue = 'lone-modifier:rightOption'
 
@@ -58,7 +58,7 @@ describe('native lone-modifier binding model', () => {
     expect(binding).toEqual({ kind: 'lone-modifier', modifier: 'rightOption' })
   })
 
-  it('refuses to parse an accelerator as a native binding', () => {
+  test('refuses to parse an accelerator as a native binding', () => {
     // Arrange
     const acceleratorValue = 'CommandOrControl+Shift+B'
 
@@ -69,7 +69,7 @@ describe('native lone-modifier binding model', () => {
     expect(binding).toBeNull()
   })
 
-  it('rejects a native binding whose modifier id is unknown (corrupt config / bad IPC payload)', () => {
+  test('rejects a native binding whose modifier id is unknown (corrupt config / bad IPC payload)', () => {
     // Arrange
     const corruptValue = 'lone-modifier:bogusModifier'
 
@@ -80,7 +80,7 @@ describe('native lone-modifier binding model', () => {
     expect(binding).toBeNull()
   })
 
-  it('round-trips every canonical lone modifier through create then parse', () => {
+  test('round-trips every canonical lone modifier through create then parse', () => {
     // Arrange + Act + Assert (one canonical id per loop iteration)
     for (const modifier of LONE_MODIFIER_IDS) {
       const persistedValue = createNativeBinding(modifier)
@@ -89,7 +89,7 @@ describe('native lone-modifier binding model', () => {
     }
   })
 
-  it('displays a native binding as its macOS label, never the raw sentinel string', () => {
+  test('displays a native binding as its macOS label, never the raw sentinel string', () => {
     // Arrange
     const persistedValue = 'lone-modifier:rightOption'
 
@@ -101,7 +101,7 @@ describe('native lone-modifier binding model', () => {
     expect(label).not.toContain('lone-modifier:')
   })
 
-  it('passes an accelerator through the display formatter unchanged', () => {
+  test('passes an accelerator through the display formatter unchanged', () => {
     // Arrange
     const acceleratorValue = 'CommandOrControl+B'
 
@@ -112,7 +112,7 @@ describe('native lone-modifier binding model', () => {
     expect(label).toBe('CommandOrControl+B')
   })
 
-  it('has a non-empty display label for every canonical lone modifier so none renders blank in the tray', () => {
+  test('has a non-empty display label for every canonical lone modifier so none renders blank in the tray', () => {
     // Arrange + Act + Assert
     for (const modifier of LONE_MODIFIER_IDS) {
       const label = LONE_MODIFIER_DISPLAY[modifier]

@@ -9,7 +9,7 @@
  * globals.css by cathedral-css-snapshot.test.ts) and fails if any accent fill
  * stops carrying AA-readable text.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import { CATHEDRAL } from '../../../scripts/generate-theme-css'
 
@@ -32,7 +32,7 @@ function tokenOf(tokens: Record<string, string>, name: string): string {
 describe('Warm Cathedral accent CTAs carry AA-readable text (≥4.5:1)', () => {
   for (const mode of ['light', 'dark'] as const satisfies ThemeMode[]) {
     for (const [fill, foreground] of ACCENT_TEXT_PAIRS) {
-      it(`${mode} ${fill}: ${foreground} text is readable on the accent fill`, () => {
+      test(`${mode} ${fill}: ${foreground} text is readable on the accent fill`, () => {
         // Arrange
         const tokens = CATHEDRAL[mode]
         // Act

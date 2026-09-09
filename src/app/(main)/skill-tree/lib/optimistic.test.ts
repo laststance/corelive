@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { applyAssignment, type OptimisticState } from './optimistic'
 
@@ -12,7 +12,7 @@ const baseState: OptimisticState = {
 }
 
 describe('applyAssignment', () => {
-  it('assigns a todo from the pool to a node', () => {
+  test('assigns a todo from the pool to a node', () => {
     const next = applyAssignment(baseState, {
       type: 'assign',
       nodeId: 2,
@@ -22,7 +22,7 @@ describe('applyAssignment', () => {
     expect(next.unassignedTodoIds).toEqual([201, 202])
   })
 
-  it('is a no-op if the todo is already assigned to that node', () => {
+  test('is a no-op if the todo is already assigned to that node', () => {
     const next = applyAssignment(baseState, {
       type: 'assign',
       nodeId: 1,
@@ -35,7 +35,7 @@ describe('applyAssignment', () => {
     expect(next.unassignedTodoIds).toEqual([200, 201, 202])
   })
 
-  it('unassigns a todo, returning it to the pool', () => {
+  test('unassigns a todo, returning it to the pool', () => {
     const next = applyAssignment(baseState, {
       type: 'unassign',
       nodeId: 1,
@@ -45,7 +45,7 @@ describe('applyAssignment', () => {
     expect(next.unassignedTodoIds).toContain(100)
   })
 
-  it('unassign is a no-op if the assignment does not exist', () => {
+  test('unassign is a no-op if the assignment does not exist', () => {
     const next = applyAssignment(baseState, {
       type: 'unassign',
       nodeId: 1,
@@ -54,7 +54,7 @@ describe('applyAssignment', () => {
     expect(next).toEqual(baseState)
   })
 
-  it('does not mutate the input state', () => {
+  test('does not mutate the input state', () => {
     const snapshot = JSON.parse(JSON.stringify(baseState)) as OptimisticState
     applyAssignment(baseState, { type: 'assign', nodeId: 2, todoId: 200 })
     expect(baseState).toEqual(snapshot)

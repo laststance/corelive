@@ -1,5 +1,5 @@
 import { render, waitFor } from '@testing-library/react'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 
 import { ThemeProvider } from './ThemeProvider'
 
@@ -14,7 +14,7 @@ describe('ThemeProvider — heals a tampered persisted theme end to end', () => 
     document.documentElement.removeAttribute('data-theme')
   })
 
-  it('rewrites an unregistered persisted theme to the default after mount', async () => {
+  test('rewrites an unregistered persisted theme to the default after mount', async () => {
     // Arrange — a stale/tampered id next-themes would otherwise apply verbatim
     // ('sunset' is not a registered family — mimics a downgrade that dropped one)
     window.localStorage.setItem(STORAGE_KEY, 'sunset-dark')
@@ -32,7 +32,7 @@ describe('ThemeProvider — heals a tampered persisted theme end to end', () => 
     })
   })
 
-  it('leaves a registered persisted theme untouched', async () => {
+  test('leaves a registered persisted theme untouched', async () => {
     // Arrange
     window.localStorage.setItem(STORAGE_KEY, 'dark')
 

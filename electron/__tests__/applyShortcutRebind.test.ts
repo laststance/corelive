@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import {
   applyShortcutRebind,
@@ -28,7 +28,7 @@ function createRebinder(options: {
 }
 
 describe('applyShortcutRebind', () => {
-  it('keeps the requested accelerator when it binds exactly as asked', () => {
+  test('keeps the requested accelerator when it binds exactly as asked', () => {
     // Arrange — the requested chord registers and is what comes back.
     const rebinder = createRebinder({
       updateResult: true,
@@ -51,7 +51,7 @@ describe('applyShortcutRebind', () => {
     })
   })
 
-  it('restores the previous binding when nothing could register', () => {
+  test('restores the previous binding when nothing could register', () => {
     // Arrange — the new accelerator fails to bind, but restoring the previous
     // (just-live) accelerator succeeds, as it does in a single-threaded main.
     const rebinder = {
@@ -74,7 +74,7 @@ describe('applyShortcutRebind', () => {
     })
   })
 
-  it('throws when even restoring the previous binding fails', () => {
+  test('throws when even restoring the previous binding fails', () => {
     // Arrange — both the new accelerator AND the restore fail to bind, so the
     // helper cannot honestly report a clean rollback and must surface it.
     const rebinder = {
@@ -93,7 +93,7 @@ describe('applyShortcutRebind', () => {
     ).toThrow('Failed to restore previous shortcut for toggleLiveEditor')
   })
 
-  it('rejects a silently substituted fallback and restores the previous binding', () => {
+  test('rejects a silently substituted fallback and restores the previous binding', () => {
     // Arrange — updateShortcuts returns true, but ShortcutManager swapped in a
     // DIFFERENT accelerator because the requested one was already taken.
     const rebinder = createRebinder({
@@ -117,7 +117,7 @@ describe('applyShortcutRebind', () => {
     })
   })
 
-  it('disables the shortcut on empty string without reading the registration back', () => {
+  test('disables the shortcut on empty string without reading the registration back', () => {
     // Arrange — '' means "unbind"; nothing is expected to be registered after.
     const rebinder = createRebinder({ updateResult: true, effective: {} })
 

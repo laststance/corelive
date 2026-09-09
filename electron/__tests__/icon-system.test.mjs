@@ -3,7 +3,7 @@ import os from 'os'
 import path from 'path'
 
 import sharp from 'sharp'
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { generateMacTemplateTrayIcons } from '../../scripts/generate-icons.js'
 
@@ -30,7 +30,7 @@ describe('Icon System', () => {
   const trayDir = path.join(iconDir, 'tray')
 
   describe('Icon Generation', () => {
-    it('should have generated all required PNG icons', () => {
+    test('should have generated all required PNG icons', () => {
       const requiredSizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024]
 
       for (const size of requiredSizes) {
@@ -39,7 +39,7 @@ describe('Icon System', () => {
       }
     })
 
-    it('should have generated tray icons for all states', () => {
+    test('should have generated tray icons for all states', () => {
       const trayStates = ['default', 'active', 'notification', 'disabled']
       const traySizes = [16, 20, 24, 32]
 
@@ -55,7 +55,7 @@ describe('Icon System', () => {
       }
     })
 
-    it('generates macOS Template tray icons in a clean output directory', async () => {
+    test('generates macOS Template tray icons in a clean output directory', async () => {
       // Arrange
       const outputDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'corelive-tray-icons-'),
@@ -89,7 +89,7 @@ describe('Icon System', () => {
       }
     })
 
-    it('should have generated app store icons', () => {
+    test('should have generated app store icons', () => {
       const appIconSizes = [512, 1024]
       for (const size of appIconSizes) {
         const iconPath = path.join(iconDir, `app-icon-${size}x${size}.png`)
@@ -97,7 +97,7 @@ describe('Icon System', () => {
       }
     })
 
-    it('should have generated icon manifest', () => {
+    test('should have generated icon manifest', () => {
       const manifestPath = path.join(iconDir, 'icon-manifest.json')
       expect(fs.existsSync(manifestPath)).toBe(true)
 
@@ -109,7 +109,7 @@ describe('Icon System', () => {
       expect(manifest.icons).toHaveProperty('appIcons')
     })
 
-    it('should have generated web favicons', () => {
+    test('should have generated web favicons', () => {
       const publicDir = path.join(process.cwd(), 'public')
       const faviconSizes = [16, 32, 48, 64, 128, 192, 512]
 
@@ -192,14 +192,14 @@ describe('Icon System', () => {
       // The actual icon paths are verified through integration tests and
       // the Icon Generation tests above which check that files exist.
 
-      it('should be a function that accepts a state parameter', () => {
+      test('should be a function that accepts a state parameter', () => {
         expect(typeof trayManager.getTrayIconPath).toBe('function')
         expect(trayManager.getTrayIconPath.length).toBe(0) // Has default parameter
       })
     })
 
     describe('createTrayIcon', () => {
-      it('marks Template icons without resizing away the macOS template image', () => {
+      test('marks Template icons without resizing away the macOS template image', () => {
         withPlatform('darwin', () => {
           // Arrange
           trayManager.getTrayIconPath = vi.fn(
@@ -220,7 +220,7 @@ describe('Icon System', () => {
     })
 
     describe('getTrayIconSize', () => {
-      it('should return 16 for macOS menu bar', () => {
+      test('should return 16 for macOS menu bar', () => {
         // This app only supports macOS, so getTrayIconSize always returns 16
         const size = trayManager.getTrayIconSize()
         expect(size).toBe(16)
@@ -228,17 +228,17 @@ describe('Icon System', () => {
     })
 
     describe('fileExists', () => {
-      it('should return true for existing files', () => {
+      test('should return true for existing files', () => {
         const exists = trayManager.fileExists(__filename)
         expect(exists).toBe(true)
       })
 
-      it('should return false for non-existing files', () => {
+      test('should return false for non-existing files', () => {
         const exists = trayManager.fileExists('/non/existing/file.png')
         expect(exists).toBe(false)
       })
 
-      it('should handle errors gracefully', () => {
+      test('should handle errors gracefully', () => {
         // Mock fs.existsSync to throw an error
         const originalExistsSync = require('fs').existsSync
         require('fs').existsSync = vi.fn(() => {
@@ -268,43 +268,43 @@ describe('Icon System', () => {
         )
       })
 
-      it('should set tray icon to active state', () => {
+      test('should set tray icon to active state', () => {
         const result = trayManager.setTrayIconState('active')
         expect(result).toBe(true)
         expect(trayManager.tray.setImage).toHaveBeenCalled()
       })
 
-      it('should set tray icon to notification state', () => {
+      test('should set tray icon to notification state', () => {
         const result = trayManager.setTrayIconState('notification')
         expect(result).toBe(true)
         expect(trayManager.tray.setImage).toHaveBeenCalled()
       })
 
-      it('should set tray icon to disabled state', () => {
+      test('should set tray icon to disabled state', () => {
         const result = trayManager.setTrayIconState('disabled')
         expect(result).toBe(true)
         expect(trayManager.tray.setImage).toHaveBeenCalled()
       })
 
-      it('should reset tray icon to default state', () => {
+      test('should reset tray icon to default state', () => {
         const result = trayManager.setTrayIconState('default')
         expect(result).toBe(true)
         expect(trayManager.tray.setImage).toHaveBeenCalled()
       })
 
-      it('should return false when tray is not available', () => {
+      test('should return false when tray is not available', () => {
         trayManager.tray = null
         const result = trayManager.setTrayIconState('active')
         expect(result).toBe(false)
       })
 
-      it('should return false when tray is destroyed', () => {
+      test('should return false when tray is destroyed', () => {
         trayManager.tray.isDestroyed = vi.fn(() => true)
         const result = trayManager.setTrayIconState('active')
         expect(result).toBe(false)
       })
 
-      it('should handle errors gracefully', () => {
+      test('should handle errors gracefully', () => {
         trayManager.tray.setImage = vi.fn(() => {
           throw new Error('Test error')
         })
@@ -318,24 +318,24 @@ describe('Icon System', () => {
         trayManager.setTrayIconState = vi.fn(() => true)
       })
 
-      it('should call setTrayIconState with active state', () => {
+      test('should call setTrayIconState with active state', () => {
         trayManager.setActiveState()
         expect(trayManager.setTrayIconState).toHaveBeenCalledWith('active')
       })
 
-      it('should call setTrayIconState with notification state', () => {
+      test('should call setTrayIconState with notification state', () => {
         trayManager.setNotificationState()
         expect(trayManager.setTrayIconState).toHaveBeenCalledWith(
           'notification',
         )
       })
 
-      it('should call setTrayIconState with disabled state', () => {
+      test('should call setTrayIconState with disabled state', () => {
         trayManager.setDisabledState()
         expect(trayManager.setTrayIconState).toHaveBeenCalledWith('disabled')
       })
 
-      it('should call setTrayIconState with default state', () => {
+      test('should call setTrayIconState with default state', () => {
         trayManager.resetToDefaultState()
         expect(trayManager.setTrayIconState).toHaveBeenCalledWith('default')
       })
@@ -350,7 +350,7 @@ describe('Icon System', () => {
       manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     })
 
-    it('should have valid structure', () => {
+    test('should have valid structure', () => {
       expect(manifest).toHaveProperty('generated')
       expect(manifest).toHaveProperty('sources')
       expect(manifest).toHaveProperty('icons')
@@ -360,7 +360,7 @@ describe('Icon System', () => {
       expect(manifest.sources).toHaveProperty('tray')
     })
 
-    it('should list all PNG icons', () => {
+    test('should list all PNG icons', () => {
       const expectedSizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024]
       for (const size of expectedSizes) {
         expect(manifest.icons.png).toHaveProperty(size.toString())
@@ -368,14 +368,14 @@ describe('Icon System', () => {
       }
     })
 
-    it('should list all tray icon states', () => {
+    test('should list all tray icon states', () => {
       const expectedStates = ['default', 'active', 'notification', 'disabled']
       for (const state of expectedStates) {
         expect(manifest.icons.tray).toHaveProperty(state)
       }
     })
 
-    it('should list all tray icon sizes for each state', () => {
+    test('should list all tray icon sizes for each state', () => {
       const expectedSizes = [16, 20, 24, 32]
       const expectedStates = ['default', 'active', 'notification', 'disabled']
 
@@ -386,7 +386,7 @@ describe('Icon System', () => {
       }
     })
 
-    it('should list app icons', () => {
+    test('should list app icons', () => {
       expect(manifest.icons.appIcons).toHaveProperty('512')
       expect(manifest.icons.appIcons).toHaveProperty('1024')
       expect(manifest.icons.appIcons['512']).toBe('app-icon-512x512.png')

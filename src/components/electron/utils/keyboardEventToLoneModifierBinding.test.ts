@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { keyboardEventToLoneModifierBinding } from './keyboardEventToLoneModifierBinding'
 
@@ -13,7 +13,7 @@ function keydown(init: KeyboardEventInit): KeyboardEvent {
 }
 
 describe('keyboardEventToLoneModifierBinding', () => {
-  it('arms a Right Option binding when the right Option key is pressed alone', () => {
+  test('arms a Right Option binding when the right Option key is pressed alone', () => {
     // Arrange
     const event = keydown({ code: 'AltRight', altKey: true })
 
@@ -24,7 +24,7 @@ describe('keyboardEventToLoneModifierBinding', () => {
     expect(binding).toBe('lone-modifier:rightOption')
   })
 
-  it('distinguishes left from right for the same modifier key', () => {
+  test('distinguishes left from right for the same modifier key', () => {
     // Arrange
     const event = keydown({ code: 'AltLeft', altKey: true })
 
@@ -35,7 +35,7 @@ describe('keyboardEventToLoneModifierBinding', () => {
     expect(binding).toBe('lone-modifier:leftOption')
   })
 
-  it('maps each physical modifier key to its own left/right binding', () => {
+  test('maps each physical modifier key to its own left/right binding', () => {
     // Arrange: every modifier code + the flag its own key-down sets.
     const cases = [
       { code: 'AltLeft', altKey: true, expected: 'lone-modifier:leftOption' },
@@ -78,7 +78,7 @@ describe('keyboardEventToLoneModifierBinding', () => {
     }
   })
 
-  it('rejects a modifier that is part of a forming chord (a second modifier is held)', () => {
+  test('rejects a modifier that is part of a forming chord (a second modifier is held)', () => {
     // Arrange: Control pressed while Command is already down → two modifiers.
     const event = keydown({ code: 'ControlLeft', ctrlKey: true, metaKey: true })
 
@@ -89,7 +89,7 @@ describe('keyboardEventToLoneModifierBinding', () => {
     expect(binding).toBeNull()
   })
 
-  it('rejects a non-modifier key so a normal keypress never arms a lone binding', () => {
+  test('rejects a non-modifier key so a normal keypress never arms a lone binding', () => {
     // Arrange
     const event = keydown({ code: 'KeyA' })
 
@@ -100,7 +100,7 @@ describe('keyboardEventToLoneModifierBinding', () => {
     expect(binding).toBeNull()
   })
 
-  it('ignores a modifier pressed during IME composition', () => {
+  test('ignores a modifier pressed during IME composition', () => {
     // Arrange
     const event = keydown({ code: 'AltRight', altKey: true, isComposing: true })
 
@@ -111,7 +111,7 @@ describe('keyboardEventToLoneModifierBinding', () => {
     expect(binding).toBeNull()
   })
 
-  it('ignores OS auto-repeat so a held modifier arms only once', () => {
+  test('ignores OS auto-repeat so a held modifier arms only once', () => {
     // Arrange
     const event = keydown({ code: 'AltRight', altKey: true, repeat: true })
 

@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { formatAcceleratorForDisplay } from './formatAcceleratorForDisplay'
 import { keyboardEventToAccelerator } from './keyboardEventToAccelerator'
 import { keyboardEventToLoneModifierBinding } from './keyboardEventToLoneModifierBinding'
 
 describe('formatAcceleratorForDisplay', () => {
-  it('renders Cmd + digit as a tight ⌘ glyph group on macOS', () => {
+  test('renders Cmd + digit as a tight ⌘ glyph group on macOS', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay('CommandOrControl+3', 'darwin')
 
@@ -13,7 +13,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('⌘3')
   })
 
-  it('renders Option + Space with the ⌥ glyph on macOS', () => {
+  test('renders Option + Space with the ⌥ glyph on macOS', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay('Alt+Space', 'darwin')
 
@@ -21,7 +21,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('⌥Space')
   })
 
-  it('orders modifiers Shift-before-Command per Apple HIG', () => {
+  test('orders modifiers Shift-before-Command per Apple HIG', () => {
     // Arrange + Act: capture util emits Command first; display must reorder.
     const display = formatAcceleratorForDisplay(
       'CommandOrControl+Shift+N',
@@ -32,7 +32,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('⇧⌘N')
   })
 
-  it('renders Control as the ⌃ caret glyph on macOS', () => {
+  test('renders Control as the ⌃ caret glyph on macOS', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay('Control+Shift+A', 'darwin')
 
@@ -40,7 +40,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('⌃⇧A')
   })
 
-  it('renders an arrow key as its glyph on macOS', () => {
+  test('renders an arrow key as its glyph on macOS', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay('CommandOrControl+Up', 'darwin')
 
@@ -48,7 +48,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('⌘↑')
   })
 
-  it('renders ASCII labels joined with plus off macOS', () => {
+  test('renders ASCII labels joined with plus off macOS', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay('CommandOrControl+3', 'other')
 
@@ -56,7 +56,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('Ctrl+3')
   })
 
-  it('returns an empty string for an unbound accelerator', () => {
+  test('returns an empty string for an unbound accelerator', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay('', 'darwin')
 
@@ -64,7 +64,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('')
   })
 
-  it('renders a native lone-modifier binding as its labelled glyph on macOS', () => {
+  test('renders a native lone-modifier binding as its labelled glyph on macOS', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay(
       'lone-modifier:rightOption',
@@ -75,7 +75,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('Right ⌥')
   })
 
-  it('renders a native lone-modifier binding the same off macOS (no token to split)', () => {
+  test('renders a native lone-modifier binding the same off macOS (no token to split)', () => {
     // Arrange + Act
     const display = formatAcceleratorForDisplay(
       'lone-modifier:leftCommand',
@@ -86,7 +86,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('Left ⌘')
   })
 
-  it('renders the bare id, never the raw sentinel, for an unknown lone-modifier', () => {
+  test('renders the bare id, never the raw sentinel, for an unknown lone-modifier', () => {
     // Arrange + Act: a corrupt/unknown id must not leak the 'lone-modifier:'
     // prefix into the UI — it falls back to the bare id.
     const display = formatAcceleratorForDisplay('lone-modifier:bogus', 'darwin')
@@ -95,7 +95,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('bogus')
   })
 
-  it('round-trips a captured lone modifier from keydown to display label', () => {
+  test('round-trips a captured lone modifier from keydown to display label', () => {
     // Arrange: the lone-modifier handoff — whatever the capture util emits on a
     // clean single-modifier press must render cleanly here.
     const event = new KeyboardEvent('keydown', {
@@ -114,7 +114,7 @@ describe('formatAcceleratorForDisplay', () => {
     expect(display).toBe('Right ⌥')
   })
 
-  it('round-trips a captured chord from keydown to display glyphs', () => {
+  test('round-trips a captured chord from keydown to display glyphs', () => {
     // Arrange: the exact handoff the capture box relies on — whatever
     // keyboardEventToAccelerator emits must render cleanly here.
     const event = new KeyboardEvent('keydown', {

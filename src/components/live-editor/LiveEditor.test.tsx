@@ -5,7 +5,7 @@ import type { ReactElement } from 'react'
 import { Provider } from 'react-redux'
 import { toast } from 'sonner'
 import type { ToastT } from 'sonner'
-import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import {
   useAutoSelectDefaultCategory,
@@ -323,7 +323,7 @@ describe('LiveEditor web host (/write)', () => {
     vi.restoreAllMocks()
   })
 
-  it('lets a signed-out stranger write right away — focus in the field, no notice, no spinner', async () => {
+  test('lets a signed-out stranger write right away — focus in the field, no notice, no spinner', async () => {
     // Arrange / Act
     renderEditor()
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox', {
@@ -347,7 +347,7 @@ describe('LiveEditor web host (/write)', () => {
     })
   })
 
-  it('paints the real editor as its own loading state before Clerk answers — no spinner, no empty-state copy (DR5)', async () => {
+  test('paints the real editor as its own loading state before Clerk answers — no spinner, no empty-state copy (DR5)', async () => {
     // Arrange — first paint: Clerk has not resolved the session yet.
     clerkUserRef.current = { isLoaded: false, isSignedIn: false, user: null }
 
@@ -367,7 +367,7 @@ describe('LiveEditor web host (/write)', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('says the categories are loading instead of inviting a keep into a dead field', async () => {
+  test('says the categories are loading instead of inviting a keep into a dead field', async () => {
     // Arrange — /write passes `data?.categories ?? []`, so the list reads empty
     // for the whole `category.list` round trip after Clerk resolves the session.
     clerkUserRef.current = {
@@ -392,7 +392,7 @@ describe('LiveEditor web host (/write)', () => {
     expect(noteField).toBeDisabled()
   })
 
-  it('does not tell a signed-in visitor with no categories at all to pick one', async () => {
+  test('does not tell a signed-in visitor with no categories at all to pick one', async () => {
     // Arrange — the fetch landed and the account genuinely has nothing; the
     // Select says "No categories" on its own.
     clerkUserRef.current = {
@@ -415,7 +415,7 @@ describe('LiveEditor web host (/write)', () => {
     })
   })
 
-  it('shows the web frame — wordmark, shortcut hint, footer — and none of the panel chrome', async () => {
+  test('shows the web frame — wordmark, shortcut hint, footer — and none of the panel chrome', async () => {
     // Arrange / Act
     renderEditor()
     await waitForLiveEditorReady(
@@ -439,7 +439,7 @@ describe('LiveEditor web host (/write)', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
-  it('Cmd+Enter keeps the line on this device — no server call — and clears it even with the setting off', async () => {
+  test('Cmd+Enter keeps the line on this device — no server call — and clears it even with the setting off', async () => {
     // Arrange — clear-on-complete OFF in settings; signed out forces it on.
     renderEditor({
       liveEditorClearOnComplete: false,
@@ -467,7 +467,7 @@ describe('LiveEditor web host (/write)', () => {
     )
   })
 
-  it('Undo brings the line back and forgets the device-local keep', async () => {
+  test('Undo brings the line back and forgets the device-local keep', async () => {
     // Arrange — one kept line, already cleared.
     renderEditor({ liveEditorClearDelayMs: 0 })
     const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
@@ -498,7 +498,7 @@ describe('LiveEditor web host (/write)', () => {
     expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('remembers the half-written note on this device', async () => {
+  test('remembers the half-written note on this device', async () => {
     // Arrange
     const user = userEvent.setup()
     renderEditor()
@@ -545,7 +545,7 @@ describe('LiveEditor web host (/write)', () => {
     })
   })
 
-  it('says so when the browser refuses storage: keeps stay for this session only', async () => {
+  test('says so when the browser refuses storage: keeps stay for this session only', async () => {
     // Arrange
     storageAvailabilityRef.current = 'unavailable'
 
@@ -560,7 +560,7 @@ describe('LiveEditor web host (/write)', () => {
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument()
   })
 
-  it('signed in on the web, keeps go to the account, the picker is the only category control, and the footer points home', async () => {
+  test('signed in on the web, keeps go to the account, the picker is the only category control, and the footer points home', async () => {
     // Arrange
     clerkUserRef.current = {
       isLoaded: true,
@@ -599,7 +599,7 @@ describe('LiveEditor web host (/write)', () => {
     )
   })
 
-  it("never opens the previous account's note when a shared device still remembers their category", async () => {
+  test("never opens the previous account's note when a shared device still remembers their category", async () => {
     // Arrange — user A signed out leaving their category id and note on disk;
     // user B signs in and their account owns category 1, not 5.
     localStorage.setItem(
@@ -637,7 +637,7 @@ describe('LiveEditor web host (/write)', () => {
     ).toEqual({ '5': "user A's private note" })
   })
 
-  it('on touch, a Keep line button under the editor keeps the caret line through the same path', async () => {
+  test('on touch, a Keep line button under the editor keeps the caret line through the same path', async () => {
     // Arrange
     mockCoarsePointer()
     renderEditor({ liveEditorClearDelayMs: 0 })
@@ -665,7 +665,7 @@ describe('LiveEditor web host (/write)', () => {
     ).toEqual(['ship it'])
   })
 
-  it('hides the Keep line button for mouse and trackpad users', async () => {
+  test('hides the Keep line button for mouse and trackpad users', async () => {
     // Arrange / Act
     renderEditor()
     await waitForLiveEditorReady(
@@ -678,7 +678,7 @@ describe('LiveEditor web host (/write)', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('keeps the panel chrome and skips the web frame inside the Electron panel', async () => {
+  test('keeps the panel chrome and skips the web frame inside the Electron panel', async () => {
     // Arrange
     liveEditorEnvironmentRef.current = true
     clerkUserRef.current = {
@@ -961,7 +961,7 @@ describe('LiveEditor Spaces tracking switch', () => {
     vi.clearAllMocks()
   })
 
-  it('reflects the saved Mac desktop tracking setting in the header switch', async () => {
+  test('reflects the saved Mac desktop tracking setting in the header switch', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -983,7 +983,7 @@ describe('LiveEditor Spaces tracking switch', () => {
     })
   })
 
-  it('persists the header switch change through the LiveEditor preload bridge', async () => {
+  test('persists the header switch change through the LiveEditor preload bridge', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -1010,7 +1010,7 @@ describe('LiveEditor Spaces tracking switch', () => {
     })
   })
 
-  it('rolls the header switch back when the main process rejects the change', async () => {
+  test('rolls the header switch back when the main process rejects the change', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi
@@ -1041,7 +1041,7 @@ describe('LiveEditor Spaces tracking switch', () => {
     )
   })
 
-  it('blocks rapid repeats while the Mac desktop tracking save is pending', async () => {
+  test('blocks rapid repeats while the Mac desktop tracking save is pending', async () => {
     // Arrange
     let resolveSpacesUpdate: (value: boolean) => void = () => undefined
     const pendingSpacesUpdate = new Promise<boolean>((resolve) => {
@@ -1082,7 +1082,7 @@ describe('LiveEditor text styling settings', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the note in the saved font family, size, and color', async () => {
+  test('renders the note in the saved font family, size, and color', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1107,7 +1107,7 @@ describe('LiveEditor text styling settings', () => {
     expect(noteField.style.color).toBe('var(--primary)')
   })
 
-  it('falls back to the default look (sans / 16px) when no setting is saved', async () => {
+  test('falls back to the default look (sans / 16px) when no setting is saved', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1132,7 +1132,7 @@ describe('LiveEditor writing surface', () => {
     vi.clearAllMocks()
   })
 
-  it('keeps the surface calm by disabling the native red spellcheck underlines', async () => {
+  test('keeps the surface calm by disabling the native red spellcheck underlines', async () => {
     // Arrange
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1166,7 +1166,7 @@ describe('LiveEditor note persistence during reload', () => {
     localStorage.removeItem('corelive-selected-category')
   })
 
-  it('does not read or write the shared category note before LiveEditor config finishes loading', async () => {
+  test('does not read or write the shared category note before LiveEditor config finishes loading', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1192,7 +1192,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('swaps a remembered id this account does not own for the default category without requesting the foreign note', async () => {
+  test('swaps a remembered id this account does not own for the default category without requesting the foreign note', async () => {
     // Arrange: the shared selection remembers an id this account's list does
     // not contain (a shared device, a category deleted elsewhere, or a
     // Follow-OFF upgrader — plan D11). The REAL auto-select runs here so the
@@ -1225,7 +1225,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(api.note.get).not.toHaveBeenCalledWith(99)
   })
 
-  it('writes the picker choice to the shared category selection from the Electron panel', async () => {
+  test('writes the picker choice to the shared category selection from the Electron panel', async () => {
     // Arrange: the REAL shared selection backs this spec, so the pick has to
     // land in the localStorage slot the sidebar and /write read. Two
     // categories, nothing selected yet.
@@ -1255,7 +1255,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(localStorage.getItem('corelive-selected-category')).toBe('12')
   })
 
-  it('does not flush a clean loaded note when the active category changes', async () => {
+  test('does not flush a clean loaded note when the active category changes', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1300,7 +1300,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('persists an intentional full clear after the loaded category note is editable', async () => {
+  test('persists an intentional full clear after the loaded category note is editable', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1330,7 +1330,7 @@ describe('LiveEditor note persistence during reload', () => {
     )
   })
 
-  it('keeps the existing category note on disk when LiveEditor reloads before the note finishes loading', async () => {
+  test('keeps the existing category note on disk when LiveEditor reloads before the note finishes loading', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1353,7 +1353,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('blocks editing while the existing category note is still loading', async () => {
+  test('blocks editing while the existing category note is still loading', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1380,7 +1380,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('keeps the existing category note on disk when loading that note fails', async () => {
+  test('keeps the existing category note on disk when loading that note fails', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1407,7 +1407,7 @@ describe('LiveEditor note persistence during reload', () => {
     expect(noteSet).not.toHaveBeenCalled()
   })
 
-  it('persists a new user edit after the existing category note fails to load', async () => {
+  test('persists a new user edit after the existing category note fails to load', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1444,7 +1444,7 @@ describe('LiveEditor focus on window show', () => {
     vi.clearAllMocks()
   })
 
-  it('focuses the note editor when the LiveEditor window first opens, so a quick capture can start typing right away', async () => {
+  test('focuses the note editor when the LiveEditor window first opens, so a quick capture can start typing right away', async () => {
     // Arrange — open the editor with an active category, so the note field is enabled.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1464,7 +1464,7 @@ describe('LiveEditor focus on window show', () => {
     })
   })
 
-  it('returns focus to the note editor when the window is shown again, instead of leaving it on the Follow Spaces switch', async () => {
+  test('returns focus to the note editor when the window is shown again, instead of leaving it on the Follow Spaces switch', async () => {
     // Arrange — editor open with an active category; reproduce the reported bug's
     // starting point by parking focus on the first focusable header control.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -1579,7 +1579,7 @@ describe('LiveEditor complete command', () => {
     selectedCategoryRef.current = 1
   })
 
-  it('completes a plain prose line into a Completed row on Cmd+Enter', async () => {
+  test('completes a plain prose line into a Completed row on Cmd+Enter', async () => {
     // Arrange — an editor with a category, holding one ordinary (non-checkbox) line.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1604,7 +1604,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('still toggles an existing checkbox line into a Completed row on Cmd+Enter', async () => {
+  test('still toggles an existing checkbox line into a Completed row on Cmd+Enter', async () => {
     // Arrange — an editor holding a pre-formatted unchecked checkbox line.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1629,7 +1629,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('completes an already checked checkbox line instead of unchecking it on Cmd+Enter', async () => {
+  test('completes an already checked checkbox line instead of unchecking it on Cmd+Enter', async () => {
     // Arrange — a user manually checked the task before invoking the complete command.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1654,7 +1654,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('records an already checked checkbox line only once across repeated Cmd+Enter commands', async () => {
+  test('records an already checked checkbox line only once across repeated Cmd+Enter commands', async () => {
     // Arrange — keep the first Completed request pending so a rapid repeat exercises the in-flight guard.
     let resolveCreate!: (value: { id: number }) => void
     const pendingCreate = new Promise<{ id: number }>((resolve) => {
@@ -1690,7 +1690,7 @@ describe('LiveEditor complete command', () => {
     expect(completedMutateAsync).toHaveBeenCalledTimes(1)
   })
 
-  it('records a checked task only once after earlier lines shift it during creation', async () => {
+  test('records a checked task only once after earlier lines shift it during creation', async () => {
     // Arrange — keep the create pending while an edit above moves the tracked task.
     let resolveCreate!: (value: { id: number }) => void
     const pendingCreate = new Promise<{ id: number }>((resolve) => {
@@ -1725,7 +1725,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('undoes the original checked task after an identical row is inserted immediately before it', async () => {
+  test('undoes the original checked task after an identical row is inserted immediately before it', async () => {
     // Arrange — record the second row and retain its optimistic Undo action.
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1762,7 +1762,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('does not undo or delete a completion after removing the separator before its tracked row', async () => {
+  test('does not undo or delete a completion after removing the separator before its tracked row', async () => {
     // Arrange — keep creation pending while the tracked checkbox still has its own line.
     let resolveCreate!: (value: { id: number }) => void
     const pendingCreate = new Promise<{ id: number }>((resolve) => {
@@ -1809,7 +1809,7 @@ describe('LiveEditor complete command', () => {
     expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('does not use another checked row with the same title after tracked identity is lost', async () => {
+  test('does not use another checked row with the same title after tracked identity is lost', async () => {
     // Arrange — record one checked task and retain its Undo action.
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -1841,7 +1841,7 @@ describe('LiveEditor complete command', () => {
     expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('keeps an already checked checkbox line checked when completion recording fails', async () => {
+  test('keeps an already checked checkbox line checked when completion recording fails', async () => {
     // Arrange — a manually checked task whose Completed create will fail.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -1867,7 +1867,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('toggles the nested checkbox line at the caret into a Completed row on Cmd+Enter', async () => {
+  test('toggles the nested checkbox line at the caret into a Completed row on Cmd+Enter', async () => {
     // Arrange — a parent task with one indented child checkbox under it.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -1898,7 +1898,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('restores the original plain prose when the completion create fails', async () => {
+  test('restores the original plain prose when the completion create fails', async () => {
     // Arrange — the create mutation rejects for this completion.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -1920,7 +1920,7 @@ describe('LiveEditor complete command', () => {
     })
   })
 
-  it('leaves an unrelated line untouched when a failed completion can no longer find its line', async () => {
+  test('leaves an unrelated line untouched when a failed completion can no longer find its line', async () => {
     // Arrange — hold the create in flight so we can edit the note before it
     // rejects (the create only settles when we call rejectCreate).
     let rejectCreate: (reason: Error) => void = () => undefined
@@ -1953,7 +1953,7 @@ describe('LiveEditor complete command', () => {
     expect(noteField).toHaveValue('urgent\n- [x] buy milk and eggs')
   })
 
-  it('restores the exact failed row when an earlier checked row has the same title', async () => {
+  test('restores the exact failed row when an earlier checked row has the same title', async () => {
     // Arrange — hold a plain second row's create while an identical checked title sits above it.
     let rejectCreate!: (reason: Error) => void
     const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
@@ -1982,7 +1982,7 @@ describe('LiveEditor complete command', () => {
     expect(noteField).toHaveValue('- [x] FooTask\nFooTask')
   })
 
-  it('keeps a failed keep-visible rollback retryable after switching categories', async () => {
+  test('keeps a failed keep-visible rollback retryable after switching categories', async () => {
     // Arrange — hold create pending while category 1's checked row switches off-screen.
     let rejectCreate: (reason: Error) => void = () => undefined
     const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
@@ -2057,7 +2057,7 @@ describe('LiveEditor complete command', () => {
     expect(noteField).toHaveValue('')
   })
 
-  it('keeps an undone line visible while a failed Completed delete retries', async () => {
+  test('keeps an undone line visible while a failed Completed delete retries', async () => {
     // Arrange — complete one checkbox and make the first server delete fail.
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -2104,7 +2104,7 @@ describe('LiveEditor complete command', () => {
     expect(noteField).toHaveValue('- [ ] buy milk')
   })
 
-  it('records a pre-checked row only once after switching categories and back', async () => {
+  test('records a pre-checked row only once after switching categories and back', async () => {
     // Arrange — category 1 always reloads the same checked row; category 2 is empty.
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -2156,7 +2156,7 @@ describe('LiveEditor complete command', () => {
     expect(completedMutateAsync).toHaveBeenCalledTimes(1)
   })
 
-  it('does nothing when the caret line is blank', async () => {
+  test('does nothing when the caret line is blank', async () => {
     // Arrange — an editor whose caret line is whitespace only.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2184,7 +2184,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     selectedCategoryRef.current = 1
   })
 
-  it('removes a finished line the instant it completes when the clear delay is zero', async () => {
+  test('removes a finished line the instant it completes when the clear delay is zero', async () => {
     // Arrange — the editor with clear-on-complete opted in.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2210,7 +2210,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('shows the checked state once before an instant clear removes the line', async () => {
+  test('shows the checked state once before an instant clear removes the line', async () => {
     // Arrange: instant clear should still acknowledge the completion visually
     // before the line leaves the scratchpad.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -2233,7 +2233,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('records and clears an already checked checkbox line when instant clear is enabled', async () => {
+  test('records and clears an already checked checkbox line when instant clear is enabled', async () => {
     // Arrange — clear-on-complete is enabled after the user checked the task manually.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2258,7 +2258,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('records a shifted lingering row only once across repeated Cmd+Enter commands', async () => {
+  test('records a shifted lingering row only once across repeated Cmd+Enter commands', async () => {
     // Arrange — keep the create pending while clear-on-complete leaves the checked row visible.
     let resolveCreate!: (value: { id: number }) => void
     const pendingCreate = new Promise<{ id: number }>((resolve) => {
@@ -2299,7 +2299,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('undo re-inserts the cleared line at its original position', async () => {
+  test('undo re-inserts the cleared line at its original position', async () => {
     // Arrange — clear-on-complete on, two lines so the re-insert index matters.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2336,7 +2336,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('undo restores a cleared task after an identical anchor row is inserted above its saved position', async () => {
+  test('undo restores a cleared task after an identical anchor row is inserted above its saved position', async () => {
     // Arrange — complete the first row and wait for its instant clear to leave one anchor row.
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -2364,7 +2364,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('undo re-inserts a cleared nested checkbox with its original indentation', async () => {
+  test('undo re-inserts a cleared nested checkbox with its original indentation', async () => {
     // Arrange — clear-on-complete on, with the caret parked on an indented child.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2402,7 +2402,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(completedMutateAsync).toHaveBeenCalledTimes(1)
   })
 
-  it('restores the cleared line when the completion create fails', async () => {
+  test('restores the cleared line when the completion create fails', async () => {
     // Arrange — the create rejects for this completion.
     completedMutateAsync.mockRejectedValueOnce(new Error('network down'))
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
@@ -2425,7 +2425,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('still restores the cleared line when the create rejects AFTER the undo window closed', async () => {
+  test('still restores the cleared line when the create rejects AFTER the undo window closed', async () => {
     // Arrange — hold the create in flight so the undo window can close (its
     // onAutoClose fires) BEFORE the create rejects. Without the late-failure
     // restore, the line AND the win vanish silently — the bug this guards.
@@ -2471,7 +2471,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('does not duplicate the line when Undo is tapped after a late failure already restored it', async () => {
+  test('does not duplicate the line when Undo is tapped after a late failure already restored it', async () => {
     // Arrange — the create rejects, so the failure handler restores the line.
     // Sonner's dismiss runs an exit animation, leaving the Undo button clickable
     // for a few hundred ms, so a tap AFTER the restore must NOT re-insert a
@@ -2515,7 +2515,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('stays silent when the create fails after the user already undid', async () => {
+  test('stays silent when the create fails after the user already undid', async () => {
     // Arrange — hold the create in flight so the user can Undo FIRST, then make
     // it reject. The user abandoned the completion, so a late create failure is
     // irrelevant to them: no error toast, and no second re-insert of the line.
@@ -2560,7 +2560,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('restores the line with its exact leading whitespace on undo (verbatim, not trimmed)', async () => {
+  test('restores the line with its exact leading whitespace on undo (verbatim, not trimmed)', async () => {
     // Arrange — a plain line the user indented with leading spaces.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2597,7 +2597,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     })
   })
 
-  it('keeps the caret out of the following line after the optimistic clear', async () => {
+  test('keeps the caret out of the following line after the optimistic clear', async () => {
     // Arrange — three lines; completing the middle one shifts 'c' up into its slot.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2627,7 +2627,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(noteField.selectionStart).toBe(2)
   })
 
-  it('keeps every finished line in place by default (no auto-close hook wired)', async () => {
+  test('keeps every finished line in place by default (no auto-close hook wired)', async () => {
     // Arrange — a fresh install (clear-on-complete OFF) keeps the prior behavior.
     const getVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(false)
     const setVisibleOnAllWorkspaces = vi.fn().mockResolvedValue(true)
@@ -2654,7 +2654,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(noteField).toHaveValue('- [x] buy milk')
   })
 
-  it("restores the cleared line into its origin category's stored note when Undo fires after switching categories", async () => {
+  test("restores the cleared line into its origin category's stored note when Undo fires after switching categories", async () => {
     // Arrange — clear-on-complete on, with TWO categories. note.get is made
     // category-aware so the assertion proves the line returns to category 1's
     // REAL content, not an empty stand-in. This is the cross-category data-loss
@@ -2741,7 +2741,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(noteField).toHaveValue('other\nrows')
   })
 
-  it('offers Retry when Undo cannot restore a cleared origin row', async () => {
+  test('offers Retry when Undo cannot restore a cleared origin row', async () => {
     // Arrange — complete in category 1, clear the row, then switch to category 2.
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -2822,7 +2822,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(noteField).toHaveValue('')
   })
 
-  it('offers Retry when failed creation cannot restore a cleared origin row', async () => {
+  test('offers Retry when failed creation cannot restore a cleared origin row', async () => {
     // Arrange — keep create pending, clear category 1, then switch to category 2.
     let rejectCreate: (reason: Error) => void = () => undefined
     const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
@@ -2910,7 +2910,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('does not duplicate a cleared row when stale create-failure Retry follows Undo', async () => {
+  test('does not duplicate a cleared row when stale create-failure Retry follows Undo', async () => {
     // Arrange — fail creation and its automatic restore after the row leaves category 1.
     let rejectCreate: (reason: Error) => void = () => undefined
     const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
@@ -2997,7 +2997,7 @@ describe('LiveEditor clear-on-complete (instant / zero delay)', () => {
     expect(deleteCompletedMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('serializes create-failure and Undo restoration of the same cleared row', async () => {
+  test('serializes create-failure and Undo restoration of the same cleared row', async () => {
     // Arrange — pause the cross-category note read so failure and Undo overlap.
     let rejectCreate: (reason: Error) => void = () => undefined
     const pendingCreate = new Promise<{ id: number }>((_resolve, reject) => {
@@ -3099,7 +3099,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     selectedCategoryRef.current = 1
   })
 
-  it('keeps the finished line on screen for the linger, then tucks it away once the delay elapses', async () => {
+  test('keeps the finished line on screen for the linger, then tucks it away once the delay elapses', async () => {
     // Arrange — clear-on-complete on with a 100 ms linger (not instant).
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -3128,7 +3128,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     })
   })
 
-  it('clears every line completed within one linger, not just the first', async () => {
+  test('clears every line completed within one linger, not just the first', async () => {
     // Arrange — three lines; completing two top-to-bottom within ONE linger leaves
     // two removal timers pending at once. When the first timer removes line 0 it
     // shifts every later line up, so a still-pending sibling's tracked index must
@@ -3171,7 +3171,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     )
   })
 
-  it('cancels the pending removal when Undo is tapped during the linger, so the line never leaves', async () => {
+  test('cancels the pending removal when Undo is tapped during the linger, so the line never leaves', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -3204,7 +3204,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     expect(noteField).toHaveValue('buy milk\nkeep me')
   })
 
-  it('leaves the line in place when the background create fails during the linger', async () => {
+  test('leaves the line in place when the background create fails during the linger', async () => {
     // Arrange — the create rejects. Its rejection runs as a microtask, BEFORE the
     // 100 ms removal timer could fire, so it cancels the pending timer: the line was
     // never cleared, so there is nothing to restore — it simply stays.
@@ -3234,7 +3234,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     expect(noteField).toHaveValue('buy milk\nkeep me')
   })
 
-  it('restores the origin category when a failed linger completion still reads the pre-flush row after switching away', async () => {
+  test('restores the origin category when a failed linger completion still reads the pre-flush row after switching away', async () => {
     // Arrange — hold the create in flight so category 1 can switch away before the
     // failure handler runs. Its stored note still reads the original row, matching
     // the real pre-flush race CodeRabbit caught.
@@ -3309,7 +3309,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     )
   })
 
-  it('does not remove the tracked line if the user edited it during the linger', async () => {
+  test('does not remove the tracked line if the user edited it during the linger', async () => {
     // Arrange
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -3333,7 +3333,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     expect(noteField).toHaveValue('buy oat milk\nkeep me')
   })
 
-  it('keeps a cancelled delayed-clear completion deduplicated after returning to its category', async () => {
+  test('keeps a cancelled delayed-clear completion deduplicated after returning to its category', async () => {
     // Arrange — keep create pending while category 1's checked row moves off-screen.
     let resolveCreate: (value: { id: number }) => void = () => undefined
     const pendingCreate = new Promise<{ id: number }>((resolve) => {
@@ -3399,7 +3399,7 @@ describe('LiveEditor clear-on-complete (deferred linger)', () => {
     expect(noteField).toHaveValue('- [x] buy milk')
   })
 
-  it('cancels a pending removal on a category switch, never touching the switched-to category', async () => {
+  test('cancels a pending removal on a category switch, never touching the switched-to category', async () => {
     // Arrange — clear-on-complete on with a linger, TWO categories. Completing in
     // category 1 then switching to 2 before the linger elapses must cancel the
     // pending removal, so the timer can never fire against category 2's freshly
@@ -3478,7 +3478,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
     selectedCategoryRef.current = 1
   })
 
-  it('shows the completion toast with a close button and the configured display duration', async () => {
+  test('shows the completion toast with a close button and the configured display duration', async () => {
     // Arrange — clear-on-complete OFF (the always-shown toast path), with an
     // 8 s display duration saved.
     installLiveEditorAPI({
@@ -3502,7 +3502,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
     expect(toastOptions?.duration).toBe(8000)
   })
 
-  it('phrases the Undo-window copy for the configured display duration', async () => {
+  test('phrases the Undo-window copy for the configured display duration', async () => {
     // Arrange — an 8 s duration must read "8 s", not a hardcoded "5 s".
     installLiveEditorAPI({
       getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
@@ -3525,7 +3525,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
     )
   })
 
-  it('floors the Undo-window copy at a half-step duration so it never over-promises the Undo time', async () => {
+  test('floors the Undo-window copy at a half-step duration so it never over-promises the Undo time', async () => {
     // Arrange — a half-step 2500 ms duration (reachable via the slider's 500 ms
     // step) must read "2 s" (floor), never "3 s" (round): the copy must never
     // claim more Undo time than actually remains (FINDING-001 regret-safe floor).
@@ -3550,7 +3550,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
     )
   })
 
-  it('keeps the close button and configured duration on the clear-on-complete toast', async () => {
+  test('keeps the close button and configured duration on the clear-on-complete toast', async () => {
     // Arrange — clear-on-complete ON with instant clear and a 6 s duration: the
     // SAME helper must wire the ✕ + duration on this second completion path too.
     installLiveEditorAPI({
@@ -3577,7 +3577,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
     expect(toastOptions?.duration).toBe(6000)
   })
 
-  it('still restores the cleared line on Undo even though the toast now fires onDismiss on close', async () => {
+  test('still restores the cleared line on Undo even though the toast now fires onDismiss on close', async () => {
     // Arrange — clear-on-complete ON; the ✕ adds an onDismiss that BOTH a ✕ and an
     // Undo trigger. Undo must still revert, and the trailing onDismiss must NOT
     // confirm the win away (the call-site wasUndoCalled guard — CEO-D4).
@@ -3620,7 +3620,7 @@ describe('LiveEditor completion toast — close button + display duration (#109)
     })
   })
 
-  it('clamps the clear linger down to the shorter toast duration so a line never outlasts its Undo', async () => {
+  test('clamps the clear linger down to the shorter toast duration so a line never outlasts its Undo', async () => {
     // Arrange — a clear delay (300 ms) LONGER than the toast duration (100 ms).
     // The runtime min() must remove the line when the toast (and its Undo) closes
     // at 100 ms, never letting it linger the full 300 ms (#109 replaces #108's

@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { useLocalDayKey } from './useLocalDayKey'
 
@@ -10,7 +10,7 @@ describe('useLocalDayKey', () => {
     vi.useRealTimers()
   })
 
-  it('publishes the next local day after midnight without remounting Home', () => {
+  test('publishes the next local day after midnight without remounting Home', () => {
     // Arrange
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 6, 14, 23, 59, 59, 500))

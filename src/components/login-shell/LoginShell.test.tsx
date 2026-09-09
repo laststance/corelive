@@ -14,7 +14,7 @@
  *   pnpm test -- LoginShell
  */
 import { render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { LoginShell } from './LoginShell'
 
@@ -69,7 +69,7 @@ describe('LoginShell', () => {
     clerkUserRef.current = { isLoaded: true, isSignedIn: false }
   })
 
-  it('tells a plain browser tab the shell is desktop-only instead of showing the card', () => {
+  test('tells a plain browser tab the shell is desktop-only instead of showing the card', () => {
     // Arrange: no preload at all — corelive.app/login-shell opened in a tab.
 
     // Act
@@ -83,7 +83,7 @@ describe('LoginShell', () => {
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
   })
 
-  it('holds a calm loading state until Clerk resolves', () => {
+  test('holds a calm loading state until Clerk resolves', () => {
     // Arrange: inside the login window, Clerk still loading.
     exposeElectronAPI({ oauth: {} })
     clerkUserRef.current = { isLoaded: false, isSignedIn: false }
@@ -96,7 +96,7 @@ describe('LoginShell', () => {
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
   })
 
-  it('offers native sign-in when the login preload exposes the oauth bridge', () => {
+  test('offers native sign-in when the login preload exposes the oauth bridge', () => {
     // Arrange: the current login preload has exposed window.electronAPI.oauth.
     exposeElectronAPI({ oauth: {} })
 
@@ -108,7 +108,7 @@ describe('LoginShell', () => {
     expect(screen.getByTestId('oauth-buttons')).toBeInTheDocument()
   })
 
-  it('points to the web app instead of dead buttons when a frozen preload has no oauth bridge', () => {
+  test('points to the web app instead of dead buttons when a frozen preload has no oauth bridge', () => {
     // Arrange: preload skew — an installed app's frozen preload exposes
     // electronAPI without the oauth bridge.
     exposeElectronAPI({})
@@ -122,7 +122,7 @@ describe('LoginShell', () => {
     expect(screen.getByText(/web app/i)).toBeInTheDocument()
   })
 
-  it('greets the signed-out user with the north-star invitation, not a sign-in demand', () => {
+  test('greets the signed-out user with the north-star invitation, not a sign-in demand', () => {
     // Arrange: the signed-out front door with the oauth bridge present.
     exposeElectronAPI({ oauth: {} })
 
@@ -137,7 +137,7 @@ describe('LoginShell', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the LiveEditor placeholder once signed in, for installs whose main process does not close the window', () => {
+  test('shows the LiveEditor placeholder once signed in, for installs whose main process does not close the window', () => {
     // Arrange: Clerk reports a session inside the login window.
     exposeElectronAPI({ oauth: {} })
     clerkUserRef.current = { isLoaded: true, isSignedIn: true }

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import { contrastRatio, AA_TEXT_CONTRAST } from '@/lib/themes/contrast'
 
@@ -42,7 +42,7 @@ const parchmentBlock = stylesCss.match(
 )?.[1]
 
 describe('skill-tree palette legibility — primary ink stays AA on its surface', () => {
-  it('keeps parchment cream readable on the parchment surface for every light family', () => {
+  test('keeps parchment cream readable on the parchment surface for every light family', () => {
     // Arrange
     if (parchmentBlock === undefined)
       throw new Error('parchment block not found')
@@ -55,7 +55,7 @@ describe('skill-tree palette legibility — primary ink stays AA on its surface'
     )
   })
 
-  it('keeps dark-fantasy cream readable on the dark surface for every dark family', () => {
+  test('keeps dark-fantasy cream readable on the dark surface for every dark family', () => {
     // Arrange
     if (darkFantasyBlock === undefined)
       throw new Error('dark-fantasy block not found')

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import {
   CATHEDRAL,
@@ -61,13 +61,13 @@ const ALL_THEMES: ThemeSeed[] = Object.values(THEME_REGISTRY)
 const DERIVED_THEMES = ALL_THEMES.filter(isDerivedTheme)
 
 describe('theme preview swatches match the generated CSS the user will actually see', () => {
-  it('covers all 10 colored families (5 families × light + dark)', () => {
+  test('covers all 10 colored families (5 families × light + dark)', () => {
     // Arrange / Act / Assert — guard against it.each([]) passing vacuously if the
     // registry empties or the preserve filter regresses.
     expect(DERIVED_THEMES).toHaveLength(10)
   })
 
-  it.each(DERIVED_THEMES)(
+  test.each(DERIVED_THEMES)(
     '$id preview equals the generator-derived tokens (no drift from generated.css)',
     (theme) => {
       // Arrange — the generator is the source of truth for colored families
@@ -77,7 +77,7 @@ describe('theme preview swatches match the generated CSS the user will actually 
     },
   )
 
-  it('resolves harbor-light to its exact derived swatches', () => {
+  test('resolves harbor-light to its exact derived swatches', () => {
     // A human-readable anchor with hard-coded expecteds — the cross-check above is
     // the drift guard; this documents one concrete result so a deliberate seed
     // change surfaces as a reviewable value diff (not a silent relational pass).
@@ -98,7 +98,7 @@ describe('theme preview swatches match the generated CSS the user will actually 
     ])
   })
 
-  it.each(['default-light', 'default-dark'] as const)(
+  test.each(['default-light', 'default-dark'] as const)(
     '%s preview equals the literal shadcn tokens the generator emits verbatim',
     (id) => {
       // Arrange — a static theme's registry `tokens` ARE what generated.css emits
@@ -108,7 +108,7 @@ describe('theme preview swatches match the generated CSS the user will actually 
     },
   )
 
-  it.each(['light', 'dark'] as const)(
+  test.each(['light', 'dark'] as const)(
     'cathedral %s preview equals the generator-exported CATHEDRAL map (verbatim globals.css)',
     (mode) => {
       // Arrange — cathedral is hand-authored; the generator mirrors globals.css in
@@ -119,7 +119,7 @@ describe('theme preview swatches match the generated CSS the user will actually 
     },
   )
 
-  it('always produces a 5-stop heatmap ramp for every theme', () => {
+  test('always produces a 5-stop heatmap ramp for every theme', () => {
     // Arrange / Act / Assert — the strip the picker renders is always 5 cells
     expect(getThemePreview('iris-light').heatmap).toHaveLength(5)
     expect(getThemePreview('graphite-dark').heatmap).toHaveLength(5)

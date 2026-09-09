@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 // Simulate a pino-pretty thread-stream worker that has exited: every write
 // method throws "the worker has exited" — the exact failure that bricks a
@@ -34,13 +34,13 @@ describe('log.* is crash-safe when the pino transport has died', () => {
   // so Electron showed the fatal "A JavaScript error occurred" dialog and the
   // window was stranded on about:blank. Logging must never crash the app.
 
-  it('does not throw when info() hits a dead transport', () => {
+  test('does not throw when info() hits a dead transport', () => {
     // Arrange: appLogger.info is mocked to throw "the worker has exited".
     // Act + Assert: the wrapper swallows it instead of propagating.
     expect(() => log.info('Application started')).not.toThrow()
   })
 
-  it('keeps every log level crash-safe (error, warn, info, debug, trace)', () => {
+  test('keeps every log level crash-safe (error, warn, info, debug, trace)', () => {
     // Arrange: every appLogger level method throws on write.
 
     // Act + Assert: none of the public log.* methods propagate the failure.
@@ -51,7 +51,7 @@ describe('log.* is crash-safe when the pino transport has died', () => {
     expect(() => log.trace('verbose')).not.toThrow()
   })
 
-  it('keeps a catch-then-log error path safe (logging with a context object)', () => {
+  test('keeps a catch-then-log error path safe (logging with a context object)', () => {
     // Arrange: this mirrors settings:setHideAppIcon, whose catch block logs the
     // caught error — the double-throw that originally defeated try/catch.
 
@@ -67,7 +67,7 @@ describe('computeShouldUsePrettyTransport (pino-pretty worker gate)', () => {
   // genuine local-dev main process, never in a packaged build, test, or
   // renderer — otherwise the worker exits and bricks the app.
 
-  it('enables pretty transport only in the development main process', () => {
+  test('enables pretty transport only in the development main process', () => {
     // Arrange: NODE_ENV=development (set by scripts/dev.js) + main process.
     const result = computeShouldUsePrettyTransport(
       { NODE_ENV: 'development' },
@@ -78,7 +78,7 @@ describe('computeShouldUsePrettyTransport (pino-pretty worker gate)', () => {
     expect(result).toBe(true)
   })
 
-  it('disables pretty transport in a packaged build where NODE_ENV is unset', () => {
+  test('disables pretty transport in a packaged build where NODE_ENV is unset', () => {
     // Arrange: packaged Electron leaves NODE_ENV undefined — the exact prod case
     // that crashed. The old `!== 'production'` gate wrongly returned true here.
     const result = computeShouldUsePrettyTransport(
@@ -90,7 +90,7 @@ describe('computeShouldUsePrettyTransport (pino-pretty worker gate)', () => {
     expect(result).toBe(false)
   })
 
-  it('disables pretty transport under production and test', () => {
+  test('disables pretty transport under production and test', () => {
     // Arrange + Act + Assert: neither explicit non-dev env spawns the worker.
     expect(
       computeShouldUsePrettyTransport({ NODE_ENV: 'production' }, 'browser'),
@@ -100,7 +100,7 @@ describe('computeShouldUsePrettyTransport (pino-pretty worker gate)', () => {
     ).toBe(false)
   })
 
-  it('disables pretty transport outside the main process (renderer/preload)', () => {
+  test('disables pretty transport outside the main process (renderer/preload)', () => {
     // Arrange: dev env but NOT the main process — no SharedArrayBuffer there.
     expect(
       computeShouldUsePrettyTransport({ NODE_ENV: 'development' }, 'renderer'),
@@ -110,7 +110,7 @@ describe('computeShouldUsePrettyTransport (pino-pretty worker gate)', () => {
     ).toBe(false)
   })
 
-  it('honors DISABLE_PINO_PRETTY=true as an explicit opt-out', () => {
+  test('honors DISABLE_PINO_PRETTY=true as an explicit opt-out', () => {
     // Arrange: dev main process, but the escape hatch is set.
     const result = computeShouldUsePrettyTransport(
       { NODE_ENV: 'development', DISABLE_PINO_PRETTY: 'true' },

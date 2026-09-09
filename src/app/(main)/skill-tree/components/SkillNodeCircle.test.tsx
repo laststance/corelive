@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import * as React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { SkillNodeCircle } from './SkillNodeCircle'
 
@@ -24,7 +24,7 @@ describe('<SkillNodeCircle>', () => {
     xp: 0,
   }
 
-  it('renders with an accessible label at Dormant state', () => {
+  test('renders with an accessible label at Dormant state', () => {
     render(svgWrap(<SkillNodeCircle {...baseProps} />))
     expect(
       screen.getByRole('button', {
@@ -33,21 +33,21 @@ describe('<SkillNodeCircle>', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows level 3 in the label when XP is 40', () => {
+  test('shows level 3 in the label when XP is 40', () => {
     render(svgWrap(<SkillNodeCircle {...baseProps} xp={40} />))
     expect(
       screen.getByRole('button', { name: /apis.*level 3/i }),
     ).toBeInTheDocument()
   })
 
-  it('reports Mastered when XP is 75', () => {
+  test('reports Mastered when XP is 75', () => {
     render(svgWrap(<SkillNodeCircle {...baseProps} xp={75} />))
     expect(
       screen.getByRole('button', { name: /apis.*mastered/i }),
     ).toBeInTheDocument()
   })
 
-  it('is keyboard focusable (tabIndex=0)', () => {
+  test('is keyboard focusable (tabIndex=0)', () => {
     render(svgWrap(<SkillNodeCircle {...baseProps} />))
     expect(screen.getByRole('button')).toHaveAttribute('tabindex', '0')
   })

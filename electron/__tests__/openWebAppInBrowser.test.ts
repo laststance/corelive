@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
 
@@ -23,7 +23,7 @@ describe('openWebAppInBrowser', () => {
     vi.restoreAllMocks()
   })
 
-  it('opens an absolute path on an http(s) origin in the external browser', () => {
+  test('opens an absolute path on an http(s) origin in the external browser', () => {
     // Arrange + Act: a normal tray/menu/deep-link call.
     openWebAppInBrowser('https://corelive.app', '/home?focus=42')
 
@@ -34,7 +34,7 @@ describe('openWebAppInBrowser', () => {
     )
   })
 
-  it('refuses a path that is not leading-slash, so the authority cannot be hijacked', () => {
+  test('refuses a path that is not leading-slash, so the authority cannot be hijacked', () => {
     // Arrange + Act: a path missing its leading slash would re-interpret the host
     // (e.g. corelive.app@evil.com) once concatenated onto the origin.
     openWebAppInBrowser('https://corelive.app', '@evil.com/phish')
@@ -43,7 +43,7 @@ describe('openWebAppInBrowser', () => {
     expect(shell.openExternal).not.toHaveBeenCalled()
   })
 
-  it('refuses to open a URL whose protocol is not http(s)', () => {
+  test('refuses to open a URL whose protocol is not http(s)', () => {
     // Arrange + Act: a non-http(s) origin must never reach the OS-handoff sink.
     openWebAppInBrowser('file://host', '/home')
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ServerTiming } from '@/server/timing/ServerTiming'
 
@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 describe('oRPC route Server-Timing response', () => {
-  it('exposes auth, DB connection, user resolution, and SQL phases on a production response', async () => {
+  test('exposes auth, DB connection, user resolution, and SQL phases on a production response', async () => {
     // Arrange
     mockHandle.mockImplementation(async (_request, options) => {
       options.context.serverTiming.record('auth', 1)
@@ -60,7 +60,7 @@ describe('oRPC route Server-Timing response', () => {
     expect(response.headers.get('x-corelive-server-timing')).toBe(serverTiming)
   })
 
-  it('keeps exception details out of the 500 body when the oRPC handler throws', async () => {
+  test('keeps exception details out of the 500 body when the oRPC handler throws', async () => {
     // Arrange — the handler throws an error carrying internal details
     mockHandle.mockImplementation(async () => {
       throw new Error('connect ECONNREFUSED 127.0.0.1:5491 (postgres)')

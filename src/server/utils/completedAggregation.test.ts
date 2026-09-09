@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
@@ -23,7 +23,7 @@ beforeEach(() => {
 })
 
 describe('fetchCompletedEntries', () => {
-  it('returns an empty array when neither table has rows in the range', async () => {
+  test('returns an empty array when neither table has rows in the range', async () => {
     mockedTodoFindMany.mockResolvedValue([])
     mockedCompletedFindMany.mockResolvedValue([])
 
@@ -31,7 +31,7 @@ describe('fetchCompletedEntries', () => {
     expect(entries).toEqual([])
   })
 
-  it('maps Todo rows with source="todo" using completedAt as the bucket day', async () => {
+  test('maps Todo rows with source="todo" using completedAt as the bucket day', async () => {
     // Arrange — a completed Todo whose stable completedAt differs from updatedAt
     // (completed earlier, then edited). The heatmap must use completedAt.
     mockedTodoFindMany.mockResolvedValue([
@@ -60,7 +60,7 @@ describe('fetchCompletedEntries', () => {
     ])
   })
 
-  it('falls back to updatedAt when a Todo row has a null completedAt', async () => {
+  test('falls back to updatedAt when a Todo row has a null completedAt', async () => {
     // Arrange — an unconverted / pre-backfill completed Todo (null completedAt)
     // must coalesce to updatedAt so it never vanishes from the heatmap.
     mockedTodoFindMany.mockResolvedValue([
@@ -83,7 +83,7 @@ describe('fetchCompletedEntries', () => {
     )
   })
 
-  it('maps Completed rows with source="completed" using createdAt as completedAt', async () => {
+  test('maps Completed rows with source="completed" using createdAt as completedAt', async () => {
     mockedTodoFindMany.mockResolvedValue([])
     mockedCompletedFindMany.mockResolvedValue([
       {
@@ -106,7 +106,7 @@ describe('fetchCompletedEntries', () => {
     ])
   })
 
-  it('buckets a Completed row by completedAt when it differs from createdAt (dated import)', async () => {
+  test('buckets a Completed row by completedAt when it differs from createdAt (dated import)', async () => {
     // Arrange — a paste-imported row whose semantic completion day (completedAt)
     // is earlier than its insert time (createdAt). The heatmap must use
     // completedAt so the row lands on the day it actually happened.
@@ -130,7 +130,7 @@ describe('fetchCompletedEntries', () => {
     )
   })
 
-  it('falls back to createdAt when a Completed row has a null completedAt (existing-row stability)', async () => {
+  test('falls back to createdAt when a Completed row has a null completedAt (existing-row stability)', async () => {
     // Arrange — a pre-migration row the backfill conceptually covers; a null
     // completedAt must coalesce to createdAt so old rows keep their heatmap day
     // (they do NOT jump to migration-day).
@@ -154,7 +154,7 @@ describe('fetchCompletedEntries', () => {
     )
   })
 
-  it('UNIONs rows from both tables sorted ascending by completedAt', async () => {
+  test('UNIONs rows from both tables sorted ascending by completedAt', async () => {
     // Todo updated later than the Completed row, so the sort needs to flip
     // them relative to insertion order.
     mockedTodoFindMany.mockResolvedValue([
@@ -178,7 +178,7 @@ describe('fetchCompletedEntries', () => {
     expect(entries.map((entry) => entry.source)).toEqual(['completed', 'todo'])
   })
 
-  it('breaks identical-timestamp ties with todo first, then by id', async () => {
+  test('breaks identical-timestamp ties with todo first, then by id', async () => {
     // Both rows on the same instant: todo should win the tie, then ascending
     // id. Locks the deterministic ordering documented inline in the sort.
     const sameInstant = new Date('2026-05-08T12:00:00.000Z')
@@ -200,7 +200,7 @@ describe('fetchCompletedEntries', () => {
     ])
   })
 
-  it('passes userId, completed=true, and the completedAt-or-updatedAt range to the Todo query', async () => {
+  test('passes userId, completed=true, and the completedAt-or-updatedAt range to the Todo query', async () => {
     mockedTodoFindMany.mockResolvedValue([])
     mockedCompletedFindMany.mockResolvedValue([])
 
@@ -223,7 +223,7 @@ describe('fetchCompletedEntries', () => {
     )
   })
 
-  it('filters archived=false and the completedAt-or-createdAt range on the Completed query', async () => {
+  test('filters archived=false and the completedAt-or-createdAt range on the Completed query', async () => {
     mockedTodoFindMany.mockResolvedValue([])
     mockedCompletedFindMany.mockResolvedValue([])
 
@@ -246,7 +246,7 @@ describe('fetchCompletedEntries', () => {
     )
   })
 
-  it('forwards null categories through the mapper untouched', async () => {
+  test('forwards null categories through the mapper untouched', async () => {
     mockedTodoFindMany.mockResolvedValue([
       {
         id: 1,
@@ -261,7 +261,7 @@ describe('fetchCompletedEntries', () => {
     expect(entries[0]?.category).toBeNull()
   })
 
-  it('uses Todo.completedAt over updatedAt so a later edit does NOT drift the heatmap day', async () => {
+  test('uses Todo.completedAt over updatedAt so a later edit does NOT drift the heatmap day', async () => {
     // The migration to a stable Todo.completedAt resolved the old drift: editing
     // a long-completed Todo used to bump its heatmap bucket to the edit day.
     // Now completedAt holds the real completion day regardless of later edits.

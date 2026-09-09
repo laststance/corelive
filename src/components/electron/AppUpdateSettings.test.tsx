@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { UpdaterDownloadProgress } from '@/electron/types/ipc'
 
@@ -47,7 +47,7 @@ describe('AppUpdateSettings', () => {
     })
   })
 
-  it('restores in-progress update download progress from updater status', async () => {
+  test('restores in-progress update download progress from updater status', async () => {
     // Arrange
     getStatusMock.mockResolvedValue({
       updateAvailable: true,
@@ -76,7 +76,7 @@ describe('AppUpdateSettings', () => {
     ).toHaveAttribute('aria-valuenow', '42')
   })
 
-  it('shows the installed version once the main process responds', async () => {
+  test('shows the installed version once the main process responds', async () => {
     // Arrange
     installElectronAPI({
       app: { getVersion: getVersionMock },
@@ -96,7 +96,7 @@ describe('AppUpdateSettings', () => {
     ).toBeInTheDocument()
   })
 
-  it('starts a manual update check when the button is clicked', async () => {
+  test('starts a manual update check when the button is clicked', async () => {
     // Arrange
     installElectronAPI({
       app: { getVersion: getVersionMock },
@@ -120,7 +120,7 @@ describe('AppUpdateSettings', () => {
     expect(screen.getByText('Checking for updates…')).toBeInTheDocument()
   })
 
-  it('offers restart when an update has already been downloaded', async () => {
+  test('offers restart when an update has already been downloaded', async () => {
     // Arrange
     getStatusMock.mockResolvedValue({
       updateAvailable: true,
@@ -148,7 +148,7 @@ describe('AppUpdateSettings', () => {
     ).toBeInTheDocument()
   })
 
-  it('restarts the app when Restart to Update is clicked', async () => {
+  test('restarts the app when Restart to Update is clicked', async () => {
     // Arrange
     getStatusMock.mockResolvedValue({
       updateAvailable: true,
@@ -176,7 +176,7 @@ describe('AppUpdateSettings', () => {
     })
   })
 
-  it('shows a desktop-only message when the updater bridge is absent', async () => {
+  test('shows a desktop-only message when the updater bridge is absent', async () => {
     // Arrange
     installElectronAPI(undefined)
 

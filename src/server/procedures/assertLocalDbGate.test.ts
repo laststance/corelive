@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 /**
  * Contract tests for the fail-closed local-DB gate (`scripts/assert-local-db.cjs`).
@@ -38,7 +38,7 @@ function runGate(databaseUrl: string): number {
 }
 
 describe('assert-local-db gate (fail-closed local-DB chokepoint)', () => {
-  it('allows the local Docker connection string', () => {
+  test('allows the local Docker connection string', () => {
     // Arrange / Act
     const exitCode = runGate(
       'postgresql://postgres:password@localhost:5491/corelive?schema=public',
@@ -47,7 +47,7 @@ describe('assert-local-db gate (fail-closed local-DB chokepoint)', () => {
     expect(exitCode).toBe(0)
   })
 
-  it('aborts on a remote Neon production host', () => {
+  test('aborts on a remote Neon production host', () => {
     // Arrange / Act
     const exitCode = runGate(
       'postgresql://user:pass@ep-cool-name-123.us-east-2.aws.neon.tech/db',
@@ -56,7 +56,7 @@ describe('assert-local-db gate (fail-closed local-DB chokepoint)', () => {
     expect(exitCode).toBe(1)
   })
 
-  it('aborts when a localhost authority hides a prod ?host= (parser fail-open)', () => {
+  test('aborts when a localhost authority hides a prod ?host= (parser fail-open)', () => {
     // Arrange / Act — WHATWG reads "localhost"; libpq dials the ?host=. The gate
     // must close this divergence or it would wipe prod thinking it was local.
     const exitCode = runGate('postgresql://localhost/db?host=prod.neon.tech')
@@ -64,21 +64,21 @@ describe('assert-local-db gate (fail-closed local-DB chokepoint)', () => {
     expect(exitCode).toBe(1)
   })
 
-  it('still allows a ?host= that is itself local (does not over-block)', () => {
+  test('still allows a ?host= that is itself local (does not over-block)', () => {
     // Arrange / Act
     const exitCode = runGate('postgresql://localhost/db?host=127.0.0.1')
     // Assert — every host the driver could dial is local, so it is permitted.
     expect(exitCode).toBe(0)
   })
 
-  it('aborts on a backslash URL where the two parsers disagree on the authority', () => {
+  test('aborts on a backslash URL where the two parsers disagree on the authority', () => {
     // Arrange / Act
     const exitCode = runGate('postgres\\evil@localhost/db')
     // Assert — ambiguous parse → fail closed.
     expect(exitCode).toBe(1)
   })
 
-  it('aborts on an unparseable connection string (cannot prove local)', () => {
+  test('aborts on an unparseable connection string (cannot prove local)', () => {
     // Arrange / Act
     const exitCode = runGate('not a connection string')
     // Assert

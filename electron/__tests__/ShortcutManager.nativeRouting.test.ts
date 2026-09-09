@@ -1,5 +1,5 @@
 import { globalShortcut } from 'electron'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ConfigManager } from '../ConfigManager'
 import { createNativeBinding } from '../nativeBinding'
@@ -91,7 +91,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     vi.clearAllMocks()
   })
 
-  it('binds a lone-modifier shortcut through the native tap and never through globalShortcut', () => {
+  test('binds a lone-modifier shortcut through the native tap and never through globalShortcut', () => {
     // Arrange
     const { engine, register } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -119,7 +119,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(globalRegisterMock).not.toHaveBeenCalled()
   })
 
-  it('leaves a lone-modifier binding INACTIVE when the freeze-safety latch is blocked', () => {
+  test('leaves a lone-modifier binding INACTIVE when the freeze-safety latch is blocked', () => {
     // Arrange: a prior launch armed the tap but never confirmed stability (#125),
     // so the engine reports latch-blocked — re-arming could re-freeze every launch.
     const { engine, register, isLatchBlocked } =
@@ -149,7 +149,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     ).toBeUndefined()
   })
 
-  it('exposes the native binding in the read-back map so a rebind is confirmed', () => {
+  test('exposes the native binding in the read-back map so a rebind is confirmed', () => {
     // Arrange
     const { engine } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -172,7 +172,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     )
   })
 
-  it('unbinds a native shortcut through the tap, leaving globalShortcut untouched', () => {
+  test('unbinds a native shortcut through the tap, leaving globalShortcut untouched', () => {
     // Arrange
     const { engine, unregister } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -199,7 +199,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     ).toBeUndefined()
   })
 
-  it('refuses a lone-modifier bind when the native tap is unavailable so the caller can fall back to a chord', () => {
+  test('refuses a lone-modifier bind when the native tap is unavailable so the caller can fall back to a chord', () => {
     // Arrange: an unavailable tap (module missing / no Accessibility permission).
     const unavailableEngine: NativeShortcutEngine = {
       isAvailable: () => false,
@@ -234,7 +234,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     ).toBeUndefined()
   })
 
-  it('still binds a chord accelerator through globalShortcut even when a native tap is present', () => {
+  test('still binds a chord accelerator through globalShortcut even when a native tap is present', () => {
     // Arrange
     const { engine, register } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -260,7 +260,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
   // Freeze-safety recovery surface (#125): status + power-event + manual re-arm
   // ──────────────────────────────────────────────────────────────────────────
 
-  it('reports the native tap status straight from the engine for the renderer affordance', () => {
+  test('reports the native tap status straight from the engine for the renderer affordance', () => {
     // Arrange: a latch-blocked engine (a prior arming never confirmed).
     const { engine, isLatchBlocked } = createAvailableNativeEngineHarness()
     isLatchBlocked.mockReturnValue(true)
@@ -280,7 +280,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     })
   })
 
-  it('revives the tap on reArmNativeTap (wired to powerMonitor resume/unlock)', () => {
+  test('revives the tap on reArmNativeTap (wired to powerMonitor resume/unlock)', () => {
     // Arrange
     const { engine, reArm } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -297,7 +297,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(reArm).toHaveBeenCalledTimes(1)
   })
 
-  it('drops pressed-alone state on resetNativeTapState (wired to powerMonitor suspend/lock)', () => {
+  test('drops pressed-alone state on resetNativeTapState (wired to powerMonitor suspend/lock)', () => {
     // Arrange
     const { engine, resetPressedState } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -314,7 +314,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(resetPressedState).toHaveBeenCalledTimes(1)
   })
 
-  it('clears the latch block and returns status on manual reenableNativeTap', () => {
+  test('clears the latch block and returns status on manual reenableNativeTap', () => {
     // Arrange
     const { engine, clearLatchBlock } = createAvailableNativeEngineHarness()
     const shortcutManager = new ShortcutManager(
@@ -339,7 +339,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     })
   })
 
-  it('notifies the user only once while the tap stays latch-blocked', () => {
+  test('notifies the user only once while the tap stays latch-blocked', () => {
     // Arrange: a latch-blocked engine + a configured lone-modifier binding, so
     // every registerGlobalShortcuts() hits the inactive branch. The OS toast must
     // fire once, not once per attempt (startup + rebinds would spam) — codex #6.
@@ -374,7 +374,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(showNotification).toHaveBeenCalledTimes(1)
   })
 
-  it('marks the native tap active once a lone-modifier binding is live', () => {
+  test('marks the native tap active once a lone-modifier binding is live', () => {
     // Arrange: an available tap that registers the bind AND reports itself live
     // at runtime (#125 codex review). `active` must come from the engine's
     // RUNTIME state, so the harness drives isActive() true here.
@@ -398,7 +398,7 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(shortcutManager.getNativeTapStatus().active).toBe(true)
   })
 
-  it('keeps the tap INACTIVE after a re-enable whose re-arm still fails', () => {
+  test('keeps the tap INACTIVE after a re-enable whose re-arm still fails', () => {
     // Arrange: a lone-modifier binding is configured, but the engine refuses to
     // register it even once the block is cleared (the tap won't start). The
     // status must NOT claim a healthy tap — the renderer keeps the recovery

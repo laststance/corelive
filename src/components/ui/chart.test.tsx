@@ -1,10 +1,10 @@
 import { render } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import { ChartContainer, type ChartConfig } from './chart'
 
 describe('ChartStyle dark color scoping', () => {
-  it('scopes chart dark colors to the data-theme attribute, not a dead .dark class', () => {
+  test('scopes chart dark colors to the data-theme attribute, not a dead .dark class', () => {
     // Arrange — a config supplying distinct light/dark colors via the theme form
     const config: ChartConfig = {
       visits: { label: 'Visits', theme: { light: '#111111', dark: '#eeeeee' } },
@@ -24,7 +24,7 @@ describe('ChartStyle dark color scoping', () => {
     expect(css).not.toContain('.dark [data-chart')
   })
 
-  it('emits the light chart colors unscoped so :root themes pick them up', () => {
+  test('emits the light chart colors unscoped so :root themes pick them up', () => {
     // Arrange
     const config: ChartConfig = {
       visits: { label: 'Visits', theme: { light: '#111111', dark: '#eeeeee' } },
@@ -43,7 +43,7 @@ describe('ChartStyle dark color scoping', () => {
     expect(css).toMatch(/(?:^|\n)\s*\[data-chart=/)
   })
 
-  it('emits a color-form item identically in light and dark so a single color follows neither axis', () => {
+  test('emits a color-form item identically in light and dark so a single color follows neither axis', () => {
     // Arrange — the color-only shape (no light/dark split), which is what the
     // live Storybook consumer uses; the emitter still walks both theme modes
     const config: ChartConfig = {
@@ -65,7 +65,7 @@ describe('ChartStyle dark color scoping', () => {
     expect(css).toContain("[data-theme$='dark'] [data-chart=")
   })
 
-  it('emits no style element when no series defines a color or theme', () => {
+  test('emits no style element when no series defines a color or theme', () => {
     // Arrange — a label-only config has nothing to colorize
     const config: ChartConfig = {
       visits: { label: 'Visits' },

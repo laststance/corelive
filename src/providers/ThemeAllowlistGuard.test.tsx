@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach } from 'vitest'
 
 // Drive the guard with a controlled next-themes state + a spy setter, so each
 // case asserts the corrective behavior without next-themes' real localStorage /
@@ -16,7 +16,7 @@ describe('ThemeAllowlistGuard — heals an unregistered persisted theme', () => 
     useThemeMock.mockReset()
   })
 
-  it('resets a stale colored-family id (dark utilities, no token block) to the default', () => {
+  test('resets a stale colored-family id (dark utilities, no token block) to the default', () => {
     // Arrange — a *-dark id left after a downgrade that dropped the family
     useThemeMock.mockReturnValue({
       theme: 'sunset-dark',
@@ -30,7 +30,7 @@ describe('ThemeAllowlistGuard — heals an unregistered persisted theme', () => 
     expect(setThemeSpy).toHaveBeenCalledWith('light')
   })
 
-  it('resets a tampered garbage id to the default', () => {
+  test('resets a tampered garbage id to the default', () => {
     // Arrange
     useThemeMock.mockReturnValue({ theme: 'bogus', setTheme: setThemeSpy })
 
@@ -41,7 +41,7 @@ describe('ThemeAllowlistGuard — heals an unregistered persisted theme', () => 
     expect(setThemeSpy).toHaveBeenCalledWith('light')
   })
 
-  it('leaves a registered theme untouched so a real choice is never clobbered', () => {
+  test('leaves a registered theme untouched so a real choice is never clobbered', () => {
     // Arrange
     useThemeMock.mockReturnValue({ theme: 'dark', setTheme: setThemeSpy })
 
@@ -52,7 +52,7 @@ describe('ThemeAllowlistGuard — heals an unregistered persisted theme', () => 
     expect(setThemeSpy).not.toHaveBeenCalled()
   })
 
-  it('leaves the system sentinel untouched so OS-follow keeps working', () => {
+  test('leaves the system sentinel untouched so OS-follow keeps working', () => {
     // Arrange
     useThemeMock.mockReturnValue({ theme: 'system', setTheme: setThemeSpy })
 
@@ -63,7 +63,7 @@ describe('ThemeAllowlistGuard — heals an unregistered persisted theme', () => 
     expect(setThemeSpy).not.toHaveBeenCalled()
   })
 
-  it('does nothing before hydration when the theme is undefined', () => {
+  test('does nothing before hydration when the theme is undefined', () => {
     // Arrange
     useThemeMock.mockReturnValue({ theme: undefined, setTheme: setThemeSpy })
 

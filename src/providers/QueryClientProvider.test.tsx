@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 const capturedPersistOptions = vi.hoisted(
   (): { maxAge: number | undefined } => ({ maxAge: undefined }),
@@ -36,7 +36,7 @@ vi.mock('@tanstack/react-query-persist-client', () => ({
 import { QueryClientProvider } from './QueryClientProvider'
 
 describe('QueryClientProvider persistence', () => {
-  it('keeps persisted Home data reusable for seven days before expiring it', () => {
+  test('keeps persisted Home data reusable for seven days before expiring it', () => {
     // Arrange and Act
     render(
       <QueryClientProvider>

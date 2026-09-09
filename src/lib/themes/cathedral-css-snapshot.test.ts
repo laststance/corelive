@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import { CATHEDRAL } from '../../../scripts/generate-theme-css'
 
@@ -25,7 +25,7 @@ const extractBlock = (pattern: RegExp): string => {
 }
 
 describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
-  it('keeps the :root (cathedral light) token block unchanged', () => {
+  test('keeps the :root (cathedral light) token block unchanged', () => {
     // Arrange / Act
     const rootBlock = extractBlock(/:root \{[^}]*\}/)
 
@@ -79,7 +79,7 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
     `)
   })
 
-  it("keeps the [data-theme='dark'] (cathedral dark) token block unchanged", () => {
+  test("keeps the [data-theme='dark'] (cathedral dark) token block unchanged", () => {
     // Arrange / Act
     const darkBlock = extractBlock(/\[data-theme='dark'\] \{[^}]*\}/)
 
@@ -134,7 +134,7 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
 })
 
 describe('generator cathedral ladder mirrors globals.css', () => {
-  it('emits every cathedral token at the globals.css value so derived themes never derive from a stale ladder', () => {
+  test('emits every cathedral token at the globals.css value so derived themes never derive from a stale ladder', () => {
     // Arrange — the generator hardcodes the cathedral L/C ladder; it must match
     // the hand-authored source, or colored families (T7) would derive wrong values
     const drifted: string[] = []
@@ -167,7 +167,7 @@ describe('generator ladder covers every globals.css color token (reverse drift-g
     return names
   }
 
-  it('classifies every cathedral light token so derived themes never derive from a stale ladder', () => {
+  test('classifies every cathedral light token so derived themes never derive from a stale ladder', () => {
     // Arrange
     const block = extractBlock(/:root \{[^}]*\}/)
 
@@ -182,7 +182,7 @@ describe('generator ladder covers every globals.css color token (reverse drift-g
     expect(missing).toEqual([])
   })
 
-  it('classifies every cathedral dark token so derived themes never derive from a stale ladder', () => {
+  test('classifies every cathedral dark token so derived themes never derive from a stale ladder', () => {
     // Arrange
     const block = extractBlock(/\[data-theme='dark'\] \{[^}]*\}/)
 

@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import { contrastRatio, meetsAA, readableForeground } from './contrast'
 
 describe('contrastRatio', () => {
-  it('reaches the maximum ratio of 21 for black on white', () => {
+  test('reaches the maximum ratio of 21 for black on white', () => {
     // Arrange / Act
     const ratio = contrastRatio('#000000', '#ffffff')
 
@@ -11,7 +11,7 @@ describe('contrastRatio', () => {
     expect(ratio).toBeCloseTo(21)
   })
 
-  it('is 1 for a color against itself', () => {
+  test('is 1 for a color against itself', () => {
     // Arrange / Act
     const ratio = contrastRatio('#777777', '#777777')
 
@@ -21,7 +21,7 @@ describe('contrastRatio', () => {
 })
 
 describe('meetsAA', () => {
-  it('passes white text on black, far above the AA body threshold', () => {
+  test('passes white text on black, far above the AA body threshold', () => {
     // Arrange / Act
     const passes = meetsAA('#ffffff', '#000000')
 
@@ -29,7 +29,7 @@ describe('meetsAA', () => {
     expect(passes).toBe(true)
   })
 
-  it('fails faint gray text on white, below the AA body threshold', () => {
+  test('fails faint gray text on white, below the AA body threshold', () => {
     // Arrange — #cccccc on white is ~1.6, well under 4.5
 
     // Act
@@ -39,7 +39,7 @@ describe('meetsAA', () => {
     expect(passes).toBe(false)
   })
 
-  it('applies the lenient large-text threshold so a mid-contrast pair passes large but fails body', () => {
+  test('applies the lenient large-text threshold so a mid-contrast pair passes large but fails body', () => {
     // Arrange — #8a8a8a on white is ~3.45: above the 3.0 large/UI floor, below the 4.5 body floor
     const foreground = '#8a8a8a'
     const background = '#ffffff'
@@ -55,7 +55,7 @@ describe('meetsAA', () => {
 })
 
 describe('readableForeground', () => {
-  it('chooses the dark candidate on a light background', () => {
+  test('chooses the dark candidate on a light background', () => {
     // Arrange / Act
     const foreground = readableForeground('#ffffff', ['#ffffff', '#000000'])
 
@@ -63,7 +63,7 @@ describe('readableForeground', () => {
     expect(foreground).toBe('#000000')
   })
 
-  it('chooses the light candidate on a dark background', () => {
+  test('chooses the light candidate on a dark background', () => {
     // Arrange / Act
     const foreground = readableForeground('#000000', ['#ffffff', '#000000'])
 
@@ -71,7 +71,7 @@ describe('readableForeground', () => {
     expect(foreground).toBe('#ffffff')
   })
 
-  it('picks the brand ink over near-white on a light surface by default', () => {
+  test('picks the brand ink over near-white on a light surface by default', () => {
     // Arrange — default candidates are the brand near-white and near-ink
 
     // Act

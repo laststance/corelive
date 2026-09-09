@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import {
   isCoreliveDebugEnabled,
@@ -10,12 +10,12 @@ describe('isCoreliveDebugEnabled (the CORELIVE_DEBUG launch opt-in)', () => {
   // The single env predicate behind both debug capabilities. A packaged build
   // must stay non-debuggable unless this is explicitly turned on.
 
-  it('treats CORELIVE_DEBUG="1" as enabled', () => {
+  test('treats CORELIVE_DEBUG="1" as enabled', () => {
     // Arrange + Act + Assert
     expect(isCoreliveDebugEnabled({ CORELIVE_DEBUG: '1' })).toBe(true)
   })
 
-  it('treats CORELIVE_DEBUG="true" (any case, padded) as enabled', () => {
+  test('treats CORELIVE_DEBUG="true" (any case, padded) as enabled', () => {
     // Arrange + Act + Assert: trimmed + case-insensitive so shell quoting/casing
     // does not silently disable debugging.
     expect(isCoreliveDebugEnabled({ CORELIVE_DEBUG: 'true' })).toBe(true)
@@ -23,7 +23,7 @@ describe('isCoreliveDebugEnabled (the CORELIVE_DEBUG launch opt-in)', () => {
     expect(isCoreliveDebugEnabled({ CORELIVE_DEBUG: '  true  ' })).toBe(true)
   })
 
-  it('treats "0", "false", "", and unset as disabled (packaged default)', () => {
+  test('treats "0", "false", "", and unset as disabled (packaged default)', () => {
     // Arrange + Act + Assert: explicit-off and absent both read as off.
     expect(isCoreliveDebugEnabled({ CORELIVE_DEBUG: '0' })).toBe(false)
     expect(isCoreliveDebugEnabled({ CORELIVE_DEBUG: 'false' })).toBe(false)
@@ -37,28 +37,28 @@ describe('isDevToolsEnabled (secure-by-default per-window DevTools gate)', () =>
   // Regression for Issue #61: a default packaged build must NOT expose DevTools
   // on any window, but each opt-in path must re-enable it.
 
-  it('enables DevTools in the local-dev main process', () => {
+  test('enables DevTools in the local-dev main process', () => {
     // Arrange: NODE_ENV=development → isDev true.
 
     // Act + Assert
     expect(isDevToolsEnabled(true, false, {})).toBe(true)
   })
 
-  it('enables DevTools when the advanced.enableDevTools config is on', () => {
+  test('enables DevTools when the advanced.enableDevTools config is on', () => {
     // Arrange: packaged (isDev false), no env flag, but the persisted config opt-in.
 
     // Act + Assert
     expect(isDevToolsEnabled(false, true, {})).toBe(true)
   })
 
-  it('enables DevTools under the CORELIVE_DEBUG launch opt-in', () => {
+  test('enables DevTools under the CORELIVE_DEBUG launch opt-in', () => {
     // Arrange: packaged, config off, but launched with CORELIVE_DEBUG=1.
 
     // Act + Assert
     expect(isDevToolsEnabled(false, false, { CORELIVE_DEBUG: '1' })).toBe(true)
   })
 
-  it('disables DevTools in a default packaged build (all opt-ins off)', () => {
+  test('disables DevTools in a default packaged build (all opt-ins off)', () => {
     // Arrange: packaged main process, no config opt-in, no env flag — the exact
     // default a notarized user runs.
 
@@ -69,7 +69,7 @@ describe('isDevToolsEnabled (secure-by-default per-window DevTools gate)', () =>
     expect(result).toBe(false)
   })
 
-  it('stays disabled when CORELIVE_DEBUG is explicitly off', () => {
+  test('stays disabled when CORELIVE_DEBUG is explicitly off', () => {
     // Arrange + Act + Assert: CORELIVE_DEBUG=0 must not enable anything.
     expect(isDevToolsEnabled(false, false, { CORELIVE_DEBUG: '0' })).toBe(false)
   })
@@ -79,14 +79,14 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
   // Drives whether main.ts opens a --remote-debugging-port. The persisted config
   // can NEVER reach here; only env levers open the port.
 
-  it('opens the default port 9222 under CORELIVE_DEBUG=1', () => {
+  test('opens the default port 9222 under CORELIVE_DEBUG=1', () => {
     // Arrange: prod debug opt-in with no explicit port.
 
     // Act + Assert
     expect(resolveRemoteDebuggingPort({ CORELIVE_DEBUG: '1' })).toBe('9222')
   })
 
-  it('honors CORELIVE_REMOTE_DEBUGGING_PORT as a port override', () => {
+  test('honors CORELIVE_REMOTE_DEBUGGING_PORT as a port override', () => {
     // Arrange: prod debug opt-in with an explicit custom port.
 
     // Act + Assert
@@ -98,7 +98,7 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
     ).toBe('9333')
   })
 
-  it('opens no port in a default packaged build', () => {
+  test('opens no port in a default packaged build', () => {
     // Arrange: no debug lever of any kind — the notarized default.
 
     // Act
@@ -108,7 +108,7 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
     expect(result).toBeNull()
   })
 
-  it('does not open a port from CORELIVE_REMOTE_DEBUGGING_PORT alone', () => {
+  test('does not open a port from CORELIVE_REMOTE_DEBUGGING_PORT alone', () => {
     // Arrange: a port is set but the CORELIVE_DEBUG opt-in is NOT — the port
     // override is inert without the deliberate debug opt-in.
 
@@ -118,7 +118,7 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
     ).toBeNull()
   })
 
-  it('throws on an out-of-range custom port', () => {
+  test('throws on an out-of-range custom port', () => {
     // Arrange: CORELIVE_DEBUG on, but the override is above the TCP max.
 
     // Act + Assert: surface invalid configuration instead of opening a bad port.
@@ -130,7 +130,7 @@ describe('resolveRemoteDebuggingPort (CDP port — env-only, off by default)', (
     ).toThrow(/CORELIVE_REMOTE_DEBUGGING_PORT/)
   })
 
-  it('throws on a non-integer custom port', () => {
+  test('throws on a non-integer custom port', () => {
     // Arrange: CORELIVE_DEBUG on, but the override is not a plain integer.
 
     // Act + Assert

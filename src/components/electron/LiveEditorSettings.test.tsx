@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { LiveEditorSettings } from './LiveEditorSettings'
 
@@ -113,7 +113,7 @@ describe('LiveEditorSettings', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows saved LiveEditor settings after loading without changing hook order', async () => {
+  test('shows saved LiveEditor settings after loading without changing hook order', async () => {
     // Arrange: the preload bridge resolves and flips the card from loading to ready.
     installLiveEditorBridge({
       opacity: 0.7,
@@ -139,7 +139,7 @@ describe('LiveEditorSettings', () => {
     )
   })
 
-  it('binds a second key to the same toggle without disturbing the first', async () => {
+  test('binds a second key to the same toggle without disturbing the first', async () => {
     // Arrange: a desktop app whose bridge carries both slots.
     installLiveEditorBridge({
       opacity: 0.7,
@@ -159,7 +159,7 @@ describe('LiveEditorSettings', () => {
     expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
   })
 
-  it('hides the second shortcut box on a desktop app whose preload predates it', async () => {
+  test('hides the second shortcut box on a desktop app whose preload predates it', async () => {
     // Arrange: an installed app updates its web bundle before its preload, so the
     // bridge can carry the first slot only. Offering a box that cannot persist
     // would silently swallow the user's chord.
@@ -180,7 +180,7 @@ describe('LiveEditorSettings', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('reverts the binding and explains why when the captured chord is already in use', async () => {
+  test('reverts the binding and explains why when the captured chord is already in use', async () => {
     // Arrange: load with Alt+Space bound, then make the next register attempt fail.
     installLiveEditorBridge({
       opacity: 0.7,
@@ -204,7 +204,7 @@ describe('LiveEditorSettings', () => {
     expect(box).toHaveTextContent('⌥Space')
   })
 
-  it('degrades gracefully when an old preload exposes liveEditor but not the settings getters', async () => {
+  test('degrades gracefully when an old preload exposes liveEditor but not the settings getters', async () => {
     // Arrange: an OUTDATED desktop app exposes the `liveEditor` window-toggle bridge
     // but predates the getOpacity/getShortcut settings getters that
     // the load effect's Promise.all calls.
@@ -219,7 +219,7 @@ describe('LiveEditorSettings', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows a desktop-only message when the LiveEditor bridge is absent', async () => {
+  test('shows a desktop-only message when the LiveEditor bridge is absent', async () => {
     // Arrange: a web renderer has no electronAPI at all.
     installElectronAPI(undefined)
 
@@ -235,7 +235,7 @@ describe('LiveEditorSettings', () => {
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
-  it('shows a loading state until the saved LiveEditor settings arrive', async () => {
+  test('shows a loading state until the saved LiveEditor settings arrive', async () => {
     // Arrange: getOpacity never resolves, so the load Promise.all keeps the
     // card in its loading state (both getters exist, so the guards pass).
     getOpacityMock.mockReturnValue(new Promise<number>(() => {}))
@@ -263,7 +263,7 @@ describe('LiveEditorSettings', () => {
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
-  it('opens config.json via the main-process config bridge when the button is clicked', async () => {
+  test('opens config.json via the main-process config bridge when the button is clicked', async () => {
     // Arrange
     installLiveEditorBridge({
       opacity: 0.7,
@@ -281,7 +281,7 @@ describe('LiveEditorSettings', () => {
     expect(openConfigMock).toHaveBeenCalledTimes(1)
   })
 
-  it('shows an error banner when opening config.json fails', async () => {
+  test('shows an error banner when opening config.json fails', async () => {
     // Arrange
     installLiveEditorBridge({
       opacity: 0.7,

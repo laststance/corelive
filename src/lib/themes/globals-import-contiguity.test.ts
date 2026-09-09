@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 /**
  * Turbopack-dev regression guard for the colored theme families.
@@ -52,7 +52,7 @@ const importBreaksBeforeGeneratedThemes = (css: string): string[] => {
 }
 
 describe('Colored theme families load in Turbopack dev', () => {
-  it('keeps generated.css contiguous with the leading @import block in globals.css', () => {
+  test('keeps generated.css contiguous with the leading @import block in globals.css', () => {
     // Arrange / Act
     const breaks = importBreaksBeforeGeneratedThemes(globalsCss)
 
@@ -60,7 +60,7 @@ describe('Colored theme families load in Turbopack dev', () => {
     expect(breaks).toEqual([])
   })
 
-  it('flags a comment break before generated.css — the exact Turbopack drop', () => {
+  test('flags a comment break before generated.css — the exact Turbopack drop', () => {
     // Arrange — a comment wedged between the imports is the regression we guard
     const brokenCss = [
       "@import 'tailwindcss' source('.');",
@@ -78,7 +78,7 @@ describe('Colored theme families load in Turbopack dev', () => {
     ])
   })
 
-  it('accepts a fully contiguous import block', () => {
+  test('accepts a fully contiguous import block', () => {
     // Arrange
     const cleanCss = [
       "@import 'tailwindcss' source('.');",

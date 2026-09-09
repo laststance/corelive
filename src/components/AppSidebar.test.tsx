@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import { SidebarProvider } from '@/components/ui/sidebar'
 
@@ -31,7 +31,7 @@ vi.mock('@/components/auth/ElectronLoginForm', () => ({
 }))
 
 describe('AppSidebar', () => {
-  it('offers a way into LiveEditor, the only surface that creates tasks', () => {
+  test('offers a way into LiveEditor, the only surface that creates tasks', () => {
     // Arrange
     render(
       <SidebarProvider>
@@ -49,7 +49,7 @@ describe('AppSidebar', () => {
     expect(liveEditorLink).toHaveAttribute('href', '/write')
   })
 
-  it('keeps Home and Skill Tree reachable alongside LiveEditor', () => {
+  test('keeps Home and Skill Tree reachable alongside LiveEditor', () => {
     // Arrange
     render(
       <SidebarProvider>

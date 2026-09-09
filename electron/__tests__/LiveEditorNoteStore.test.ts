@@ -2,7 +2,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 // A mutable holder lets the hoisted Electron app mock return a fresh userData
 // directory per test before ConfigManager reads the path.
@@ -45,7 +45,7 @@ describe('LiveEditorNoteStore', () => {
     fs.rmSync(userDataDir.current, { recursive: true, force: true })
   })
 
-  it('returns an empty string when a category has no persisted note', () => {
+  test('returns an empty string when a category has no persisted note', () => {
     // Arrange
     const configManager = new ConfigManager()
     configManager.set('liveEditor.notes', {
@@ -59,7 +59,7 @@ describe('LiveEditorNoteStore', () => {
     expect(noteText).toBe('')
   })
 
-  it('reads the persisted note for the requested category', () => {
+  test('reads the persisted note for the requested category', () => {
     // Arrange
     const configManager = new ConfigManager()
     configManager.set('liveEditor.notes', {
@@ -73,7 +73,7 @@ describe('LiveEditorNoteStore', () => {
     expect(noteText).toBe('existing CoreLive note')
   })
 
-  it('updates one category note while preserving the other category notes', () => {
+  test('updates one category note while preserving the other category notes', () => {
     // Arrange
     const configManager = new ConfigManager()
     configManager.set('liveEditor.notes', {
@@ -91,7 +91,7 @@ describe('LiveEditorNoteStore', () => {
     })
   })
 
-  it('creates a notes map when none exists yet', () => {
+  test('creates a notes map when none exists yet', () => {
     // Arrange
     const configManager = new ConfigManager()
 

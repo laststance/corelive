@@ -15,7 +15,7 @@
  * @example
  *   pnpm test:electron -- WindowManager.settings-resize
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
 
@@ -136,7 +136,7 @@ afterEach(() => {
 })
 
 describe('createSettingsWindow — resize options', () => {
-  it('opens with resizable: true so the user can drag the window edge', () => {
+  test('opens with resizable: true so the user can drag the window edge', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -149,7 +149,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.resizable).toBe(true)
   })
 
-  it('applies min/max width/height constraints', () => {
+  test('applies min/max width/height constraints', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -165,7 +165,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.maxHeight).toBe(900)
   })
 
-  it("opens at the user's last-saved size", () => {
+  test("opens at the user's last-saved size", () => {
     // Arrange
     const { configManager, get } = createConfigStub({
       'settingsPopover.width': 500,
@@ -186,7 +186,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(get).toHaveBeenCalledWith('settingsPopover.height', 380)
   })
 
-  it('uses default size (360×380) when configManager is absent', () => {
+  test('uses default size (360×380) when configManager is absent', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -200,7 +200,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.height).toBe(380)
   })
 
-  it('clamps an oversized persisted width to MAX (800)', () => {
+  test('clamps an oversized persisted width to MAX (800)', () => {
     // Arrange
     const { configManager } = createConfigStub({
       'settingsPopover.width': 99999,
@@ -217,7 +217,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.width).toBe(800)
   })
 
-  it('resets NaN persisted width to default (360)', () => {
+  test('resets NaN persisted width to default (360)', () => {
     // Arrange
     const { configManager } = createConfigStub({
       'settingsPopover.width': NaN,
@@ -234,7 +234,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.width).toBe(360)
   })
 
-  it('resets zero persisted width to default (360)', () => {
+  test('resets zero persisted width to default (360)', () => {
     // Arrange
     const { configManager } = createConfigStub({
       'settingsPopover.width': 0,
@@ -251,7 +251,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.width).toBe(360)
   })
 
-  it('clamps an oversized persisted height to MAX (900)', () => {
+  test('clamps an oversized persisted height to MAX (900)', () => {
     // Arrange
     const { configManager } = createConfigStub({
       'settingsPopover.width': 360,
@@ -268,7 +268,7 @@ describe('createSettingsWindow — resize options', () => {
     expect(captured.options.height).toBe(900)
   })
 
-  it('resets negative persisted height to default (380)', () => {
+  test('resets negative persisted height to default (380)', () => {
     // Arrange
     const { configManager } = createConfigStub({
       'settingsPopover.width': 360,
@@ -287,7 +287,7 @@ describe('createSettingsWindow — resize options', () => {
 })
 
 describe('createSettingsWindow — resize persistence (debounce)', () => {
-  it('does not persist before the user stops dragging for 200 ms', () => {
+  test('does not persist before the user stops dragging for 200 ms', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -303,7 +303,7 @@ describe('createSettingsWindow — resize persistence (debounce)', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('persists the resized dimensions 200 ms after the user stops dragging', () => {
+  test('persists the resized dimensions 200 ms after the user stops dragging', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -326,7 +326,7 @@ describe('createSettingsWindow — resize persistence (debounce)', () => {
     })
   })
 
-  it('writes only one persist call when the user resizes rapidly', () => {
+  test('writes only one persist call when the user resizes rapidly', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -350,7 +350,7 @@ describe('createSettingsWindow — resize persistence (debounce)', () => {
 })
 
 describe('createSettingsWindow — blur-during-resize guard', () => {
-  it('skips hiding the window when blur fires during a manual resize drag', () => {
+  test('skips hiding the window when blur fires during a manual resize drag', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.createSettingsWindow()
@@ -366,7 +366,7 @@ describe('createSettingsWindow — blur-during-resize guard', () => {
     expect(captured.win.hide).not.toHaveBeenCalled()
   })
 
-  it('hides on blur after 500 ms when the user clicked the handle without moving', () => {
+  test('hides on blur after 500 ms when the user clicked the handle without moving', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.createSettingsWindow()
@@ -386,7 +386,7 @@ describe('createSettingsWindow — blur-during-resize guard', () => {
     expect(captured.win.hide).toHaveBeenCalledTimes(1)
   })
 
-  it('hides the window on blur once the resize debounce has settled', () => {
+  test('hides the window on blur once the resize debounce has settled', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.createSettingsWindow()
@@ -407,7 +407,7 @@ describe('createSettingsWindow — blur-during-resize guard', () => {
 })
 
 describe('createSettingsWindow — closed event cleanup', () => {
-  it('cancels pending persist when the window is closed mid-resize', () => {
+  test('cancels pending persist when the window is closed mid-resize', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -427,7 +427,7 @@ describe('createSettingsWindow — closed event cleanup', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('closes on blur normally after the window is reopened', () => {
+  test('closes on blur normally after the window is reopened', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -453,7 +453,7 @@ describe('createSettingsWindow — closed event cleanup', () => {
 })
 
 describe('resetSettingsPopoverSize', () => {
-  it('writes default dimensions to config', () => {
+  test('writes default dimensions to config', () => {
     // Arrange
     const { configManager, update } = createConfigStub({
       'settingsPopover.width': 700,
@@ -474,7 +474,7 @@ describe('resetSettingsPopoverSize', () => {
     )
   })
 
-  it('repositions and resizes the window to 360×380 at the tray position', () => {
+  test('repositions and resizes the window to 360×380 at the tray position', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.createSettingsWindow()
@@ -490,7 +490,7 @@ describe('resetSettingsPopoverSize', () => {
     )
   })
 
-  it('still resets config but skips setBounds when the window is destroyed', () => {
+  test('still resets config but skips setBounds when the window is destroyed', () => {
     // Arrange
     const { configManager, update } = createConfigStub()
     const windowManager = new WindowManager(SERVER_URL, configManager)
@@ -509,7 +509,7 @@ describe('resetSettingsPopoverSize', () => {
     expect(captured.win.setBounds).not.toHaveBeenCalled()
   })
 
-  it('does not throw when called before any settings window is created', () => {
+  test('does not throw when called before any settings window is created', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 

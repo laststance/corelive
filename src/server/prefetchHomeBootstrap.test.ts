@@ -4,7 +4,7 @@ import { call } from '@orpc/server'
 import type * as OrpcServerModule from '@orpc/server'
 import { hydrate } from '@tanstack/react-query'
 import { cookies, headers } from 'next/headers'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { HOME_TIMEZONE_COOKIE_NAME } from '@/lib/constants/home'
 import { createQueryClient } from '@/lib/query/createQueryClient'
@@ -109,7 +109,7 @@ beforeEach(() => {
 })
 
 describe('prefetchHomeBootstrap', () => {
-  it('leaves a signed-out visit on the client-fetch path without calling the bootstrap procedure', async () => {
+  test('leaves a signed-out visit on the client-fetch path without calling the bootstrap procedure', async () => {
     // Arrange
     mockedAuth.mockResolvedValue({ userId: null } as Awaited<
       ReturnType<typeof auth>
@@ -123,7 +123,7 @@ describe('prefetchHomeBootstrap', () => {
     expect(mockedCall).not.toHaveBeenCalled()
   })
 
-  it('hands Home its category, heatmap and journal caches already filled, so the first paint fetches nothing', async () => {
+  test('hands Home its category, heatmap and journal caches already filled, so the first paint fetches nothing', async () => {
     // Act
     const dehydratedState = await prefetchHomeBootstrap()
 
@@ -165,7 +165,7 @@ describe('prefetchHomeBootstrap', () => {
     expect(journalCache.pages[0]?.entries[0]?.completedAt).toBeInstanceOf(Date)
   })
 
-  it('falls back to client fetching when the bootstrap call fails instead of crashing Home', async () => {
+  test('falls back to client fetching when the bootstrap call fails instead of crashing Home', async () => {
     // Arrange
     mockedCall.mockRejectedValue(new Error('database unreachable'))
 
@@ -176,7 +176,7 @@ describe('prefetchHomeBootstrap', () => {
     expect(dehydratedState).toBeUndefined()
   })
 
-  it('ignores a garbage timezone cookie and uses the Vercel geo header instead', async () => {
+  test('ignores a garbage timezone cookie and uses the Vercel geo header instead', async () => {
     // Arrange
     mockRequestState({
       cookieTimeZone: 'Not/A_Real_Zone',
@@ -190,7 +190,7 @@ describe('prefetchHomeBootstrap', () => {
     expect(bootstrapCallTimezone()).toBe('America/New_York')
   })
 
-  it('falls back to the server zone when neither cookie nor geo header exists', async () => {
+  test('falls back to the server zone when neither cookie nor geo header exists', async () => {
     // Arrange
     mockRequestState({})
 

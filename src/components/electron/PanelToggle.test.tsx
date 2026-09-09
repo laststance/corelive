@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { LIVE_EDITOR_PIN_SETTING, PanelToggle } from './PanelToggle'
 
@@ -34,7 +34,7 @@ describe('PanelToggle', () => {
     vi.clearAllMocks()
   })
 
-  it('reflects the saved pin value once the bridge responds', async () => {
+  test('reflects the saved pin value once the bridge responds', async () => {
     // Arrange: the saved value pins LiveEditor (overriding the descriptor's
     // default-off), proving the row shows the loaded value.
     installElectronAPI({
@@ -55,7 +55,7 @@ describe('PanelToggle', () => {
     })
   })
 
-  it('persists the pin to the main process when toggled off', async () => {
+  test('persists the pin to the main process when toggled off', async () => {
     // Arrange: saved on; the user will unpin it.
     const setPin = vi.fn().mockResolvedValue(false)
     installElectronAPI({
@@ -79,7 +79,7 @@ describe('PanelToggle', () => {
     await waitFor(() => expect(pinSwitch).not.toBeChecked())
   })
 
-  it('rolls the pin back when the main process fails to persist it', async () => {
+  test('rolls the pin back when the main process fails to persist it', async () => {
     // Arrange: saved on; unpinning will reject in the main process.
     installElectronAPI({
       floatingPanels: {
@@ -104,7 +104,7 @@ describe('PanelToggle', () => {
     expect(screen.getByText('Failed to update setting')).toBeInTheDocument()
   })
 
-  it('renders nothing when the preload lacks this setting’s methods', () => {
+  test('renders nothing when the preload lacks this setting’s methods', () => {
     // Arrange: an outdated preload exposes the panels bridge but not the pin pair.
     installElectronAPI({ floatingPanels: {} })
 
@@ -118,7 +118,7 @@ describe('PanelToggle', () => {
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
-  it('renders nothing on web where there is no electronAPI', () => {
+  test('renders nothing on web where there is no electronAPI', () => {
     // Arrange: a web renderer has no bridge at all.
     installElectronAPI(undefined)
 

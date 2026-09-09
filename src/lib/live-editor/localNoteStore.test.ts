@@ -3,7 +3,7 @@
  * If these fail, the `/write` textarea forgets its text on reload or one category's
  * note overwrites another's.
  */
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 
 import { LOCAL_NOTE_STORAGE_KEY } from './constants'
 import { getLocalNote, setLocalNote } from './localNoteStore'
@@ -13,12 +13,12 @@ beforeEach(() => {
 })
 
 describe('local note store — the /write textarea survives a reload', () => {
-  it('reads an empty note before anything was written', () => {
+  test('reads an empty note before anything was written', () => {
     // Act / Assert
     expect(getLocalNote(0)).toBe('')
   })
 
-  it('round-trips the signed-out note under the "0" key', () => {
+  test('round-trips the signed-out note under the "0" key', () => {
     // Act
     setLocalNote(0, '- [ ] buy milk')
 
@@ -29,7 +29,7 @@ describe('local note store — the /write textarea survives a reload', () => {
     ).toEqual({ '0': '- [ ] buy milk' })
   })
 
-  it("writing one category's note leaves every other category's note intact", () => {
+  test("writing one category's note leaves every other category's note intact", () => {
     // Arrange
     setLocalNote(0, 'local')
     setLocalNote(7, 'work')
@@ -42,7 +42,7 @@ describe('local note store — the /write textarea survives a reload', () => {
     expect(getLocalNote(0)).toBe('local edited')
   })
 
-  it('reads a corrupt map as empty instead of throwing', () => {
+  test('reads a corrupt map as empty instead of throwing', () => {
     // Arrange
     localStorage.setItem(LOCAL_NOTE_STORAGE_KEY, '{"0": 42}')
 

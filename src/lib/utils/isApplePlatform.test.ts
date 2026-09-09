@@ -4,7 +4,7 @@
  * Mac user Ctrl — and the server render disagrees with the client, which React
  * reports as a hydration mismatch.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 /**
  * Reports the given user agent for one assertion.
@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 describe('isApplePlatform', () => {
-  it('reads a Mac as Apple, so the shortcut hint says ⌘', async () => {
+  test('reads a Mac as Apple, so the shortcut hint says ⌘', async () => {
     // Arrange
     mockUserAgent(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
@@ -33,7 +33,7 @@ describe('isApplePlatform', () => {
     expect(isApplePlatform()).toBe(true)
   })
 
-  it('reads an iPhone as Apple, so the touch surface agrees with the desktop', async () => {
+  test('reads an iPhone as Apple, so the touch surface agrees with the desktop', async () => {
     // Arrange
     mockUserAgent(
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
@@ -44,7 +44,7 @@ describe('isApplePlatform', () => {
     expect(isApplePlatform()).toBe(true)
   })
 
-  it('reads Windows as not Apple, so the hint says Ctrl', async () => {
+  test('reads Windows as not Apple, so the hint says Ctrl', async () => {
     // Arrange
     mockUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126',
@@ -55,7 +55,7 @@ describe('isApplePlatform', () => {
     expect(isApplePlatform()).toBe(false)
   })
 
-  it('assumes Apple with no navigator at all, so the server render matches the ⌘ default', async () => {
+  test('assumes Apple with no navigator at all, so the server render matches the ⌘ default', async () => {
     // Arrange — the server has no navigator; the client corrects after mount.
     const { isApplePlatform } = await import('./isApplePlatform')
     const realNavigator = globalThis.navigator

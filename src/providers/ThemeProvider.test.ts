@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import { THEMES, THEME_META } from './ThemeProvider'
 
 describe('ThemeProvider picker metadata', () => {
-  it('derives picker metadata from the registry for every theme, matching the stock Default pair, the Warm Cathedral defaults, and the colored families', () => {
+  test('derives picker metadata from the registry for every theme, matching the stock Default pair, the Warm Cathedral defaults, and the colored families', () => {
     // Arrange / Act / Assert — hard-coded so the derived (`as`-cast) map can never silently drift
     expect(THEME_META).toEqual({
       'default-light': { name: 'Default Light', preview: '#ffffff' },
@@ -23,7 +23,7 @@ describe('ThemeProvider picker metadata', () => {
     })
   })
 
-  it('exposes a metadata entry for every available theme id, so pickers never hit an undefined entry', () => {
+  test('exposes a metadata entry for every available theme id, so pickers never hit an undefined entry', () => {
     // Arrange
     const metadataKeys = Object.keys(THEME_META).sort()
 

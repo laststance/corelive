@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
@@ -51,7 +51,7 @@ describe('SundayDigestCard', () => {
     window.localStorage.clear()
   })
 
-  it('renders nothing on a non-Sunday', () => {
+  test('renders nothing on a non-Sunday', () => {
     const { container } = render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
@@ -62,7 +62,7 @@ describe('SundayDigestCard', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders nothing while loading', () => {
+  test('renders nothing while loading', () => {
     const { container } = render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
@@ -73,7 +73,7 @@ describe('SundayDigestCard', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders the quiet-week fallback when the heatmap is empty', () => {
+  test('renders the quiet-week fallback when the heatmap is empty', () => {
     // A new user (or a fully quiet week) should still see the digest —
     // the "quiet week" copy is exactly what the empty path was designed
     // for (DESIGN.md: self-affirmation on rest weeks too).
@@ -88,7 +88,7 @@ describe('SundayDigestCard', () => {
     expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
   })
 
-  it('renders the digest on Sunday with non-zero data', () => {
+  test('renders the digest on Sunday with non-zero data', () => {
     render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(4, [
@@ -104,7 +104,7 @@ describe('SundayDigestCard', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the zero-week fallback when total is zero', () => {
+  test('shows the zero-week fallback when total is zero', () => {
     // dataByDate is non-empty but only has activity outside the 7-day window
     const data = new Map<string, HeatmapDay>()
     const oldDate = shiftIsoDate(LOCAL_SUNDAY_ISO, -30)
@@ -120,7 +120,7 @@ describe('SundayDigestCard', () => {
     expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
   })
 
-  it('shows the brightest day inside the week', () => {
+  test('shows the brightest day inside the week', () => {
     const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
     const data = buildWeekFixture(2, [{ date: wednesday, count: 6 }])
     render(
@@ -136,7 +136,7 @@ describe('SundayDigestCard', () => {
     expect(screen.getByText(/6 things/i)).toBeInTheDocument()
   })
 
-  it('uses the singular "1 thing" for a one-item brightest day', () => {
+  test('uses the singular "1 thing" for a one-item brightest day', () => {
     const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
     const data = buildWeekFixture(0, [{ date: wednesday, count: 1 }])
     render(
@@ -149,7 +149,7 @@ describe('SundayDigestCard', () => {
     expect(screen.getByText(/1 thing(?!s)/i)).toBeInTheDocument()
   })
 
-  it('hides the card after the dismiss button is clicked and persists per-week', () => {
+  test('hides the card after the dismiss button is clicked and persists per-week', () => {
     render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
@@ -177,7 +177,7 @@ describe('SundayDigestCard', () => {
     expect(window.localStorage.getItem(setKeys[0]!)).toBe('1')
   })
 
-  it('honors a pre-existing dismiss flag for the same week (mount-time read)', () => {
+  test('honors a pre-existing dismiss flag for the same week (mount-time read)', () => {
     // Seed the dismiss flag for the current Sunday before mount.
     const sundayKey = `corelive.sunday-digest-dismissed.${LOCAL_SUNDAY.toLocaleDateString('en-CA')}`
     window.localStorage.setItem(sundayKey, '1')
@@ -192,7 +192,7 @@ describe('SundayDigestCard', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('re-appears next Sunday (different week key)', () => {
+  test('re-appears next Sunday (different week key)', () => {
     // Seed dismiss for last Sunday.
     const lastSunday = new Date(2026, 4, 3, 12)
     const lastSundayKey = `corelive.sunday-digest-dismissed.${lastSunday.toLocaleDateString('en-CA')}`

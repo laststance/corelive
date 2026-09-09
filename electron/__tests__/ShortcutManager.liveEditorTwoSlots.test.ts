@@ -1,5 +1,5 @@
 import { globalShortcut } from 'electron'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ConfigManager } from '../ConfigManager'
 import ShortcutManager from '../ShortcutManager'
@@ -80,7 +80,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     heldAccelerators.clear()
   })
 
-  it('opens LiveEditor from either of the two configured toggle keys', () => {
+  test('opens LiveEditor from either of the two configured toggle keys', () => {
     // Arrange
     const { windowManager, toggleLiveEditor } = createWindowManagerHarness()
     const shortcutManager = new ShortcutManager(
@@ -115,7 +115,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     expect(toggleLiveEditor).toHaveBeenCalledTimes(2)
   })
 
-  it('refuses a settings save that would point both toggle keys at one key', () => {
+  test('refuses a settings save that would point both toggle keys at one key', () => {
     // Arrange: the generic Shortcut Settings screen submits every registered id,
     // including the second slot (which has no row there), so a user rebinding the
     // visible "Toggle LiveEditor" row onto the second slot's key arrives as a
@@ -146,7 +146,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     )
   })
 
-  it('still lets the two toggle keys swap accelerators in one save', () => {
+  test('still lets the two toggle keys swap accelerators in one save', () => {
     // Arrange: a swap ends with two DIFFERENT keys, so it must survive both the
     // duplicate guard AND the batch's own live registrations — the key each slot
     // moves onto is still held by the other slot when the batch starts.
@@ -177,7 +177,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     ).toBe('Alt+Space')
   })
 
-  it('keeps an already-registered contextual shortcut alive when only a global key changes', () => {
+  test('keeps an already-registered contextual shortcut alive when only a global key changes', () => {
     // Arrange: a settings save carries EVERY id, so the untouched contextual
     // `newTask` rides along. Pass 2 never re-registers contextual shortcuts, so
     // unregistering it here would leave Cmd+N dead until the next blur→focus.
@@ -210,7 +210,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     )
   })
 
-  it('keeps a conflict-substituted contextual shortcut alive across a global save', () => {
+  test('keeps a conflict-substituted contextual shortcut alive across a global save', () => {
     // Arrange: another app already owns Cmd+N, so newTask lands on a fallback
     // accelerator. A caller that submits the CONFIGURED value (what the user
     // asked for) must still read as "unchanged" — otherwise every unrelated save
@@ -244,7 +244,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     )
   })
 
-  it('refuses a duplicate toggle key typed in a different case', () => {
+  test('refuses a duplicate toggle key typed in a different case', () => {
     // Arrange: Electron accelerators are case-insensitive, so `alt+space` and
     // `Alt+Space` are the same key — a config edited by hand must not sneak both
     // slots onto it past the duplicate guard.
@@ -268,7 +268,7 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     ).toBeUndefined()
   })
 
-  it('leaves the second toggle key unbound until the user sets one', () => {
+  test('leaves the second toggle key unbound until the user sets one', () => {
     // Arrange
     const { windowManager } = createWindowManagerHarness()
     const shortcutManager = new ShortcutManager(

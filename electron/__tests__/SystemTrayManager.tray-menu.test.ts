@@ -1,6 +1,6 @@
 import { Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions, Tray } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { SystemTrayManager } from '../SystemTrayManager'
 import type { WindowManager } from '../WindowManager'
@@ -91,7 +91,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     fakeTray.setContextMenu = vi.fn()
   })
 
-  it('toggles the LiveEditor window when its tray item is clicked', () => {
+  test('toggles the LiveEditor window when its tray item is clicked', () => {
     // Arrange
     const { manager, toggleLiveEditor } = createManager()
 
@@ -107,7 +107,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect(toggleLiveEditor).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the full app in the browser — never a native window — from its tray item', () => {
+  test('opens the full app in the browser — never a native window — from its tray item', () => {
     // Arrange
     const { manager, restoreFromTray } = createManager()
 
@@ -131,7 +131,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect(restoreFromTray).not.toHaveBeenCalled()
   })
 
-  it('opens Settings from the tray without exposing the retired Preferences label', () => {
+  test('opens Settings from the tray without exposing the retired Preferences label', () => {
     // Arrange
     const { manager, openSettings } = createManager()
 
@@ -148,7 +148,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect(openSettings).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the LiveEditor toggle item’s live hotkey supplied by the accelerator provider', () => {
+  test('shows the LiveEditor toggle item’s live hotkey supplied by the accelerator provider', () => {
     // Arrange
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
@@ -165,7 +165,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     )
   })
 
-  it('omits the accelerator entirely when a shortcut is unbound', () => {
+  test('omits the accelerator entirely when a shortcut is unbound', () => {
     // Arrange: provider reports no LiveEditor binding (empty string disables it).
     const { manager } = createManager()
     manager.setShortcutAcceleratorProvider(() => ({
@@ -181,7 +181,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect('accelerator' in liveEditorItem!).toBe(false)
   })
 
-  it('falls back to no hotkey when no accelerator provider is injected', () => {
+  test('falls back to no hotkey when no accelerator provider is injected', () => {
     // Arrange: provider never set (e.g. boot before ShortcutManager wiring).
     const { manager } = createManager()
 
@@ -195,7 +195,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     )
   })
 
-  it('refreshes the displayed hotkey after a rebind', () => {
+  test('refreshes the displayed hotkey after a rebind', () => {
     // Arrange: first render shows the default LiveEditor hotkey.
     const { manager } = createManager()
     let liveEditorAccelerator = 'Alt+Space'

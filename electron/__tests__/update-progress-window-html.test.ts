@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import type { UpdaterDownloadProgress } from '../types/ipc'
 import {
@@ -14,7 +14,7 @@ const halfwayProgress: UpdaterDownloadProgress = {
 }
 
 describe('update progress window markup', () => {
-  it('renders accessible progressbar markup with the initial percent', () => {
+  test('renders accessible progressbar markup with the initial percent', () => {
     // Arrange + Act
     const html = buildUpdateProgressWindowHtml(halfwayProgress)
 
@@ -25,7 +25,7 @@ describe('update progress window markup', () => {
     expect(html).toContain('42%')
   })
 
-  it('renders a complete standalone document without external assets', () => {
+  test('renders a complete standalone document without external assets', () => {
     // Arrange + Act
     const html = buildUpdateProgressWindowHtml(halfwayProgress)
 
@@ -36,7 +36,7 @@ describe('update progress window markup', () => {
     expect(html).not.toContain('fonts.googleapis.com')
   })
 
-  it('stays click-through so the native progress window never blocks work', () => {
+  test('stays click-through so the native progress window never blocks work', () => {
     // Arrange + Act
     const html = buildUpdateProgressWindowHtml(halfwayProgress)
 
@@ -45,7 +45,7 @@ describe('update progress window markup', () => {
     expect(html).toContain('user-select: none')
   })
 
-  it('honors reduced motion for progress updates', () => {
+  test('honors reduced motion for progress updates', () => {
     // Arrange + Act
     const html = buildUpdateProgressWindowHtml(halfwayProgress)
 
@@ -54,7 +54,7 @@ describe('update progress window markup', () => {
     expect(html).toContain('transition: none')
   })
 
-  it('builds a tiny update script for an already-loaded window', () => {
+  test('builds a tiny update script for an already-loaded window', () => {
     // Arrange + Act
     const script = buildUpdateProgressWindowUpdateScript(halfwayProgress)
 

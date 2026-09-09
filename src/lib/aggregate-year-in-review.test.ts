@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
@@ -34,7 +34,7 @@ function buildActivity(input: {
 }
 
 describe('aggregateYearInReview', () => {
-  it('returns zeros and `eligible: false` on an empty heatmap', () => {
+  test('returns zeros and `eligible: false` on an empty heatmap', () => {
     const result = aggregateYearInReview(new Map(), '2026-12-15')
     expect(result).toMatchObject({
       totalCompleted: 0,
@@ -46,7 +46,7 @@ describe('aggregateYearInReview', () => {
     })
   })
 
-  it('counts distinct active days and total completions only for the anchor year', () => {
+  test('counts distinct active days and total completions only for the anchor year', () => {
     const map = new Map<string, HeatmapDay>([
       // Same date but in 2025 — must NOT be counted in the 2026 review.
       [
@@ -82,7 +82,7 @@ describe('aggregateYearInReview', () => {
     ])
   })
 
-  it('reports `eligible: true` once activeDays crosses YIR_MIN_ACTIVE_DAYS', () => {
+  test('reports `eligible: true` once activeDays crosses YIR_MIN_ACTIVE_DAYS', () => {
     const activity = buildActivity({
       endIso: '2026-12-15',
       days: YIR_MIN_ACTIVE_DAYS,
@@ -93,7 +93,7 @@ describe('aggregateYearInReview', () => {
     expect(result.eligible).toBe(true)
   })
 
-  it('reports `eligible: false` when activeDays is below YIR_MIN_ACTIVE_DAYS', () => {
+  test('reports `eligible: false` when activeDays is below YIR_MIN_ACTIVE_DAYS', () => {
     const activity = buildActivity({
       endIso: '2026-12-15',
       days: YIR_MIN_ACTIVE_DAYS - 1,
@@ -103,7 +103,7 @@ describe('aggregateYearInReview', () => {
     expect(result.eligible).toBe(false)
   })
 
-  it('year-scopes the longest streak so a Dec→Jan run does NOT bleed into the YIR total', () => {
+  test('year-scopes the longest streak so a Dec→Jan run does NOT bleed into the YIR total', () => {
     // 20-day cross-boundary streak: 10 in 2025 (Dec 22 → Dec 31) +
     // 10 in 2026 (Jan 1 → Jan 10). The 2026 YIR should report the
     // 10-day longest, NOT the full 20-day calendar streak — the modal
@@ -127,7 +127,7 @@ describe('aggregateYearInReview', () => {
     expect(result.longestStreak).toBe(10)
   })
 
-  it('caps topCategories at 3 and sorts by count desc, name asc', () => {
+  test('caps topCategories at 3 and sorts by count desc, name asc', () => {
     const map = new Map<string, HeatmapDay>([
       [
         '2026-05-01',
@@ -154,7 +154,7 @@ describe('aggregateYearInReview', () => {
 })
 
 describe('shouldAutoOpenYir', () => {
-  it('opens in December when summary is eligible', () => {
+  test('opens in December when summary is eligible', () => {
     const eligibleSummary = {
       totalCompleted: 100,
       activeDays: YIR_MIN_ACTIVE_DAYS,
@@ -166,7 +166,7 @@ describe('shouldAutoOpenYir', () => {
     expect(shouldAutoOpenYir('2026-12-15', eligibleSummary)).toBe(true)
   })
 
-  it('does NOT open outside December even if eligible', () => {
+  test('does NOT open outside December even if eligible', () => {
     const eligibleSummary = {
       totalCompleted: 100,
       activeDays: YIR_MIN_ACTIVE_DAYS,
@@ -179,7 +179,7 @@ describe('shouldAutoOpenYir', () => {
     expect(shouldAutoOpenYir('2026-05-12', eligibleSummary)).toBe(false)
   })
 
-  it('does NOT open in December when summary is ineligible (<30 days)', () => {
+  test('does NOT open in December when summary is ineligible (<30 days)', () => {
     const ineligibleSummary = {
       totalCompleted: 5,
       activeDays: 5,
@@ -200,7 +200,7 @@ describe('shouldAutoOpenYir (with fake timers — guards against real-clock leak
     vi.useRealTimers()
   })
 
-  it('honors the timer-frozen "today" instead of wall clock', () => {
+  test('honors the timer-frozen "today" instead of wall clock', () => {
     // Freeze clock to mid-May so a stray `new Date()` inside the gate
     // would incorrectly evaluate to false. The gate must derive its
     // decision from the supplied `today` ONLY.
@@ -220,7 +220,7 @@ describe('shouldAutoOpenYir (with fake timers — guards against real-clock leak
 })
 
 describe('parseForceDate', () => {
-  it('returns null for null / empty / malformed input', () => {
+  test('returns null for null / empty / malformed input', () => {
     expect(parseForceDate(null)).toBeNull()
     expect(parseForceDate('')).toBeNull()
     expect(parseForceDate('2026/12/31')).toBeNull()
@@ -228,7 +228,7 @@ describe('parseForceDate', () => {
     expect(parseForceDate('2026-13-01')).toBeNull()
   })
 
-  it('rejects day-rollover inputs that JS Date silently normalizes', () => {
+  test('rejects day-rollover inputs that JS Date silently normalizes', () => {
     // `new Date('2026-02-30T00:00:00.000Z')` → `2026-03-02`. The regex
     // passes and `getTime()` is valid, so without a round-trip check the
     // URL surface said one date and the modal rendered a different one.
@@ -239,7 +239,7 @@ describe('parseForceDate', () => {
     expect(parseForceDate('2025-12-32')).toBeNull()
   })
 
-  it('returns the validated YYYY-MM-DD local-day key for a real calendar date', () => {
+  test('returns the validated YYYY-MM-DD local-day key for a real calendar date', () => {
     expect(parseForceDate('2026-12-31')).toBe('2026-12-31')
     expect(parseForceDate('2026-01-01')).toBe('2026-01-01')
   })

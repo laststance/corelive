@@ -12,7 +12,7 @@
  * @example
  *   pnpm test:electron -- ipc-contract
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import { ZodError } from 'zod'
 
 import { IPC_ARG_SCHEMAS } from '../ipc/ipc-schemas'
@@ -27,7 +27,7 @@ describe('IPC contract', () => {
      * so this test only needs to *exist* to document the invariant and survive
      * a future refactor that accidentally loosens the type.
      */
-    it('registers a schema for every channel in IPCChannels', () => {
+    test('registers a schema for every channel in IPCChannels', () => {
       const channels = Object.keys(IPC_ARG_SCHEMAS) as IPCChannel[]
       expect(channels.length).toBeGreaterThan(0)
       for (const channel of channels) {
@@ -37,7 +37,7 @@ describe('IPC contract', () => {
   })
 
   describe('Schema shape sanity', () => {
-    it('each schema parses an empty array for void-arg channels', () => {
+    test('each schema parses an empty array for void-arg channels', () => {
       const voidChannels: IPCChannel[] = [
         'app-version',
         'app-quit',
@@ -51,7 +51,7 @@ describe('IPC contract', () => {
       }
     })
 
-    it('rejects invalid arguments for typed channels', () => {
+    test('rejects invalid arguments for typed channels', () => {
       const authSetUser = IPC_ARG_SCHEMAS['auth-set-user']
       // Missing required `clerkId`
       expect(() => authSetUser.parse([{}])).toThrow(ZodError)
@@ -70,7 +70,7 @@ describe('IPC contract', () => {
       ).not.toThrow()
     })
 
-    it('keeps LiveEditor note text behind the dedicated IPC channel', () => {
+    test('keeps LiveEditor note text behind the dedicated IPC channel', () => {
       // Arrange
       const configGet = IPC_ARG_SCHEMAS['config-get']
 
@@ -85,14 +85,14 @@ describe('IPC contract', () => {
       )
     })
 
-    it('requires boolean for settings toggles', () => {
+    test('requires boolean for settings toggles', () => {
       const setHide = IPC_ARG_SCHEMAS['settings:setHideAppIcon']
       expect(() => setHide.parse([true])).not.toThrow()
       expect(() => setHide.parse(['not a boolean'])).toThrow(ZodError)
       expect(() => setHide.parse([])).toThrow(ZodError)
     })
 
-    it('takes no arguments for settings:resetPopoverSize', () => {
+    test('takes no arguments for settings:resetPopoverSize', () => {
       // Arrange
       const resetPopoverSize = IPC_ARG_SCHEMAS['settings:resetPopoverSize']
 
@@ -103,7 +103,7 @@ describe('IPC contract', () => {
       expect(() => resetPopoverSize.parse([360])).toThrow(ZodError)
     })
 
-    it('requires boolean for LiveEditor desktop tracking', () => {
+    test('requires boolean for LiveEditor desktop tracking', () => {
       const setVisibleOnAllWorkspaces =
         IPC_ARG_SCHEMAS['live-editor-set-visible-on-all-workspaces']
       expect(() => setVisibleOnAllWorkspaces.parse([true])).not.toThrow()
@@ -112,7 +112,7 @@ describe('IPC contract', () => {
       expect(() => setVisibleOnAllWorkspaces.parse([])).toThrow(ZodError)
     })
 
-    it('requires boolean for live-editor-window-set-always-on-top', () => {
+    test('requires boolean for live-editor-window-set-always-on-top', () => {
       const setAlwaysOnTop =
         IPC_ARG_SCHEMAS['live-editor-window-set-always-on-top']
       expect(() => setAlwaysOnTop.parse([true])).not.toThrow()
@@ -121,7 +121,7 @@ describe('IPC contract', () => {
       expect(() => setAlwaysOnTop.parse([])).toThrow(ZodError)
     })
 
-    it('accepts optional second arg for oauth-cancel', () => {
+    test('accepts optional second arg for oauth-cancel', () => {
       const oauthCancel = IPC_ARG_SCHEMAS['oauth-cancel']
       expect(() => oauthCancel.parse([])).not.toThrow()
       expect(() => oauthCancel.parse([null])).not.toThrow()
@@ -130,7 +130,7 @@ describe('IPC contract', () => {
       expect(() => oauthCancel.parse([123])).toThrow(ZodError)
     })
 
-    it('accepts empty tuple for config-open', () => {
+    test('accepts empty tuple for config-open', () => {
       const openConfig = IPC_ARG_SCHEMAS['config-open']
       expect(() => openConfig.parse([])).not.toThrow()
       expect(() => openConfig.parse([null])).toThrow(ZodError)
@@ -140,7 +140,7 @@ describe('IPC contract', () => {
      * LiveEditor Note channels — locks down the contract used by
      * `preload-live-editor.ts` and the main-window Settings bridge.
      */
-    it('clamps and validates live-editor-window-set-opacity', () => {
+    test('clamps and validates live-editor-window-set-opacity', () => {
       const setOpacity = IPC_ARG_SCHEMAS['live-editor-window-set-opacity']
       expect(() => setOpacity.parse([0.85])).not.toThrow()
       expect(() => setOpacity.parse([0])).not.toThrow()
@@ -151,7 +151,7 @@ describe('IPC contract', () => {
       expect(() => setOpacity.parse(['0.5'])).toThrow(ZodError)
     })
 
-    it('requires (categoryId, text) tuple for live-editor-note-set', () => {
+    test('requires (categoryId, text) tuple for live-editor-note-set', () => {
       const setNote = IPC_ARG_SCHEMAS['live-editor-note-set']
       expect(() => setNote.parse([42, 'hello'])).not.toThrow()
       expect(() => setNote.parse([42])).toThrow(ZodError)
@@ -159,7 +159,7 @@ describe('IPC contract', () => {
       expect(() => setNote.parse([1.5, 'hello'])).toThrow(ZodError) // not int
     })
 
-    it('accepts empty string (disable shortcut) for live-editor-config-set-shortcut', () => {
+    test('accepts empty string (disable shortcut) for live-editor-config-set-shortcut', () => {
       const setShortcut = IPC_ARG_SCHEMAS['live-editor-config-set-shortcut']
       expect(() => setShortcut.parse([''])).not.toThrow()
       expect(() =>

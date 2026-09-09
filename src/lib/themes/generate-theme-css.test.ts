@@ -1,5 +1,5 @@
 import { converter } from 'culori'
-import { describe, it, expect } from 'vitest'
+import { describe, test, expect } from 'vitest'
 
 import {
   deriveThemeTokens,
@@ -89,7 +89,7 @@ const oklchOf = (oklchValue: string): { l: number; c: number; h: number } => {
 }
 
 describe('deriveThemeTokens — classification map', () => {
-  it('tints a neutral surface with the family hue/chroma at the cathedral lightness', () => {
+  test('tints a neutral surface with the family hue/chroma at the cathedral lightness', () => {
     // Arrange / Act
     const tokens = deriveThemeTokens(SAMPLE_LIGHT)
 
@@ -97,7 +97,7 @@ describe('deriveThemeTokens — classification map', () => {
     expect(tokens['--background']).toBe('oklch(0.975 0.012 250)')
   })
 
-  it('paints accent tokens (and ring) from the seed signature color', () => {
+  test('paints accent tokens (and ring) from the seed signature color', () => {
     // Arrange / Act
     const tokens = deriveThemeTokens(SAMPLE_LIGHT)
 
@@ -106,7 +106,7 @@ describe('deriveThemeTokens — classification map', () => {
     expect(tokens['--ring']).toBe('oklch(0.5 0.135 250)')
   })
 
-  it('keeps the warm chart and destructive identity fixed across families', () => {
+  test('keeps the warm chart and destructive identity fixed across families', () => {
     // Arrange / Act
     const tokens = deriveThemeTokens(SAMPLE_LIGHT)
 
@@ -115,7 +115,7 @@ describe('deriveThemeTokens — classification map', () => {
     expect(tokens['--chart-1']).toBe('oklch(0.62 0.16 50)')
   })
 
-  it('preserves a translucent dark border instead of making it opaque', () => {
+  test('preserves a translucent dark border instead of making it opaque', () => {
     // Arrange / Act
     const tokens = deriveThemeTokens(SAMPLE_DARK)
 
@@ -125,7 +125,7 @@ describe('deriveThemeTokens — classification map', () => {
 })
 
 describe('deriveThemeTokens — WCAG AA', () => {
-  it('clears AA for body text on every core surface in light mode', () => {
+  test('clears AA for body text on every core surface in light mode', () => {
     // Arrange / Act
     const t = deriveThemeTokens(SAMPLE_LIGHT)
 
@@ -144,7 +144,7 @@ describe('deriveThemeTokens — WCAG AA', () => {
     ).toBe(true)
   })
 
-  it('clears AA for body text on every core surface in dark mode', () => {
+  test('clears AA for body text on every core surface in dark mode', () => {
     // Arrange / Act
     const t = deriveThemeTokens(SAMPLE_DARK)
 
@@ -165,7 +165,7 @@ describe('deriveThemeTokens — WCAG AA', () => {
 })
 
 describe('deriveThemeTokens — heatmap temperature ramp', () => {
-  it('darkens monotonically as completions rise in light mode', () => {
+  test('darkens monotonically as completions rise in light mode', () => {
     // Arrange / Act — light heatmap cools (high L) → warms (low L)
     const t = deriveThemeTokens(SAMPLE_LIGHT)
     const lightness = HEATMAP_TOKENS.map((k) => lightnessOf(token(t, k)))
@@ -177,7 +177,7 @@ describe('deriveThemeTokens — heatmap temperature ramp', () => {
     expect(strictlyDecreasing).toBe(true)
   })
 
-  it('lightens monotonically as completions rise in dark mode', () => {
+  test('lightens monotonically as completions rise in dark mode', () => {
     // Arrange / Act — dark heatmap glows brighter toward the apex
     const t = deriveThemeTokens(SAMPLE_DARK)
     const lightness = HEATMAP_TOKENS.map((k) => lightnessOf(token(t, k)))
@@ -189,7 +189,7 @@ describe('deriveThemeTokens — heatmap temperature ramp', () => {
     expect(strictlyIncreasing).toBe(true)
   })
 
-  it('rests on the family hue and lands the hottest cell on the shared warm apex', () => {
+  test('rests on the family hue and lands the hottest cell on the shared warm apex', () => {
     // Arrange / Act
     const t = deriveThemeTokens(SAMPLE_LIGHT)
 
@@ -200,7 +200,7 @@ describe('deriveThemeTokens — heatmap temperature ramp', () => {
 })
 
 describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
-  it('wraps a derived theme in the high-specificity :root[data-theme] selector so it outranks cathedral :root regardless of @import order', () => {
+  test('wraps a derived theme in the high-specificity :root[data-theme] selector so it outranks cathedral :root regardless of @import order', () => {
     // Arrange / Act
     const css = deriveThemeCss(SAMPLE_DERIVED_THEME)
 
@@ -210,7 +210,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(css.endsWith('\n}')).toBe(true)
   })
 
-  it('declares color-scheme first, then every cathedral color token', () => {
+  test('declares color-scheme first, then every cathedral color token', () => {
     // Arrange / Act
     const css = deriveThemeCss(SAMPLE_DERIVED_THEME)
     const declarationCount = css
@@ -222,7 +222,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(declarationCount).toBe(36)
   })
 
-  it('skips preserved cathedral themes and emits one block per derived theme', () => {
+  test('skips preserved cathedral themes and emits one block per derived theme', () => {
     // Arrange / Act — registry cathedral pair is preserved; only the derived block ships
     const css = generateThemesCss([
       THEME_REGISTRY.light,
@@ -236,7 +236,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(css).toContain('AUTO-GENERATED')
   })
 
-  it('emits the header alone when every registered theme is preserved', () => {
+  test('emits the header alone when every registered theme is preserved', () => {
     // Arrange / Act — nothing emitted → no blocks
     const css = generateThemesCss([THEME_REGISTRY.light, THEME_REGISTRY.dark])
     const blockCount = css.split(':root[data-theme=').length - 1
@@ -246,7 +246,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(css).toContain('AUTO-GENERATED')
   })
 
-  it('copies the stock shadcn Default tokens verbatim — no derivation, same selector contract', () => {
+  test('copies the stock shadcn Default tokens verbatim — no derivation, same selector contract', () => {
     // Arrange / Act
     const css = staticThemeCss(THEME_REGISTRY['default-light'])
     const declarationCount = css
@@ -263,7 +263,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
     expect(declarationCount).toBe(36)
   })
 
-  it('emits a static theme alongside derived ones and still skips preserved cathedral', () => {
+  test('emits a static theme alongside derived ones and still skips preserved cathedral', () => {
     // Arrange / Act
     const css = generateThemesCss([
       THEME_REGISTRY['default-dark'],
@@ -293,14 +293,15 @@ const EMITTED_THEMES = [...STATIC_THEMES, ...DERIVED_THEMES]
 
 /** The token map generated.css carries for an emitted theme (literal or derived). */
 const emittedTokens = (theme: ThemeSeed): Record<string, string> => {
-  if (theme.preserve) throw new Error(`${theme.id} is hand-authored, not emitted`)
+  if (theme.preserve)
+    throw new Error(`${theme.id} is hand-authored, not emitted`)
   return isStaticTheme(theme) ? theme.tokens : deriveThemeTokens(theme)
 }
 
 // it.each([]) passes vacuously — so if the registry ever empties or the kind
 // filters regress, the per-theme gates below would silently test NOTHING. Lock
 // the shipped set up front: 10 colored (5 families × light/dark) + 2 Default.
-it('ships exactly 10 colored families (5 families × light + dark) and the 2 static Default themes', () => {
+test('ships exactly 10 colored families (5 families × light + dark) and the 2 static Default themes', () => {
   // Arrange / Act / Assert
   expect(DERIVED_THEMES).toHaveLength(10)
   expect(STATIC_THEMES.map((theme) => theme.id)).toEqual([
@@ -310,7 +311,7 @@ it('ships exactly 10 colored families (5 families × light + dark) and the 2 sta
 })
 
 describe('every emitted theme — WCAG AA gate', () => {
-  it.each(EMITTED_THEMES)(
+  test.each(EMITTED_THEMES)(
     '$id clears AA on body text, muted labels, and the computed primary foreground',
     (theme) => {
       // Arrange
@@ -353,7 +354,7 @@ describe('every emitted theme — heatmap "temperature = pride" invariant', () =
   // stops, are what must read warm. (--hm-3 = second-hottest, --hm-4 = apex.)
   const WARMEST_STOPS = ['--hm-3', '--hm-4'] as const
 
-  it.each(EMITTED_THEMES)(
+  test.each(EMITTED_THEMES)(
     '$id reuses the cathedral L/C ramp and blooms its two hottest stops into the warm band',
     (theme) => {
       // Arrange — the five heatmap stops, coolest (rest) → warmest (apex)

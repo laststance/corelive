@@ -1,11 +1,11 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import { KEYBINDING_CONFLICT_MESSAGE } from '@/lib/constants/keybinding'
 
 describe('useShortcutCapture', () => {
-  it('shows a captured accelerator and clears the error once it persists', async () => {
+  test('shows a captured accelerator and clears the error once it persists', async () => {
     // Arrange
     const persist = vi.fn().mockResolvedValue(true)
     const onError = vi.fn()
@@ -24,7 +24,7 @@ describe('useShortcutCapture', () => {
     expect(onError).toHaveBeenLastCalledWith(null)
   })
 
-  it('rolls back to the loaded binding and explains the conflict when the main process rejects it', async () => {
+  test('rolls back to the loaded binding and explains the conflict when the main process rejects it', async () => {
     // Arrange — a saved binding seeded as the rollback target.
     const persist = vi.fn().mockResolvedValue(false)
     const onError = vi.fn()
@@ -45,7 +45,7 @@ describe('useShortcutCapture', () => {
     expect(onError).toHaveBeenLastCalledWith(KEYBINDING_CONFLICT_MESSAGE)
   })
 
-  it('reverts the optimistic value without an error when no desktop bridge is present', async () => {
+  test('reverts the optimistic value without an error when no desktop bridge is present', async () => {
     // Arrange — persist resolves `undefined`, the documented "no bridge" signal.
     const persist = vi.fn().mockResolvedValue(undefined)
     const onError = vi.fn()
@@ -67,7 +67,7 @@ describe('useShortcutCapture', () => {
     expect(onError).not.toHaveBeenCalledWith(KEYBINDING_CONFLICT_MESSAGE)
   })
 
-  it('rolls back and reports a generic failure when the persist call throws', async () => {
+  test('rolls back and reports a generic failure when the persist call throws', async () => {
     // Arrange
     const persist = vi.fn().mockRejectedValue(new Error('IPC down'))
     const onError = vi.fn()

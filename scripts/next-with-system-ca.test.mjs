@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 import { sanitizeTlsEnvForClerkHandshake } from './next-with-system-ca.mjs'
 
@@ -13,7 +13,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = path.resolve(scriptDirectory, '..')
 
 describe('next-with-system-ca TLS env sanitization', () => {
-  it('drops Cursor exclusive SSL_CERT_FILE and keeps it as NODE_EXTRA_CA_CERTS', () => {
+  test('drops Cursor exclusive SSL_CERT_FILE and keeps it as NODE_EXTRA_CA_CERTS', () => {
     // Arrange
     const cursorCaPath = '/tmp/sfw-abc/socketFirewallCa.crt'
 
@@ -29,7 +29,7 @@ describe('next-with-system-ca TLS env sanitization', () => {
     expect(sanitized.NODE_EXTRA_CA_CERTS).toBe(cursorCaPath)
   })
 
-  it('leaves non-Cursor SSL_CERT_FILE untouched', () => {
+  test('leaves non-Cursor SSL_CERT_FILE untouched', () => {
     // Arrange
     const systemCaPath = '/etc/ssl/cert.pem'
 
@@ -46,7 +46,7 @@ describe('next-with-system-ca TLS env sanitization', () => {
     expect(sanitized.NODE_EXTRA_CA_CERTS).toBe('/custom/extra.pem')
   })
 
-  it('starts Next help under Cursor CA env without crashing', () => {
+  test('starts Next help under Cursor CA env without crashing', () => {
     // Arrange
     const launcherPath = path.join(
       repositoryRoot,

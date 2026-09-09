@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 /**
  * Regression guard for the v0.8.0/v0.8.1 packaging bug: electron-builder + pnpm
@@ -30,7 +30,7 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
   // absent from the asar, electron-updater throws MODULE_NOT_FOUND at load time,
   // so the WHOLE auto-update mechanism dies — silently, because the failure is
   // caught and the app keeps running but can never update itself again.
-  it('keeps "ms" as a direct dependency so packaged electron-updater can load and auto-update stays alive', () => {
+  test('keeps "ms" as a direct dependency so packaged electron-updater can load and auto-update stays alive', () => {
     // Act
     const declaredMsRange = dependencies.ms
 
@@ -45,7 +45,7 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
   // -> once -> wrappy), which the logger gate (computeShouldUsePrettyTransport)
   // already neutralizes in packaged builds. It is pinned as belt-and-suspenders
   // so that path can never crash on a missing leaf if the gate ever regresses.
-  it('keeps "wrappy" as a direct dependency to harden the pino-pretty crash path against the leaf drop', () => {
+  test('keeps "wrappy" as a direct dependency to harden the pino-pretty crash path against the leaf drop', () => {
     // Act
     const declaredWrappyRange = dependencies.wrappy
 
@@ -60,7 +60,7 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
   // same electron-builder+pnpm drop would leave the unpacked uiohook-napi unable
   // to load — silently disabling #111 lone-modifier shortcuts in packaged builds.
   // Pinned direct so the asar always bundles it.
-  it('keeps "node-gyp-build" as a direct dependency so packaged uiohook-napi can resolve its prebuilt binary', () => {
+  test('keeps "node-gyp-build" as a direct dependency so packaged uiohook-napi can resolve its prebuilt binary', () => {
     // Act
     const declaredNodeGypBuildRange = dependencies['node-gyp-build']
 
@@ -73,7 +73,7 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
   // It is imported only via a runtime require() in loadUiohook (the CJS main
   // process), never a static import our source-scanners can see, so a cleanup
   // pass could flag it as unused. Pinned direct so the desktop build keeps it.
-  it('keeps "uiohook-napi" as a direct dependency so the native lone-modifier tap ships in the app', () => {
+  test('keeps "uiohook-napi" as a direct dependency so the native lone-modifier tap ships in the app', () => {
     // Act
     const declaredUiohookRange = dependencies['uiohook-napi']
 
