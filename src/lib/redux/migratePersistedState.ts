@@ -3,10 +3,11 @@ import { type UserSettingsState } from '@/lib/schemas/settings'
 import { type ElectronSettingsState } from './slices/electronSettingsSlice'
 
 /** Current persisted-state version; {@link migratePersistedState} removes retired settings when an older store hydrates. */
-export const STORAGE_SCHEMA_VERSION = 4
+export const STORAGE_SCHEMA_VERSION = 5
 
 /** Only these unused preferences are removed; unrelated saved values survive. */
 const RETIRED_USER_SETTING_KEYS = [
+  'showCompletedTaskStrikethrough',
   'retainCompletedInList',
   'completionSound',
   'soundMoments',
@@ -96,7 +97,7 @@ export const migrateLegacyLiveEditorSettings = (
  * @returns
  * - The unchanged state when already current or no user-settings key exists.
  * - A cleaned state when the root or user-settings slice is corrupt.
- * - A migrated v4 state with retired keys removed and unrelated values preserved.
+ * - A migrated v5 state with retired keys removed and unrelated values preserved.
  * @example
  * migratePersistedState({ preferences: { completionSound: true, braindumpFontSize: 18 } }, 0)
  * // => { settings: { liveEditorFontSize: 18 } }

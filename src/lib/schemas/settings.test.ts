@@ -3,15 +3,13 @@ import { describe, expect, test } from 'vitest'
 import { UserSettingsStateSchema } from '@/lib/schemas/settings'
 
 describe('UserSettingsStateSchema', () => {
-  test('preserves completed-history and editor defaults when no settings have been saved', () => {
+  test('preserves editor defaults when no settings have been saved', () => {
     // Act
     const result = UserSettingsStateSchema.parse({})
 
-    // Assert — completed-title strikethrough preserves the established presentation,
-    // the LiveEditor editor at its prior look (sans / 16px / theme foreground),
+    // Assert — retain the LiveEditor look (sans / 16px / theme foreground),
     // and clear-on-complete OFF (finished lines stay put by default).
     expect(result).toEqual({
-      showCompletedTaskStrikethrough: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,
@@ -24,14 +22,17 @@ describe('UserSettingsStateSchema', () => {
 
   test('drops retired settings from old payloads while defaulting missing current preferences', () => {
     // Arrange — exactly the shape persisted before the sound palette existed.
-    const legacyPayload = { completionSound: true, retainCompletedInList: true }
+    const legacyPayload = {
+      completionSound: true,
+      retainCompletedInList: true,
+      showCompletedTaskStrikethrough: true,
+    }
 
     // Act
     const result = UserSettingsStateSchema.parse(legacyPayload)
 
     // Assert — retired values are absent; current fields fill from defaults.
     expect(result).toEqual({
-      showCompletedTaskStrikethrough: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,

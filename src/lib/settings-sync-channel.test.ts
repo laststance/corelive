@@ -10,7 +10,6 @@ import userSettingsReducer, {
   setLiveEditorFontSize,
   setLiveEditorTextColor,
   setLiveEditorToastDurationMs,
-  setShowCompletedTaskStrikethrough,
   setShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 import {
@@ -119,28 +118,6 @@ describe('settings cross-window sync', () => {
     expect(eventType).toBe('preferences-sync')
   })
 
-  test('updates completed-history strikethrough in both windows without reloading', () => {
-    // Arrange
-    const firstWindow = makeWindowStore()
-    const secondWindow = makeWindowStore()
-
-    // Act
-    firstWindow.dispatch(setShowCompletedTaskStrikethrough(false))
-
-    // Assert
-    expect(
-      secondWindow.getState().settings.showCompletedTaskStrikethrough,
-    ).toBe(false)
-
-    // Act
-    secondWindow.dispatch(setShowCompletedTaskStrikethrough(true))
-
-    // Assert
-    expect(firstWindow.getState().settings.showCompletedTaskStrikethrough).toBe(
-      true,
-    )
-  })
-
   test('accepts older windows without restoring retired settings or losing current choices', () => {
     // Arrange
     const receiver = makeWindowStore()
@@ -167,7 +144,6 @@ describe('settings cross-window sync', () => {
 
     // Assert
     expect(receiver.getState().settings).toEqual({
-      showCompletedTaskStrikethrough: false,
       showTodayEmber: false,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 21,
@@ -320,7 +296,7 @@ describe('settings cross-window sync', () => {
     // Act — a wrong-typed retained preference must fail validation wholesale.
     sender.postMessage({
       type: SETTINGS_SYNC_EVENT_TYPE,
-      state: { showCompletedTaskStrikethrough: 'yes' },
+      state: { showTodayEmber: 'yes' },
     })
 
     // Assert — nothing was applied.
@@ -336,7 +312,7 @@ describe('settings cross-window sync', () => {
     // Act — a foreign message on the same channel name.
     sender.postMessage({
       type: 'some-other-event',
-      state: { showCompletedTaskStrikethrough: false },
+      state: { showTodayEmber: true },
     })
 
     // Assert
@@ -353,13 +329,11 @@ describe('settings cross-window sync', () => {
     windowA.dispatch(
       hydrateUserSettings({
         ...initialState,
-        showCompletedTaskStrikethrough: false,
+        showTodayEmber: true,
       }),
     )
 
-    // Assert — window B never received it; it keeps its own decoration preference.
-    expect(windowB.getState().settings.showCompletedTaskStrikethrough).toBe(
-      true,
-    )
+    // Assert — window B never received it; it keeps its own Ember preference.
+    expect(windowB.getState().settings.showTodayEmber).toBe(false)
   })
 })

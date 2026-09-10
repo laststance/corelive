@@ -3,8 +3,6 @@ import React from 'react'
 
 import { getColorDotClass } from '@/lib/category-colors'
 import { formatClockTime } from '@/lib/formatClockTime'
-import { useAppSelector } from '@/lib/redux/hooks'
-import { selectShowCompletedTaskStrikethrough } from '@/lib/redux/slices/settingsSlice'
 import { cn } from '@/lib/utils'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
@@ -31,10 +29,6 @@ interface CompletedJournalRowProps {
 export const CompletedJournalRow = function CompletedJournalRow({
   entry,
 }: CompletedJournalRowProps) {
-  const showCompletedTaskStrikethrough = useAppSelector(
-    selectShowCompletedTaskStrikethrough,
-  )
-
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
       {/* Permanent record: a static, display-only check for every source. */}
@@ -43,13 +37,7 @@ export const CompletedJournalRow = function CompletedJournalRow({
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
-        {/* Keep the quieter completed tone while letting users remove the line decoration. */}
-        <div
-          className={cn(
-            'block break-words text-muted-foreground',
-            showCompletedTaskStrikethrough && 'line-through',
-          )}
-        >
+        <div className="block break-words text-muted-foreground">
           {entry.title}
         </div>
         {entry.category && (
