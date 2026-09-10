@@ -28,6 +28,7 @@ interface MockBrowserWindow {
   minimize: Spy
   isMinimized: Spy
   isVisible: Spy
+  isFocused: Spy
   isDestroyed: Spy
   setOpacity: Spy
   getOpacity: Spy
@@ -72,6 +73,7 @@ vi.mock('electron', () => ({
       minimize: vi.fn(),
       isMinimized: vi.fn(() => false),
       isVisible: vi.fn(() => false),
+      isFocused: vi.fn(() => false),
       isDestroyed: vi.fn(() => false),
       setOpacity: vi.fn(),
       getOpacity: vi.fn(() => 1),
@@ -371,6 +373,47 @@ describe('WindowManager startup panel nav-watch', () => {
     // Assert
     expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
     expect(onShown).toHaveBeenCalledTimes(1)
+  })
+
+  test('reveals LiveEditor covered by another app when its toggle is invoked', () => {
+    // Arrange: macOS still reports an occluded window as visible.
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.showLiveEditor()
+    const liveEditorWindow = getWindow(0)
+    liveEditorWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.win.isVisible.mockReturnValue(true)
+    liveEditorWindow.win.isFocused.mockReturnValue(false)
+    const onShown = vi.fn()
+
+    // Act
+    const didRequestOpen = windowManager.toggleLiveEditor(onShown)
+
+    // Assert
+    expect(didRequestOpen).toBe(true)
+    expect(liveEditorWindow.win.hide).not.toHaveBeenCalled()
+    expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(2)
+    expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(2)
+    expect(onShown).toHaveBeenCalledTimes(1)
+  })
+
+  test('hides the focused LiveEditor when its toggle is invoked again', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.showLiveEditor()
+    const liveEditorWindow = getWindow(0)
+    liveEditorWindow.fireWebContents('did-finish-load')
+    liveEditorWindow.win.isVisible.mockReturnValue(true)
+    liveEditorWindow.win.isFocused.mockReturnValue(true)
+    const onShown = vi.fn()
+
+    // Act
+    const didRequestOpen = windowManager.toggleLiveEditor(onShown)
+
+    // Assert
+    expect(didRequestOpen).toBe(false)
+    expect(liveEditorWindow.win.hide).toHaveBeenCalledTimes(1)
+    expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
+    expect(onShown).not.toHaveBeenCalled()
   })
 
   test('does not report a shortcut LiveEditor open when auth keeps the panel hidden', () => {
