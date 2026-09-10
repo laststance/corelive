@@ -74,7 +74,7 @@ describe('TaskSettings', () => {
   })
 
   test('offers Today Ember without the retired task presentation settings', () => {
-    // Arrange / Act
+    // Act
     renderTaskSettings()
 
     // Assert
