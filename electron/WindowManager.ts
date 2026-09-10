@@ -824,7 +824,7 @@ export class WindowManager {
   }
 
   /**
-   * Toggles LiveEditor and reports its eventual authenticated reveal to shortcut-only callers.
+   * Hides the focused LiveEditor or reveals it for menu, tray, IPC, and {@link ShortcutManager} callers.
    * @param onShown - Optional callback fired only after the panel is visibly shown.
    * @returns True when an open was requested, false when it was hidden or canceled.
    * @example
@@ -837,7 +837,11 @@ export class WindowManager {
       return true
     }
 
-    if (this.liveEditorWindow.isVisible()) {
+    // Electron also considers panels covered by another app visible; those need focus.
+    if (
+      this.liveEditorWindow.isVisible() &&
+      this.liveEditorWindow.isFocused()
+    ) {
       this.hideLiveEditor()
       return false
     }
