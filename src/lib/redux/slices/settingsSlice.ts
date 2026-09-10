@@ -12,13 +12,13 @@
  * @example
  * import { useAppSelector, useAppDispatch } from '@/lib/redux/hooks'
  * import {
- *   selectShowCompletedTaskStrikethrough,
- *   setShowCompletedTaskStrikethrough,
+ *   selectShowTodayEmber,
+ *   setShowTodayEmber,
  * } from '@/lib/redux/slices/settingsSlice'
  *
- * const showStrikethrough = useAppSelector(selectShowCompletedTaskStrikethrough)
+ * const showTodayEmber = useAppSelector(selectShowTodayEmber)
  * const dispatch = useAppDispatch()
- * dispatch(setShowCompletedTaskStrikethrough(false))
+ * dispatch(setShowTodayEmber(true))
  */
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
@@ -57,21 +57,6 @@ const userSettingsSlice = createSlice({
   name: 'settings',
   initialState,
   reducers: {
-    /**
-     * Controls whether completed task titles use a strikethrough in Home's completed history.
-     * @param state - Current state.
-     * @param action - Payload containing the new strikethrough visibility.
-     * @returns Nothing; Redux Toolkit records the state mutation.
-     * @example
-     * dispatch(setShowCompletedTaskStrikethrough(false))
-     */
-    setShowCompletedTaskStrikethrough: (
-      state,
-      action: PayloadAction<boolean>,
-    ) => {
-      state.showCompletedTaskStrikethrough = action.payload
-    },
-
     /**
      * Saves Ember visibility when {@link TaskSettings} toggles the shared LiveEditor feedback.
      * @param state - Current settings.
@@ -208,7 +193,6 @@ const userSettingsSlice = createSlice({
 
 // Export actions
 export const {
-  setShowCompletedTaskStrikethrough,
   setShowTodayEmber,
   setLiveEditorFontFamily,
   setLiveEditorFontSize,
@@ -223,19 +207,6 @@ export const {
 // Selectors — read through `?? DEFAULT` as a read-time backstop: deepMerge
 // (store.ts) already fills any field a pre-field persisted blob lacks, so this
 // only guards the remaining edges instead of surfacing `undefined` (Finding 5).
-/**
- * Selects whether completed task titles use a strikethrough in Home's completed history.
- * @param state - Root state.
- * @returns Whether the completed-title strikethrough is visible (default true).
- * @example
- * selectShowCompletedTaskStrikethrough(state) // => true
- */
-export const selectShowCompletedTaskStrikethrough = (
-  state: RootState,
-): boolean =>
-  state.settings.showCompletedTaskStrikethrough ??
-  DEFAULT_SETTINGS.showCompletedTaskStrikethrough
-
 /**
  * Reads the opt-in Ember setting for {@link LiveEditor} and {@link TaskSettings}, including older saved settings.
  * @param state - Root state.
@@ -306,7 +277,6 @@ export const selectLiveEditorToastDurationMs = (state: RootState): number =>
  * @returns The complete, effective settings state
  */
 export const selectUserSettings = (state: RootState): UserSettingsState => ({
-  showCompletedTaskStrikethrough: selectShowCompletedTaskStrikethrough(state),
   showTodayEmber: selectShowTodayEmber(state),
   liveEditorFontFamily: selectLiveEditorFontFamily(state),
   liveEditorFontSize: selectLiveEditorFontSize(state),

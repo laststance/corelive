@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { STORAGE_SCHEMA_VERSION } from './migratePersistedState'
 import { selectShowInMenuBar } from './slices/electronSettingsSlice'
-import { setShowCompletedTaskStrikethrough } from './slices/settingsSlice'
+import { setShowTodayEmber } from './slices/settingsSlice'
 import { createPersistenceMiddleware, STORAGE_KEY } from './store'
 
 /** Hydrates a fresh store through the production migration and merge configuration for upgrade tests.
@@ -27,7 +27,7 @@ describe('settings survive an app update', () => {
   beforeEach(() => window.localStorage.clear())
   afterEach(() => window.localStorage.clear())
 
-  test.each([0, 1, 2, 3])(
+  test.each([0, 1, 2, 3, 4])(
     'upgrades v%s and preserves choices after another save and reload',
     async (version) => {
       // Arrange
@@ -76,13 +76,13 @@ describe('settings survive an app update', () => {
 
       // Act
       const first = await rehydrateSavedSettings()
-      first.store.dispatch(setShowCompletedTaskStrikethrough(true))
+      first.store.dispatch(setShowTodayEmber(false))
       await vi.waitFor(() => {
         expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
-          '"version":4',
+          '"version":5',
         )
         expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
-          '"showCompletedTaskStrikethrough":true',
+          '"showTodayEmber":false',
         )
         expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
           'soundMoments',
@@ -92,8 +92,7 @@ describe('settings survive an app update', () => {
 
       // Assert
       expect(reloaded.store.getState().settings).toEqual({
-        showCompletedTaskStrikethrough: true,
-        showTodayEmber: true,
+        showTodayEmber: false,
         liveEditorFontFamily: 'serif',
         liveEditorFontSize: 21,
         liveEditorTextColor: '#c2410c',
@@ -114,34 +113,11 @@ describe('settings survive an app update', () => {
       expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
         'retainCompletedInList',
       )
+      expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
+        'showCompletedTaskStrikethrough',
+      )
     },
   )
-
-  test('keeps a saved decoration choice while filling missing editor fields', async () => {
-    // Arrange
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: STORAGE_SCHEMA_VERSION,
-        state: { settings: { showCompletedTaskStrikethrough: false } },
-      }),
-    )
-
-    // Act
-    const { store } = await rehydrateSavedSettings()
-
-    // Assert
-    expect(store.getState().settings).toEqual({
-      showCompletedTaskStrikethrough: false,
-      showTodayEmber: false,
-      liveEditorFontFamily: 'sans',
-      liveEditorFontSize: 16,
-      liveEditorTextColor: 'var(--foreground)',
-      liveEditorClearOnComplete: false,
-      liveEditorClearDelayMs: 500,
-      liveEditorToastDurationMs: 5000,
-    })
-  })
 
   test('keeps Today Ember enabled after reopening the app', async () => {
     // Arrange
@@ -213,7 +189,7 @@ describe('settings survive an app update', () => {
         version: 3,
         state: {
           settings: {
-            showCompletedTaskStrikethrough: 'yes',
+            showTodayEmber: 'yes',
             liveEditorFontFamily: 'serif',
             liveEditorFontSize: 22,
           },
@@ -250,7 +226,7 @@ describe('settings survive an app update', () => {
     const { store } = await rehydrateSavedSettings()
 
     // Assert
-    expect(store.getState().settings.showCompletedTaskStrikethrough).toBe(true)
+    expect(store.getState().settings.showTodayEmber).toBe(false)
     expect(store.getState().electronSettings).toEqual({
       hideAppIcon: true,
       showInMenuBar: false,

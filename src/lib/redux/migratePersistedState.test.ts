@@ -6,7 +6,7 @@ import {
 } from './migratePersistedState'
 
 describe('persisted settings migration', () => {
-  test.each([0, 1, 2, 3])(
+  test.each([0, 1, 2, 3, 4])(
     'removes retired preferences from v%s without changing other saved data',
     (version) => {
       // Arrange
@@ -18,7 +18,8 @@ describe('persisted settings migration', () => {
         soundMoments: { 'task-create': true, complete: true, clear: false },
         soundTimbre: 'wood',
         soundVolume: 0.3,
-        showCompletedTaskStrikethrough: false,
+        showCompletedTaskStrikethrough: true,
+        showTodayEmber: false,
         liveEditorFontFamily: 'serif',
         liveEditorFontSize: 21,
         liveEditorTextColor: '#c2410c',
@@ -45,7 +46,7 @@ describe('persisted settings migration', () => {
       // Assert
       expect(migrated).toEqual({
         settings: {
-          showCompletedTaskStrikethrough: false,
+          showTodayEmber: false,
           liveEditorFontFamily: 'serif',
           liveEditorFontSize: 21,
           liveEditorTextColor: '#c2410c',
@@ -103,11 +104,11 @@ describe('persisted settings migration', () => {
     // Arrange
     const persistedState = {
       preferences: {
-        showCompletedTaskStrikethrough: true,
+        showTodayEmber: true,
         braindumpFontSize: 12,
       },
       settings: {
-        showCompletedTaskStrikethrough: false,
+        showTodayEmber: false,
         liveEditorFontSize: 21,
         braindumpFontSize: 18,
       },
@@ -119,7 +120,7 @@ describe('persisted settings migration', () => {
     // Assert
     expect(migrated).toEqual({
       settings: {
-        showCompletedTaskStrikethrough: false,
+        showTodayEmber: false,
         liveEditorFontSize: 21,
       },
     })
@@ -135,7 +136,7 @@ describe('persisted settings migration', () => {
         soundTimbre: 42,
         soundVolume: 'loud',
         liveEditorFontSize: 22,
-        showCompletedTaskStrikethrough: false,
+        showTodayEmber: false,
       },
     }
 
@@ -146,24 +147,24 @@ describe('persisted settings migration', () => {
     expect(migrated).toEqual({
       settings: {
         liveEditorFontSize: 22,
-        showCompletedTaskStrikethrough: false,
+        showTodayEmber: false,
       },
     })
   })
 
-  test.each([4, 5])(
+  test.each([5, 6])(
     'leaves current or future v%s data unchanged',
     (version) => {
       // Arrange
       const persistedState = {
-        settings: { showCompletedTaskStrikethrough: false },
+        settings: { showTodayEmber: false },
       }
 
       // Act
       const migrated = migratePersistedState(persistedState, version)
 
       // Assert
-      expect(STORAGE_SCHEMA_VERSION).toBe(4)
+      expect(STORAGE_SCHEMA_VERSION).toBe(5)
       expect(migrated).toBe(persistedState)
     },
   )
@@ -227,7 +228,7 @@ describe('persisted settings migration', () => {
     const persistedState = {
       settings: null,
       preferences: {
-        showCompletedTaskStrikethrough: false,
+        showTodayEmber: false,
         completionSound: true,
       },
     } as unknown as Parameters<typeof migratePersistedState>[0]
@@ -237,7 +238,7 @@ describe('persisted settings migration', () => {
 
     // Assert
     expect(migrated).toEqual({
-      settings: { showCompletedTaskStrikethrough: false },
+      settings: { showTodayEmber: false },
     })
   })
 })

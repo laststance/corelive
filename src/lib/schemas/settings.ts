@@ -31,8 +31,6 @@ import {
  * Validates incoming settings for window sync, filling missing preferences and dropping retired keys from older windows.
  */
 export const UserSettingsStateSchema = z.object({
-  /** Show a line through task titles in Home's completed history. */
-  showCompletedTaskStrikethrough: z.boolean().default(true),
   /** Opt-in Today Ember above both LiveEditor hosts; existing installs keep it hidden. */
   showTodayEmber: z.boolean().default(false),
   /** LiveEditor editor font family. `.catch` (not `.default`) so a MISSING *or*

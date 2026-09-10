@@ -19,7 +19,6 @@ import reducer, {
   setLiveEditorFontSize,
   setLiveEditorTextColor,
   setLiveEditorToastDurationMs,
-  setShowCompletedTaskStrikethrough,
   type UserSettingsState,
 } from './settingsSlice'
 
@@ -31,10 +30,9 @@ function stateWith(settings: Partial<UserSettingsState>): RootState {
 }
 
 describe('settingsSlice', () => {
-  test('preserves completed-history decoration and LiveEditor defaults', () => {
-    // Arrange — hard-code completed-history and LiveEditor defaults.
+  test('preserves the LiveEditor defaults without retired settings', () => {
+    // Arrange — hard-code the remaining LiveEditor defaults.
     const expectedSettings = {
-      showCompletedTaskStrikethrough: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,
@@ -47,25 +45,13 @@ describe('settingsSlice', () => {
     // Act — read the schema-owned initial state used by fresh installs.
     const actualSettings = initialState
 
-    // Assert — completed titles retain their line and existing editor behavior.
+    // Assert — only active editor preferences remain.
     expect(actualSettings).toEqual(expectedSettings)
-  })
-
-  test('removes completed title lines when setShowCompletedTaskStrikethrough(false) is dispatched', () => {
-    // Arrange
-    const action = setShowCompletedTaskStrikethrough(false)
-
-    // Act
-    const next = reducer(initialState, action)
-
-    // Assert
-    expect(next.showCompletedTaskStrikethrough).toBe(false)
   })
 
   test('replaces the whole state on hydrateUserSettings (the cross-window apply path)', () => {
     // Arrange
     const incoming: UserSettingsState = {
-      showCompletedTaskStrikethrough: false,
       showTodayEmber: true,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 20,
@@ -80,7 +66,6 @@ describe('settingsSlice', () => {
 
     // Assert
     expect(next).toEqual({
-      showCompletedTaskStrikethrough: false,
       showTodayEmber: true,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 20,
@@ -94,7 +79,6 @@ describe('settingsSlice', () => {
   test('restores every default on resetUserSettings', () => {
     // Arrange — a fully-enabled state.
     const enabled: UserSettingsState = {
-      showCompletedTaskStrikethrough: false,
       showTodayEmber: true,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 24,
@@ -109,7 +93,6 @@ describe('settingsSlice', () => {
 
     // Assert
     expect(next).toEqual({
-      showCompletedTaskStrikethrough: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,
@@ -120,7 +103,7 @@ describe('settingsSlice', () => {
     })
   })
 
-  test('fills missing saved settings with completed-history and LiveEditor defaults', () => {
+  test('fills missing saved settings with LiveEditor defaults', () => {
     // Arrange — all fields dropped.
     const emptyState = stateWith({})
 
@@ -129,7 +112,6 @@ describe('settingsSlice', () => {
 
     // Assert
     expect(settings).toEqual({
-      showCompletedTaskStrikethrough: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,

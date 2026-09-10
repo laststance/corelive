@@ -16,7 +16,7 @@ import type { UserSettingsState } from '@/lib/schemas/settings'
  * @param overrides - Settings values that differ from current defaults.
  * @returns The store and user driver used by each observable-behavior test.
  * @example
- * renderTaskSettings({ showCompletedTaskStrikethrough: false })
+ * renderTaskSettings({ showTodayEmber: true })
  */
 function renderTaskSettings(overrides: Partial<UserSettingsState> = {}) {
   const store = configureStore({
@@ -73,45 +73,22 @@ describe('TaskSettings', () => {
     ).toBeChecked()
   })
 
-  test('offers completed-history decoration without the unused keep-in-list setting', () => {
-    // Arrange / Act
+  test('offers Today Ember without the retired task presentation settings', () => {
+    // Act
     renderTaskSettings()
 
     // Assert
-    expect(screen.getAllByRole('switch')).toHaveLength(2)
+    expect(screen.getAllByRole('switch')).toHaveLength(1)
+    expect(
+      screen.getByRole('switch', { name: 'Show Today Ember' }),
+    ).toBeVisible()
     expect(
       screen.queryByRole('switch', { name: 'Keep finished tasks in the list' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(
-        'Draw a line through task titles in your completed history.',
-      ),
-    ).toBeInTheDocument()
-  })
-  test('shows completed task strikethrough by default', () => {
-    // Arrange / Act — render a fresh install.
-    renderTaskSettings()
-
-    // Assert — the current completed-title treatment remains the default.
-    expect(
-      screen.getByRole('switch', {
+      screen.queryByRole('switch', {
         name: 'Show strikethrough on completed tasks',
       }),
-    ).toBeChecked()
-  })
-
-  test('removes completed task strikethrough when the switch is turned off', async () => {
-    // Arrange
-    const { store, user } = renderTaskSettings()
-
-    // Act — turn off the completed-title line decoration.
-    await user.click(
-      screen.getByRole('switch', {
-        name: 'Show strikethrough on completed tasks',
-      }),
-    )
-
-    // Assert — the persisted settings slice records the opt-out.
-    expect(store.getState().settings.showCompletedTaskStrikethrough).toBe(false)
+    ).not.toBeInTheDocument()
   })
 })

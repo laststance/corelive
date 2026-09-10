@@ -9,7 +9,6 @@ import {
   setLiveEditorFontSize,
   setLiveEditorTextColor,
   setLiveEditorToastDurationMs,
-  setShowCompletedTaskStrikethrough,
   setShowTodayEmber,
 } from '@/lib/redux/slices/settingsSlice'
 import {
@@ -36,7 +35,6 @@ type UserSettingsSyncMessage = Readonly<{
 // added here (the Zod schema validates payloads but does NOT decide which
 // actions broadcast).
 const BROADCASTABLE_ACTION_TYPES = new Set<string>([
-  setShowCompletedTaskStrikethrough.type,
   setShowTodayEmber.type,
   setLiveEditorFontFamily.type,
   setLiveEditorFontSize.type,
