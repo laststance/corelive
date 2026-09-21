@@ -154,6 +154,19 @@ then test the cold-boot path, or you'll misread the unseeded first-boot as a fai
 
 ## Renderer ⇄ main precedence — the hydration race (codex MAJOR)
 
+> **Superseded by the store-mirroring fix** (branch
+> `fix/settings-popover-hydration-policy-flip`). This section concluded the stale
+> pre-hydration push was harmless. It was not. `ElectronStartupSync` pushed a
+> **render-time selector** value, and while hydrating server HTML react-redux renders
+> `ReduxProvider`'s `serverState` (slice defaults) first and the restored localStorage
+> state second — so with Hide App Icon ON, main received `setHideAppIcon(false)` then
+> `(true)`. That `regular → accessory` flip deactivates the app, which blur-closed the
+> Settings popover the first time it opened in each app session. The component now
+> mirrors `store.getState()` on mount plus a `store.subscribe` listener with a
+> per-setting last-pushed dedupe, so the placeholder value never reaches main. Read
+> the rest of this section as the reasoning at the time of #112, not as current
+> behavior.
+
 `ElectronStartupSync` re-pushes the renderer's value over IPC after the page loads
 (`setHideAppIcon`), so the question is: can a stale **pre-hydration default `false`**
 push fight main's boot `accessory` and flip the icon back on? Tracing the actual
@@ -294,7 +307,9 @@ Native macOS QA (packaged app, driven locally — see CLAUDE.md "Electron Native
   seeds config). A faithful unit test of the ordering isn't possible (same-tick
   `configureStore()`+`render()` has no microtask gap → tautological); existing
   `ElectronStartupSync.test.tsx` covers the once-hydrated push, boot is proven
-  main-side.
+  main-side. **This resolution was wrong** — see the Superseded note in
+  §Renderer ⇄ main precedence: the flip-flop was real and blur-closed the Settings
+  popover, fixed by mirroring the store instead of a render-time selector.
 - **MAJOR — `resolveHideAppIcon` weak to corrupt config.** Adopted strict `=== true`;
   unit truth table covers missing/`"false"`/`0`/`1`.
 - **MAJOR — tests/QA don't close the boot-ordering + login-item risk.** Persist is
