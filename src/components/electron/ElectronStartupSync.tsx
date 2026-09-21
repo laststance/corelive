@@ -51,7 +51,7 @@ import { isElectronEnvironment } from '../../../electron/utils/electron-client'
  * a store subscriber, where a throw would abort Redux's listener loop and escape
  * `store.dispatch()` at whoever dispatched (e.g. a Settings toggle handler).
  *
- * The preload bridge (electron/preload.ts) wraps `typedInvoke` in a try/catch
+ * The preload bridge (electron/preload.ts) wraps {@link typedInvoke} in a try/catch
  * and returns `false` instead of rejecting, so the meaningful failure signal is
  * the boolean `false`. The `async` thunk is the defense-in-depth against a frozen
  * or changed preload: `async` turns a synchronous throw into a rejection and
@@ -88,12 +88,19 @@ function pushSettingToMain(
  * `store.getState()` (never a render-time selector) so the SSR hydration
  * placeholder cannot reach main — see the module doc.
  *
- * Each setting keeps its OWN last-synced value and its OWN method guard so they
+ * A Settings toggle ({@link ElectronSettingsPage}) already calls the bridge itself
+ * and dispatches only on success, so the push it triggers here is a same-value
+ * repeat. That is safe only because main's handlers are idempotent (re-applying
+ * the same activation policy is a no-op;
+ * {@link SystemTrayManager.setMenuBarVisible} skips creating a second tray) —
+ * keep them that way.
+ *
+ * Each setting keeps its OWN last-pushed value and its OWN method guard so they
  * stay independent: a change to one setting re-syncs only that one, and an older
  * preload missing one method never suppresses the other's sync.
  *
- * Uses `isElectronEnvironment()` directly inside the effect rather than the
- * `useIsElectron` hook: avoids importing the heavy auth-form module (and its
+ * Uses {@link isElectronEnvironment} directly inside the effect rather than the
+ * {@link useIsElectron} hook: avoids importing the heavy auth-form module (and its
  * Clerk hooks) into the root layout chunk for web users, while staying SSR-safe
  * because effects only run in the browser.
  *

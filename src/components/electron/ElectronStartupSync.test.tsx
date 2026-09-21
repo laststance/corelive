@@ -71,8 +71,10 @@ const installElectronAPI = (
 describe('ElectronStartupSync', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    setHideAppIconMock.mockClear()
-    setShowInMenuBarMock.mockClear()
+    // mockReset (not mockClear) also drains queued `mock*Once` values, so a Once
+    // that a test never consumed cannot leak into the next test.
+    setHideAppIconMock.mockReset().mockResolvedValue(true)
+    setShowInMenuBarMock.mockReset().mockResolvedValue(true)
     isElectronMock.value = true
     installElectronAPI({
       settings: {
@@ -85,6 +87,9 @@ describe('ElectronStartupSync', () => {
   afterEach(() => {
     // The rehydration test seeds persisted settings; never leak them onward.
     window.localStorage.clear()
+    // A failed assertion skips a test's own `mockRestore()`; without this the
+    // `console.error` spy would stay a silent no-op for every later test.
+    vi.restoreAllMocks()
   })
 
   test.each([true, false])(
@@ -260,9 +265,10 @@ describe('ElectronStartupSync', () => {
 
   test('logs an error when setHideAppIcon resolves to false', async () => {
     // The preload bridge swallows thrown errors and returns `false` instead
-    // of rejecting (electron/preload.ts:1491-1502). Without this test, the
-    // .then/false-check could be removed and the rejection-only test above
-    // would still pass — but real failures from main would silently disappear.
+    // of rejecting (the try/catch around typedInvoke in electron/preload.ts's
+    // `settings` bridge). Without this test, the .then/false-check could be
+    // removed and the rejection-only test above would still pass — but real
+    // failures from main would silently disappear.
     setHideAppIconMock.mockResolvedValueOnce(false)
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -456,6 +462,19 @@ describe('ElectronStartupSync', () => {
     const serverState = store.getState()
     // Next task: the gap between bundle evaluation and React hydration.
     await new Promise((resolve) => setTimeout(resolve, 0))
+    // Premises of this scenario — if either stops holding, fail loudly here
+    // rather than let the test go green while guarding nothing: the placeholder
+    // still holds the slice defaults, and the store is restored before mount.
+    expect(serverState.electronSettings).toEqual({
+      hideAppIcon: false,
+      showInMenuBar: true,
+      startAtLogin: false,
+    })
+    expect(store.getState().electronSettings).toEqual({
+      hideAppIcon: true,
+      showInMenuBar: false,
+      startAtLogin: false,
+    })
     const app = (
       <Provider store={store} serverState={serverState}>
         <ElectronStartupSync />
@@ -616,6 +635,37 @@ describe('ElectronStartupSync', () => {
     store.dispatch(setHideAppIcon(false))
 
     // Assert
+    await Promise.resolve()
+    expect(setHideAppIconMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not re-attempt a failed dock-policy push on every later dispatch', async () => {
+    // A push is recorded as made BEFORE it settles, on purpose: the sync listens
+    // to the whole store, so "retry until it works" against a broken bridge would
+    // re-apply the macOS activation policy on every dispatch in the app.
+    // Arrange
+    const ipcError = new Error('main process unavailable')
+    setHideAppIconMock.mockRejectedValueOnce(ipcError)
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+    const store = buildStore({ hideAppIcon: true, showInMenuBar: true })
+    render(
+      <Provider store={store}>
+        <ElectronStartupSync />
+      </Provider>,
+    )
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[ElectronStartupSync] Failed to sync hideAppIcon:',
+        ipcError,
+      )
+    })
+
+    // Act: an unrelated setting changes after the failed push.
+    store.dispatch(setStartAtLogin(true))
+
+    // Assert: the failure was logged once and is not retried.
     await Promise.resolve()
     expect(setHideAppIconMock).toHaveBeenCalledTimes(1)
   })
@@ -844,6 +894,72 @@ describe('ElectronStartupSync', () => {
         bridgeError,
       )
     })
+
+    consoleErrorSpy.mockRestore()
+  })
+
+  test('keeps a Settings toggle working when setShowInMenuBar throws synchronously after mount', async () => {
+    // Mirror for the tray call site: each setting pushes through its OWN thunk,
+    // so hardening one does not protect the other.
+    // Arrange
+    const bridgeError = new Error('contextBridge call failed')
+    const store = buildStore({ hideAppIcon: false, showInMenuBar: true })
+    render(
+      <Provider store={store}>
+        <ElectronStartupSync />
+      </Provider>,
+    )
+    await waitFor(() => {
+      expect(setShowInMenuBarMock).toHaveBeenCalledWith(true)
+    })
+    // Registered after the sync, so Redux notifies it after the sync.
+    const laterSubscriber = vi.fn()
+    store.subscribe(laterSubscriber)
+    setShowInMenuBarMock.mockImplementationOnce(() => {
+      throw bridgeError
+    })
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+
+    // Act + Assert: the dispatch the Settings toggle makes must not throw.
+    expect(() => store.dispatch(setShowInMenuBar(false))).not.toThrow()
+
+    // Assert: the toggle took effect, later subscribers still ran, failure logged.
+    expect(store.getState().electronSettings.showInMenuBar).toBe(false)
+    expect(laterSubscriber).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[ElectronStartupSync] Failed to sync showInMenuBar:',
+        bridgeError,
+      )
+    })
+
+    consoleErrorSpy.mockRestore()
+  })
+
+  test('does not throw when an older preload returns a bare true instead of a promise from setShowInMenuBar', async () => {
+    // Mirror of the setHideAppIcon non-promise case for the tray call site.
+    // Arrange
+    setShowInMenuBarMock.mockReturnValueOnce(true)
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+
+    // Act + Assert: mounting stays quiet and the independent dock-icon sync runs.
+    expect(() =>
+      render(
+        wrapWithStore(<ElectronStartupSync />, {
+          hideAppIcon: true,
+          showInMenuBar: true,
+        }),
+      ),
+    ).not.toThrow()
+    await waitFor(() => {
+      expect(setHideAppIconMock).toHaveBeenCalledWith(true)
+    })
+    expect(setShowInMenuBarMock).toHaveBeenCalledWith(true)
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
 
     consoleErrorSpy.mockRestore()
   })
