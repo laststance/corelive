@@ -18,9 +18,16 @@
  * persisted config (ConfigManager `behavior.hideAppIcon`), so on a cold restart
  * the dock policy is correct before any window shows even if this renderer never
  * loads (#112). This component stays the live-toggle path and the writer that
- * SEEDS that config: its mount run reads the already-hydrated value (the storage
- * middleware rehydrates in a microtask, before mount effects), so it pushes the
- * correct value, not the pre-hydration default — see ElectronStartupSync.test.tsx.
+ * SEEDS that config.
+ *
+ * It mirrors the STORE, never a render-time selector value: while hydrating
+ * server HTML, react-redux renders {@link ReduxProvider}'s `serverState` (slice
+ * defaults) first, then the restored localStorage state. A selector-driven effect
+ * pushed that placeholder too — `hideAppIcon` false→true flipped the macOS
+ * activation policy regular→accessory, which deactivates the app and blur-closed
+ * the Settings popover the instant it first opened. The store itself is already
+ * restored by mount (the storage middleware rehydrates in a microtask at store
+ * creation) — see ElectronStartupSync.test.tsx.
  *
  * Renders nothing. Mount once near the top of the React tree, inside
  * `<ReduxProvider>`.
@@ -28,12 +35,14 @@
  * @module components/electron/ElectronStartupSync
  */
 
-import { useCycleEffect } from '@/hooks/use-cycle-effect'
-import { useAppSelector } from '@/lib/redux/hooks'
+import { useStore } from 'react-redux'
+
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import {
   selectHideAppIcon,
   selectShowInMenuBar,
 } from '@/lib/redux/slices/electronSettingsSlice'
+import type { RootState } from '@/lib/redux/store'
 
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 
@@ -72,17 +81,16 @@ function reportSyncFailure(
 }
 
 /**
- * Pushes the persisted `hideAppIcon` and `showInMenuBar` values to the main
- * process via IPC after Redux hydrates from localStorage. The IPC handlers in
- * main.ts are idempotent (re-applying the same activation policy is a no-op;
- * `setMenuBarVisible` skips creating a second tray), so firing on every selector
- * change is safe.
+ * Mirrors the store's persisted `hideAppIcon` and `showInMenuBar` to the main
+ * process via IPC: once on mount, then whenever either value changes. Reads
+ * `store.getState()` (never a render-time selector) so the SSR hydration
+ * placeholder cannot reach main — see the module doc.
  *
- * Each setting syncs in its OWN effect with its OWN method guard so they stay
- * independent: a re-render that only changes one setting re-syncs only that one,
- * and an older preload missing one method never suppresses the other's sync.
+ * Each setting keeps its OWN last-synced value and its OWN method guard so they
+ * stay independent: a change to one setting re-syncs only that one, and an older
+ * preload missing one method never suppresses the other's sync.
  *
- * Uses `isElectronEnvironment()` directly inside each effect rather than the
+ * Uses `isElectronEnvironment()` directly inside the effect rather than the
  * `useIsElectron` hook: avoids importing the heavy auth-form module (and its
  * Clerk hooks) into the root layout chunk for web users, while staying SSR-safe
  * because effects only run in the browser.
@@ -97,35 +105,53 @@ function reportSyncFailure(
  * </ReduxProvider>
  */
 export function ElectronStartupSync(): null {
-  const hideAppIcon = useAppSelector(selectHideAppIcon)
-  const showInMenuBar = useAppSelector(selectShowInMenuBar)
+  const store = useStore<RootState>()
 
-  // Sync the dock-icon policy. Guard on the METHOD, not just the `settings`
-  // namespace. This component is mounted in the root layout, so it runs on every
-  // route — and the installed desktop app loads remote web against its own
-  // FROZEN preload. Calling `undefined()` on an older preload would throw a
-  // synchronous TypeError out of this effect, past its own `.catch`, to the
-  // error boundary (and from the root layout it escapes `error.tsx` entirely —
-  // see `global-error.tsx`). Uniform method-guarding future-proofs the bridge
-  // against a reshuffle and matches the other Electron settings components.
-  useCycleEffect(() => {
+  useInitialEffect(() => {
     if (!isElectronEnvironment()) return
-    const settings = window.electronAPI?.settings
-    if (typeof settings?.setHideAppIcon !== 'function') return
-    // Call as a method so `this` stays bound to `settings`.
-    reportSyncFailure(settings.setHideAppIcon(hideAppIcon), 'hideAppIcon')
-  }, [hideAppIcon])
 
-  // Sync the menu-bar (tray) visibility. Independent method guard for the same
-  // frozen-preload reason as above; an old preload that lacks `setShowInMenuBar`
-  // is skipped rather than crashing every route.
-  useCycleEffect(() => {
-    if (!isElectronEnvironment()) return
-    const settings = window.electronAPI?.settings
-    if (typeof settings?.setShowInMenuBar !== 'function') return
-    // Call as a method so `this` stays bound to `settings`.
-    reportSyncFailure(settings.setShowInMenuBar(showInMenuBar), 'showInMenuBar')
-  }, [showInMenuBar])
+    // Last value handed to main, per setting: an unrelated dispatch syncs nothing.
+    let lastSyncedHideAppIcon: boolean | undefined
+    let lastSyncedShowInMenuBar: boolean | undefined
+
+    const syncChangedSettings = (): void => {
+      const settings = window.electronAPI?.settings
+      const state = store.getState()
+
+      // Guard on the METHOD, not just the `settings` namespace. This component is
+      // mounted in the root layout, so it runs on every route — and the installed
+      // desktop app loads remote web against its own FROZEN preload. Calling
+      // `undefined()` on an older preload would throw a synchronous TypeError out
+      // of this effect, past its own `.catch`, to the error boundary (and from the
+      // root layout it escapes `error.tsx` entirely — see `global-error.tsx`).
+      const hideAppIcon = selectHideAppIcon(state)
+      if (
+        hideAppIcon !== lastSyncedHideAppIcon &&
+        typeof settings?.setHideAppIcon === 'function'
+      ) {
+        lastSyncedHideAppIcon = hideAppIcon
+        // Call as a method so `this` stays bound to `settings`.
+        reportSyncFailure(settings.setHideAppIcon(hideAppIcon), 'hideAppIcon')
+      }
+
+      // Menu-bar (tray) visibility: independent guard for the same frozen-preload
+      // reason; an old preload lacking `setShowInMenuBar` is skipped, not crashed.
+      const showInMenuBar = selectShowInMenuBar(state)
+      if (
+        showInMenuBar !== lastSyncedShowInMenuBar &&
+        typeof settings?.setShowInMenuBar === 'function'
+      ) {
+        lastSyncedShowInMenuBar = showInMenuBar
+        reportSyncFailure(
+          settings.setShowInMenuBar(showInMenuBar),
+          'showInMenuBar',
+        )
+      }
+    }
+
+    syncChangedSettings()
+    return store.subscribe(syncChangedSettings)
+  })
 
   return null
 }

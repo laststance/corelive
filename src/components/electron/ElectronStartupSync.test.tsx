@@ -84,7 +84,7 @@ describe('ElectronStartupSync', () => {
       })
       // Cross-check the OTHER setting got its own distinct literal (the store's
       // showInMenuBar default is true), so a selector/value swap between the two
-      // independent effects can never silently pass this case.
+      // independent syncs can never silently pass this case.
       expect(setShowInMenuBarMock).toHaveBeenCalledWith(true)
     },
   )
@@ -97,8 +97,8 @@ describe('ElectronStartupSync', () => {
       await waitFor(() => {
         expect(setShowInMenuBarMock).toHaveBeenCalledWith(showInMenuBar)
       })
-      // Cross-check the dock-icon effect sent its own distinct literal (false),
-      // guarding against a swap where one effect forwards the other's value.
+      // Cross-check the dock-icon sync sent its own distinct literal (false),
+      // guarding against a swap where one sync forwards the other's value.
       expect(setHideAppIconMock).toHaveBeenCalledWith(false)
     },
   )
@@ -285,11 +285,74 @@ describe('ElectronStartupSync', () => {
     consoleErrorSpy.mockRestore()
   })
 
+  test('keeps the Settings popover open on first mount by never pushing the SSR placeholder hideAppIcon while hydrating', async () => {
+    // Arrange: mirror the production ReduxProvider — the real store already holds
+    // the user's persisted hideAppIcon=true (restored from localStorage), while
+    // `serverState` carries the slice defaults so the first hydration render
+    // matches the server HTML.
+    const store = buildStore(true)
+    const serverState = {
+      electronSettings: {
+        hideAppIcon: false,
+        showInMenuBar: true,
+        startAtLogin: false,
+      },
+    }
+    const app = (
+      <Provider store={store} serverState={serverState}>
+        <ElectronStartupSync />
+      </Provider>
+    )
+    // This tree renders nothing, so its server HTML is an empty container.
+    const container = document.body.appendChild(document.createElement('div'))
+
+    // Act: hydrate (not client-render) the tree, as every Electron window does on
+    // load — only hydration makes react-redux serve `serverState` first.
+    render(app, { container, hydrate: true })
+
+    // Assert: only the persisted value reaches main. A `false` push flips the
+    // macOS activation policy accessory→regular→accessory, which deactivates the
+    // app and blur-closes the Settings popover the instant it first opens.
+    await waitFor(() => {
+      expect(setHideAppIconMock).toHaveBeenCalledWith(true)
+    })
+    expect(setHideAppIconMock).not.toHaveBeenCalledWith(false)
+  })
+
+  test('keeps a hidden tray icon hidden on first mount by never pushing the SSR placeholder showInMenuBar while hydrating', async () => {
+    // Arrange: the user turned the menu-bar icon OFF (persisted false); the SSR
+    // placeholder default is true.
+    const store = buildStore(false, false)
+    const serverState = {
+      electronSettings: {
+        hideAppIcon: false,
+        showInMenuBar: true,
+        startAtLogin: false,
+      },
+    }
+    const app = (
+      <Provider store={store} serverState={serverState}>
+        <ElectronStartupSync />
+      </Provider>
+    )
+    // This tree renders nothing, so its server HTML is an empty container.
+    const container = document.body.appendChild(document.createElement('div'))
+
+    // Act: hydrate, so react-redux serves the `serverState` placeholder first.
+    render(app, { container, hydrate: true })
+
+    // Assert: a `true` push would re-create the tray icon the user hid, then
+    // destroy it again — a menu-bar icon flash when the Settings window first mounts.
+    await waitFor(() => {
+      expect(setShowInMenuBarMock).toHaveBeenCalledWith(false)
+    })
+    expect(setShowInMenuBarMock).not.toHaveBeenCalledWith(true)
+  })
+
   test('re-syncs when hideAppIcon changes after mount', async () => {
-    // Locks down the [hideAppIcon] dependency in the effect — if someone
-    // changes it to [] (mount-only), this test fails. Important because
-    // the Settings UI updates the Redux value at runtime and the dock
-    // policy must follow.
+    // Locks down the store subscription — if someone drops `store.subscribe`
+    // (mount-only sync), this test fails. Important because the Settings UI
+    // updates the Redux value at runtime and the dock policy must follow.
     const store = configureStore({
       reducer: { electronSettings: electronSettingsReducer },
       preloadedState: {
@@ -320,10 +383,10 @@ describe('ElectronStartupSync', () => {
   })
 
   test('re-syncs when showInMenuBar changes after mount', async () => {
-    // Mirror dep-lock for the menu-bar effect: a [showInMenuBar] → [] regression
+    // Mirror subscription-lock for the menu-bar sync: a mount-only regression
     // would strand the tray out of sync after a runtime toggle. Also confirms
-    // the menu-bar effect is independent of hideAppIcon — toggling the menu bar
-    // must NOT re-fire the dock-icon sync.
+    // the per-setting last-synced dedupe — toggling the menu bar must NOT
+    // re-fire the dock-icon sync.
     const store = configureStore({
       reducer: { electronSettings: electronSettingsReducer },
       preloadedState: {
