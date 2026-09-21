@@ -37,7 +37,7 @@
 
 import { useStore } from 'react-redux'
 
-import { useInitialEffect } from '@/hooks/use-initial-effect'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import {
   selectHideAppIcon,
   selectShowInMenuBar,
@@ -47,35 +47,37 @@ import type { RootState } from '@/lib/redux/store'
 import { isElectronEnvironment } from '../../../electron/utils/electron-client'
 
 /**
- * Reports an IPC settings-sync failure to the console without ever throwing.
+ * Pushes one setting to main and logs any failure, never throwing: it runs inside
+ * a store subscriber, where a throw would abort Redux's listener loop and escape
+ * `store.dispatch()` at whoever dispatched (e.g. a Settings toggle handler).
  *
  * The preload bridge (electron/preload.ts) wraps `typedInvoke` in a try/catch
  * and returns `false` instead of rejecting, so the meaningful failure signal is
- * the boolean `false`, not a thrown error. The `.catch` is kept as
- * defense-in-depth in case preload behavior changes or someone exposes the raw
- * IPC channel later (which is also why `syncPromise` is treated as possibly
- * undefined). Swallowing failures silently would mask main-process regressions
+ * the boolean `false`. The `async` thunk is the defense-in-depth against a frozen
+ * or changed preload: `async` turns a synchronous throw into a rejection and
+ * wraps a non-promise return value, so every failure mode lands on the same
+ * logged path. Swallowing failures silently would mask main-process regressions
  * during startup sync.
  *
- * @param syncPromise - The pending IPC call, or undefined if the bridge returned nothing.
+ * @param sendToMain - MUST be an `async` thunk calling the preload method; its body still runs synchronously, so IPC calls keep dispatch order.
  * @param label - Setting name used in the failure message (e.g. 'hideAppIcon').
- * @returns void; logs to `console.error` on a `false` resolution or rejection.
+ * @returns void; logs to `console.error` on a `false` resolution, a rejection, or a throw.
  * @example
- * reportSyncFailure(settings.setHideAppIcon(true), 'hideAppIcon')
+ * pushSettingToMain(async () => settings.setHideAppIcon(true), 'hideAppIcon')
  */
-function reportSyncFailure(
-  syncPromise: Promise<boolean> | undefined,
+function pushSettingToMain(
+  sendToMain: () => Promise<unknown>,
   label: string,
 ): void {
-  syncPromise
-    ?.then((ok) => {
+  sendToMain()
+    .then((ok) => {
       if (ok === false) {
         console.error(
           `[ElectronStartupSync] Failed to sync ${label}: IPC returned false`,
         )
       }
     })
-    ?.catch((error: unknown) => {
+    .catch((error: unknown) => {
       console.error(`[ElectronStartupSync] Failed to sync ${label}:`, error)
     })
 }
@@ -107,12 +109,15 @@ function reportSyncFailure(
 export function ElectronStartupSync(): null {
   const store = useStore<RootState>()
 
-  useInitialEffect(() => {
+  // Keyed on `store`: a singleton today (one run), but a swapped store must be
+  // re-subscribed and re-pushed instead of leaving this bound to a dead one.
+  useCycleEffect(() => {
     if (!isElectronEnvironment()) return
 
-    // Last value handed to main, per setting: an unrelated dispatch syncs nothing.
-    let lastSyncedHideAppIcon: boolean | undefined
-    let lastSyncedShowInMenuBar: boolean | undefined
+    // Last value PUSHED to main, per setting — attempted, not confirmed: a failed
+    // push is logged, never retried. An unrelated dispatch pushes nothing.
+    let lastPushedHideAppIcon: boolean | undefined
+    let lastPushedShowInMenuBar: boolean | undefined
 
     const syncChangedSettings = (): void => {
       const settings = window.electronAPI?.settings
@@ -120,30 +125,32 @@ export function ElectronStartupSync(): null {
 
       // Guard on the METHOD, not just the `settings` namespace. This component is
       // mounted in the root layout, so it runs on every route — and the installed
-      // desktop app loads remote web against its own FROZEN preload. Calling
-      // `undefined()` on an older preload would throw a synchronous TypeError out
-      // of this effect, past its own `.catch`, to the error boundary (and from the
-      // root layout it escapes `error.tsx` entirely — see `global-error.tsx`).
+      // desktop app loads remote web against its own FROZEN preload, which may
+      // predate a method. A missing method is skipped quietly (no error log, and
+      // nothing recorded as pushed) rather than reported as a failed sync.
       const hideAppIcon = selectHideAppIcon(state)
       if (
-        hideAppIcon !== lastSyncedHideAppIcon &&
+        hideAppIcon !== lastPushedHideAppIcon &&
         typeof settings?.setHideAppIcon === 'function'
       ) {
-        lastSyncedHideAppIcon = hideAppIcon
+        lastPushedHideAppIcon = hideAppIcon
         // Call as a method so `this` stays bound to `settings`.
-        reportSyncFailure(settings.setHideAppIcon(hideAppIcon), 'hideAppIcon')
+        pushSettingToMain(
+          async () => settings.setHideAppIcon(hideAppIcon),
+          'hideAppIcon',
+        )
       }
 
       // Menu-bar (tray) visibility: independent guard for the same frozen-preload
       // reason; an old preload lacking `setShowInMenuBar` is skipped, not crashed.
       const showInMenuBar = selectShowInMenuBar(state)
       if (
-        showInMenuBar !== lastSyncedShowInMenuBar &&
+        showInMenuBar !== lastPushedShowInMenuBar &&
         typeof settings?.setShowInMenuBar === 'function'
       ) {
-        lastSyncedShowInMenuBar = showInMenuBar
-        reportSyncFailure(
-          settings.setShowInMenuBar(showInMenuBar),
+        lastPushedShowInMenuBar = showInMenuBar
+        pushSettingToMain(
+          async () => settings.setShowInMenuBar(showInMenuBar),
           'showInMenuBar',
         )
       }
@@ -151,7 +158,7 @@ export function ElectronStartupSync(): null {
 
     syncChangedSettings()
     return store.subscribe(syncChangedSettings)
-  })
+  }, [store])
 
   return null
 }
