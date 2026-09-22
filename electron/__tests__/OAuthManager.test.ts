@@ -1,3 +1,4 @@
+import { app, shell } from 'electron'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { typedSend } from '../ipc/typedSend'
@@ -5,6 +6,12 @@ import { log } from '../logger'
 import { OAuthManager } from '../OAuthManager'
 
 vi.mock('electron', () => ({
+  // LaunchServices stand-in: by default ANOTHER bundle owns corelive:// (the
+  // dev Electron took it) and the OS accepts this app's claim.
+  app: {
+    isDefaultProtocolClient: vi.fn(() => false),
+    setAsDefaultProtocolClient: vi.fn(() => true),
+  },
   shell: {
     openExternal: vi.fn(),
   },
@@ -221,6 +228,80 @@ describe('OAuthManager initiator targeting', () => {
       token: 'tok_coldboot',
       provider: 'google',
     })
+  })
+})
+
+// Every dev Electron run claims the SAME corelive:// scheme under its own bundle
+// id (com.corelive.app.dev), and the installed app only won it back at boot —
+// so a sign-in started days later handed its one-time ticket to a bare
+// node_modules Electron.app welcome window. These pin "claim before you leave".
+describe('OAuthManager deep-link handler claim', () => {
+  beforeEach(() => {
+    vi.mocked(app.isDefaultProtocolClient).mockReset().mockReturnValue(false)
+    vi.mocked(app.setAsDefaultProtocolClient).mockReset().mockReturnValue(true)
+    vi.mocked(shell.openExternal).mockClear()
+    vi.mocked(log.warn).mockClear()
+  })
+
+  test('reclaims corelive:// before opening the browser so the callback returns to this app', async () => {
+    // Arrange: another bundle currently owns the scheme (mock default).
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+
+    // Act
+    const result = await oauthManager.startOAuthFlow('google', fakeRenderer(11))
+
+    // Assert: claimed with the exact scheme, and BEFORE the browser handoff —
+    // a claim after openExternal would race the callback it is meant to catch.
+    expect(result.success).toBe(true)
+    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith('corelive')
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+    // Math.min over the call-order arrays keeps the comparison number-typed
+    // (an uncalled mock yields Infinity, which the calledWith checks above rule out).
+    const firstClaimOrder = Math.min(
+      ...vi.mocked(app.setAsDefaultProtocolClient).mock.invocationCallOrder,
+    )
+    const firstBrowserOrder = Math.min(
+      ...vi.mocked(shell.openExternal).mock.invocationCallOrder,
+    )
+    expect(firstClaimOrder).toBeLessThan(firstBrowserOrder)
+  })
+
+  test('leaves LaunchServices untouched when this app already owns corelive://', async () => {
+    // Arrange
+    vi.mocked(app.isDefaultProtocolClient).mockReturnValue(true)
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+
+    // Act
+    await oauthManager.startOAuthFlow('google', fakeRenderer(11))
+
+    // Assert
+    expect(app.setAsDefaultProtocolClient).not.toHaveBeenCalled()
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+  })
+
+  test('still opens the browser when the OS refuses the handler claim', async () => {
+    // Arrange: LaunchServices rejects the claim.
+    vi.mocked(app.setAsDefaultProtocolClient).mockReturnValue(false)
+    const oauthManager = new OAuthManager(
+      createWindowManagerMock() as never,
+      null,
+    )
+
+    // Act
+    const result = await oauthManager.startOAuthFlow('google', fakeRenderer(11))
+
+    // Assert: a best-effort claim never blocks sign-in; the refusal is logged.
+    expect(result.success).toBe(true)
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('corelive://'),
+    )
   })
 })
 

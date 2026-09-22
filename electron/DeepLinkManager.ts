@@ -14,9 +14,11 @@ import { URL } from 'url'
 import type { App } from 'electron'
 import { app as electronApp } from 'electron'
 
+import { DEEP_LINK_PROTOCOL } from './constants'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { OAuthManager } from './OAuthManager'
+import { claimDefaultProtocolClient } from './utils/claimDefaultProtocolClient'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
@@ -81,7 +83,7 @@ export class DeepLinkManager {
     this.windowManager = windowManager
     this.notificationManager = notificationManager
     this.app = app || electronApp
-    this.protocol = 'corelive'
+    this.protocol = DEEP_LINK_PROTOCOL
     this._isInitialized = false
     this.pendingUrl = null
     this.oauthManager = null
@@ -149,15 +151,12 @@ export class DeepLinkManager {
   }
 
   /**
-   * Registers the custom URL protocol with the operating system.
+   * Registers the custom URL protocol with the operating system at boot. The
+   * same claim is repeated by {@link OAuthManager.startOAuthFlow} right before
+   * each browser handoff, since a dev Electron can steal the scheme mid-session.
    */
   registerProtocol(): void {
-    if (!this.app.isDefaultProtocolClient(this.protocol)) {
-      const success = this.app.setAsDefaultProtocolClient(this.protocol)
-      if (!success) {
-        log.warn('Failed to register as default protocol client')
-      }
-    }
+    claimDefaultProtocolClient(this.app, this.protocol)
   }
 
   /**

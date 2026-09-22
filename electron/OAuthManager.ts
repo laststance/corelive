@@ -9,12 +9,14 @@
 
 import crypto from 'crypto'
 
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import type { WebContents } from 'electron'
 
+import { DEEP_LINK_PROTOCOL } from './constants'
 import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
+import { claimDefaultProtocolClient } from './utils/claimDefaultProtocolClient'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -215,6 +217,13 @@ export class OAuthManager {
         provider,
         state: state.slice(0, 8) + '...',
       })
+
+      // Re-claim corelive:// RIGHT before leaving for the browser: the callback
+      // carries a one-time ticket, and a dev Electron (com.corelive.app.dev) may
+      // have taken the scheme since this app booted — the boot-time claim alone
+      // sent that ticket to a bare Electron welcome window. Best-effort: a
+      // refusal is logged in the helper and must not block the sign-in.
+      claimDefaultProtocolClient(app, DEEP_LINK_PROTOCOL)
 
       await shell.openExternal(oauthUrl)
 

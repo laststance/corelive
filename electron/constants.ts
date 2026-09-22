@@ -306,3 +306,16 @@ export const DEV_SERVER_REQUEST_TIMEOUT_MS = 2000
 
 /** Let Next.js finish compiling between development readiness requests. */
 export const DEV_SERVER_RETRY_INTERVAL_MS = 1000
+
+// ============================================================================
+// Deep links
+// ============================================================================
+
+/**
+ * Custom URL scheme LaunchServices routes to this app (`corelive://…`). Mirrors
+ * `electron-builder.json` `protocols[0].schemes` and the dev Info.plist patch in
+ * `electron/devProtocol.ts`; the web OAuth callback page builds its return URL
+ * on it. Consumed by {@link DeepLinkManager} (boot claim) and {@link OAuthManager}
+ * (re-claim right before the browser handoff).
+ */
+export const DEEP_LINK_PROTOCOL = 'corelive'
