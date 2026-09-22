@@ -33,17 +33,22 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { DEEP_LINK_PROTOCOL } from './constants'
 import { log } from './logger'
 
 /**
  * Unique bundle id for the unpackaged dev Electron. Deliberately distinct from
  * the packaged `com.corelive.app` so dev and prod handlers never collide, and
  * from `com.github.Electron` so other Electron projects can't hijack the scheme.
+ *
+ * Note the SCHEME is still shared with prod: whichever bundle claimed it last
+ * owns `corelive://` OS-wide, which is why the installed app re-claims it right
+ * before every OAuth handoff (see `utils/claimDefaultProtocolClient.ts`).
  */
 export const DEV_BUNDLE_ID = 'com.corelive.app.dev'
 
 /** Custom URL scheme used for deep links (mirrors electron-builder.json). */
-export const DEEP_LINK_SCHEME = 'corelive'
+export const DEEP_LINK_SCHEME = DEEP_LINK_PROTOCOL
 
 /** One PlistBuddy mutation; `tolerateError` is true when re-running may have
  *  already removed/added the entry (Delete on first run has nothing to delete). */
