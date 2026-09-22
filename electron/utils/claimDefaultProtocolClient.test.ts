@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 
 import { log } from '../logger'
 
@@ -12,6 +12,13 @@ vi.mock('../logger', () => ({
     warn: vi.fn(),
   },
 }))
+
+// The logger mock is shared by every test in this file and the electron vitest
+// config does not clear mocks, so wipe call history before each test to keep
+// the `not.toHaveBeenCalled()` assertions independent of execution order.
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 /**
  * Builds the two-method slice of Electron's `app` the claim helper depends on,
