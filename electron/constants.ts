@@ -319,3 +319,10 @@ export const DEV_SERVER_RETRY_INTERVAL_MS = 1000
  * (re-claim right before the browser handoff).
  */
 export const DEEP_LINK_PROTOCOL = 'corelive'
+
+/**
+ * Upper bound for one `osascript` LaunchServices call made by the dev runner
+ * when it hands `corelive://` back to the installed app. A stalled call must
+ * reject instead of keeping the runner alive after the dev Electron exited.
+ */
+export const LAUNCH_SERVICES_OSASCRIPT_TIMEOUT_MS = 5000
