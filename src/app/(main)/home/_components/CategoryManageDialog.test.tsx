@@ -311,7 +311,9 @@ describe('CategoryManageDialog row actions', () => {
     expect(
       screen.queryByRole('button', { name: 'Delete Reading' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Rename General' })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Recolor General' }),
+    ).toBeVisible()
 
     // …and the same row becomes editable the moment the server assigns its id.
     release()
@@ -329,6 +331,27 @@ describe('CategoryManageDialog row actions', () => {
       screen.queryByRole('button', { name: 'Delete General' }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete Work' })).toBeVisible()
+  })
+
+  test('lets the default category be recolored but never renamed', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    await renderDialog([defaultCategory, buildCategory()])
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Recolor General' }))
+    const renameBox = screen.queryByRole('textbox', { name: 'Rename category' })
+    await user.click(screen.getByRole('button', { name: 'Select violet' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    // Assert — edit mode offered no rename box, and only the color changed.
+    expect(renameBox).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(readCategories()[0]).toMatchObject({
+        name: 'General',
+        color: 'violet',
+      })
+    })
   })
 
   test('renames a category through to the server', async () => {

@@ -193,6 +193,17 @@ export const updateCategory = authMiddleware
         })
       }
 
+      // The default is always "General"; recoloring and a same-name save stay allowed
+      if (
+        existing.isDefault &&
+        data.name !== undefined &&
+        data.name !== existing.name
+      ) {
+        throw new ORPCError('FORBIDDEN', {
+          message: "The default category can't be renamed",
+        })
+      }
+
       const category = await prisma.category.update({
         where: { id },
         data,

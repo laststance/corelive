@@ -159,11 +159,15 @@ export const CategoryManageDialog = function CategoryManageDialog({
    */
   const saveEdit = () => {
     if (editingId === null || !editName.trim()) return
+    const isEditingDefault = editingId === defaultCategory?.id
 
     updateMutation.mutate(
       {
         id: editingId,
-        data: { name: editName.trim(), color: editColor },
+        // The server refuses any rename of the default, so it only gets a color
+        data: isEditingDefault
+          ? { color: editColor }
+          : { name: editName.trim(), color: editColor },
       },
       { onSuccess: () => setEditingId(null) },
     )
@@ -372,19 +376,24 @@ export const CategoryManageDialog = function CategoryManageDialog({
                           />
                         ))}
                       </div>
-                      <Input
-                        value={editName}
-                        onChange={handleEditNameChange}
-                        onKeyDown={handleEditNameKeyDown}
-                        className="h-8 flex-1"
-                        maxLength={30}
-                        // Not "Category name": that is a substring of the create
-                        // row's "New category name", and Playwright's role-name
-                        // matching is substring-based, so the two would be
-                        // ambiguous to every browser-driven test.
-                        aria-label="Rename category"
-                        autoFocus
-                      />
+                      {/* The default is always "General": recolor only, no rename */}
+                      {category.isDefault ? (
+                        <span className="flex-1 text-sm">{category.name}</span>
+                      ) : (
+                        <Input
+                          value={editName}
+                          onChange={handleEditNameChange}
+                          onKeyDown={handleEditNameKeyDown}
+                          className="h-8 flex-1"
+                          maxLength={30}
+                          // Not "Category name": that is a substring of the create
+                          // row's "New category name", and Playwright's role-name
+                          // matching is substring-based, so the two would be
+                          // ambiguous to every browser-driven test.
+                          aria-label="Rename category"
+                          autoFocus
+                        />
+                      )}
 
                       <Button
                         variant="ghost"
@@ -392,6 +401,7 @@ export const CategoryManageDialog = function CategoryManageDialog({
                         className="h-8 w-8"
                         onClick={saveEdit}
                         disabled={!editName.trim()}
+                        aria-label="Save changes"
                       >
                         <Check className="h-4 w-4" />
                       </Button>
@@ -400,6 +410,7 @@ export const CategoryManageDialog = function CategoryManageDialog({
                         size="icon"
                         className="h-8 w-8"
                         onClick={cancelEdit}
+                        aria-label="Cancel editing"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -426,7 +437,7 @@ export const CategoryManageDialog = function CategoryManageDialog({
                             className="h-8 w-8 text-muted-foreground"
                             data-category-id={category.id}
                             onClick={handleEditCategoryClick}
-                            aria-label={`Rename ${category.name}`}
+                            aria-label={`${category.isDefault ? 'Recolor' : 'Rename'} ${category.name}`}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
