@@ -1,7 +1,14 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
   // These roots are launched by subprocesses, electron-builder, or separate Vitest configs.
-  "entry": ["electron/dev-runner.ts", "scripts/after-build.js"],
+  // The shadcn catalog stays installed even when the app does not import every primitive.
+  // Wallaby reads wallaby.conf.js outside the app module graph.
+  "entry": [
+    "electron/dev-runner.ts",
+    "scripts/after-build.js",
+    "src/components/ui/**/*.tsx",
+    "wallaby.conf.js",
+  ],
   "framework": [
     {
       "name": "corelive-electron-tests",
