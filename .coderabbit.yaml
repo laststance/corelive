@@ -60,7 +60,6 @@ reviews:
     - '!**/dist-electron-dev/**'
     - '!**/out/**'
     - '!**/build/**'
-    - '!**/storybook-static/**'
 
     # Generated / machine-written
     - '!**/prisma/migrations/**'
@@ -131,15 +130,10 @@ reviews:
         Tests use Vitest. Prefer DAMP over DRY; use AAA comments.
         Name tests by observable behavior, not implementation. Hard-code expected values.
 
-    - path: '**/*.{stories,mdx}.{ts,tsx,mdx}'
-      instructions: |
-        Storybook stories and MDX docs: lighter review. Ensure stories reflect DESIGN.md
-        tokens and accessible defaults; avoid decorative-only churn.
-
     - path: '*.{config,config.*}.{js,ts,mjs}'
       instructions: |
         Build/tooling config (Next, Vitest, Electron Vite, ESLint flat config).
-        Changes here affect CI (`pnpm validate`, Storybook, electron build). Flag breaking path or env assumptions.
+        Changes here affect CI (`pnpm validate`, electron build). Flag breaking path or env assumptions.
 
     - path: 'scripts/**'
       instructions: |

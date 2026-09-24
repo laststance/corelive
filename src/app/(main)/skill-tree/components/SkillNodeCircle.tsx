@@ -22,8 +22,7 @@ import { LEVEL_LABEL, xpToLevel } from '../lib/xp'
  * - `st-gold-glow` — SVG filter used by levels 4 and 5
  * - `st-mastered-core` — radialGradient used by level 5
  *
- * The Storybook decorator provides these for isolated stories; in the app,
- * `<ConstellationCanvas>` (Task 13) is the canonical defs location.
+ * `<ConstellationCanvas>` is the canonical defs location.
  *
  * @example
  * <SkillNodeCircle id={1} name="APIs" cx={50} cy={50} xp={30} onClick={(id) => console.log(id)} />

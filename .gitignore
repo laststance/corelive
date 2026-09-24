@@ -45,8 +45,6 @@ yarn-error.log*
 
 # Vitest
 html
-*storybook.log
-storybook-static
 
 .serena
 examples-with-next

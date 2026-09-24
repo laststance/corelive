@@ -46,9 +46,6 @@
     "./**/*.mts",
     "next-env.d.ts",
     ".next/types/**/*.ts",
-    ".storybook/*.js",
-    ".storybook/*.ts",
-    ".storybook/*.tsx",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", "next", "examples-with-next", "_trials"]

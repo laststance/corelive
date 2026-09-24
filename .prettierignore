@@ -23,7 +23,6 @@ bun.lockb
 
 # Tools
 coverage
-storybook-static
 .all-contributorsrc
 
 # Vitest

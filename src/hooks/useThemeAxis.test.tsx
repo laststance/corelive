@@ -7,8 +7,7 @@ import { useThemeAxis } from './useThemeAxis'
 
 // Drive the hook through the REAL ThemeProvider (no next-themes mock), the same
 // end-to-end approach as ThemeProvider.guard.test — these prove the Fork-A System
-// rule and the (family, mode) ↔ stored-id mapping that the storybook play-tests
-// exercise in a browser, but here in the Node validate loop.
+// rule and the (family, mode) ↔ stored-id mapping in the Node validate loop.
 const STORAGE_KEY = 'corelive-theme'
 
 /** Minimal harness: renders the axis state + a button per family/mode to click. */

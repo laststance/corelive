@@ -1,7 +1,14 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
   // These roots are launched by subprocesses, electron-builder, or separate Vitest configs.
-  "entry": ["electron/dev-runner.ts", "scripts/after-build.js"],
+  // The shadcn catalog stays installed even when the app does not import every primitive.
+  // Wallaby reads wallaby.conf.js outside the app module graph.
+  "entry": [
+    "electron/dev-runner.ts",
+    "scripts/after-build.js",
+    "src/components/ui/**/*.tsx",
+    "wallaby.conf.js",
+  ],
   "framework": [
     {
       "name": "corelive-electron-tests",
@@ -11,12 +18,6 @@
         "scripts/**/*.{test,spec}.{ts,mjs}",
       ],
       "entryPointRole": "test",
-    },
-    {
-      "name": "corelive-storybook-docs",
-      "enablers": ["storybook"],
-      "entryPoints": ["src/**/*.mdx"],
-      "entryPointRole": "support",
     },
   ],
   // Next.js generates route declarations; theme:generate owns the repeated theme CSS.
@@ -30,9 +31,6 @@
     "pino-pretty",
     "thread-stream",
     "wrappy",
-    // Storybook's MDX renderer and documentation prebundling load these indirectly.
-    "@mdx-js/react",
-    "markdown-to-jsx",
   ],
   // electron-vite emits these .ts entry points as .cjs; the output is absent in a fresh checkout.
   "ignoreUnresolvedImports": [
@@ -49,11 +47,7 @@
   "ignoreExports": [{ "file": "src/components/ui/**", "exports": ["*"] }],
   "duplicates": {
     // Test cases repeat setup and expected values so each scenario remains readable.
-    "ignore": [
-      "**/*.{test,spec,stories}.{ts,tsx,mjs}",
-      "**/__tests__/**",
-      "src/**/*.mdx",
-    ],
+    "ignore": ["**/*.{test,spec}.{ts,tsx,mjs}", "**/__tests__/**"],
   },
   "health": {
     // Match the structural complexity budget used by Skills Desktop.
@@ -63,7 +57,6 @@
     "ignore": [
       "**/*.{test,spec}.{ts,tsx,mjs}",
       "**/__tests__/**",
-      ".storybook/**",
       "scripts/**",
       "prisma/seed*.ts",
     ],
