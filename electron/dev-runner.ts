@@ -28,7 +28,10 @@
 import { spawn, type ChildProcess } from 'child_process'
 import path from 'path'
 
-import { ensureDevProtocolRegistration } from './devProtocol'
+import {
+  ensureDevProtocolRegistration,
+  restoreInstalledProtocolHandler,
+} from './devProtocol'
 import { log } from './logger'
 import { waitForDevServer } from './utils/waitForDevServer'
 
@@ -96,6 +99,11 @@ async function startElectron(): Promise<void> {
       },
     )
 
+    // Set on the first signal or child exit; later signals become no-ops.
+    let isShuttingDown = false
+    // Set once the handler restore starts, so it runs at most once.
+    let hasStartedRestore = false
+
     /**
      * Cleanup function to terminate electron process and remove listeners.
      */
@@ -107,17 +115,41 @@ async function startElectron(): Promise<void> {
     }
 
     /**
+     * Hands `corelive://` back to the installed app, then exits. Runs only once
+     * the child is gone, so a late `before-quit` cannot re-touch the default.
+     * Signal listeners stay attached so a late SIGTERM cannot cut the restore short.
+     *
+     * @param code - Exit code for this runner process
+     */
+    const restoreHandlerAndExit = async (code: number): Promise<void> => {
+      // The child 'close' and the signal fallback timer can both land here.
+      if (hasStartedRestore) return
+      hasStartedRestore = true
+      isShuttingDown = true
+      // Async so the event loop can still acknowledge tsx's signal relay;
+      // a blocked loop gets the runner SIGKILLed mid-restore.
+      const { reason } = await restoreInstalledProtocolHandler()
+      log.info(`corelive:// handler after dev exit: ${reason}`)
+      process.exit(code)
+    }
+
+    /**
      * Signal handler for graceful shutdown.
      *
      * @param signal - The signal received (SIGINT or SIGTERM)
      */
     const handleSignal = (signal: NodeJS.Signals): void => {
+      // Ctrl-C also makes scripts/dev.js SIGTERM this runner via pnpm/tsx. Stay
+      // subscribed and swallow repeats: the default action would kill the runner
+      // before the child exits and the handler restore runs.
+      if (isShuttingDown) return
+      isShuttingDown = true
       log.info(`Received ${signal}, shutting down Electron...`)
-      cleanup()
+      // Keep the 'close' listener: the restore must run after the child exits.
       electronProcess.kill(signal)
       // Give the process time to exit gracefully, then force exit
       setTimeout(() => {
-        process.exit(0)
+        void restoreHandlerAndExit(0)
       }, 3000)
     }
 
@@ -125,9 +157,10 @@ async function startElectron(): Promise<void> {
     process.on('SIGINT', handleSignal)
     process.on('SIGTERM', handleSignal)
 
+    // Fires for every child exit path the runner can observe, including a
+    // `kill -9` of the Electron child that skips its own `before-quit` cleanup.
     electronProcess.on('close', (code) => {
-      cleanup()
-      process.exit(code ?? 0)
+      void restoreHandlerAndExit(code ?? 0)
     })
 
     electronProcess.on('error', (error) => {

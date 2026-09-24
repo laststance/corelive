@@ -29,9 +29,10 @@
  * @module electron/devProtocol
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 import { DEEP_LINK_PROTOCOL } from './constants'
 import { log } from './logger'
@@ -236,4 +237,210 @@ export function ensureDevProtocolRegistration(options: {
     `devProtocol: dev Electron bundle id set to ${DEV_BUNDLE_ID} for corelive:// deep links`,
   )
   return { skipped: false, reason: 'patched' }
+}
+
+/** Bundle id of the packaged/installed app (electron-builder.json `appId`). */
+const INSTALLED_BUNDLE_ID = 'com.corelive.app'
+
+/** What LaunchServices currently says about the scheme and the installed app. */
+export interface LaunchServicesSnapshot {
+  /** Bundle id of the user-level default handler, or null when none is set. */
+  defaultHandler: string | null
+  /** Where LaunchServices would launch {@link INSTALLED_BUNDLE_ID} from, or null when it is not installed. */
+  installedAppPath: string | null
+}
+
+/** Injectable LaunchServices access so the restore decision is unit-testable
+ *  without touching the real user-level handler table. Async on purpose: a
+ *  blocked event loop cannot acknowledge tsx's signal relay, and tsx then
+ *  SIGKILLs the dev runner mid-restore. */
+export interface LaunchServicesClient {
+  read(scheme: string, bundleId: string): Promise<LaunchServicesSnapshot>
+  /** Resolves to the raw OSStatus of `LSSetDefaultHandlerForURLScheme` (0 = noErr). */
+  setDefaultHandler(scheme: string, bundleId: string): Promise<number>
+}
+
+/** Non-blocking counterpart of {@link CommandRunner}; resolves to trimmed stdout. */
+export type AsyncCommandRunner = (
+  file: string,
+  args: string[],
+) => Promise<string>
+
+const execFileAsync = promisify(execFile)
+
+/** Default async runner backed by `execFile`. */
+const defaultRunCommandAsync: AsyncCommandRunner = async (file, args) => {
+  const { stdout } = await execFileAsync(file, args, { encoding: 'utf8' })
+  return stdout.trim()
+}
+
+// JXA passes `$()` NSStrings, which are toll-free bridged to CFStringRef.
+// Plain JS strings make LSSetDefaultHandlerForURLScheme return paramErr (-50).
+const READ_LAUNCH_SERVICES_JXA = `
+ObjC.import('AppKit')
+function run(argv) {
+  const handler = ObjC.castRefToObject($.LSCopyDefaultHandlerForURLScheme($(argv[0])))
+  const app = $.NSWorkspace.sharedWorkspace.URLForApplicationWithBundleIdentifier($(argv[1]))
+  return JSON.stringify({
+    defaultHandler: handler.isNil() ? null : handler.js,
+    installedAppPath: app.isNil() ? null : app.path.js,
+  })
+}`
+
+const SET_DEFAULT_HANDLER_JXA = `
+ObjC.import('CoreServices')
+function run(argv) {
+  return String($.LSSetDefaultHandlerForURLScheme($(argv[0]), $(argv[1])))
+}`
+
+/** Accepts a string or null; anything else means the JXA output is malformed. */
+function readNullableString(value: unknown, field: string): string | null {
+  if (value === null || typeof value === 'string') {
+    return value
+  }
+  throw new Error(`LaunchServices probe returned a non-string ${field}`)
+}
+
+/**
+ * Parses the read-probe JSON so a malformed osascript result fails loudly
+ * instead of being trusted as a snapshot.
+ * @param output - Raw stdout of {@link READ_LAUNCH_SERVICES_JXA}.
+ * @returns The validated snapshot; throws on any other shape.
+ * @example
+ * parseLaunchServicesSnapshot('{"defaultHandler":null,"installedAppPath":null}')
+ * // => { defaultHandler: null, installedAppPath: null }
+ */
+function parseLaunchServicesSnapshot(output: string): LaunchServicesSnapshot {
+  const parsed: unknown = JSON.parse(output)
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('LaunchServices probe returned a non-object')
+  }
+  return {
+    defaultHandler: readNullableString(
+      Reflect.get(parsed, 'defaultHandler'),
+      'defaultHandler',
+    ),
+    installedAppPath: readNullableString(
+      Reflect.get(parsed, 'installedAppPath'),
+      'installedAppPath',
+    ),
+  }
+}
+
+/**
+ * Builds the default {@link LaunchServicesClient} on top of `osascript -l JavaScript`,
+ * which reaches the LaunchServices C API without a Python or Swift toolchain.
+ * @param runCommand - Async shell runner; defaults to `execFile`.
+ * @returns A client that reads and writes the real user-level handler table.
+ * @example
+ * await createOsascriptLaunchServicesClient().read('corelive', 'com.corelive.app')
+ * // => { defaultHandler: 'com.corelive.app.dev', installedAppPath: '/Applications/CoreLive.app' }
+ */
+export function createOsascriptLaunchServicesClient(
+  runCommand: AsyncCommandRunner = defaultRunCommandAsync,
+): LaunchServicesClient {
+  const runJxa = async (script: string, args: string[]): Promise<string> =>
+    runCommand('/usr/bin/osascript', [
+      '-l',
+      'JavaScript',
+      '-e',
+      script,
+      ...args,
+    ])
+
+  return {
+    async read(scheme, bundleId) {
+      return parseLaunchServicesSnapshot(
+        await runJxa(READ_LAUNCH_SERVICES_JXA, [scheme, bundleId]),
+      )
+    },
+    async setDefaultHandler(scheme, bundleId) {
+      return Number(await runJxa(SET_DEFAULT_HANDLER_JXA, [scheme, bundleId]))
+    },
+  }
+}
+
+export interface RestoreInstalledProtocolHandlerResult {
+  restored: boolean
+  reason: string
+}
+
+/**
+ * Hands `corelive://` back to the installed CoreLive.app after a dev Electron exits.
+ *
+ * Why: every dev run claims the user-level default for the SHARED scheme under
+ * {@link DEV_BUNDLE_ID}. Electron's own `before-quit` cleanup is skipped on
+ * `kill -9` or a crash, so without this, deep links keep launching the bare dev
+ * binary until the installed app restarts. OAuth already re-claims per handoff
+ * ({@link claimDefaultProtocolClient}); this covers every other `corelive://` link.
+ *
+ * When: called from `electron/dev-runner.ts` after the Electron child has exited
+ * (normal quit, Ctrl-C, SIGTERM, or a killed child). Dev tooling only; the
+ * packaged app never runs it.
+ *
+ * Idempotent: once the installed app is the default, a repeat call is a no-op.
+ * It never rejects, so it cannot mask the child's exit code.
+ *
+ * @param options.platform - OS platform (defaults to `process.platform`; inject for tests).
+ * @param options.client - LaunchServices access (defaults to the osascript client).
+ * @returns Resolves to `{ restored, reason }` — `restored: true` only when the default was changed.
+ * @example
+ * await restoreInstalledProtocolHandler() // => { restored: true, reason: 'restored to /Applications/CoreLive.app' }
+ */
+export async function restoreInstalledProtocolHandler(
+  options: {
+    platform?: NodeJS.Platform
+    client?: LaunchServicesClient
+  } = {},
+): Promise<RestoreInstalledProtocolHandlerResult> {
+  const { platform = process.platform, client } = options
+
+  // Only macOS resolves the scheme through a per-user default bundle id.
+  if (platform !== 'darwin') {
+    return { restored: false, reason: 'not macOS' }
+  }
+
+  try {
+    const launchServices = client ?? createOsascriptLaunchServicesClient()
+    const { defaultHandler, installedAppPath } = await launchServices.read(
+      DEEP_LINK_SCHEME,
+      INSTALLED_BUNDLE_ID,
+    )
+    const handler = defaultHandler?.toLowerCase() ?? null
+
+    if (handler === INSTALLED_BUNDLE_ID) {
+      return {
+        restored: false,
+        reason: 'installed app already owns the scheme',
+      }
+    }
+    // Respect an explicit choice of some other app. Unset / "None" is dev residue
+    // too: Electron's removeAsDefaultProtocolClient can leave the scheme on "None".
+    if (handler !== null && handler !== DEV_BUNDLE_ID && handler !== 'none') {
+      return {
+        restored: false,
+        reason: `default handler is ${defaultHandler}, not the dev bundle`,
+      }
+    }
+    // Nothing to hand back to: leave the dev bundle as the only handler.
+    if (installedAppPath === null) {
+      return { restored: false, reason: 'installed app not found' }
+    }
+
+    const status = await launchServices.setDefaultHandler(
+      DEEP_LINK_SCHEME,
+      INSTALLED_BUNDLE_ID,
+    )
+    if (status !== 0) {
+      log.warn(
+        `devProtocol: LSSetDefaultHandlerForURLScheme returned ${status}; ${DEEP_LINK_SCHEME}:// stays on ${defaultHandler}`,
+      )
+      return { restored: false, reason: `LaunchServices error ${status}` }
+    }
+
+    return { restored: true, reason: `restored to ${installedAppPath}` }
+  } catch (error) {
+    log.warn('devProtocol: could not restore the installed handler:', error)
+    return { restored: false, reason: 'restore failed' }
+  }
 }
