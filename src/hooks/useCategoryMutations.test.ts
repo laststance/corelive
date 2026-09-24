@@ -143,6 +143,32 @@ describe('category writes the server rejects', () => {
     })
   })
 
+  test('explains that the default category cannot be renamed and keeps it "General"', async () => {
+    // Arrange
+    const { result, queryClient } = renderCategoryMutations()
+    queryClient.setQueryData(categoryListKey, {
+      categories: [defaultCategory, buildCategory()],
+    })
+
+    // Act
+    result.current.updateMutation.mutate({
+      id: 1,
+      data: { name: 'Geek Infiltration' },
+    })
+
+    // Assert
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "The default category can't be renamed",
+      )
+    })
+    expect(
+      queryClient
+        .getQueryData<{ categories: CategoryWithCount[] }>(categoryListKey)
+        ?.categories.map((category) => category.name),
+    ).toEqual(['General', 'Work'])
+  })
+
   test('falls back to our own words when the request never reaches the server', async () => {
     // Arrange — a dead connection; "Failed to fetch" is not user-facing copy.
     armNetworkFailure()

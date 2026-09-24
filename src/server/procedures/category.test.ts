@@ -6,7 +6,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { prisma } from '@/lib/prisma'
 
-import { listCategories } from './category'
+import { deleteCategory, listCategories, updateCategory } from './category'
 import { getHeatmap } from './completed'
 import { describeIfDb } from './describeIfDb'
 
@@ -41,6 +41,8 @@ afterEach(async () => {
   for (const clerkId of createdClerkIds) {
     const user = await prisma.user.findUnique({ where: { clerkId } })
     if (!user) continue
+    // Todo rows restrict their category's delete, so they go first.
+    await prisma.todo.deleteMany({ where: { userId: user.id } })
     await prisma.category.deleteMany({ where: { userId: user.id } })
     await prisma.user.delete({ where: { id: user.id } })
   }
@@ -138,6 +140,116 @@ describeIfDb(
 
       // Assert
       expect(categories.map((category) => category.name)).toEqual(['Work'])
+    })
+  },
+)
+
+describeIfDb(
+  'category.update / delete — "General" is the fixed default',
+  () => {
+    /**
+     * Seeds an account through the real lazy-upsert path, so its default is the
+     * same "General" row a real signup gets, plus one ordinary category.
+     */
+    async function seedAccount() {
+      const clerkId = freshClerkId()
+      const { categories } = await call(
+        listCategories,
+        undefined,
+        authContext(clerkId),
+      )
+      const general = categories[0]!
+      const work = await prisma.category.create({
+        data: {
+          name: 'Work',
+          color: 'green',
+          isDefault: false,
+          userId: general.userId,
+        },
+      })
+      return { clerkId, general, work }
+    }
+
+    test('refuses to rename the default category, keeping it "General"', async () => {
+      // Arrange
+      const { clerkId, general } = await seedAccount()
+
+      // Act
+      const rename = call(
+        updateCategory,
+        { id: general.id, data: { name: 'Geek Infiltration' } },
+        authContext(clerkId),
+      )
+
+      // Assert
+      await expect(rename).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        message: "The default category can't be renamed",
+      })
+      expect(
+        await prisma.category.findUniqueOrThrow({ where: { id: general.id } }),
+      ).toMatchObject({ name: 'General', isDefault: true })
+    })
+
+    test('still lets the default category be recolored', async () => {
+      // Arrange
+      const { clerkId, general } = await seedAccount()
+
+      // Act
+      const updated = await call(
+        updateCategory,
+        { id: general.id, data: { color: 'violet' } },
+        authContext(clerkId),
+      )
+
+      // Assert
+      expect(updated).toMatchObject({ name: 'General', color: 'violet' })
+    })
+
+    test("accepts a save that sends the default's unchanged name alongside a new color", async () => {
+      // Arrange
+      const { clerkId, general } = await seedAccount()
+
+      // Act
+      const updated = await call(
+        updateCategory,
+        { id: general.id, data: { name: 'General', color: 'rose' } },
+        authContext(clerkId),
+      )
+
+      // Assert
+      expect(updated).toMatchObject({ name: 'General', color: 'rose' })
+    })
+
+    test('still renames an ordinary category', async () => {
+      // Arrange
+      const { clerkId, work } = await seedAccount()
+
+      // Act
+      const updated = await call(
+        updateCategory,
+        { id: work.id, data: { name: 'Side Project' } },
+        authContext(clerkId),
+      )
+
+      // Assert
+      expect(updated).toMatchObject({ name: 'Side Project', isDefault: false })
+    })
+
+    test('moves an ordinary category\'s tasks to "General" when it is deleted', async () => {
+      // Arrange
+      const { clerkId, general, work } = await seedAccount()
+      const task = await prisma.todo.create({
+        data: { text: 'Keep me', userId: general.userId, categoryId: work.id },
+      })
+
+      // Act
+      await call(deleteCategory, { id: work.id }, authContext(clerkId))
+
+      // Assert
+      expect(
+        await prisma.todo.findUniqueOrThrow({ where: { id: task.id } }),
+      ).toMatchObject({ categoryId: general.id })
     })
   },
 )

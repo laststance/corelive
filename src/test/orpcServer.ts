@@ -146,6 +146,15 @@ const update = os
   .handler(({ input }) => {
     const existing = requireCategory(input.id)
     if (
+      existing.isDefault &&
+      input.data.name !== undefined &&
+      input.data.name !== existing.name
+    ) {
+      throw new ORPCError('FORBIDDEN', {
+        message: "The default category can't be renamed",
+      })
+    }
+    if (
       input.data.name !== undefined &&
       categories.some(
         (category) =>
