@@ -149,6 +149,14 @@ async function startElectron(): Promise<void> {
       electronProcess.kill(signal)
       // Give the process time to exit gracefully, then force exit
       setTimeout(() => {
+        // A child that ignored the signal would outlive the runner as an
+        // orphan dev instance; force it down before handing the scheme back.
+        if (
+          electronProcess.exitCode === null &&
+          electronProcess.signalCode === null
+        ) {
+          electronProcess.kill('SIGKILL')
+        }
         void restoreHandlerAndExit(0)
       }, 3000)
     }

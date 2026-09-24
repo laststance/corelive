@@ -34,7 +34,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
-import { DEEP_LINK_PROTOCOL } from './constants'
+import {
+  DEEP_LINK_PROTOCOL,
+  LAUNCH_SERVICES_OSASCRIPT_TIMEOUT_MS,
+} from './constants'
 import { log } from './logger'
 
 /**
@@ -270,7 +273,11 @@ const execFileAsync = promisify(execFile)
 
 /** Default async runner backed by `execFile`. */
 const defaultRunCommandAsync: AsyncCommandRunner = async (file, args) => {
-  const { stdout } = await execFileAsync(file, args, { encoding: 'utf8' })
+  const { stdout } = await execFileAsync(file, args, {
+    encoding: 'utf8',
+    // A stalled osascript rejects instead of blocking the runner's exit.
+    timeout: LAUNCH_SERVICES_OSASCRIPT_TIMEOUT_MS,
+  })
   return stdout.trim()
 }
 
