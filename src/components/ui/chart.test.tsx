@@ -45,7 +45,7 @@ describe('ChartStyle dark color scoping', () => {
 
   test('emits a color-form item identically in light and dark so a single color follows neither axis', () => {
     // Arrange — the color-only shape (no light/dark split), which is what the
-    // live Storybook consumer uses; the emitter still walks both theme modes
+    // a single color token uses; the emitter still walks both theme modes
     const config: ChartConfig = {
       visits: { label: 'Visits', color: '#abcdef' },
     }

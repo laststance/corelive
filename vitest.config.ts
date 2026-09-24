@@ -13,7 +13,7 @@ export default defineConfig({
       'src/**/*.{spec,test}.{js,jsx,ts,tsx}',
       'src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     ],
-    exclude: ['src/types/__tests__', 'src/**/*.stories.{js,jsx,ts,tsx}'],
+    exclude: ['src/types/__tests__'],
     setupFiles: ['setupTests.ts'],
     // Coverage (#127): v8 provider, per-surface repo-relative reportsDirectory;
     // `all: true` so untested files (incl. 0% ones) appear in the baseline.
@@ -30,7 +30,6 @@ export default defineConfig({
         // Test-only helpers that live under src/ because specs import them by
         // alias; counting the MSW fake server as app code understates coverage.
         'src/test/**',
-        'src/**/*.stories.{ts,tsx}',
         'src/types/**',
         '**/*.d.ts',
       ],

@@ -16,7 +16,7 @@ import type { TodoId, TodoText } from '../lib/domain-types'
 import { TaskPoolCard } from './TaskPoolCard'
 
 /**
- * Minimal Todo shape used by the drawer. Kept loose so stories can use mocks.
+ * Minimal Todo shape used by the drawer.
  */
 export interface PoolTodo {
   id: TodoId

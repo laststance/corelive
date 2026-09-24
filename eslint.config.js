@@ -12,7 +12,6 @@ export default defineConfig([
     ignores: [
       '.next/**',
       'html/**',
-      'storybook-static/**',
       'dist/**',
       'out/**',
       'build/**',
@@ -144,11 +143,9 @@ export default defineConfig([
         },
       ],
     },
-    // shadcn/ui, Storybook, packages, tests は除外
+    // shadcn/ui, packages, tests は除外
     ignores: [
       'src/components/ui/**',
-      '**/*.stories.tsx',
-      '**/*.stories.ts',
       'packages/**',
       '**/*.test.ts',
       '**/*.test.tsx',
