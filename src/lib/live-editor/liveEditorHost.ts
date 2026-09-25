@@ -22,7 +22,6 @@ const resolved = async (): Promise<void> => {}
 const webLiveEditorHost: LiveEditorAPI = {
   window: {
     close: resolved,
-    toggle: resolved,
     setOpacity: resolved,
     getOpacity: async () => LIVE_EDITOR_OPACITY_MAX,
     getBounds: async () => null,

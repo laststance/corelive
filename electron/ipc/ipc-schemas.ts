@@ -166,7 +166,6 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   // ──────────────────────────────────────────────────────────────────────────
   // LiveEditor
   // ──────────────────────────────────────────────────────────────────────────
-  'live-editor-window-toggle': z.tuple([]),
   'live-editor-window-show': z.tuple([]),
   'live-editor-window-hide': z.tuple([]),
   // Opacity is clamped in main; we only validate the bounded range here.

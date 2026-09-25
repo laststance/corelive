@@ -496,17 +496,6 @@ const electronAPI = {
    * LiveEditor without opening it.
    */
   liveEditor: {
-    /** Toggle LiveEditor window visibility. */
-    toggle: async (): Promise<void> => {
-      try {
-        await typedInvoke('live-editor-window-toggle')
-      } catch (error) {
-        // Re-throw so the renderer can react (toast, retry); a swallowed
-        // failure leaves the user thinking the toggle worked.
-        log.error('Failed to toggle LiveEditor:', error)
-        throw error
-      }
-    },
     /** Open the LiveEditor window (additive — only shows, never hides). */
     show: async (): Promise<void> => {
       try {

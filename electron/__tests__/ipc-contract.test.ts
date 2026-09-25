@@ -27,6 +27,14 @@ describe('IPC contract', () => {
      * so this test only needs to *exist* to document the invariant and survive
      * a future refactor that accidentally loosens the type.
      */
+    test('does not register the removed LiveEditor window toggle channel', () => {
+      // Arrange: the Settings button was the only caller of this channel.
+      const channels = Object.keys(IPC_ARG_SCHEMAS)
+
+      // Act / Assert: bringing the channel back would reopen that button's IPC.
+      expect(channels).not.toContain('live-editor-window-toggle')
+    })
+
     test('registers a schema for every channel in IPCChannels', () => {
       const channels = Object.keys(IPC_ARG_SCHEMAS) as IPCChannel[]
       expect(channels.length).toBeGreaterThan(0)

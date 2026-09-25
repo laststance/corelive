@@ -2,6 +2,18 @@
 
 ## QA
 
+### Drive tray, Window menu, and Alt+Space after the settings toggle removal
+
+**What:** On `electron:dev`, confirm the tray item "Toggle LiveEditor", the Window menu item "LiveEditor Note", and Alt+Space still show and hide the panel. Confirm the settings card has opacity, shortcut capture, and Open config.json, and does not show "Toggle LiveEditor window".
+
+**Why:** Deferred from plan during /ship. Those opener files were not edited. The settings card absence is covered by `LiveEditorSettings.test.tsx`.
+
+**Context:** Deferred from plan: Remove LiveEditor toggle button plan. Do not tag an Electron release until production HTML no longer contains that button. This change can ride the next release.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** this PR merged.
+
 ### Playwright web E2E for the signed-out LiveEditor loop (when a second person actually uses it)
 
 **What:** One Clerk-free Playwright spec: land on the public LiveEditor page in a fresh profile → editor focused → write → Cmd+Enter → the line clears and the Kept toast offers Undo → reload keeps the device-local record (`localStorage`).
