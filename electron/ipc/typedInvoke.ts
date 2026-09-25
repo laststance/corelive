@@ -21,7 +21,7 @@ import type { ArgsOf } from './types'
  * @example
  *   // Inside electron/preload.ts contextBridge namespace:
  *   liveEditor: {
- *     toggle: () => typedInvoke('live-editor-window-toggle'),
+ *     show: () => typedInvoke('live-editor-window-show'),
  *   },
  *   auth: {
  *     syncFromWeb: (user: AuthUserPayload) =>

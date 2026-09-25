@@ -19,7 +19,6 @@ function fakeBridge() {
   return {
     window: {
       close: vi.fn(),
-      toggle: vi.fn(),
       setOpacity: vi.fn(),
       getOpacity: vi.fn(),
       getBounds: vi.fn(),

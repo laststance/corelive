@@ -97,7 +97,6 @@ function installFailingLiveEditorBridge(
   window.liveEditorAPI = {
     window: {
       close: async () => {},
-      toggle: async () => {},
       setOpacity: async () => {},
       getOpacity: async () => 1,
       getBounds: async () => null,
@@ -142,7 +141,6 @@ function installHeldReadLiveEditorBridge(): {
   window.liveEditorAPI = {
     window: {
       close: async () => {},
-      toggle: async () => {},
       setOpacity: async () => {},
       getOpacity: async () => 1,
       getBounds: async () => null,

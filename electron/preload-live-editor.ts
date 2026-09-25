@@ -48,15 +48,6 @@ const liveEditorAPI = {
       }
     },
 
-    /** Toggle LiveEditor visibility (mirror of the global accelerator). */
-    toggle: async (): Promise<void> => {
-      try {
-        await typedInvoke('live-editor-window-toggle')
-      } catch (error) {
-        log.error('LiveEditor: Failed to toggle window:', error)
-      }
-    },
-
     /**
      * Set window opacity. Main process clamps to [0.30, 1.00] regardless.
      *

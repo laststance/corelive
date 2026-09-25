@@ -801,12 +801,6 @@ function setupIPCHandlers(): void {
   // its own preload; window/note channels live together so the contract
   // between preload-live-editor.ts and main.ts is easy to audit.
   // ────────────────────────────────────────────────────────────────────────
-  typedHandle('live-editor-window-toggle', () => {
-    if (!windowManager) return false
-    windowManager.toggleLiveEditor()
-    return true
-  })
-
   typedHandle('live-editor-window-show', () => {
     if (!windowManager) return
     windowManager.showLiveEditor()

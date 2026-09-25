@@ -211,8 +211,6 @@ export interface ElectronAPI {
 
 /** LiveEditor configuration controls exposed to the Settings window's renderer. */
 export interface LiveEditorSettingsAPI {
-  /** Toggle LiveEditor window visibility. */
-  toggle: () => Promise<void>
   /** Open the LiveEditor window (additive — only shows, never hides). */
   show: () => Promise<void>
   /** Read current opacity (already clamped to [0.30, 1.00]). */
@@ -243,7 +241,7 @@ export interface ElectronEnv {
  * LiveEditor API exposed via contextBridge in preload-live-editor.ts.
  *
  * Provides:
- * - `window.*` — frameless panel controls (close/toggle/opacity/bounds)
+ * - `window.*` — frameless panel controls (close/opacity/bounds)
  * - `note.*`   — per-category text persistence
  * - `spaces.*` — macOS Spaces tracking for the panel
  */
@@ -251,8 +249,6 @@ export interface LiveEditorAPI {
   window: {
     /** Hide the LiveEditor window (kept in memory for fast re-show). */
     close: () => Promise<void>
-    /** Toggle LiveEditor visibility (mirror of the global accelerator). */
-    toggle: () => Promise<void>
     /**
      * Set window opacity. Main process clamps to [0.30, 1.00].
      */

@@ -9,7 +9,6 @@ const getShortcutMock = vi.fn()
 const setShortcutMock = vi.fn()
 const getShortcutSecondaryMock = vi.fn()
 const setShortcutSecondaryMock = vi.fn()
-const toggleMock = vi.fn()
 const openConfigMock = vi.fn()
 
 type LiveEditorBridge = {
@@ -19,7 +18,6 @@ type LiveEditorBridge = {
   setShortcut: (accelerator: string) => Promise<boolean>
   getShortcutSecondary: () => Promise<string>
   setShortcutSecondary: (accelerator: string) => Promise<boolean>
-  toggle: () => Promise<void>
 }
 
 type ConfigBridge = {
@@ -70,7 +68,6 @@ function installLiveEditorBridge(saved: {
   setOpacityMock.mockResolvedValue(saved.opacity)
   getShortcutMock.mockResolvedValue(saved.shortcut)
   setShortcutMock.mockResolvedValue(true)
-  toggleMock.mockResolvedValue(undefined)
   openConfigMock.mockResolvedValue(true)
 
   installElectronAPI({
@@ -79,7 +76,6 @@ function installLiveEditorBridge(saved: {
       setOpacity: setOpacityMock,
       getShortcut: getShortcutMock,
       setShortcut: setShortcutMock,
-      toggle: toggleMock,
       // Only a bridge that reports a second slot gets the second-slot methods.
       ...(saved.secondaryShortcut === undefined
         ? {}
@@ -105,7 +101,6 @@ describe('LiveEditorSettings', () => {
     setShortcutMock.mockReset()
     getShortcutSecondaryMock.mockReset()
     setShortcutSecondaryMock.mockReset()
-    toggleMock.mockReset()
     openConfigMock.mockReset()
   })
 
@@ -205,10 +200,10 @@ describe('LiveEditorSettings', () => {
   })
 
   test('degrades gracefully when an old preload exposes liveEditor but not the settings getters', async () => {
-    // Arrange: an OUTDATED desktop app exposes the `liveEditor` window-toggle bridge
+    // Arrange: an OUTDATED desktop app exposes the `liveEditor` namespace
     // but predates the getOpacity/getShortcut settings getters that
     // the load effect's Promise.all calls.
-    installElectronAPI({ liveEditor: { toggle: toggleMock } })
+    installElectronAPI({ liveEditor: {} })
 
     // Act + Assert: mounting must NOT throw a synchronous TypeError from the
     // Promise.all (which would bubble out of useEffect to Next.js global-error
@@ -246,7 +241,6 @@ describe('LiveEditorSettings', () => {
         setOpacity: setOpacityMock,
         getShortcut: getShortcutMock,
         setShortcut: setShortcutMock,
-        toggle: toggleMock,
       },
       config: {
         open: openConfigMock,
@@ -261,6 +255,27 @@ describe('LiveEditorSettings', () => {
       await screen.findByText('Loading LiveEditor settings…'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  test('offers shortcut and config controls without a window toggle', async () => {
+    // Arrange: a current preload that can load the ready card.
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    render(<LiveEditorSettings />)
+
+    // Act: wait until the card has left its loading state.
+    const openConfig = await screen.findByRole('button', {
+      name: 'Open config.json',
+    })
+
+    // Assert: config and shortcut controls stay; the window toggle is gone.
+    expect(openConfig).toBeVisible()
+    expect(screen.getByLabelText('Toggle shortcut')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Toggle LiveEditor window' }),
+    ).not.toBeInTheDocument()
   })
 
   test('opens config.json via the main-process config bridge when the button is clicked', async () => {

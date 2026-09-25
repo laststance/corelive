@@ -221,7 +221,6 @@ function installLiveEditorAPI(spaces: LiveEditorSpacesBridge): void {
         getOpacity: vi.fn().mockResolvedValue(1),
         setBounds: vi.fn().mockResolvedValue(undefined),
         setOpacity: vi.fn().mockResolvedValue(undefined),
-        toggle: vi.fn().mockResolvedValue(undefined),
       },
       note: {
         get: vi.fn().mockResolvedValue(''),

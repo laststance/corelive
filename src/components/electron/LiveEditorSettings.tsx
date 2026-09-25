@@ -112,8 +112,8 @@ export const LiveEditorSettings = function LiveEditorSettings({
     const api =
       typeof window === 'undefined' ? undefined : getLiveEditorSettingsAPI()
     // Guard on the METHODS, not just the namespace: an outdated desktop preload
-    // can expose `liveEditor` (the window toggle) without the newer settings
-    // getters. A missing method in this Promise.all throws synchronously inside
+    // can expose `liveEditor` without the settings getters. A missing method
+    // in this Promise.all throws synchronously inside
     // the effect and bubbles to global-error, so bail out and let the
     // fallback card render instead.
     if (
@@ -175,15 +175,6 @@ export const LiveEditorSettings = function LiveEditorSettings({
       // in-flight optimistic value held in `opacity` state.
       setOpacity(lastGoodOpacityRef.current)
       setError('Failed to update opacity')
-    }
-  }
-
-  const handleOpenLiveEditor = async (): Promise<void> => {
-    try {
-      await getLiveEditorSettingsAPI()?.toggle()
-    } catch (err) {
-      log.error('Failed to toggle LiveEditor window:', err)
-      setError('Failed to toggle LiveEditor window')
     }
   }
 
@@ -347,12 +338,6 @@ export const LiveEditorSettings = function LiveEditorSettings({
         </div>
         <Button variant="outline" size="sm" onClick={handleOpenConfigFile}>
           Open config.json
-        </Button>
-      </div>
-
-      <div className="flex justify-end">
-        <Button variant="outline" onClick={handleOpenLiveEditor}>
-          Toggle LiveEditor window
         </Button>
       </div>
     </div>

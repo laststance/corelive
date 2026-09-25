@@ -198,11 +198,6 @@ export interface IPCChannels {
   // ──────────────────────────────────────────────────────────────────────────
   // LiveEditor Window
   // ──────────────────────────────────────────────────────────────────────────
-  /** Toggle LiveEditor window visibility (callable from LiveEditor itself). */
-  'live-editor-window-toggle': {
-    request: void
-    response: boolean
-  }
   'live-editor-window-show': {
     request: void
     response: void
