@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { readMigrationFiles } from 'drizzle-orm/migrator'
 import { expect, test } from 'vitest'
 
 /**
@@ -33,4 +34,19 @@ test('lists the migration files with strictly increasing timestamps, so the migr
 
   // Assert
   expect(outOfOrder).toEqual([])
+})
+
+test('keeps drizzle/0000_init.sql byte-identical to the file whose hash the production baseline row records, because one edited byte would fail every later deploy', () => {
+  // Arrange
+  const [init] = readMigrationFiles({
+    migrationsFolder: path.resolve(process.cwd(), 'drizzle'),
+  })
+
+  // Act
+  const hash = init?.hash
+
+  // Assert
+  expect(hash).toBe(
+    'c74b835ea8b3fc89b265d9dc5ce7b5f079267073724f1bd7fb07cef18b0af3d9',
+  )
 })

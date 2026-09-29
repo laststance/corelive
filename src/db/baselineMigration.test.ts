@@ -36,7 +36,10 @@ import type { db } from './index'
  * Lifecycle: the `--apply` tests (`refuses to record a baseline …`, `records exactly one baseline
  * row …`) belong to the one-time cutover and are deleted together with `--apply` once production
  * carries the baseline row; see the header of `scripts/baseline-drizzle-migrations.mjs`. The rest
- * cover the read-only checks the deploy workflow runs every time and stay.
+ * cover the read-only checks the deploy workflow runs every time and stay, BUT the tests that call
+ * {@link recordBaseline} or hard-code `0000_init`'s timestamp only hold while the journal lists exactly
+ * ONE migration (the baseline is `readMigrationFiles()[0]`, and `pending migrations: none` assumes nothing
+ * newer exists). Adding the next migration makes them fail: update them in that same change.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -335,7 +338,7 @@ describeIfDb(
       )
     })
 
-    test('the post-migrate check fails when a journal migration was never recorded even though the newest timestamp matches, because the migrator skips such a file silently', async () => {
+    test('the post-migrate check fails when the newest row carries the journal timestamp but not the file hash, and says the file was edited after it was applied', async () => {
       // Arrange — the newest row carries the journal timestamp but not the hash of any journal file.
       await recordBaseline(scratch.db)
       await scratch.db.execute(
@@ -348,8 +351,74 @@ describeIfDb(
       // Assert
       expect(verdict.status).toBe(1)
       expect(verdict.output).toContain(
-        '1 journal migration(s) never recorded in drizzle.__drizzle_migrations (journal "when": 1790679206746)',
+        '1 journal migration(s) not recorded correctly in drizzle.__drizzle_migrations',
       )
+      expect(verdict.output).toContain(
+        '0000_init (journal "when" 1790679206746) is recorded with a different hash: the file was edited after it was applied',
+      )
+    })
+
+    test('the pre-migrate check fails when a migration older than the newest recorded row was never recorded, because the migrator would skip it without an error', async () => {
+      // Arrange — a newer row exists (as after a deploy of a later migration) and it is not 0000_init's hash.
+      await recordBaseline(scratch.db)
+      await scratch.db.execute(
+        sql`UPDATE drizzle.__drizzle_migrations SET hash = 'hash-of-a-newer-migration', created_at = 1790679206747`,
+      )
+
+      // Act
+      const verdict = runBaselineScript([], scratch.url)
+
+      // Assert — named by its journal tag, with the fix that applies to a skipped file.
+      expect(verdict.status).toBe(1)
+      expect(verdict.output).toContain(
+        '0000_init (journal "when" 1790679206746) was never recorded: the migrator skips a file whose "when" is not newer than the newest recorded row',
+      )
+    })
+
+    test('the deploy checks fail when a bookkeeping row has no created_at, because the migrator reads it as the newest row and applies every migration again', async () => {
+      // Arrange — the baseline row plus a row whose created_at is NULL (ORDER BY … DESC puts NULL first).
+      await recordBaseline(scratch.db)
+      await scratch.db.execute(
+        sql`INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('row-without-timestamp', NULL)`,
+      )
+
+      // Act
+      const migration = migrate(scratch.db, {
+        migrationsFolder: MIGRATIONS_FOLDER,
+      })
+      const readOnly = runBaselineScript([], scratch.url)
+      const postMigrate = runBaselineScript(['--expect-current'], scratch.url)
+
+      // Assert — the premise (the migrator does try to create the tables again) and the guard on it.
+      const failure = await migration.then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      expect(isPgError(failure, PG_DUPLICATE_TABLE)).toBe(true)
+      for (const verdict of [readOnly, postMigrate]) {
+        expect(verdict.status).toBe(1)
+        expect(verdict.output).toContain(
+          'drizzle.__drizzle_migrations has 1 row(s) without created_at',
+        )
+      }
+    })
+
+    test('the deploy checks keep passing after the User table is renamed, because they look for any application table rather than one named table', async () => {
+      // Arrange — a later migration may rename or drop any table; the checks run on every deploy.
+      await recordBaseline(scratch.db)
+      await scratch.db.execute(sql`ALTER TABLE "User" RENAME TO "Person"`)
+
+      try {
+        // Act
+        const readOnly = runBaselineScript([], scratch.url)
+        const postMigrate = runBaselineScript(['--expect-current'], scratch.url)
+
+        // Assert
+        expect(readOnly.status).toBe(0)
+        expect(postMigrate.status).toBe(0)
+      } finally {
+        await scratch.db.execute(sql`ALTER TABLE "Person" RENAME TO "User"`)
+      }
     })
 
     test('never prints the connection password or user, only the host and database name', () => {
@@ -463,7 +532,7 @@ describeIfDb(
         for (const verdict of [readOnly, postMigrate]) {
           expect(verdict.status).toBe(1)
           expect(verdict.output).toContain(
-            'drizzle.__drizzle_migrations records applied migrations but public."User" is missing',
+            'drizzle.__drizzle_migrations records applied migrations but no application tables exist in public',
           )
         }
       } finally {
@@ -492,7 +561,7 @@ describeIfDb(
         expect(beforeMigrating.output).toContain('fresh database')
         expect(afterMigrating.status).toBe(1)
         expect(afterMigrating.output).toContain(
-          'expected a migrated database, but public."User" is missing',
+          'expected a migrated database, but no application tables exist in public',
         )
       } finally {
         await fresh.drop()

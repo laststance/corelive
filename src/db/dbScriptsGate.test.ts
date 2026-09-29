@@ -126,8 +126,10 @@ describe('database package scripts', () => {
     expect(commands).not.toContain('CONSENT_FOR_DANGEROUS_AI_ACTION')
   })
 
-  test('refuses a raw drizzle-kit push against a remote database, so bypassing the package scripts cannot run DDL on production', () => {
-    // Arrange — a remote URL and no opt-in, as in a developer .env that points at production.
+  test('refuses a raw drizzle-kit push whose remote URL comes from the environment, so skipping the package scripts with a production URL in .env cannot run DDL on production', () => {
+    // Arrange — a remote URL and no opt-in, as in a developer .env that points at production. (Credential flags
+    // typed on the command line, `--url` and friends, put drizzle-kit in a mode that never loads the config:
+    // that is an explicit act the gate does not try to stop.)
 
     // Act
     const { status, output } = runDrizzleKit('push')
@@ -153,6 +155,22 @@ describe('database package scripts', () => {
     expect(status).toBe(1)
     expect(output).toContain('[assert-local-db]')
     expect(output).toContain('prod-db.invalid')
+  }, 30_000)
+
+  test('lets the deploy job through the gate when it opts out on a GitHub Actions runner, so the production migration is not blocked by its own guard', () => {
+    // Arrange — exactly what db-migrate.yml sets: the opt-out plus the runner's own variable. The target is
+    // unreachable (`.invalid`), so drizzle-kit fails to connect; what matters is that the gate stayed silent.
+
+    // Act
+    const { output } = runDrizzleKit('migrate', {
+      POSTGRES_PRISMA_URL: REMOTE_DATABASE_URL,
+      DRIZZLE_ALLOW_REMOTE: '1',
+      GITHUB_ACTIONS: 'true',
+    })
+
+    // Assert — the config was loaded (drizzle-kit names it), and the gate did not refuse.
+    expect(output).toContain('drizzle.config.ts')
+    expect(output).not.toContain('[assert-local-db]')
   }, 30_000)
 
   test('still lets the offline drizzle-kit check run against a remote URL, so validating the migration folder needs no local database', () => {
@@ -183,7 +201,8 @@ describe('database package scripts', () => {
   })
 
   test('refuses to seed when POSTGRES_PRISMA_URL is unset, because the shared client would then connect wherever PGHOST points instead of the database the gate approved', () => {
-    // Arrange — an empty URL, which dotenv leaves alone; nothing is reachable at the default host.
+    // Arrange — an empty URL, which dotenv leaves alone. PGHOST points at an unreachable `.invalid` host, so a
+    // guard that regressed would fail to connect instead of writing to whatever database the developer's PG* variables name.
     const seedEntry = 'src/db/seed/seed.ts'
 
     // Act
@@ -193,7 +212,12 @@ describe('database package scripts', () => {
       {
         cwd: process.cwd(),
         encoding: 'utf8',
-        env: { ...process.env, POSTGRES_PRISMA_URL: '' },
+        env: {
+          ...process.env,
+          POSTGRES_PRISMA_URL: '',
+          PGHOST: 'seed-guard.invalid',
+        },
+        timeout: 25_000,
       },
     )
 
@@ -201,6 +225,36 @@ describe('database package scripts', () => {
     expect(result.status).toBe(1)
     expect(`${result.stdout}${result.stderr}`).toContain(
       '[db:seed] POSTGRES_PRISMA_URL is not set: refusing to seed',
+    )
+  }, 30_000)
+
+  test('refuses to define real-database suites when POSTGRES_PRISMA_URL is unset, because the local-database check would approve a database the shared client never connects to', () => {
+    // Arrange — the opt-in is on, the URL is empty and no .env is read, so the shared client would follow PGHOST.
+    // `--eval` is CommonJS, so no top-level await: the rejected import ends the process with the gate's message.
+    const importGate = "import('./src/server/procedures/describeIfDb.ts')"
+
+    // Act
+    const result = spawnSync(
+      process.execPath,
+      ['node_modules/tsx/dist/cli.mjs', '--eval', importGate],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          RUN_DB_INTEGRATION_TESTS: '1',
+          POSTGRES_PRISMA_URL: '',
+          PGHOST: 'suite-guard.invalid',
+          DOTENV_CONFIG_PATH: path.resolve(process.cwd(), 'no-such.env'),
+        },
+        timeout: 25_000,
+      },
+    )
+
+    // Assert
+    expect(result.status).toBe(1)
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      'Refusing to run destructive DB integration tests: POSTGRES_PRISMA_URL is not set',
     )
   }, 30_000)
 })

@@ -99,7 +99,7 @@ POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive"
 
 #### Database Management
 
-**Schema changes go through migrations only.** Edit `src/db/schema.ts`, run `pnpm db:generate`, review and commit the SQL, then `pnpm db:migrate`. Never use `drizzle-kit push` or `pull` here: their live-database introspection cannot see `SkillNode_skillTreeId_id_key` (the index both composite `NodeEdge` foreign keys point at), so they always plan to drop and re-add those keys and then fail halfway through. `drizzle.config.ts` also refuses any drizzle-kit command that could connect to a non-local database; only the deploy workflow opts out (`DRIZZLE_ALLOW_REMOTE=1`, honored only on a GitHub Actions runner).
+**Schema changes go through migrations only.** Edit `src/db/schema.ts`, run `pnpm db:generate`, review and commit the SQL, then `pnpm db:migrate`. Never use `drizzle-kit push` or `pull` here: their live-database introspection cannot see `SkillNode_skillTreeId_id_key` (the index both composite `NodeEdge` foreign keys point at), so they always plan to drop and re-add those keys and then fail halfway through. `drizzle.config.ts` also refuses any drizzle-kit command that could connect to a non-local database when the URL comes from the environment or `.env`; only the deploy workflow opts out (`DRIZZLE_ALLOW_REMOTE=1`, honored only on a GitHub Actions runner). Credential flags typed on the command line (`--url`, `--host`, …) make drizzle-kit skip the config, so that gate does not cover them.
 
 **Basic Commands:**
 

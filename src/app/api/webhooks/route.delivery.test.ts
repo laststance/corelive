@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
 import { DrizzleQueryError, eq, or } from 'drizzle-orm'
+import type { PoolClient } from 'pg'
 import { Webhook } from 'svix'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi, type MockInstance } from 'vitest'
 
 import { db } from '@/db'
 import { categoryTable, userTable } from '@/db/schema'
@@ -296,7 +297,7 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
     })
   })
 
-  test('records which accounts lost their address, by id and Clerk ID and never the address itself, because clearing it cannot be undone', async () => {
+  test('records which accounts lost their address by row id only, never the address or a Clerk ID, because clearing it cannot be undone and a Clerk ID is a working API credential', async () => {
     // Arrange
     const staleClerkId = freshClerkId()
     const newClerkId = freshClerkId()
@@ -321,15 +322,79 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
 
     // Assert
     expect(response.status).toBe(201)
+    const [created] = await db
+      .select({ id: userTable.id })
+      .from(userTable)
+      .where(eq(userTable.clerkId, newClerkId))
     expect(webhookWarn).toHaveBeenCalledTimes(1)
     expect(webhookWarn).toHaveBeenCalledWith(
-      {
-        clerkId: newClerkId,
-        releasedFrom: [{ id: stale?.id, clerkId: staleClerkId }],
-      },
+      { userId: created?.id, releasedUserIds: [stale?.id] },
       'Released an email address from stale accounts',
     )
-    expect(JSON.stringify(webhookWarn.mock.calls)).not.toContain(sharedEmail)
+    const logged = JSON.stringify(webhookWarn.mock.calls)
+    expect(logged).not.toContain(sharedEmail)
+    expect(logged).not.toContain(staleClerkId)
+    expect(logged).not.toContain(newClerkId)
+  })
+
+  test('rolls the release back when a later statement of the same transaction fails, so the stale account keeps its address and no release is logged', async () => {
+    // Arrange — a stale account holds the address, and the transaction's "General" insert is made to fail
+    // on the connection the route checks out, after the release UPDATE already ran inside the transaction.
+    const staleClerkId = freshClerkId()
+    const newClerkId = freshClerkId()
+    const sharedEmail = `${newClerkId}@example.com`
+    await db.insert(userTable).values({
+      clerkId: staleClerkId,
+      email: sharedEmail,
+      name: 'Old Account',
+    })
+    let categoryInsertSpy: MockInstance | undefined
+    const failCategoryInsert = (client: PoolClient) => {
+      const realQuery = client.query.bind(client) as (
+        ...args: unknown[]
+      ) => unknown
+      categoryInsertSpy = vi
+        .spyOn(client, 'query')
+        .mockImplementation((...args: unknown[]) => {
+          const first = args[0]
+          const text =
+            typeof first === 'string'
+              ? first
+              : ((first as { text?: string }).text ?? '')
+          return text.startsWith('insert into "Category"')
+            ? Promise.reject(new Error('category insert failed'))
+            : realQuery(...args)
+        })
+    }
+    db.$client.once('acquire', failCategoryInsert)
+    const request = userCreatedRequest(
+      'msg_rolled_back',
+      newClerkId,
+      sharedEmail,
+      'new-account',
+    )
+
+    try {
+      // Act
+      const response = await POST(request)
+
+      // Assert
+      expect(response.status).toBe(500)
+      expect(webhookWarn).not.toHaveBeenCalled()
+      const [stale] = await db
+        .select({ email: userTable.email })
+        .from(userTable)
+        .where(eq(userTable.clerkId, staleClerkId))
+      expect(stale).toEqual({ email: sharedEmail })
+      expect(await readAccountRows(newClerkId)).toEqual({
+        userCount: 0,
+        categoryNames: [],
+      })
+    } finally {
+      // The pooled connection is reused by later tests: put its real `query` back.
+      db.$client.off('acquire', failCategoryInsert)
+      categoryInsertSpy?.mockRestore()
+    }
   })
 
   test('logs nothing about released addresses when no other account held the address', async () => {
@@ -374,19 +439,20 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
 })
 
 test('answers 500 with a bare body when the database write fails, so the failed query and the new user email never reach Clerk or the response', async () => {
-  // Arrange — the transaction rejects the way drizzle does: wrapping the SQL and its bound values.
-  // No row is ever written, so the ID stays out of the DB teardown set and the test runs without a database.
+  // Arrange — the failure is injected where the route first touches the database: the pool checkout inside
+  // `runTransaction`. The error has the shape drizzle throws (SQL and bound values on the error object), so the
+  // test proves those never reach the response body. No row is ever written, so the ID stays out of the DB
+  // teardown set and the test runs without a database.
   const clerkId = `test_webhook_delivery_${randomUUID()}`
   const email = `${clerkId}@example.com`
-  const failedInsert = new DrizzleQueryError(
+  const connectionFailure = new DrizzleQueryError(
     'insert into "User" ("clerkId", "email") values ($1, $2)',
     [clerkId, email],
     new Error('connection terminated'),
   )
-  // `runTransaction` checks a connection out of the pool first, so that is where the failure is injected.
   const connect = vi
     .spyOn(db.$client, 'connect')
-    .mockRejectedValueOnce(failedInsert)
+    .mockRejectedValueOnce(connectionFailure)
   const request = userCreatedRequest('msg_db_down', clerkId, email, 'unlucky')
 
   // Act
@@ -396,7 +462,7 @@ test('answers 500 with a bare body when the database write fails, so the failed 
   expect(response.status).toBe(500)
   expect(await response.text()).toBe('Error occured')
   expect(webhookError).toHaveBeenCalledWith(
-    { error: failedInsert, clerkId },
+    { error: connectionFailure, svixId: 'msg_db_down' },
     'Clerk user sync failed',
   )
   connect.mockRestore()

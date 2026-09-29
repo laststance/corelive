@@ -56,15 +56,10 @@ jobs:
         run: pnpm db:migrate
       # `drizzle-kit check` (deploy workflow) validates the migration folder against itself, not against
       # src/db/schema.ts. A schema edit without `pnpm db:generate` would leave the SQL stale and only show
-      # up after deploy, so regenerate here and fail when that writes or changes anything under drizzle/.
+      # up after deploy, so regenerate here and fail on any difference (the script also catches a rename,
+      # which drizzle-kit cannot resolve without a terminal and would otherwise pass silently).
       - name: Check schema.ts matches the committed migrations 🧬
-        run: |
-          pnpm exec drizzle-kit generate --name=ci_drift_check
-          if [ -n "$(git status --porcelain drizzle)" ]; then
-            echo "::error::src/db/schema.ts differs from the committed migrations. Run 'pnpm db:generate' and commit the new SQL."
-            git status --porcelain drizzle
-            exit 1
-          fi
+        run: bash scripts/check-schema-drift.sh
       - name: Generate Icons 🎨
         run: pnpm build:icons
       # Coverage lives in the dedicated `coverage.yml` workflow so this gate

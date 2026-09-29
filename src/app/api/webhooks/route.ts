@@ -75,14 +75,16 @@ export async function POST(req: Request) {
     const name =
       userData.username || `${firstName} ${lastName}`.trim() || 'Unknown User'
 
-    // Accounts that lose the address below; logged once the transaction has committed.
-    let releasedFrom: { id: number; clerkId: string }[] = []
+    // Row ids only, logged once the transaction has committed. A Clerk user id is never logged: the API
+    // trusts `Authorization: Bearer <Clerk user id>`, so in a log line it would be a working credential.
+    let syncedUserId: number | undefined
+    let releasedUserIds: number[] = []
     try {
       await runTransaction(async (tx) => {
         // Clerk owns email uniqueness: a different row still holding this address belongs to a
         // deleted or re-addressed account (no `user.deleted` / `user.updated` handler exists), and
         // its unique index would otherwise reject this account for good and make Svix retry forever.
-        releasedFrom = await tx
+        const released = await tx
           .update(userTable)
           .set({ email: null })
           .where(
@@ -91,7 +93,8 @@ export async function POST(req: Request) {
               ne(userTable.clerkId, userData.id),
             ),
           )
-          .returning({ id: userTable.id, clerkId: userTable.clerkId })
+          .returning({ id: userTable.id })
+        releasedUserIds = released.map((row) => row.id)
 
         // Insert, or fill the blanks of a row the auth middleware created first. Existing values win,
         // so a late delivery never overwrites what the account already holds.
@@ -109,6 +112,7 @@ export async function POST(req: Request) {
             .returning({ id: userTable.id }),
           'user.insert',
         )
+        syncedUserId = user.id
 
         // Unique index on (name, userId): the middleware's own "General" is left as it is.
         await tx
@@ -120,19 +124,17 @@ export async function POST(req: Request) {
       })
     } catch (error) {
       // The sanitizing serializer keeps the SQL, bound name and email out of the log line; the
-      // bare `Response` keeps them out of Next's own error output. Svix retries a non-2xx.
-      webhookLog.error(
-        { error, clerkId: userData.id },
-        'Clerk user sync failed',
-      )
+      // bare `Response` keeps them out of Next's own error output. Svix retries a non-2xx, and the
+      // delivery id lets the log line be matched with the Svix dashboard without naming the user.
+      webhookLog.error({ error, svixId: svix_id }, 'Clerk user sync failed')
       return new Response('Error occured', { status: 500 })
     }
 
     // The address is the only thing linking a stale row's history to a person, and clearing it is
-    // permanent: keep a record of which accounts lost it (ids only; the address itself is PII).
-    if (releasedFrom.length > 0) {
+    // permanent: keep a record of which accounts lost it (row ids only; the address itself is PII).
+    if (releasedUserIds.length > 0) {
       webhookLog.warn(
-        { clerkId: userData.id, releasedFrom },
+        { userId: syncedUserId, releasedUserIds },
         'Released an email address from stale accounts',
       )
     }

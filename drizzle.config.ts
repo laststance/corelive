@@ -23,10 +23,14 @@ const remoteAllowed =
  * Applies the fail-closed local-database gate to a raw `drizzle-kit` invocation.
  *
  * The package scripts run `scripts/assert-local-db.cjs` before `drizzle-kit`, but `pnpm exec drizzle-kit push`
- * skips them, and a developer `.env` may point at production. Loading this config is the one place every
- * invocation passes through, so the gate also runs here for any subcommand that could connect (an unknown or
- * missing subcommand counts as one). Only the deploy workflow, which targets production on purpose, opts out
- * (see {@link remoteAllowed}).
+ * skips them, and a developer `.env` may point at production. drizzle-kit evaluates this config whenever the
+ * connection comes from the environment, so the gate also runs here for any subcommand that could connect
+ * (an unknown or missing subcommand counts as one). Only the deploy workflow, which targets production on
+ * purpose, opts out (see {@link remoteAllowed}).
+ *
+ * This guards the accidental case: a URL taken from the environment or `.env`. Credential flags typed on the
+ * command line (`--url`, `--host`, …) put drizzle-kit in a mode that never loads this file, and passing them is
+ * an explicit act this gate does not try to stop.
  *
  * Called once when drizzle-kit loads this file.
  *

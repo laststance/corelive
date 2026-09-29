@@ -20,21 +20,23 @@ import { SEED_USER_CLERK_ID } from './seedUser'
  * The seed identity is fixed, and a developer database may already hold it (with
  * data) after `pnpm db:reset`, so teardown removes it only when this test created it.
  * When the account already existed, the test demotes its "General" category on purpose,
- * so teardown puts `isDefault` back to the value it found, even if the test failed midway.
+ * so teardown puts `isDefault` back to the value it found (or deletes the "General" the
+ * test created when the account had none), even if the test failed midway.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
 // Safe default: never delete a seed account this test did not create.
 let seedUserExistedBeforeTest = true
-/** `isDefault` of a pre-existing "General" category before the test demoted it; `undefined` when there was none. */
-let generalWasDefaultBeforeTest: boolean | undefined
+/** "General" of a pre-existing seed account as the test found it; `undefined` until the test has looked. */
+let generalBeforeTest:
+  { present: false } | { present: true; isDefault: boolean } | undefined
 
 afterEach(async () => {
   // Read and reset the flags before any await, so the next test starts from the safe defaults.
   const createdByThisTest = !seedUserExistedBeforeTest
-  const restoreGeneralDefault = generalWasDefaultBeforeTest
+  const generalFound = generalBeforeTest
   seedUserExistedBeforeTest = true
-  generalWasDefaultBeforeTest = undefined
+  generalBeforeTest = undefined
   const [user] = await db
     .select()
     .from(userTable)
@@ -45,13 +47,20 @@ afterEach(async () => {
     await db.delete(userTable).where(eq(userTable.id, user.id))
     return
   }
-  if (restoreGeneralDefault === undefined) return
+  if (generalFound === undefined) return
+  const general = and(
+    eq(categoryTable.userId, user.id),
+    eq(categoryTable.name, 'General'),
+  )
+  // The account had no "General": the one the test's seed run created must not outlive the test.
+  if (!generalFound.present) {
+    await db.delete(categoryTable).where(general)
+    return
+  }
   await db
     .update(categoryTable)
-    .set({ isDefault: restoreGeneralDefault })
-    .where(
-      and(eq(categoryTable.userId, user.id), eq(categoryTable.name, 'General')),
-    )
+    .set({ isDefault: generalFound.isDefault })
+    .where(general)
 })
 
 describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
@@ -72,7 +81,9 @@ describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
             eq(categoryTable.name, 'General'),
           ),
         )
-      generalWasDefaultBeforeTest = generalBefore?.isDefault
+      generalBeforeTest = generalBefore
+        ? { present: true, isDefault: generalBefore.isDefault }
+        : { present: false }
     }
     const first = await ensureSeedAccount()
     await db

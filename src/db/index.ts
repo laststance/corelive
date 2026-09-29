@@ -49,7 +49,8 @@ pool.on('connect', (client) => {
 export const databaseSchema = { ...schema, ...relations }
 
 /**
- * Shared drizzle client over one `pg` pool — the only database handle the app uses.
+ * Shared drizzle client over one `pg` pool — the app's one pool, which every query goes through.
+ * ({@link runTransaction} checks one connection out of this pool and wraps it in a short-lived second client so it can release the connection itself.)
  *
  * Replaces the former client module and the second private client the Clerk webhook
  * used to build, so a serverless instance now holds one pool instead of two.

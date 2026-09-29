@@ -18,6 +18,7 @@
 #   The "Check baseline" step below refuses to migrate a database that has tables but no row, so a
 #   forgotten baseline fails here without touching anything. Merging the cutover PR to main triggers
 #   this workflow (drizzle/** changed), so the baseline must be recorded BEFORE that merge.
+#   This paragraph is cutover-only: it goes away together with `--apply` (see TODOS.md).
 #
 # Recommended Setup:
 #   1. Create a "production" environment in GitHub repository settings
@@ -84,20 +85,18 @@ jobs:
 
       # `check` compares the migration folder with itself, not with src/db/schema.ts. A schema change
       # pushed without `pnpm db:generate` would apply nothing and still pass every step below, while
-      # Vercel ships code that expects the new column. Regenerate (offline, so the config gate allows
-      # it) and fail when that writes anything under drizzle/ — the same test the CI workflow runs.
+      # Vercel ships code that expects the new column. The script regenerates offline (so the config
+      # gate allows it) and fails on any difference, including a column or table rename, which
+      # drizzle-kit cannot resolve without a terminal. The same script runs in the CI workflow.
       - name: Check schema.ts matches the committed migrations
-        run: |
-          pnpm exec drizzle-kit generate --name=deploy_drift_check
-          if [ -n "$(git status --porcelain drizzle)" ]; then
-            echo "::error::src/db/schema.ts differs from the committed migrations. Run 'pnpm db:generate' and commit the new SQL."
-            git status --porcelain drizzle
-            exit 1
-          fi
+        run: bash scripts/check-schema-drift.sh
 
-      # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no
-      # row (the baseline was never recorded), which would make the migrator re-create them.
-      # Also runs on a dry run, so the operator sees the verdict without applying anything.
+      # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no row
+      # (the baseline was never recorded), which would make the migrator re-create them; when the
+      # bookkeeping rows survive but the tables are gone; and when a migration older than the newest
+      # recorded row was never recorded, which the migrator would skip without an error. Otherwise it
+      # lists the migrations still pending. Also runs on a dry run, so the operator sees the verdict
+      # without applying anything.
       - name: Check baseline
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
@@ -118,7 +117,8 @@ jobs:
           pnpm exec drizzle-kit migrate
           echo "✅ Migrations deployed successfully!"
 
-      # Read-only: the newest recorded migration must now equal the newest file in the journal.
+      # Read-only: after the migrator, the newest recorded migration must equal the newest file in the
+      # journal, every journal migration's hash must be recorded, and the application tables must exist.
       - name: Verify migrated state
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:

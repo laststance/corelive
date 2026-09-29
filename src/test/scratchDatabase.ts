@@ -12,29 +12,6 @@ import { db } from '@/db'
 const MIGRATIONS_FOLDER = path.resolve(process.cwd(), 'drizzle')
 
 /**
- * Waits until no backend is connected to a database any more, or five seconds have passed.
- *
- * `pool.end()` resolves once every client has been told to end, not once the server has closed the connections.
- * A `DROP DATABASE … WITH (FORCE)` that lands in between kills a backend the client is still saying goodbye to,
- * and the client reports it as `57P01` on an error event nobody listens to: an uncaught exception that fails the whole run.
- * Also covers a child process that exited without closing its connection cleanly.
- * @param name - Database whose connections should be gone.
- * @returns Resolves when the database has no connections, or after the deadline (the caller then forces the drop).
- * @example
- * await waitForNoBackends('corelive_scratch_123_ab12cd34')
- */
-async function waitForNoBackends(name: string): Promise<void> {
-  const deadline = Date.now() + 5_000
-  while (Date.now() < deadline) {
-    const { rows } = await db.execute<{ open: number }>(
-      sql`SELECT count(*)::int AS open FROM pg_stat_activity WHERE datname = ${name}`,
-    )
-    if ((rows[0]?.open ?? 0) === 0) return
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-}
-
-/**
  * Creates a throwaway database on the same server as the shared test database and builds it from the committed migrations.
  *
  * Tests that change the schema or the migration bookkeeping (drop tables, drop the `drizzle` schema, run the reset script) need a database of their own: on the shared one they would race every other real-database suite, and an interrupted run would leave the developer's database broken. The name carries the process id and a random suffix, so parallel workers never collide.
@@ -67,15 +44,14 @@ export async function createScratchDatabase(
   const scratchUrl = new URL(sharedUrl)
   scratchUrl.pathname = `/${name}`
   const pool = new Pool({ connectionString: scratchUrl.toString() })
-  // A connection the server ends while the pool is closing (the forced drop below) must not surface as an
-  // uncaught exception in a test that has already finished with the database.
-  pool.on('connect', (client) => {
-    client.on('error', () => {})
-  })
+  // `pool.end()` resolves once every client has been told to end, not once the server has closed the connections,
+  // so the forced drop below can kill a backend the client is still saying goodbye to. pg-pool re-emits that
+  // idle-client error (57P01) on the POOL, and a pool without an 'error' listener turns it into an uncaught exception
+  // that fails the whole run even when every test passed. A listener on the individual client does not help.
+  pool.on('error', () => {})
   const scratchDb = drizzle({ client: pool })
   const drop = async () => {
     await pool.end()
-    await waitForNoBackends(name)
     await db.execute(sql.raw(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`))
   }
 

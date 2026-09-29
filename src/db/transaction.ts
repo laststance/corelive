@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 
 import { databaseSchema, db } from './index'
 
-/** The transaction handle {@link db}.transaction passes to its callback. */
+/** The transaction handle a drizzle client passes to its `transaction` callback; {@link db} and the per-call client {@link runTransaction} builds share this type. */
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** Time budget for an ordinary transaction — the interactive-transaction default of the previous ORM. */
