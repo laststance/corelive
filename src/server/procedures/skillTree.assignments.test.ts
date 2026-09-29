@@ -27,7 +27,7 @@ import {
  * node's assignments with a subquery (orphaned receipts stay; assignments whose todo
  * is no longer completed disappear), `assignTask` moves an assignment atomically, and
  * `getUnassignedPool` is a NOT EXISTS anti-join. All three were rewritten in the
- * Prisma → Drizzle swap and had no server-side test.
+ * ORM swap and had no server-side test.
  */
 vi.setConfig({ testTimeout: 30_000 })
 

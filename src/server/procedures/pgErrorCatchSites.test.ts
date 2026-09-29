@@ -126,28 +126,29 @@ afterEach(async () => {
 })
 
 /**
- * Polls `pg_stat_activity` until a statement touching `tableName` is parked
- * waiting for a lock, so a test can commit the blocker at exactly the right moment.
- * @param tableName - Table whose statement should be blocked, e.g. `'NodeAssignment'`.
- * @returns Resolves once such a statement is waiting.
+ * Polls `pg_blocking_pids()` until some statement is parked behind the given backend, so a
+ * test commits the blocker at exactly the right moment. Scoped to ONE holder pid, so a lock
+ * wait belonging to a test running in another worker can never satisfy it.
+ * @param holderPid - `pg_backend_pid()` of the transaction that holds the locks.
+ * @returns Resolves once at least one statement is waiting on that backend.
  * @throws when nothing blocks within ten seconds.
  * @example
- * await waitForBlockedStatement('NodeAssignment')
+ * await waitForStatementBlockedBy(holderPid)
  */
-async function waitForBlockedStatement(tableName: string): Promise<void> {
+async function waitForStatementBlockedBy(holderPid: number): Promise<void> {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
     const { rows } = await db.execute<{ blocked: number }>(sql`
       SELECT count(*)::int AS blocked
       FROM pg_stat_activity
-      WHERE datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND query ILIKE ${`%"${tableName}"%`}
+      WHERE ${holderPid}::int = ANY(pg_blocking_pids(pid))
     `)
     if ((rows[0]?.blocked ?? 0) > 0) return
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
-  throw new Error(`No ${tableName} statement became blocked within 10s`)
+  throw new Error(
+    `No statement became blocked behind backend ${holderPid} within 10s`,
+  )
 }
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -157,23 +158,20 @@ type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
  * then commits that transaction so the call's blocked statement fails (or proceeds) for real.
  *
  * Deterministic replacement for "fire N calls and hope they collide": the holder takes
- * its locks first, the call is started and observed parked in `pg_stat_activity`, and only
+ * its locks first, the call is started and observed parked behind the holder's backend, and only
  * then is the holder committed.
  *
  * @param options.holdLocks - Statements the second transaction runs and then keeps open.
- * @param options.blockedTable - Table whose statement is expected to park, e.g. `'Category'`.
  * @param options.startCall - Starts the procedure call under test (do not await inside).
  * @returns `{ value }` when the call resolved, `{ error }` when it rejected.
  * @example
  * const settled = await settleBehindHeldTransaction({
  *   holdLocks: async (tx) => { await tx.delete(todoTable).where(eq(todoTable.id, 1)) },
- *   blockedTable: 'NodeAssignment',
  *   startCall: () => call(assignTask, input, authContext(clerkId)),
  * })
  */
 async function settleBehindHeldTransaction<Result>(options: {
   holdLocks: (tx: Transaction) => Promise<void>
-  blockedTable: string
   startCall: () => Promise<Result>
 }): Promise<{ value: Result } | { error: unknown }> {
   let release = () => {}
@@ -184,7 +182,12 @@ async function settleBehindHeldTransaction<Result>(options: {
   const started = new Promise<void>((resolve) => {
     markStarted = resolve
   })
+  let holderPid = 0
   const finished = db.transaction(async (tx) => {
+    const { rows } = await tx.execute<{ pid: number }>(
+      sql`SELECT pg_backend_pid() AS pid`,
+    )
+    holderPid = rows[0]?.pid ?? 0
     await options.holdLocks(tx)
     markStarted()
     await released
@@ -197,7 +200,7 @@ async function settleBehindHeldTransaction<Result>(options: {
       (value) => ({ value }),
       (error: unknown) => ({ error }),
     )
-    await waitForBlockedStatement(options.blockedTable)
+    await waitForStatementBlockedBy(holderPid)
     release()
     await finished
     return await outcome
@@ -304,7 +307,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
           .insert(categoryTable)
           .values({ ...DEFAULT_CATEGORY_SEED, userId: user!.id })
       },
-      blockedTable: 'Category',
       startCall: async () =>
         call(listCategories, undefined, authContext(clerkId)),
     })
@@ -398,7 +400,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
       holdLocks: async (tx) => {
         await tx.insert(electronSettingsTable).values({ userId: user.id })
       },
-      blockedTable: 'ElectronSettings',
       startCall: async () =>
         call(getElectronSettings, undefined, authContext(clerkId)),
     })
@@ -425,7 +426,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
           .insert(skillTreeTable)
           .values({ userId: user.id, name: 'Winner' })
       },
-      blockedTable: 'SkillTree',
       startCall: async () => call(getMyTree, undefined, authContext(clerkId)),
     })
 
@@ -453,7 +453,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
           .insert(nodeAssignmentTable)
           .values({ nodeId: nodeIds[0], todoId, todoText: 'held' })
       },
-      blockedTable: 'NodeAssignment',
       startCall: async () =>
         call(assignTask, { nodeId: nodeIds[1], todoId }, authContext(clerkId)),
     })
@@ -475,7 +474,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
       holdLocks: async (tx) => {
         await tx.delete(todoTable).where(eq(todoTable.id, todoId))
       },
-      blockedTable: 'NodeAssignment',
       startCall: async () =>
         call(assignTask, { nodeId: nodeIds[0], todoId }, authContext(clerkId)),
     })
@@ -502,7 +500,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
           .delete(nodeAssignmentTable)
           .where(eq(nodeAssignmentTable.todoId, todoId))
       },
-      blockedTable: 'NodeAssignment',
       startCall: async () =>
         call(
           unassignTask,

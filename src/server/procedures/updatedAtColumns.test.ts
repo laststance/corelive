@@ -27,7 +27,7 @@ import { upsertElectronSettings } from './electronSettings'
 import { getMyTree } from './skillTree'
 
 /**
- * Real-database guard for the seven `updatedAt` columns. Prisma's `@updatedAt`
+ * Real-database guard for the seven `updatedAt` columns. The previous ORM's `@updatedAt`
  * stamped them client-side on every write; drizzle only does that where the schema
  * says `$onUpdate`, and a missing one is silent (the column just stays stale). Each
  * test first parks `updatedAt` at a far-past sentinel, runs the real write path, and

@@ -75,7 +75,7 @@ describe('database package scripts', () => {
     )
   })
 
-  test('no longer ships a postinstall step or the prisma consent variable', () => {
+  test('has no postinstall step and no ORM consent-variable prefix on any script', () => {
     // Arrange
     const scripts = readPackageScripts()
 
@@ -84,6 +84,6 @@ describe('database package scripts', () => {
 
     // Assert
     expect(scripts.postinstall).toBeUndefined()
-    expect(commands).not.toContain('PRISMA_USER_CONSENT')
+    expect(commands).not.toContain('CONSENT_FOR_DANGEROUS_AI_ACTION')
   })
 })
