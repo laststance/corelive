@@ -1,3 +1,6 @@
+import { DrizzleQueryError } from 'drizzle-orm'
+import { DatabaseError } from 'pg'
+
 import { MAX_ERROR_CAUSE_DEPTH } from '../db/constants'
 
 /** Shape an error takes in a log line: identifies the failure without carrying row data. */
@@ -160,54 +163,12 @@ export const logSerializers = {
   context: serializeLogContext,
 }
 
-/** How many levels of plain objects and arrays {@link shapeErrorsUnderAnyKey} looks into; anything deeper is passed through unchanged. */
-const MAX_LOG_VALUE_DEPTH = 4
-
 /**
- * Replaces every {@link Error} found in a value with its log-safe shape, looking through plain objects and arrays up to {@link MAX_LOG_VALUE_DEPTH} levels.
+ * pino `formatters.log` hook for {@link createLogger}: shapes an {@link Error} that sits directly under ANY key of a log object.
  *
- * A container is rebuilt only when an error sits somewhere inside it; every other value is returned as the very same object, so custom `toJSON` redaction and lazy getters keep working exactly as before. A rebuilt object keeps its own enumerable data properties: accessors are never invoked (a getter that throws must not turn a log call into a failure) and are shown as `'[Getter]'`. An object with a `toJSON` method is left to that method.
- * @param value - Any value a call site put in a log object.
- * @param depth - How many containers were entered to reach `value`.
- * @returns The value with its errors shaped, or `value` itself when it holds none.
- * @example
- * shapeErrorsDeep({ details: { error: new Error('boom') } }, 0)
- * // => { details: { error: { type: 'Error', message: 'boom', stack: '…' } } }
- */
-function shapeErrorsDeep(value: unknown, depth: number): unknown {
-  if (value instanceof Error) return shapeError(value, 0)
-  if (depth >= MAX_LOG_VALUE_DEPTH) return value
-  if (Array.isArray(value)) {
-    const shaped = value.map((item) => shapeErrorsDeep(item, depth + 1))
-    return shaped.some((item, index) => item !== value[index]) ? shaped : value
-  }
-  if (typeof value !== 'object' || value === null) return value
-  const prototype = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) return value
-  if ('toJSON' in value) return value
-
-  let changed = false
-  const entries: [string, unknown][] = []
-  for (const key of Object.keys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)
-    if (descriptor === undefined) continue
-    if (!('value' in descriptor)) {
-      entries.push([key, '[Getter]'])
-      continue
-    }
-    const shaped = shapeErrorsDeep(descriptor.value, depth + 1)
-    if (shaped !== descriptor.value) changed = true
-    entries.push([key, shaped])
-  }
-  return changed ? Object.fromEntries(entries) : value
-}
-
-/**
- * pino `formatters.log` hook for {@link createLogger}: shapes an {@link Error} that sits under ANY key of a log object, however deeply it is nested in plain objects and arrays.
- *
- * pino applies {@link logSerializers} by key name, so `log.error({ failure: error }, …)` or `log.error({ details: { errors: [error] } }, …)` would reach the log line through `JSON.stringify`, which includes a failed query's own enumerable `query` and `params`. This hook runs before the serializers (pino's `asJson` calls `formatters.log` first), so the rule "no SQL or bound value in the logs" no longer depends on what a call site names its key or how it groups its values.
+ * pino applies {@link logSerializers} by key name, so `log.error({ failure: error }, …)` would reach the log line through `JSON.stringify`, which includes a failed query's own enumerable `query` and `params`. This hook runs before the serializers (pino's `asJson` calls `formatters.log` first), so the rule "no SQL or bound value in the logs" no longer depends on what a call site names its key. An error nested deeper is covered by {@link installLogSafeJson}.
  * @param object - The object a call site passed to the logger.
- * @returns A copy in which every {@link Error} value is replaced by its log-safe shape; other values are unchanged.
+ * @returns A copy in which every direct {@link Error} value is replaced by its log-safe shape; other values are unchanged.
  * @example
  * shapeErrorsUnderAnyKey({ failure: new Error('boom'), userId: 7 })
  * // => { failure: { type: 'Error', message: 'boom', stack: '…' }, userId: 7 }
@@ -215,8 +176,34 @@ function shapeErrorsDeep(value: unknown, depth: number): unknown {
 export function shapeErrorsUnderAnyKey(
   object: Record<string, unknown>,
 ): Record<string, unknown> {
-  const shaped = shapeErrorsDeep(object, 0)
-  return typeof shaped === 'object' && shaped !== null && !Array.isArray(shaped)
-    ? (shaped as Record<string, unknown>)
-    : object
+  return Object.fromEntries(
+    Object.entries(object).map(([key, value]) => [
+      key,
+      serializeLogError(value),
+    ]),
+  )
 }
+
+/**
+ * Gives a database error class a `toJSON` that returns its log-safe shape, so `JSON.stringify` never reaches the SQL, bound parameters or row detail the instance carries, whatever the instance is nested in.
+ *
+ * pino serializes a log object with `JSON.stringify` semantics, which honor `toJSON` on any value at any depth: inside arrays, class instances, getters, or a container that defines its own `toJSON`. That makes this a net under {@link shapeErrorsUnderAnyKey}, which only sees errors directly under a key, without walking (and thereby disturbing) the objects call sites log. Idempotent; the property is non-enumerable.
+ * @param errorClass - The class whose instances carry row data.
+ * @returns Nothing.
+ * @example
+ * installLogSafeJson(DrizzleQueryError)
+ * JSON.stringify({ a: [failedQuery] }) // => '{"a":[{"type":"DrizzleQueryError", …}]}' with no SQL or params
+ */
+function installLogSafeJson(errorClass: { prototype: Error }): void {
+  Object.defineProperty(errorClass.prototype, 'toJSON', {
+    value(this: Error) {
+      return shapeError(this, 0)
+    },
+    configurable: true,
+    writable: true,
+    enumerable: false,
+  })
+}
+
+installLogSafeJson(DrizzleQueryError)
+installLogSafeJson(DatabaseError)

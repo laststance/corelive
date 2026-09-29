@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { DrizzleQueryError } from 'drizzle-orm'
+import { DatabaseError } from 'pg'
 import { describe, expect, test } from 'vitest'
 
 import { createLogger } from './logger'
@@ -138,6 +139,84 @@ describe('createLogger', () => {
         throw new Error('getter exploded')
       },
     }
+
+    // Act
+    const logging = () => logger.error({ details }, 'Operation failed')
+
+    // Assert
+    expect(logging).not.toThrow()
+    expect(lastLine()).toMatchObject({ msg: 'Operation failed' })
+  })
+
+  test('sanitizes a failed query however its container serializes: non-callable toJSON, a toJSON that returns the error, a getter that returns it, and a class instance as the whole log object', () => {
+    // Arrange
+    const { logger, lastRawLine } = createCapturingProductionLogger()
+    class LogRecord {
+      failure = makeFailedQuery()
+    }
+    const failure = makeFailedQuery()
+    const shapes: [string, unknown][] = [
+      ['non-callable toJSON', { details: { toJSON: null, failure } }],
+      [
+        'toJSON returning the error',
+        {
+          details: {
+            failure,
+            toJSON() {
+              return { failure }
+            },
+          },
+        },
+      ],
+      [
+        'getter returning the error',
+        {
+          details: {
+            get failure() {
+              return makeFailedQuery()
+            },
+          },
+        },
+      ],
+      ['class instance as the log object', new LogRecord()],
+    ]
+
+    for (const [shape, logged] of shapes) {
+      // Act
+      logger.error(logged as object, 'Operation failed')
+
+      // Assert
+      expect(lastRawLine(), shape).not.toContain('secret-title')
+      expect(lastRawLine(), shape).not.toContain('insert into')
+    }
+  })
+
+  test('sanitizes a raw PostgreSQL error nested in a logged object, because its detail quotes the offending row values', () => {
+    // Arrange
+    const { logger, lastRawLine } = createCapturingProductionLogger()
+    const violation = new DatabaseError('duplicate key', 10, 'error')
+    violation.detail = 'Key (email)=(secret@example.com) already exists.'
+    violation.code = '23505'
+
+    // Act
+    logger.error({ attempts: [{ violation }] }, 'Sync failed')
+
+    // Assert
+    expect(lastRawLine()).not.toContain('secret@example.com')
+    expect(lastRawLine()).toContain('23505')
+  })
+
+  test('logs an object whose Proxy throws on inspection instead of failing the log call', () => {
+    // Arrange
+    const { logger, lastLine } = createCapturingProductionLogger()
+    const details = new Proxy(
+      { status: 'failed' },
+      {
+        has() {
+          throw new Error('has trap')
+        },
+      },
+    )
 
     // Act
     const logging = () => logger.error({ details }, 'Operation failed')
