@@ -55,6 +55,18 @@ function say(message) {
   process.stdout.write(`${message}\n`)
 }
 
+// Bounds on every wait against the database. `pg` waits forever by default, so an unreachable or wedged server
+// would hold the deploy job, and the `db-migrate-production` concurrency slot behind it, until Actions' 6-hour
+// limit. The queries here read catalog views or touch one small table; none legitimately runs for long.
+/** Time to open the connection; generous because a managed Postgres can take several seconds to wake up. */
+const CONNECT_TIMEOUT_MS = 15_000
+/** A statement stuck behind another session's lock (a migration running elsewhere) fails instead of queueing. */
+const LOCK_TIMEOUT_MS = 10_000
+/** Server-side cap on one statement. */
+const STATEMENT_TIMEOUT_MS = 30_000
+/** Client-side backstop above the server-side cap: it also covers a socket that went silent, where no server timeout can fire. */
+const QUERY_TIMEOUT_MS = 45_000
+
 /** Migrations the previous ORM had applied to production, each recorded as finished. */
 const EXPECTED_PREVIOUS_MIGRATIONS = 16
 /** The last of them — the one that renamed the default category to "General". */
@@ -100,7 +112,13 @@ const migrations = readMigrationFiles({
 const journalEntries = JSON.parse(readFileSync(JOURNAL_URL, 'utf8')).entries
 const newestJournalMillis = Math.max(...migrations.map((m) => m.folderMillis))
 
-const client = new pg.Client({ connectionString: url })
+const client = new pg.Client({
+  connectionString: url,
+  connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+  lock_timeout: LOCK_TIMEOUT_MS,
+  statement_timeout: STATEMENT_TIMEOUT_MS,
+  query_timeout: QUERY_TIMEOUT_MS,
+})
 await client.connect()
 try {
   const state = await readState(client)

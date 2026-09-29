@@ -65,6 +65,9 @@ jobs:
   migrate:
     name: Deploy Migrations
     runs-on: ubuntu-latest
+    # The baseline script bounds its own waits; `drizzle-kit migrate` does not, so an unresponsive database
+    # would otherwise hold this job (and the concurrency group above) for Actions' 6-hour default.
+    timeout-minutes: 15
 
     # Use production environment for approval gate
     environment: production

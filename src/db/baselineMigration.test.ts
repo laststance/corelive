@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import net from 'node:net'
 import path from 'node:path'
 
 import { eq, sql } from 'drizzle-orm'
 import { readMigrationFiles } from 'drizzle-orm/migrator'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
+import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 
 import { describeIfDb } from '@/server/procedures/describeIfDb'
@@ -192,6 +194,9 @@ async function dropPreviousOrmHistory(executor: SqlExecutor): Promise<void> {
   await executor.execute(sql`DROP TABLE IF EXISTS public."_prisma_migrations"`)
 }
 
+/** Longest any single script run may take; above the script's own 45 s query backstop, so only a real hang reaches it. */
+const SCRIPT_RUN_LIMIT_MS = 60_000
+
 /**
  * Runs the committed baseline script against a database, the way the deploy workflow and the operator do.
  * @param flags - Command-line flags, e.g. `['--apply']`.
@@ -219,6 +224,9 @@ function runBaselineScript(
         ...extraEnv,
       },
       encoding: 'utf8',
+      // spawnSync blocks this worker's event loop, so vitest's own timeout could never fire on a script that hangs.
+      timeout: SCRIPT_RUN_LIMIT_MS,
+      killSignal: 'SIGKILL',
     },
   )
   return { status: result.status, output: `${result.stdout}${result.stderr}` }
@@ -631,5 +639,56 @@ describeIfDb(
         await fresh.drop()
       }
     })
+
+    test('gives up on a database that accepts the connection but never answers, instead of holding the deploy job for hours', async () => {
+      // Arrange — the kernel completes the TCP handshake for a listening socket that nobody serves, which is
+      // what an unresponsive database looks like to the client.
+      const silentServer = net.createServer()
+      await new Promise<void>((resolve) =>
+        silentServer.listen(0, '127.0.0.1', resolve),
+      )
+      const { port } = silentServer.address() as net.AddressInfo
+
+      try {
+        // Act
+        const verdict = runBaselineScript(
+          [],
+          `postgresql://postgres:password@127.0.0.1:${port}/never_answers`,
+        )
+
+        // Assert — a killed run would report a null status, so 1 proves the script ended itself.
+        expect(verdict.status).toBe(1)
+        expect(verdict.output).toContain('timeout expired')
+      } finally {
+        silentServer.close()
+      }
+    }, 90_000)
+
+    test('gives up when another session holds the bookkeeping table locked, instead of queueing behind a migration running elsewhere', async () => {
+      // Arrange — the bookkeeping table exists and a second session holds it exclusively.
+      await scratch.db.execute(sql`CREATE SCHEMA drizzle`)
+      await scratch.db.execute(
+        sql`CREATE TABLE drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)`,
+      )
+      const lockHolder = new pg.Client({ connectionString: scratch.url })
+      await lockHolder.connect()
+
+      try {
+        await lockHolder.query('BEGIN')
+        await lockHolder.query(
+          'LOCK TABLE drizzle.__drizzle_migrations IN ACCESS EXCLUSIVE MODE',
+        )
+
+        // Act
+        const verdict = runBaselineScript([], scratch.url)
+
+        // Assert
+        expect(verdict.status).toBe(1)
+        expect(verdict.output).toContain('lock timeout')
+      } finally {
+        // Ending the session rolls its transaction back and releases the lock.
+        await lockHolder.end()
+      }
+    }, 90_000)
   },
 )
