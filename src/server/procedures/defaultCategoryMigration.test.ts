@@ -19,6 +19,13 @@ import { describeIfDb } from './describeIfDb'
  * rewrites every account, so each case runs inside one transaction that is
  * always rolled back: a local dev DB's real accounts are never touched, and
  * there is nothing to clean up.
+ *
+ * Archival by design: that SQL has already run in production and fresh
+ * databases are built from the DDL-only `drizzle/0000_init.sql`, so no code path
+ * executes it any more. It stays as the executable spec of what the data
+ * migration guaranteed (one default "General" per account, todos re-homed,
+ * nothing lost); delete the suite and its fixture together if that record stops
+ * being worth its maintenance.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -76,7 +83,7 @@ async function createUser(tx: Transaction) {
       .insert(userTable)
       .values({ clerkId: `test_default_migration_${randomUUID()}` })
       .returning(),
-    'user.create',
+    'user.insert',
   )
 }
 
@@ -91,7 +98,7 @@ async function createCategory(
       .insert(categoryTable)
       .values({ name, color: 'blue', isDefault, userId })
       .returning(),
-    'category.create',
+    'category.insert',
   )
 }
 
@@ -130,7 +137,7 @@ describeIfDb(
               categoryId: renamed.id,
             })
             .returning(),
-          'todo.create',
+          'todo.insert',
         )
 
         // Act
@@ -148,7 +155,7 @@ describeIfDb(
               .from(todoTable)
               .where(eq(todoTable.id, task.id))
               .limit(1),
-            'todo.findUniqueOrThrow',
+            'todo.select',
           ),
         ).toMatchObject({ categoryId: renamed.id })
       })

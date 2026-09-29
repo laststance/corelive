@@ -3,16 +3,15 @@ import { execFileSync } from 'node:child_process'
 import { describe } from 'vitest'
 
 /**
- * Shared gate for the real-DB integration suites (`completed.journal.test.ts`,
- * `completed.dayDetail.test.ts`). They opt in via `RUN_DB_INTEGRATION_TESTS=1` (CI's
- * `test` job sets it once Postgres is up; locally set it with `docker compose
- * up`) and run per-user-scoped `deleteMany` teardown against whatever
- * `POSTGRES_PRISMA_URL` points at — so when enabled, this re-runs the SAME
- * fail-closed chokepoint that guards `db:reset` (`scripts/assert-local-db.cjs`)
- * BEFORE any suite is defined. A misconfigured remote URL aborts the run loudly
- * instead of mutating prod data. Shelling out reuses the gate verbatim — one
- * source of truth, with none of its security-critical URL parsing duplicated
- * here where it could drift from the CLI.
+ * Shared gate for every real-DB integration suite (procedures, middleware, webhook, `src/db`).
+ * They opt in via `RUN_DB_INTEGRATION_TESTS=1` (CI's `test` job sets it once
+ * Postgres is up; locally set it with `docker compose up`) and clean up with
+ * per-user-scoped deletes against whatever `POSTGRES_PRISMA_URL` points at — so when
+ * enabled, this re-runs the SAME fail-closed chokepoint that guards `db:reset`
+ * (`scripts/assert-local-db.cjs`) BEFORE any suite is defined. A misconfigured
+ * remote URL aborts the run loudly instead of mutating prod data. Shelling out
+ * reuses the gate verbatim — one source of truth, with none of its
+ * security-critical URL parsing duplicated here where it could drift from the CLI.
  */
 const dbIntegrationEnabled = process.env.RUN_DB_INTEGRATION_TESTS === '1'
 
@@ -51,7 +50,7 @@ if (dbIntegrationEnabled) assertLocalDbBeforeDestructiveTests()
 
 /**
  * `describe` when integration tests are enabled AND the DB is provably local,
- * else `describe.skip`. Drop-in replacement for the per-file inline definition
- * the three integration suites previously each declared.
+ * else `describe.skip`. Wrap only the cases that need a database; keep DB-free
+ * cases in a plain `describe`/`test` so they still run in a bare `pnpm test`.
  */
 export const describeIfDb = dbIntegrationEnabled ? describe : describe.skip

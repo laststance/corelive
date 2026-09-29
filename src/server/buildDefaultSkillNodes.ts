@@ -1,4 +1,4 @@
-// Relative + type-only on purpose: the tsx-run dev seed imports this file, and tsx does not reliably honor `@/`.
+// Relative imports on purpose: the tsx-run dev seed imports this file, and tsx does not reliably honor `@/`. The schema import is type-only so this file never loads drizzle at runtime.
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../app/(main)/skill-tree/lib/template'
 import type { skillNodeTable } from '../db/schema'
 

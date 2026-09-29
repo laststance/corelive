@@ -117,7 +117,7 @@ const create = os
   .input(CreateCategorySchema)
   .output(CategorySchema)
   .handler(({ input }) => {
-    // Mirrors the real @@unique([name, userId]) violation -> P2002 -> CONFLICT.
+    // Mirrors the real (name, userId) unique violation (SQLSTATE 23505, via isPgError) -> CONFLICT.
     if (categories.some((category) => category.name === input.name)) {
       throw new ORPCError('CONFLICT', {
         message: `Category "${input.name}" already exists`,

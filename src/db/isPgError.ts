@@ -15,7 +15,7 @@ import { MAX_ERROR_CAUSE_DEPTH } from './constants'
  * - `false` for other errors, non-objects, and chains longer than {@link MAX_ERROR_CAUSE_DEPTH}
  * @example
  * try {
- *   await db.insert(category).values(row)
+ *   await db.insert(categoryTable).values(row)
  * } catch (error) {
  *   if (isPgError(error, PG_UNIQUE_VIOLATION)) return // duplicate name
  *   throw error

@@ -10,7 +10,10 @@
  * @returns The first row.
  * @throws {Error} When `rows` is empty (the statement affected no row).
  * @example
- * const [row] = requireRow(await db.delete(todo).where(eq(todo.id, 1)).returning(), 'todo.delete')
+ * const row = requireRow(
+ *   await db.delete(todoTable).where(eq(todoTable.id, 1)).returning(),
+ *   'todo.delete',
+ * )
  */
 export function requireRow<Row>(rows: readonly Row[], operation: string): Row {
   const [row] = rows
