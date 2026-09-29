@@ -9,9 +9,10 @@
 // Usage (POSTGRES_PRISMA_URL points at the database to inspect — never printed):
 //   node scripts/baseline-drizzle-migrations.mjs                   read-only: report the state and the pending
 //                                                                  migrations; exit 1 when the baseline row is
-//                                                                  missing, the tables are gone, or a migration
-//                                                                  older than the newest recorded row is not
-//                                                                  recorded (the migrator would skip it silently)
+//                                                                  missing, a table or column of the newest recorded
+//                                                                  schema is gone, or a migration older than the newest
+//                                                                  recorded row is not recorded (the migrator would
+//                                                                  skip it silently)
 //   node scripts/baseline-drizzle-migrations.mjs --expect-current  read-only: additionally require that the
 //                                                                  newest row equals the journal AND every
 //                                                                  journal migration is recorded (post-migrate)
@@ -87,6 +88,9 @@ const url = process.env.POSTGRES_PRISMA_URL
 if (!url) fail('POSTGRES_PRISMA_URL is required')
 
 const target = new URL(url)
+// The repository and its Actions logs are public. GitHub masks the secret as a whole, not the host inside it,
+// so the host is registered as a mask before it is printed.
+if (process.env.GITHUB_ACTIONS === 'true') say(`::add-mask::${target.hostname}`)
 say(`target: host=${target.hostname} database=${target.pathname.slice(1)}`)
 
 // Resolved from this file, like the fixture paths above, so the script works from any working directory.
@@ -148,6 +152,7 @@ try {
         ? migrations
         : migrations.filter((m) => m.folderMillis <= state.newestCreatedAt),
     )
+    await requireSchemaPresent(client, state.newestCreatedAt)
     say('baseline recorded: `drizzle-kit migrate` applies only newer files')
     const pending = pendingMigrationTags(state.newestCreatedAt)
     say(
@@ -261,6 +266,71 @@ async function requireMigrationsRecorded(connected, required) {
       `${problems.length} journal migration(s) not recorded correctly in drizzle.__drizzle_migrations:\n  ${problems.join('\n  ')}`,
     )
   }
+}
+
+/**
+ * Fails when a table or column of the schema the newest recorded migration produced is missing from `public`.
+ *
+ * The bookkeeping row says `0000_init` ran; it cannot say the tables are still there. After a partial restore or a
+ * dropped table the migrator skips the file all the same, so the deploy would report success on a database the app
+ * cannot query. The expectation comes from drizzle-kit's own snapshot of that migration (`drizzle/meta/NNNN_snapshot.json`),
+ * which the schema-drift check keeps equal to `src/db/schema.ts`, so a later migration that renames a table brings its
+ * own snapshot and needs no change here. Only presence is checked; types and indexes are the `--apply` fingerprint's job.
+ * @param connected - Connected pg client.
+ * @param newestCreatedAt - Newest `created_at` in the bookkeeping table, which names the snapshot to compare with.
+ * @returns Resolves when nothing is missing, or when the newest recorded migration is not in this checkout (the deployed
+ * code is older than the database, so there is no snapshot to compare with); otherwise the process ends via {@link fail}.
+ * @example
+ * await requireSchemaPresent(client, 1790679206746) // fails when public."Completed" was dropped
+ */
+async function requireSchemaPresent(connected, newestCreatedAt) {
+  const entry = journalEntries.find(
+    (candidate) => candidate.when === newestCreatedAt,
+  )
+  if (!entry) {
+    say(
+      'schema presence not checked: the newest recorded migration is not in this checkout',
+    )
+    return
+  }
+  const snapshotUrl = new URL(
+    `../drizzle/meta/${String(entry.idx).padStart(4, '0')}_snapshot.json`,
+    import.meta.url,
+  )
+  const { tables } = JSON.parse(readFileSync(snapshotUrl, 'utf8'))
+  const { rows } = await connected.query(`
+    SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'
+  `)
+  const present = new Set(
+    rows.map((row) => `${row.table_name}.${row.column_name}`),
+  )
+  const presentTables = new Set(rows.map((row) => row.table_name))
+  const missing = []
+  // An empty snapshot would pass vacuously, so it is treated as a broken checkout.
+  if (Object.keys(tables).length === 0) {
+    fail(`drizzle/meta snapshot of ${entry.tag} lists no tables`)
+  }
+  for (const table of Object.values(tables)) {
+    // drizzle-kit stores the default schema as an empty string.
+    if (table.schema !== '' && table.schema !== 'public') continue
+    if (!presentTables.has(table.name)) {
+      missing.push(`table "${table.name}"`)
+      continue
+    }
+    for (const column of Object.values(table.columns)) {
+      if (!present.has(`${table.name}.${column.name}`)) {
+        missing.push(`column "${table.name}"."${column.name}"`)
+      }
+    }
+  }
+  if (missing.length > 0) {
+    fail(
+      `${entry.tag} is recorded as applied, but the database lacks ${missing.length} of its objects: ` +
+        `${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ', …' : ''}. ` +
+        '`drizzle-kit migrate` would skip the file and the deploy would report success on a schema the app cannot query.',
+    )
+  }
+  say(`schema present: every table and column of ${entry.tag}`)
 }
 
 /**

@@ -430,6 +430,41 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
     expect(settled).toEqual({ value: null })
   })
 
+  test('keeps an assignment that a concurrent call moved to another node before the unassign ran its delete, answering null', async () => {
+    // Arrange — the todo is assigned to the first node.
+    const clerkId = freshClerkId()
+    const { nodeIds, todoId } = await arrangeAssignableTodo(clerkId)
+    await db
+      .insert(nodeAssignmentTable)
+      .values({ nodeId: nodeIds[0], todoId, todoText: 'ship the migration' })
+
+    // Act — a second transaction moves the assignment to the second node but has not committed:
+    // unassignTask still reads it on the first node, then its DELETE parks on the row lock and, once
+    // that commits, must no longer match, because the row now belongs to the other node.
+    const settled = await settleBehindHeldTransaction({
+      holdLocks: async (tx) => {
+        await tx
+          .update(nodeAssignmentTable)
+          .set({ nodeId: nodeIds[1] })
+          .where(eq(nodeAssignmentTable.todoId, todoId))
+      },
+      startCall: async () =>
+        call(
+          unassignTask,
+          { nodeId: nodeIds[0], todoId },
+          authContext(clerkId),
+        ),
+    })
+
+    // Assert — nothing was deleted: the moved assignment is still there.
+    expect(settled).toEqual({ value: null })
+    const remaining = await db
+      .select({ nodeId: nodeAssignmentTable.nodeId })
+      .from(nodeAssignmentTable)
+      .where(eq(nodeAssignmentTable.todoId, todoId))
+    expect(remaining).toEqual([{ nodeId: nodeIds[1] }])
+  })
+
   test('returns null when the todo has no assignment to remove', async () => {
     // Arrange
     const clerkId = freshClerkId()

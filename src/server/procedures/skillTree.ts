@@ -404,12 +404,20 @@ export const unassignTask = authMiddleware
       if (!existing || existing.nodeId !== input.nodeId) {
         return null
       }
+      // The node is part of the condition, not only of the read above: a concurrent assign may have
+      // moved the todo to another node since, and that new assignment must survive this call.
       const [deleted] = await db
         .delete(nodeAssignmentTable)
-        .where(eq(nodeAssignmentTable.todoId, input.todoId))
+        .where(
+          and(
+            eq(nodeAssignmentTable.todoId, input.todoId),
+            eq(nodeAssignmentTable.nodeId, input.nodeId),
+          ),
+        )
         .returning()
-      // A concurrent unassign call won the race between our read and this
-      // delete — already-gone is OK, return null so the client can reconcile.
+      // A concurrent call won the race between our read and this delete (it
+      // unassigned the todo or moved it to another node) — already-gone is OK,
+      // return null so the client can reconcile.
       return deleted ?? null
     } catch (error) {
       if (error instanceof ORPCError) throw error

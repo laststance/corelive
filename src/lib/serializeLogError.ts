@@ -160,12 +160,44 @@ export const logSerializers = {
   context: serializeLogContext,
 }
 
+/** How many levels of plain objects and arrays {@link shapeErrorsUnderAnyKey} looks into; anything deeper is passed through unchanged. */
+const MAX_LOG_VALUE_DEPTH = 4
+
 /**
- * pino `formatters.log` hook for {@link createLogger}: shapes an {@link Error} that sits directly under ANY key of a log object.
+ * Replaces every {@link Error} found in a value with its log-safe shape, looking through plain objects and arrays up to {@link MAX_LOG_VALUE_DEPTH} levels.
+ * @param value - Any value a call site put in a log object.
+ * @param depth - How many containers were entered to reach `value`.
+ * @returns A copy with the errors shaped; class instances (dates, maps) and anything past the depth limit are returned as they are.
+ * @example
+ * shapeErrorsDeep({ details: { error: new Error('boom') } }, 0)
+ * // => { details: { error: { type: 'Error', message: 'boom', stack: '…' } } }
+ */
+function shapeErrorsDeep(value: unknown, depth: number): unknown {
+  if (value instanceof Error) return shapeError(value, 0)
+  if (depth >= MAX_LOG_VALUE_DEPTH) return value
+  if (Array.isArray(value)) {
+    return value.map((item) => shapeErrorsDeep(item, depth + 1))
+  }
+  if (typeof value === 'object' && value !== null) {
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype === Object.prototype || prototype === null) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+          key,
+          shapeErrorsDeep(item, depth + 1),
+        ]),
+      )
+    }
+  }
+  return value
+}
+
+/**
+ * pino `formatters.log` hook for {@link createLogger}: shapes an {@link Error} that sits under ANY key of a log object, however deeply it is nested in plain objects and arrays.
  *
- * pino applies {@link logSerializers} by key name, so `log.error({ failure: error }, …)` would reach the log line through `JSON.stringify`, which includes a failed query's own enumerable `query` and `params`. This hook runs before the serializers (pino's `asJson` calls `formatters.log` first), so the rule "no SQL or bound value in the logs" no longer depends on what a call site names its key.
+ * pino applies {@link logSerializers} by key name, so `log.error({ failure: error }, …)` or `log.error({ details: { errors: [error] } }, …)` would reach the log line through `JSON.stringify`, which includes a failed query's own enumerable `query` and `params`. This hook runs before the serializers (pino's `asJson` calls `formatters.log` first), so the rule "no SQL or bound value in the logs" no longer depends on what a call site names its key or how it groups its values.
  * @param object - The object a call site passed to the logger.
- * @returns A copy in which every direct {@link Error} value is replaced by its log-safe shape; other values are unchanged.
+ * @returns A copy in which every {@link Error} value is replaced by its log-safe shape; other values are unchanged.
  * @example
  * shapeErrorsUnderAnyKey({ failure: new Error('boom'), userId: 7 })
  * // => { failure: { type: 'Error', message: 'boom', stack: '…' }, userId: 7 }
@@ -176,7 +208,7 @@ export function shapeErrorsUnderAnyKey(
   return Object.fromEntries(
     Object.entries(object).map(([key, value]) => [
       key,
-      serializeLogError(value),
+      shapeErrorsDeep(value, 1),
     ]),
   )
 }

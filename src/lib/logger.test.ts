@@ -94,6 +94,26 @@ describe('createLogger', () => {
     expect(lastRawLine()).not.toContain('insert into')
   })
 
+  test('sanitizes a failed query nested inside plain objects and arrays, so grouping values under one key cannot bring the SQL or bound values back', () => {
+    // Arrange
+    const { logger, lastLine, lastRawLine } = createCapturingProductionLogger()
+
+    // Act
+    logger.error(
+      { details: { attempts: [{ failure: makeFailedQuery() }] }, userId: 7 },
+      'Sync failed',
+    )
+
+    // Assert
+    expect(lastLine()).toMatchObject({
+      msg: 'Sync failed',
+      userId: 7,
+      details: { attempts: [{ failure: { type: 'Error' } }] },
+    })
+    expect(lastRawLine()).not.toContain('secret-title')
+    expect(lastRawLine()).not.toContain('insert into')
+  })
+
   test('keeps the caller message when an Error is logged with one', () => {
     // Arrange
     const { logger, lastLine } = createCapturingProductionLogger()

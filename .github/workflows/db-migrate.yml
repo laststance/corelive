@@ -18,6 +18,10 @@
 #   The "Check baseline" step below refuses to migrate a database that has tables but no row, so a
 #   forgotten baseline fails here without touching anything. Merging the cutover PR to main triggers
 #   this workflow (drizzle/** changed), so the baseline must be recorded BEFORE that merge.
+#   Two cautions: run `--apply` with the same role as the POSTGRES_PRISMA_URL secret (the migrator
+#   runs CREATE SCHEMA IF NOT EXISTS on every deploy, and PostgreSQL checks CREATE on the database
+#   before honoring IF NOT EXISTS), and merge nothing else to main between `--apply` and the cutover
+#   merge (`--apply` verified the schema as it was then; later checks only look at the bookkeeping).
 #   This paragraph is cutover-only: it goes away together with `--apply` (see TODOS.md).
 #
 # Recommended Setup:
@@ -93,9 +97,9 @@ jobs:
 
       # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no row
       # (the baseline was never recorded), which would make the migrator re-create them; when the
-      # bookkeeping rows survive but the tables are gone; and when a migration older than the newest
-      # recorded row was never recorded, which the migrator would skip without an error. Otherwise it
-      # lists the migrations still pending. Also runs on a dry run, so the operator sees the verdict
+      # bookkeeping rows survive but the tables are gone, or a table or column of the newest recorded
+      # schema is missing; and when a migration older than the newest recorded row was never recorded,
+      # which the migrator would skip without an error. Otherwise it lists the migrations still pending. Also runs on a dry run, so the operator sees the verdict
       # without applying anything.
       - name: Check baseline
         env:
@@ -118,7 +122,8 @@ jobs:
           echo "✅ Migrations deployed successfully!"
 
       # Read-only: after the migrator, the newest recorded migration must equal the newest file in the
-      # journal, every journal migration's hash must be recorded, and the application tables must exist.
+      # journal, every journal migration's hash must be recorded, and every table and column of that
+      # migration's drizzle-kit snapshot must exist.
       - name: Verify migrated state
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:

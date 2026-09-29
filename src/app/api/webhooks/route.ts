@@ -1,5 +1,5 @@
 import type { WebhookEvent } from '@clerk/nextjs/server'
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, lt, ne, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { Webhook } from 'svix'
 
@@ -75,44 +75,72 @@ export async function POST(req: Request) {
     const name =
       userData.username || `${firstName} ${lastName}`.trim() || 'Unknown User'
 
+    // When Clerk created this account. A payload without it (never sent by Clerk) releases nothing.
+    const accountCreatedAt = new Date(userData.created_at)
+    const hasCreatedAt = !Number.isNaN(accountCreatedAt.getTime())
+
     // Row ids only, logged once the transaction has committed. A Clerk user id is never logged: the API
     // trusts `Authorization: Bearer <Clerk user id>`, so in a log line it would be a working credential.
-    let syncedUserId: number | undefined
-    let releasedUserIds: number[] = []
+    const outcome: {
+      userId?: number
+      releasedUserIds: number[]
+      heldByUserId?: number
+    } = { releasedUserIds: [] }
     try {
       await runTransaction(async (tx) => {
-        // Clerk owns email uniqueness: a different row still holding this address belongs to a
-        // deleted or re-addressed account (no `user.deleted` / `user.updated` handler exists), and
-        // its unique index would otherwise reject this account for good and make Svix retry forever.
-        const released = await tx
-          .update(userTable)
-          .set({ email: null })
+        // Clerk owns email uniqueness: a row that still holds this address although its account is gone
+        // (no `user.deleted` / `user.updated` handler exists) would otherwise reject this account for good
+        // and make Svix retry forever. Only a row the app created BEFORE this account existed in Clerk is
+        // stale. A row created at or after that instant belongs to a newer account: this event is an older
+        // one, replayed or delivered late, and a valid signature proves the event happened, not that the
+        // address is still this account's, so it must not take the address from that row.
+        if (hasCreatedAt) {
+          const released = await tx
+            .update(userTable)
+            .set({ email: null })
+            .where(
+              and(
+                eq(userTable.email, emailAddress),
+                ne(userTable.clerkId, userData.id),
+                lt(userTable.createdAt, accountCreatedAt),
+              ),
+            )
+            .returning({ id: userTable.id })
+          outcome.releasedUserIds = released.map((row) => row.id)
+        }
+
+        // Whoever still holds the address now is newer than this account: store this one without it,
+        // because the unique index would reject the insert and Svix would retry a delivery that can never succeed.
+        const [newerHolder] = await tx
+          .select({ id: userTable.id })
+          .from(userTable)
           .where(
             and(
               eq(userTable.email, emailAddress),
               ne(userTable.clerkId, userData.id),
             ),
           )
-          .returning({ id: userTable.id })
-        releasedUserIds = released.map((row) => row.id)
+          .limit(1)
+        outcome.heldByUserId = newerHolder?.id
+        const emailToStore = newerHolder ? null : emailAddress
 
         // Insert, or fill the blanks of a row the auth middleware created first. Existing values win,
         // so a late delivery never overwrites what the account already holds.
         const user = requireRow(
           await tx
             .insert(userTable)
-            .values({ clerkId: userData.id, name, email: emailAddress })
+            .values({ clerkId: userData.id, name, email: emailToStore })
             .onConflictDoUpdate({
               target: userTable.clerkId,
               set: {
                 name: sql`COALESCE(${userTable.name}, ${name})`,
-                email: sql`COALESCE(${userTable.email}, ${emailAddress})`,
+                email: sql`COALESCE(${userTable.email}, ${emailToStore})`,
               },
             })
             .returning({ id: userTable.id }),
           'user.insert',
         )
-        syncedUserId = user.id
+        outcome.userId = user.id
 
         // Unique index on (name, userId): the middleware's own "General" is left as it is.
         await tx
@@ -132,10 +160,16 @@ export async function POST(req: Request) {
 
     // The address is the only thing linking a stale row's history to a person, and clearing it is
     // permanent: keep a record of which accounts lost it (row ids only; the address itself is PII).
-    if (releasedUserIds.length > 0) {
+    if (outcome.releasedUserIds.length > 0) {
       webhookLog.warn(
-        { userId: syncedUserId, releasedUserIds },
+        { userId: outcome.userId, releasedUserIds: outcome.releasedUserIds },
         'Released an email address from stale accounts',
+      )
+    }
+    if (outcome.heldByUserId !== undefined) {
+      webhookLog.warn(
+        { userId: outcome.userId, heldByUserId: outcome.heldByUserId },
+        'Stored an account without an email: a newer account holds the address',
       )
     }
   }

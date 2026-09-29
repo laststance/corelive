@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { eq, sql } from 'drizzle-orm'
+import type { PoolClient } from 'pg'
 import { expect, type MockInstance, test, vi } from 'vitest'
 
 import { describeIfDb } from '@/server/procedures/describeIfDb'
@@ -117,6 +118,68 @@ describeIfDb('runTransaction (real PostgreSQL)', () => {
     expect(db.$client.totalCount - db.$client.idleCount).toBe(0)
     const { rows } = await db.execute<{ alive: number }>(sql`SELECT 1 AS alive`)
     expect(rows).toEqual([{ alive: 1 }])
+  })
+
+  test('discards the connection and rejects when the server stops answering mid-transaction, so a silent socket cannot pin a pool slot past the deadline', async () => {
+    // Arrange — after BEGIN, the statement that sets the limits never gets an answer, like a proxy that keeps the
+    // socket open and forwards nothing. The 50 ms limit makes the client-side deadline 50 ms + 2 s.
+    const slotsInUseBefore = db.$client.totalCount - db.$client.idleCount
+    const totalBefore = db.$client.totalCount
+    let stalledClient: MockInstance | undefined
+    let stalled: PoolClient | undefined
+    const removed: PoolClient[] = []
+    const recordRemoved = (client: PoolClient) => removed.push(client)
+    db.$client.on('remove', recordRemoved)
+    const stallAfterBegin = (client: PoolClient) => {
+      stalled = client
+      const realQuery = client.query.bind(client) as (
+        ...args: unknown[]
+      ) => unknown
+      stalledClient = vi
+        .spyOn(client, 'query')
+        .mockImplementation((...args: unknown[]) => {
+          const first = args[0]
+          const text =
+            typeof first === 'string'
+              ? first
+              : ((first as { text?: string }).text ?? '')
+          return text.includes('set_config')
+            ? new Promise(() => {})
+            : realQuery(...args)
+        })
+    }
+    db.$client.once('acquire', stallAfterBegin)
+
+    try {
+      // Act
+      const failure = await runTransaction(
+        async () => 'never reached',
+        50,
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+
+      // Assert — rejected with the deadline message, the slot is free again and the connection is gone.
+      expect(failure).toEqual(
+        new Error(
+          'Transaction did not finish within 2050 ms; its database connection was discarded and the outcome is unknown',
+        ),
+      )
+      expect(db.$client.totalCount - db.$client.idleCount).toBe(
+        slotsInUseBefore,
+      )
+      expect(db.$client.totalCount).toBeLessThanOrEqual(totalBefore)
+      const { rows } = await db.execute<{ one: number }>(sql`SELECT 1 AS one`)
+      expect(rows[0]?.one).toBe(1)
+      // The pool announces every connection it destroys: the stalled one must be among them. Handing it back
+      // instead would let the next request run inside a transaction that already sent BEGIN.
+      await vi.waitFor(() => expect(removed).toContain(stalled))
+    } finally {
+      db.$client.off('acquire', stallAfterBegin)
+      db.$client.off('remove', recordRemoved)
+      stalledClient?.mockRestore()
+    }
   })
 
   test('rolls back everything the callback wrote when the callback throws', async () => {

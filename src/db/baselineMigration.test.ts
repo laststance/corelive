@@ -196,6 +196,7 @@ async function dropPreviousOrmHistory(executor: SqlExecutor): Promise<void> {
  * Runs the committed baseline script against a database, the way the deploy workflow and the operator do.
  * @param flags - Command-line flags, e.g. `['--apply']`.
  * @param connectionUrl - Database to target; always a scratch database in this suite.
+ * @param extraEnv - Environment variables added for this run, e.g. `GITHUB_ACTIONS`.
  * @returns The exit code and everything the script printed.
  * @example
  * runBaselineScript(['--expect-current'], scratch.url) // => { status: 0, output: 'target: host=localhost …' }
@@ -203,6 +204,7 @@ async function dropPreviousOrmHistory(executor: SqlExecutor): Promise<void> {
 function runBaselineScript(
   flags: string[],
   connectionUrl: string,
+  extraEnv: Record<string, string> = {},
 ): {
   status: number | null
   output: string
@@ -211,7 +213,11 @@ function runBaselineScript(
     process.execPath,
     ['scripts/baseline-drizzle-migrations.mjs', ...flags],
     {
-      env: { ...process.env, POSTGRES_PRISMA_URL: connectionUrl },
+      env: {
+        ...process.env,
+        POSTGRES_PRISMA_URL: connectionUrl,
+        ...extraEnv,
+      },
       encoding: 'utf8',
     },
   )
@@ -403,22 +409,61 @@ describeIfDb(
       }
     })
 
-    test('the deploy checks keep passing after the User table is renamed, because they look for any application table rather than one named table', async () => {
-      // Arrange — a later migration may rename or drop any table; the checks run on every deploy.
-      await recordBaseline(scratch.db)
-      await scratch.db.execute(sql`ALTER TABLE "User" RENAME TO "Person"`)
+    test('the deploy checks fail when one table of the recorded schema is missing but the bookkeeping row and the other tables survive, because the migrator skips 0000_init and the app could not query that table', async () => {
+      // Arrange — a database of its own: a partial restore or an accidental drop left everything but "Completed".
+      const partial = await createScratchDatabase()
 
       try {
+        await partial.db.execute(sql`DROP TABLE "Completed" CASCADE`)
+
         // Act
-        const readOnly = runBaselineScript([], scratch.url)
-        const postMigrate = runBaselineScript(['--expect-current'], scratch.url)
+        const readOnly = runBaselineScript([], partial.url)
+        const postMigrate = runBaselineScript(['--expect-current'], partial.url)
 
         // Assert
-        expect(readOnly.status).toBe(0)
-        expect(postMigrate.status).toBe(0)
+        for (const verdict of [readOnly, postMigrate]) {
+          expect(verdict.status).toBe(1)
+          expect(verdict.output).toContain(
+            '0000_init is recorded as applied, but the database lacks 1 of its objects: table "Completed"',
+          )
+        }
       } finally {
-        await scratch.db.execute(sql`ALTER TABLE "Person" RENAME TO "User"`)
+        await partial.drop()
       }
+    })
+
+    test('the deploy checks fail when a column of the recorded schema is missing, naming the table and the column', async () => {
+      // Arrange
+      const partial = await createScratchDatabase()
+
+      try {
+        await partial.db.execute(
+          sql`ALTER TABLE "Category" DROP COLUMN "color"`,
+        )
+
+        // Act
+        const verdict = runBaselineScript(['--expect-current'], partial.url)
+
+        // Assert
+        expect(verdict.status).toBe(1)
+        expect(verdict.output).toContain('column "Category"."color"')
+      } finally {
+        await partial.drop()
+      }
+    })
+
+    test('the deploy checks report that every recorded table and column is present on an intact database', async () => {
+      // Arrange
+      await recordBaseline(scratch.db)
+
+      // Act
+      const verdict = runBaselineScript(['--expect-current'], scratch.url)
+
+      // Assert
+      expect(verdict.status).toBe(0)
+      expect(verdict.output).toContain(
+        'schema present: every table and column of 0000_init',
+      )
     })
 
     test('never prints the connection password or user, only the host and database name', () => {
@@ -432,6 +477,25 @@ describeIfDb(
       expect(verdict.output).toContain('target: host=')
       expect(verdict.output).not.toContain(password)
       expect(verdict.output).not.toMatch(new RegExp(`\\b${username}\\b`))
+    })
+
+    test('registers the database host as an Actions log mask before printing it, because the repository and its logs are public', () => {
+      // Arrange
+      const { hostname } = new URL(scratch.url)
+
+      // Act
+      const onRunner = runBaselineScript([], scratch.url, {
+        GITHUB_ACTIONS: 'true',
+      })
+      const onDeveloperMachine = runBaselineScript([], scratch.url, {
+        GITHUB_ACTIONS: '',
+      })
+
+      // Assert
+      const lines = onRunner.output.split('\n')
+      expect(lines[0]).toBe(`::add-mask::${hostname}`)
+      expect(lines[1]).toContain('target: host=')
+      expect(onDeveloperMachine.output).not.toContain('::add-mask::')
     })
 
     test('refuses to record a baseline on a database the previous ORM never built, writing nothing', async () => {
