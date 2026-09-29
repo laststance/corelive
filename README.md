@@ -89,7 +89,7 @@ pnpm db:seed
 pnpm db:generate
 ```
 
-> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (nothing is changed). Run `pnpm db:reset` once to rebuild it, or keep its data by recording the baseline: `node --env-file=.env scripts/baseline-drizzle-migrations.mjs --apply` (the script reads `POSTGRES_PRISMA_URL` from the environment, and only writes on a database that carries the previous ORM's migration history and a schema identical to the one `drizzle/0000_init.sql` builds).
+> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (your tables and data are left untouched). Run `pnpm db:reset` once to rebuild it, or keep its data by recording the baseline: `node --env-file=.env scripts/baseline-drizzle-migrations.mjs --apply` (the script reads `POSTGRES_PRISMA_URL` from the environment, and only writes on a database that carries the previous ORM's migration history and a schema identical to the one `drizzle/0000_init.sql` builds).
 
 Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
 
