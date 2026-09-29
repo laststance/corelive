@@ -165,9 +165,11 @@ const MAX_LOG_VALUE_DEPTH = 4
 
 /**
  * Replaces every {@link Error} found in a value with its log-safe shape, looking through plain objects and arrays up to {@link MAX_LOG_VALUE_DEPTH} levels.
+ *
+ * A container is rebuilt only when an error sits somewhere inside it; every other value is returned as the very same object, so custom `toJSON` redaction and lazy getters keep working exactly as before. A rebuilt object keeps its own enumerable data properties: accessors are never invoked (a getter that throws must not turn a log call into a failure) and are shown as `'[Getter]'`. An object with a `toJSON` method is left to that method.
  * @param value - Any value a call site put in a log object.
  * @param depth - How many containers were entered to reach `value`.
- * @returns A copy with the errors shaped; class instances (dates, maps) and anything past the depth limit are returned as they are.
+ * @returns The value with its errors shaped, or `value` itself when it holds none.
  * @example
  * shapeErrorsDeep({ details: { error: new Error('boom') } }, 0)
  * // => { details: { error: { type: 'Error', message: 'boom', stack: '…' } } }
@@ -176,20 +178,28 @@ function shapeErrorsDeep(value: unknown, depth: number): unknown {
   if (value instanceof Error) return shapeError(value, 0)
   if (depth >= MAX_LOG_VALUE_DEPTH) return value
   if (Array.isArray(value)) {
-    return value.map((item) => shapeErrorsDeep(item, depth + 1))
+    const shaped = value.map((item) => shapeErrorsDeep(item, depth + 1))
+    return shaped.some((item, index) => item !== value[index]) ? shaped : value
   }
-  if (typeof value === 'object' && value !== null) {
-    const prototype = Object.getPrototypeOf(value)
-    if (prototype === Object.prototype || prototype === null) {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [
-          key,
-          shapeErrorsDeep(item, depth + 1),
-        ]),
-      )
+  if (typeof value !== 'object' || value === null) return value
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return value
+  if ('toJSON' in value) return value
+
+  let changed = false
+  const entries: [string, unknown][] = []
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (descriptor === undefined) continue
+    if (!('value' in descriptor)) {
+      entries.push([key, '[Getter]'])
+      continue
     }
+    const shaped = shapeErrorsDeep(descriptor.value, depth + 1)
+    if (shaped !== descriptor.value) changed = true
+    entries.push([key, shaped])
   }
-  return value
+  return changed ? Object.fromEntries(entries) : value
 }
 
 /**
@@ -205,10 +215,8 @@ function shapeErrorsDeep(value: unknown, depth: number): unknown {
 export function shapeErrorsUnderAnyKey(
   object: Record<string, unknown>,
 ): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(object).map(([key, value]) => [
-      key,
-      shapeErrorsDeep(value, 1),
-    ]),
-  )
+  const shaped = shapeErrorsDeep(object, 0)
+  return typeof shaped === 'object' && shaped !== null && !Array.isArray(shaped)
+    ? (shaped as Record<string, unknown>)
+    : object
 }

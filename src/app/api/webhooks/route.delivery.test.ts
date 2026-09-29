@@ -51,12 +51,6 @@ import { POST } from './route'
  */
 vi.setConfig({ testTimeout: 30_000 })
 
-/** When the older of two accounts sharing an address was created, in Clerk and as a row. */
-const OLDER_ACCOUNT_CREATED_AT = new Date('2026-01-01T00:00:00.000Z')
-
-/** When the newer account was created in Clerk: after the older account's row already existed. */
-const NEWER_ACCOUNT_CREATED_AT = new Date('2026-06-01T00:00:00.000Z')
-
 // Every Clerk ID a test sends, so teardown can remove exactly the rows it made.
 const createdClerkIds = new Set<string>()
 
@@ -144,7 +138,6 @@ afterEach(async () => {
  * @param clerkId - Clerk user identifier in the payload.
  * @param email - Address in the payload's first email entry.
  * @param username - Username the route stores as the account name.
- * @param createdAt - When Clerk created the account, sent as the payload's `created_at`.
  * @returns The signed webhook request.
  * @example
  * userCreatedRequest('msg_1', 'test_webhook_delivery_…', 'a@example.com', 'ann')
@@ -154,7 +147,6 @@ function userCreatedRequest(
   clerkId: string,
   email: string,
   username: string,
-  createdAt: Date = NEWER_ACCOUNT_CREATED_AT,
 ): Request {
   return signedWebhookRequest(
     messageId,
@@ -164,7 +156,6 @@ function userCreatedRequest(
         id: clerkId,
         email_addresses: [{ email_address: email }],
         username,
-        created_at: createdAt.getTime(),
       },
     }),
   )
@@ -263,7 +254,7 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
     })
   })
 
-  test('creates a re-registered Clerk account whose address a deleted account still holds, releasing the address from the stale row', async () => {
+  test('stores a re-registered Clerk account without the address a deleted account still holds, leaving the stale row untouched', async () => {
     // Arrange — no user.deleted handler exists, so the old account's row keeps the address.
     const staleClerkId = freshClerkId()
     const newClerkId = freshClerkId()
@@ -272,7 +263,6 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
       clerkId: staleClerkId,
       email: sharedEmail,
       name: 'Old Account',
-      createdAt: OLDER_ACCOUNT_CREATED_AT,
     })
     const request = userCreatedRequest(
       'msg_reregistered',
@@ -284,7 +274,7 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
     // Act
     const response = await POST(request)
 
-    // Assert
+    // Assert — 201 (Svix stops retrying), the new account exists without the address, the old row is unchanged.
     expect(response.status).toBe(201)
     const stored = await db
       .select({ clerkId: userTable.clerkId, email: userTable.email })
@@ -297,8 +287,8 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
       )
     expect(stored).toEqual(
       expect.arrayContaining([
-        { clerkId: staleClerkId, email: null },
-        { clerkId: newClerkId, email: sharedEmail },
+        { clerkId: staleClerkId, email: sharedEmail },
+        { clerkId: newClerkId, email: null },
       ]),
     )
     expect(await readAccountRows(newClerkId)).toEqual({
@@ -307,22 +297,21 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
     })
   })
 
-  test('records which accounts lost their address by row id only, never the address or a Clerk ID, because clearing it cannot be undone and a Clerk ID is a working API credential', async () => {
+  test('records which row holds the address by row id only, never the address or a Clerk ID, because a Clerk ID is a working API credential', async () => {
     // Arrange
-    const staleClerkId = freshClerkId()
+    const holderClerkId = freshClerkId()
     const newClerkId = freshClerkId()
     const sharedEmail = `${newClerkId}@example.com`
-    const [stale] = await db
+    const [holder] = await db
       .insert(userTable)
       .values({
-        clerkId: staleClerkId,
+        clerkId: holderClerkId,
         email: sharedEmail,
         name: 'Old Account',
-        createdAt: OLDER_ACCOUNT_CREATED_AT,
       })
       .returning({ id: userTable.id })
     const request = userCreatedRequest(
-      'msg_release_logged',
+      'msg_holder_logged',
       newClerkId,
       sharedEmail,
       'new-account',
@@ -339,26 +328,83 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
       .where(eq(userTable.clerkId, newClerkId))
     expect(webhookWarn).toHaveBeenCalledTimes(1)
     expect(webhookWarn).toHaveBeenCalledWith(
-      { userId: created?.id, releasedUserIds: [stale?.id] },
-      'Released an email address from stale accounts',
+      { userId: created?.id, heldByUserId: holder?.id },
+      'Stored an account without an email: another account holds the address',
     )
     const logged = JSON.stringify(webhookWarn.mock.calls)
     expect(logged).not.toContain(sharedEmail)
-    expect(logged).not.toContain(staleClerkId)
+    expect(logged).not.toContain(holderClerkId)
     expect(logged).not.toContain(newClerkId)
   })
 
-  test('rolls the release back when a later statement of the same transaction fails, so the stale account keeps its address and no release is logged', async () => {
-    // Arrange — a stale account holds the address, and the transaction's "General" insert is made to fail
-    // on the connection the route checks out, after the release UPDATE already ran inside the transaction.
-    const staleClerkId = freshClerkId()
+  test("never takes the address from the account that holds it when an older account's user.created is replayed", async () => {
+    // Arrange — the older account keeps its address; a newer account with the same address was stored without it.
+    const olderClerkId = freshClerkId()
+    const newerClerkId = freshClerkId()
+    const sharedEmail = `${olderClerkId}@example.com`
+    await db.insert(userTable).values({
+      clerkId: olderClerkId,
+      email: sharedEmail,
+      name: 'Old Account',
+    })
+    await POST(
+      userCreatedRequest(
+        'msg_newer_registers',
+        newerClerkId,
+        sharedEmail,
+        'newer-account',
+      ),
+    )
+    webhookWarn.mockClear()
+
+    // Act — Svix replays the older account's historical event, and later the newer one's.
+    const olderReplay = await POST(
+      userCreatedRequest(
+        'msg_older_replayed',
+        olderClerkId,
+        sharedEmail,
+        'older-account',
+      ),
+    )
+    const newerReplay = await POST(
+      userCreatedRequest(
+        'msg_newer_replayed',
+        newerClerkId,
+        sharedEmail,
+        'newer-account',
+      ),
+    )
+
+    // Assert — both deliveries succeed and nobody's address changed.
+    expect(olderReplay.status).toBe(201)
+    expect(newerReplay.status).toBe(201)
+    const stored = await db
+      .select({ clerkId: userTable.clerkId, email: userTable.email })
+      .from(userTable)
+      .where(
+        or(
+          eq(userTable.clerkId, olderClerkId),
+          eq(userTable.clerkId, newerClerkId),
+        ),
+      )
+    expect(stored).toEqual(
+      expect.arrayContaining([
+        { clerkId: olderClerkId, email: sharedEmail },
+        { clerkId: newerClerkId, email: null },
+      ]),
+    )
+  })
+
+  test('rolls the new account back when a later statement of the same transaction fails, so no half-created user is left and no warning is logged', async () => {
+    // Arrange — another row holds the address, and the transaction's "General" insert is made to fail on the
+    // connection the route checks out, after the user row was already inserted inside the transaction.
+    const holderClerkId = freshClerkId()
     const newClerkId = freshClerkId()
     const sharedEmail = `${newClerkId}@example.com`
     await db.insert(userTable).values({
-      clerkId: staleClerkId,
+      clerkId: holderClerkId,
       email: sharedEmail,
       name: 'Old Account',
-      createdAt: OLDER_ACCOUNT_CREATED_AT,
     })
     let categoryInsertSpy: MockInstance | undefined
     const failCategoryInsert = (client: PoolClient) => {
@@ -393,11 +439,6 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
       // Assert
       expect(response.status).toBe(500)
       expect(webhookWarn).not.toHaveBeenCalled()
-      const [stale] = await db
-        .select({ email: userTable.email })
-        .from(userTable)
-        .where(eq(userTable.clerkId, staleClerkId))
-      expect(stale).toEqual({ email: sharedEmail })
       expect(await readAccountRows(newClerkId)).toEqual({
         userCount: 0,
         categoryNames: [],
@@ -409,77 +450,11 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
     }
   })
 
-  test("keeps the address with the newer account when an older account's user.created is replayed, storing the replayed account without an email", async () => {
-    // Arrange — the older account was deleted in Clerk, the newer one registered with its address, and the
-    // route already handed the address over. Then Svix replays the older account's historical event.
-    const olderClerkId = freshClerkId()
-    const newerClerkId = freshClerkId()
-    const sharedEmail = `${newerClerkId}@example.com`
-    const [older] = await db
-      .insert(userTable)
-      .values({
-        clerkId: olderClerkId,
-        email: sharedEmail,
-        name: 'Old Account',
-        createdAt: OLDER_ACCOUNT_CREATED_AT,
-      })
-      .returning({ id: userTable.id })
-    await POST(
-      userCreatedRequest(
-        'msg_newer_registers',
-        newerClerkId,
-        sharedEmail,
-        'newer-account',
-        NEWER_ACCOUNT_CREATED_AT,
-      ),
-    )
-    webhookWarn.mockClear()
-
-    // Act
-    const replay = await POST(
-      userCreatedRequest(
-        'msg_older_replayed',
-        olderClerkId,
-        sharedEmail,
-        'older-account',
-        OLDER_ACCOUNT_CREATED_AT,
-      ),
-    )
-
-    // Assert
-    expect(replay.status).toBe(201)
-    const stored = await db
-      .select({
-        id: userTable.id,
-        clerkId: userTable.clerkId,
-        email: userTable.email,
-      })
-      .from(userTable)
-      .where(
-        or(
-          eq(userTable.clerkId, olderClerkId),
-          eq(userTable.clerkId, newerClerkId),
-        ),
-      )
-    expect(stored).toEqual(
-      expect.arrayContaining([
-        { id: older?.id, clerkId: olderClerkId, email: null },
-        { id: expect.any(Number), clerkId: newerClerkId, email: sharedEmail },
-      ]),
-    )
-    const newer = stored.find((row) => row.clerkId === newerClerkId)
-    expect(webhookWarn).toHaveBeenCalledTimes(1)
-    expect(webhookWarn).toHaveBeenCalledWith(
-      { userId: older?.id, heldByUserId: newer?.id },
-      'Stored an account without an email: a newer account holds the address',
-    )
-  })
-
-  test('logs nothing about released addresses when no other account held the address', async () => {
+  test('logs nothing about the address when no other account held it', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const request = userCreatedRequest(
-      'msg_nothing_released',
+      'msg_no_holder',
       clerkId,
       `${clerkId}@example.com`,
       'plain-signup',

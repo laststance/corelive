@@ -114,6 +114,39 @@ describe('createLogger', () => {
     expect(lastRawLine()).not.toContain('insert into')
   })
 
+  test('leaves a nested object with its own toJSON redaction alone, so shaping errors never exposes what that object hides', () => {
+    // Arrange
+    const { logger, lastRawLine } = createCapturingProductionLogger()
+    const details = { secret: 'DO-NOT-LOG' }
+    Object.defineProperty(details, 'toJSON', {
+      value: () => ({ redacted: true }),
+    })
+
+    // Act
+    logger.error({ details }, 'Operation failed')
+
+    // Assert
+    expect(lastRawLine()).toContain('"redacted":true')
+    expect(lastRawLine()).not.toContain('DO-NOT-LOG')
+  })
+
+  test('does not call a getter inside a logged object, so a getter that throws cannot make the log call fail', () => {
+    // Arrange
+    const { logger, lastLine } = createCapturingProductionLogger()
+    const details = {
+      get nested(): never {
+        throw new Error('getter exploded')
+      },
+    }
+
+    // Act
+    const logging = () => logger.error({ details }, 'Operation failed')
+
+    // Assert
+    expect(logging).not.toThrow()
+    expect(lastLine()).toMatchObject({ msg: 'Operation failed' })
+  })
+
   test('keeps the caller message when an Error is logged with one', () => {
     // Arrange
     const { logger, lastLine } = createCapturingProductionLogger()
