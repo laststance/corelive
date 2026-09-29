@@ -18,11 +18,9 @@ import {
   skillNodeTable,
   skillTreeTable,
   todoTable,
-  userTable,
 } from '../schema'
 
-// Shared seeded-user identity (single source of truth with seed.ts).
-import { SEED_USER_CLERK_ID, SEED_USER_EMAIL } from './seedUser'
+import { ensureSeedAccount } from './ensureSeedAccount'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Localhost safety gate (in-script, defense-in-depth)
@@ -437,41 +435,9 @@ async function seedDev(): Promise<void> {
   // guard was bypassed (e.g. a bare `tsx src/db/seed/seed.dev.ts`).
   assertLocalDatabase(process.env.POSTGRES_PRISMA_URL)
 
-  // ── 1. User (the SAME identity seed.ts targets — never a new scheme) ──
-  // Insert-if-missing, then read: an existing seeded user is never modified.
-  await db
-    .insert(userTable)
-    .values({
-      clerkId: SEED_USER_CLERK_ID,
-      email: SEED_USER_EMAIL,
-      name: 'test01',
-      bio: 'Test account for local development',
-    })
-    .onConflictDoNothing({ target: userTable.clerkId })
-  const [user] = await db
-    .select()
-    .from(userTable)
-    .where(eq(userTable.clerkId, SEED_USER_CLERK_ID))
-  if (!user) throw new Error('[seed:dev] Seed user missing after insert')
-
-  // ── 2. Categories (idempotent upsert; General stays the default) ──
-  // General mirrors seed.ts; the rest give realistic life/work buckets.
-  const [generalCategory] = await db
-    .insert(categoryTable)
-    .values({
-      name: 'General',
-      color: 'blue',
-      isDefault: true,
-      userId: user.id,
-    })
-    .onConflictDoUpdate({
-      target: [categoryTable.name, categoryTable.userId],
-      set: { isDefault: true },
-    })
-    .returning()
-  if (!generalCategory) {
-    throw new Error('[seed:dev] General category missing after upsert')
-  }
+  // ── 1–2. User + General (the SAME identity seed.ts targets — never a new scheme) ──
+  // General stays the default; the other categories below give realistic life/work buckets.
+  const { user, generalCategory } = await ensureSeedAccount()
 
   // Upsert each extra category and collect every category id for FK use.
   const categories: { id: number; name: string }[] = [

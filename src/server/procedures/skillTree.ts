@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server'
 import {
   and,
+  asc,
   desc,
   eq,
   type SQL,
@@ -277,7 +278,8 @@ export const getUnassignedPool = authMiddleware
             ),
           ),
         )
-        .orderBy(desc(todoTable.updatedAt))
+        // `id` breaks updatedAt ties (bulk-inserted rows share one timestamp), keeping insertion order.
+        .orderBy(desc(todoTable.updatedAt), asc(todoTable.id))
     } catch (error) {
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in getUnassignedPool')

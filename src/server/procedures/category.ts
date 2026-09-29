@@ -79,6 +79,25 @@ async function readCategoriesWithCounts(
 }
 
 /**
+ * Loads a category by id, but only when the caller owns it — the permission check shared by update and delete.
+ * @param userId - Authenticated owner.
+ * @param categoryId - Category to load.
+ * @returns The category row, or `undefined` when it does not exist or belongs to someone else.
+ * @example
+ * await findOwnedCategory(1, 3) // => { id: 3, name: 'Work', userId: 1, ... }
+ */
+async function findOwnedCategory(userId: User['id'], categoryId: number) {
+  const [category] = await db
+    .select()
+    .from(categoryTable)
+    .where(
+      and(eq(categoryTable.id, categoryId), eq(categoryTable.userId, userId)),
+    )
+    .limit(1)
+  return category
+}
+
+/**
  * Seeds the default "General" category for an account that has none. New accounts get it from the auth middleware's create, so this is the repair path for accounts made before that (and for a category deleted down to zero) — without it the editor opens locked on "No categories". Called by {@link listCategories} when its read comes back empty.
  * @param userId - Owner of the missing default.
  * @returns Nothing; a concurrent webhook insert of the same name is treated as success.
@@ -197,11 +216,7 @@ export const updateCategory = authMiddleware
       const { id, data } = input
 
       // Permission check
-      const [existing] = await db
-        .select()
-        .from(categoryTable)
-        .where(and(eq(categoryTable.id, id), eq(categoryTable.userId, user.id)))
-        .limit(1)
+      const existing = await findOwnedCategory(user.id, id)
 
       if (!existing) {
         throw new ORPCError('NOT_FOUND', {
@@ -265,11 +280,7 @@ export const deleteCategory = authMiddleware
       const { id } = input
 
       // Permission check
-      const [existing] = await db
-        .select()
-        .from(categoryTable)
-        .where(and(eq(categoryTable.id, id), eq(categoryTable.userId, user.id)))
-        .limit(1)
+      const existing = await findOwnedCategory(user.id, id)
 
       if (!existing) {
         throw new ORPCError('NOT_FOUND', {

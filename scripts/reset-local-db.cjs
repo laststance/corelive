@@ -37,7 +37,12 @@ async function resetSchemas() {
     await client.query('BEGIN')
     await client.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
     await client.query('DROP SCHEMA IF EXISTS public CASCADE')
-    await client.query('CREATE SCHEMA public')
+    // A freshly created database (PostgreSQL 14+) owns `public` via `pg_database_owner`, with this comment and
+    // PUBLIC usage. Recreate exactly that so a reset database is indistinguishable from a new one; otherwise
+    // pg_dump reports the difference.
+    await client.query('CREATE SCHEMA public AUTHORIZATION pg_database_owner')
+    await client.query("COMMENT ON SCHEMA public IS 'standard public schema'")
+    await client.query('GRANT USAGE ON SCHEMA public TO PUBLIC')
     await client.query('COMMIT')
   } catch (error) {
     await client.query('ROLLBACK')
