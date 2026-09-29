@@ -1,0 +1,274 @@
+// @vitest-environment node
+import { randomUUID } from 'node:crypto'
+
+import { call } from '@orpc/server'
+import { and, count, eq, sql } from 'drizzle-orm'
+import { afterEach, expect, test, vi } from 'vitest'
+
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import {
+  categoryTable,
+  completedTable,
+  importBatchTable,
+  todoTable,
+  userTable,
+} from '@/db/schema'
+
+import { deleteCategory, listCategories, updateCategory } from './category'
+import { importLocalCompleted } from './completed'
+import { describeIfDb } from './describeIfDb'
+
+/**
+ * Real-database coverage for rows that disappear while a request is using them.
+ * The previous ORM threw on an `update` / `delete` that matched nothing; drizzle
+ * returns `[]`, so these paths only fail loudly because of `requireRow` (or, for
+ * the import, because the whole batch shares one transaction). Each race is made
+ * deterministic by parking a second transaction on the row, letting the procedure
+ * block behind it, then committing the delete.
+ */
+vi.setConfig({ testTimeout: 30_000 })
+
+/**
+ * Builds the direct-call options every authenticated procedure needs.
+ * @param clerkId - Clerk user id placed in the Bearer header.
+ * @returns oRPC call options carrying the auth header.
+ * @example
+ * await call(listCategories, undefined, authContext('user_1'))
+ */
+function authContext(clerkId: string) {
+  return {
+    context: {
+      headers: new Headers({ Authorization: `Bearer ${clerkId}` }),
+    },
+  }
+}
+
+// Every clerk id a test touches, so afterEach can delete the user and its rows.
+const createdClerkIds = new Set<string>()
+
+/**
+ * Provisions an account through the real auth middleware and returns its "General" row.
+ * @returns The clerk id, the user id and the default category.
+ * @example
+ * const { clerkId, userId, general } = await arrangeAccount()
+ */
+async function arrangeAccount() {
+  const clerkId = `test_vanished_${randomUUID()}`
+  createdClerkIds.add(clerkId)
+  const { categories } = await call(
+    listCategories,
+    undefined,
+    authContext(clerkId),
+  )
+  const general = categories[0]!
+  return { clerkId, userId: general.userId, general }
+}
+
+afterEach(async () => {
+  for (const clerkId of createdClerkIds) {
+    const [user] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+    if (!user) continue
+    // FK-safe teardown: child rows before the user.
+    await db.delete(completedTable).where(eq(completedTable.userId, user.id))
+    await db.delete(todoTable).where(eq(todoTable.userId, user.id))
+    await db
+      .delete(importBatchTable)
+      .where(eq(importBatchTable.userId, user.id))
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
+    await db.delete(userTable).where(eq(userTable.id, user.id))
+  }
+  createdClerkIds.clear()
+})
+
+/**
+ * Polls `pg_blocking_pids()` until some statement is parked behind the given backend.
+ * Scoped to ONE holder pid, so a lock wait from a test in another worker never satisfies it.
+ * @param holderPid - `pg_backend_pid()` of the transaction that holds the locks.
+ * @returns Resolves once at least one statement is waiting on that backend.
+ * @throws when nothing blocks within ten seconds.
+ * @example
+ * await waitForStatementBlockedBy(holderPid)
+ */
+async function waitForStatementBlockedBy(holderPid: number): Promise<void> {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const { rows } = await db.execute<{ blocked: number }>(sql`
+      SELECT count(*)::int AS blocked
+      FROM pg_stat_activity
+      WHERE ${holderPid}::int = ANY(pg_blocking_pids(pid))
+    `)
+    if ((rows[0]?.blocked ?? 0) > 0) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(
+    `No statement became blocked behind backend ${holderPid} within 10s`,
+  )
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Runs a procedure call while a second transaction holds locks the call must wait for,
+ * then commits that transaction so the call's blocked statement sees the committed state.
+ * @param options.holdLocks - Statements the second transaction runs and then keeps open.
+ * @param options.startCall - Starts the procedure call under test (do not await inside).
+ * @returns `{ value }` when the call resolved, `{ error }` when it rejected.
+ * @example
+ * const settled = await settleBehindHeldTransaction({
+ *   holdLocks: async (tx) => { await tx.delete(categoryTable).where(eq(categoryTable.id, 1)) },
+ *   startCall: () => call(updateCategory, input, authContext(clerkId)),
+ * })
+ */
+async function settleBehindHeldTransaction<Result>(options: {
+  holdLocks: (tx: Transaction) => Promise<void>
+  startCall: () => Promise<Result>
+}): Promise<{ value: Result } | { error: unknown }> {
+  let release = () => {}
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let markStarted = () => {}
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve
+  })
+  let holderPid = 0
+  const finished = db.transaction(async (tx) => {
+    const { rows } = await tx.execute<{ pid: number }>(
+      sql`SELECT pg_backend_pid() AS pid`,
+    )
+    holderPid = rows[0]?.pid ?? 0
+    await options.holdLocks(tx)
+    markStarted()
+    await released
+  })
+  // If the lock-taking statements throw, surface that instead of hanging on `started`.
+  await Promise.race([started, finished])
+
+  try {
+    const outcome = options.startCall().then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    )
+    await waitForStatementBlockedBy(holderPid)
+    release()
+    await finished
+    return await outcome
+  } finally {
+    release()
+    await finished.catch(() => undefined)
+  }
+}
+
+describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
+  test('fails the rename instead of reporting a phantom success when another request deletes the category first', async () => {
+    // Arrange
+    const { clerkId, userId } = await arrangeAccount()
+    const work = requireRow(
+      await db
+        .insert(categoryTable)
+        .values({ name: 'Work', color: 'green', userId })
+        .returning(),
+      'category.insert',
+    )
+
+    // Act — the owner check still sees the row; the UPDATE parks on its lock and then matches nothing.
+    const settled = await settleBehindHeldTransaction({
+      holdLocks: async (tx) => {
+        await tx.delete(categoryTable).where(eq(categoryTable.id, work.id))
+      },
+      startCall: async () =>
+        call(
+          updateCategory,
+          { id: work.id, data: { name: 'Side Project' } },
+          authContext(clerkId),
+        ),
+    })
+
+    // Assert
+    expect(settled).toMatchObject({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to update category',
+      },
+    })
+  })
+
+  test('fails the delete instead of reporting success when another request removes the category first', async () => {
+    // Arrange
+    const { clerkId, userId } = await arrangeAccount()
+    const work = requireRow(
+      await db
+        .insert(categoryTable)
+        .values({ name: 'Work', color: 'green', userId })
+        .returning(),
+      'category.insert',
+    )
+
+    // Act — the owner check still sees the row; the DELETE parks on its lock and then matches nothing.
+    const settled = await settleBehindHeldTransaction({
+      holdLocks: async (tx) => {
+        await tx.delete(categoryTable).where(eq(categoryTable.id, work.id))
+      },
+      startCall: async () =>
+        call(deleteCategory, { id: work.id }, authContext(clerkId)),
+    })
+
+    // Assert
+    expect(settled).toMatchObject({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to delete category',
+      },
+    })
+  })
+
+  test('rolls the whole import back when its category disappears mid-write, so a retry lands instead of being reported as already imported', async () => {
+    // Arrange
+    const { clerkId, userId, general } = await arrangeAccount()
+    const batchId = randomUUID()
+    const input = {
+      batchId,
+      items: [
+        {
+          localId: 'keep-1',
+          title: 'push-ups',
+          completedAt: new Date('2026-09-01T09:00:00.000Z'),
+        },
+      ],
+    }
+
+    // Act — the category lookup still sees "General"; the row insert parks on its
+    // foreign key and then violates it once the delete commits.
+    const settled = await settleBehindHeldTransaction({
+      holdLocks: async (tx) => {
+        await tx.delete(categoryTable).where(eq(categoryTable.id, general.id))
+      },
+      startCall: async () =>
+        call(importLocalCompleted, input, authContext(clerkId)),
+    })
+    const [batchRowsAfterFailure] = await db
+      .select({ value: count() })
+      .from(importBatchTable)
+      .where(
+        and(
+          eq(importBatchTable.userId, userId),
+          eq(importBatchTable.id, `${userId}:${batchId}`),
+        ),
+      )
+    const retry = await call(importLocalCompleted, input, authContext(clerkId))
+
+    // Assert — the failed attempt left no batch marker behind, so the retry imports the keep.
+    expect(settled).toMatchObject({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to import local completions',
+      },
+    })
+    expect(batchRowsAfterFailure?.value).toBe(0)
+    expect(retry).toEqual({ batchId, imported: 1, alreadyImported: false })
+  })
+})
