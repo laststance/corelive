@@ -278,7 +278,7 @@ export const getUnassignedPool = authMiddleware
             ),
           ),
         )
-        // `id` breaks updatedAt ties (bulk-inserted rows share one timestamp), keeping insertion order.
+        // `id` breaks updatedAt ties so equal timestamps still list in a stable insertion order.
         .orderBy(desc(todoTable.updatedAt), asc(todoTable.id))
     } catch (error) {
       if (error instanceof ORPCError) throw error

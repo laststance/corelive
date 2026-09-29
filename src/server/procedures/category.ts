@@ -237,10 +237,12 @@ export const updateCategory = authMiddleware
 
       // `requireRow` makes an update of a missing row fail loudly: a row deleted between the
       // permission check and this update aborts into the generic 500 below.
+      // `updatedAt` is always in the SET list: drizzle throws "No values to set" on an empty
+      // SET (before it adds the `$onUpdate` stamp), while an empty `data` used to succeed.
       const category = requireRow(
         await db
           .update(categoryTable)
-          .set(data)
+          .set({ ...data, updatedAt: new Date() })
           .where(eq(categoryTable.id, id))
           .returning(),
         'category.update',

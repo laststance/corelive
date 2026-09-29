@@ -73,6 +73,9 @@ async function arrangeAccount() {
         text,
         completed: true,
         completedAt: new Date('2026-06-03T14:30:00.000Z'),
+        // One shared stamp: `$onUpdate` would otherwise call its clock once per row,
+        // and a millisecond tick between the two rows would flip the pool order.
+        updatedAt: new Date('2026-06-03T14:30:00.000Z'),
         userId: user!.id,
         categoryId: category!.id,
       })),

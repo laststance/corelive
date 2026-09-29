@@ -154,9 +154,12 @@ export const upsertElectronSettings = authMiddleware
             ...input,
           })
           // Conflict target = the unique index on userId; only provided fields change.
+          // `updatedAt` is always in the SET list: drizzle throws "No values to set" on an
+          // empty SET (before it adds the `$onUpdate` stamp), while an empty save used to
+          // succeed and just bump `updatedAt`.
           .onConflictDoUpdate({
             target: electronSettingsTable.userId,
-            set: input,
+            set: { ...input, updatedAt: new Date() },
           })
           .returning(),
         'electronSettings.upsert',
