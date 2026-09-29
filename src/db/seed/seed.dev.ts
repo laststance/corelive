@@ -42,7 +42,7 @@ const LOCAL_DB_GATE = fileURLToPath(
 )
 
 /**
- * Throws unless `POSTGRES_PRISMA_URL` provably points at a local Docker/localhost DB.
+ * Throws unless the given connection string provably points at a local Docker/localhost DB.
  *
  * Runs `scripts/assert-local-db.cjs` itself instead of re-implementing its URL parsing: the gate also
  * inspects every `?host=` / `?hostname=` value (comma-separated multi-host included), Unix-socket
@@ -63,8 +63,12 @@ function assertLocalDatabase(connectionString: string | undefined): void {
     )
   }
   try {
-    // Inherits process.env, so the gate judges the same URL the pool will use.
-    execFileSync(process.execPath, [LOCAL_DB_GATE], { stdio: 'pipe' })
+    // The gate reads its target from POSTGRES_PRISMA_URL, so hand it the very string being asserted
+    // rather than trusting that the environment still holds the same value.
+    execFileSync(process.execPath, [LOCAL_DB_GATE], {
+      stdio: 'pipe',
+      env: { ...process.env, POSTGRES_PRISMA_URL: connectionString },
+    })
   } catch (error) {
     const gateReason =
       error && typeof error === 'object' && 'stderr' in error
@@ -586,7 +590,7 @@ async function seedDev(): Promise<void> {
 
   // ── 7. Skill tree: reuse the real "Backend Developer Core" template ──
   // Replicates importDefaultTemplate's logic with our own client: create the
-  // tree, bulk-insert the 28 nodes, re-read to map name→id, then bulk-insert
+  // tree, bulk-insert the 28 nodes (RETURNING their ids), then bulk-insert
   // the edges. One tree per user (unique index on userId).
   const [tree] = await db
     .insert(skillTreeTable)
@@ -597,12 +601,11 @@ async function seedDev(): Promise<void> {
     })
     .returning()
   if (!tree) throw new Error('[seed:dev] Skill tree missing after insert')
-  await db.insert(skillNodeTable).values(buildDefaultSkillNodes(tree.id))
-  // Re-read by name to resolve node ids (template names are unique).
+  // RETURNING gives the node ids to resolve edges by name (template names are unique).
   const createdNodes = await db
-    .select({ id: skillNodeTable.id, name: skillNodeTable.name })
-    .from(skillNodeTable)
-    .where(eq(skillNodeTable.skillTreeId, tree.id))
+    .insert(skillNodeTable)
+    .values(buildDefaultSkillNodes(tree.id))
+    .returning({ id: skillNodeTable.id, name: skillNodeTable.name })
   const nodeNameToId = new Map(createdNodes.map((node) => [node.name, node.id]))
   const edgeRows = buildDefaultSkillEdges(tree.id, createdNodes)
   await db.insert(nodeEdgeTable).values(edgeRows)

@@ -15,6 +15,9 @@ import { db } from './index'
 /** SQLSTATE `query_canceled`: what PostgreSQL raises when `statement_timeout` expires. */
 const PG_QUERY_CANCELED = '57014'
 
+/** Connections the shared pool can hold; pg-pool fills `max` with 10 when it is not configured. */
+const POOL_SIZE = db.$client.options.max ?? 10
+
 /**
  * Reads `statement_timeout` as the server reports it to the calling session.
  * @param executor - Anything that can run a query: the pool client or a transaction.
@@ -61,13 +64,34 @@ describeIfDb('runTransaction (real PostgreSQL)', () => {
     // Arrange
     await runTransaction(async () => undefined, 1234)
 
-    // Act — ten concurrent reads touch every connection the pool can hold, including the one the transaction used.
+    // Act — one concurrent read per pool slot touches every connection the pool can hold, including the one the transaction used.
     const readings = await Promise.all(
-      Array.from({ length: 10 }, async () => readStatementTimeout(db)),
+      Array.from({ length: POOL_SIZE }, async () => readStatementTimeout(db)),
     )
 
     // Assert
-    expect(readings).toEqual(Array.from({ length: 10 }, () => '0'))
+    expect(readings).toEqual(Array.from({ length: POOL_SIZE }, () => '0'))
+  })
+
+  test('ends a transaction that sits idle past the limit and leaves the pool usable, so a callback stuck on external work cannot pin a connection', async () => {
+    // Arrange
+    const startedAt = Date.now()
+
+    // Act — the callback pauses between two statements for three times the limit.
+    const failure = await runTransaction(async (tx) => {
+      await tx.execute(sql`SELECT 1`)
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      await tx.execute(sql`SELECT 2`)
+    }, 200).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+
+    // Assert — the server terminated the session, so there is no SQLSTATE to match; the pool still answers.
+    expect(failure).toBeInstanceOf(Error)
+    expect(Date.now() - startedAt).toBeLessThan(3_000)
+    const { rows } = await db.execute<{ alive: number }>(sql`SELECT 1 AS alive`)
+    expect(rows).toEqual([{ alive: 1 }])
   })
 
   test('rolls back everything the callback wrote when the callback throws', async () => {

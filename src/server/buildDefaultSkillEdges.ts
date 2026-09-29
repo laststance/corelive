@@ -17,7 +17,7 @@ export function buildDefaultSkillEdges(
   for (const node of BACKEND_DEVELOPER_CORE_TEMPLATE.nodes) {
     const id = nameToId.get(node.name)
     if (id === undefined)
-      throw new Error(`Template node "${node.name}" missing after createMany`)
+      throw new Error(`Template node "${node.name}" missing after insert`)
     slugToId.set(node.slug, id)
   }
   return BACKEND_DEVELOPER_CORE_TEMPLATE.edges.map(([fromSlug, toSlug]) => {

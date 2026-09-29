@@ -13,10 +13,16 @@
 //                                                                  newest row equals the journal (post-migrate)
 //   node scripts/baseline-drizzle-migrations.mjs --apply           write the baseline row (once), after
 //                                                                  verifying the previous ORM's history
+//                                                                  AND that the live schema equals the
+//                                                                  committed fingerprint of that ORM's schema
 //
-// Before `--apply` on production, also diff `pg_dump -s` of it against a database built by
-// `pnpm db:migrate`; the checks below prove the history, not the schema.
+// `--apply` compares the database's columns (with type modifiers), indexes and named constraints with
+// `src/db/__fixtures__/previousOrmSchemaFingerprint.txt` — the schema `drizzle/0000_init.sql` reproduces —
+// and refuses on any difference: recording the baseline for a schema drizzle does not describe would
+// hide the drift from every later migration.
 // Reversible: `DELETE FROM drizzle.__drizzle_migrations` (then drop the `drizzle` schema).
+import { readFileSync } from 'node:fs'
+
 import { readMigrationFiles } from 'drizzle-orm/migrator'
 import pg from 'pg'
 
@@ -38,6 +44,14 @@ const EXPECTED_LAST_PREVIOUS_MIGRATION =
   '20260924120000_default_category_named_general'
 /** Journal `when` of `0000_init`; the migrator compares it with `created_at`, so it must not drift. */
 const EXPECTED_BASELINE_MILLIS = 1790679206746
+
+/** Query text shared with `src/test/schemaFingerprint.ts`, so both sides serialize the schema identically. */
+const FINGERPRINT_SQL_URL = new URL('./schema-fingerprint.sql', import.meta.url)
+/** Schema the previous ORM's migrations built, as serialized by that query. */
+const FINGERPRINT_FIXTURE_URL = new URL(
+  '../src/db/__fixtures__/previousOrmSchemaFingerprint.txt',
+  import.meta.url,
+)
 
 const applyRequested = process.argv.includes('--apply')
 const expectCurrent = process.argv.includes('--expect-current')
@@ -170,6 +184,8 @@ async function applyBaseline(connected, state) {
     )
   }
 
+  await verifySchemaMatchesFixture(connected)
+
   await connected.query('BEGIN')
   try {
     await connected.query('CREATE SCHEMA IF NOT EXISTS drizzle')
@@ -198,6 +214,43 @@ async function applyBaseline(connected, state) {
   }
   say(
     `baseline recorded: hash=${hash.slice(0, 12)}… created_at=${folderMillis}`,
+  )
+}
+
+/**
+ * Fails unless the database's `public` schema equals the committed fingerprint of the schema the previous ORM built.
+ *
+ * Lines are compared as sorted sets, so a server whose collation orders rows differently does not raise a false alarm. The message lists at most 10 differing lines per side; they describe schema only (names, types, defaults), never row data.
+ * @param connected - Connected pg client.
+ * @returns Resolves when the schema matches; otherwise the process ends via {@link fail}.
+ * @example
+ * await verifySchemaMatchesFixture(client)
+ */
+async function verifySchemaMatchesFixture(connected) {
+  const { rows } = await connected.query(
+    readFileSync(FINGERPRINT_SQL_URL, 'utf8'),
+  )
+  const actual = rows.map((row) => row.item).sort()
+  const expected = readFileSync(FINGERPRINT_FIXTURE_URL, 'utf8')
+    .trimEnd()
+    .split('\n')
+    .sort()
+  const actualSet = new Set(actual)
+  const expectedSet = new Set(expected)
+  const missing = expected.filter((line) => !actualSet.has(line))
+  const unexpected = actual.filter((line) => !expectedSet.has(line))
+  if (missing.length === 0 && unexpected.length === 0) {
+    say(`schema verified: ${actual.length} lines match the fixture`)
+    return
+  }
+  const list = (label, lines) =>
+    lines.length === 0
+      ? ''
+      : `\n  ${label} (${lines.length}):\n    ${lines.slice(0, 10).join('\n    ')}`
+  fail(
+    'the live schema differs from the schema `drizzle/0000_init.sql` builds; refusing to record the baseline.' +
+      list('expected but absent', missing) +
+      list('present but not expected', unexpected),
   )
 }
 

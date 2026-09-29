@@ -19,21 +19,23 @@ const pool = new Pool({
   connectionTimeoutMillis: 10_000,
 })
 
-// An idle client can be dropped by the server or a proxy between requests. pg-pool
-// re-emits that on the pool, and an 'error' event with no listener is an uncaught
-// exception that takes the whole process down. Log it; the pool discards the dead
-// client and opens a fresh one on the next query.
-pool.on('error', (error) => {
-  // Serialized by {@link logSerializers}, which expands `err` into message + stack and drops SQL/params.
-  log.error({ err: error }, 'Idle PostgreSQL client error')
+// An idle client can be dropped by the server or a proxy between requests. pg-pool re-emits that
+// on the pool, and an 'error' event with no listener is an uncaught exception that takes the whole
+// process down, so the pool needs a handler. It stays silent: the per-client listener below sees the
+// same failure and logs it, so each drop is logged once. The pool discards the dead client and opens
+// a fresh one on the next query.
+pool.on('error', () => {
+  // Logged by the per-client 'error' listener registered on connect.
 })
 
 // pg-pool removes its idle listener while a client is checked out, and drizzle's `db.transaction`
 // checks out a raw client without adding one. A connection that drops mid-transaction would then
 // emit an unhandled 'error' (an uncaught exception that ends plain Node processes and bypasses the
-// logger under Next.js). The pool still discards the non-queryable client on release.
+// logger under Next.js). This listener lives as long as the client, idle or checked out, so it is the
+// one place a drop is logged. The pool still discards the non-queryable client on release.
 pool.on('connect', (client) => {
   client.on('error', (error) => {
+    // Serialized by {@link logSerializers}, which expands `err` into message + stack and drops SQL/params.
     log.warn({ err: error }, 'PostgreSQL client error')
   })
 })

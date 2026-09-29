@@ -104,8 +104,9 @@ function findTreeWithRelations(
 
 /**
  * Imports the default template as a new SkillTree for a user. Uses batched
- * multi-row inserts for nodes and edges so a 28-node / 32-edge template completes
- * in 4 round-trips instead of ~54, keeping the transaction short.
+ * multi-row inserts for nodes and edges, so a 28-node / 32-edge template takes one
+ * statement per table plus the final re-fetch instead of ~54 single-row inserts,
+ * keeping the transaction short.
  *
  * @param userId - The user's database ID (not Clerk ID).
  * @returns The newly created tree with nodes, edges, and empty assignment arrays.
@@ -124,16 +125,13 @@ async function importDefaultTemplate(userId: number) {
       'skillTree.insert',
     )
 
-    // Batch insert all nodes in one round-trip.
-    await tx.insert(skillNodeTable).values(buildDefaultSkillNodes(tree.id))
-
-    // Re-read to resolve slug → node ID. The template edges reference nodes by
-    // slug, so we look the newly-inserted nodes up by name (which is
-    // unique-by-construction within a single template).
+    // Batch insert all nodes in one round-trip. RETURNING hands back the new ids so the
+    // template edges, which reference nodes by name (unique within a template), resolve
+    // without a second read.
     const createdNodes = await tx
-      .select({ id: skillNodeTable.id, name: skillNodeTable.name })
-      .from(skillNodeTable)
-      .where(eq(skillNodeTable.skillTreeId, tree.id))
+      .insert(skillNodeTable)
+      .values(buildDefaultSkillNodes(tree.id))
+      .returning({ id: skillNodeTable.id, name: skillNodeTable.name })
     const edgeRows = buildDefaultSkillEdges(tree.id, createdNodes)
     if (edgeRows.length > 0) {
       await tx.insert(nodeEdgeTable).values(edgeRows)

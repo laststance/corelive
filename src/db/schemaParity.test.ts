@@ -24,7 +24,7 @@ const PREVIOUS_ORM_FINGERPRINT_PATH = path.resolve(
   'src',
   'db',
   '__fixtures__',
-  'prismaBuiltSchemaFingerprint.txt',
+  'previousOrmSchemaFingerprint.txt',
 )
 
 describeIfDb('schema built by drizzle/0000_init.sql (real PostgreSQL)', () => {

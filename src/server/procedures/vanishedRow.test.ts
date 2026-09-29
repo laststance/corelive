@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { and, count, eq, sql } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
@@ -16,6 +16,7 @@ import {
   todoTable,
   userTable,
 } from '@/db/schema'
+import { settleBehindHeldTransaction } from '@/test/heldTransaction'
 
 import { deleteCategory, listCategories, updateCategory } from './category'
 import { importLocalCompleted } from './completed'
@@ -85,85 +86,6 @@ afterEach(async () => {
   }
   createdClerkIds.clear()
 })
-
-/**
- * Polls `pg_blocking_pids()` until some statement is parked behind the given backend.
- * Scoped to ONE holder pid, so a lock wait from a test in another worker never satisfies it.
- * @param holderPid - `pg_backend_pid()` of the transaction that holds the locks.
- * @returns Resolves once at least one statement is waiting on that backend.
- * @throws when nothing blocks within ten seconds.
- * @example
- * await waitForStatementBlockedBy(holderPid)
- */
-async function waitForStatementBlockedBy(holderPid: number): Promise<void> {
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    const { rows } = await db.execute<{ blocked: number }>(sql`
-      SELECT count(*)::int AS blocked
-      FROM pg_stat_activity
-      WHERE ${holderPid}::int = ANY(pg_blocking_pids(pid))
-    `)
-    if ((rows[0]?.blocked ?? 0) > 0) return
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-  throw new Error(
-    `No statement became blocked behind backend ${holderPid} within 10s`,
-  )
-}
-
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-/**
- * Runs a procedure call while a second transaction holds locks the call must wait for,
- * then commits that transaction so the call's blocked statement sees the committed state.
- * @param options.holdLocks - Statements the second transaction runs and then keeps open.
- * @param options.startCall - Starts the procedure call under test (do not await inside).
- * @returns `{ value }` when the call resolved, `{ error }` when it rejected.
- * @example
- * const settled = await settleBehindHeldTransaction({
- *   holdLocks: async (tx) => { await tx.delete(categoryTable).where(eq(categoryTable.id, 1)) },
- *   startCall: () => call(updateCategory, input, authContext(clerkId)),
- * })
- */
-async function settleBehindHeldTransaction<Result>(options: {
-  holdLocks: (tx: Transaction) => Promise<void>
-  startCall: () => Promise<Result>
-}): Promise<{ value: Result } | { error: unknown }> {
-  let release = () => {}
-  const released = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  let markStarted = () => {}
-  const started = new Promise<void>((resolve) => {
-    markStarted = resolve
-  })
-  let holderPid = 0
-  const finished = db.transaction(async (tx) => {
-    const { rows } = await tx.execute<{ pid: number }>(
-      sql`SELECT pg_backend_pid() AS pid`,
-    )
-    holderPid = rows[0]?.pid ?? 0
-    await options.holdLocks(tx)
-    markStarted()
-    await released
-  })
-  // If the lock-taking statements throw, surface that instead of hanging on `started`.
-  await Promise.race([started, finished])
-
-  try {
-    const outcome = options.startCall().then(
-      (value) => ({ value }),
-      (error: unknown) => ({ error }),
-    )
-    await waitForStatementBlockedBy(holderPid)
-    release()
-    await finished
-    return await outcome
-  } finally {
-    release()
-    await finished.catch(() => undefined)
-  }
-}
 
 /**
  * Reads the `cause` an oRPC error carries, where the underlying database or helper error lives.

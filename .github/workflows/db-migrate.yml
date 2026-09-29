@@ -92,11 +92,13 @@ jobs:
 
       # The migrator applies every file newer than the newest row in
       # drizzle.__drizzle_migrations, all inside one transaction. A database that is
-      # already up to date is a no-op.
+      # already up to date is a no-op. drizzle.config.ts refuses any non-local target
+      # unless DRIZZLE_ALLOW_REMOTE=1: this is the one place production is meant.
       - name: Deploy migrations
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          DRIZZLE_ALLOW_REMOTE: '1'
         run: |
           echo "🚀 Deploying migrations to production database..."
           pnpm exec drizzle-kit migrate

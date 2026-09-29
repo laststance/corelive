@@ -89,7 +89,7 @@ pnpm db:seed
 pnpm db:generate
 ```
 
-> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (nothing is changed). Run `pnpm db:reset` once to rebuild it, or keep its data by recording the baseline: `node scripts/baseline-drizzle-migrations.mjs --apply` (the script only writes on a database that carries the previous ORM's migration history).
+> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (nothing is changed). Run `pnpm db:reset` once to rebuild it, or keep its data by recording the baseline: `node --env-file=.env scripts/baseline-drizzle-migrations.mjs --apply` (the script reads `POSTGRES_PRISMA_URL` from the environment, and only writes on a database that carries the previous ORM's migration history and a schema identical to the one `drizzle/0000_init.sql` builds).
 
 Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
 
@@ -98,6 +98,8 @@ POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive"
 ```
 
 #### Database Management
+
+**Schema changes go through migrations only.** Edit `src/db/schema.ts`, run `pnpm db:generate`, review and commit the SQL, then `pnpm db:migrate`. Never use `drizzle-kit push` or `pull` here: their live-database introspection cannot see `SkillNode_skillTreeId_id_key` (the index both composite `NodeEdge` foreign keys point at), so they always plan to drop and re-add those keys and then fail halfway through. `drizzle.config.ts` also refuses any drizzle-kit command that could connect to a non-local database; only the deploy workflow opts out (`DRIZZLE_ALLOW_REMOTE=1`).
 
 **Basic Commands:**
 

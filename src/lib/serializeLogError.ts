@@ -16,18 +16,16 @@ type LoggedError = {
   cause?: LoggedError
 }
 
-/** PostgreSQL error fields that name the failing object but never hold a row value. */
-const PG_LOCATION_FIELDS = [
+/** Error fields that name the failing object or system call but never hold a row value: PostgreSQL's location fields plus Node's `syscall` (`ECONNREFUSED`, …). */
+const SAFE_ERROR_FIELDS = [
   'severity',
   'schema',
   'table',
   'column',
   'constraint',
   'routine',
+  'syscall',
 ] as const
-
-/** Node system-error fields (`ECONNREFUSED`, …) worth keeping on an otherwise plain error. */
-const SYSTEM_ERROR_FIELDS = ['syscall'] as const
 
 /**
  * Reads one property off an error-like object without a cast.
@@ -72,15 +70,24 @@ function isPgDatabaseError(error: Error): boolean {
 }
 
 /**
- * Keeps only the `at …` frames of a V8 stack. The header line repeats the error message, which for a drizzle failed query holds the bound parameters.
- * @param stack - Raw `error.stack`.
- * @returns The frame lines, or `undefined` when there are none.
+ * Keeps only the call frames of a V8 stack. The header repeats the error message, which for a drizzle failed query holds the bound parameters, and a parameter can itself contain a line break followed by `    at …`.
+ *
+ * The header is therefore cut off by position: everything up to the end of the message is dropped, and only the lines after it that look like frames are kept. A stack whose header cannot be located (rewritten `stack`, unusual runtime) yields nothing rather than risk a value.
+ * @param error - Error whose `stack` to reduce.
+ * @returns The frame lines, or `undefined` when there are none or the header cannot be located.
  * @example
- * framesOnly('Error: Failed query: … params: secret\n    at fn (file.ts:1:1)') // => '    at fn (file.ts:1:1)'
+ * framesOnly(failedQuery) // => '    at fn (file.ts:1:1)'
  */
-function framesOnly(stack: string | undefined): string | undefined {
+function framesOnly(error: Error): string | undefined {
+  const { stack, message } = error
+  if (!stack) return undefined
+  // V8 writes `Name: message` (or just `Name` for an empty message) and then one frame per line.
+  const marker = message === '' ? '' : `: ${message}`
+  const headerAt = stack.indexOf(marker)
+  if (headerAt === -1) return undefined
   const frames = stack
-    ?.split('\n')
+    .slice(headerAt + marker.length)
+    .split('\n')
     .filter((line) => /^\s+at /.test(line))
     .join('\n')
   return frames || undefined
@@ -100,17 +107,13 @@ function shapeError(error: Error, depth: number): LoggedError {
   const shaped: LoggedError = { type: error.name }
 
   if (!carriesRowData) shaped.message = error.message
-  const stack = carriesRowData ? framesOnly(error.stack) : error.stack
+  const stack = carriesRowData ? framesOnly(error) : error.stack
   if (stack) shaped.stack = stack
 
   const code = readProperty(error, 'code')
   if (typeof code === 'string' || typeof code === 'number') shaped.code = code
 
-  for (const field of PG_LOCATION_FIELDS) {
-    const value = readProperty(error, field)
-    if (typeof value === 'string') shaped[field] = value
-  }
-  for (const field of SYSTEM_ERROR_FIELDS) {
+  for (const field of SAFE_ERROR_FIELDS) {
     const value = readProperty(error, field)
     if (typeof value === 'string') shaped[field] = value
   }

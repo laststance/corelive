@@ -33,6 +33,7 @@ const isDevelopment = (): boolean => {
 /**
  * Creates a Pino logger instance with appropriate configuration.
  *
+ * @param destination - Where the JSON lines go; stdout by default. Ignored in development, where the pino-pretty transport owns the output. Tests pass an in-memory stream to inspect the production configuration.
  * @returns Configured Pino logger
  *
  * @example
@@ -43,30 +44,49 @@ const isDevelopment = (): boolean => {
  * logger.error({ error }, 'Error message')   // Level 50
  * logger.fatal({ error }, 'Fatal error')     // Level 60
  */
-const createLogger = (): pino.Logger => {
-  return pino({
-    level: isDevelopment() ? 'debug' : 'info',
-    // Both branches: pino's stock serializers would log a DrizzleQueryError's SQL and bound values.
-    serializers: logSerializers,
-    ...(isDevelopment()
-      ? {
-          transport: {
-            target: 'pino-pretty',
-            options: {
-              colorize: true,
-              translateTime: 'SYS:standard',
-              ignore: 'pid,hostname',
+export const createLogger = (
+  destination?: pino.DestinationStream,
+): pino.Logger => {
+  const development = isDevelopment()
+  return pino(
+    {
+      level: development ? 'debug' : 'info',
+      // Both branches: pino's stock serializers would log a DrizzleQueryError's SQL and bound values.
+      serializers: logSerializers,
+      hooks: {
+        // `logger.error(err)` makes pino copy `err.message` into `msg` before any serializer runs; for a
+        // failed query that message is the SQL plus every bound value. Log a lone Error under `err` with a
+        // fixed message instead, so the serializer alone decides what reaches the log line.
+        logMethod(args, method) {
+          const [first, ...rest] = args
+          if (first instanceof Error && rest.length === 0) {
+            return method.call(this, { err: first }, 'Unhandled error')
+          }
+          return method.apply(this, args)
+        },
+      },
+      ...(development
+        ? {
+            transport: {
+              target: 'pino-pretty',
+              options: {
+                colorize: true,
+                translateTime: 'SYS:standard',
+                ignore: 'pid,hostname',
+              },
             },
-          },
-        }
-      : {
-          // Production: JSON format for log aggregation
-          formatters: {
-            level: (label) => ({ level: label }),
-          },
-          timestamp: pino.stdTimeFunctions.isoTime,
-        }),
-  })
+          }
+        : {
+            // Production: JSON format for log aggregation
+            formatters: {
+              level: (label) => ({ level: label }),
+            },
+            timestamp: pino.stdTimeFunctions.isoTime,
+          }),
+    },
+    // A custom destination and a transport are mutually exclusive in pino.
+    development ? undefined : destination,
+  )
 }
 
 /** Backs the public {@link log} facade and {@link createModuleLogger} with one server logger.

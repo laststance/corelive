@@ -20,7 +20,7 @@ export const IMPORT_TRANSACTION_TIMEOUT_MS = 30_000
  * @param callback - Work to run atomically; receives the transaction handle.
  * @param timeoutMs - Longest a single statement, or a pause between statements, may take.
  * @returns Whatever the callback returns, once committed.
- * @throws A `DrizzleQueryError` wrapping SQLSTATE `57014` (statement) or `25P03` (idle in transaction) when a limit is hit; the transaction rolls back.
+ * @throws A `DrizzleQueryError` wrapping SQLSTATE `57014` when one statement outlives `timeoutMs`; the transaction rolls back. A pause between statements longer than `timeoutMs` makes the server end the whole connection (`25P03`, session terminated), so that rejection is a plain connection error with no usable SQLSTATE; the pool discards the dead client.
  * @example
  * const category = await runTransaction(async (tx) => {
  *   await tx.update(todoTable).set({ categoryId: 1 }).where(eq(todoTable.categoryId, 2))

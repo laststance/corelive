@@ -19,10 +19,10 @@ import { describeIfDb } from './describeIfDb'
 
 /**
  * Real-database coverage for the edges of `completed.importLocal`'s single
- * multi-row `INSERT … ON CONFLICT DO NOTHING RETURNING`. The previous ORM's
- * `createMany` ran under a 30-second transaction budget sized for the 2000-keep
- * maximum; that budget is gone, so the maximum batch must still land in one call,
- * and the returned row count must stay honest when rows inside one batch collide.
+ * multi-row `INSERT … ON CONFLICT DO NOTHING RETURNING`. The import runs in
+ * `runTransaction` under a 30-second budget (`IMPORT_TRANSACTION_TIMEOUT_MS`) sized
+ * for the 2000-keep maximum, so the maximum batch must still land inside it in one
+ * call, and the returned row count must stay honest when rows inside one batch collide.
  */
 vi.setConfig({ testTimeout: 60_000 })
 

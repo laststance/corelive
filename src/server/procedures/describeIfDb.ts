@@ -18,7 +18,7 @@ const dbIntegrationEnabled = process.env.RUN_DB_INTEGRATION_TESTS === '1'
 /**
  * Re-runs the local-DB chokepoint and throws (fail-closed) if it cannot prove
  * the active `POSTGRES_PRISMA_URL` is local — invoked once at import, before any
- * destructive per-user `deleteMany`. Surfaces the gate's own reason in the throw.
+ * destructive per-user deletes. Surfaces the gate's own reason in the throw.
  * @returns Nothing; returns normally only when the gate exits 0 (provably local).
  * @throws when `scripts/assert-local-db.cjs` exits non-zero (non-local / unprovable)
  * @example

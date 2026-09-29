@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -9,6 +10,36 @@ const GATE_COMMAND = 'node scripts/assert-local-db.cjs'
 
 /** `db:*` scripts that never connect to a database: `db:generate` only reads the schema file and writes SQL files. (`db:studio` is gated: its UI can edit and delete rows.) */
 const UNGATED_SCRIPTS = new Set(['db:generate'])
+
+/** A production-looking target; the gate must reject it before any connection is attempted. */
+const REMOTE_DATABASE_URL = 'postgresql://user:pass@prod.example.com:5432/db'
+
+/**
+ * Runs the installed drizzle-kit binary directly, the way a developer skips the package scripts with `pnpm exec drizzle-kit …`.
+ * @param subcommand - drizzle-kit subcommand, e.g. `push`.
+ * @returns Exit status and the combined stdout/stderr.
+ * @example
+ * runDrizzleKit('push') // => { status: 1, output: '🛑 [assert-local-db] …' }
+ */
+function runDrizzleKit(subcommand: string): {
+  status: number | null
+  output: string
+} {
+  const result = spawnSync(
+    process.execPath,
+    ['node_modules/drizzle-kit/bin.cjs', subcommand],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        POSTGRES_PRISMA_URL: REMOTE_DATABASE_URL,
+        DRIZZLE_ALLOW_REMOTE: '',
+      },
+    },
+  )
+  return { status: result.status, output: `${result.stdout}${result.stderr}` }
+}
 
 /**
  * Reads the package.json `scripts` table.
@@ -87,4 +118,27 @@ describe('database package scripts', () => {
     expect(scripts.postinstall).toBeUndefined()
     expect(commands).not.toContain('CONSENT_FOR_DANGEROUS_AI_ACTION')
   })
+
+  test('refuses a raw drizzle-kit push against a remote database, so bypassing the package scripts cannot run DDL on production', () => {
+    // Arrange — a remote URL and no opt-in, as in a developer .env that points at production.
+
+    // Act
+    const { status, output } = runDrizzleKit('push')
+
+    // Assert
+    expect(status).toBe(1)
+    expect(output).toContain('[assert-local-db]')
+    expect(output).toContain('prod.example.com')
+  }, 30_000)
+
+  test('still lets the offline drizzle-kit check run against a remote URL, so validating the migration folder needs no local database', () => {
+    // Arrange — same remote URL; `check` only reads the drizzle/ folder.
+
+    // Act
+    const { status, output } = runDrizzleKit('check')
+
+    // Assert
+    expect(status).toBe(0)
+    expect(output).not.toContain('[assert-local-db]')
+  }, 30_000)
 })

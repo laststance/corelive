@@ -143,6 +143,23 @@ describe('logSerializers', () => {
     expect(lastRawLine()).not.toContain('secret-param')
   })
 
+  test('drops a bound parameter that contains a line break and a fake stack frame, so a user-typed value cannot smuggle itself into the logged stack', () => {
+    // Arrange
+    const { logger, lastRawLine } = createCapturingLogger()
+    const failedQuery = new DrizzleQueryError(
+      'insert into "Completed" ("title") values ($1)',
+      ['first line\n    at leaked-value (secret.ts:1:1)'],
+      makeUniqueViolation(),
+    )
+
+    // Act
+    logger.error({ error: failedQuery }, 'Error in createCompleted')
+
+    // Assert
+    expect(lastRawLine()).not.toContain('leaked-value')
+    expect(lastRawLine()).not.toContain('secret.ts')
+  })
+
   test('keeps the message of a network error and its errno-style code', () => {
     // Arrange
     const { logger, lastLine } = createCapturingLogger()
