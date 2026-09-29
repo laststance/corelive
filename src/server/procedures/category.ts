@@ -27,6 +27,7 @@ import {
   todoTable,
   type User,
 } from '@/db/schema'
+import { runTransaction } from '@/db/transaction'
 import { createModuleLogger } from '@/lib/logger'
 
 import { authMiddleware } from '../middleware/auth'
@@ -79,14 +80,17 @@ async function readCategoriesWithCounts(
 }
 
 /**
- * Loads a category by id, but only when the caller owns it — the permission check shared by update and delete.
+ * Loads a category by id, but only when the caller owns it — the permission check shared by update, delete and {@link createCompleted}.
  * @param userId - Authenticated owner.
  * @param categoryId - Category to load.
  * @returns The category row, or `undefined` when it does not exist or belongs to someone else.
  * @example
  * await findOwnedCategory(1, 3) // => { id: 3, name: 'Work', userId: 1, ... }
  */
-async function findOwnedCategory(userId: User['id'], categoryId: number) {
+export async function findOwnedCategory(
+  userId: User['id'],
+  categoryId: number,
+) {
   const [category] = await db
     .select()
     .from(categoryTable)
@@ -95,24 +99,6 @@ async function findOwnedCategory(userId: User['id'], categoryId: number) {
     )
     .limit(1)
   return category
-}
-
-/**
- * Seeds the default "General" category for an account that has none. New accounts get it from the auth middleware's create, so this is the repair path for accounts made before that (and for a category deleted down to zero) — without it the editor opens locked on "No categories". Called by {@link listCategories} when its read comes back empty.
- * @param userId - Owner of the missing default.
- * @returns Nothing; a concurrent webhook insert of the same name is treated as success.
- * @example
- * await ensureDefaultCategory(user.id)
- */
-async function ensureDefaultCategory(userId: User['id']): Promise<void> {
-  try {
-    await db.insert(categoryTable).values({ ...DEFAULT_CATEGORY_SEED, userId })
-  } catch (error) {
-    // Unique violation = the webhook inserted "General" between our read and this
-    // write (unique index on name + userId) — that row is exactly what we wanted.
-    if (isPgError(error, PG_UNIQUE_VIOLATION)) return
-    throw error
-  }
 }
 
 /**
@@ -137,9 +123,16 @@ export const listCategories = authMiddleware
         return { categories }
       }
 
-      // Brand-new (or webhook-less) account: seed the default, then re-read so
-      // the response carries the real row id and count shape.
-      await ensureDefaultCategory(user.id)
+      // Brand-new (or webhook-less) account: seed the default "General", then re-read so the
+      // response carries the real row id and count shape. New accounts get theirs from the auth
+      // middleware, so this is the repair path for accounts made before that (and for a category
+      // deleted down to zero); without it the editor opens locked on "No categories".
+      // DO NOTHING: the Clerk webhook may insert "General" between our read and this write
+      // (unique index on name + userId), and that row is exactly what we wanted.
+      await db
+        .insert(categoryTable)
+        .values({ ...DEFAULT_CATEGORY_SEED, userId: user.id })
+        .onConflictDoNothing()
       return { categories: await readCategoriesWithCounts(user.id) }
     } catch (error) {
       log.error({ error }, 'Error in listCategories')
@@ -235,14 +228,19 @@ export const updateCategory = authMiddleware
         })
       }
 
+      // An empty `data` is a no-op: answer with the stored row and leave `updatedAt` alone, as the
+      // previous ORM did. Drizzle would reject an empty SET ("No values to set") before it stamps
+      // `$onUpdate`, so this cannot be left to the UPDATE.
+      if (Object.values(data).every((value) => value === undefined)) {
+        return existing as Category
+      }
+
       // `requireRow` makes an update of a missing row fail loudly: a row deleted between the
       // permission check and this update aborts into the generic 500 below.
-      // `updatedAt` is always in the SET list: drizzle throws "No values to set" on an empty
-      // SET (before it adds the `$onUpdate` stamp), while an empty `data` used to succeed.
       const category = requireRow(
         await db
           .update(categoryTable)
-          .set({ ...data, updatedAt: new Date() })
+          .set(data)
           .where(eq(categoryTable.id, id))
           .returning(),
         'category.update',
@@ -310,7 +308,7 @@ export const deleteCategory = authMiddleware
         .limit(1)
 
       // Reassign todos to default category, then delete
-      await db.transaction(async (tx) => {
+      await runTransaction(async (tx) => {
         if (defaultCategory) {
           await tx
             .update(todoTable)

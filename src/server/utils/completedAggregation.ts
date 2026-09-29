@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte, or } from 'drizzle-orm'
+import { and, asc, between, eq, isNull, or } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { categoryTable, completedTable, todoTable } from '@/db/schema'
@@ -12,14 +12,14 @@ import { categoryTable, completedTable, todoTable } from '@/db/schema'
  * @example
  * { source: 'todo', id: 12, title: 'draft digest', completedAt: Date, category: { id: 3, name: 'writing', color: 'blue' } }
  * @example
- * { source: 'completed', id: 42, title: 'buy milk', completedAt: Date, category: null }
+ * { source: 'completed', id: 42, title: 'buy milk', completedAt: Date, category: { id: 1, name: 'General', color: 'blue' } }
  */
 export type CompletedEntry = {
   source: 'todo' | 'completed'
   id: number
   title: string
   completedAt: Date
-  category: { id: number; name: string; color: string } | null
+  category: { id: number; name: string; color: string }
 }
 
 /**
@@ -33,10 +33,10 @@ export type CompletedEntry = {
  *
  * Both halves FILTER and BUCKET by `completedAt`, with a null-coalescing
  * fallback (Todo → updatedAt, Completed → createdAt) for any row whose
- * completedAt is null. Migration 20260603235155 added Todo.completedAt and
- * backfilled it from updatedAt; the now-removed toggleTodo wrote it on each false→true
- * completion. Migration 20260529164052 added Completed.completedAt and
- * backfilled it from createdAt. Because the filter and the bucket now use the
+ * completedAt is null. Earlier migrations (now folded into drizzle/0000_init.sql)
+ * added Todo.completedAt, backfilled from updatedAt, and Completed.completedAt,
+ * backfilled from createdAt; the now-removed toggleTodo wrote it on each false→true
+ * completion. Because the filter and the bucket now use the
  * SAME field, a completion always lands on its real day's range — this fixes
  * both the dated-import drop and the edit-drift noted below.
  *
@@ -90,19 +90,15 @@ export async function fetchCompletedEntries(
           eq(todoTable.userId, userId),
           eq(todoTable.completed, true),
           // Filter by the stable completion day. `completedAt` is the semantic
-          // completion timestamp (migration 20260603235155); fall back to
+          // completion timestamp (added by an earlier migration); fall back to
           // `updatedAt` only for rows whose `completedAt` is still null (an
           // unconverted write path or a pre-backfill row) so they never vanish
           // from the heatmap.
           or(
-            and(
-              gte(todoTable.completedAt, startDate),
-              lte(todoTable.completedAt, endDate),
-            ),
+            between(todoTable.completedAt, startDate, endDate),
             and(
               isNull(todoTable.completedAt),
-              gte(todoTable.updatedAt, startDate),
-              lte(todoTable.updatedAt, endDate),
+              between(todoTable.updatedAt, startDate, endDate),
             ),
           ),
         ),
@@ -139,14 +135,10 @@ export async function fetchCompletedEntries(
           // completedAt = createdAt, so nulls are not expected — the fallback is
           // defensive.
           or(
-            and(
-              gte(completedTable.completedAt, startDate),
-              lte(completedTable.completedAt, endDate),
-            ),
+            between(completedTable.completedAt, startDate, endDate),
             and(
               isNull(completedTable.completedAt),
-              gte(completedTable.createdAt, startDate),
-              lte(completedTable.createdAt, endDate),
+              between(completedTable.createdAt, startDate, endDate),
             ),
           ),
         ),
@@ -175,12 +167,28 @@ export async function fetchCompletedEntries(
     category: row.category,
   }))
 
-  // Stable merge: sort by completedAt ascending. Tie-break by source then id
-  // so test seeds with identical timestamps produce deterministic ordering.
-  return [...todoEntries, ...completedEntries].sort((a, b) => {
-    const timeDiff = a.completedAt.getTime() - b.completedAt.getTime()
-    if (timeDiff !== 0) return timeDiff
-    if (a.source !== b.source) return a.source === 'todo' ? -1 : 1
-    return a.id - b.id
-  })
+  // Stable merge of the two halves into one timeline.
+  return [...todoEntries, ...completedEntries].sort(compareCompletedEntries)
+}
+
+/**
+ * Orders completion entries by completion time ascending, breaking ties by source (todo first) and then id.
+ *
+ * The tie-break keeps rows that share an instant, such as a bulk import or a test seed, in one deterministic order instead of whatever order the two queries happened to return them.
+ * Called as the sort comparator of {@link fetchCompletedEntries}.
+ *
+ * @param a - First entry.
+ * @param b - Second entry.
+ * @returns Negative when `a` comes first, positive when `b` does, never zero for distinct entries.
+ * @example
+ * [entryAt10, entryAt09].sort(compareCompletedEntries) // => [entryAt09, entryAt10]
+ */
+export function compareCompletedEntries(
+  a: CompletedEntry,
+  b: CompletedEntry,
+): number {
+  const timeDiff = a.completedAt.getTime() - b.completedAt.getTime()
+  if (timeDiff !== 0) return timeDiff
+  if (a.source !== b.source) return a.source === 'todo' ? -1 : 1
+  return a.id - b.id
 }

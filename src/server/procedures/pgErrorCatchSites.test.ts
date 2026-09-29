@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { count, eq, sql } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
@@ -16,6 +16,7 @@ import {
   todoTable,
   userTable,
 } from '@/db/schema'
+import { settleBehindHeldTransaction } from '@/test/heldTransaction'
 
 import { DEFAULT_CATEGORY_SEED } from '../schemas/category'
 
@@ -26,15 +27,17 @@ import { getElectronSettings } from './electronSettings'
 import { assignTask, getMyTree, unassignTask } from './skillTree'
 
 /**
- * Real-database coverage for the ten places that turn a PostgreSQL constraint
+ * Real-database coverage for the places that turn a PostgreSQL constraint
  * violation into a friendly outcome. drizzle-orm wraps every driver error in
- * `DrizzleQueryError` (the SQLSTATE sits in `.cause`), so each of these catch
- * sites silently stops matching if the `.cause` walk in `isPgError` breaks. Every
- * test triggers the REAL constraint and asserts the outcome users see today.
+ * `DrizzleQueryError` (the SQLSTATE sits in `.cause`), so each catch site that
+ * tests a code silently stops matching if the `.cause` walk in `isPgError`
+ * breaks; the create races that use `ON CONFLICT DO NOTHING` instead are pinned
+ * to the same outcomes. Every test triggers the REAL constraint and asserts the
+ * outcome users see today.
  *
- * The two skill-tree races are made deterministic (not timing-dependent) by
- * parking a second transaction on the contested row, letting the procedure block
- * behind it, then committing so the procedure's statement fails for real.
+ * The races are made deterministic (not timing-dependent) by parking a second
+ * transaction on the contested row, letting the procedure block behind it, then
+ * committing so the procedure's statement fails (or does nothing) for real.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -124,91 +127,6 @@ afterEach(async () => {
   }
   createdClerkIds.clear()
 })
-
-/**
- * Polls `pg_blocking_pids()` until some statement is parked behind the given backend, so a
- * test commits the blocker at exactly the right moment. Scoped to ONE holder pid, so a lock
- * wait belonging to a test running in another worker can never satisfy it.
- * @param holderPid - `pg_backend_pid()` of the transaction that holds the locks.
- * @returns Resolves once at least one statement is waiting on that backend.
- * @throws when nothing blocks within ten seconds.
- * @example
- * await waitForStatementBlockedBy(holderPid)
- */
-async function waitForStatementBlockedBy(holderPid: number): Promise<void> {
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    const { rows } = await db.execute<{ blocked: number }>(sql`
-      SELECT count(*)::int AS blocked
-      FROM pg_stat_activity
-      WHERE ${holderPid}::int = ANY(pg_blocking_pids(pid))
-    `)
-    if ((rows[0]?.blocked ?? 0) > 0) return
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-  throw new Error(
-    `No statement became blocked behind backend ${holderPid} within 10s`,
-  )
-}
-
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-/**
- * Runs a procedure call while a second transaction holds locks the call must wait for,
- * then commits that transaction so the call's blocked statement fails (or proceeds) for real.
- *
- * Deterministic replacement for "fire N calls and hope they collide": the holder takes
- * its locks first, the call is started and observed parked behind the holder's backend, and only
- * then is the holder committed.
- *
- * @param options.holdLocks - Statements the second transaction runs and then keeps open.
- * @param options.startCall - Starts the procedure call under test (do not await inside).
- * @returns `{ value }` when the call resolved, `{ error }` when it rejected.
- * @example
- * const settled = await settleBehindHeldTransaction({
- *   holdLocks: async (tx) => { await tx.delete(todoTable).where(eq(todoTable.id, 1)) },
- *   startCall: () => call(assignTask, input, authContext(clerkId)),
- * })
- */
-async function settleBehindHeldTransaction<Result>(options: {
-  holdLocks: (tx: Transaction) => Promise<void>
-  startCall: () => Promise<Result>
-}): Promise<{ value: Result } | { error: unknown }> {
-  let release = () => {}
-  const released = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  let markStarted = () => {}
-  const started = new Promise<void>((resolve) => {
-    markStarted = resolve
-  })
-  let holderPid = 0
-  const finished = db.transaction(async (tx) => {
-    const { rows } = await tx.execute<{ pid: number }>(
-      sql`SELECT pg_backend_pid() AS pid`,
-    )
-    holderPid = rows[0]?.pid ?? 0
-    await options.holdLocks(tx)
-    markStarted()
-    await released
-  })
-  // If the lock-taking statements throw, surface that instead of hanging on `started`.
-  await Promise.race([started, finished])
-
-  try {
-    const outcome = options.startCall().then(
-      (value) => ({ value }),
-      (error: unknown) => ({ error }),
-    )
-    await waitForStatementBlockedBy(holderPid)
-    release()
-    await finished
-    return await outcome
-  } finally {
-    release()
-    await finished.catch(() => undefined)
-  }
-}
 
 /**
  * Creates a user with a skill tree, plus one completed todo the user could assign.

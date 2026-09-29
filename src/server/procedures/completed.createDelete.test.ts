@@ -98,8 +98,11 @@ describeIfDb('completed.create and completed.delete (real PostgreSQL)', () => {
       authContext(clerkId),
     )
 
-    // Assert
+    // Assert — createdAt is the current UTC instant, which the 60 s undo window is measured from.
     expect(created).toMatchObject({ title, categoryId, archived: false })
+    expect(Math.abs(created.createdAt.getTime() - Date.now())).toBeLessThan(
+      5_000,
+    )
     expect(await findCompletedByTitle(title)).toHaveLength(1)
   })
 

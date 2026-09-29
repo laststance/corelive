@@ -2,11 +2,10 @@
 import { randomUUID } from 'node:crypto'
 
 import { auth } from '@clerk/nextjs/server'
-import { type DehydratedState, hydrate } from '@tanstack/react-query'
+import { hydrate } from '@tanstack/react-query'
 import { eq } from 'drizzle-orm'
 import { cookies, headers } from 'next/headers'
-import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { z } from 'zod'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
 import { requireRow } from '@/db/requireRow'
@@ -21,27 +20,26 @@ import {
 import { describeIfDb } from '@/server/procedures/describeIfDb'
 import type { HomeBootstrapResponse } from '@/server/schemas/home'
 
-import { prefetchHomeBootstrap } from './prefetchHomeBootstrap'
+import {
+  prefetchHomeBootstrap,
+  resolveViewerTimeZone,
+} from './prefetchHomeBootstrap'
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
 vi.mock('next/headers', () => ({ cookies: vi.fn(), headers: vi.fn() }))
 
 /**
- * Real-DB suite for the Home SSR prefetch: Clerk and the Next request stores
- * stay mocked, while the `home.bootstrap` procedure runs for real against
- * Postgres. Several sequential DB round trips per case, so the suite gets a
- * generous timeout.
+ * Suite for the Home SSR prefetch: Clerk and the Next request stores stay mocked,
+ * while the `home.bootstrap` procedure runs for real against Postgres. The
+ * viewer-zone guess reads only the mocked request stores, so its cases run
+ * without a database. Several sequential DB round trips per case, so the suite
+ * gets a generous timeout.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
 const mockedAuth = vi.mocked(auth)
 const mockedCookies = vi.mocked(cookies)
 const mockedHeaders = vi.mocked(headers)
-
-/** Options half of the heatmap query key, `{ input: { days, timezone }, type }`; only the zone matters here. */
-const HeatmapQueryKeyOptionsSchema = z.object({
-  input: z.object({ timezone: z.string() }),
-})
 
 // Every Clerk ID a test signs in with, so teardown removes exactly the rows it made.
 const createdClerkIds = new Set<string>()
@@ -84,30 +82,6 @@ function mockRequestState({
       geoTimeZone !== undefined ? { 'x-vercel-ip-timezone': geoTimeZone } : {},
     ),
   )
-}
-
-/**
- * Reads the viewer zone the dehydrated heatmap slice is keyed by, the observable output of the zone-guessing chain.
- * @param dehydratedState - What {@link prefetchHomeBootstrap} returned.
- * @returns
- * - The `timezone` inside the heatmap cache key
- * - `undefined` when no heatmap slice was dehydrated
- * @example
- * dehydratedHeatmapTimeZone(await prefetchHomeBootstrap()) // => 'Asia/Tokyo'
- */
-function dehydratedHeatmapTimeZone(
-  dehydratedState: DehydratedState | undefined,
-): string | undefined {
-  // Nothing dehydrated means the prefetch fell back to client fetching.
-  if (!dehydratedState) return undefined
-  const queryClient = createQueryClient()
-  hydrate(queryClient, dehydratedState)
-  const [heatmapQuery] = queryClient
-    .getQueryCache()
-    .findAll({ queryKey: [['completed', 'heatmap']] })
-  if (!heatmapQuery) return undefined
-  const [, keyOptions] = heatmapQuery.queryKey
-  return HeatmapQueryKeyOptionsSchema.parse(keyOptions).input.timezone
 }
 
 /**
@@ -298,33 +272,45 @@ describeIfDb('prefetchHomeBootstrap', () => {
     // Assert
     expect(dehydratedState).toBeUndefined()
   })
+})
+
+describe('viewer time zone guess', () => {
+  test('prefers the cookie the browser persisted over the Vercel geo header', async () => {
+    // Arrange
+    mockRequestState({
+      cookieTimeZone: 'Asia/Tokyo',
+      geoTimeZone: 'America/New_York',
+    })
+
+    // Act
+    const timeZone = await resolveViewerTimeZone()
+
+    // Assert
+    expect(timeZone).toBe('Asia/Tokyo')
+  })
 
   test('ignores a garbage timezone cookie and uses the Vercel geo header instead', async () => {
     // Arrange
-    signInFreshViewer()
     mockRequestState({
       cookieTimeZone: 'Not/A_Real_Zone',
       geoTimeZone: 'America/New_York',
     })
 
     // Act
-    const dehydratedState = await prefetchHomeBootstrap()
+    const timeZone = await resolveViewerTimeZone()
 
     // Assert
-    expect(dehydratedHeatmapTimeZone(dehydratedState)).toBe('America/New_York')
+    expect(timeZone).toBe('America/New_York')
   })
 
   test('falls back to the server zone when neither cookie nor geo header exists', async () => {
     // Arrange
-    signInFreshViewer()
     mockRequestState({})
 
     // Act
-    const dehydratedState = await prefetchHomeBootstrap()
+    const timeZone = await resolveViewerTimeZone()
 
     // Assert
-    expect(dehydratedHeatmapTimeZone(dehydratedState)).toBe(
-      Intl.DateTimeFormat().resolvedOptions().timeZone,
-    )
+    expect(timeZone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
   })
 })

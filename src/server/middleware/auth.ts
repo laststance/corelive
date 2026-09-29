@@ -6,6 +6,7 @@ import { PG_UNIQUE_VIOLATION } from '@/db/constants'
 import { isPgError } from '@/db/isPgError'
 import { requireRow } from '@/db/requireRow'
 import { categoryTable, type User, userTable } from '@/db/schema'
+import { runTransaction } from '@/db/transaction'
 import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 import { ServerTiming } from '@/server/timing/ServerTiming'
 
@@ -45,10 +46,9 @@ async function resolveUser(clerkUserId: string): Promise<User> {
 
   try {
     // One transaction, two inserts: the user and its default category commit
-    // together, so a
-    // webhook-less user never reaches a procedure with zero categories.
-    // `listCategories` keeps its own seed for accounts created before this.
-    return await db.transaction(async (tx) => {
+    // together, so a webhook-less user never reaches a procedure with zero
+    // categories. `listCategories` keeps its own seed for accounts created before this.
+    return await runTransaction(async (tx) => {
       const createdUser = requireRow(
         await tx
           .insert(userTable)

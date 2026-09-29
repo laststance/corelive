@@ -124,7 +124,7 @@ describeIfDb('electronSettings get and save (real PostgreSQL)', () => {
     })
   })
 
-  test('an empty save returns the stored settings unchanged instead of failing', async () => {
+  test('an empty save returns the stored settings and leaves updatedAt alone instead of failing', async () => {
     // Arrange — one non-default toggle, with updatedAt parked in the past.
     const clerkId = freshClerkId()
     const first = await call(
@@ -141,13 +141,28 @@ describeIfDb('electronSettings get and save (real PostgreSQL)', () => {
     // Act
     const saved = await call(upsertElectronSettings, {}, authContext(clerkId))
 
-    // Assert — same row, same toggles, and the save is stamped as a touch.
+    // Assert — same row, same toggles, and nothing counts as touched.
     expect(saved).toMatchObject({
       id: first.id,
       hideAppIcon: false,
       showInMenuBar: true,
       startAtLogin: true,
     })
-    expect(saved.updatedAt.getTime()).toBeGreaterThan(parkedAt.getTime())
+    expect(saved.updatedAt).toEqual(parkedAt)
+  })
+
+  test('an empty first save creates the default settings row', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+
+    // Act
+    const saved = await call(upsertElectronSettings, {}, authContext(clerkId))
+
+    // Assert
+    expect(saved).toMatchObject({
+      hideAppIcon: false,
+      showInMenuBar: true,
+      startAtLogin: false,
+    })
   })
 })

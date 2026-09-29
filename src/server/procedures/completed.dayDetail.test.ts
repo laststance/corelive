@@ -87,7 +87,7 @@ async function seedCompletedTableRow(
       .from(userTable)
       .where(eq(userTable.clerkId, clerkId))
       .limit(1),
-    'user.findUniqueOrThrow',
+    'user.select',
   )
   // Get-or-create "General": an existing row is left untouched, then read back.
   await db
@@ -110,7 +110,7 @@ async function seedCompletedTableRow(
         ),
       )
       .limit(1),
-    'category.upsert',
+    'category.insert',
   )
   await db
     .insert(completedTable)

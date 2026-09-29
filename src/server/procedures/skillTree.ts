@@ -4,8 +4,8 @@ import {
   asc,
   desc,
   eq,
+  exists,
   type SQL,
-  inArray,
   isNull,
   notExists,
   or,
@@ -24,6 +24,7 @@ import {
   skillTreeTable,
   todoTable,
 } from '@/db/schema'
+import { runTransaction } from '@/db/transaction'
 import { createModuleLogger } from '@/lib/logger'
 import { buildDefaultSkillEdges } from '@/server/buildDefaultSkillEdges'
 import { buildDefaultSkillNodes } from '@/server/buildDefaultSkillNodes'
@@ -76,12 +77,18 @@ function findTreeWithRelations(
             where: (assignments) =>
               or(
                 isNull(assignments.todoId),
-                inArray(
-                  assignments.todoId,
+                // Correlated on this assignment's todo, so Postgres probes the todo by primary key
+                // instead of first collecting every completed todo of every user.
+                exists(
                   db
-                    .select({ id: todoTable.id })
+                    .select({ one: sql`1` })
                     .from(todoTable)
-                    .where(eq(todoTable.completed, true)),
+                    .where(
+                      and(
+                        eq(todoTable.id, assignments.todoId),
+                        eq(todoTable.completed, true),
+                      ),
+                    ),
                 ),
               ),
             orderBy: (assignments, { asc }) => [asc(assignments.id)],
@@ -104,7 +111,7 @@ function findTreeWithRelations(
  * @returns The newly created tree with nodes, edges, and empty assignment arrays.
  */
 async function importDefaultTemplate(userId: number) {
-  return db.transaction(async (tx) => {
+  return runTransaction(async (tx) => {
     const tree = requireRow(
       await tx
         .insert(skillTreeTable)
@@ -296,7 +303,7 @@ export const getUnassignedPool = authMiddleware
  * transaction). Enforces:
  *   - The todo is completed (prevents XP inflation via "complete → assign →
  *     uncomplete → recomplete" loop).
- *   - One assignment per todo globally (`@@unique([todoId])`).
+ *   - One assignment per todo globally (unique index on `todoId`).
  *
  * @param input.nodeId - Target skill node ID.
  * @param input.todoId - Completed Todo ID to assign.
@@ -314,7 +321,7 @@ export const assignTask = authMiddleware
     )
 
     try {
-      return await db.transaction(async (tx) => {
+      return await runTransaction(async (tx) => {
         // Delete any existing assignment for this todo (supports move between
         // nodes). The unique index on todoId would otherwise reject the insert.
         await tx
@@ -365,7 +372,7 @@ export const assignTask = authMiddleware
  * left behind when a completed todo is deleted) are intentionally frozen XP
  * receipts and are unreachable through this mutation by design — the
  * `AssignTaskInputSchema` requires a positive integer `todoId`, and the
- * schema's `@@unique([todoId])` means `todoId` identifies at most one row.
+ * unique index on `todoId` means `todoId` identifies at most one row.
  *
  * Verifies the found row's `nodeId` matches `input.nodeId` so the API is
  * honest about what it targets: a caller that passes a wrong `nodeId` gets
@@ -387,7 +394,7 @@ export const unassignTask = authMiddleware
     })
     try {
       // Verify the assignment actually belongs to the node the caller named.
-      // `todoId` is globally unique (`@@unique([todoId])`), so this is a
+      // `todoId` is globally unique (unique index), so this is a
       // single-row lookup. If the row exists but points at a different
       // node, return null — the caller's mental model is out of sync and
       // `onSettled` query invalidation will rebase their optimistic state.

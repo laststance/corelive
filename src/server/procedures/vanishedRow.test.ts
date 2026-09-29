@@ -6,6 +6,8 @@ import { and, count, eq, sql } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
+import { PG_FOREIGN_KEY_VIOLATION } from '@/db/constants'
+import { isPgError } from '@/db/isPgError'
 import { requireRow } from '@/db/requireRow'
 import {
   categoryTable,
@@ -163,6 +165,23 @@ async function settleBehindHeldTransaction<Result>(options: {
   }
 }
 
+/**
+ * Reads the `cause` an oRPC error carries, where the underlying database or helper error lives.
+ * @param settled - Outcome of a call run through {@link settleBehindHeldTransaction}.
+ * @returns The rejection's `cause`, or `undefined` when the call resolved or carried none.
+ * @example
+ * readFailureCause({ error: new ORPCError('INTERNAL_SERVER_ERROR', { cause: dbError }) }) // => dbError
+ */
+function readFailureCause(
+  settled: { value: unknown } | { error: unknown },
+): unknown {
+  if (!('error' in settled)) return undefined
+  const { error } = settled
+  return typeof error === 'object' && error !== null && 'cause' in error
+    ? error.cause
+    : undefined
+}
+
 describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
   test('fails the rename instead of reporting a phantom success when another request deletes the category first', async () => {
     // Arrange
@@ -193,6 +212,8 @@ describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
       error: {
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Failed to update category',
+        // The vanished row is what failed it, not some other error inside the procedure.
+        cause: { message: 'category.update matched no row' },
       },
     })
   })
@@ -222,6 +243,7 @@ describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
       error: {
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Failed to delete category',
+        cause: { message: 'category.delete matched no row' },
       },
     })
   })
@@ -268,6 +290,10 @@ describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
         message: 'Failed to import local completions',
       },
     })
+    // The category the batch was filed under vanished, so the row insert broke a foreign key.
+    expect(isPgError(readFailureCause(settled), PG_FOREIGN_KEY_VIOLATION)).toBe(
+      true,
+    )
     expect(batchRowsAfterFailure?.value).toBe(0)
     expect(retry).toEqual({ batchId, imported: 1, alreadyImported: false })
   })

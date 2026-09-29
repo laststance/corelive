@@ -58,7 +58,7 @@ async function ensureUser(clerkId: string): Promise<{ id: number }> {
       .from(userTable)
       .where(eq(userTable.clerkId, clerkId))
       .limit(1),
-    'user.findUniqueOrThrow',
+    'user.select',
   )
 }
 
@@ -157,7 +157,7 @@ describeIfDb('completed.importLocal', () => {
           ),
         )
         .limit(1),
-      'completed.findFirstOrThrow',
+      'completed.select',
     )
     expect(row.completedAt?.toISOString()).toBe('2026-07-04T12:34:56.000Z')
   })
@@ -321,7 +321,7 @@ describeIfDb('completed.importLocal', () => {
           ),
         )
         .limit(1),
-      'completed.findFirstOrThrow',
+      'completed.select',
     )
     expect(row.category.name).toBe('General')
   })

@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto'
 
-import { eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Webhook } from 'svix'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
 import { categoryTable, userTable } from '@/db/schema'
@@ -135,12 +135,14 @@ describeIfDb('Clerk webhook signature verification', () => {
       ])
     },
   )
+})
 
-  test('rejects a tampered signed payload before any database write', async () => {
+describe('Clerk webhook signature rejection', () => {
+  test('rejects a tampered signed payload with 400 before any database write', async () => {
     // Arrange — the signed payload is complete (it carries an email), so only
     // the signature check stands between it and a user row.
-    const signedClerkId = freshClerkId()
-    const tamperedClerkId = freshClerkId()
+    const signedClerkId = `test_webhook_${randomUUID()}`
+    const tamperedClerkId = `test_webhook_${randomUUID()}`
     const signedBody = JSON.stringify({
       type: 'user.created',
       data: {
@@ -153,16 +155,14 @@ describeIfDb('Clerk webhook signature verification', () => {
       method: 'POST',
       body: signedBody.replaceAll(signedClerkId, tamperedClerkId),
     })
+    const transaction = vi.spyOn(db, 'transaction')
 
     // Act
     const response = await POST(request)
 
-    // Assert
+    // Assert — every write the route makes goes through a transaction, and none was opened.
     expect(response.status).toBe(400)
-    const storedUsers = await db
-      .select({ id: userTable.id })
-      .from(userTable)
-      .where(inArray(userTable.clerkId, [signedClerkId, tamperedClerkId]))
-    expect(storedUsers).toEqual([])
+    expect(transaction).not.toHaveBeenCalled()
+    transaction.mockRestore()
   })
 })

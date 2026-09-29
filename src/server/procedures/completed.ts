@@ -8,6 +8,7 @@ import { isPgError } from '@/db/isPgError'
 import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
 import { requireRow } from '@/db/requireRow'
 import { categoryTable, completedTable, importBatchTable } from '@/db/schema'
+import { IMPORT_TRANSACTION_TIMEOUT_MS, runTransaction } from '@/db/transaction'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 import { toLocalDayKey } from '@/lib/toLocalDayKey'
 
@@ -29,6 +30,8 @@ import {
 } from '../schemas/completed'
 import { calculateStreaks } from '../utils/calculateStreaks'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
+
+import { findOwnedCategory } from './category'
 
 /**
  * Window during which a Completed row may be hard-deleted via {@link deleteCompleted}.
@@ -120,18 +123,17 @@ export const getHeatmap = authMiddleware
         const day = dayMap.get(dateKey)!
         day.count++
 
-        if (entry.category) {
-          const categoryId = entry.category.id
-          if (!day.categories.has(categoryId)) {
-            day.categories.set(categoryId, {
-              id: categoryId,
-              name: entry.category.name,
-              color: entry.category.color,
-              count: 0,
-            })
-          }
-          day.categories.get(categoryId)!.count++
+        // Both aggregation queries inner-join the category (a required FK), so every entry has one.
+        const categoryId = entry.category.id
+        if (!day.categories.has(categoryId)) {
+          day.categories.set(categoryId, {
+            id: categoryId,
+            name: entry.category.name,
+            color: entry.category.color,
+            count: 0,
+          })
         }
+        day.categories.get(categoryId)!.count++
       }
 
       const data = Array.from(dayMap.entries()).map(([date, entry]) => ({
@@ -223,7 +225,6 @@ export const getDayDetail = authMiddleware
         { id: number; name: string; color: string; count: number }
       >()
       for (const entry of entries) {
-        if (!entry.category) continue
         const existing = categoryRollup.get(entry.category.id)
         if (existing) {
           existing.count++
@@ -417,17 +418,7 @@ export const createCompleted = authMiddleware
       const { user } = context
       const { categoryId, title } = input
 
-      const [category] = await db
-        .select({ id: categoryTable.id })
-        .from(categoryTable)
-        .where(
-          and(
-            eq(categoryTable.id, categoryId),
-            eq(categoryTable.userId, user.id),
-          ),
-        )
-        .limit(1)
-      if (!category) {
+      if (!(await findOwnedCategory(user.id, categoryId))) {
         throw new ORPCError('NOT_FOUND', {
           message: 'Category not found',
         })
@@ -520,7 +511,7 @@ export const deleteCompleted = authMiddleware
  * Exists because a `/write` visitor can sign up and merge before the Clerk
  * webhook's seed lands, and an import that 404s there would strand the device's
  * whole history. Called only by {@link importLocalCompleted}, outside its
- * transaction — a unique violation from the seed would abort the batch insert.
+ * transaction, so the seed cannot abort the batch insert.
  * @param userId - Owner whose default category is wanted.
  * @returns The category id to file every imported row under.
  * @example
@@ -536,20 +527,14 @@ async function resolveImportCategoryId(userId: number): Promise<number> {
     .limit(1)
   if (existing) return existing.id
 
-  try {
-    const created = requireRow(
-      await db
-        .insert(categoryTable)
-        .values({ ...DEFAULT_CATEGORY_SEED, userId })
-        .returning({ id: categoryTable.id }),
-      'category.insert',
-    )
-    return created.id
-  } catch (error) {
-    // Unique violation on (name, userId): the webhook (or a non-default "General")
-    // already owns the name, so fall through to whatever the account does have.
-    if (!isPgError(error, PG_UNIQUE_VIOLATION)) throw error
-  }
+  // DO NOTHING returns no row when the webhook (or a non-default "General") already owns the
+  // name (unique index on name + userId); fall through to whatever the account does have.
+  const [created] = await db
+    .insert(categoryTable)
+    .values({ ...DEFAULT_CATEGORY_SEED, userId })
+    .onConflictDoNothing()
+    .returning({ id: categoryTable.id })
+  if (created) return created.id
 
   const [fallback] = await db
     .select({ id: categoryTable.id })
@@ -596,7 +581,8 @@ export const importLocalCompleted = authMiddleware
     try {
       const categoryId = await resolveImportCategoryId(user.id)
 
-      const imported = await db.transaction(async (tx) => {
+      // Up to 2000 rows in one transaction, so it gets the longer limit the previous ORM gave it.
+      const imported = await runTransaction(async (tx) => {
         await tx
           .insert(importBatchTable)
           .values({ id: namespacedBatchId, userId: user.id })
@@ -619,7 +605,7 @@ export const importLocalCompleted = authMiddleware
           .onConflictDoNothing()
           .returning({ id: completedTable.id })
         return insertedRows.length
-      })
+      }, IMPORT_TRANSACTION_TIMEOUT_MS)
 
       return { batchId, imported, alreadyImported: false }
     } catch (error) {

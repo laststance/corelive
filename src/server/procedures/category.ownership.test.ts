@@ -207,8 +207,8 @@ describeIfDb('category badge counts and owner checks (real PostgreSQL)', () => {
     expect(storedTask).toMatchObject({ categoryId: general.id })
   })
 
-  test('answers an update with no fields by returning the category unchanged and stamping updatedAt', async () => {
-    // Arrange — park updatedAt in the past so a fresh stamp is unmistakable.
+  test('answers an update with no fields by returning the stored category and leaving updatedAt alone', async () => {
+    // Arrange — park updatedAt in the past so any stamp would be unmistakable.
     const { clerkId, userId } = await arrangeAccount()
     const work = requireRow(
       await db
@@ -230,8 +230,8 @@ describeIfDb('category badge counts and owner checks (real PostgreSQL)', () => {
       authContext(clerkId),
     )
 
-    // Assert — the name and color survive and the row is stamped as touched.
+    // Assert — the name and color survive and nothing counts as touched.
     expect(updated).toMatchObject({ id: work.id, name: 'Work', color: 'green' })
-    expect(updated.updatedAt.getTime()).toBeGreaterThan(parkedAt.getTime())
+    expect(updated.updatedAt).toEqual(parkedAt)
   })
 })

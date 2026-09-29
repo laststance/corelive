@@ -51,7 +51,7 @@ describeIfDb('home.bootstrap', () => {
     const clerkId = freshClerkId()
     const user = requireRow(
       await db.insert(userTable).values({ clerkId }).returning(),
-      'user.create',
+      'user.insert',
     )
     const category = requireRow(
       await db
@@ -63,7 +63,7 @@ describeIfDb('home.bootstrap', () => {
           userId: user.id,
         })
         .returning(),
-      'category.create',
+      'category.insert',
     )
     await db.insert(todoTable).values({
       categoryId: category.id,

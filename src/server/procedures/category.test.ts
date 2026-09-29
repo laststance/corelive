@@ -108,7 +108,7 @@ describeIfDb(
           .from(userTable)
           .where(eq(userTable.clerkId, clerkId))
           .limit(1),
-        'user.findUnique',
+        'user.select',
       )
       const seeded = await db
         .select()
@@ -138,7 +138,7 @@ describeIfDb(
       const clerkId = freshClerkId()
       const user = requireRow(
         await db.insert(userTable).values({ clerkId }).returning(),
-        'user.create',
+        'user.insert',
       )
       await db.insert(categoryTable).values({
         name: 'Work',
@@ -185,7 +185,7 @@ describeIfDb(
             userId: general.userId,
           })
           .returning(),
-        'category.create',
+        'category.insert',
       )
       return { clerkId, general, work }
     }
@@ -213,7 +213,7 @@ describeIfDb(
             .from(categoryTable)
             .where(eq(categoryTable.id, general.id))
             .limit(1),
-          'category.findUniqueOrThrow',
+          'category.select',
         ),
       ).toMatchObject({ name: 'General', isDefault: true })
     })
@@ -275,7 +275,7 @@ describeIfDb(
             categoryId: work.id,
           })
           .returning(),
-        'todo.create',
+        'todo.insert',
       )
 
       // Act
@@ -289,7 +289,7 @@ describeIfDb(
             .from(todoTable)
             .where(eq(todoTable.id, task.id))
             .limit(1),
-          'todo.findUniqueOrThrow',
+          'todo.select',
         ),
       ).toMatchObject({ categoryId: general.id })
     })

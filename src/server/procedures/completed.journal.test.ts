@@ -90,7 +90,7 @@ async function seedCompletedTableRow(
       .from(userTable)
       .where(eq(userTable.clerkId, clerkId))
       .limit(1),
-    'user.findUniqueOrThrow',
+    'user.select',
   )
   // Get-or-create "General": an existing row is left untouched, then read back.
   await db
@@ -113,7 +113,7 @@ async function seedCompletedTableRow(
         ),
       )
       .limit(1),
-    'category.upsert',
+    'category.insert',
   )
   await db
     .insert(completedTable)
@@ -143,7 +143,7 @@ async function seedTodoCompletionAt(
       .from(userTable)
       .where(eq(userTable.clerkId, clerkId))
       .limit(1),
-    'user.findUniqueOrThrow',
+    'user.select',
   )
   const resolvedCategoryId =
     categoryId ??
@@ -153,7 +153,7 @@ async function seedTodoCompletionAt(
         .from(categoryTable)
         .where(eq(categoryTable.userId, user.id))
         .limit(1),
-      'category.findFirstOrThrow',
+      'category.select',
     ).id
   await db.insert(todoTable).values({
     text: title,
@@ -315,7 +315,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         .from(userTable)
         .where(eq(userTable.clerkId, clerkId))
         .limit(1),
-      'user.findUniqueOrThrow',
+      'user.select',
     )
     const focusCategory = requireRow(
       await db
@@ -326,7 +326,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
           userId: user.id,
         })
         .returning(),
-      'category.create',
+      'category.insert',
     )
     const generalCategory = requireRow(
       await db
@@ -339,7 +339,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
           ),
         )
         .limit(1),
-      'category.findFirstOrThrow',
+      'category.select',
     )
     await db.insert(completedTable).values([
       {
@@ -420,7 +420,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         .from(userTable)
         .where(eq(userTable.clerkId, clerkId))
         .limit(1),
-      'user.findUniqueOrThrow',
+      'user.select',
     )
 
     // Act — the journal (newest-first) and the heatmap reader (oldest-first) over

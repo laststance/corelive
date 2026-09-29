@@ -2,13 +2,11 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { eq } from 'drizzle-orm'
+import { DrizzleQueryError, eq, or } from 'drizzle-orm'
 import { Webhook } from 'svix'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
-import { PG_UNIQUE_VIOLATION } from '@/db/constants'
-import { isPgError } from '@/db/isPgError'
 import { categoryTable, userTable } from '@/db/schema'
 import { listCategories } from '@/server/procedures/category'
 import { describeIfDb } from '@/server/procedures/describeIfDb'
@@ -24,10 +22,11 @@ vi.mock('@/env.mjs', () => ({ env: { WEBHOOK_SECRET: testSigningSecret } }))
 import { POST } from './route'
 
 /**
- * Real-DB suite for Clerk webhook deliveries that must not add rows: a
- * `user.created` that arrives after the auth middleware already created the
- * account (the webhook now shares the app's one `db` and writes the user and its
- * "General" in one transaction), and an event carrying no email address.
+ * Suite for Clerk webhook deliveries beyond the first clean `user.created`: one
+ * that arrives late (the auth middleware already created the account), one that
+ * is delivered twice, one whose email a stale account still holds, one with no
+ * email address, and a database write that fails. The webhook shares the app's
+ * one `db` and writes the user and its "General" in one transaction.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -110,36 +109,166 @@ afterEach(async () => {
   createdClerkIds.clear()
 })
 
-describeIfDb('Clerk webhook deliveries that add no rows', () => {
-  test('rejects a late user.created for an account the app already created, leaving one user and one "General"', async () => {
+/**
+ * Builds a signed `user.created` request for one account.
+ * @param messageId - Svix message identifier bound into the signature.
+ * @param clerkId - Clerk user identifier in the payload.
+ * @param email - Address in the payload's first email entry.
+ * @param username - Username the route stores as the account name.
+ * @returns The signed webhook request.
+ * @example
+ * userCreatedRequest('msg_1', 'test_webhook_delivery_…', 'a@example.com', 'ann')
+ */
+function userCreatedRequest(
+  messageId: string,
+  clerkId: string,
+  email: string,
+  username: string,
+): Request {
+  return signedWebhookRequest(
+    messageId,
+    JSON.stringify({
+      type: 'user.created',
+      data: {
+        id: clerkId,
+        email_addresses: [{ email_address: email }],
+        username,
+      },
+    }),
+  )
+}
+
+/**
+ * Creates the account the way the auth middleware does on a first request: a user row with no name or email, plus "General".
+ * @param clerkId - Clerk user identifier the request authenticates as.
+ * @returns Nothing once the account exists.
+ * @example
+ * await createAccountThroughMiddleware(freshClerkId())
+ */
+async function createAccountThroughMiddleware(clerkId: string): Promise<void> {
+  await call(listCategories, undefined, {
+    context: { headers: new Headers({ Authorization: `Bearer ${clerkId}` }) },
+  })
+}
+
+describeIfDb('Clerk webhook deliveries against an existing database', () => {
+  test('completes a late user.created for an account the app already created, filling its name and email and keeping one "General"', async () => {
     // Arrange — the first authenticated request created the account before the webhook arrived.
     const clerkId = freshClerkId()
-    await call(listCategories, undefined, {
-      context: {
-        headers: new Headers({ Authorization: `Bearer ${clerkId}` }),
-      },
-    })
-    const request = signedWebhookRequest(
+    await createAccountThroughMiddleware(clerkId)
+    const request = userCreatedRequest(
       'msg_late',
-      JSON.stringify({
-        type: 'user.created',
-        data: {
-          id: clerkId,
-          email_addresses: [{ email_address: `${clerkId}@example.com` }],
-          username: 'late-user',
-        },
-      }),
+      clerkId,
+      `${clerkId}@example.com`,
+      'late-user',
     )
 
     // Act
-    const failure = await POST(request).then(
-      () => undefined,
-      (error: unknown) => error,
+    const response = await POST(request)
+
+    // Assert
+    expect(response.status).toBe(201)
+    expect(await readAccountRows(clerkId)).toEqual({
+      userCount: 1,
+      categoryNames: ['General'],
+    })
+    const [stored] = await db
+      .select({ name: userTable.name, email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+    expect(stored).toEqual({
+      name: 'late-user',
+      email: `${clerkId}@example.com`,
+    })
+  })
+
+  test('keeps the name and email an account already holds when a late user.created carries different ones', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+    await createAccountThroughMiddleware(clerkId)
+    await db
+      .update(userTable)
+      .set({ name: 'Renamed In App', email: `${clerkId}-current@example.com` })
+      .where(eq(userTable.clerkId, clerkId))
+    const request = userCreatedRequest(
+      'msg_stale_payload',
+      clerkId,
+      `${clerkId}-original@example.com`,
+      'original-name',
     )
 
-    // Assert — the Clerk ID unique index stops the insert and the transaction adds no second "General".
-    expect(isPgError(failure, PG_UNIQUE_VIOLATION)).toBe(true)
+    // Act
+    const response = await POST(request)
+
+    // Assert
+    expect(response.status).toBe(201)
+    const [stored] = await db
+      .select({ name: userTable.name, email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+    expect(stored).toEqual({
+      name: 'Renamed In App',
+      email: `${clerkId}-current@example.com`,
+    })
+  })
+
+  test('answers a Svix retry of an already handled user.created with 201 and no second user or "General"', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+    const email = `${clerkId}@example.com`
+    await POST(userCreatedRequest('msg_first', clerkId, email, 'retried'))
+
+    // Act
+    const retry = await POST(
+      userCreatedRequest('msg_first', clerkId, email, 'retried'),
+    )
+
+    // Assert
+    expect(retry.status).toBe(201)
     expect(await readAccountRows(clerkId)).toEqual({
+      userCount: 1,
+      categoryNames: ['General'],
+    })
+  })
+
+  test('creates a re-registered Clerk account whose address a deleted account still holds, releasing the address from the stale row', async () => {
+    // Arrange — no user.deleted handler exists, so the old account's row keeps the address.
+    const staleClerkId = freshClerkId()
+    const newClerkId = freshClerkId()
+    const sharedEmail = `${newClerkId}@example.com`
+    await db.insert(userTable).values({
+      clerkId: staleClerkId,
+      email: sharedEmail,
+      name: 'Old Account',
+    })
+    const request = userCreatedRequest(
+      'msg_reregistered',
+      newClerkId,
+      sharedEmail,
+      'new-account',
+    )
+
+    // Act
+    const response = await POST(request)
+
+    // Assert
+    expect(response.status).toBe(201)
+    const stored = await db
+      .select({ clerkId: userTable.clerkId, email: userTable.email })
+      .from(userTable)
+      .where(
+        or(
+          eq(userTable.clerkId, staleClerkId),
+          eq(userTable.clerkId, newClerkId),
+        ),
+      )
+    expect(stored).toEqual(
+      expect.arrayContaining([
+        { clerkId: staleClerkId, email: null },
+        { clerkId: newClerkId, email: sharedEmail },
+      ]),
+    )
+    expect(await readAccountRows(newClerkId)).toEqual({
       userCount: 1,
       categoryNames: ['General'],
     })
@@ -166,4 +295,28 @@ describeIfDb('Clerk webhook deliveries that add no rows', () => {
       categoryNames: [],
     })
   })
+})
+
+test('answers 500 with a bare body when the database write fails, so the failed query and the new user email never reach Clerk or the response', async () => {
+  // Arrange — the transaction rejects the way drizzle does: wrapping the SQL and its bound values.
+  // No row is ever written, so the ID stays out of the DB teardown set and the test runs without a database.
+  const clerkId = `test_webhook_delivery_${randomUUID()}`
+  const email = `${clerkId}@example.com`
+  const failedInsert = new DrizzleQueryError(
+    'insert into "User" ("clerkId", "email") values ($1, $2)',
+    [clerkId, email],
+    new Error('connection terminated'),
+  )
+  const transaction = vi
+    .spyOn(db, 'transaction')
+    .mockRejectedValueOnce(failedInsert)
+  const request = userCreatedRequest('msg_db_down', clerkId, email, 'unlucky')
+
+  // Act
+  const response = await POST(request)
+
+  // Assert
+  expect(response.status).toBe(500)
+  expect(await response.text()).toBe('Error occured')
+  transaction.mockRestore()
 })

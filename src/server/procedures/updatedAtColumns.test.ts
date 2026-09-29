@@ -31,12 +31,29 @@ import { getMyTree } from './skillTree'
  * stamped them client-side on every write; drizzle only does that where the schema
  * says `$onUpdate`, and a missing one is silent (the column just stays stale). Each
  * test first parks `updatedAt` at a far-past sentinel, runs the real write path, and
- * asserts the column moved forward.
+ * asserts the column now holds the moment of the write (a stamp shifted by a
+ * time-zone offset, or left stale, would miss the window).
  */
 vi.setConfig({ testTimeout: 30_000 })
 
-/** A stale value no real write can produce, so "later than this" proves the write stamped the column. */
+/** A stale value no real write can produce, so "now" proves the write stamped the column. */
 const STALE_UPDATED_AT = new Date('2020-01-01T00:00:00.000Z')
+
+/** Longest a stamp may differ from the test's own clock and still count as "just written". */
+const JUST_WRITTEN_TOLERANCE_MS = 5_000
+
+/**
+ * Asserts a stamp is the current instant, so a stale value or one shifted by a local UTC offset fails.
+ * @param stamp - `updatedAt` value read back after the write.
+ * @returns Nothing; throws through `expect` when the stamp is not within seconds of now.
+ * @example
+ * expectStampedJustNow(updated.updatedAt)
+ */
+function expectStampedJustNow(stamp: Date): void {
+  expect(Math.abs(stamp.getTime() - Date.now())).toBeLessThan(
+    JUST_WRITTEN_TOLERANCE_MS,
+  )
+}
 
 const createdClerkIds = new Set<string>()
 
@@ -126,9 +143,7 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
 
     // Assert
     expect(updated.name).toBe('Deep Focus')
-    expect(updated.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
+    expectStampedJustNow(updated.updatedAt)
   })
 
   test('stamps ElectronSettings.updatedAt on the insert path and advances it on the conflict-update path', async () => {
@@ -152,14 +167,10 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
     )
 
     // Assert
-    expect(inserted.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
+    expectStampedJustNow(inserted.updatedAt)
     expect(updated.id).toBe(inserted.id)
     expect(updated.hideAppIcon).toBe(true)
-    expect(updated.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
+    expectStampedJustNow(updated.updatedAt)
   })
 
   test('advances Todo.updatedAt and Completed.updatedAt when deleting a category moves their rows to the default category', async () => {
@@ -203,13 +214,9 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
       .from(completedTable)
       .where(eq(completedTable.id, completed!.id))
     expect(movedTodo!.categoryId).not.toBe(doomed.id)
-    expect(movedTodo!.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
+    expectStampedJustNow(movedTodo!.updatedAt)
     expect(movedCompleted!.categoryId).toBe(movedTodo!.categoryId)
-    expect(movedCompleted!.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
+    expectStampedJustNow(movedCompleted!.updatedAt)
   })
 
   test('advances User, SkillTree and SkillNode updatedAt on a direct update, covering the tables no procedure edits today', async () => {
@@ -258,15 +265,9 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
       .select()
       .from(skillNodeTable)
       .where(eq(skillNodeTable.id, nodeId))
-    expect(userRow!.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
-    expect(treeRow!.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
-    expect(nodeRow!.updatedAt.getTime()).toBeGreaterThan(
-      STALE_UPDATED_AT.getTime(),
-    )
+    expectStampedJustNow(userRow!.updatedAt)
+    expectStampedJustNow(treeRow!.updatedAt)
+    expectStampedJustNow(nodeRow!.updatedAt)
   })
 
   test('fills updatedAt on insert for tables whose column has no database default', async () => {
@@ -282,7 +283,7 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
       .select()
       .from(categoryTable)
       .where(eq(categoryTable.userId, user.id))
-    expect(user.updatedAt).toBeInstanceOf(Date)
-    expect(category!.updatedAt).toBeInstanceOf(Date)
+    expectStampedJustNow(user.updatedAt)
+    expectStampedJustNow(category!.updatedAt)
   })
 })
