@@ -1,6 +1,8 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
 import { DrizzleQueryError } from 'drizzle-orm'
-import { DatabaseError } from 'pg'
 import { describe, expect, test } from 'vitest'
 
 import { createLogger } from './logger'
@@ -95,135 +97,44 @@ describe('createLogger', () => {
     expect(lastRawLine()).not.toContain('insert into')
   })
 
-  test('sanitizes a failed query nested inside plain objects and arrays, so grouping values under one key cannot bring the SQL or bound values back', () => {
+  test('logs a fixed placeholder instead of throwing when the logged object cannot be inspected, and never writes the error next to it', () => {
     // Arrange
     const { logger, lastLine, lastRawLine } = createCapturingProductionLogger()
-
-    // Act
-    logger.error(
-      { details: { attempts: [{ failure: makeFailedQuery() }] }, userId: 7 },
-      'Sync failed',
-    )
-
-    // Assert
-    expect(lastLine()).toMatchObject({
-      msg: 'Sync failed',
-      userId: 7,
-      details: { attempts: [{ failure: { type: 'Error' } }] },
-    })
-    expect(lastRawLine()).not.toContain('secret-title')
-    expect(lastRawLine()).not.toContain('insert into')
-  })
-
-  test('leaves a nested object with its own toJSON redaction alone, so shaping errors never exposes what that object hides', () => {
-    // Arrange
-    const { logger, lastRawLine } = createCapturingProductionLogger()
-    const details = { secret: 'DO-NOT-LOG' }
-    Object.defineProperty(details, 'toJSON', {
-      value: () => ({ redacted: true }),
-    })
-
-    // Act
-    logger.error({ details }, 'Operation failed')
-
-    // Assert
-    expect(lastRawLine()).toContain('"redacted":true')
-    expect(lastRawLine()).not.toContain('DO-NOT-LOG')
-  })
-
-  test('does not call a getter inside a logged object, so a getter that throws cannot make the log call fail', () => {
-    // Arrange
-    const { logger, lastLine } = createCapturingProductionLogger()
-    const details = {
-      get nested(): never {
+    const logged = {
+      failure: makeFailedQuery(),
+      get details(): never {
         throw new Error('getter exploded')
       },
     }
 
     // Act
-    const logging = () => logger.error({ details }, 'Operation failed')
+    const logging = () => logger.error(logged, 'Operation failed')
 
     // Assert
     expect(logging).not.toThrow()
-    expect(lastLine()).toMatchObject({ msg: 'Operation failed' })
+    expect(lastLine()).toMatchObject({
+      msg: 'Operation failed',
+      logObject: '[unable to inspect the logged object]',
+    })
+    expect(lastRawLine()).not.toContain('secret-title')
+    expect(lastRawLine()).not.toContain('insert into')
   })
 
-  test('sanitizes a failed query however its container serializes: non-callable toJSON, a toJSON that returns the error, a getter that returns it, and a class instance as the whole log object', () => {
-    // Arrange
-    const { logger, lastRawLine } = createCapturingProductionLogger()
-    class LogRecord {
-      failure = makeFailedQuery()
-    }
-    const failure = makeFailedQuery()
-    const shapes: [string, unknown][] = [
-      ['non-callable toJSON', { details: { toJSON: null, failure } }],
-      [
-        'toJSON returning the error',
-        {
-          details: {
-            failure,
-            toJSON() {
-              return { failure }
-            },
-          },
-        },
-      ],
-      [
-        'getter returning the error',
-        {
-          details: {
-            get failure() {
-              return makeFailedQuery()
-            },
-          },
-        },
-      ],
-      ['class instance as the log object', new LogRecord()],
-    ]
-
-    for (const [shape, logged] of shapes) {
-      // Act
-      logger.error(logged as object, 'Operation failed')
-
-      // Assert
-      expect(lastRawLine(), shape).not.toContain('secret-title')
-      expect(lastRawLine(), shape).not.toContain('insert into')
-    }
-  })
-
-  test('sanitizes a raw PostgreSQL error nested in a logged object, because its detail quotes the offending row values', () => {
-    // Arrange
-    const { logger, lastRawLine } = createCapturingProductionLogger()
-    const violation = new DatabaseError('duplicate key', 10, 'error')
-    violation.detail = 'Key (email)=(secret@example.com) already exists.'
-    violation.code = '23505'
-
-    // Act
-    logger.error({ attempts: [{ violation }] }, 'Sync failed')
-
-    // Assert
-    expect(lastRawLine()).not.toContain('secret@example.com')
-    expect(lastRawLine()).toContain('23505')
-  })
-
-  test('logs an object whose Proxy throws on inspection instead of failing the log call', () => {
-    // Arrange
-    const { logger, lastLine } = createCapturingProductionLogger()
-    const details = new Proxy(
-      { status: 'failed' },
-      {
-        has() {
-          throw new Error('has trap')
-        },
-      },
+  test('keeps database packages out of the logger import graph, because Client Components import the logger and a server-only package fails to initialize in the browser', () => {
+    // Arrange — every module the logger loads from this folder.
+    const sources = ['logger.ts', 'serializeLogError.ts'].map((file) =>
+      readFileSync(path.resolve(process.cwd(), 'src/lib', file), 'utf8'),
     )
 
     // Act
-    const logging = () => logger.error({ details }, 'Operation failed')
+    const importedPackages = sources.flatMap((source) =>
+      [...source.matchAll(/^import .* from '([^'.][^']*)'/gm)].map(
+        (match) => match[1],
+      ),
+    )
 
     // Assert
-    expect(logging).not.toThrow()
-    expect(lastLine()).toMatchObject({ msg: 'Operation failed' })
+    expect(importedPackages).toEqual(['pino'])
   })
 
   test('keeps the caller message when an Error is logged with one', () => {

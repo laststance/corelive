@@ -1,6 +1,3 @@
-import { DrizzleQueryError } from 'drizzle-orm'
-import { DatabaseError } from 'pg'
-
 import { MAX_ERROR_CAUSE_DEPTH } from '../db/constants'
 
 /** Shape an error takes in a log line: identifies the failure without carrying row data. */
@@ -166,9 +163,11 @@ export const logSerializers = {
 /**
  * pino `formatters.log` hook for {@link createLogger}: shapes an {@link Error} that sits directly under ANY key of a log object.
  *
- * pino applies {@link logSerializers} by key name, so `log.error({ failure: error }, …)` would reach the log line through `JSON.stringify`, which includes a failed query's own enumerable `query` and `params`. This hook runs before the serializers (pino's `asJson` calls `formatters.log` first), so the rule "no SQL or bound value in the logs" no longer depends on what a call site names its key. An error nested deeper is covered by {@link installLogSafeJson}.
+ * pino applies {@link logSerializers} by key name, so `log.error({ failure: error }, …)` would reach the log line through `JSON.stringify`, which includes a failed query's own enumerable `query` and `params`. This hook runs before the serializers (pino's `asJson` calls `formatters.log` first), so the rule "no SQL or bound value in the logs" no longer depends on what a call site names its key.
+ *
+ * Only an error DIRECTLY under a key is shaped; containers are not walked. Pass errors as `{ error }` (every call site does), never wrapped in another object. Walking arbitrary values was tried and rejected: copying an object drops its own `toJSON` redaction and evaluates its getters, and each guard against that opened another bypass (see the reproductions in the review history of PR #196). This module also stays free of `drizzle-orm` and `pg` imports because Client Components import the logger too.
  * @param object - The object a call site passed to the logger.
- * @returns A copy in which every direct {@link Error} value is replaced by its log-safe shape; other values are unchanged.
+ * @returns A copy in which every direct {@link Error} value is replaced by its log-safe shape; other values are unchanged. When the object cannot be inspected (a getter that throws), a fixed placeholder object instead, so that logging never throws and never writes what it could not check.
  * @example
  * shapeErrorsUnderAnyKey({ failure: new Error('boom'), userId: 7 })
  * // => { failure: { type: 'Error', message: 'boom', stack: '…' }, userId: 7 }
@@ -176,34 +175,14 @@ export const logSerializers = {
 export function shapeErrorsUnderAnyKey(
   object: Record<string, unknown>,
 ): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(object).map(([key, value]) => [
-      key,
-      serializeLogError(value),
-    ]),
-  )
+  try {
+    return Object.fromEntries(
+      Object.entries(object).map(([key, value]) => [
+        key,
+        serializeLogError(value),
+      ]),
+    )
+  } catch {
+    return { logObject: '[unable to inspect the logged object]' }
+  }
 }
-
-/**
- * Gives a database error class a `toJSON` that returns its log-safe shape, so `JSON.stringify` never reaches the SQL, bound parameters or row detail the instance carries, whatever the instance is nested in.
- *
- * pino serializes a log object with `JSON.stringify` semantics, which honor `toJSON` on any value at any depth: inside arrays, class instances, getters, or a container that defines its own `toJSON`. That makes this a net under {@link shapeErrorsUnderAnyKey}, which only sees errors directly under a key, without walking (and thereby disturbing) the objects call sites log. Idempotent; the property is non-enumerable.
- * @param errorClass - The class whose instances carry row data.
- * @returns Nothing.
- * @example
- * installLogSafeJson(DrizzleQueryError)
- * JSON.stringify({ a: [failedQuery] }) // => '{"a":[{"type":"DrizzleQueryError", …}]}' with no SQL or params
- */
-function installLogSafeJson(errorClass: { prototype: Error }): void {
-  Object.defineProperty(errorClass.prototype, 'toJSON', {
-    value(this: Error) {
-      return shapeError(this, 0)
-    },
-    configurable: true,
-    writable: true,
-    enumerable: false,
-  })
-}
-
-installLogSafeJson(DrizzleQueryError)
-installLogSafeJson(DatabaseError)
