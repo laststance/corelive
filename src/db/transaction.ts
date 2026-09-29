@@ -1,0 +1,42 @@
+import { sql } from 'drizzle-orm'
+
+import { db } from './index'
+
+/** The transaction handle {@link db}.transaction passes to its callback. */
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Time budget for an ordinary transaction — the interactive-transaction default of the previous ORM. */
+const DEFAULT_TRANSACTION_TIMEOUT_MS = 5_000
+
+/** Time budget for `importLocalCompleted`, whose single transaction inserts up to 2000 rows. */
+export const IMPORT_TRANSACTION_TIMEOUT_MS = 30_000
+
+/**
+ * Runs a callback in one database transaction that gives up on a stalled database instead of waiting for the platform to kill the request.
+ *
+ * The previous ORM aborted an interactive transaction after 5 s (30 s for the local-completion import) and every catch block turned that into the oRPC 500 envelope; a bare `db.transaction` has no limit, so a held lock or a hung connection would pin a pooled connection until the serverless function timed out. The limits are set with `set_config(..., true)` (`SET LOCAL`), which lasts only until COMMIT/ROLLBACK: nothing leaks to the pooled connection, and no startup parameter is needed (a pooler in transaction mode rejects those).
+ * Called by every procedure that writes more than one row atomically: {@link resolveUser}'s account creation, the Clerk webhook, `deleteCategory`, `importLocalCompleted` and the skill-tree writes.
+ *
+ * @param callback - Work to run atomically; receives the transaction handle.
+ * @param timeoutMs - Longest a single statement, or a pause between statements, may take.
+ * @returns Whatever the callback returns, once committed.
+ * @throws A `DrizzleQueryError` wrapping SQLSTATE `57014` (statement) or `25P03` (idle in transaction) when a limit is hit; the transaction rolls back.
+ * @example
+ * const category = await runTransaction(async (tx) => {
+ *   await tx.update(todoTable).set({ categoryId: 1 }).where(eq(todoTable.categoryId, 2))
+ *   return tx.delete(categoryTable).where(eq(categoryTable.id, 2)).returning()
+ * })
+ */
+export async function runTransaction<Result>(
+  callback: (tx: Transaction) => Promise<Result>,
+  timeoutMs: number = DEFAULT_TRANSACTION_TIMEOUT_MS,
+): Promise<Result> {
+  return db.transaction(async (tx) => {
+    // `set_config` takes bound parameters, unlike `SET LOCAL`, so the limit needs no string splicing.
+    await tx.execute(sql`
+      SELECT set_config('statement_timeout', ${String(timeoutMs)}, true),
+             set_config('idle_in_transaction_session_timeout', ${String(timeoutMs)}, true)
+    `)
+    return callback(tx)
+  })
+}

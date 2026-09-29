@@ -13,8 +13,12 @@
  * const log = createModuleLogger('electronSettings')
  * log.info({ userId: '123' }, 'Settings updated')
  * log.error({ error, userId }, 'Failed to update settings')
+ * // `error`, `err` and `context` pass through {@link logSerializers}: a failed query logs its
+ * // SQLSTATE and constraint but never its SQL text, bound params or row detail.
  */
 import pino from 'pino'
+
+import { logSerializers } from './serializeLogError'
 
 /**
  * Determines if the logger should use pretty printing.
@@ -42,6 +46,8 @@ const isDevelopment = (): boolean => {
 const createLogger = (): pino.Logger => {
   return pino({
     level: isDevelopment() ? 'debug' : 'info',
+    // Both branches: pino's stock serializers would log a DrizzleQueryError's SQL and bound values.
+    serializers: logSerializers,
     ...(isDevelopment()
       ? {
           transport: {

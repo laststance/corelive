@@ -41,12 +41,18 @@ const timestampColumn = (name: string) =>
   timestamp(name, { precision: 3, mode: 'date' })
 
 /**
- * Builds the `createdAt` column: `timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`.
+ * Builds the `createdAt` column: `timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`, stamped in UTC by the app.
  *
  * `CURRENT_TIMESTAMP` (not `now()`) is what the original migrations wrote, and
- * `pg_dump` prints the two differently.
+ * `pg_dump` prints the two differently. The DB default still exists for raw SQL
+ * and old rows, but Drizzle's insert path fills the column with `new Date()`
+ * first (`$defaultFn` takes precedence and is runtime-only, so `drizzle-kit`
+ * sees no DDL change). Without it the DB would cast `CURRENT_TIMESTAMP`
+ * (a `timestamptz`) to `timestamp(3)` in the SESSION time zone, shifting every
+ * new row by the session's UTC offset on a non-UTC connection; the previous ORM
+ * always stamped UTC app-side.
  *
- * @returns A finished, not-null column builder with the DB-side default.
+ * @returns A finished, not-null column builder that stamps `new Date()`.
  * @example
  * createdAt: createdAtColumn()
  */
@@ -54,6 +60,7 @@ const createdAtColumn = () =>
   timestampColumn('createdAt')
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull()
+    .$defaultFn(() => new Date())
 
 /**
  * Builds the `updatedAt` column with `@updatedAt`-style semantics (stamped on insert and on every update).
@@ -96,6 +103,7 @@ export const categoryTable = pgTable(
     userId: integer('userId').notNull(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
+    // Plain text with no CHECK constraint: a stored color can sit outside the API palette, so readers cast explicitly.
     color: text('color').default('blue').notNull(),
     isDefault: boolean('isDefault').default(false).notNull(),
   },
@@ -260,11 +268,13 @@ export const skillNodeTable = pgTable(
     x: doublePrecision('x').notNull(),
     y: doublePrecision('y').notNull(),
     createdAt: createdAtColumn(),
-    // Unlike the other tables this column also has a DB default (added by the
-    // skill_tree_v1_hardening migration), so `$onUpdate` only fires on update.
+    // Unlike the other tables this column also has a DB default (part of the live
+    // schema captured in drizzle/0000_init.sql), so `$onUpdate` only fires on update;
+    // `$defaultFn` stamps insert in UTC for the same reason as {@link createdAtColumn}.
     updatedAt: timestampColumn('updatedAt')
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull()
+      .$defaultFn(() => new Date())
       .$onUpdate(() => new Date()),
   },
   (table) => [
