@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest'
 /**
  * Contract tests for the fail-closed local-DB gate (`scripts/assert-local-db.cjs`).
  * The gate is the single chokepoint that keeps destructive ops (`db:reset`,
- * `db:truncate`, `prisma:migrate`, `prisma:seed`, and — via `describeIfDb` — the
+ * `db:truncate`, `db:migrate`, `db:seed`, and — via `describeIfDb` — the
  * real-DB integration suites) from running against a non-local Postgres. It had
  * no tests; now that `describeIfDb` shells out to it and depends on its
  * exit-code contract, lock that contract here. These never touch a database —

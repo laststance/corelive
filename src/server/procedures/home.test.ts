@@ -2,11 +2,19 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
+import { eq } from 'drizzle-orm'
 import { afterEach, expect, test } from 'vitest'
 
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import {
+  categoryTable,
+  completedTable,
+  todoTable,
+  userTable,
+} from '@/db/schema'
 import { COMPLETED_JOURNAL_PAGE_SIZE } from '@/lib/constants/completed'
 import { HOME_HEATMAP_DAYS } from '@/lib/constants/home'
-import { prisma } from '@/lib/prisma'
 
 import { describeIfDb } from './describeIfDb'
 import { bootstrapHome } from './home'
@@ -23,12 +31,16 @@ function freshClerkId(): string {
 afterEach(async () => {
   // Remove every dependent row before its test user because these relations do not all cascade.
   for (const clerkId of createdClerkIds) {
-    const user = await prisma.user.findUnique({ where: { clerkId } })
+    const [user] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+      .limit(1)
     if (!user) continue
-    await prisma.completed.deleteMany({ where: { userId: user.id } })
-    await prisma.todo.deleteMany({ where: { userId: user.id } })
-    await prisma.category.deleteMany({ where: { userId: user.id } })
-    await prisma.user.delete({ where: { id: user.id } })
+    await db.delete(completedTable).where(eq(completedTable.userId, user.id))
+    await db.delete(todoTable).where(eq(todoTable.userId, user.id))
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
+    await db.delete(userTable).where(eq(userTable.id, user.id))
   }
   createdClerkIds.clear()
 })
@@ -37,30 +49,33 @@ describeIfDb('home.bootstrap', () => {
   test('returns every critical Home region through one authenticated procedure call', async () => {
     // Arrange
     const clerkId = freshClerkId()
-    const user = await prisma.user.create({ data: { clerkId } })
-    const category = await prisma.category.create({
-      data: {
-        color: 'blue',
-        isDefault: true,
-        name: 'General',
-        userId: user.id,
-      },
+    const user = requireRow(
+      await db.insert(userTable).values({ clerkId }).returning(),
+      'user.create',
+    )
+    const category = requireRow(
+      await db
+        .insert(categoryTable)
+        .values({
+          color: 'blue',
+          isDefault: true,
+          name: 'General',
+          userId: user.id,
+        })
+        .returning(),
+      'category.create',
+    )
+    await db.insert(todoTable).values({
+      categoryId: category.id,
+      completed: false,
+      text: "Review Sarah's PR before standup",
+      userId: user.id,
     })
-    await prisma.todo.create({
-      data: {
-        categoryId: category.id,
-        completed: false,
-        text: "Review Sarah's PR before standup",
-        userId: user.id,
-      },
-    })
-    await prisma.completed.create({
-      data: {
-        categoryId: category.id,
-        completedAt: new Date(),
-        title: 'Shipped the bootstrap',
-        userId: user.id,
-      },
+    await db.insert(completedTable).values({
+      categoryId: category.id,
+      completedAt: new Date(),
+      title: 'Shipped the bootstrap',
+      userId: user.id,
     })
 
     // Act

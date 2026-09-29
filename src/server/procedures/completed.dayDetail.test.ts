@@ -2,9 +2,18 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
+import { and, eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import {
+  categoryTable,
+  completedTable,
+  importBatchTable,
+  todoTable,
+  userTable,
+} from '@/db/schema'
 
 import { listCategories } from './category'
 import { getDayDetail } from './completed'
@@ -72,32 +81,58 @@ async function seedCompletedTableRow(
   // Any authed procedure triggers authMiddleware's lazy user upsert; list is
   // the cheapest read-only one.
   await call(listCategories, undefined, authContext(clerkId))
-  const user = await prisma.user.findUniqueOrThrow({ where: { clerkId } })
-  const category = await prisma.category.upsert({
-    where: { name_userId: { name: 'General', userId: user.id } },
-    update: {},
-    create: {
+  const user = requireRow(
+    await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+      .limit(1),
+    'user.findUniqueOrThrow',
+  )
+  // Get-or-create "General": an existing row is left untouched, then read back.
+  await db
+    .insert(categoryTable)
+    .values({
       name: 'General',
       color: 'blue',
       isDefault: true,
       userId: user.id,
-    },
-  })
-  await prisma.completed.create({
-    data: { title, completedAt, userId: user.id, categoryId: category.id },
-  })
+    })
+    .onConflictDoNothing({ target: [categoryTable.name, categoryTable.userId] })
+  const category = requireRow(
+    await db
+      .select()
+      .from(categoryTable)
+      .where(
+        and(
+          eq(categoryTable.name, 'General'),
+          eq(categoryTable.userId, user.id),
+        ),
+      )
+      .limit(1),
+    'category.upsert',
+  )
+  await db
+    .insert(completedTable)
+    .values({ title, completedAt, userId: user.id, categoryId: category.id })
 }
 
 afterEach(async () => {
   for (const clerkId of createdClerkIds) {
-    const user = await prisma.user.findUnique({ where: { clerkId } })
+    const [user] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+      .limit(1)
     if (!user) continue
     // FK-safe teardown: child rows before the user.
-    await prisma.completed.deleteMany({ where: { userId: user.id } })
-    await prisma.todo.deleteMany({ where: { userId: user.id } })
-    await prisma.importBatch.deleteMany({ where: { userId: user.id } })
-    await prisma.category.deleteMany({ where: { userId: user.id } })
-    await prisma.user.delete({ where: { id: user.id } })
+    await db.delete(completedTable).where(eq(completedTable.userId, user.id))
+    await db.delete(todoTable).where(eq(todoTable.userId, user.id))
+    await db
+      .delete(importBatchTable)
+      .where(eq(importBatchTable.userId, user.id))
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
+    await db.delete(userTable).where(eq(userTable.id, user.id))
   }
   createdClerkIds.clear()
 })

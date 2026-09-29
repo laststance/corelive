@@ -3,31 +3,38 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import type { Prisma } from '@prisma/client'
+import { asc, eq, sql } from 'drizzle-orm'
 import { expect, test, vi } from 'vitest'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import { categoryTable, todoTable, userTable } from '@/db/schema'
 
 import { describeIfDb } from './describeIfDb'
 
 /**
  * Real-DB proof for the data migration that makes "General" every account's
- * fixed default. It runs the exact SQL file `prisma migrate deploy` ships, so an
- * edit to the file is what gets tested. The SQL rewrites every account, so each
- * case runs inside one transaction that is always rolled back: a local dev DB's
- * real accounts are never touched, and there is nothing to clean up.
+ * fixed default. It runs the historical migration SQL, kept verbatim as a
+ * fixture, so the exact statements that shipped are what gets tested. The SQL
+ * rewrites every account, so each case runs inside one transaction that is
+ * always rolled back: a local dev DB's real accounts are never touched, and
+ * there is nothing to clean up.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
 const MIGRATION_SQL_PATH = path.join(
   process.cwd(),
-  'prisma',
-  'migrations',
-  '20260924120000_default_category_named_general',
-  'migration.sql',
+  'src',
+  'server',
+  'procedures',
+  '__fixtures__',
+  '20260924120000_default_category_named_general.sql',
 )
 
-/** Thrown at the end of every case so Prisma rolls the transaction back. */
+/** The transaction handle `db.transaction` passes to its callback. */
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Thrown at the end of every case so the transaction rolls back. */
 class RollbackSignal extends Error {}
 
 /**
@@ -38,65 +45,66 @@ class RollbackSignal extends Error {}
  * await inRolledBackTransaction(async (tx) => { await runMigration(tx) })
  */
 async function inRolledBackTransaction(
-  runCase: (tx: Prisma.TransactionClient) => Promise<void>,
+  runCase: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
   try {
-    await prisma.$transaction(
-      async (tx) => {
-        await runCase(tx)
-        throw new RollbackSignal()
-      },
-      { timeout: 20_000 },
-    )
+    await db.transaction(async (tx) => {
+      await runCase(tx)
+      throw new RollbackSignal()
+    })
   } catch (error) {
     if (!(error instanceof RollbackSignal)) throw error
   }
 }
 
 /**
- * Executes the migration file statement by statement (a prepared statement
- * takes one command). Comment lines are dropped first: they contain semicolons.
+ * Executes the whole migration file as one query. With no bound parameters the
+ * driver uses the simple query protocol, which accepts several statements (and
+ * their comments) in one round-trip, the same way a migration runner applies it.
  * @param tx - The case's transaction client.
  * @returns Resolves once every statement has run.
  * @example
  * await runMigration(tx)
  */
-async function runMigration(tx: Prisma.TransactionClient): Promise<void> {
-  const statements = readFileSync(MIGRATION_SQL_PATH, 'utf8')
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith('--'))
-    .join('\n')
-    .split(';')
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0)
-  for (const statement of statements) {
-    await tx.$executeRawUnsafe(statement)
-  }
+async function runMigration(tx: Transaction): Promise<void> {
+  await tx.execute(sql.raw(readFileSync(MIGRATION_SQL_PATH, 'utf8')))
 }
 
-async function createUser(tx: Prisma.TransactionClient) {
-  return tx.user.create({
-    data: { clerkId: `test_default_migration_${randomUUID()}` },
-  })
+async function createUser(tx: Transaction) {
+  return requireRow(
+    await tx
+      .insert(userTable)
+      .values({ clerkId: `test_default_migration_${randomUUID()}` })
+      .returning(),
+    'user.create',
+  )
 }
 
 async function createCategory(
-  tx: Prisma.TransactionClient,
+  tx: Transaction,
   userId: number,
   name: string,
   isDefault: boolean,
 ) {
-  return tx.category.create({
-    data: { name, color: 'blue', isDefault, userId },
-  })
+  return requireRow(
+    await tx
+      .insert(categoryTable)
+      .values({ name, color: 'blue', isDefault, userId })
+      .returning(),
+    'category.create',
+  )
 }
 
-async function readCategories(tx: Prisma.TransactionClient, userId: number) {
-  return tx.category.findMany({
-    where: { userId },
-    orderBy: { id: 'asc' },
-    select: { id: true, name: true, isDefault: true },
-  })
+async function readCategories(tx: Transaction, userId: number) {
+  return tx
+    .select({
+      id: categoryTable.id,
+      name: categoryTable.name,
+      isDefault: categoryTable.isDefault,
+    })
+    .from(categoryTable)
+    .where(eq(categoryTable.userId, userId))
+    .orderBy(asc(categoryTable.id))
 }
 
 describeIfDb(
@@ -113,9 +121,17 @@ describeIfDb(
           true,
         )
         const general = await createCategory(tx, user.id, 'General', false)
-        const task = await tx.todo.create({
-          data: { text: 'Keep me', userId: user.id, categoryId: renamed.id },
-        })
+        const task = requireRow(
+          await tx
+            .insert(todoTable)
+            .values({
+              text: 'Keep me',
+              userId: user.id,
+              categoryId: renamed.id,
+            })
+            .returning(),
+          'todo.create',
+        )
 
         // Act
         await runMigration(tx)
@@ -126,7 +142,14 @@ describeIfDb(
           { id: general.id, name: 'General', isDefault: true },
         ])
         expect(
-          await tx.todo.findUniqueOrThrow({ where: { id: task.id } }),
+          requireRow(
+            await tx
+              .select()
+              .from(todoTable)
+              .where(eq(todoTable.id, task.id))
+              .limit(1),
+            'todo.findUniqueOrThrow',
+          ),
         ).toMatchObject({ categoryId: renamed.id })
       })
     })
