@@ -1,6 +1,6 @@
 /**
  * Single source of truth for the seeded development user's identity,
- * imported by BOTH `prisma/seed.ts` and `prisma/seed.dev.ts`
+ * imported by BOTH `src/db/seed/seed.ts` and `src/db/seed/seed.dev.ts`
  * (year-scale power-user dev seed). The two seeds MUST target the same Clerk
  * dev-tenant user, and this module makes that contract compiler-enforced instead
  * of a hand-synced pair of string literals that could silently drift.

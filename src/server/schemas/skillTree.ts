@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /**
  * Coerces a DB/JSON date value to a Date. oRPC wire format hands us strings
- * after JSON round-trip; Prisma hands us Dates directly. This accepts either.
+ * after JSON round-trip; the database layer hands us Dates directly. This accepts either.
  *
  * For string inputs we require a strict ISO-8601 UTC datetime (the format
  * `Date.prototype.toJSON()` produces — always `Z`-suffixed), so garbage like
@@ -26,7 +26,7 @@ const AssignmentRowSchema = z.object({
   createdAt: dateLike,
 })
 
-/** A skill node with its assignments. Maps to Prisma SkillNode + NodeAssignment[]. */
+/** A skill node with its assignments. Maps to the SkillNode row + NodeAssignment[]. */
 const SkillNodeSchema = z.object({
   id: z.number().int().positive(),
   skillTreeId: z.number().int().positive(),

@@ -188,7 +188,7 @@ const remove = os
     return { success: true }
   })
 
-/** Same keys as `src/server/router.ts`, minus the Prisma and Clerk halves. */
+/** Same keys as `src/server/router.ts`, minus the database-backed and Clerk halves. */
 const testRouter = {
   category: { list, create, update, delete: remove },
 }

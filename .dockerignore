@@ -57,5 +57,5 @@ logs/
 *.tmp
 *.temp
 
-# Prisma generated client (will be regenerated)
-prisma/generated/ 
+# Local drizzle-kit scratch output
+drizzle/scratch/ 

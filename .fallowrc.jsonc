@@ -58,7 +58,7 @@
       "**/*.{test,spec}.{ts,tsx,mjs}",
       "**/__tests__/**",
       "scripts/**",
-      "prisma/seed*.ts",
+      "src/db/seed/*.ts",
     ],
   },
 }

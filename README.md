@@ -7,7 +7,7 @@
 
 CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. Built with [Next.js](https://nextjs.org/), available as a web app and a macOS desktop app (Electron).
 
-> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Prisma schema, APIs, or any other element freely and abruptly — there is **no need to write or preserve migrations, keep existing data, or maintain backward compatibility**. When the schema changes, just reset the database (`pnpm db:reset`).
+> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to write or preserve migrations, keep existing data, or maintain backward compatibility**. When the schema changes, just reset the database (`pnpm db:reset`).
 
 ## Documentation
 
@@ -79,11 +79,14 @@ The Docker Compose service maps **host port `5491`** to the container's default 
 # Start the PostgreSQL database
 docker compose up -d postgres
 
-# Apply migrations (also generates the Prisma client)
-pnpm prisma:migrate
+# Apply migrations (SQL lives in drizzle/, schema in src/db/schema.ts)
+pnpm db:migrate
 
 # Seed initial data (optional)
-pnpm prisma:seed
+pnpm db:seed
+
+# After editing src/db/schema.ts, generate the next migration
+pnpm db:generate
 ```
 
 Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:

@@ -46,7 +46,7 @@ conditions or follow-up work, not defects it introduced.
 
 ### Dead `ImportBatch` schema still costs index maintenance
 
-**What:** Prisma `model ImportBatch`, plus `Completed.importBatchId` / `Todo.importBatchId` and their two `@@index` entries, have zero production writers since paste-import was deleted in v0.21.0 (PR #168). Seeds and tests are the only writers.
+**What:** The `ImportBatch` table, plus `Completed.importBatchId` / `Todo.importBatchId` and their two indexes, have zero production writers since paste-import was deleted in v0.21.0 (PR #168). Seeds and tests are the only writers.
 
 **Why:** Unlike the other v0.21.0 residue, this is not a free dead switch. Every insert into `Completed` and `Todo` still pays index maintenance for a column nothing reads.
 

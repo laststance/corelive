@@ -8,7 +8,7 @@ import type { TodoId, TodoText } from '../lib/domain-types'
  * A draggable card representing a completed Todo in the pool drawer.
  * Uses `useDraggable` for DnD and renders as a button for a11y.
  *
- * @param props.id - The Prisma Todo ID. Prefixed with `todo-` internally to
+ * @param props.id - The database Todo ID. Prefixed with `todo-` internally to
  *   avoid collisions with SkillNode droppable IDs in the same DragDropProvider.
  * @param props.text - The display text of the todo item.
  * @returns A draggable button element that can be dropped onto a SkillNodeCircle.

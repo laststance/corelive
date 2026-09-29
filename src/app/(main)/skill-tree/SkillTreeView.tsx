@@ -317,7 +317,7 @@ export const SkillTreeView = function SkillTreeView() {
 
 /**
  * Parses a draggable DnD id of the form `todo-<number>` into its numeric todo id.
- * Rejects zero and negative ids because Prisma autoincrement ids are always
+ * Rejects zero and negative ids because database autoincrement ids are always
  * positive integers — guards against `Number('')` coercing `"todo-"` to `0`.
  * @param id - The raw id from the latest dnd-kit drag source.
  * @returns
@@ -343,7 +343,7 @@ function parseTodoDragId(
 
 /**
  * Parses a droppable DnD id of the form `node-<number>` into its numeric node id.
- * Rejects zero and negative ids because Prisma autoincrement ids are always
+ * Rejects zero and negative ids because database autoincrement ids are always
  * positive integers — guards against `Number('')` coercing `"node-"` to `0`.
  * @param id - The raw id from the latest dnd-kit drop target.
  * @returns

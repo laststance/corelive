@@ -1,23 +1,16 @@
-import 'dotenv/config'
-
 import type { WebhookEvent } from '@clerk/nextjs/server'
-import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '@prisma/client'
 import { headers } from 'next/headers'
 import { Webhook } from 'svix'
 
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import { categoryTable, userTable } from '@/db/schema'
 import { env } from '@/env.mjs'
 import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 
 import { log } from '../../../lib/logger'
 
 export const runtime = 'nodejs'
-
-const adapter = new PrismaPg({
-  connectionString: process.env.POSTGRES_PRISMA_URL!,
-})
-
-const prisma = new PrismaClient({ adapter })
 
 /**
  * Handles signed Clerk events from Next.js and creates each new user's default category.
@@ -77,18 +70,22 @@ export async function POST(req: Request) {
     const name =
       userData.username || `${firstName} ${lastName}`.trim() || 'Unknown User'
 
-    await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          clerkId: userData.id,
-          name,
-          email: emailAddress,
-        },
-      })
+    await db.transaction(async (tx) => {
+      const user = requireRow(
+        await tx
+          .insert(userTable)
+          .values({
+            clerkId: userData.id,
+            name,
+            email: emailAddress,
+          })
+          .returning({ id: userTable.id }),
+        'user.insert',
+      )
 
-      await tx.category.create({
-        data: { ...DEFAULT_CATEGORY_SEED, userId: user.id },
-      })
+      await tx
+        .insert(categoryTable)
+        .values({ ...DEFAULT_CATEGORY_SEED, userId: user.id })
     })
   }
 

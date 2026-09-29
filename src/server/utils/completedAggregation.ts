@@ -1,4 +1,7 @@
-import { prisma } from '@/lib/prisma'
+import { and, asc, eq, gte, isNull, lte, or } from 'drizzle-orm'
+
+import { db } from '@/db'
+import { categoryTable, completedTable, todoTable } from '@/db/schema'
 
 /**
  * One row in the merged Todo+Completed completion stream consumed by the
@@ -67,59 +70,88 @@ export async function fetchCompletedEntries(
   // postgres planner uses the primary userId access path. No extra index
   // needed — see /plan-eng-review §4.
   const [todoRows, completedRows] = await Promise.all([
-    prisma.todo.findMany({
-      where: {
-        userId,
-        completed: true,
-        // Filter by the stable completion day. `completedAt` is the semantic
-        // completion timestamp (migration 20260603235155); fall back to
-        // `updatedAt` only for rows whose `completedAt` is still null (an
-        // unconverted write path or a pre-backfill row) so they never vanish
-        // from the heatmap.
-        OR: [
-          { completedAt: { gte: startDate, lte: endDate } },
-          { completedAt: null, updatedAt: { gte: startDate, lte: endDate } },
-        ],
-      },
-      select: {
-        id: true,
-        text: true,
-        completedAt: true,
-        updatedAt: true,
-        category: { select: { id: true, name: true, color: true } },
-      },
-      orderBy: { updatedAt: 'asc' },
-    }),
-    prisma.completed.findMany({
-      where: {
-        userId,
-        // archived rows are excluded from the heatmap surface. Nothing writes
-        // `archived` any more (the archive flow went with the Todo vertical),
-        // so every live row is archived:false — but the filter stays: an
-        // archived:true row would silently erase its whole day.
-        archived: false,
-        // Filter by the semantic completion day, falling back to `createdAt`
-        // (insert time) only for rows whose `completedAt` is null. This lands
-        // the dated-import case (a row with a past `completedAt` and a today
-        // `createdAt`) on its REAL day, and keeps Slice-1 paste-import correct
-        // (those rows have completedAt = now() = createdAt). The backfill set
-        // completedAt = createdAt, so nulls are not expected — the fallback is
-        // defensive.
-        OR: [
-          { completedAt: { gte: startDate, lte: endDate } },
-          { completedAt: null, createdAt: { gte: startDate, lte: endDate } },
-        ],
-      },
-      select: {
-        id: true,
-        title: true,
+    db
+      .select({
+        id: todoTable.id,
+        text: todoTable.text,
+        completedAt: todoTable.completedAt,
+        updatedAt: todoTable.updatedAt,
+        category: {
+          id: categoryTable.id,
+          name: categoryTable.name,
+          color: categoryTable.color,
+        },
+      })
+      .from(todoTable)
+      // categoryId is a required FK, so every todo joins exactly one category.
+      .innerJoin(categoryTable, eq(todoTable.categoryId, categoryTable.id))
+      .where(
+        and(
+          eq(todoTable.userId, userId),
+          eq(todoTable.completed, true),
+          // Filter by the stable completion day. `completedAt` is the semantic
+          // completion timestamp (migration 20260603235155); fall back to
+          // `updatedAt` only for rows whose `completedAt` is still null (an
+          // unconverted write path or a pre-backfill row) so they never vanish
+          // from the heatmap.
+          or(
+            and(
+              gte(todoTable.completedAt, startDate),
+              lte(todoTable.completedAt, endDate),
+            ),
+            and(
+              isNull(todoTable.completedAt),
+              gte(todoTable.updatedAt, startDate),
+              lte(todoTable.updatedAt, endDate),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(todoTable.updatedAt)),
+    db
+      .select({
+        id: completedTable.id,
+        title: completedTable.title,
         // Bucket by `completedAt ?? createdAt` (coalesced in JS below).
-        completedAt: true,
-        createdAt: true,
-        category: { select: { id: true, name: true, color: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
+        completedAt: completedTable.completedAt,
+        createdAt: completedTable.createdAt,
+        category: {
+          id: categoryTable.id,
+          name: categoryTable.name,
+          color: categoryTable.color,
+        },
+      })
+      .from(completedTable)
+      .innerJoin(categoryTable, eq(completedTable.categoryId, categoryTable.id))
+      .where(
+        and(
+          eq(completedTable.userId, userId),
+          // archived rows are excluded from the heatmap surface. Nothing writes
+          // `archived` any more (the archive flow went with the Todo vertical),
+          // so every live row is archived:false — but the filter stays: an
+          // archived:true row would silently erase its whole day.
+          eq(completedTable.archived, false),
+          // Filter by the semantic completion day, falling back to `createdAt`
+          // (insert time) only for rows whose `completedAt` is null. This lands
+          // the dated-import case (a row with a past `completedAt` and a today
+          // `createdAt`) on its REAL day, and keeps Slice-1 paste-import correct
+          // (those rows have completedAt = now() = createdAt). The backfill set
+          // completedAt = createdAt, so nulls are not expected — the fallback is
+          // defensive.
+          or(
+            and(
+              gte(completedTable.completedAt, startDate),
+              lte(completedTable.completedAt, endDate),
+            ),
+            and(
+              isNull(completedTable.completedAt),
+              gte(completedTable.createdAt, startDate),
+              lte(completedTable.createdAt, endDate),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(completedTable.createdAt)),
   ])
 
   const todoEntries: CompletedEntry[] = todoRows.map((row) => ({

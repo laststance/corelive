@@ -1,7 +1,11 @@
 import { ORPCError, os } from '@orpc/server'
-import { Prisma, type User } from '@prisma/client'
+import { eq, sql } from 'drizzle-orm'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/db'
+import { PG_UNIQUE_VIOLATION } from '@/db/constants'
+import { isPgError } from '@/db/isPgError'
+import { requireRow } from '@/db/requireRow'
+import { categoryTable, type User, userTable } from '@/db/schema'
 import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 import { ServerTiming } from '@/server/timing/ServerTiming'
 
@@ -22,38 +26,51 @@ function getClerkUserId(headers: Headers): string | undefined {
   return clerkUserId.length > 0 ? clerkUserId : undefined
 }
 
+/** Reads one user row by Clerk ID, whenever auth middleware needs the account behind a Bearer credential. @param clerkUserId - Authenticated Clerk user identifier. @returns The user row, or undefined when none exists yet. @example `await findUserByClerkId('user_123') // => { id: 7, clerkId: 'user_123', ... }` */
+async function findUserByClerkId(
+  clerkUserId: string,
+): Promise<User | undefined> {
+  const [existingUser] = await db
+    .select()
+    .from(userTable)
+    .where(eq(userTable.clerkId, clerkUserId))
+    .limit(1)
+  return existingUser
+}
+
 /** Resolves webhook-synced users without writes and creates only a genuinely missing row when auth middleware first sees it. @param clerkUserId - Authenticated Clerk user identifier. @returns The existing, newly-created, or concurrent winning user row. @example `await resolveUser('user_123') // => { clerkId: 'user_123', ... }` */
 async function resolveUser(clerkUserId: string): Promise<User> {
-  const existingUser = await prisma.user.findUnique({
-    where: { clerkId: clerkUserId },
-  })
+  const existingUser = await findUserByClerkId(clerkUserId)
   if (existingUser) return existingUser
 
   try {
-    return await prisma.user.create({
-      data: {
-        clerkId: clerkUserId,
-        // Seeded here, in the one write that creates the account, so a
-        // webhook-less user never reaches a procedure with zero categories.
-        // `listCategories` keeps its own seed for accounts created before this.
-        categories: { create: DEFAULT_CATEGORY_SEED },
-        ...(clerkUserId === DEVELOPMENT_USER_ID
-          ? { email: 'test@example.com', name: 'Test User' }
-          : {}),
-      },
+    // One transaction, two inserts: the user and its default category commit
+    // together, so a
+    // webhook-less user never reaches a procedure with zero categories.
+    // `listCategories` keeps its own seed for accounts created before this.
+    return await db.transaction(async (tx) => {
+      const createdUser = requireRow(
+        await tx
+          .insert(userTable)
+          .values({
+            clerkId: clerkUserId,
+            ...(clerkUserId === DEVELOPMENT_USER_ID
+              ? { email: 'test@example.com', name: 'Test User' }
+              : {}),
+          })
+          .returning(),
+        'user.insert',
+      )
+      await tx
+        .insert(categoryTable)
+        .values({ ...DEFAULT_CATEGORY_SEED, userId: createdUser.id })
+      return createdUser
     })
   } catch (error) {
     // A webhook or parallel request may insert the unique Clerk row after our read.
-    if (
-      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-      error.code !== 'P2002'
-    ) {
-      throw error
-    }
+    if (!isPgError(error, PG_UNIQUE_VIOLATION)) throw error
 
-    const concurrentUser = await prisma.user.findUnique({
-      where: { clerkId: clerkUserId },
-    })
+    const concurrentUser = await findUserByClerkId(clerkUserId)
     if (concurrentUser) return concurrentUser
 
     // The unique winner should be readable; retain the original database error if it is not.
@@ -82,10 +99,8 @@ export const authMiddleware = os
     }
 
     // `SELECT 1` isolates connection acquisition from user lookup in production timing.
-    await serverTiming.measure(
-      'db',
-      async () =>
-        prisma.$queryRaw<Array<{ connected: number }>>`SELECT 1 AS connected`,
+    await serverTiming.measure('db', async () =>
+      db.execute(sql`SELECT 1 AS connected`),
     )
 
     const user = await serverTiming.measure('user', async () =>

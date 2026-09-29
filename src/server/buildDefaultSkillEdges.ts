@@ -1,19 +1,17 @@
-import type { Prisma } from '@prisma/client'
-
+// Relative + type-only on purpose: the tsx-run dev seed imports this file, and tsx does not reliably honor `@/`.
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../app/(main)/skill-tree/lib/template'
+import type { nodeEdgeTable, skillNodeTable } from '../db/schema'
 
 /** Resolves template edges after node creation for first-use import and development seeding.
  * @param skillTreeId - The newly created tree owning the edges.
  * @param createdNodes - Persisted node IDs and unique template names.
- * @returns Edge rows for Prisma's bulk insert; missing template nodes throw.
+ * @returns Edge rows for a bulk insert; missing template nodes throw.
  * @example buildDefaultSkillEdges(1, createdNodes)
  */
 export function buildDefaultSkillEdges(
   skillTreeId: number,
-  createdNodes: Prisma.SkillNodeGetPayload<{
-    select: { id: true; name: true }
-  }>[],
-): Prisma.NodeEdgeCreateManyInput[] {
+  createdNodes: Pick<typeof skillNodeTable.$inferSelect, 'id' | 'name'>[],
+): (typeof nodeEdgeTable.$inferInsert)[] {
   const nameToId = new Map(createdNodes.map(({ name, id }) => [name, id]))
   const slugToId = new Map<string, number>()
   for (const node of BACKEND_DEVELOPER_CORE_TEMPLATE.nodes) {

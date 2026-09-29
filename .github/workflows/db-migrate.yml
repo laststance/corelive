@@ -1,10 +1,10 @@
 # Production Database Migration Workflow
 #
-# This workflow deploys pending Prisma migrations to the production database.
+# This workflow deploys pending Drizzle migrations to the production database.
 #
 # Usage:
 #   1. Manual trigger: Go to Actions > DB Migrate > Run workflow
-#   2. Auto trigger: Push migration files to prisma/migrations/ on main branch
+#   2. Auto trigger: Push migration files to drizzle/ (or src/db/schema.ts) on main branch
 #
 # Required GitHub Secrets:
 #   - POSTGRES_PRISMA_URL: Production PostgreSQL connection string
@@ -35,8 +35,8 @@ on:
     branches:
       - main
     paths:
-      - 'prisma/migrations/**'
-      - 'prisma/schema.prisma'
+      - 'drizzle/**'
+      - 'src/db/schema.ts'
 
 permissions:
   contents: read
@@ -67,44 +67,25 @@ jobs:
       - name: Setup Node.js and pnpm
         uses: ./.github/actions/prepare
 
-      - name: Check migration status (before)
-        env:
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: |
-          echo "📋 Checking pending migrations..."
-          # Note: prisma migrate status exits with code 1 if there are pending migrations
-          # This is expected before deployment, so we ignore the exit code here
-          pnpm prisma:status || true
+      # drizzle-kit has no `migrate status`. `check` validates the committed migration
+      # folder (journal, snapshots, no collisions) without touching the database.
+      - name: Check migration files
+        run: pnpm exec drizzle-kit check
 
+      # The migrator applies every file newer than the newest row in
+      # drizzle.__drizzle_migrations, all inside one transaction. A database that is
+      # already up to date is a no-op.
       - name: Deploy migrations
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
         run: |
           echo "🚀 Deploying migrations to production database..."
-          pnpm prisma:deploy
+          pnpm exec drizzle-kit migrate
           echo "✅ Migrations deployed successfully!"
 
       - name: Dry run notice
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
-          echo "🔍 Dry run mode - no migrations were applied"
+          echo "🔍 Dry run mode - migration files were checked, nothing was applied"
           echo "Run this workflow again with 'dry_run: false' to apply migrations"
-
-      - name: Verify migration status (after)
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        env:
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: |
-          echo "📋 Verifying migration status..."
-          pnpm prisma:status
-          echo "✅ All migrations verified!"
-
-      - name: Generate Prisma Client
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        env:
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: |
-          echo "🔧 Generating Prisma client..."
-          pnpm prisma:generate
-          echo "✅ Prisma client generated!"

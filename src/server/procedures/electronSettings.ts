@@ -12,9 +12,14 @@
  * await orpcClient.electronSettings.upsert({ hideAppIcon: true })
  */
 import { ORPCError } from '@orpc/server'
+import { eq } from 'drizzle-orm'
 
+import { db } from '@/db'
+import { PG_UNIQUE_VIOLATION } from '@/db/constants'
+import { isPgError } from '@/db/isPgError'
+import { requireRow } from '@/db/requireRow'
+import { electronSettingsTable } from '@/db/schema'
 import { createModuleLogger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
 
 import { authMiddleware } from '../middleware/auth'
 import {
@@ -52,32 +57,35 @@ export const getElectronSettings = authMiddleware
       const { user } = context
 
       // Try to find existing settings first
-      let settings = await prisma.electronSettings.findUnique({
-        where: { userId: user.id },
-      })
+      let [settings] = await db
+        .select()
+        .from(electronSettingsTable)
+        .where(eq(electronSettingsTable.userId, user.id))
+        .limit(1)
 
       // If not found, create with defaults
       if (!settings) {
         try {
-          settings = await prisma.electronSettings.create({
-            data: {
-              userId: user.id,
-              ...DEFAULT_ELECTRON_SETTINGS,
-            },
-          })
+          settings = requireRow(
+            await db
+              .insert(electronSettingsTable)
+              .values({
+                userId: user.id,
+                ...DEFAULT_ELECTRON_SETTINGS,
+              })
+              .returning(),
+            'electronSettings.insert',
+          )
         } catch (createError: unknown) {
           // Handle race condition: if another request created settings
-          // between findUnique and create, catch P2002 and re-fetch
-          if (
-            createError &&
-            typeof createError === 'object' &&
-            'code' in createError &&
-            createError.code === 'P2002'
-          ) {
+          // between the select and the insert, catch the unique violation and re-fetch
+          if (isPgError(createError, PG_UNIQUE_VIOLATION)) {
             // Settings were created by another request - fetch the existing record
-            settings = await prisma.electronSettings.findUnique({
-              where: { userId: user.id },
-            })
+            ;[settings] = await db
+              .select()
+              .from(electronSettingsTable)
+              .where(eq(electronSettingsTable.userId, user.id))
+              .limit(1)
             if (!settings) {
               // Still not found after race - this shouldn't happen but handle it
               throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -86,7 +94,7 @@ export const getElectronSettings = authMiddleware
               })
             }
           } else {
-            // Re-throw non-P2002 errors
+            // Re-throw everything except the unique violation
             throw createError
           }
         }
@@ -105,7 +113,7 @@ export const getElectronSettings = authMiddleware
 /**
  * Upsert (create or update) Electron settings for the authenticated user.
  *
- * Uses Prisma upsert to handle both creation and update in one operation.
+ * Uses one `INSERT … ON CONFLICT ("userId") DO UPDATE` to handle both creation and update.
  * Only provided fields are updated; others retain their current values.
  *
  * @param input - Partial settings object with fields to update
@@ -137,15 +145,22 @@ export const upsertElectronSettings = authMiddleware
         )
       }
 
-      const settings = await prisma.electronSettings.upsert({
-        where: { userId: user.id },
-        update: input,
-        create: {
-          userId: user.id,
-          ...DEFAULT_ELECTRON_SETTINGS,
-          ...input,
-        },
-      })
+      const settings = requireRow(
+        await db
+          .insert(electronSettingsTable)
+          .values({
+            userId: user.id,
+            ...DEFAULT_ELECTRON_SETTINGS,
+            ...input,
+          })
+          // Conflict target = the unique index on userId; only provided fields change.
+          .onConflictDoUpdate({
+            target: electronSettingsTable.userId,
+            set: input,
+          })
+          .returning(),
+        'electronSettings.upsert',
+      )
 
       return settings
     } catch (error) {

@@ -60,11 +60,8 @@ jobs:
           timeout 60 bash -c 'until docker compose -f compose.yml -p corelive exec postgres env PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive; do sleep 2; done'
           echo "Database 'corelive' exists and is ready!"
 
-      - name: Run Prisma migrations 📦
-        run: pnpm prisma migrate deploy
-
-      - name: Generate Prisma Client 🗄️
-        run: pnpm prisma generate
+      - name: Run database migrations 📦
+        run: pnpm db:migrate
 
       - name: Generate Icons 🎨
         run: pnpm build:icons

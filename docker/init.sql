@@ -9,4 +9,4 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 SET timezone = 'UTC';
 
 -- Create any additional configurations here if needed
--- Note: Prisma will handle the schema creation through migrations 
+-- Note: the schema is created by the Drizzle migrations (pnpm db:migrate) 

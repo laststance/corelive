@@ -1,31 +1,34 @@
-import 'dotenv/config'
+import { and, eq, inArray } from 'drizzle-orm'
 
-import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '@prisma/client'
+// Relative imports (NOT the `@/` alias): tsx does not reliably honor tsconfig
+// `paths`. The template module is pure data with zero imports, and `../index`
+// only pulls in relative modules, so all of these resolve under tsx. We
+// deliberately do NOT import `importDefaultTemplate` — it relies on the logger
+// + auth middleware and would throw inside a tsx script.
+import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../../app/(main)/skill-tree/lib/template'
+import { buildDefaultSkillEdges } from '../../server/buildDefaultSkillEdges'
+import { buildDefaultSkillNodes } from '../../server/buildDefaultSkillNodes'
+import { db } from '../index'
+import {
+  categoryTable,
+  completedTable,
+  importBatchTable,
+  nodeAssignmentTable,
+  nodeEdgeTable,
+  skillNodeTable,
+  skillTreeTable,
+  todoTable,
+  userTable,
+} from '../schema'
 
-// Relative import (NOT the `@/` alias): tsx does not reliably honor tsconfig
-// `paths`, and this template module is pure data with zero imports, so pulling
-// it in by relative path is safe and cheap. We deliberately do NOT import
-// `importDefaultTemplate` / `@/lib/prisma` — those rely on the server Prisma
-// singleton + logger + auth middleware and would throw inside a tsx script.
-import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../src/app/(main)/skill-tree/lib/template'
-import { buildDefaultSkillEdges } from '../src/server/buildDefaultSkillEdges'
-import { buildDefaultSkillNodes } from '../src/server/buildDefaultSkillNodes'
-
-// Shared seeded-user identity (single source of truth with prisma/seed.ts).
+// Shared seeded-user identity (single source of truth with seed.ts).
 import { SEED_USER_CLERK_ID, SEED_USER_EMAIL } from './seedUser'
-
-const adapter = new PrismaPg({
-  connectionString: process.env.POSTGRES_PRISMA_URL!,
-})
-
-const prisma = new PrismaClient({ adapter })
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Localhost safety gate (in-script, defense-in-depth)
 //
 // The `seed:dev` npm script already runs `scripts/assert-local-db.cjs` first,
-// but a bare `tsx prisma/seed.dev.ts` would bypass it. This seed performs a
+// but a bare `tsx src/db/seed/seed.dev.ts` would bypass it. This seed performs a
 // USER-WIDE wipe (every Todo/Completed for the seeded user — far broader than
 // seed.ts's scoped 10-row delete), so we re-assert localhost here ourselves.
 // fail-closed: only proceed when the host is provably local.
@@ -44,7 +47,7 @@ const LOCAL_DB_HOSTS = new Set([
 /**
  * Throws unless `POSTGRES_PRISMA_URL` points at a local Docker/localhost DB —
  * the in-script twin of `scripts/assert-local-db.cjs`, so even a direct
- * `tsx prisma/seed.dev.ts` (which skips the npm-script gate) cannot wipe a
+ * `tsx src/db/seed/seed.dev.ts` (which skips the npm-script gate) cannot wipe a
  * remote DB. Called once at the top of `seedDev`, before any delete.
  * @param connectionString - The raw `POSTGRES_PRISMA_URL` value.
  * @returns void — returns normally only when the host is local; otherwise throws.
@@ -431,50 +434,75 @@ function buildCompletionCalendar(target: number): Date[] {
  */
 async function seedDev(): Promise<void> {
   // Defense-in-depth: refuse to run against a non-local DB even if the npm
-  // guard was bypassed (e.g. a bare `tsx prisma/seed.dev.ts`).
+  // guard was bypassed (e.g. a bare `tsx src/db/seed/seed.dev.ts`).
   assertLocalDatabase(process.env.POSTGRES_PRISMA_URL)
 
-  // ── 1. User (the SAME identity prisma/seed.ts targets — never a new scheme) ──
-  const user = await prisma.user.upsert({
-    where: { clerkId: SEED_USER_CLERK_ID },
-    update: {},
-    create: {
+  // ── 1. User (the SAME identity seed.ts targets — never a new scheme) ──
+  // Insert-if-missing, then read: an existing seeded user is never modified.
+  await db
+    .insert(userTable)
+    .values({
       clerkId: SEED_USER_CLERK_ID,
       email: SEED_USER_EMAIL,
       name: 'test01',
       bio: 'Test account for local development',
-    },
-  })
+    })
+    .onConflictDoNothing({ target: userTable.clerkId })
+  const [user] = await db
+    .select()
+    .from(userTable)
+    .where(eq(userTable.clerkId, SEED_USER_CLERK_ID))
+  if (!user) throw new Error('[seed:dev] Seed user missing after insert')
 
   // ── 2. Categories (idempotent upsert; General stays the default) ──
-  // General mirrors prisma/seed.ts; the rest give realistic life/work buckets.
-  const generalCategory = await prisma.category.upsert({
-    where: { name_userId: { name: 'General', userId: user.id } },
-    update: { isDefault: true },
-    create: {
+  // General mirrors seed.ts; the rest give realistic life/work buckets.
+  const [generalCategory] = await db
+    .insert(categoryTable)
+    .values({
       name: 'General',
       color: 'blue',
       isDefault: true,
       userId: user.id,
-    },
-  })
+    })
+    .onConflictDoUpdate({
+      target: [categoryTable.name, categoryTable.userId],
+      set: { isDefault: true },
+    })
+    .returning()
+  if (!generalCategory) {
+    throw new Error('[seed:dev] General category missing after upsert')
+  }
 
   // Upsert each extra category and collect every category id for FK use.
   const categories: { id: number; name: string }[] = [
     { id: generalCategory.id, name: 'General' },
   ]
   for (const seed of CATEGORY_SEEDS) {
-    const category = await prisma.category.upsert({
-      where: { name_userId: { name: seed.name, userId: user.id } },
-      update: {},
-      create: {
+    // Insert-if-missing, then read: an existing category keeps its color/default flag.
+    await db
+      .insert(categoryTable)
+      .values({
         name: seed.name,
         color: seed.color,
         isDefault: false,
         userId: user.id,
-      },
-    })
-    categories.push({ id: category.id, name: category.name })
+      })
+      .onConflictDoNothing({
+        target: [categoryTable.name, categoryTable.userId],
+      })
+    const [category] = await db
+      .select({ id: categoryTable.id, name: categoryTable.name })
+      .from(categoryTable)
+      .where(
+        and(
+          eq(categoryTable.name, seed.name),
+          eq(categoryTable.userId, user.id),
+        ),
+      )
+    if (!category) {
+      throw new Error(`[seed:dev] Category "${seed.name}" missing after insert`)
+    }
+    categories.push(category)
   }
 
   // ── 3. Idempotent clean-slate of THIS USER's seeded rows (approach (a)) ──
@@ -484,13 +512,25 @@ async function seedDev(): Promise<void> {
   // delete NodeAssignment explicitly first for readability. ImportBatch only
   // cascades from User, so we delete it explicitly too. Scoped to this user and
   // already gated to localhost by `assertLocalDatabase` above.
-  await prisma.nodeAssignment.deleteMany({
-    where: { node: { skillTree: { userId: user.id } } },
-  })
-  await prisma.skillTree.deleteMany({ where: { userId: user.id } })
-  await prisma.todo.deleteMany({ where: { userId: user.id } })
-  await prisma.completed.deleteMany({ where: { userId: user.id } })
-  await prisma.importBatch.deleteMany({ where: { userId: user.id } })
+  await db
+    .delete(nodeAssignmentTable)
+    .where(
+      inArray(
+        nodeAssignmentTable.nodeId,
+        db
+          .select({ id: skillNodeTable.id })
+          .from(skillNodeTable)
+          .innerJoin(
+            skillTreeTable,
+            eq(skillNodeTable.skillTreeId, skillTreeTable.id),
+          )
+          .where(eq(skillTreeTable.userId, user.id)),
+      ),
+    )
+  await db.delete(skillTreeTable).where(eq(skillTreeTable.userId, user.id))
+  await db.delete(todoTable).where(eq(todoTable.userId, user.id))
+  await db.delete(completedTable).where(eq(completedTable.userId, user.id))
+  await db.delete(importBatchTable).where(eq(importBatchTable.userId, user.id))
 
   // ── 4. ~360 completed Todos spread across the year ──
   // A clustered calendar gives believable rest days, weekend dips, and streaks.
@@ -513,7 +553,7 @@ async function seedDev(): Promise<void> {
       categoryId: category.id,
     }
   })
-  await prisma.todo.createMany({ data: completedTodoRows })
+  await db.insert(todoTable).values(completedTodoRows)
 
   // ── 5. ~40 active (incomplete) Todos so the active list is populated ──
   const activeTodoRows = Array.from(
@@ -531,7 +571,7 @@ async function seedDev(): Promise<void> {
       }
     },
   )
-  await prisma.todo.createMany({ data: activeTodoRows })
+  await db.insert(todoTable).values(activeTodoRows)
 
   // ── 6. ~200 Completed-table rows (the import/live-editor store) ──
   // First create the ImportBatch parent rows, then tag a slice of Completed rows
@@ -541,9 +581,9 @@ async function seedDev(): Promise<void> {
     { length: IMPORT_BATCH_COUNT },
     (_, i) => `dev-seed-batch-${i + 1}`,
   )
-  await prisma.importBatch.createMany({
-    data: batchIds.map((id) => ({ id, userId: user.id })),
-  })
+  await db
+    .insert(importBatchTable)
+    .values(batchIds.map((id) => ({ id, userId: user.id })))
 
   // Decide how many rows each batch owns (10..40), capped by the total target.
   const completedTableRows: {
@@ -596,30 +636,30 @@ async function seedDev(): Promise<void> {
       categoryId: category.id,
     })
   }
-  await prisma.completed.createMany({ data: completedTableRows })
+  await db.insert(completedTable).values(completedTableRows)
 
   // ── 7. Skill tree: reuse the real "Backend Developer Core" template ──
   // Replicates importDefaultTemplate's logic with our own client: create the
-  // tree, bulk-insert the 28 nodes, re-read to map name→id (createMany returns
-  // no ids), then bulk-insert the edges. One tree per user (@@unique([userId])).
-  const tree = await prisma.skillTree.create({
-    data: {
+  // tree, bulk-insert the 28 nodes, re-read to map name→id, then bulk-insert
+  // the edges. One tree per user (unique index on userId).
+  const [tree] = await db
+    .insert(skillTreeTable)
+    .values({
       userId: user.id,
       name: BACKEND_DEVELOPER_CORE_TEMPLATE.name,
       templateKey: BACKEND_DEVELOPER_CORE_TEMPLATE.key,
-    },
-  })
-  await prisma.skillNode.createMany({
-    data: buildDefaultSkillNodes(tree.id),
-  })
+    })
+    .returning()
+  if (!tree) throw new Error('[seed:dev] Skill tree missing after insert')
+  await db.insert(skillNodeTable).values(buildDefaultSkillNodes(tree.id))
   // Re-read by name to resolve node ids (template names are unique).
-  const createdNodes = await prisma.skillNode.findMany({
-    where: { skillTreeId: tree.id },
-    select: { id: true, name: true },
-  })
+  const createdNodes = await db
+    .select({ id: skillNodeTable.id, name: skillNodeTable.name })
+    .from(skillNodeTable)
+    .where(eq(skillNodeTable.skillTreeId, tree.id))
   const nodeNameToId = new Map(createdNodes.map((node) => [node.name, node.id]))
   const edgeRows = buildDefaultSkillEdges(tree.id, createdNodes)
-  await prisma.nodeEdge.createMany({ data: edgeRows })
+  await db.insert(nodeEdgeTable).values(edgeRows)
 
   // ── 8. XP distribution: orphan NodeAssignment rows across every level band ──
   // XP per node = COUNT of its NodeAssignment rows. We use ORPHAN assignments
@@ -645,7 +685,7 @@ async function seedDev(): Promise<void> {
       })
     }
   }
-  await prisma.nodeAssignment.createMany({ data: assignmentRows })
+  await db.insert(nodeAssignmentTable).values(assignmentRows)
 
   // Lightweight summary so the operator sees what landed. Uses console.warn —
   // the only intentional-stdout channel ESLint's no-console rule allows (the
@@ -666,10 +706,10 @@ async function seedDev(): Promise<void> {
 
 seedDev()
   .then(async () => {
-    await prisma.$disconnect()
+    await db.$client.end()
   })
   .catch(async (e) => {
     console.error('❌ Error during dev database seeding:', e)
-    await prisma.$disconnect()
+    await db.$client.end()
     process.exit(1)
   })

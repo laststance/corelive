@@ -21,7 +21,7 @@ import { SkillNodeCircle } from './SkillNodeCircle'
 
 /**
  * A lightweight view model for nodes passed into the canvas.
- * Kept separate from the Prisma type to avoid pulling server types into client code.
+ * Kept separate from the database row type to avoid pulling server types into client code.
  */
 export interface CanvasNode {
   id: SkillNodeId

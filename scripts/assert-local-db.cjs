@@ -1,5 +1,5 @@
 /**
- * Blocks destructive Prisma commands unless the connection is proven local; package database scripts invoke it before resets or migrations.
+ * Blocks destructive database commands unless the connection is proven local; package database scripts invoke it before resets or migrations.
  *
  * Development may point POSTGRES_PRISMA_URL at production, so this file is the
  * fail-closed choke point for both automated and manually invoked DB commands.
@@ -7,14 +7,14 @@
  * 方針は allowlist（fail closed）: 「本番っぽければ止める」ではなく「ローカルだと証明できた時だけ通す」。
  * prod のURL書式が変わっても、ローカルと確証できなければ exit(1) する。
  *
- * パーサ差分への注意: ホスト判定は WHATWG `new URL().hostname` で行うが、prisma/libpq は接続文字列の
+ * パーサ差分への注意: ホスト判定は WHATWG `new URL().hostname` で行うが、libpq / node-postgres は接続文字列の
  *   `?host=` / `?hostname=` 接続パラメータを honor してそちら "へ" 接続する（WHATWG はこれを `.hostname` に
  *   反映しない）。素朴な hostname チェックだけだと `postgresql://localhost/db?host=prod.neon.tech` が
- *   「localhost だから許可」で通り、prisma は prod を全消しする fail-OPEN になる。ゆえに query 上の host も
+ *   「localhost だから許可」で通り、drizzle-kit / pg は prod を全消しする fail-OPEN になる。ゆえに query 上の host も
  *   ローカル許可リストで検証し、パーサが割れるバックスラッシュ入りURLは安全側に倒して停止する。
  */
 
-// prisma.config.ts と同じく .env を読み込んでから判定する（手動 `pnpm db:reset` 時、URLが .env 内にしか無いケースを揃えるため）
+// drizzle.config.ts と同じく .env を読み込んでから判定する（手動 `pnpm db:reset` 時、URLが .env 内にしか無いケースを揃えるため）
 require('dotenv').config()
 
 const { LOCAL_POSTGRES_HOST_PORT } = require('./local-db-port.cjs')
@@ -30,9 +30,9 @@ const ALLOWED_HOSTS = new Set([
   'corelive-postgres', // コンテナ名
 ])
 
-// prisma.config.ts の解決順を完全に再現（POSTGRES_PRISMA_URL → DATABASE_URL → localhost フォールバック）。
-// 両env未設定時、prisma.config.ts は同じ localhost DSN へ接続するため、ここでも同じ既定値に倒して挙動を一致させる
-// （未設定で abort すると、prisma 側はローカルへ繋ぐのにゲートだけが止まる乖離が起きる）。
+// drizzle.config.ts の解決順を完全に再現（POSTGRES_PRISMA_URL → DATABASE_URL → localhost フォールバック）。
+// 両env未設定時、drizzle.config.ts は同じ localhost DSN へ接続するため、ここでも同じ既定値に倒して挙動を一致させる
+// （未設定で abort すると、drizzle 側はローカルへ繋ぐのにゲートだけが止まる乖離が起きる）。
 const rawUrl =
   process.env.POSTGRES_PRISMA_URL ||
   process.env.DATABASE_URL ||
@@ -42,7 +42,7 @@ function abort(reason) {
   console.error('\n🛑 [assert-local-db] 破壊的DB操作を中止しました。')
   console.error(`   理由: ${reason}`)
   console.error(
-    `   db:reset / db:truncate / prisma:migrate はローカルDocker（localhost:${LOCAL_POSTGRES_HOST_PORT}）にのみ許可されています。`,
+    `   db:reset / db:truncate / db:migrate はローカルDocker（localhost:${LOCAL_POSTGRES_HOST_PORT}）にのみ許可されています。`,
   )
   console.error(
     '   接続先が本番(Neon等)に向いていないか POSTGRES_PRISMA_URL を確認してください。\n',
@@ -57,7 +57,7 @@ function isLocalHost(value) {
   return ALLOWED_HOSTS.has(h)
 }
 
-// rawUrl は上の localhost フォールバックにより常に非空（prisma.config.ts と同一）。空文字ガードは不要。
+// rawUrl は上の localhost フォールバックにより常に非空（drizzle.config.ts と同一）。空文字ガードは不要。
 
 // バックスラッシュは WHATWG と libpq で authority の切れ目の解釈が割れる（パーサ差分）。正当なローカル接続文字列には
 // 出現しないので、曖昧なパースを信用せず安全側に倒して停止する。
@@ -77,7 +77,7 @@ try {
   )
 }
 
-// libpq/prisma が実際に接続する先は query 上の host が指定されていればそちらが勝つ。authority の hostname だけでなく
+// libpq / node-postgres が実際に接続する先は query 上の host が指定されていればそちらが勝つ。authority の hostname だけでなく
 // query 上の host(複数・カンマ区切り含む)も全てローカルでなければ停止する（CRITICAL fail-open の封じ込め）。
 const queryHosts = [
   ...parsed.searchParams.getAll('host'),
@@ -88,14 +88,14 @@ for (const qh of queryHosts) {
   for (const entry of qh.split(',')) {
     if (!isLocalHost(entry)) {
       abort(
-        `接続URLの ?host=/?hostname= が "${entry.trim()}" を指しています（ローカル許可リスト外）。prisma はこちらに接続するため停止します。`,
+        `接続URLの ?host=/?hostname= が "${entry.trim()}" を指しています（ローカル許可リスト外）。pg はこちらに接続するため停止します。`,
       )
     }
   }
 }
 
 // authority の hostname が空でも、query 上の host(`?host=/var/run/postgresql` や `?host=::1` 等)が
-// 上のループで全てローカルと検証済みなら、prisma/libpq の実接続先はローカルなので許可する。
+// 上のループで全てローカルと検証済みなら、libpq / node-postgres の実接続先はローカルなので許可する。
 // query host が1つも無い空ホストは「ローカルだと確証できない」ため停止（fail closed）。
 const host = parsed.hostname
 if (!host) {

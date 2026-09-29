@@ -89,7 +89,7 @@ const nextConfig = {
   },
   // Configure webpack for Electron environment and performance
   webpack: (config, { isServer, dev }) => {
-    // Externalize Prisma packages for client-side bundles (server-only)
+    // Externalize database packages for client-side bundles (server-only)
     if (!isServer) {
       const originalExternals = config.externals || []
       config.externals = [
@@ -98,10 +98,10 @@ const nextConfig = {
           : [originalExternals]),
         ({ request }, callback) => {
           if (
-            request === '@prisma/client' ||
-            request === '@prisma/adapter-pg' ||
+            request === 'pg' ||
+            request === 'drizzle-orm' ||
             request === 'dotenv' ||
-            request?.startsWith('@prisma/')
+            request?.startsWith('drizzle-orm/')
           ) {
             return callback(null, `commonjs ${request}`)
           }
