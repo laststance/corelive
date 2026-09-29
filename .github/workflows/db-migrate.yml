@@ -9,6 +9,16 @@
 # Required GitHub Secrets:
 #   - POSTGRES_PRISMA_URL: Production PostgreSQL connection string
 #
+# One-off baseline (the cutover from the previous ORM):
+#   Production's tables were built by the previous ORM's migrations, so `drizzle-kit migrate` would
+#   try to CREATE them again. Before the first run of this workflow, record `0000_init` as applied
+#   with ONE row, from a machine that holds the production URL:
+#     POSTGRES_PRISMA_URL=<prod> node scripts/baseline-drizzle-migrations.mjs           # read-only report
+#     POSTGRES_PRISMA_URL=<prod> node scripts/baseline-drizzle-migrations.mjs --apply   # writes the row
+#   The "Check baseline" step below refuses to migrate a database that has tables but no row, so a
+#   forgotten baseline fails here without touching anything. Merging the cutover PR to main triggers
+#   this workflow (drizzle/** changed), so the baseline must be recorded BEFORE that merge.
+#
 # Recommended Setup:
 #   1. Create a "production" environment in GitHub repository settings
 #   2. Add required reviewers for the "production" environment
@@ -25,7 +35,7 @@ on:
         required: true
         type: string
       dry_run:
-        description: 'Dry run (only check status, do not apply)'
+        description: 'Dry run (validate the migration files and read the database state, do not apply)'
         required: false
         default: false
         type: boolean
@@ -72,6 +82,14 @@ jobs:
       - name: Check migration files
         run: pnpm exec drizzle-kit check
 
+      # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no
+      # row (the baseline was never recorded), which would make the migrator re-create them.
+      # Also runs on a dry run, so the operator sees the verdict without applying anything.
+      - name: Check baseline
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: node scripts/baseline-drizzle-migrations.mjs
+
       # The migrator applies every file newer than the newest row in
       # drizzle.__drizzle_migrations, all inside one transaction. A database that is
       # already up to date is a no-op.
@@ -84,8 +102,15 @@ jobs:
           pnpm exec drizzle-kit migrate
           echo "✅ Migrations deployed successfully!"
 
+      # Read-only: the newest recorded migration must now equal the newest file in the journal.
+      - name: Verify migrated state
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: node scripts/baseline-drizzle-migrations.mjs --expect-current
+
       - name: Dry run notice
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
-          echo "🔍 Dry run mode - migration files were checked, nothing was applied"
+          echo "🔍 Dry run mode - migration files were checked and the database state was read, nothing was applied"
           echo "Run this workflow again with 'dry_run: false' to apply migrations"

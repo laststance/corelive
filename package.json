@@ -42,7 +42,7 @@
     "prepare": "husky",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/assert-local-db.cjs && drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
+    "db:studio": "node scripts/assert-local-db.cjs && drizzle-kit studio",
     "db:seed": "node scripts/assert-local-db.cjs && tsx src/db/seed/seed.ts",
     "seed:dev": "node scripts/assert-local-db.cjs && tsx src/db/seed/seed.dev.ts",
     "db:reset": "node scripts/assert-local-db.cjs && node scripts/reset-local-db.cjs && pnpm db:migrate && pnpm db:seed",
@@ -141,7 +141,8 @@
   "pnpm": {
     "overrides": {
       "minimatch@>=10.0.0 <10.2.6": "10.2.6",
-      "tsup@8.5.1>esbuild": "0.28.2"
+      "tsup@8.5.1>esbuild": "0.28.2",
+      "@esbuild-kit/core-utils>esbuild": "0.25.12"
     },
     "onlyBuiltDependencies": [
       "@clerk/shared",

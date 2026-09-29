@@ -1,0 +1,121 @@
+column Category.color pos=6 text default='blue'::text nullable=NO
+column Category.createdAt pos=4 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column Category.id pos=1 integer default=nextval('"Category_id_seq"'::regclass) nullable=NO
+column Category.isDefault pos=7 boolean default=false nullable=NO
+column Category.name pos=2 text default= nullable=NO
+column Category.updatedAt pos=5 timestamp without time zone default= nullable=NO
+column Category.userId pos=3 integer default= nullable=NO
+column Completed.archived pos=2 boolean default=false nullable=NO
+column Completed.categoryId pos=5 integer default= nullable=NO
+column Completed.completedAt pos=8 timestamp without time zone default= nullable=YES
+column Completed.createdAt pos=6 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column Completed.id pos=1 integer default=nextval('"Completed_id_seq"'::regclass) nullable=NO
+column Completed.importBatchId pos=9 text default= nullable=YES
+column Completed.localCompletionId pos=10 text default= nullable=YES
+column Completed.title pos=3 character varying default= nullable=NO
+column Completed.updatedAt pos=7 timestamp without time zone default= nullable=NO
+column Completed.userId pos=4 integer default= nullable=NO
+column ElectronSettings.createdAt pos=6 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column ElectronSettings.hideAppIcon pos=3 boolean default=false nullable=NO
+column ElectronSettings.id pos=1 integer default=nextval('"ElectronSettings_id_seq"'::regclass) nullable=NO
+column ElectronSettings.showInMenuBar pos=4 boolean default=true nullable=NO
+column ElectronSettings.startAtLogin pos=5 boolean default=false nullable=NO
+column ElectronSettings.updatedAt pos=7 timestamp without time zone default= nullable=NO
+column ElectronSettings.userId pos=2 integer default= nullable=NO
+column ImportBatch.createdAt pos=3 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column ImportBatch.id pos=1 text default= nullable=NO
+column ImportBatch.userId pos=2 integer default= nullable=NO
+column NodeAssignment.createdAt pos=4 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column NodeAssignment.id pos=1 integer default=nextval('"NodeAssignment_id_seq"'::regclass) nullable=NO
+column NodeAssignment.nodeId pos=2 integer default= nullable=NO
+column NodeAssignment.todoId pos=3 integer default= nullable=YES
+column NodeAssignment.todoText pos=5 character varying default=''::character varying nullable=NO
+column NodeEdge.fromNodeId pos=3 integer default= nullable=NO
+column NodeEdge.id pos=1 integer default=nextval('"NodeEdge_id_seq"'::regclass) nullable=NO
+column NodeEdge.skillTreeId pos=2 integer default= nullable=NO
+column NodeEdge.toNodeId pos=4 integer default= nullable=NO
+column SkillNode.createdAt pos=8 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column SkillNode.description pos=4 text default= nullable=YES
+column SkillNode.icon pos=5 text default= nullable=YES
+column SkillNode.id pos=1 integer default=nextval('"SkillNode_id_seq"'::regclass) nullable=NO
+column SkillNode.name pos=3 text default= nullable=NO
+column SkillNode.skillTreeId pos=2 integer default= nullable=NO
+column SkillNode.updatedAt pos=9 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column SkillNode.x pos=6 double precision default= nullable=NO
+column SkillNode.y pos=7 double precision default= nullable=NO
+column SkillTree.createdAt pos=5 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column SkillTree.id pos=1 integer default=nextval('"SkillTree_id_seq"'::regclass) nullable=NO
+column SkillTree.name pos=3 text default= nullable=NO
+column SkillTree.templateKey pos=4 text default= nullable=YES
+column SkillTree.updatedAt pos=6 timestamp without time zone default= nullable=NO
+column SkillTree.userId pos=2 integer default= nullable=NO
+column Todo.categoryId pos=9 integer default= nullable=NO
+column Todo.completed pos=3 boolean default=false nullable=NO
+column Todo.completedAt pos=11 timestamp without time zone default= nullable=YES
+column Todo.createdAt pos=6 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column Todo.id pos=1 integer default=nextval('"Todo_id_seq"'::regclass) nullable=NO
+column Todo.importBatchId pos=10 text default= nullable=YES
+column Todo.notes pos=4 text default= nullable=YES
+column Todo.order pos=8 integer default= nullable=YES
+column Todo.text pos=2 character varying default= nullable=NO
+column Todo.updatedAt pos=7 timestamp without time zone default= nullable=NO
+column Todo.userId pos=5 integer default= nullable=NO
+column User.bio pos=5 text default= nullable=YES
+column User.clerkId pos=2 text default= nullable=NO
+column User.createdAt pos=6 timestamp without time zone default=CURRENT_TIMESTAMP nullable=NO
+column User.email pos=3 text default= nullable=YES
+column User.id pos=1 integer default=nextval('"User_id_seq"'::regclass) nullable=NO
+column User.name pos=4 text default= nullable=YES
+column User.updatedAt pos=7 timestamp without time zone default= nullable=NO
+constraint "Category" FOREIGN KEY ("userId") REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE RESTRICT
+constraint "Category" PRIMARY KEY (id)
+constraint "Completed" FOREIGN KEY ("categoryId") REFERENCES "Category"(id) ON UPDATE CASCADE ON DELETE RESTRICT
+constraint "Completed" FOREIGN KEY ("userId") REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE RESTRICT
+constraint "Completed" PRIMARY KEY (id)
+constraint "ElectronSettings" FOREIGN KEY ("userId") REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE RESTRICT
+constraint "ElectronSettings" PRIMARY KEY (id)
+constraint "ImportBatch" FOREIGN KEY ("userId") REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE CASCADE
+constraint "ImportBatch" PRIMARY KEY (id)
+constraint "NodeAssignment" FOREIGN KEY ("nodeId") REFERENCES "SkillNode"(id) ON UPDATE CASCADE ON DELETE CASCADE
+constraint "NodeAssignment" FOREIGN KEY ("todoId") REFERENCES "Todo"(id) ON UPDATE CASCADE ON DELETE SET NULL
+constraint "NodeAssignment" PRIMARY KEY (id)
+constraint "NodeEdge" FOREIGN KEY ("skillTreeId") REFERENCES "SkillTree"(id) ON UPDATE CASCADE ON DELETE CASCADE
+constraint "NodeEdge" FOREIGN KEY ("skillTreeId", "fromNodeId") REFERENCES "SkillNode"("skillTreeId", id)
+constraint "NodeEdge" FOREIGN KEY ("skillTreeId", "toNodeId") REFERENCES "SkillNode"("skillTreeId", id)
+constraint "NodeEdge" PRIMARY KEY (id)
+constraint "SkillNode" FOREIGN KEY ("skillTreeId") REFERENCES "SkillTree"(id) ON UPDATE CASCADE ON DELETE CASCADE
+constraint "SkillNode" PRIMARY KEY (id)
+constraint "SkillTree" FOREIGN KEY ("userId") REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE CASCADE
+constraint "SkillTree" PRIMARY KEY (id)
+constraint "Todo" FOREIGN KEY ("categoryId") REFERENCES "Category"(id) ON UPDATE CASCADE ON DELETE RESTRICT
+constraint "Todo" FOREIGN KEY ("userId") REFERENCES "User"(id) ON UPDATE CASCADE ON DELETE RESTRICT
+constraint "Todo" PRIMARY KEY (id)
+constraint "User" PRIMARY KEY (id)
+index CREATE INDEX "Completed_categoryId_idx" ON public."Completed" USING btree ("categoryId")
+index CREATE INDEX "Completed_importBatchId_idx" ON public."Completed" USING btree ("importBatchId")
+index CREATE INDEX "ImportBatch_userId_idx" ON public."ImportBatch" USING btree ("userId")
+index CREATE INDEX "NodeAssignment_nodeId_idx" ON public."NodeAssignment" USING btree ("nodeId")
+index CREATE INDEX "NodeEdge_skillTreeId_idx" ON public."NodeEdge" USING btree ("skillTreeId")
+index CREATE INDEX "NodeEdge_toNodeId_idx" ON public."NodeEdge" USING btree ("toNodeId")
+index CREATE INDEX "SkillNode_skillTreeId_idx" ON public."SkillNode" USING btree ("skillTreeId")
+index CREATE INDEX "Todo_categoryId_idx" ON public."Todo" USING btree ("categoryId")
+index CREATE INDEX "Todo_importBatchId_idx" ON public."Todo" USING btree ("importBatchId")
+index CREATE UNIQUE INDEX "Category_name_userId_key" ON public."Category" USING btree (name, "userId")
+index CREATE UNIQUE INDEX "Category_pkey" ON public."Category" USING btree (id)
+index CREATE UNIQUE INDEX "Completed_pkey" ON public."Completed" USING btree (id)
+index CREATE UNIQUE INDEX "Completed_userId_localCompletionId_key" ON public."Completed" USING btree ("userId", "localCompletionId")
+index CREATE UNIQUE INDEX "ElectronSettings_pkey" ON public."ElectronSettings" USING btree (id)
+index CREATE UNIQUE INDEX "ElectronSettings_userId_key" ON public."ElectronSettings" USING btree ("userId")
+index CREATE UNIQUE INDEX "ImportBatch_pkey" ON public."ImportBatch" USING btree (id)
+index CREATE UNIQUE INDEX "NodeAssignment_pkey" ON public."NodeAssignment" USING btree (id)
+index CREATE UNIQUE INDEX "NodeAssignment_todoId_key" ON public."NodeAssignment" USING btree ("todoId")
+index CREATE UNIQUE INDEX "NodeEdge_fromNodeId_toNodeId_key" ON public."NodeEdge" USING btree ("fromNodeId", "toNodeId")
+index CREATE UNIQUE INDEX "NodeEdge_pkey" ON public."NodeEdge" USING btree (id)
+index CREATE UNIQUE INDEX "SkillNode_pkey" ON public."SkillNode" USING btree (id)
+index CREATE UNIQUE INDEX "SkillNode_skillTreeId_id_key" ON public."SkillNode" USING btree ("skillTreeId", id)
+index CREATE UNIQUE INDEX "SkillTree_pkey" ON public."SkillTree" USING btree (id)
+index CREATE UNIQUE INDEX "SkillTree_userId_key" ON public."SkillTree" USING btree ("userId")
+index CREATE UNIQUE INDEX "Todo_pkey" ON public."Todo" USING btree (id)
+index CREATE UNIQUE INDEX "User_clerkId_key" ON public."User" USING btree ("clerkId")
+index CREATE UNIQUE INDEX "User_email_key" ON public."User" USING btree (email)
+index CREATE UNIQUE INDEX "User_pkey" ON public."User" USING btree (id)

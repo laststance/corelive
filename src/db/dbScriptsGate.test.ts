@@ -7,8 +7,8 @@ import { describe, expect, test } from 'vitest'
 /** The fail-closed local-database check every database-writing script must run first. */
 const GATE_COMMAND = 'node scripts/assert-local-db.cjs'
 
-/** `db:*` scripts that never write to a database the URL points at: one only reads files, one opens a read/browse UI. */
-const UNGATED_SCRIPTS = new Set(['db:generate', 'db:studio'])
+/** `db:*` scripts that never connect to a database: `db:generate` only reads the schema file and writes SQL files. (`db:studio` is gated: its UI can edit and delete rows.) */
+const UNGATED_SCRIPTS = new Set(['db:generate'])
 
 /**
  * Reads the package.json `scripts` table.
@@ -37,8 +37,8 @@ function readPackageScripts(): Record<string, string> {
 }
 
 describe('database package scripts', () => {
-  test('run the local-database check before anything that can write to a database, so a production URL can never be reset or seeded', () => {
-    // Arrange — every db:* script plus seed:dev, minus the two that never write.
+  test('run the local-database check before anything that can write to a database, so a production URL can never be reset, seeded or edited through the studio', () => {
+    // Arrange — every db:* script plus seed:dev, minus the one that never connects.
     const scripts = readPackageScripts()
     const databaseScripts = Object.entries(scripts).filter(
       ([name]) =>
@@ -56,6 +56,7 @@ describe('database package scripts', () => {
       'db:migrate',
       'db:reset',
       'db:seed',
+      'db:studio',
       'db:truncate',
       'seed:dev',
     ])

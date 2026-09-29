@@ -17,7 +17,10 @@
 // drizzle.config.ts と同じく .env を読み込んでから判定する（手動 `pnpm db:reset` 時、URLが .env 内にしか無いケースを揃えるため）
 require('dotenv').config()
 
-const { LOCAL_POSTGRES_HOST_PORT } = require('./local-db-port.cjs')
+const {
+  LOCAL_POSTGRES_HOST_PORT,
+  LOCAL_FALLBACK_DATABASE_URL,
+} = require('./local-db-port.cjs')
 
 // ローカルとみなして破壊操作を許可するホスト名のホワイトリスト（Docker compose / localhost のみ）。
 // 0.0.0.0 は「全インターフェースにbindする」アドレスでクライアントのダイヤル先として意味を持たないため除外。
@@ -30,19 +33,16 @@ const ALLOWED_HOSTS = new Set([
   'corelive-postgres', // コンテナ名
 ])
 
-// drizzle.config.ts の解決順を完全に再現（POSTGRES_PRISMA_URL → DATABASE_URL → localhost フォールバック）。
-// 両env未設定時、drizzle.config.ts は同じ localhost DSN へ接続するため、ここでも同じ既定値に倒して挙動を一致させる
+// drizzle.config.ts の解決順を完全に再現（POSTGRES_PRISMA_URL → localhost フォールバック）。
+// env未設定時、drizzle.config.ts は同じ localhost DSN へ接続するため、ここでも同じ既定値に倒して挙動を一致させる
 // （未設定で abort すると、drizzle 側はローカルへ繋ぐのにゲートだけが止まる乖離が起きる）。
-const rawUrl =
-  process.env.POSTGRES_PRISMA_URL ||
-  process.env.DATABASE_URL ||
-  `postgresql://user:pass@localhost:${LOCAL_POSTGRES_HOST_PORT}/db?schema=public`
+const rawUrl = process.env.POSTGRES_PRISMA_URL || LOCAL_FALLBACK_DATABASE_URL
 
 function abort(reason) {
   console.error('\n🛑 [assert-local-db] 破壊的DB操作を中止しました。')
   console.error(`   理由: ${reason}`)
   console.error(
-    `   db:reset / db:truncate / db:migrate はローカルDocker（localhost:${LOCAL_POSTGRES_HOST_PORT}）にのみ許可されています。`,
+    `   db:reset / db:truncate / db:migrate / db:seed / db:studio / seed:dev はローカルDocker（localhost:${LOCAL_POSTGRES_HOST_PORT}）にのみ許可されています。`,
   )
   console.error(
     '   接続先が本番(Neon等)に向いていないか POSTGRES_PRISMA_URL を確認してください。\n',
@@ -110,5 +110,5 @@ if (!host) {
 // ここまで来たらローカルと確証できた → 破壊操作を許可
 // eslint-disable-next-line no-console -- ゲートが実際に走り host を許可した確認をCI/ローカルログに残すための意図的な情報出力
 console.log(
-  `✅ [assert-local-db] 接続先ホスト "${host}" はローカル。db:reset を許可します。`,
+  `✅ [assert-local-db] 接続先ホスト "${host}" はローカル。DB操作を許可します。`,
 )

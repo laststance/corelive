@@ -6,6 +6,8 @@
   "entry": [
     "electron/dev-runner.ts",
     "scripts/after-build.js",
+    // Run by .github/workflows/db-migrate.yml around `drizzle-kit migrate`, not by a package script.
+    "scripts/baseline-drizzle-migrations.mjs",
     "src/components/ui/**/*.tsx",
     "wallaby.conf.js",
   ],

@@ -1,13 +1,17 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+import { and, eq } from 'drizzle-orm'
 
 // Relative imports (NOT the `@/` alias): tsx does not reliably honor tsconfig
 // `paths`. The template module is pure data with zero imports, and `../index`
 // only pulls in relative modules, so all of these resolve under tsx. We
-// deliberately do NOT import `importDefaultTemplate` — it relies on the logger
-// + auth middleware and would throw inside a tsx script.
+// deliberately do NOT import `importDefaultTemplate` — it lives in the skill-tree
+// procedure module, whose `@/` imports (auth middleware, Clerk) tsx cannot resolve.
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '../../app/(main)/skill-tree/lib/template'
 import { buildDefaultSkillEdges } from '../../server/buildDefaultSkillEdges'
 import { buildDefaultSkillNodes } from '../../server/buildDefaultSkillNodes'
+import type { CategoryColor } from '../../server/schemas/category'
 import { db } from '../index'
 import {
   categoryTable,
@@ -32,23 +36,22 @@ import { ensureSeedAccount } from './ensureSeedAccount'
 // fail-closed: only proceed when the host is provably local.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Hostnames we treat as local (mirrors `scripts/assert-local-db.cjs`). */
-const LOCAL_DB_HOSTS = new Set([
-  'localhost',
-  '127.0.0.1',
-  '::1',
-  '[::1]',
-  'postgres',
-  'corelive-postgres',
-])
+/** The one fail-closed local-DB gate, also run by every `db:*` npm script. */
+const LOCAL_DB_GATE = fileURLToPath(
+  new URL('../../../scripts/assert-local-db.cjs', import.meta.url),
+)
 
 /**
- * Throws unless `POSTGRES_PRISMA_URL` points at a local Docker/localhost DB —
- * the in-script twin of `scripts/assert-local-db.cjs`, so even a direct
- * `tsx src/db/seed/seed.dev.ts` (which skips the npm-script gate) cannot wipe a
- * remote DB. Called once at the top of `seedDev`, before any delete.
+ * Throws unless `POSTGRES_PRISMA_URL` provably points at a local Docker/localhost DB.
+ *
+ * Runs `scripts/assert-local-db.cjs` itself instead of re-implementing its URL parsing: the gate also
+ * inspects every `?host=` / `?hostname=` value (comma-separated multi-host included), Unix-socket
+ * paths and parser-ambiguous URLs, and a second copy here would drift from it. This makes a direct
+ * `tsx src/db/seed/seed.dev.ts` (which skips the npm-script gate) as safe as `pnpm seed:dev`.
+ * Called once at the top of `seedDev`, before any delete.
  * @param connectionString - The raw `POSTGRES_PRISMA_URL` value.
- * @returns void — returns normally only when the host is local; otherwise throws.
+ * @returns void — returns normally only when the gate exits 0; otherwise throws.
+ * @throws when the URL is unset or the gate cannot prove it is local.
  * @example
  * assertLocalDatabase('postgresql://postgres:password@localhost:5491/corelive') // ok
  * assertLocalDatabase('postgresql://u:p@prod.neon.tech/db') // throws
@@ -59,25 +62,17 @@ function assertLocalDatabase(connectionString: string | undefined): void {
       '[seed:dev] POSTGRES_PRISMA_URL is not set — refusing to run a destructive seed.',
     )
   }
-  let host: string
   try {
-    host = new URL(connectionString).hostname
-  } catch {
+    // Inherits process.env, so the gate judges the same URL the pool will use.
+    execFileSync(process.execPath, [LOCAL_DB_GATE], { stdio: 'pipe' })
+  } catch (error) {
+    const gateReason =
+      error && typeof error === 'object' && 'stderr' in error
+        ? String(error.stderr ?? '')
+        : ''
     throw new Error(
-      '[seed:dev] Could not parse POSTGRES_PRISMA_URL — refusing (fail closed).',
-    )
-  }
-  // libpq honors a `?host=` query param over the authority host; if present and
-  // non-local, refuse (matches the cjs guard's fail-closed posture).
-  const queryHost = new URL(connectionString).searchParams.get('host')
-  if (queryHost && !LOCAL_DB_HOSTS.has(queryHost.trim())) {
-    throw new Error(
-      `[seed:dev] ?host=${queryHost} is not local — refusing destructive seed.`,
-    )
-  }
-  if (!LOCAL_DB_HOSTS.has(host)) {
-    throw new Error(
-      `[seed:dev] DB host "${host}" is not local — refusing destructive seed.`,
+      '[seed:dev] the local-DB gate (scripts/assert-local-db.cjs) could not prove ' +
+        `POSTGRES_PRISMA_URL is local — refusing destructive seed.\n${gateReason}`,
     )
   }
 }
@@ -214,12 +209,12 @@ function pickOne<T>(items: readonly T[]): T {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Category seed set: a believable mix of work + life buckets. */
-const CATEGORY_SEEDS: ReadonlyArray<{ name: string; color: string }> = [
+const CATEGORY_SEEDS: ReadonlyArray<{ name: string; color: CategoryColor }> = [
   { name: 'Work', color: 'blue' },
   { name: 'Health', color: 'green' },
-  { name: 'Learning', color: 'purple' },
+  { name: 'Learning', color: 'violet' },
   { name: 'Home', color: 'orange' },
-  { name: 'Side Project', color: 'pink' },
+  { name: 'Side Project', color: 'rose' },
 ]
 
 /**
@@ -474,25 +469,10 @@ async function seedDev(): Promise<void> {
   // ── 3. Idempotent clean-slate of THIS USER's seeded rows (approach (a)) ──
   // FK-safe order. The only Restrict FK is Category→Todo/Completed, and we
   // upsert (never delete) categories above, so it never fires. Deleting the
-  // user's SkillTree cascades to SkillNode/NodeEdge/NodeAssignment, but we also
-  // delete NodeAssignment explicitly first for readability. ImportBatch only
-  // cascades from User, so we delete it explicitly too. Scoped to this user and
-  // already gated to localhost by `assertLocalDatabase` above.
-  await db
-    .delete(nodeAssignmentTable)
-    .where(
-      inArray(
-        nodeAssignmentTable.nodeId,
-        db
-          .select({ id: skillNodeTable.id })
-          .from(skillNodeTable)
-          .innerJoin(
-            skillTreeTable,
-            eq(skillNodeTable.skillTreeId, skillTreeTable.id),
-          )
-          .where(eq(skillTreeTable.userId, user.id)),
-      ),
-    )
+  // user's SkillTree cascades to SkillNode/NodeEdge/NodeAssignment (ON DELETE
+  // CASCADE), so one delete clears the whole tree. ImportBatch only cascades from
+  // User, so we delete it explicitly. Scoped to this user and already gated to
+  // localhost by `assertLocalDatabase` above.
   await db.delete(skillTreeTable).where(eq(skillTreeTable.userId, user.id))
   await db.delete(todoTable).where(eq(todoTable.userId, user.id))
   await db.delete(completedTable).where(eq(completedTable.userId, user.id))
@@ -629,7 +609,7 @@ async function seedDev(): Promise<void> {
 
   // ── 8. XP distribution: orphan NodeAssignment rows across every level band ──
   // XP per node = COUNT of its NodeAssignment rows. We use ORPHAN assignments
-  // (todoId = null) because @@unique([todoId]) allows only one assignment per
+  // (todoId = null) because the unique index on todoId allows only one assignment per
   // real todo, but treats NULLs as distinct — so we can stack many onto one node
   // to hit any band. The read path counts rows where todoId IS NULL OR the todo
   // is completed (skillTree.ts), so these orphans all count toward the level.

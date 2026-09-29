@@ -14,14 +14,12 @@ require('./assert-local-db.cjs')
 
 const { Client } = require('pg')
 
-const { LOCAL_POSTGRES_HOST_PORT } = require('./local-db-port.cjs')
+const { LOCAL_FALLBACK_DATABASE_URL } = require('./local-db-port.cjs')
 
 // Same resolution order (and fallback) as assert-local-db.cjs and drizzle.config.ts, so the URL judged
 // by the gate is the URL this script connects to.
 const connectionString =
-  process.env.POSTGRES_PRISMA_URL ||
-  process.env.DATABASE_URL ||
-  `postgresql://user:pass@localhost:${LOCAL_POSTGRES_HOST_PORT}/db?schema=public`
+  process.env.POSTGRES_PRISMA_URL || LOCAL_FALLBACK_DATABASE_URL
 
 /**
  * Empties the connected database of every CoreLive-owned schema.
@@ -37,7 +35,7 @@ async function resetSchemas() {
     await client.query('BEGIN')
     await client.query('DROP SCHEMA IF EXISTS drizzle CASCADE')
     await client.query('DROP SCHEMA IF EXISTS public CASCADE')
-    // A freshly created database (PostgreSQL 14+) owns `public` via `pg_database_owner`, with this comment and
+    // A freshly created database (PostgreSQL 15+) owns `public` via `pg_database_owner`, with this comment and
     // PUBLIC usage. Recreate exactly that so a reset database is indistinguishable from a new one; otherwise
     // pg_dump reports the difference.
     await client.query('CREATE SCHEMA public AUTHORIZATION pg_database_owner')
