@@ -64,6 +64,36 @@ describe('createLogger', () => {
     expect(lastRawLine()).not.toContain('secret-title')
   })
 
+  test('logs a bare { err } object under a fixed message, so the error message (SQL and bound values) never becomes the line text', () => {
+    // Arrange
+    const { logger, lastLine, lastRawLine } = createCapturingProductionLogger()
+
+    // Act
+    logger.error({ err: makeFailedQuery() })
+
+    // Assert
+    expect(lastLine().msg).toBe('Unhandled error')
+    expect(lastRawLine()).not.toContain('secret-title')
+    expect(lastRawLine()).not.toContain('insert into')
+  })
+
+  test('sanitizes a failed query stored under any key, not only err, error and context', () => {
+    // Arrange
+    const { logger, lastLine, lastRawLine } = createCapturingProductionLogger()
+
+    // Act
+    logger.error({ failure: makeFailedQuery(), userId: 7 }, 'Sync failed')
+
+    // Assert — the line still says what failed and for whom, but not the SQL or the bound title.
+    expect(lastLine()).toMatchObject({
+      msg: 'Sync failed',
+      userId: 7,
+      failure: { type: 'Error' },
+    })
+    expect(lastRawLine()).not.toContain('secret-title')
+    expect(lastRawLine()).not.toContain('insert into')
+  })
+
   test('keeps the caller message when an Error is logged with one', () => {
     // Arrange
     const { logger, lastLine } = createCapturingProductionLogger()

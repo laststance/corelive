@@ -7,10 +7,12 @@
 // The row is the only thing this script ever writes; application tables are untouched.
 //
 // Usage (POSTGRES_PRISMA_URL points at the database to inspect — never printed):
-//   node scripts/baseline-drizzle-migrations.mjs                   read-only: report the state, exit 1 when
-//                                                                  the baseline row is missing
+//   node scripts/baseline-drizzle-migrations.mjs                   read-only: report the state and the pending
+//                                                                  migrations, exit 1 when the baseline row is
+//                                                                  missing or the tables are gone
 //   node scripts/baseline-drizzle-migrations.mjs --expect-current  read-only: additionally require that the
-//                                                                  newest row equals the journal (post-migrate)
+//                                                                  newest row equals the journal AND every
+//                                                                  journal migration is recorded (post-migrate)
 //   node scripts/baseline-drizzle-migrations.mjs --apply           write the baseline row (once), after
 //                                                                  verifying the previous ORM's history
 //                                                                  AND that the live schema equals the
@@ -21,7 +23,14 @@
 // and refuses on any difference: recording the baseline for a schema drizzle does not describe would
 // hide the drift from every later migration.
 // Reversible: `DELETE FROM drizzle.__drizzle_migrations` (then drop the `drizzle` schema).
+//
+// Lifecycle: only `--apply` is cutover-only. `.github/workflows/db-migrate.yml` runs the read-only mode and
+// `--expect-current` on EVERY deploy, so those stay. Once the baseline row is recorded on production, delete
+// `--apply`, `src/db/__fixtures__/previousOrmSchemaFingerprint.txt` and the `--apply` tests in
+// `src/db/baselineMigration.test.ts` BEFORE the next migration lands: `--apply` insists on exactly one
+// migration file, and the fixture is a frozen record of the previous ORM's schema that must never be edited.
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { readMigrationFiles } from 'drizzle-orm/migrator'
 import pg from 'pg'
@@ -53,6 +62,9 @@ const FINGERPRINT_FIXTURE_URL = new URL(
   import.meta.url,
 )
 
+/** The migrator's own index of the migration files: `tag` names each file and `when` is the timestamp it compares. */
+const JOURNAL_URL = new URL('../drizzle/meta/_journal.json', import.meta.url)
+
 const applyRequested = process.argv.includes('--apply')
 const expectCurrent = process.argv.includes('--expect-current')
 
@@ -62,7 +74,10 @@ if (!url) fail('POSTGRES_PRISMA_URL is required')
 const target = new URL(url)
 say(`target: host=${target.hostname} database=${target.pathname.slice(1)}`)
 
-const migrations = readMigrationFiles({ migrationsFolder: './drizzle' })
+// Resolved from this file, like the fixture paths above, so the script works from any working directory.
+const migrations = readMigrationFiles({
+  migrationsFolder: fileURLToPath(new URL('../drizzle', import.meta.url)),
+})
 const newestJournalMillis = Math.max(...migrations.map((m) => m.folderMillis))
 
 const client = new pg.Client({ connectionString: url })
@@ -76,7 +91,18 @@ try {
 
   if (applyRequested) {
     await applyBaseline(client, state)
+  } else if (!state.applicationTables && state.bookkeepingRows > 0) {
+    // The migrator skips every file that is not newer than the newest row, so it would build nothing
+    // and the deploy would report success on a database without tables.
+    fail(
+      'drizzle.__drizzle_migrations records applied migrations but public."User" is missing: ' +
+        '`drizzle-kit migrate` would skip them and leave the database without tables. ' +
+        'Drop the `drizzle` schema so the migrator rebuilds everything, or restore the tables.',
+    )
   } else if (!state.applicationTables) {
+    if (expectCurrent) {
+      fail('expected a migrated database, but public."User" is missing')
+    }
     say('fresh database: `drizzle-kit migrate` will build it')
   } else if (state.bookkeepingRows === 0) {
     fail(
@@ -89,7 +115,12 @@ try {
       `newest applied migration is ${state.newestCreatedAt}, journal expects ${newestJournalMillis}`,
     )
   } else {
+    if (expectCurrent) await requireEveryMigrationRecorded(client)
     say('baseline recorded: `drizzle-kit migrate` applies only newer files')
+    const pending = pendingMigrationTags(state.newestCreatedAt)
+    say(
+      `pending migrations: ${pending.length === 0 ? 'none' : pending.join(', ')}`,
+    )
   }
 } finally {
   await client.end()
@@ -124,6 +155,48 @@ async function readState(connected) {
     applicationTables: presence.application_tables,
     bookkeepingRows,
     newestCreatedAt,
+  }
+}
+
+/**
+ * Lists the migration files the migrator would still apply: those whose journal `when` is newer than the newest recorded row.
+ *
+ * Shown by the read-only run so an operator approving a production deploy can see whether zero or five files will run.
+ * @param newestCreatedAt - Newest `created_at` in the bookkeeping table.
+ * @returns Migration tags in journal order.
+ * @example
+ * pendingMigrationTags(1790679206746) // => [] when 0000_init is the newest file and is recorded
+ */
+function pendingMigrationTags(newestCreatedAt) {
+  const { entries } = JSON.parse(readFileSync(JOURNAL_URL, 'utf8'))
+  return entries
+    .filter((entry) => entry.when > newestCreatedAt)
+    .map((entry) => entry.tag)
+}
+
+/**
+ * Fails unless every migration in the journal has a bookkeeping row with its hash.
+ *
+ * The migrator applies a file only when its journal `when` is newer than the newest recorded `created_at`, so a
+ * migration generated on a parallel branch and merged after a newer one is skipped WITHOUT an error, and the
+ * newest-row comparison alone still passes. Checking the hashes catches that skip.
+ * @param connected - Connected pg client.
+ * @returns Resolves when every journal migration is recorded; otherwise the process ends via {@link fail}.
+ * @example
+ * await requireEveryMigrationRecorded(client)
+ */
+async function requireEveryMigrationRecorded(connected) {
+  const { rows } = await connected.query(
+    'SELECT hash FROM drizzle.__drizzle_migrations',
+  )
+  const recorded = new Set(rows.map((row) => row.hash))
+  const unrecorded = migrations.filter((m) => !recorded.has(m.hash))
+  if (unrecorded.length > 0) {
+    fail(
+      `${unrecorded.length} journal migration(s) never recorded in drizzle.__drizzle_migrations (journal "when": ` +
+        `${unrecorded.map((m) => m.folderMillis).join(', ')}). The migrator skips a file whose "when" is not newer ` +
+        'than the newest recorded row: regenerate that migration so it sorts after the newer one.',
+    )
   }
 }
 

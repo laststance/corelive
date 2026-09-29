@@ -9,7 +9,7 @@ import { runTransaction } from '@/db/transaction'
 import { env } from '@/env.mjs'
 import { DEFAULT_CATEGORY_SEED } from '@/server/schemas/category'
 
-import { createModuleLogger, log } from '../../../lib/logger'
+import { createModuleLogger } from '../../../lib/logger'
 
 const webhookLog = createModuleLogger('clerkWebhook')
 
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     })
     evt = JSON.parse(body) as WebhookEvent
   } catch (err) {
-    log.error('Error verifying webhook:', err)
+    webhookLog.error({ err }, 'Error verifying webhook')
     return new Response('Error occured', {
       status: 400,
     })
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     const emailAddress = userData.email_addresses?.[0]?.email_address
 
     if (!emailAddress) {
-      log.error('No email address found for user')
+      webhookLog.error('No email address found for user')
       return new Response('No email address found', { status: 400 })
     }
 
@@ -75,12 +75,14 @@ export async function POST(req: Request) {
     const name =
       userData.username || `${firstName} ${lastName}`.trim() || 'Unknown User'
 
+    // Accounts that lose the address below; logged once the transaction has committed.
+    let releasedFrom: { id: number; clerkId: string }[] = []
     try {
       await runTransaction(async (tx) => {
         // Clerk owns email uniqueness: a different row still holding this address belongs to a
         // deleted or re-addressed account (no `user.deleted` / `user.updated` handler exists), and
         // its unique index would otherwise reject this account for good and make Svix retry forever.
-        await tx
+        releasedFrom = await tx
           .update(userTable)
           .set({ email: null })
           .where(
@@ -89,6 +91,7 @@ export async function POST(req: Request) {
               ne(userTable.clerkId, userData.id),
             ),
           )
+          .returning({ id: userTable.id, clerkId: userTable.clerkId })
 
         // Insert, or fill the blanks of a row the auth middleware created first. Existing values win,
         // so a late delivery never overwrites what the account already holds.
@@ -123,6 +126,15 @@ export async function POST(req: Request) {
         'Clerk user sync failed',
       )
       return new Response('Error occured', { status: 500 })
+    }
+
+    // The address is the only thing linking a stale row's history to a person, and clearing it is
+    // permanent: keep a record of which accounts lost it (ids only; the address itself is PII).
+    if (releasedFrom.length > 0) {
+      webhookLog.warn(
+        { clerkId: userData.id, releasedFrom },
+        'Released an email address from stale accounts',
+      )
     }
   }
 

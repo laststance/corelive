@@ -19,24 +19,39 @@ import { SEED_USER_CLERK_ID } from './seedUser'
  *
  * The seed identity is fixed, and a developer database may already hold it (with
  * data) after `pnpm db:reset`, so teardown removes it only when this test created it.
+ * When the account already existed, the test demotes its "General" category on purpose,
+ * so teardown puts `isDefault` back to the value it found, even if the test failed midway.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
 // Safe default: never delete a seed account this test did not create.
 let seedUserExistedBeforeTest = true
+/** `isDefault` of a pre-existing "General" category before the test demoted it; `undefined` when there was none. */
+let generalWasDefaultBeforeTest: boolean | undefined
 
 afterEach(async () => {
-  // Read and reset the flag before any await, so the next test starts from the safe default.
+  // Read and reset the flags before any await, so the next test starts from the safe defaults.
   const createdByThisTest = !seedUserExistedBeforeTest
+  const restoreGeneralDefault = generalWasDefaultBeforeTest
   seedUserExistedBeforeTest = true
-  if (!createdByThisTest) return
+  generalWasDefaultBeforeTest = undefined
   const [user] = await db
     .select()
     .from(userTable)
     .where(eq(userTable.clerkId, SEED_USER_CLERK_ID))
   if (!user) return
-  await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
-  await db.delete(userTable).where(eq(userTable.id, user.id))
+  if (createdByThisTest) {
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
+    await db.delete(userTable).where(eq(userTable.id, user.id))
+    return
+  }
+  if (restoreGeneralDefault === undefined) return
+  await db
+    .update(categoryTable)
+    .set({ isDefault: restoreGeneralDefault })
+    .where(
+      and(eq(categoryTable.userId, user.id), eq(categoryTable.name, 'General')),
+    )
 })
 
 describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
@@ -47,6 +62,18 @@ describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
       .from(userTable)
       .where(eq(userTable.clerkId, SEED_USER_CLERK_ID))
     seedUserExistedBeforeTest = existing.length > 0
+    if (existing[0]) {
+      const [generalBefore] = await db
+        .select()
+        .from(categoryTable)
+        .where(
+          and(
+            eq(categoryTable.userId, existing[0].id),
+            eq(categoryTable.name, 'General'),
+          ),
+        )
+      generalWasDefaultBeforeTest = generalBefore?.isDefault
+    }
     const first = await ensureSeedAccount()
     await db
       .update(categoryTable)

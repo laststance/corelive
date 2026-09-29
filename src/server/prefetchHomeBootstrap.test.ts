@@ -251,6 +251,56 @@ describeIfDb('prefetchHomeBootstrap', () => {
     expect(journalCache.pages[0]?.entries[0]?.completedAt).toBeInstanceOf(Date)
   })
 
+  test('buckets the SSR heatmap by the viewer cookie zone, so a late-evening completion lands on the viewer own day and not on the server or CI day', async () => {
+    // Arrange — 03:00 UTC on the 18th is still the evening of the 17th in Los Angeles, while it is
+    // already the 18th in UTC and in Tokyo (the zone CI runs in), so only a bucketing that really
+    // uses the cookie zone reports the 17th.
+    vi.useFakeTimers({
+      now: new Date('2026-07-19T03:00:00.000Z'),
+      toFake: ['Date'],
+    })
+    mockRequestState({ cookieTimeZone: 'America/Los_Angeles' })
+    const clerkId = signInFreshViewer()
+    const viewer = requireRow(
+      await db
+        .insert(userTable)
+        .values({ clerkId })
+        .returning({ id: userTable.id }),
+      'user.insert',
+    )
+    const category = requireRow(
+      await db
+        .insert(categoryTable)
+        .values({
+          name: 'Work',
+          color: 'blue',
+          isDefault: true,
+          userId: viewer.id,
+        })
+        .returning({ id: categoryTable.id }),
+      'category.insert',
+    )
+    await db.insert(todoTable).values({
+      text: 'evening win',
+      completed: true,
+      completedAt: new Date('2026-07-18T03:00:00.000Z'),
+      userId: viewer.id,
+      categoryId: category.id,
+    })
+
+    // Act
+    const dehydratedState = await prefetchHomeBootstrap()
+
+    // Assert — read under the Los Angeles key, exactly where the client hook looks.
+    const queryClient = createQueryClient()
+    hydrate(queryClient, JSON.parse(JSON.stringify(dehydratedState)))
+    const heatmap = queryClient.getQueryData(
+      getHomeHeatmapQueryKey('America/Los_Angeles'),
+    ) as HomeBootstrapResponse['heatmap']
+    expect(heatmap.data.map((day) => day.date)).toEqual(['2026-07-17'])
+    expect(heatmap.total).toBe(1)
+  })
+
   test('falls back to client fetching when the bootstrap call fails instead of crashing Home', async () => {
     // Arrange — a stored category color outside the palette makes the real
     // bootstrap call reject on its output contract.

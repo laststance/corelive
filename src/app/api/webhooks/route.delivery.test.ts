@@ -8,16 +8,36 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
 import { categoryTable, userTable } from '@/db/schema'
+import type * as LoggerModule from '@/lib/logger'
 import { listCategories } from '@/server/procedures/category'
 import { describeIfDb } from '@/server/procedures/describeIfDb'
 
-const { mockHeaders, testSigningSecret } = vi.hoisted(() => ({
-  mockHeaders: vi.fn(),
-  testSigningSecret: 'whsec_d2ViaG9vay10ZXN0LXNpZ25pbmctc2VjcmV0',
-}))
+const { mockHeaders, testSigningSecret, webhookWarn, webhookError } =
+  vi.hoisted(() => ({
+    mockHeaders: vi.fn(),
+    testSigningSecret: 'whsec_d2ViaG9vay10ZXN0LXNpZ25pbmctc2VjcmV0',
+    webhookWarn: vi.fn(),
+    webhookError: vi.fn(),
+  }))
 
 vi.mock('next/headers', () => ({ headers: mockHeaders }))
 vi.mock('@/env.mjs', () => ({ env: { WEBHOOK_SECRET: testSigningSecret } }))
+// Only the webhook's own module logger is replaced, so its log calls can be asserted; every other logger stays real.
+vi.mock('@/lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof LoggerModule>()
+  return {
+    ...actual,
+    createModuleLogger: (module: string) => {
+      const real = actual.createModuleLogger(module)
+      return module === 'clerkWebhook'
+        ? Object.assign(Object.create(real), {
+            warn: webhookWarn,
+            error: webhookError,
+          })
+        : real
+    },
+  }
+})
 
 import { POST } from './route'
 
@@ -96,6 +116,8 @@ async function readAccountRows(clerkId: string) {
 }
 
 afterEach(async () => {
+  webhookWarn.mockClear()
+  webhookError.mockClear()
   for (const clerkId of createdClerkIds) {
     const [user] = await db
       .select({ id: userTable.id })
@@ -274,6 +296,60 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
     })
   })
 
+  test('records which accounts lost their address, by id and Clerk ID and never the address itself, because clearing it cannot be undone', async () => {
+    // Arrange
+    const staleClerkId = freshClerkId()
+    const newClerkId = freshClerkId()
+    const sharedEmail = `${newClerkId}@example.com`
+    const [stale] = await db
+      .insert(userTable)
+      .values({
+        clerkId: staleClerkId,
+        email: sharedEmail,
+        name: 'Old Account',
+      })
+      .returning({ id: userTable.id })
+    const request = userCreatedRequest(
+      'msg_release_logged',
+      newClerkId,
+      sharedEmail,
+      'new-account',
+    )
+
+    // Act
+    const response = await POST(request)
+
+    // Assert
+    expect(response.status).toBe(201)
+    expect(webhookWarn).toHaveBeenCalledTimes(1)
+    expect(webhookWarn).toHaveBeenCalledWith(
+      {
+        clerkId: newClerkId,
+        releasedFrom: [{ id: stale?.id, clerkId: staleClerkId }],
+      },
+      'Released an email address from stale accounts',
+    )
+    expect(JSON.stringify(webhookWarn.mock.calls)).not.toContain(sharedEmail)
+  })
+
+  test('logs nothing about released addresses when no other account held the address', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+    const request = userCreatedRequest(
+      'msg_nothing_released',
+      clerkId,
+      `${clerkId}@example.com`,
+      'plain-signup',
+    )
+
+    // Act
+    const response = await POST(request)
+
+    // Assert
+    expect(response.status).toBe(201)
+    expect(webhookWarn).not.toHaveBeenCalled()
+  })
+
   test('answers 400 and writes nothing for a user.created event without an email address', async () => {
     // Arrange
     const clerkId = freshClerkId()
@@ -307,8 +383,9 @@ test('answers 500 with a bare body when the database write fails, so the failed 
     [clerkId, email],
     new Error('connection terminated'),
   )
-  const transaction = vi
-    .spyOn(db, 'transaction')
+  // `runTransaction` checks a connection out of the pool first, so that is where the failure is injected.
+  const connect = vi
+    .spyOn(db.$client, 'connect')
     .mockRejectedValueOnce(failedInsert)
   const request = userCreatedRequest('msg_db_down', clerkId, email, 'unlucky')
 
@@ -318,5 +395,9 @@ test('answers 500 with a bare body when the database write fails, so the failed 
   // Assert
   expect(response.status).toBe(500)
   expect(await response.text()).toBe('Error occured')
-  transaction.mockRestore()
+  expect(webhookError).toHaveBeenCalledWith(
+    { error: failedInsert, clerkId },
+    'Clerk user sync failed',
+  )
+  connect.mockRestore()
 })

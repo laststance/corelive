@@ -581,7 +581,7 @@ export const importLocalCompleted = authMiddleware
     try {
       const categoryId = await resolveImportCategoryId(user.id)
 
-      // Up to 2000 rows in one transaction, so it gets the longer limit the previous ORM gave it.
+      // Up to {@link IMPORT_LOCAL_MAX_ITEMS} rows in one transaction, so it gets the longer limit the previous ORM gave it.
       const imported = await runTransaction(async (tx) => {
         await tx
           .insert(importBatchTable)

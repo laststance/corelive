@@ -155,14 +155,16 @@ describe('Clerk webhook signature rejection', () => {
       method: 'POST',
       body: signedBody.replaceAll(signedClerkId, tamperedClerkId),
     })
-    const transaction = vi.spyOn(db, 'transaction')
+    // pg-pool's own `query()` and `runTransaction` both check a connection out through `connect()`, so a
+    // spy there sees every way the route could reach the database.
+    const connect = vi.spyOn(db.$client, 'connect')
 
     // Act
     const response = await POST(request)
 
-    // Assert — every write the route makes goes through a transaction, and none was opened.
+    // Assert — the route never touched the database, so no user row can have been written.
     expect(response.status).toBe(400)
-    expect(transaction).not.toHaveBeenCalled()
-    transaction.mockRestore()
+    expect(connect).not.toHaveBeenCalled()
+    connect.mockRestore()
   })
 })

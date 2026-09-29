@@ -28,8 +28,8 @@ pool.on('error', () => {
   // Logged by the per-client 'error' listener registered on connect.
 })
 
-// pg-pool removes its idle listener while a client is checked out, and drizzle's `db.transaction`
-// checks out a raw client without adding one. A connection that drops mid-transaction would then
+// pg-pool removes its idle listener while a client is checked out, and a transaction ({@link runTransaction},
+// drizzle's `db.transaction`) holds a raw client without adding one. A connection that drops mid-transaction would then
 // emit an unhandled 'error' (an uncaught exception that ends plain Node processes and bypasses the
 // logger under Next.js). This listener lives as long as the client, idle or checked out, so it is the
 // one place a drop is logged. The pool still discards the non-queryable client on release.
@@ -39,6 +39,14 @@ pool.on('connect', (client) => {
     log.warn({ err: error }, 'PostgreSQL client error')
   })
 })
+
+/**
+ * Every table and relation definition, the schema each drizzle client in the app is built with.
+ *
+ * Shared by {@link db} and by {@link runTransaction}, which builds a second client over one checked-out connection and
+ * needs the same schema so its transaction handle has the same type.
+ */
+export const databaseSchema = { ...schema, ...relations }
 
 /**
  * Shared drizzle client over one `pg` pool — the only database handle the app uses.
@@ -54,5 +62,5 @@ pool.on('connect', (client) => {
  */
 export const db = drizzle({
   client: pool,
-  schema: { ...schema, ...relations },
+  schema: databaseSchema,
 })

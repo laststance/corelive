@@ -15,6 +15,14 @@ import { ensureSeedAccount } from './ensureSeedAccount'
  *   life tasks for a realistic local-development baseline.
  */
 async function main(): Promise<void> {
+  // `pnpm db:seed` runs the local-database gate first, and with no URL the gate judges the fallback
+  // `localhost:5491` DSN. The shared client would instead hand `undefined` to `pg`, which then follows
+  // PGHOST / PGUSER / PGDATABASE: a database the gate never approved. Refuse rather than guess.
+  if (!process.env.POSTGRES_PRISMA_URL) {
+    throw new Error(
+      '[db:seed] POSTGRES_PRISMA_URL is not set: refusing to seed, because the connection would not be the local database the gate approved.',
+    )
+  }
   const { user, generalCategory: defaultCategory } = await ensureSeedAccount()
 
   // Fixed strings — no Date.now() / Math.random(). `pnpm db:reset`

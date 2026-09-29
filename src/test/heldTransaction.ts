@@ -52,14 +52,9 @@ export async function settleBehindHeldTransaction<Result>(options: {
   holdLocks: (tx: Transaction) => Promise<void>
   startCall: () => Promise<Result>
 }): Promise<{ value: Result } | { error: unknown }> {
-  let release = () => {}
-  const released = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  let markStarted = () => {}
-  const started = new Promise<void>((resolve) => {
-    markStarted = resolve
-  })
+  const { promise: released, resolve: release } = Promise.withResolvers<void>()
+  const { promise: started, resolve: markStarted } =
+    Promise.withResolvers<void>()
   let holderPid = 0
   const finished = db.transaction(async (tx) => {
     const { rows } = await tx.execute<{ pid: number }>(

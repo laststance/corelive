@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { eq, sql } from 'drizzle-orm'
-import { expect, test } from 'vitest'
+import { expect, type MockInstance, test, vi } from 'vitest'
 
 import { describeIfDb } from '@/server/procedures/describeIfDb'
 
@@ -90,6 +90,31 @@ describeIfDb('runTransaction (real PostgreSQL)', () => {
     // Assert — the server terminated the session, so there is no SQLSTATE to match; the pool still answers.
     expect(failure).toBeInstanceOf(Error)
     expect(Date.now() - startedAt).toBeLessThan(3_000)
+    const { rows } = await db.execute<{ alive: number }>(sql`SELECT 1 AS alive`)
+    expect(rows).toEqual([{ alive: 1 }])
+  })
+
+  test('hands the pooled connection back when BEGIN itself fails, so a stale socket cannot shrink the pool for good', async () => {
+    // Arrange — the first statement on the next checked-out connection is BEGIN; make it reject.
+    let beginSpy: MockInstance | undefined
+    db.$client.once('acquire', (client) => {
+      beginSpy = vi
+        .spyOn(client, 'query')
+        .mockRejectedValueOnce(new Error('BEGIN failed'))
+    })
+    const callback = vi.fn(async () => 'never runs')
+
+    // Act
+    const failure = await runTransaction(callback).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    beginSpy?.mockRestore()
+
+    // Assert — the callback never started, and no connection is left checked out.
+    expect(failure).toBeInstanceOf(Error)
+    expect(callback).not.toHaveBeenCalled()
+    expect(db.$client.totalCount - db.$client.idleCount).toBe(0)
     const { rows } = await db.execute<{ alive: number }>(sql`SELECT 1 AS alive`)
     expect(rows).toEqual([{ alive: 1 }])
   })

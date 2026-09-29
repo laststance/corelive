@@ -82,6 +82,19 @@ jobs:
       - name: Check migration files
         run: pnpm exec drizzle-kit check
 
+      # `check` compares the migration folder with itself, not with src/db/schema.ts. A schema change
+      # pushed without `pnpm db:generate` would apply nothing and still pass every step below, while
+      # Vercel ships code that expects the new column. Regenerate (offline, so the config gate allows
+      # it) and fail when that writes anything under drizzle/ — the same test the CI workflow runs.
+      - name: Check schema.ts matches the committed migrations
+        run: |
+          pnpm exec drizzle-kit generate --name=deploy_drift_check
+          if [ -n "$(git status --porcelain drizzle)" ]; then
+            echo "::error::src/db/schema.ts differs from the committed migrations. Run 'pnpm db:generate' and commit the new SQL."
+            git status --porcelain drizzle
+            exit 1
+          fi
+
       # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no
       # row (the baseline was never recorded), which would make the migrator re-create them.
       # Also runs on a dry run, so the operator sees the verdict without applying anything.
@@ -93,7 +106,8 @@ jobs:
       # The migrator applies every file newer than the newest row in
       # drizzle.__drizzle_migrations, all inside one transaction. A database that is
       # already up to date is a no-op. drizzle.config.ts refuses any non-local target
-      # unless DRIZZLE_ALLOW_REMOTE=1: this is the one place production is meant.
+      # unless DRIZZLE_ALLOW_REMOTE=1 on a GitHub Actions runner (the runner sets GITHUB_ACTIONS
+      # itself): this is the one place production is meant.
       - name: Deploy migrations
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:

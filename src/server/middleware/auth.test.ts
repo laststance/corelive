@@ -223,7 +223,9 @@ describe('authMiddleware fast paths that never reach the database', () => {
       // Arrange
       const execute = vi.spyOn(db, 'execute')
       const select = vi.spyOn(db, 'select')
-      const transaction = vi.spyOn(db, 'transaction')
+      // `runTransaction` and pg-pool's `query()` both check a connection out through `connect()`, so a spy
+      // there sees every way the middleware could reach the database, transactions included.
+      const connect = vi.spyOn(db.$client, 'connect')
 
       // Act
       const operation = call(readAuthenticatedUser, undefined, {
@@ -234,7 +236,7 @@ describe('authMiddleware fast paths that never reach the database', () => {
       await expect(operation).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
       expect(execute).not.toHaveBeenCalled()
       expect(select).not.toHaveBeenCalled()
-      expect(transaction).not.toHaveBeenCalled()
+      expect(connect).not.toHaveBeenCalled()
     },
   )
 
@@ -253,7 +255,8 @@ describe('authMiddleware fast paths that never reach the database', () => {
     }
     const execute = vi.spyOn(db, 'execute')
     const select = vi.spyOn(db, 'select')
-    const transaction = vi.spyOn(db, 'transaction')
+    // Any database access, a transaction included, checks a connection out through `connect()`.
+    const connect = vi.spyOn(db.$client, 'connect')
     const options = {
       context: {
         headers: new Headers({ Authorization: `Bearer ${clerkId}` }),
@@ -268,6 +271,6 @@ describe('authMiddleware fast paths that never reach the database', () => {
     expect(user).toEqual(bootstrapUser)
     expect(execute).not.toHaveBeenCalled()
     expect(select).not.toHaveBeenCalled()
-    expect(transaction).not.toHaveBeenCalled()
+    expect(connect).not.toHaveBeenCalled()
   })
 })

@@ -127,3 +127,31 @@ conditions or follow-up work, not defects it introduced.
 **Effort:** S
 **Priority:** P3
 **Depends on:** nothing.
+
+## Drizzle cutover follow-ups (PR #196, 2026-09-29)
+
+Two items surfaced in the pre-landing review of the Prisma → Drizzle migration. Neither is a defect the migration introduced; both would have widened a PR that is meant to change no behavior.
+
+### Retire the one-time cutover tooling once production carries the baseline row
+
+**What:** After `node scripts/baseline-drizzle-migrations.mjs --apply` has recorded the baseline on production, delete the `--apply` path of that script, `src/db/__fixtures__/previousOrmSchemaFingerprint.txt`, and the `--apply` tests in `src/db/baselineMigration.test.ts` (`refuses to record a baseline …`, `records exactly one baseline row …`). Keep the read-only mode and `--expect-current`: `.github/workflows/db-migrate.yml` runs them on every deploy.
+
+**Why:** `--apply` insists on exactly one migration file, so its tests fail as soon as a second migration exists (the `ImportBatch` drop above is the likely first one). The fixture is a frozen record of the previous ORM's schema; it must never be edited to make a test pass, so it has to go rather than be updated.
+
+**Context:** The headers of `scripts/baseline-drizzle-migrations.mjs` and `src/db/baselineMigration.test.ts` describe the same lifecycle. `src/db/schemaParity.test.ts` builds its own scratch database from `0000_init.sql` alone, so it keeps passing after later migrations and can stay as a guard on that file.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** the production baseline row recorded; must land before the next migration.
+
+### Tune the `pg` pool for serverless
+
+**What:** `src/db/index.ts` leaves the `pg.Pool` at its defaults (10 connections, 10 s idle timeout) and does not register it with `attachDatabasePool` from `@vercel/functions`. Set `max`, `idleTimeoutMillis` and `maxLifetimeSeconds` for serverless, and confirm `POSTGRES_PRISMA_URL` is the pooled endpoint.
+
+**Why:** A suspended Vercel instance never fires the pool's idle timer, so its idle connections stay open on the database side until a TCP or server timeout closes them, and each warm instance can hold up to 10. Several procedures use two connections at once (`Promise.all`), so a busy instance can exhaust its pool and queue requests for up to the 10 s connection timeout.
+
+**Context:** Not a regression: the previous adapter used a default pool too, and the migration cut it from two pools per instance (the client module plus the webhook's private one) to one. Needs the new `@vercel/functions` dependency and a look at real connection counts before choosing numbers, so it does not belong in a parity migration.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** nothing.

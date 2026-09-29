@@ -8,13 +8,25 @@ import { defineConfig } from 'drizzle-kit'
 const OFFLINE_COMMANDS = new Set(['generate', 'check', 'up', 'export'])
 
 /**
+ * Whether this process may target a non-local database: on a GitHub Actions runner (`GITHUB_ACTIONS=true`, which
+ * the runner sets itself) AND with the deploy workflow's explicit `DRIZZLE_ALLOW_REMOTE=1`.
+ *
+ * Both are required because drizzle-kit loads `.env` BEFORE it evaluates this file, so a `.env` line looks exactly
+ * like a real environment variable here. A developer `.env` that holds a production URL and `DRIZZLE_ALLOW_REMOTE=1`
+ * (copied from the deploy job, say) therefore cannot switch the gate off for a raw `pnpm exec drizzle-kit push`.
+ */
+const remoteAllowed =
+  process.env.DRIZZLE_ALLOW_REMOTE === '1' &&
+  process.env.GITHUB_ACTIONS === 'true'
+
+/**
  * Applies the fail-closed local-database gate to a raw `drizzle-kit` invocation.
  *
  * The package scripts run `scripts/assert-local-db.cjs` before `drizzle-kit`, but `pnpm exec drizzle-kit push`
  * skips them, and a developer `.env` may point at production. Loading this config is the one place every
  * invocation passes through, so the gate also runs here for any subcommand that could connect (an unknown or
  * missing subcommand counts as one). Only the deploy workflow, which targets production on purpose, opts out
- * with `DRIZZLE_ALLOW_REMOTE=1`.
+ * (see {@link remoteAllowed}).
  *
  * Called once when drizzle-kit loads this file.
  *
@@ -25,10 +37,7 @@ const OFFLINE_COMMANDS = new Set(['generate', 'check', 'up', 'export'])
 function assertLocalDatabaseForOnlineCommands(): void {
   // argv[2] is the subcommand: `node drizzle-kit <subcommand> …`
   const subcommand = process.argv[2] ?? ''
-  if (
-    OFFLINE_COMMANDS.has(subcommand) ||
-    process.env.DRIZZLE_ALLOW_REMOTE === '1'
-  ) {
+  if (OFFLINE_COMMANDS.has(subcommand) || remoteAllowed) {
     return
   }
   const gate = spawnSync(process.execPath, ['scripts/assert-local-db.cjs'], {
