@@ -185,12 +185,7 @@ test('renews a missing copy with a new notification receipt while retaining its 
 
 test('keeps receipt storage flat across 150 confirmed operations while retaining unresolved writing', () => {
   // Arrange
-  const pending = prepareCategoryDraftRescueReceipt(
-    12,
-    1,
-    'base',
-    'pending writing',
-  )
+  prepareCategoryDraftRescueReceipt(12, 1, 'base', 'pending writing')
   // Act
   for (let sourceId = 101; sourceId <= 250; sourceId += 1) {
     prepareCategoryDraftRescueReceipt(sourceId, 1, 'base', 'confirmed writing')
@@ -200,19 +195,22 @@ test('keeps receipt storage flat across 150 confirmed operations while retaining
   // Assert
   expect(
     JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
-  ).toEqual([pending])
+  ).toEqual([
+    {
+      receipt: '00000000-0000-4000-8000-000000000001',
+      identity: '[12,1,"pending writing"]',
+      baseText: 'base',
+      text: 'pending writing',
+      state: 'prepared',
+    },
+  ])
 })
 
 test('retires every receipt of the confirmed source without touching another source or unparseable identity', () => {
   // Arrange
   recordCategoryDraftRescueReceipt(12, 1, 'base', 'first thought')
   prepareCategoryDraftRescueReceipt(12, 2, 'base', 'second thought')
-  const pending = prepareCategoryDraftRescueReceipt(
-    13,
-    1,
-    'base',
-    'pending writing',
-  )
+  prepareCategoryDraftRescueReceipt(13, 1, 'base', 'pending writing')
   const foreign = {
     receipt: 'foreign',
     identity: 'unknown-format',
@@ -234,7 +232,22 @@ test('retires every receipt of the confirmed source without touching another sou
   expect(getCategoryDraftRescueReceipt(12, 2, 'second thought')).toBeUndefined()
   expect(
     JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
-  ).toEqual([pending, foreign])
+  ).toEqual([
+    {
+      receipt: '00000000-0000-4000-8000-000000000001',
+      identity: '[13,1,"pending writing"]',
+      baseText: 'base',
+      text: 'pending writing',
+      state: 'prepared',
+    },
+    {
+      receipt: 'foreign',
+      identity: 'unknown-format',
+      baseText: 'base',
+      text: 'unknown source',
+      state: 'prepared',
+    },
+  ])
 })
 
 test('retires a known legacy source identity while retaining other pending sources', () => {
@@ -259,7 +272,11 @@ test('retires a known legacy source identity while retaining other pending sourc
   retireCategoryDraftRescueReceipts(12)
   // Assert
   expect(getCategoryDraftRescueReceipt(12, 1, 'legacy thought')).toBeUndefined()
-  expect(getCategoryDraftRescueReceipt(13, 1, 'pending thought')).toMatchObject(
-    { text: 'pending thought', state: 'prepared' },
-  )
+  expect(getCategoryDraftRescueReceipt(13, 1, 'pending thought')).toEqual({
+    receipt: '[13,1,"pending thought"]',
+    identity: '[13,1,"pending thought"]',
+    baseText: 'base',
+    text: 'pending thought',
+    state: 'prepared',
+  })
 })

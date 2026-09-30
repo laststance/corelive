@@ -948,14 +948,12 @@ test('restores the source once when a saved rescue copy was removed before retry
 test('retires a confirmed deleted source receipt while preserving another pending source', async () => {
   // Arrange
   const user = userEvent.setup()
+  const uuid = vi
+    .spyOn(crypto, 'randomUUID')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
   setLocalNote(1, 'existing')
   setLocalNote(12, 'half a thought')
-  const pending = prepareCategoryDraftRescueReceipt(
-    13,
-    1,
-    'existing',
-    'other pending writing',
-  )
+  prepareCategoryDraftRescueReceipt(13, 1, 'existing', 'other pending writing')
   await renderDialog([
     defaultCategory,
     buildCategory(),
@@ -974,12 +972,19 @@ test('retires a confirmed deleted source receipt while preserving another pendin
     ).toBeUndefined(),
   )
   expect(getCategoryDraftRescueReceipt(13, 1, 'other pending writing')).toEqual(
-    pending,
+    {
+      receipt: '00000000-0000-4000-8000-000000000001',
+      identity: '[13,1,"other pending writing"]',
+      baseText: 'existing',
+      text: 'other pending writing',
+      state: 'prepared',
+    },
   )
   expect(
     JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
   ).toHaveLength(1)
   expect(getLocalNote(12)).toBe('half a thought')
+  uuid.mockRestore()
 })
 
 test('retains receipt evidence after a failed server delete for a later retry', async () => {
