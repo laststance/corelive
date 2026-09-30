@@ -11,7 +11,15 @@ CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is 
 
 ## Documentation
 
-The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/).
+The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`TODOS.md`](TODOS.md) for deferred work, and the [design-system lint package](packages/eslint-plugin-dslint/README.md) for its rules.
+
+Categories organize writing and completed history in two levels:
+
+- Create a main category or choose a main category as its parent to create a subcategory, such as `Work / CoreLive`. The sidebar shows both levels; Manage categories lets you rename, recolor, move, or promote them. A main category with children must have those children moved or promoted before it can become a subcategory. The default `General` category stays a main category and cannot be deleted.
+- In the signed-in LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor.
+- Completed-history filters include a main category's direct entries and its subcategories. Weekly summaries, daily detail, and year in review group totals by main category with an optional subcategory breakdown. Moving a subcategory changes the grouping of past entries under the current hierarchy; their dates stay the same.
+- Deleting a category moves its direct entries to the destination shown in the confirmation, preserving the entries and their dates. The initial destination is the parent for a subcategory and `General` for a main category. Children of a deleted main category become main categories with their entries still attached; rename any child that conflicts with another main category before deleting.
+- Deletion also preserves unsaved writing in the app or browser that performs it, and refreshes peers in that same browser context. It does not move drafts in other apps, browsers, or devices. The browser and Electron keep separate local draft stores; see the [cross-host boundary](docs/ROADMAP.md#later).
 
 ## Platform Support
 
@@ -89,7 +97,7 @@ pnpm db:seed
 pnpm db:generate
 ```
 
-> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (your tables and data are left untouched). Run `pnpm db:reset` once to rebuild it, or keep its data by recording the baseline: `node --env-file=.env scripts/baseline-drizzle-migrations.mjs --apply` (the script reads `POSTGRES_PRISMA_URL` from the environment, and only writes on a database that carries the previous ORM's migration history and a schema identical to the one `drizzle/0000_init.sql` builds).
+> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (your tables and data are left untouched). For a fresh local database, run `pnpm db:reset` once: it discards local data and replays every committed migration. The cutover script's `--apply` mode is historical tooling and refuses the current journal because it contains more than the initial migration; it is no longer a setup command. Its read-only inspection and `--expect-current` checks remain part of the deployment workflow. Retirement of the write mode is tracked in [`TODOS.md`](TODOS.md#retire-the-one-time-cutover-tooling-once-production-carries-the-baseline-row).
 
 Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
 
