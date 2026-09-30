@@ -77,6 +77,7 @@ export const Category = function Category({
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState<CategoryColor>('blue')
+  const [colorTouched, setColorTouched] = useState(false)
   const [newParentId, setNewParentId] = useState<number | null>(null)
 
   // Fetch categories with todo counts
@@ -96,6 +97,9 @@ export const Category = function Category({
     (category) => category.id === newParentId,
   )
   const isParentAvailable = newParentId === null || selectedParent !== undefined
+  const effectiveColor = colorTouched
+    ? newColor
+    : (selectedParent?.color ?? 'blue')
 
   // Auto-select the default (General) category when none is selected
   useAutoSelectDefaultCategory(
@@ -127,11 +131,12 @@ export const Category = function Category({
     if (!trimmedName || createMutation.isPending || !isParentAvailable) return
 
     createMutation.mutate(
-      { name: trimmedName, color: newColor, parentId: newParentId },
+      { name: trimmedName, color: effectiveColor, parentId: newParentId },
       {
         onSuccess: () => {
           setNewName('')
           setNewColor('blue')
+          setColorTouched(false)
           setNewParentId(null)
           setAddOpen(false)
         },
@@ -194,10 +199,6 @@ export const Category = function Category({
                 onValueChange={(value) => {
                   const parentId = value === 'none' ? null : Number(value)
                   setNewParentId(parentId)
-                  const parent = categories.find(
-                    (category) => category.id === parentId,
-                  )
-                  if (parent) setNewColor(parent.color)
                 }}
               >
                 <SelectTrigger
@@ -223,20 +224,23 @@ export const Category = function Category({
               </p>
             ) : null}
 
-            {/* Color picker */}
+            {/* An explicit color survives parent changes; untouched forms inherit their current parent. */}
             <div className="flex flex-wrap gap-1">
               {CATEGORY_COLORS.map((color) => (
                 <button
                   key={color}
                   type="button"
-                  onClick={() => setNewColor(color)}
+                  onClick={() => {
+                    setNewColor(color)
+                    setColorTouched(true)
+                  }}
                   className={`flex size-11 items-center justify-center rounded-md ${
-                    newColor === color
+                    effectiveColor === color
                       ? 'ring-2 ring-ring ring-offset-2 ring-offset-background'
                       : 'hover:bg-accent'
                   }`}
                   aria-label={`Select ${color} color`}
-                  aria-pressed={newColor === color}
+                  aria-pressed={effectiveColor === color}
                 >
                   <span
                     aria-hidden
