@@ -90,6 +90,13 @@ export const Category = function Category({
     (category) => (category.parentId ?? null) === null,
   )
 
+  // Temporary rows remain visible in the sidebar but cannot become creation parents.
+  const confirmedRoots = roots.filter((category) => category.id > 0)
+  const selectedParent = confirmedRoots.find(
+    (category) => category.id === newParentId,
+  )
+  const isParentAvailable = newParentId === null || selectedParent !== undefined
+
   // Auto-select the default (General) category when none is selected
   useAutoSelectDefaultCategory(
     selectedCategoryId,
@@ -116,7 +123,8 @@ export const Category = function Category({
    */
   const handleCreateCategory = () => {
     const trimmedName = newName.trim()
-    if (!trimmedName || createMutation.isPending) return
+    // A peer may remove or move the selected parent while this form stays open.
+    if (!trimmedName || createMutation.isPending || !isParentAvailable) return
 
     createMutation.mutate(
       { name: trimmedName, color: newColor, parentId: newParentId },
@@ -200,7 +208,7 @@ export const Category = function Category({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None — main category</SelectItem>
-                  {roots.map((category) => (
+                  {confirmedRoots.map((category) => (
                     <SelectItem key={category.id} value={String(category.id)}>
                       {category.name}
                     </SelectItem>
@@ -208,6 +216,12 @@ export const Category = function Category({
                 </SelectContent>
               </Select>
             </div>
+
+            {!isParentAvailable ? (
+              <p role="alert" className="text-sm text-destructive">
+                Choose an available main category.
+              </p>
+            ) : null}
 
             {/* Color picker */}
             <div className="flex flex-wrap gap-1">
@@ -236,9 +250,13 @@ export const Category = function Category({
               size="sm"
               className="w-full"
               onClick={handleCreateCategory}
-              disabled={!newName.trim() || createMutation.isPending}
+              disabled={
+                !newName.trim() ||
+                createMutation.isPending ||
+                !isParentAvailable
+              }
             >
-              {createMutation.isPending ? 'Creating...' : 'Create'}
+              {createMutation.isPending ? 'Creating…' : 'Create'}
             </Button>
           </div>
         </PopoverContent>
