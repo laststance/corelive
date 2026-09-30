@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Popover,
   PopoverContent,
@@ -21,6 +22,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { getColorDotClass } from '@/lib/category-colors'
+import { createCategoryHierarchy } from '@/lib/categoryHierarchy'
 import { DECIMAL_RADIX } from '@/lib/constants/completed'
 import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { cn } from '@/lib/utils'
@@ -32,12 +34,15 @@ import { CompletedDateRangePicker } from './CompletedDateRangePicker'
 export type CompletedFilterCategory = Pick<
   CategoryWithCount,
   'id' | 'name' | 'color'
->
+> &
+  Partial<Pick<CategoryWithCount, 'parentId' | 'createdAt'>>
 
 interface CompletedTodosFiltersProps {
   categories: readonly CompletedFilterCategory[]
   period: CompletedPeriod
   categoryId: number | null
+  includeSubcategories?: boolean
+  onIncludeSubcategoriesChange?: (include: boolean) => void
   customDateRange?: DateRange
   onPeriodChange: (period: CompletedPeriod) => void
   onCategoryChange: (categoryId: number | null) => void
@@ -70,6 +75,8 @@ export function CompletedTodosFilters({
   categories,
   period,
   categoryId,
+  includeSubcategories = true,
+  onIncludeSubcategoriesChange,
   customDateRange,
   onPeriodChange,
   onCategoryChange,
@@ -85,6 +92,12 @@ export function CompletedTodosFilters({
     () => startOfDay(new Date(`${localDayKey}${LOCAL_DAY_QUERY_ANCHOR_TIME}`)),
     [localDayKey],
   )
+  const hierarchy = createCategoryHierarchy(categories)
+  const selectedCategory = hierarchy.byId.get(categoryId ?? -1)
+  const hasSelectedChildren =
+    selectedCategory !== undefined &&
+    (selectedCategory.parentId ?? null) === null &&
+    categories.some((category) => category.parentId === categoryId)
   const isFiltered = period !== 'all' || categoryId !== null
   const isMorePeriodSelected = MORE_PERIOD_OPTIONS.some(
     (periodOption) => periodOption === period,
@@ -238,24 +251,44 @@ export function CompletedTodosFilters({
       >
         <SelectTrigger
           size="sm"
-          className="min-w-40"
+          className="min-h-11 min-w-40 max-w-full"
           aria-label="Filter wins by category"
         >
           <SelectValue />
         </SelectTrigger>
         <SelectContent align="start">
           <SelectItem value={ALL_CATEGORIES_VALUE}>All categories</SelectItem>
-          {categories.map((category) => (
-            <SelectItem key={category.id} value={String(category.id)}>
+          {hierarchy.ordered.map((category) => (
+            <SelectItem
+              key={category.id}
+              value={String(category.id)}
+              className={cn(
+                'min-h-11',
+                (category.parentId ?? null) !== null && 'pl-6',
+              )}
+            >
               <span
                 aria-hidden="true"
                 className={`size-2.5 rounded-full ${getColorDotClass(category.color)}`}
               />
-              {category.name}
+              {hierarchy.paths.get(category.id) ?? category.name}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+
+      {hasSelectedChildren ? (
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            checked={includeSubcategories}
+            onCheckedChange={(checked) =>
+              onIncludeSubcategoriesChange?.(checked === true)
+            }
+            aria-label="Include subcategories"
+          />
+          Include subcategories
+        </label>
+      ) : null}
 
       {isFiltered ? (
         <Button

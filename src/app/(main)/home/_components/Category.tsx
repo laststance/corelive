@@ -11,11 +11,19 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   SidebarGroup,
   SidebarGroupAction,
@@ -25,6 +33,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
@@ -35,6 +44,7 @@ import {
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
 import { getColorDotClass } from '@/lib/category-colors'
+import { createCategoryHierarchy } from '@/lib/categoryHierarchy'
 import { orpc } from '@/lib/orpc/client-query'
 import {
   CATEGORY_COLORS,
@@ -67,6 +77,8 @@ export const Category = function Category({
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState<CategoryColor>('blue')
+  const [colorTouched, setColorTouched] = useState(false)
+  const [newParentId, setNewParentId] = useState<number | null>(null)
 
   // Fetch categories with todo counts
   const { data } = useQuery({
@@ -74,6 +86,20 @@ export const Category = function Category({
     enabled: isClerkQueryReady,
   })
   const categories: CategoryWithCount[] = data?.categories ?? []
+  const hierarchy = createCategoryHierarchy(categories)
+  const roots = hierarchy.ordered.filter(
+    (category) => (category.parentId ?? null) === null,
+  )
+
+  // Temporary rows remain visible in the sidebar but cannot become creation parents.
+  const confirmedRoots = roots.filter((category) => category.id > 0)
+  const selectedParent = confirmedRoots.find(
+    (category) => category.id === newParentId,
+  )
+  const isParentAvailable = newParentId === null || selectedParent !== undefined
+  const effectiveColor = colorTouched
+    ? newColor
+    : (selectedParent?.color ?? 'blue')
 
   // Auto-select the default (General) category when none is selected
   useAutoSelectDefaultCategory(
@@ -101,14 +127,17 @@ export const Category = function Category({
    */
   const handleCreateCategory = () => {
     const trimmedName = newName.trim()
-    if (!trimmedName || createMutation.isPending) return
+    // A peer may remove or move the selected parent while this form stays open.
+    if (!trimmedName || createMutation.isPending || !isParentAvailable) return
 
     createMutation.mutate(
-      { name: trimmedName, color: newColor },
+      { name: trimmedName, color: effectiveColor, parentId: newParentId },
       {
         onSuccess: () => {
           setNewName('')
           setNewColor('blue')
+          setColorTouched(false)
+          setNewParentId(null)
           setAddOpen(false)
         },
       },
@@ -124,7 +153,12 @@ export const Category = function Category({
   }
 
   const handleNewNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') handleCreateCategory()
+    if (
+      event.key === 'Enter' &&
+      !event.nativeEvent.isComposing &&
+      event.keyCode !== 229
+    )
+      handleCreateCategory()
   }
 
   const handleCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
@@ -149,6 +183,7 @@ export const Category = function Category({
         <PopoverContent className="w-64 p-3" side="bottom" align="start">
           <div className="space-y-3">
             <Input
+              aria-label="Category name"
               placeholder="Category name"
               value={newName}
               onChange={handleNewNameChange}
@@ -157,20 +192,61 @@ export const Category = function Category({
               autoFocus
             />
 
-            {/* Color picker */}
-            <div className="flex gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="sidebar-category-parent">Parent category</Label>
+              <Select
+                value={newParentId === null ? 'none' : String(newParentId)}
+                onValueChange={(value) => {
+                  const parentId = value === 'none' ? null : Number(value)
+                  setNewParentId(parentId)
+                }}
+              >
+                <SelectTrigger
+                  id="sidebar-category-parent"
+                  className="min-h-11"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None — main category</SelectItem>
+                  {confirmedRoots.map((category) => (
+                    <SelectItem key={category.id} value={String(category.id)}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {!isParentAvailable ? (
+              <p role="alert" className="text-sm text-destructive">
+                Choose an available main category.
+              </p>
+            ) : null}
+
+            {/* An explicit color survives parent changes; untouched forms inherit their current parent. */}
+            <div className="flex flex-wrap gap-1">
               {CATEGORY_COLORS.map((color) => (
                 <button
                   key={color}
                   type="button"
-                  onClick={() => setNewColor(color)}
-                  className={`h-6 w-6 rounded-full transition-transform ${getColorDotClass(color)} ${
-                    newColor === color
-                      ? 'scale-110 ring-2 ring-ring ring-offset-2 ring-offset-background'
-                      : 'hover:scale-110'
+                  onClick={() => {
+                    setNewColor(color)
+                    setColorTouched(true)
+                  }}
+                  className={`flex size-11 items-center justify-center rounded-md ${
+                    effectiveColor === color
+                      ? 'ring-2 ring-ring ring-offset-2 ring-offset-background'
+                      : 'hover:bg-accent'
                   }`}
                   aria-label={`Select ${color} color`}
-                />
+                  aria-pressed={effectiveColor === color}
+                >
+                  <span
+                    aria-hidden
+                    className={`size-6 rounded-full ${getColorDotClass(color)}`}
+                  />
+                </button>
               ))}
             </div>
 
@@ -178,34 +254,49 @@ export const Category = function Category({
               size="sm"
               className="w-full"
               onClick={handleCreateCategory}
-              disabled={!newName.trim() || createMutation.isPending}
+              disabled={
+                !newName.trim() ||
+                createMutation.isPending ||
+                !isParentAvailable
+              }
             >
-              {createMutation.isPending ? 'Creating...' : 'Create'}
+              {createMutation.isPending ? 'Creating…' : 'Create'}
             </Button>
           </div>
         </PopoverContent>
       </Popover>
       <SidebarGroupContent>
         <SidebarMenu>
-          {/* Category items */}
-          {categories.map((category) => (
-            <SidebarMenuItem key={category.id}>
-              <SidebarMenuButton
-                isActive={selectedCategoryId === category.id}
-                data-category-id={category.id}
-                onClick={handleCategoryClick}
-              >
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${getColorDotClass(category.color)}`}
+          {/* The hierarchy stays expanded so every writing destination remains one click away. */}
+          {roots.map((category) => {
+            const children = hierarchy.ordered.filter(
+              (child) => child.parentId === category.id,
+            )
+            return (
+              <SidebarMenuItem key={category.id}>
+                <CategorySidebarRow
+                  category={category}
+                  selectedId={selectedCategoryId}
+                  onClick={handleCategoryClick}
+                  path={hierarchy.paths.get(category.id) ?? category.name}
                 />
-
-                <span className="truncate">{category.name}</span>
-              </SidebarMenuButton>
-              {category._count.todos > 0 && (
-                <SidebarMenuBadge>{category._count.todos}</SidebarMenuBadge>
-              )}
-            </SidebarMenuItem>
-          ))}
+                {children.length > 0 ? (
+                  <SidebarMenuSub aria-label={`${category.name} subcategories`}>
+                    {children.map((child) => (
+                      <SidebarMenuItem key={child.id}>
+                        <CategorySidebarRow
+                          category={child}
+                          selectedId={selectedCategoryId}
+                          onClick={handleCategoryClick}
+                          path={hierarchy.paths.get(child.id) ?? child.name}
+                        />
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenuSub>
+                ) : null}
+              </SidebarMenuItem>
+            )
+          })}
 
           {/* Manage */}
           {categories.length > 0 && (
@@ -222,5 +313,47 @@ export const Category = function Category({
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
+  )
+}
+
+/**
+ * Renders the same writing-category control at either sidebar level.
+ *
+ * @param path - Full accessible name distinguishes same-named subcategories.
+ * @example
+ * <CategorySidebarRow category={category} selectedId={selectedId} onClick={handleClick} path="Work / CoreLive" />
+ */
+function CategorySidebarRow({
+  category,
+  selectedId,
+  onClick,
+  path,
+}: {
+  category: CategoryWithCount
+  selectedId: number | null
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void
+  path: string
+}) {
+  return (
+    <>
+      <SidebarMenuButton
+        className="min-h-11"
+        isActive={selectedId === category.id}
+        data-category-id={category.id}
+        onClick={onClick}
+        aria-label={path}
+        title={path}
+        disabled={category.id <= 0}
+      >
+        <span
+          aria-hidden
+          className={`size-2 shrink-0 rounded-full ${getColorDotClass(category.color)}`}
+        />
+        <span className="truncate">{category.name}</span>
+      </SidebarMenuButton>
+      {category._count.todos > 0 ? (
+        <SidebarMenuBadge>{category._count.todos}</SidebarMenuBadge>
+      ) : null}
+    </>
   )
 }

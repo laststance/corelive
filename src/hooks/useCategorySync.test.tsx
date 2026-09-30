@@ -8,17 +8,25 @@ import {
   QueryClientProvider,
   useQuery,
 } from '@tanstack/react-query'
-import { act, render, screen } from '@testing-library/react'
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import {
   afterAll,
   afterEach,
   beforeAll,
   beforeEach,
   expect,
+  vi,
   test,
 } from 'vitest'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
+import { registerLiveDraftAppender } from '@/lib/live-editor/appendCategoryDraft'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import { orpcServer, resetOrpcServer } from '@/test/orpcServer'
@@ -41,6 +49,8 @@ function buildCategory(
     color: 'blue',
     isDefault: false,
     userId: 1,
+    parentId: null,
+    recordCount: 0,
     _count: { todos: 0 },
     createdAt: new Date('2026-09-07T00:00:00.000Z'),
     updatedAt: new Date('2026-09-07T00:00:00.000Z'),
@@ -124,4 +134,51 @@ test('holds the fetched list until a window announces a change', async () => {
 
   // Assert
   expect(screen.queryByText('Work')).not.toBeInTheDocument()
+})
+
+test('invalidates parent retrospectives and refreshes a persisted rescued draft on peer notification', async () => {
+  // Arrange
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  })
+  const heatmapKey = orpc.completed.heatmap.key()
+  const journalKey = orpc.completed.journal.key()
+  const bootstrapKey = orpc.home.bootstrap.key()
+  client.setQueryData(heatmapKey, { fixture: 'old root' })
+  client.setQueryData(journalKey, { fixture: 'old path' })
+  client.setQueryData(bootstrapKey, { fixture: 'old metadata' })
+  const refresh = vi.fn(async () => true)
+  const unregister = registerLiveDraftAppender(
+    async () => false,
+    undefined,
+    refresh,
+  )
+  renderHook(() => useCategorySync(), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  })
+  // Act
+  act(() => {
+    const peer = new BroadcastChannel('corelive-category-sync')
+    peer.postMessage({
+      type: 'category-sync',
+      senderId: 'other-window',
+      draftCategoryId: 12,
+      draftRescue: { receipt: '12:1', baseText: 'base', text: 'rescued' },
+    })
+    peer.close()
+  })
+  // Assert
+  await waitFor(() =>
+    expect(refresh).toHaveBeenCalledWith(12, {
+      receipt: '12:1',
+      baseText: 'base',
+      text: 'rescued',
+    }),
+  )
+  expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true)
+  expect(client.getQueryState(journalKey)?.isInvalidated).toBe(true)
+  expect(client.getQueryState(bootstrapKey)?.isInvalidated).toBe(true)
+  unregister()
 })

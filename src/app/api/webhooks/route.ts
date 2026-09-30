@@ -1,5 +1,5 @@
 import type { WebhookEvent } from '@clerk/nextjs/server'
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, ne, sql, isNull } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { Webhook } from 'svix'
 
@@ -123,6 +123,7 @@ export async function POST(req: Request) {
           .values({ ...DEFAULT_CATEGORY_SEED, userId: user.id })
           .onConflictDoNothing({
             target: [categoryTable.name, categoryTable.userId],
+            where: isNull(categoryTable.parentId),
           })
       })
     } catch (error) {

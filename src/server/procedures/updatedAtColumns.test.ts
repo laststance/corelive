@@ -173,7 +173,7 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
     expectStampedJustNow(updated.updatedAt)
   })
 
-  test('advances Todo.updatedAt and Completed.updatedAt when deleting a category moves their rows to the default category', async () => {
+  test('preserves Todo.updatedAt and Completed.updatedAt when deleting a category moves their rows, keeping historical dates unchanged', async () => {
     // Arrange
     const clerkId = freshClerkId()
     const doomed = await call(
@@ -214,9 +214,9 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
       .from(completedTable)
       .where(eq(completedTable.id, completed!.id))
     expect(movedTodo!.categoryId).not.toBe(doomed.id)
-    expectStampedJustNow(movedTodo!.updatedAt)
+    expect(movedTodo!.updatedAt).toEqual(STALE_UPDATED_AT)
     expect(movedCompleted!.categoryId).toBe(movedTodo!.categoryId)
-    expectStampedJustNow(movedCompleted!.updatedAt)
+    expect(movedCompleted!.updatedAt).toEqual(STALE_UPDATED_AT)
   })
 
   test('advances User, SkillTree and SkillNode updatedAt on a direct update, covering the tables no procedure edits today', async () => {

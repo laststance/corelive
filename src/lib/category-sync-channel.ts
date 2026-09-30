@@ -1,7 +1,18 @@
+import type { QueryClient } from '@tanstack/react-query'
+
+import type { CategoryDraftRescue } from '@/lib/live-editor/appendCategoryDraft'
+import { orpc } from '@/lib/orpc/client-query'
+
 const CATEGORY_SYNC_CHANNEL_NAME = 'corelive-category-sync'
 const CATEGORY_SYNC_EVENT_TYPE = 'category-sync'
+const CATEGORY_SYNC_SENDER_ID = crypto.randomUUID()
 
-type CategorySyncMessage = Readonly<{ type: typeof CATEGORY_SYNC_EVENT_TYPE }>
+type CategorySyncMessage = Readonly<{
+  type: typeof CATEGORY_SYNC_EVENT_TYPE
+  draftCategoryId?: number
+  draftRescue?: CategoryDraftRescue
+  senderId?: string
+}>
 
 /**
  * Checks whether the runtime supports BroadcastChannel-based sync.
@@ -35,7 +46,34 @@ const isCategorySyncMessage = (data: unknown): data is CategorySyncMessage => {
     return false
   }
 
-  return (data as CategorySyncMessage).type === CATEGORY_SYNC_EVENT_TYPE
+  return (
+    'type' in data &&
+    data.type === CATEGORY_SYNC_EVENT_TYPE &&
+    (!('draftRescue' in data) || isCategoryDraftRescue(data.draftRescue)) &&
+    (!('senderId' in data) || typeof data.senderId === 'string') &&
+    (!('draftCategoryId' in data) ||
+      (typeof data.draftCategoryId === 'number' &&
+        Number.isInteger(data.draftCategoryId) &&
+        data.draftCategoryId > 0))
+  )
+}
+
+/** Validates local peer rescue evidence before {@link subscribeToCategorySync} forwards it.
+ * @param value - Unknown BroadcastChannel payload.
+ * @returns Whether immutable rescue fields are strings.
+ * @example isCategoryDraftRescue({ receipt: 'source:1', baseText: 'existing', text: 'rescued' })
+ */
+function isCategoryDraftRescue(value: unknown): value is CategoryDraftRescue {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'receipt' in value &&
+    typeof value.receipt === 'string' &&
+    'baseText' in value &&
+    typeof value.baseText === 'string' &&
+    'text' in value &&
+    typeof value.text === 'string'
+  )
 }
 
 /**
@@ -44,7 +82,10 @@ const isCategorySyncMessage = (data: unknown): data is CategorySyncMessage => {
  * @example
  * broadcastCategorySync() // => true
  */
-export const broadcastCategorySync = (): boolean => {
+export const broadcastCategorySync = (
+  draftCategoryId?: number,
+  draftRescue?: CategoryDraftRescue,
+): boolean => {
   const channel = createCategorySyncChannel()
   if (!channel) {
     return false
@@ -52,6 +93,9 @@ export const broadcastCategorySync = (): boolean => {
 
   channel.postMessage({
     type: CATEGORY_SYNC_EVENT_TYPE,
+    senderId: CATEGORY_SYNC_SENDER_ID,
+    ...(draftCategoryId === undefined ? {} : { draftCategoryId }),
+    ...(draftRescue === undefined ? {} : { draftRescue }),
   } satisfies CategorySyncMessage)
   channel.close()
   return true
@@ -65,7 +109,9 @@ export const broadcastCategorySync = (): boolean => {
  * const cleanup = subscribeToCategorySync(() => queryClient.invalidateQueries())
  * cleanup()
  */
-export const subscribeToCategorySync = (onSync: () => void): (() => void) => {
+export const subscribeToCategorySync = (
+  onSync: (draftCategoryId?: number, draftRescue?: CategoryDraftRescue) => void,
+): (() => void) => {
   const channel = createCategorySyncChannel()
   if (!channel) {
     return () => {}
@@ -73,7 +119,15 @@ export const subscribeToCategorySync = (onSync: () => void): (() => void) => {
 
   const handleMessage = (event: MessageEvent) => {
     if (isCategorySyncMessage(event.data)) {
-      onSync()
+      // The deleting window already applied its append; only peers reconcile the payload.
+      onSync(
+        event.data.senderId === CATEGORY_SYNC_SENDER_ID
+          ? undefined
+          : event.data.draftCategoryId,
+        event.data.senderId === CATEGORY_SYNC_SENDER_ID
+          ? undefined
+          : event.data.draftRescue,
+      )
     }
   }
 
@@ -83,4 +137,21 @@ export const subscribeToCategorySync = (onSync: () => void): (() => void) => {
     channel.removeEventListener('message', handleMessage)
     channel.close()
   }
+}
+
+/**
+ * Refreshes every category-derived view after local mutations or same-context peer events.
+ *
+ * @returns Resolves after active category, completion and bootstrap queries reconcile.
+ * @example
+ * await invalidateCategoryViews(queryClient)
+ */
+export async function invalidateCategoryViews(
+  queryClient: QueryClient,
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: orpc.category.list.key() }),
+    queryClient.invalidateQueries({ queryKey: orpc.completed.key() }),
+    queryClient.invalidateQueries({ queryKey: orpc.home.bootstrap.key() }),
+  ])
 }

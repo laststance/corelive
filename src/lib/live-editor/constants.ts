@@ -54,3 +54,7 @@ export const TODAY_HEATMAP_DAYS = 1
 /** Cross-window invalidation marker; native window preference values stay in the main process. */
 export const NATIVE_WINDOW_PREFERENCES_STORAGE_KEY =
   'corelive.native-window-preferences.version'
+
+/** Device-local rescue receipts distinguish duplicate drafts from a retry of the same deletion. */
+export const CATEGORY_DRAFT_RESCUE_STORAGE_KEY =
+  'corelive.category-draft-rescues.v1'

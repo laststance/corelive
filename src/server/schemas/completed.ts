@@ -67,6 +67,17 @@ export const CompletedSchema = z.object({
  */
 export type Completed = z.infer<typeof CompletedSchema>
 
+/** Parent metadata used by retrospective paths and root totals; endpoint readers derive it from the current hierarchy.
+ * @example const parent = ParentCategorySchema.parse({ id: 1, name: 'Work', color: 'blue' })
+ */
+const ParentCategorySchema = z
+  .object({
+    id: z.number().int(),
+    name: z.string(),
+    color: z.string(),
+  })
+  .nullable()
+
 /**
  * Category breakdown within a single day's heatmap entry.
  * @example
@@ -77,6 +88,7 @@ const HeatmapCategorySchema = z.object({
   name: z.string(),
   color: z.string(),
   count: z.number().int(),
+  parent: ParentCategorySchema,
 })
 
 /**
@@ -155,6 +167,7 @@ const DayDetailTaskSchema = z.object({
       id: z.number().int(),
       name: z.string(),
       color: z.string(),
+      parent: ParentCategorySchema,
     })
     .nullable(),
 })
@@ -192,6 +205,7 @@ export const CompletedJournalInputSchema = z
     limit: z.number().int().min(1).max(100).default(20),
     offset: z.number().int().min(0).default(0),
     categoryId: z.number().int().positive().optional(),
+    includeSubcategories: z.boolean().default(true),
     completedFrom: z.date().optional(),
     completedBefore: z.date().optional(),
   })

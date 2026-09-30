@@ -118,7 +118,13 @@ const create = os
   .output(CategorySchema)
   .handler(({ input }) => {
     // Mirrors the real (name, userId) unique violation (SQLSTATE 23505, via isPgError) -> CONFLICT.
-    if (categories.some((category) => category.name === input.name)) {
+    if (
+      categories.some(
+        (category) =>
+          category.name === input.name &&
+          category.parentId === (input.parentId ?? null),
+      )
+    ) {
       throw new ORPCError('CONFLICT', {
         message: `Category "${input.name}" already exists`,
       })
@@ -127,7 +133,12 @@ const create = os
     const created: CategoryWithCount = {
       id: nextCategoryId++,
       name: input.name,
-      color: input.color,
+      color:
+        input.color ??
+        categories.find((category) => category.id === input.parentId)?.color ??
+        'blue',
+      parentId: input.parentId ?? null,
+      recordCount: 0,
       isDefault: false,
       userId: 1,
       _count: { todos: 0 },
@@ -158,7 +169,12 @@ const update = os
       input.data.name !== undefined &&
       categories.some(
         (category) =>
-          category.name === input.data.name && category.id !== input.id,
+          category.name === input.data.name &&
+          category.id !== input.id &&
+          category.parentId ===
+            (input.data.parentId === undefined
+              ? existing.parentId
+              : input.data.parentId),
       )
     ) {
       throw new ORPCError('CONFLICT', {
@@ -174,8 +190,19 @@ const update = os
   })
 
 const remove = os
-  .input(z.object({ id: z.number().int().positive() }))
-  .output(z.object({ success: z.boolean() }))
+  .input(
+    z.object({
+      id: z.number().int().positive(),
+      targetCategoryId: z.number().int().positive().optional(),
+    }),
+  )
+  .output(
+    z.object({
+      success: z.boolean(),
+      movedToCategoryId: z.number(),
+      promotedCategoryIds: z.array(z.number()),
+    }),
+  )
   .handler(({ input }) => {
     const existing = requireCategory(input.id)
     if (existing.isDefault) {
@@ -184,8 +211,24 @@ const remove = os
       })
     }
 
-    categories = categories.filter((category) => category.id !== input.id)
-    return { success: true }
+    const movedToCategoryId =
+      input.targetCategoryId ??
+      existing.parentId ??
+      categories.find((category) => category.isDefault)?.id
+    if (!movedToCategoryId || movedToCategoryId === input.id)
+      throw new ORPCError('BAD_REQUEST')
+    requireCategory(movedToCategoryId)
+    const promotedCategoryIds = categories
+      .filter((category) => category.parentId === input.id)
+      .map((category) => category.id)
+    categories = categories
+      .filter((category) => category.id !== input.id)
+      .map((category) =>
+        promotedCategoryIds.includes(category.id)
+          ? { ...category, parentId: null }
+          : category,
+      )
+    return { success: true, movedToCategoryId, promotedCategoryIds }
   })
 
 /** Same keys as `src/server/router.ts`, minus the database-backed and Clerk halves. */

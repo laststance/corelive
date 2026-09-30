@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
@@ -101,7 +101,10 @@ async function seedCompletedTableRow(
       isDefault: true,
       userId: user.id,
     })
-    .onConflictDoNothing({ target: [categoryTable.name, categoryTable.userId] })
+    .onConflictDoNothing({
+      target: [categoryTable.name, categoryTable.userId],
+      where: isNull(categoryTable.parentId),
+    })
   const category = requireRow(
     await db
       .select()

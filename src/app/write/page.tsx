@@ -19,7 +19,7 @@ import type { CategoryWithCount } from '@/server/schemas/category'
  */
 const WritePage = function WritePage() {
   const { isSignedIn } = useUser()
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     ...orpc.category.list.queryOptions({}),
     // Signed-out visitors never trigger a server read; the list stays empty.
     enabled: isSignedIn === true,
@@ -41,6 +41,10 @@ const WritePage = function WritePage() {
       <LiveEditor
         categories={categories}
         isCategoryListPending={isCategoryListPending}
+        isCategoryListError={isSignedIn === true && isError}
+        onRetryCategories={() => {
+          void refetch()
+        }}
       />
     </main>
   )

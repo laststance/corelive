@@ -244,3 +244,51 @@ describe('parseForceDate', () => {
     expect(parseForceDate('2026-01-01')).toBe('2026-01-01')
   })
 })
+
+test('annual parent totals include only that year and preserve the overall seven entries', () => {
+  // Arrange
+  const work = { id: 1, name: 'Work', color: 'blue' }
+  const data = new Map<string, HeatmapDay>([
+    [
+      '2026-05-11',
+      {
+        date: '2026-05-11',
+        count: 7,
+        categories: [
+          { ...work, count: 1, parent: null },
+          { id: 2, name: 'CoreLive', color: 'blue', count: 3, parent: work },
+          {
+            id: 3,
+            name: 'Client work',
+            color: 'green',
+            count: 2,
+            parent: work,
+          },
+          { id: 4, name: 'General', color: 'amber', count: 1, parent: null },
+        ],
+      },
+    ],
+    [
+      '2025-12-31',
+      {
+        date: '2025-12-31',
+        count: 9,
+        categories: [
+          { id: 2, name: 'CoreLive', color: 'blue', count: 9, parent: work },
+        ],
+      },
+    ],
+  ])
+  // Act
+  const review = aggregateYearInReview(data, '2026-12-31')
+  // Assert
+  expect(review.totalCompleted).toBe(7)
+  expect(review.activeDays).toBe(1)
+  expect(
+    review.topCategories.map(({ name, count }) => ({ name, count })),
+  ).toEqual([
+    { name: 'Work', count: 6 },
+    { name: 'General', count: 1 },
+  ])
+  expect(review.topCategories[0]?.directCount).toBe(1)
+})

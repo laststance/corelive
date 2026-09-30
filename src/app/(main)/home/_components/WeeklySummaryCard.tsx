@@ -11,7 +11,7 @@ import {
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { cn } from '@/lib/utils'
 
-import { CategoryTotalChip } from './CategoryTotalChip'
+import { CategoryTotals } from './CategoryTotals'
 
 interface WeeklySummaryCardProps {
   /**
@@ -112,11 +112,10 @@ export const WeeklySummaryCard = function WeeklySummaryCard({
         </p>
 
         {stats.topCategories.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5 pt-1">
-            {stats.topCategories.map((category) => (
-              <CategoryTotalChip key={category.id} category={category} />
-            ))}
-          </ul>
+          <CategoryTotals
+            categories={stats.topCategories}
+            label="Top categories this week"
+          />
         )}
       </CardContent>
     </Card>

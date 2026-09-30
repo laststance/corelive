@@ -11,7 +11,7 @@ import { aggregateLastSevenDays } from '@/lib/aggregate-last-seven-days'
 import { log } from '@/lib/logger'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 
-import { CategoryTotalChip } from './CategoryTotalChip'
+import { CategoryTotals } from './CategoryTotals'
 
 /**
  * Window the digest summarises. Anchored to the *local* Sunday so the user's
@@ -263,14 +263,10 @@ export const SundayDigestCard = function SundayDigestCard({
         ) : null}
 
         {weekStats.topCategories.length > 0 && (
-          <ul
-            aria-label="Top categories this week"
-            className="flex flex-wrap gap-1.5"
-          >
-            {weekStats.topCategories.map((category) => (
-              <CategoryTotalChip key={category.id} category={category} />
-            ))}
-          </ul>
+          <CategoryTotals
+            categories={weekStats.topCategories}
+            label="Top categories this week"
+          />
         )}
       </CardContent>
     </Card>

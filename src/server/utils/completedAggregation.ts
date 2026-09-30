@@ -1,7 +1,8 @@
-import { and, asc, between, eq, isNull, or } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { categoryTable, completedTable, todoTable } from '@/db/schema'
+import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
+import type { DayDetailTask } from '@/server/schemas/completed'
 
 /**
  * One row in the merged Todo+Completed completion stream consumed by the
@@ -19,7 +20,7 @@ export type CompletedEntry = {
   id: number
   title: string
   completedAt: Date
-  category: { id: number; name: string; color: string }
+  category: NonNullable<DayDetailTask['category']>
 }
 
 /**
@@ -66,115 +67,73 @@ export async function fetchCompletedEntries(
   startDate: Date,
   endDate: Date,
 ): Promise<CompletedEntry[]> {
-  // Two parallel reads; merge in JS. Each query is bounded by userId so the
-  // postgres planner uses the primary userId access path. No extra index
-  // needed — see /plan-eng-review §4.
-  const [todoRows, completedRows] = await Promise.all([
-    db
-      .select({
-        id: todoTable.id,
-        text: todoTable.text,
-        completedAt: todoTable.completedAt,
-        updatedAt: todoTable.updatedAt,
-        category: {
-          id: categoryTable.id,
-          name: categoryTable.name,
-          color: categoryTable.color,
-        },
-      })
-      .from(todoTable)
-      // categoryId is a required FK, so every todo joins exactly one category.
-      .innerJoin(categoryTable, eq(todoTable.categoryId, categoryTable.id))
-      .where(
-        and(
-          eq(todoTable.userId, userId),
-          eq(todoTable.completed, true),
-          // Filter by the stable completion day. `completedAt` is the semantic
-          // completion timestamp (added by an earlier migration); fall back to
-          // `updatedAt` only for rows whose `completedAt` is still null (an
-          // unconverted write path or a pre-backfill row) so they never vanish
-          // from the heatmap.
-          or(
-            between(todoTable.completedAt, startDate, endDate),
-            and(
-              isNull(todoTable.completedAt),
-              between(todoTable.updatedAt, startDate, endDate),
-            ),
-          ),
-        ),
-      )
-      .orderBy(asc(todoTable.updatedAt)),
-    db
-      .select({
-        id: completedTable.id,
-        title: completedTable.title,
-        // Bucket by `completedAt ?? createdAt` (coalesced in JS below).
-        completedAt: completedTable.completedAt,
-        createdAt: completedTable.createdAt,
-        category: {
-          id: categoryTable.id,
-          name: categoryTable.name,
-          color: categoryTable.color,
-        },
-      })
-      .from(completedTable)
-      .innerJoin(categoryTable, eq(completedTable.categoryId, categoryTable.id))
-      .where(
-        and(
-          eq(completedTable.userId, userId),
-          // archived rows are excluded from the heatmap surface. Nothing writes
-          // `archived` any more (the archive flow went with the Todo vertical),
-          // so every live row is archived:false — but the filter stays: an
-          // archived:true row would silently erase its whole day.
-          eq(completedTable.archived, false),
-          // Filter by the semantic completion day, falling back to `createdAt`
-          // (insert time) only for rows whose `completedAt` is null. This lands
-          // the dated-import case (a row with a past `completedAt` and a today
-          // `createdAt`) on its REAL day, and keeps Slice-1 paste-import correct
-          // (those rows have completedAt = now() = createdAt). The backfill set
-          // completedAt = createdAt, so nulls are not expected — the fallback is
-          // defensive.
-          or(
-            between(completedTable.completedAt, startDate, endDate),
-            and(
-              isNull(completedTable.completedAt),
-              between(completedTable.createdAt, startDate, endDate),
-            ),
-          ),
-        ),
-      )
-      .orderBy(asc(completedTable.createdAt)),
-  ])
-
-  const todoEntries: CompletedEntry[] = todoRows.map((row) => ({
-    source: 'todo',
-    id: row.id,
-    title: row.text,
-    // Bucket by the stable completion day, falling back to updatedAt for any
-    // row whose completedAt is null (defensive — see the where clause).
-    completedAt: row.completedAt ?? row.updatedAt,
-    category: row.category,
-  }))
-
-  const completedEntries: CompletedEntry[] = completedRows.map((row) => ({
-    source: 'completed',
-    id: row.id,
-    title: row.title,
-    // Bucket by the semantic completion day, falling back to the insert time
-    // for any row whose completedAt is null (defensive — the migration
-    // backfilled existing rows with completedAt = createdAt).
-    completedAt: row.completedAt ?? row.createdAt,
-    category: row.category,
-  }))
-
-  // Stable merge of the two halves into one timeline.
-  return [...todoEntries, ...completedEntries].sort(compareCompletedEntries)
+  type CompletionRow = {
+    source: CompletedEntry['source']
+    id: number
+    title: string
+    completed_at: string
+    category_id: number
+    category_name: string
+    category_color: string
+    parent_id: number | null
+    parent_name: string | null
+    parent_color: string | null
+  }
+  // One statement pins both legacy and kept entries to the same hierarchy snapshot.
+  // ISO text parameters preserve UTC wall-clock comparisons for timestamp-without-zone columns.
+  const { rows } = await db.execute<CompletionRow>(sql`
+    WITH entries AS (
+      SELECT 'todo'::text AS source, t.id, t.text AS title,
+             COALESCE(t."completedAt", t."updatedAt") AS completed_at,
+             t."categoryId" AS category_id
+      FROM "Todo" t
+      WHERE t."userId" = ${userId} AND t.completed = true
+        AND ((t."completedAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()})
+          OR (t."completedAt" IS NULL AND t."updatedAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()}))
+      UNION ALL
+      SELECT 'completed'::text AS source, cp.id, cp.title,
+             COALESCE(cp."completedAt", cp."createdAt") AS completed_at,
+             cp."categoryId" AS category_id
+      FROM "Completed" cp
+      WHERE cp."userId" = ${userId} AND cp.archived = false
+        AND ((cp."completedAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()})
+          OR (cp."completedAt" IS NULL AND cp."createdAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()}))
+    )
+    SELECT e.source, e.id, e.title, e.completed_at,
+           c.id AS category_id, c.name AS category_name, c.color AS category_color,
+           p.id AS parent_id, p.name AS parent_name, p.color AS parent_color
+    FROM entries e
+    INNER JOIN "Category" c ON c.id = e.category_id AND c."userId" = ${userId}
+    LEFT JOIN "Category" p ON p.id = c."parentId" AND p."userId" = c."userId"
+  `)
+  // Preserve the established source/id tie order after parsing raw UTC timestamps.
+  return rows
+    .map((row) => ({
+      source: row.source,
+      id: row.id,
+      title: row.title,
+      completedAt: parseUtcTimestamp(row.completed_at),
+      category: {
+        id: row.category_id,
+        name: row.category_name,
+        color: row.category_color,
+        parent:
+          row.parent_id === null
+            ? null
+            : {
+                id: row.parent_id,
+                name: row.parent_name ?? '',
+                color: row.parent_color ?? 'blue',
+              },
+      },
+    }))
+    .sort(compareCompletedEntries)
 }
 
 /**
  * Orders completion entries by completion time ascending, breaking ties by source (todo first) and then id.
  *
- * The tie-break keeps rows that share an instant, such as a bulk import or a test seed, in one deterministic order instead of whatever order the two queries happened to return them.
+ * The tie-break keeps rows that share an instant, such as a bulk import or a test seed, in one deterministic order instead of the database's unspecified row order.
  * Called as the sort comparator of {@link fetchCompletedEntries}.
  *
  * @param a - First entry.

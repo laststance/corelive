@@ -1,6 +1,9 @@
-import type { HeatmapDay } from '@/hooks/useHeatmapData'
+import type { HeatmapCategory, HeatmapDay } from '@/hooks/useHeatmapData'
 
-import { compareCategoryTotals } from './compareCategoryTotals'
+import {
+  rollupCategoryTotals,
+  type RootCategoryTotal,
+} from './rollupCategoryTotals'
 import { shiftIsoDate } from './shiftIsoDate'
 
 /**
@@ -27,12 +30,7 @@ const TOP_CATEGORIES_COUNT = 3
  * Mirrors the `HeatmapCategory` shape but is re-stated here so the util
  * can be tested without pulling in the heatmap hook's transitive types.
  */
-export type TopCategory = {
-  id: number
-  name: string
-  color: string
-  count: number
-}
+export type TopCategory = RootCategoryTotal
 
 /**
  * Discriminated trend state surfaced to the WeeklySummaryCard. Renderer
@@ -90,10 +88,10 @@ export type WeeklyStats = {
  * @param windowLength - How many days the window covers (>=1)
  * @returns
  * - total: Sum of `count` across days in the window
- * - categoryCounts: Map of categoryId → { name, color, count }
+ * - categoryCounts: Direct counts carrying current parent metadata for root aggregation
  * @example
  * sumWindow(map, '2026-05-11', 7)
- * // => { total: 12, categoryCounts: Map { 1 => { name: 'writing', color: 'blue', count: 5 }, ... } }
+ * // => { total: 12, categoryCounts: [{ id: 1, name: 'writing', color: 'blue', count: 5, parent: null }, ...] }
  */
 function sumWindow(
   dataByDate: Map<string, HeatmapDay>,
@@ -101,9 +99,9 @@ function sumWindow(
   windowLength: number,
 ): {
   total: number
-  categoryCounts: Map<number, TopCategory>
+  categoryCounts: HeatmapCategory[]
 } {
-  const categoryCounts = new Map<number, TopCategory>()
+  const categoryCounts: HeatmapCategory[] = []
   let total = 0
 
   for (let dayOffset = 0; dayOffset < windowLength; dayOffset++) {
@@ -112,19 +110,7 @@ function sumWindow(
     if (!day) continue
     total += day.count
 
-    for (const category of day.categories) {
-      const existing = categoryCounts.get(category.id)
-      if (existing) {
-        existing.count += category.count
-      } else {
-        categoryCounts.set(category.id, {
-          id: category.id,
-          name: category.name,
-          color: category.color,
-          count: category.count,
-        })
-      }
-    }
+    categoryCounts.push(...day.categories)
   }
 
   return { total, categoryCounts }
@@ -167,9 +153,10 @@ export function aggregateLastSevenDays(
   const current = sumWindow(dataByDate, todayIso, WEEKLY_WINDOW_DAYS)
   const prior = sumWindow(dataByDate, priorWindowEnd, WOW_PRIOR_WINDOW_DAYS)
 
-  const topCategories = Array.from(current.categoryCounts.values())
-    .sort(compareCategoryTotals)
-    .slice(0, TOP_CATEGORIES_COUNT)
+  const topCategories = rollupCategoryTotals(current.categoryCounts).slice(
+    0,
+    TOP_CATEGORIES_COUNT,
+  )
 
   // First-week heuristic: dataByDate has no entries anywhere in the 14-day
   // inspection window. dataByDate could still have older entries (a 365-day

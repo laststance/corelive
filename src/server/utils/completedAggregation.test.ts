@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto'
 
-import { eq } from 'drizzle-orm'
+import { and, eq, isNotNull } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
@@ -133,6 +133,14 @@ afterEach(async () => {
     // Todo/Completed rows restrict their category's and user's delete, so they go first.
     await db.delete(completedTable).where(eq(completedTable.userId, userId))
     await db.delete(todoTable).where(eq(todoTable.userId, userId))
+    await db
+      .delete(categoryTable)
+      .where(
+        and(
+          eq(categoryTable.userId, userId),
+          isNotNull(categoryTable.parentId),
+        ),
+      )
     await db.delete(categoryTable).where(eq(categoryTable.userId, userId))
     await db.delete(userTable).where(eq(userTable.id, userId))
   }
@@ -180,7 +188,12 @@ describeIfDb('fetchCompletedEntries', () => {
         id: todoId,
         title: 'draft digest',
         completedAt: new Date('2026-05-07T10:00:00.000Z'),
-        category: { id: owner.category.id, name: 'writing', color: 'blue' },
+        category: {
+          id: owner.category.id,
+          name: 'writing',
+          color: 'blue',
+          parent: null,
+        },
       },
     ])
   })
@@ -232,7 +245,12 @@ describeIfDb('fetchCompletedEntries', () => {
         title: 'buy milk',
         completedAt: new Date('2026-05-09T18:30:00.000Z'),
         // The legacy mock fed `category: null`; a real row must reference a real category (NOT NULL FK).
-        category: { id: owner.category.id, name: 'General', color: 'blue' },
+        category: {
+          id: owner.category.id,
+          name: 'General',
+          color: 'blue',
+          parent: null,
+        },
       },
     ])
   })
@@ -546,5 +564,75 @@ describeIfDb('fetchCompletedEntries', () => {
 
     // Assert
     expect(entries[0]?.completedAt).toEqual(completionDay)
+  })
+  test('uses one hierarchy snapshot when a child moves while one completion source is blocked', async () => {
+    // Arrange — only Completed is locked, so the old parallel Todo read could finish under the old parent.
+    const owner = await seedOwner('CoreLive')
+    const [work] = await db
+      .insert(categoryTable)
+      .values({ name: 'Work', userId: owner.userId })
+      .returning()
+    const [personal] = await db
+      .insert(categoryTable)
+      .values({ name: 'Personal', userId: owner.userId })
+      .returning()
+    await db
+      .update(categoryTable)
+      .set({ parentId: work!.id })
+      .where(eq(categoryTable.id, owner.category.id))
+    const instant = new Date('2026-05-07T09:00:00.000Z')
+    await insertTodo(owner, {
+      text: 'Legacy entry',
+      completed: true,
+      completedAt: instant,
+      updatedAt: instant,
+    })
+    await insertCompleted(owner, {
+      title: 'Kept entry',
+      createdAt: instant,
+      completedAt: instant,
+    })
+    const holder = await db.$client.connect()
+    let reading:
+      Promise<Awaited<ReturnType<typeof fetchCompletedEntries>>> | undefined
+    try {
+      const { rows } = await holder.query<{ pid: number }>(
+        'SELECT pg_backend_pid() AS pid',
+      )
+      const holderPid = rows[0]?.pid
+      if (holderPid === undefined) throw new Error('Lock holder PID missing')
+      await holder.query('BEGIN')
+      await holder.query('LOCK TABLE "Completed" IN ACCESS EXCLUSIVE MODE')
+      reading = fetchCompletedEntries(owner.userId, RANGE_START, RANGE_END)
+      await vi.waitFor(async () => {
+        const result = await db.$client.query<{ count: number }>(
+          'SELECT count(*)::int AS count FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))',
+          [holderPid],
+        )
+        expect(result.rows[0]?.count).toBeGreaterThanOrEqual(1)
+      })
+      // Act — change the parent after the request has started and before its blocked source can finish.
+      await db
+        .update(categoryTable)
+        .set({ parentId: personal!.id })
+        .where(eq(categoryTable.id, owner.category.id))
+      await holder.query('COMMIT')
+      const entries = await reading
+      // Assert — neither source can report the former parent while the other reports the current parent.
+      expect(
+        entries.map((entry) => [entry.source, entry.category.parent?.name]),
+      ).toEqual([
+        ['todo', 'Personal'],
+        ['completed', 'Personal'],
+      ])
+      expect(entries.map((entry) => entry.completedAt.toISOString())).toEqual([
+        '2026-05-07T09:00:00.000Z',
+        '2026-05-07T09:00:00.000Z',
+      ])
+    } finally {
+      await holder.query('ROLLBACK')
+      holder.release()
+      await reading?.catch(() => undefined)
+    }
   })
 })

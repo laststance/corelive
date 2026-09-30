@@ -97,37 +97,6 @@ type HeatmapRectValue = HeatMapValue & {
 }
 
 /**
- * Map of category color names to hex values.
- * @example
- * getCategoryHex("blue") // => "#3b82f6"
- */
-const CATEGORY_COLOR_MAP: Record<string, string> = {
-  blue: '#3b82f6',
-  red: '#ef4444',
-  green: '#22c55e',
-  yellow: '#eab308',
-  purple: '#a855f7',
-  pink: '#ec4899',
-  orange: '#f97316',
-  cyan: '#06b6d4',
-  indigo: '#6366f1',
-  gray: '#6b7280',
-}
-
-/**
- * Resolves a category color name to its hex value.
- * Falls back to the raw color string if not in the map (supports custom hex).
- * @param color - Color name or hex string
- * @returns Hex color string
- * @example
- * getCategoryHex("blue") // => "#3b82f6"
- * getCategoryHex("#ff0000") // => "#ff0000"
- */
-function getCategoryHex(color: string): string {
-  return CATEGORY_COLOR_MAP[color] ?? color
-}
-
-/**
  * Formats a YYYY/MM/DD or YYYY-MM-DD date string to a human-readable format.
  * @param dateStr - Date string
  * @returns Formatted date like "March 24, 2026"
@@ -155,21 +124,6 @@ const CategoryBreakdown = function CategoryBreakdown({
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium">{formatDate(day.date)}</p>
-      {day.categories.length > 0 ? (
-        <div className="space-y-0.5">
-          {day.categories.map((cat) => (
-            <div key={cat.id} className="flex items-center gap-1.5 text-xs">
-              <span
-                className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: getCategoryHex(cat.color) }}
-              />
-
-              <span>{cat.name}</span>
-              <span className="ml-auto text-muted-foreground">{cat.count}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
       <p className="border-t pt-1 text-xs text-muted-foreground">
         {day.count} task{day.count !== 1 ? 's' : ''} completed
       </p>

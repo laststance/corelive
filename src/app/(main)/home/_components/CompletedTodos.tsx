@@ -49,12 +49,14 @@ interface GroupedEntries {
 interface CompletedTodosFilterState {
   period: CompletedPeriod
   categoryId: number | null
+  includeSubcategories: boolean
   customDateRange?: DateRange
 }
 
 const INITIAL_COMPLETED_TODOS_FILTERS: CompletedTodosFilterState = {
   period: 'all',
   categoryId: null,
+  includeSubcategories: true,
 }
 
 /**
@@ -72,7 +74,7 @@ export const CompletedTodos = function CompletedTodos({
   const [filters, setFilters] = useState<CompletedTodosFilterState>(
     INITIAL_COMPLETED_TODOS_FILTERS,
   )
-  const { categoryId, customDateRange, period } = filters
+  const { categoryId, customDateRange, period, includeSubcategories } = filters
   const localDayKey = useLocalDayKey()
   // The Date instances must stay stable between unrelated renders because they
   // participate in oRPC's generated infinite-query key. Local-day changes
@@ -116,7 +118,7 @@ export const CompletedTodos = function CompletedTodos({
     ...orpc.completed.journal.infiniteOptions({
       input: (pageParam) => ({
         ...getUnfilteredCompletedJournalInput(pageParam),
-        ...(categoryId === null ? {} : { categoryId }),
+        ...(categoryId === null ? {} : { categoryId, includeSubcategories }),
         ...dateRange,
       }),
       initialPageParam: COMPLETED_JOURNAL_INITIAL_OFFSET,
@@ -290,6 +292,13 @@ export const CompletedTodos = function CompletedTodos({
             categories={categories}
             period={period}
             categoryId={categoryId}
+            includeSubcategories={includeSubcategories}
+            onIncludeSubcategoriesChange={(include) =>
+              setFilters((current) => ({
+                ...current,
+                includeSubcategories: include,
+              }))
+            }
             customDateRange={customDateRange}
             onPeriodChange={(nextPeriod) =>
               setFilters((currentFilters) => ({
@@ -301,6 +310,7 @@ export const CompletedTodos = function CompletedTodos({
               setFilters((currentFilters) => ({
                 ...currentFilters,
                 categoryId: nextCategoryId,
+                includeSubcategories: true,
               }))
             }
             onCustomDateRangeChange={(nextCustomDateRange) =>

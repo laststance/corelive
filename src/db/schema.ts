@@ -12,6 +12,7 @@
 import { sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   doublePrecision,
   foreignKey,
   index,
@@ -106,9 +107,30 @@ export const categoryTable = pgTable(
     // Plain text with no CHECK constraint: a stored color can sit outside the API palette, so readers cast explicitly.
     color: text('color').default('blue').notNull(),
     isDefault: boolean('isDefault').default(false).notNull(),
+    parentId: integer('parentId'),
   },
   (table) => [
-    uniqueIndex('Category_name_userId_key').on(table.name, table.userId),
+    uniqueIndex('Category_id_userId_key').on(table.id, table.userId),
+    uniqueIndex('Category_root_name_userId_key')
+      .on(table.name, table.userId)
+      .where(sql`${table.parentId} IS NULL`),
+    uniqueIndex('Category_child_name_parent_userId_key')
+      .on(table.name, table.parentId, table.userId)
+      .where(sql`${table.parentId} IS NOT NULL`),
+    index('Category_userId_parentId_idx').on(table.userId, table.parentId),
+    check(
+      'Category_not_self_parent_check',
+      sql`${table.parentId} IS NULL OR ${table.parentId} <> ${table.id}`,
+    ),
+    check(
+      'Category_default_is_root_check',
+      sql`NOT ${table.isDefault} OR ${table.parentId} IS NULL`,
+    ),
+    foreignKey({
+      columns: [table.parentId, table.userId],
+      foreignColumns: [table.id, table.userId],
+      name: 'Category_parent_owner_fkey',
+    }).onDelete('restrict'),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [userTable.id],
