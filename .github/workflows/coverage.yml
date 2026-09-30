@@ -47,7 +47,7 @@ jobs:
             printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/home\n'
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
-            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive?schema=public'
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive'
           } > .env
 
       - name: Start Postgres via Docker Compose 🐳
@@ -60,11 +60,8 @@ jobs:
           timeout 60 bash -c 'until docker compose -f compose.yml -p corelive exec postgres env PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive; do sleep 2; done'
           echo "Database 'corelive' exists and is ready!"
 
-      - name: Run Prisma migrations 📦
-        run: pnpm prisma migrate deploy
-
-      - name: Generate Prisma Client 🗄️
-        run: pnpm prisma generate
+      - name: Run database migrations 📦
+        run: pnpm db:migrate
 
       - name: Generate Icons 🎨
         run: pnpm build:icons

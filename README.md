@@ -7,7 +7,7 @@
 
 CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. Built with [Next.js](https://nextjs.org/), available as a web app and a macOS desktop app (Electron).
 
-> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Prisma schema, APIs, or any other element freely and abruptly — there is **no need to write or preserve migrations, keep existing data, or maintain backward compatibility**. When the schema changes, just reset the database (`pnpm db:reset`).
+> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to keep existing data or maintain backward compatibility**. Every schema change still ships as a generated migration (CI fails when `src/db/schema.ts` and `drizzle/` disagree): run `pnpm db:generate`, commit the SQL, then reset the database (`pnpm db:reset`) — a reset only replays the committed migrations.
 
 ## Documentation
 
@@ -79,20 +79,27 @@ The Docker Compose service maps **host port `5491`** to the container's default 
 # Start the PostgreSQL database
 docker compose up -d postgres
 
-# Apply migrations (also generates the Prisma client)
-pnpm prisma:migrate
+# Apply migrations (SQL lives in drizzle/, schema in src/db/schema.ts)
+pnpm db:migrate
 
 # Seed initial data (optional)
-pnpm prisma:seed
+pnpm db:seed
+
+# After editing src/db/schema.ts, generate the next migration
+pnpm db:generate
 ```
+
+> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (your tables and data are left untouched). Run `pnpm db:reset` once to rebuild it, or keep its data by recording the baseline: `node --env-file=.env scripts/baseline-drizzle-migrations.mjs --apply` (the script reads `POSTGRES_PRISMA_URL` from the environment, and only writes on a database that carries the previous ORM's migration history and a schema identical to the one `drizzle/0000_init.sql` builds).
 
 Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
 
 ```
-POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive?schema=public"
+POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive"
 ```
 
 #### Database Management
+
+**Schema changes go through migrations only.** Edit `src/db/schema.ts`, run `pnpm db:generate`, review and commit the SQL, then `pnpm db:migrate`. Never use `drizzle-kit push` or `pull` here: their live-database introspection cannot see `SkillNode_skillTreeId_id_key` (the index both composite `NodeEdge` foreign keys point at), so they always plan to drop and re-add those keys and then fail halfway through. `drizzle.config.ts` also refuses any drizzle-kit command that could connect to a non-local database when the URL comes from the environment or `.env`; only the deploy workflow opts out (`DRIZZLE_ALLOW_REMOTE=1`, honored only on a GitHub Actions runner). Credential flags typed on the command line (`--url`, `--host`, …) make drizzle-kit skip the config, so that gate does not cover them.
 
 **Basic Commands:**
 
@@ -131,6 +138,8 @@ You can start editing the page by modifying files under `src/app/`. The page aut
 This project loads no web fonts: text renders in the stock shadcn/ui + Tailwind system font stacks (`font-sans` for UI, `font-mono` for data).
 
 ### Code quality
+
+Suites that need a real PostgreSQL (`describeIfDb`) are skipped unless `RUN_DB_INTEGRATION_TESTS=1`, which CI sets, so `pnpm test` and `pnpm validate` do not run them. With the local database up (`docker compose up -d postgres`), run `pnpm test:db` to include them before you push.
 
 Run `pnpm validate` before committing. Alongside tests, lint, the build, and type checks, it runs three [Fallow](https://github.com/fallow-rs/fallow) gates:
 

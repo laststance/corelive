@@ -117,7 +117,7 @@ const create = os
   .input(CreateCategorySchema)
   .output(CategorySchema)
   .handler(({ input }) => {
-    // Mirrors the real @@unique([name, userId]) violation -> P2002 -> CONFLICT.
+    // Mirrors the real (name, userId) unique violation (SQLSTATE 23505, via isPgError) -> CONFLICT.
     if (categories.some((category) => category.name === input.name)) {
       throw new ORPCError('CONFLICT', {
         message: `Category "${input.name}" already exists`,
@@ -188,7 +188,7 @@ const remove = os
     return { success: true }
   })
 
-/** Same keys as `src/server/router.ts`, minus the Prisma and Clerk halves. */
+/** Same keys as `src/server/router.ts`, minus the database-backed and Clerk halves. */
 const testRouter = {
   category: { list, create, update, delete: remove },
 }

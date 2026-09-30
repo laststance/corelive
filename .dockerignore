@@ -56,6 +56,3 @@ logs/
 # Temporary files
 *.tmp
 *.temp
-
-# Prisma generated client (will be regenerated)
-prisma/generated/ 

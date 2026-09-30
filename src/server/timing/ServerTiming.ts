@@ -20,7 +20,7 @@ export class ServerTiming {
     )
   }
 
-  /** Measures an operation even when it rejects so callers retain failure-path diagnostics. @param metric - Stable response metric name. @param operation - Synchronous or asynchronous work to measure. @returns The operation's original result. @example `await timing.measure('sql', () => prisma.todo.findMany())` */
+  /** Measures an operation even when it rejects so callers retain failure-path diagnostics. @param metric - Stable response metric name. @param operation - Synchronous or asynchronous work to measure. @returns The operation's original result. @example `await timing.measure('sql', () => db.select().from(todoTable))` */
   async measure<Result>(
     metric: ServerTimingMetric,
     operation: () => Result | Promise<Result>,

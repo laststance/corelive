@@ -44,15 +44,15 @@ conditions or follow-up work, not defects it introduced.
 **Priority:** P2
 **Depends on:** PR #178 merged.
 
-### Dead `ImportBatch` schema still costs index maintenance
+### Dead `Todo.importBatchId` column still sits in the schema
 
-**What:** Prisma `model ImportBatch`, plus `Completed.importBatchId` / `Todo.importBatchId` and their two `@@index` entries, have zero production writers since paste-import was deleted in v0.21.0 (PR #168). Seeds and tests are the only writers.
+**What:** `Todo.importBatchId` and its index `Todo_importBatchId_idx` have no production writer since paste-import was deleted in v0.21.0 (PR #168). Seeds and tests are the only writers.
 
-**Why:** Unlike the other v0.21.0 residue, this is not a free dead switch. Every insert into `Completed` and `Todo` still pays index maintenance for a column nothing reads.
+**Why:** Unlike the other v0.21.0 residue, this is not a free dead switch: removing it needs a migration. It is housekeeping rather than a performance fix, because nothing inserts into `Todo` in production any more.
 
-**Context:** Deliberately kept out of the PR #178 cleanup because dropping it needs a migration, which makes it a maintainer call rather than a mechanical sweep. See the `core-only-rebuild-todo-vertical-deleted` note distinguishing dead switches from dead schema.
+**Context:** Deliberately kept out of the PR #178 cleanup because dropping it needs a migration, which makes it a maintainer call rather than a mechanical sweep. Do NOT drop `ImportBatch` or `Completed.importBatchId`: `importLocalCompleted` (`src/server/procedures/completed.ts`) inserts an `ImportBatch` row and stamps `Completed.importBatchId` to make local imports idempotent (#171, #173). See the `core-only-rebuild-todo-vertical-deleted` note distinguishing dead switches from dead schema.
 
-**Effort:** M
+**Effort:** S
 **Priority:** P3
 **Depends on:** a migration window.
 
@@ -123,6 +123,41 @@ conditions or follow-up work, not defects it introduced.
 **Why:** Raised by CodeRabbit on PR #178 as a Minor finding, but the method is byte-identical at the merge base (`e50888dc`) and so is its only caller, so it predates the PR and is out of scope for a subtractive diff. The PR's own shortcut deletions cannot reach it either: `getHandlerForShortcut(id)` returns undefined for a retired id and the `if (handler)` guard skips the entry.
 
 **Context:** The fix is to compare `failedShortcut.accelerator` against `this.shortcuts[id]` inside the retry loop and drop entries that are empty or no longer match. The regression belongs in `ShortcutManager.liveEditorTwoSlots.test.ts`, which already covers the empty-string disabled sentinel, and needs a stateful `globalShortcut` mock so a failed registration can be observed.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** nothing.
+
+## Drizzle cutover follow-ups (PR #196, 2026-09-29)
+
+Two items surfaced in the pre-landing review of the move from the previous ORM to Drizzle. Neither is a defect the migration introduced; both would have widened a PR that is meant to change no behavior.
+
+### Retire the one-time cutover tooling once production carries the baseline row
+
+**What:** After `node scripts/baseline-drizzle-migrations.mjs --apply` has recorded the baseline on production, remove the cutover-only parts, in the same change and before the next migration lands:
+
+- the `--apply` path of `scripts/baseline-drizzle-migrations.mjs` (`applyBaseline`, `verifySchemaMatchesFixture`, the constants above them);
+- the `--apply` tests in `src/db/baselineMigration.test.ts` (`refuses to record a baseline …`, `records exactly one baseline row …`, the schema-drift refusal);
+- every pointer to `--apply`: the "Record the baseline first" failure message in that script, the one-off paragraph in the header of `.github/workflows/db-migrate.yml`, and the "Local database built before the move to Drizzle" note in `README.md`;
+- then update the tests in `src/db/baselineMigration.test.ts` that assume a journal of exactly one migration (they call `recordBaseline` or hard-code `0000_init`'s timestamp; the header of that file lists the rule).
+
+Keep the read-only mode and `--expect-current`: `.github/workflows/db-migrate.yml` runs them on every deploy. Keep `src/db/__fixtures__/previousOrmSchemaFingerprint.txt` too: `src/db/schemaParity.test.ts` still reads it.
+
+**Why:** `--apply` insists on exactly one migration file, so it and the tests around it fail as soon as a second migration exists. Everything that only serves the one-time cutover should go once it has run, or it becomes a trap for the next person to add a migration.
+
+**Context:** The headers of `scripts/baseline-drizzle-migrations.mjs` and `src/db/baselineMigration.test.ts` describe the same lifecycle. The fixture is a frozen record of the previous ORM's schema and must never be edited to make a test pass; `src/db/schemaParity.test.ts` builds its own scratch database from `0000_init.sql` alone, so it keeps passing after later migrations and stays as a guard on that file.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** the production baseline row recorded; must land before the next migration.
+
+### Tune the `pg` pool for serverless
+
+**What:** `src/db/index.ts` leaves the `pg.Pool` at its defaults (10 connections, 10 s idle timeout) and does not register it with `attachDatabasePool` from `@vercel/functions`. Set `max`, `idleTimeoutMillis` and `maxLifetimeSeconds` for serverless, and confirm `POSTGRES_PRISMA_URL` is the pooled endpoint.
+
+**Why:** A suspended Vercel instance never fires the pool's idle timer, so its idle connections stay open on the database side until a TCP or server timeout closes them, and each warm instance can hold up to 10. Several procedures use two connections at once (`Promise.all`), so a busy instance can exhaust its pool and queue requests for up to the 10 s connection timeout.
+
+**Context:** Not a regression: the previous adapter used a default pool too, and the migration cut it from two pools per instance (the client module plus the webhook's private one) to one. Needs the new `@vercel/functions` dependency and a look at real connection counts before choosing numbers, so it does not belong in a parity migration.
 
 **Effort:** S
 **Priority:** P3

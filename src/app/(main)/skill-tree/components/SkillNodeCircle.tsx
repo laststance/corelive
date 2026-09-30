@@ -45,7 +45,7 @@ export const SkillNodeCircle = function SkillNodeCircle({
   onClick,
 }: SkillNodeCircleProps) {
   // dnd-kit ID namespace: node-* for SkillNode droppables, todo-* for Todo draggables.
-  // Prevents collisions because both Prisma models use autoincrement integers.
+  // Prevents collisions because both tables use autoincrement integers.
   const { ref, isDropTarget } = useDroppable({ id: `node-${id}` })
   const { level, progress, next } = xpToLevel(xp)
 

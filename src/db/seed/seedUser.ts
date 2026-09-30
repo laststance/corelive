@@ -1,0 +1,17 @@
+/**
+ * Single source of truth for the seeded development user's identity,
+ * imported by BOTH `src/db/seed/seed.ts` and `src/db/seed/seed.dev.ts`
+ * (year-scale power-user dev seed). The two seeds MUST target the same Clerk
+ * dev-tenant user, and this module makes that contract compiler-enforced instead
+ * of a hand-synced pair of string literals that could silently drift.
+ *
+ * Deliberately side-effect-free (zero imports): importing it can never trigger
+ * either seed's top-level execution, and a plain relative import resolves under
+ * the `tsx` runner without relying on tsconfig `paths`.
+ */
+
+/** Clerk user id of the seeded development account (Clerk dev tenant). */
+export const SEED_USER_CLERK_ID = 'user_32MtPR8Z8ywubMj2jwG9DdSbzPq'
+
+/** Email of the seeded development account (matches the Clerk dev tenant). */
+export const SEED_USER_EMAIL = 'test@test.com'

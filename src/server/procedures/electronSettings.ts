@@ -12,9 +12,12 @@
  * await orpcClient.electronSettings.upsert({ hideAppIcon: true })
  */
 import { ORPCError } from '@orpc/server'
+import { eq } from 'drizzle-orm'
 
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import { electronSettingsTable, type User } from '@/db/schema'
 import { createModuleLogger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
 
 import { authMiddleware } from '../middleware/auth'
 import {
@@ -24,6 +27,48 @@ import {
 } from '../schemas/electronSettings'
 
 const log = createModuleLogger('electronSettings')
+
+/**
+ * Loads the caller's settings row, creating it with defaults on first use.
+ *
+ * Two requests can both find no row and both insert; the loser's insert does nothing (unique index on `userId`), and it re-reads the winner's row instead of failing.
+ * Called by {@link getElectronSettings} and by {@link upsertElectronSettings} when a save carries no fields.
+ *
+ * @param userId - Owner of the settings row.
+ * @returns The stored settings row.
+ * @throws ORPCError INTERNAL_SERVER_ERROR when the insert lost a race yet the row cannot be read back.
+ * @example
+ * const settings = await findOrCreateSettings(user.id)
+ */
+async function findOrCreateSettings(userId: User['id']) {
+  const readSettings = () =>
+    db
+      .select()
+      .from(electronSettingsTable)
+      .where(eq(electronSettingsTable.userId, userId))
+      .limit(1)
+
+  const [existing] = await readSettings()
+  if (existing) return existing
+
+  // DO NOTHING on the unique userId index: a concurrent first read may have inserted the row
+  // already, in which case this returns no row and we read the winner's.
+  const [created] = await db
+    .insert(electronSettingsTable)
+    .values({ userId, ...DEFAULT_ELECTRON_SETTINGS })
+    .onConflictDoNothing({ target: electronSettingsTable.userId })
+    .returning()
+  if (created) return created
+
+  const [raced] = await readSettings()
+  if (!raced) {
+    // Still not found after the race - this shouldn't happen but handle it
+    throw new ORPCError('INTERNAL_SERVER_ERROR', {
+      message: 'Failed to create or retrieve Electron settings',
+    })
+  }
+  return raced
+}
 
 /**
  * Get Electron settings for the authenticated user.
@@ -49,50 +94,7 @@ export const getElectronSettings = authMiddleware
   .output(ElectronSettingsSchema)
   .handler(async ({ context }) => {
     try {
-      const { user } = context
-
-      // Try to find existing settings first
-      let settings = await prisma.electronSettings.findUnique({
-        where: { userId: user.id },
-      })
-
-      // If not found, create with defaults
-      if (!settings) {
-        try {
-          settings = await prisma.electronSettings.create({
-            data: {
-              userId: user.id,
-              ...DEFAULT_ELECTRON_SETTINGS,
-            },
-          })
-        } catch (createError: unknown) {
-          // Handle race condition: if another request created settings
-          // between findUnique and create, catch P2002 and re-fetch
-          if (
-            createError &&
-            typeof createError === 'object' &&
-            'code' in createError &&
-            createError.code === 'P2002'
-          ) {
-            // Settings were created by another request - fetch the existing record
-            settings = await prisma.electronSettings.findUnique({
-              where: { userId: user.id },
-            })
-            if (!settings) {
-              // Still not found after race - this shouldn't happen but handle it
-              throw new ORPCError('INTERNAL_SERVER_ERROR', {
-                message: 'Failed to create or retrieve Electron settings',
-                cause: createError,
-              })
-            }
-          } else {
-            // Re-throw non-P2002 errors
-            throw createError
-          }
-        }
-      }
-
-      return settings
+      return await findOrCreateSettings(context.user.id)
     } catch (error) {
       log.error({ error }, 'Error in getElectronSettings')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -105,7 +107,7 @@ export const getElectronSettings = authMiddleware
 /**
  * Upsert (create or update) Electron settings for the authenticated user.
  *
- * Uses Prisma upsert to handle both creation and update in one operation.
+ * Uses one `INSERT … ON CONFLICT ("userId") DO UPDATE` to handle both creation and update.
  * Only provided fields are updated; others retain their current values.
  *
  * @param input - Partial settings object with fields to update
@@ -137,15 +139,29 @@ export const upsertElectronSettings = authMiddleware
         )
       }
 
-      const settings = await prisma.electronSettings.upsert({
-        where: { userId: user.id },
-        update: input,
-        create: {
-          userId: user.id,
-          ...DEFAULT_ELECTRON_SETTINGS,
-          ...input,
-        },
-      })
+      // An empty save changes nothing: return the stored row (created on first use) and leave
+      // `updatedAt` alone, as the previous ORM did. Drizzle would reject an empty SET ("No values
+      // to set") before it stamps `$onUpdate`, so this cannot be left to the UPDATE.
+      if (Object.values(input).every((value) => value === undefined)) {
+        return await findOrCreateSettings(user.id)
+      }
+
+      const settings = requireRow(
+        await db
+          .insert(electronSettingsTable)
+          .values({
+            userId: user.id,
+            ...DEFAULT_ELECTRON_SETTINGS,
+            ...input,
+          })
+          // Conflict target = the unique index on userId; only provided fields change.
+          .onConflictDoUpdate({
+            target: electronSettingsTable.userId,
+            set: input,
+          })
+          .returning(),
+        'electronSettings.upsert',
+      )
 
       return settings
     } catch (error) {

@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 
 # CodeRabbit configuration for CoreLive
-# Next.js 16 App Router + Electron (macOS) + oRPC + Clerk + Prisma
+# Next.js 16 App Router + Electron (macOS) + oRPC + Clerk + Drizzle
 
 language: ja-JP
 early_access: true
@@ -62,8 +62,7 @@ reviews:
     - '!**/build/**'
 
     # Generated / machine-written
-    - '!**/prisma/migrations/**'
-    - '!**/.prisma/**'
+    - '!**/drizzle/meta/**'
     - '!**/src/lib/themes/generated.css'
     - '!**/next-env.d.ts'
     - '!**/*.tsbuildinfo'
@@ -110,12 +109,13 @@ reviews:
       instructions: |
         Server / oRPC layer:
         - Procedures live in `src/server/procedures` with Zod-validated inputs.
-        - Protect routes with Clerk auth middleware; map Clerk `userId` to `User.clerkId` in Prisma.
+        - Protect routes with Clerk auth middleware; map Clerk `userId` to `User.clerkId` via Drizzle.
         - Do not mock auth or DB in production code paths.
-        - Keep business logic testable; avoid leaking Prisma types across the client boundary.
+        - Keep business logic testable; avoid leaking database row types across the client boundary.
 
-    - path: 'prisma/schema.prisma'
+    - path: 'src/db/schema.ts'
       instructions: |
+        Every schema change needs a generated `drizzle/*.sql` migration (pnpm db:generate).
         Review schema changes for migration safety, index coverage, nullable vs required fields,
         and backward compatibility with existing Electron/web clients. Flag destructive changes
         without a migration plan.

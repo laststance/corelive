@@ -1,13 +1,28 @@
 # Production Database Migration Workflow
 #
-# This workflow deploys pending Prisma migrations to the production database.
+# This workflow deploys pending Drizzle migrations to the production database.
 #
 # Usage:
 #   1. Manual trigger: Go to Actions > DB Migrate > Run workflow
-#   2. Auto trigger: Push migration files to prisma/migrations/ on main branch
+#   2. Auto trigger: Push migration files to drizzle/ (or src/db/schema.ts) on main branch
 #
 # Required GitHub Secrets:
 #   - POSTGRES_PRISMA_URL: Production PostgreSQL connection string
+#
+# One-off baseline (the cutover from the previous ORM):
+#   Production's tables were built by the previous ORM's migrations, so `drizzle-kit migrate` would
+#   try to CREATE them again. Before the first run of this workflow, record `0000_init` as applied
+#   with ONE row, from a machine that holds the production URL:
+#     POSTGRES_PRISMA_URL=<prod> node scripts/baseline-drizzle-migrations.mjs           # read-only report
+#     POSTGRES_PRISMA_URL=<prod> node scripts/baseline-drizzle-migrations.mjs --apply   # writes the row
+#   The "Check baseline" step below refuses to migrate a database that has tables but no row, so a
+#   forgotten baseline fails here without touching anything. Merging the cutover PR to main triggers
+#   this workflow (drizzle/** changed), so the baseline must be recorded BEFORE that merge.
+#   Two cautions: run `--apply` with the same role as the POSTGRES_PRISMA_URL secret (the migrator
+#   runs CREATE SCHEMA IF NOT EXISTS on every deploy, and PostgreSQL checks CREATE on the database
+#   before honoring IF NOT EXISTS), and merge nothing else to main between `--apply` and the cutover
+#   merge (`--apply` verified the schema as it was then; later checks only look at the bookkeeping).
+#   This paragraph is cutover-only: it goes away together with `--apply` (see TODOS.md).
 #
 # Recommended Setup:
 #   1. Create a "production" environment in GitHub repository settings
@@ -25,7 +40,7 @@ on:
         required: true
         type: string
       dry_run:
-        description: 'Dry run (only check status, do not apply)'
+        description: 'Dry run (validate the migration files and read the database state, do not apply)'
         required: false
         default: false
         type: boolean
@@ -35,8 +50,8 @@ on:
     branches:
       - main
     paths:
-      - 'prisma/migrations/**'
-      - 'prisma/schema.prisma'
+      - 'drizzle/**'
+      - 'src/db/schema.ts'
 
 permissions:
   contents: read
@@ -50,6 +65,9 @@ jobs:
   migrate:
     name: Deploy Migrations
     runs-on: ubuntu-latest
+    # The baseline script bounds its own waits; `drizzle-kit migrate` does not, so an unresponsive database
+    # would otherwise hold this job (and the concurrency group above) for Actions' 6-hour default.
+    timeout-minutes: 15
 
     # Use production environment for approval gate
     environment: production
@@ -67,44 +85,56 @@ jobs:
       - name: Setup Node.js and pnpm
         uses: ./.github/actions/prepare
 
-      - name: Check migration status (before)
+      # drizzle-kit has no `migrate status`. `check` validates the committed migration
+      # folder (journal, snapshots, no collisions) without touching the database.
+      - name: Check migration files
+        run: pnpm exec drizzle-kit check
+
+      # `check` compares the migration folder with itself, not with src/db/schema.ts. A schema change
+      # pushed without `pnpm db:generate` would apply nothing and still pass every step below, while
+      # Vercel ships code that expects the new column. The script regenerates offline (so the config
+      # gate allows it) and fails on any difference, including a column or table rename, which
+      # drizzle-kit cannot resolve without a terminal. The same script runs in the CI workflow.
+      - name: Check schema.ts matches the committed migrations
+        run: bash scripts/check-schema-drift.sh
+
+      # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no row
+      # (the baseline was never recorded), which would make the migrator re-create them; when the
+      # bookkeeping rows survive but the tables are gone, or a table or column of the newest recorded
+      # schema is missing; and when a migration older than the newest recorded row was never recorded,
+      # which the migrator would skip without an error. Otherwise it lists the migrations still pending. Also runs on a dry run, so the operator sees the verdict
+      # without applying anything.
+      - name: Check baseline
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: |
-          echo "📋 Checking pending migrations..."
-          # Note: prisma migrate status exits with code 1 if there are pending migrations
-          # This is expected before deployment, so we ignore the exit code here
-          pnpm prisma:status || true
+        run: node scripts/baseline-drizzle-migrations.mjs
 
+      # The migrator applies every file newer than the newest row in
+      # drizzle.__drizzle_migrations, all inside one transaction. A database that is
+      # already up to date is a no-op. drizzle.config.ts refuses any non-local target
+      # unless DRIZZLE_ALLOW_REMOTE=1 on a GitHub Actions runner (the runner sets GITHUB_ACTIONS
+      # itself): this is the one place production is meant.
       - name: Deploy migrations
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          DRIZZLE_ALLOW_REMOTE: '1'
         run: |
           echo "🚀 Deploying migrations to production database..."
-          pnpm prisma:deploy
+          pnpm exec drizzle-kit migrate
           echo "✅ Migrations deployed successfully!"
+
+      # Read-only: after the migrator, the newest recorded migration must equal the newest file in the
+      # journal, every journal migration's hash must be recorded, and every table and column of that
+      # migration's drizzle-kit snapshot must exist.
+      - name: Verify migrated state
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: node scripts/baseline-drizzle-migrations.mjs --expect-current
 
       - name: Dry run notice
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
-          echo "🔍 Dry run mode - no migrations were applied"
+          echo "🔍 Dry run mode - migration files were checked and the database state was read, nothing was applied"
           echo "Run this workflow again with 'dry_run: false' to apply migrations"
-
-      - name: Verify migration status (after)
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        env:
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: |
-          echo "📋 Verifying migration status..."
-          pnpm prisma:status
-          echo "✅ All migrations verified!"
-
-      - name: Generate Prisma Client
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        env:
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: |
-          echo "🔧 Generating Prisma client..."
-          pnpm prisma:generate
-          echo "✅ Prisma client generated!"

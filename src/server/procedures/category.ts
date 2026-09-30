@@ -14,11 +14,21 @@
  * await orpcClient.category.delete({ id: 1 })
  */
 import { ORPCError } from '@orpc/server'
-import { Prisma, type User } from '@prisma/client'
+import { and, asc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { db } from '@/db'
+import { PG_UNIQUE_VIOLATION } from '@/db/constants'
+import { isPgError } from '@/db/isPgError'
+import { requireRow } from '@/db/requireRow'
+import {
+  categoryTable,
+  completedTable,
+  todoTable,
+  type User,
+} from '@/db/schema'
+import { runTransaction } from '@/db/transaction'
 import { createModuleLogger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
 
 import { authMiddleware } from '../middleware/auth'
 import {
@@ -43,43 +53,52 @@ const log = createModuleLogger('category')
 async function readCategoriesWithCounts(
   userId: User['id'],
 ): Promise<CategoryWithCount[]> {
-  const categories = await prisma.category.findMany({
-    where: { userId },
-    include: {
-      _count: {
-        select: { todos: { where: { completed: false } } },
-      },
-    },
-    orderBy: { createdAt: 'asc' },
-  })
+  const rows = await db
+    .select({
+      category: categoryTable,
+      // Correlated subquery: open (not completed) todos per category, for the sidebar badge.
+      openTodoCount: db.$count(
+        todoTable,
+        and(
+          eq(todoTable.categoryId, categoryTable.id),
+          eq(todoTable.completed, false),
+        ),
+      ),
+    })
+    .from(categoryTable)
+    .where(eq(categoryTable.userId, userId))
+    // `id` breaks createdAt ties so the order is deterministic.
+    .orderBy(asc(categoryTable.createdAt), asc(categoryTable.id))
 
-  // Prisma returns color as string; cast to satisfy the enum-typed output schema
+  const categories = rows.map(({ category, openTodoCount }) => ({
+    ...category,
+    _count: { todos: openTodoCount },
+  }))
+
+  // The column is plain text; cast to satisfy the enum-typed output schema
   return categories as CategoryWithCount[]
 }
 
 /**
- * Seeds the default "General" category for an account that has none. New accounts get it from the auth middleware's create, so this is the repair path for accounts made before that (and for a category deleted down to zero) — without it the editor opens locked on "No categories". Called by {@link listCategories} when its read comes back empty.
- * @param userId - Owner of the missing default.
- * @returns Nothing; a concurrent webhook insert of the same name is treated as success.
+ * Loads a category by id, but only when the caller owns it — the permission check shared by update, delete and {@link createCompleted}.
+ * @param userId - Authenticated owner.
+ * @param categoryId - Category to load.
+ * @returns The category row, or `undefined` when it does not exist or belongs to someone else.
  * @example
- * await ensureDefaultCategory(user.id)
+ * await findOwnedCategory(1, 3) // => { id: 3, name: 'Work', userId: 1, ... }
  */
-async function ensureDefaultCategory(userId: User['id']): Promise<void> {
-  try {
-    await prisma.category.create({
-      data: { ...DEFAULT_CATEGORY_SEED, userId },
-    })
-  } catch (error) {
-    // Prisma P2002 = the webhook inserted "General" between our read and this
-    // write (@@unique([name, userId])) — that row is exactly what we wanted.
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      return
-    }
-    throw error
-  }
+export async function findOwnedCategory(
+  userId: User['id'],
+  categoryId: number,
+) {
+  const [category] = await db
+    .select()
+    .from(categoryTable)
+    .where(
+      and(eq(categoryTable.id, categoryId), eq(categoryTable.userId, userId)),
+    )
+    .limit(1)
+  return category
 }
 
 /**
@@ -104,9 +123,16 @@ export const listCategories = authMiddleware
         return { categories }
       }
 
-      // Brand-new (or webhook-less) account: seed the default, then re-read so
-      // the response carries the real row id and count shape.
-      await ensureDefaultCategory(user.id)
+      // Brand-new (or webhook-less) account: seed the default "General", then re-read so the
+      // response carries the real row id and count shape. New accounts get theirs from the auth
+      // middleware, so this is the repair path for accounts made before that (and for a category
+      // deleted down to zero); without it the editor opens locked on "No categories".
+      // DO NOTHING: the Clerk webhook may insert "General" between our read and this write
+      // (unique index on name + userId), and that row is exactly what we wanted.
+      await db
+        .insert(categoryTable)
+        .values({ ...DEFAULT_CATEGORY_SEED, userId: user.id })
+        .onConflictDoNothing()
       return { categories: await readCategoriesWithCounts(user.id) }
     } catch (error) {
       log.error({ error }, 'Error in listCategories')
@@ -131,23 +157,23 @@ export const createCategory = authMiddleware
     try {
       const { user } = context
 
-      const category = await prisma.category.create({
-        data: {
-          name: input.name,
-          color: input.color,
-          userId: user.id,
-        },
-      })
+      const category = requireRow(
+        await db
+          .insert(categoryTable)
+          .values({
+            name: input.name,
+            color: input.color,
+            userId: user.id,
+          })
+          .returning(),
+        'category.insert',
+      )
 
-      // Prisma returns color as string; cast to satisfy the enum-typed output schema
+      // The column is plain text; cast to satisfy the enum-typed output schema
       return category as Category
     } catch (error) {
-      // Prisma P2002 = unique constraint violation (@@unique([name, userId]))
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        (error as { code: string }).code === 'P2002'
-      ) {
+      // Unique violation on (name, userId): the user already has this category name
+      if (isPgError(error, PG_UNIQUE_VIOLATION)) {
         throw new ORPCError('CONFLICT', {
           message: `Category "${input.name}" already exists`,
         })
@@ -183,9 +209,7 @@ export const updateCategory = authMiddleware
       const { id, data } = input
 
       // Permission check
-      const existing = await prisma.category.findFirst({
-        where: { id, userId: user.id },
-      })
+      const existing = await findOwnedCategory(user.id, id)
 
       if (!existing) {
         throw new ORPCError('NOT_FOUND', {
@@ -204,20 +228,29 @@ export const updateCategory = authMiddleware
         })
       }
 
-      const category = await prisma.category.update({
-        where: { id },
-        data,
-      })
+      // An empty `data` is a no-op: answer with the stored row and leave `updatedAt` alone, as the
+      // previous ORM did. Drizzle would reject an empty SET ("No values to set") before it stamps
+      // `$onUpdate`, so this cannot be left to the UPDATE.
+      if (Object.values(data).every((value) => value === undefined)) {
+        return existing as Category
+      }
 
-      // Prisma returns color as string; cast to satisfy the enum-typed output schema
+      // `requireRow` makes an update of a missing row fail loudly: a row deleted between the
+      // permission check and this update aborts into the generic 500 below.
+      const category = requireRow(
+        await db
+          .update(categoryTable)
+          .set(data)
+          .where(eq(categoryTable.id, id))
+          .returning(),
+        'category.update',
+      )
+
+      // The column is plain text; cast to satisfy the enum-typed output schema
       return category as Category
     } catch (error) {
-      // Prisma P2002 = unique constraint violation on rename
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        (error as { code: string }).code === 'P2002'
-      ) {
+      // Unique violation on rename: another category already has this name
+      if (isPgError(error, PG_UNIQUE_VIOLATION)) {
         throw new ORPCError('CONFLICT', {
           message: `Category "${input.data.name ?? 'unknown'}" already exists`,
         })
@@ -247,9 +280,7 @@ export const deleteCategory = authMiddleware
       const { id } = input
 
       // Permission check
-      const existing = await prisma.category.findFirst({
-        where: { id, userId: user.id },
-      })
+      const existing = await findOwnedCategory(user.id, id)
 
       if (!existing) {
         throw new ORPCError('NOT_FOUND', {
@@ -265,23 +296,37 @@ export const deleteCategory = authMiddleware
       }
 
       // Find user's default category to reassign todos
-      const defaultCategory = await prisma.category.findFirst({
-        where: { userId: user.id, isDefault: true },
-      })
+      const [defaultCategory] = await db
+        .select()
+        .from(categoryTable)
+        .where(
+          and(
+            eq(categoryTable.userId, user.id),
+            eq(categoryTable.isDefault, true),
+          ),
+        )
+        .limit(1)
 
       // Reassign todos to default category, then delete
-      await prisma.$transaction(async (tx) => {
+      await runTransaction(async (tx) => {
         if (defaultCategory) {
-          await tx.todo.updateMany({
-            where: { categoryId: id },
-            data: { categoryId: defaultCategory.id },
-          })
-          await tx.completed.updateMany({
-            where: { categoryId: id },
-            data: { categoryId: defaultCategory.id },
-          })
+          await tx
+            .update(todoTable)
+            .set({ categoryId: defaultCategory.id })
+            .where(eq(todoTable.categoryId, id))
+          await tx
+            .update(completedTable)
+            .set({ categoryId: defaultCategory.id })
+            .where(eq(completedTable.categoryId, id))
         }
-        await tx.category.delete({ where: { id } })
+        // `requireRow` makes a delete of a missing row fail loudly: a vanished row rolls the reassignment back.
+        requireRow(
+          await tx
+            .delete(categoryTable)
+            .where(eq(categoryTable.id, id))
+            .returning({ id: categoryTable.id }),
+          'category.delete',
+        )
       })
 
       return { success: true }

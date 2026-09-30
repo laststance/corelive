@@ -37,7 +37,7 @@ function isUsableTimeZone(timeZone: string): boolean {
  * @returns An `Intl`-valid IANA zone name.
  * @example `await resolveViewerTimeZone() // => 'Asia/Tokyo'`
  */
-async function resolveViewerTimeZone(): Promise<string> {
+export async function resolveViewerTimeZone(): Promise<string> {
   const cookieTimeZone = (await cookies()).get(HOME_TIMEZONE_COOKIE_NAME)?.value
   if (cookieTimeZone && isUsableTimeZone(cookieTimeZone)) {
     return cookieTimeZone

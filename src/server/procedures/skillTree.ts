@@ -1,9 +1,31 @@
 import { ORPCError } from '@orpc/server'
-import type { Prisma } from '@prisma/client'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  type SQL,
+  isNull,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm'
 
 import { BACKEND_DEVELOPER_CORE_TEMPLATE } from '@/app/(main)/skill-tree/lib/template'
+import { db } from '@/db'
+import { PG_FOREIGN_KEY_VIOLATION, PG_UNIQUE_VIOLATION } from '@/db/constants'
+import { isPgError } from '@/db/isPgError'
+import { requireRow } from '@/db/requireRow'
+import {
+  nodeAssignmentTable,
+  nodeEdgeTable,
+  skillNodeTable,
+  skillTreeTable,
+  todoTable,
+} from '@/db/schema'
+import { runTransaction } from '@/db/transaction'
 import { createModuleLogger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
 import { buildDefaultSkillEdges } from '@/server/buildDefaultSkillEdges'
 import { buildDefaultSkillNodes } from '@/server/buildDefaultSkillNodes'
 
@@ -18,77 +40,112 @@ import {
 const log = createModuleLogger('skillTree')
 
 /**
- * Shared Prisma `include` for `getMyTree` reads and the post-import re-fetch.
+ * Anything that can run relational queries: the shared {@link db} or a transaction handle.
+ * Lets one query definition serve both `getMyTree` reads and the in-transaction post-import re-fetch.
+ */
+type RelationalQueryExecutor = Pick<typeof db, 'query'>
+
+/**
+ * Reads one skill tree with its nodes (+ live assignments) and edges.
  *
- * Explicit `orderBy: { id: 'asc' }` on every relation keeps SVG DOM order and
+ * Explicit `orderBy` id ascending on every relation keeps SVG DOM order and
  * keyboard focus order deterministic across environments. Without it, Postgres
  * is free to hand back rows in any order (typically insertion order, but not
  * guaranteed), which makes the tab-through experience drift between environments.
  *
- * The assignment `where` filter surfaces orphaned rows (`todoId = null`) as
- * well as assignments whose source todo is still completed — orphans are the
- * frozen XP receipts left behind when a user deletes a completed task.
+ * The assignment filter surfaces orphaned rows (`todoId IS NULL`) as well as
+ * assignments whose source todo is still completed — orphans are the frozen XP
+ * receipts left behind when a user deletes a completed task.
+ *
+ * @param executor - {@link db} or a transaction handle.
+ * @param treeCondition - `WHERE` predicate selecting the tree (by owner or by id).
+ * @returns The tree with nested `nodes[].assignments` and `edges`, or `undefined` when none matches.
+ * @example
+ * await findTreeWithRelations(db, eq(skillTreeTable.userId, 7))
  */
-const skillTreeInclude = {
-  nodes: {
-    orderBy: { id: 'asc' },
-    include: {
-      assignments: {
-        where: {
-          OR: [{ todoId: null }, { todo: { completed: true } }],
+function findTreeWithRelations(
+  executor: RelationalQueryExecutor,
+  treeCondition: SQL,
+) {
+  return executor.query.skillTreeTable.findFirst({
+    where: treeCondition,
+    with: {
+      nodes: {
+        orderBy: (nodes, { asc }) => [asc(nodes.id)],
+        with: {
+          assignments: {
+            where: (assignments) =>
+              or(
+                isNull(assignments.todoId),
+                // Correlated on this assignment's todo, so Postgres probes the todo by primary key
+                // instead of first collecting every completed todo of every user.
+                exists(
+                  db
+                    .select({ one: sql`1` })
+                    .from(todoTable)
+                    .where(
+                      and(
+                        eq(todoTable.id, assignments.todoId),
+                        eq(todoTable.completed, true),
+                      ),
+                    ),
+                ),
+              ),
+            orderBy: (assignments, { asc }) => [asc(assignments.id)],
+          },
         },
-        orderBy: { id: 'asc' },
+      },
+      edges: {
+        orderBy: (edges, { asc }) => [asc(edges.id)],
       },
     },
-  },
-  edges: {
-    orderBy: { id: 'asc' },
-  },
-} satisfies Prisma.SkillTreeInclude
+  })
+}
 
 /**
  * Imports the default template as a new SkillTree for a user. Uses batched
- * `createMany` for nodes and edges so a 28-node / 32-edge template completes
- * in 4 round-trips instead of ~54. This keeps the transaction well under the
- * 5s Prisma interactive-transaction default timeout.
+ * multi-row inserts for nodes and edges, so a 28-node / 32-edge template takes one
+ * statement per table plus the final re-fetch instead of ~54 single-row inserts,
+ * keeping the transaction short.
  *
- * @param userId - The user's Prisma ID (not Clerk ID).
+ * @param userId - The user's database ID (not Clerk ID).
  * @returns The newly created tree with nodes, edges, and empty assignment arrays.
  */
 async function importDefaultTemplate(userId: number) {
-  return prisma.$transaction(async (tx) => {
-    const tree = await tx.skillTree.create({
-      data: {
-        userId,
-        name: BACKEND_DEVELOPER_CORE_TEMPLATE.name,
-        templateKey: BACKEND_DEVELOPER_CORE_TEMPLATE.key,
-      },
-    })
+  return runTransaction(async (tx) => {
+    const tree = requireRow(
+      await tx
+        .insert(skillTreeTable)
+        .values({
+          userId,
+          name: BACKEND_DEVELOPER_CORE_TEMPLATE.name,
+          templateKey: BACKEND_DEVELOPER_CORE_TEMPLATE.key,
+        })
+        .returning(),
+      'skillTree.insert',
+    )
 
-    // Batch insert all nodes in one round-trip.
-    await tx.skillNode.createMany({
-      data: buildDefaultSkillNodes(tree.id),
-    })
-
-    // Re-read to resolve slug → node ID. `createMany` doesn't return IDs, and
-    // template edges reference nodes by slug. We look the newly-inserted nodes
-    // up by name (which is unique-by-construction within a single template).
-    const createdNodes = await tx.skillNode.findMany({
-      where: { skillTreeId: tree.id },
-      select: { id: true, name: true },
-    })
+    // Batch insert all nodes in one round-trip. RETURNING hands back the new ids so the
+    // template edges, which reference nodes by name (unique within a template), resolve
+    // without a second read.
+    const createdNodes = await tx
+      .insert(skillNodeTable)
+      .values(buildDefaultSkillNodes(tree.id))
+      .returning({ id: skillNodeTable.id, name: skillNodeTable.name })
     const edgeRows = buildDefaultSkillEdges(tree.id, createdNodes)
     if (edgeRows.length > 0) {
-      await tx.nodeEdge.createMany({ data: edgeRows })
+      await tx.insert(nodeEdgeTable).values(edgeRows)
     }
 
     // Re-fetch the full tree with relations for the response. Reuses the
-    // shared include with deterministic orderBy so the caller sees the same
-    // ordering it will see on subsequent reads.
-    const fullTree = await tx.skillTree.findUniqueOrThrow({
-      where: { id: tree.id },
-      include: skillTreeInclude,
-    })
+    // shared query with deterministic orderBy so the caller sees the same
+    // ordering it will see on subsequent reads. A missing row aborts the
+    // transaction, like the throw-on-missing read it replaces.
+    const fullTree = await findTreeWithRelations(
+      tx,
+      eq(skillTreeTable.id, tree.id),
+    )
+    if (!fullTree) throw new Error('skillTree re-fetch matched no row')
     return fullTree
   })
 }
@@ -99,7 +156,7 @@ async function importDefaultTemplate(userId: number) {
  * — matches the error shape used by todo.ts / category.ts so clients can
  * consistently handle missing-resource cases.
  *
- * @param userId - The user's Prisma ID (not Clerk ID).
+ * @param userId - The user's database ID (not Clerk ID).
  * @param nodeId - Skill node ID to verify ownership of.
  * @param todoId - Todo ID to verify ownership of.
  * @param requireCompleted - When true (default for assignTask), reject
@@ -111,19 +168,34 @@ async function assertOwnership(
   todoId: number,
   { requireCompleted }: { requireCompleted: boolean },
 ) {
-  const [node, todo] = await Promise.all([
-    prisma.skillNode.findFirst({
-      where: { id: nodeId, skillTree: { userId } },
-      select: { id: true },
-    }),
-    prisma.todo.findFirst({
-      where: {
-        id: todoId,
-        userId,
-        ...(requireCompleted ? { completed: true } : {}),
-      },
-      select: { id: true, text: true, completed: true },
-    }),
+  const [[node], [todo]] = await Promise.all([
+    db
+      .select({ id: skillNodeTable.id })
+      .from(skillNodeTable)
+      .innerJoin(
+        skillTreeTable,
+        eq(skillNodeTable.skillTreeId, skillTreeTable.id),
+      )
+      .where(
+        and(eq(skillNodeTable.id, nodeId), eq(skillTreeTable.userId, userId)),
+      )
+      .limit(1),
+    db
+      .select({
+        id: todoTable.id,
+        text: todoTable.text,
+        completed: todoTable.completed,
+      })
+      .from(todoTable)
+      .where(
+        and(
+          eq(todoTable.id, todoId),
+          eq(todoTable.userId, userId),
+          // `and()` drops `undefined`, so the completed filter is opt-in.
+          requireCompleted ? eq(todoTable.completed, true) : undefined,
+        ),
+      )
+      .limit(1),
   ])
   if (!node) {
     throw new ORPCError('NOT_FOUND', {
@@ -140,8 +212,8 @@ async function assertOwnership(
 
 /**
  * Fetches the user's skill tree. On first visit, imports the default template.
- * If a concurrent request already created the tree (P2002 unique violation
- * on the `@@unique([userId])` constraint), re-query and return the winner.
+ * If a concurrent request already created the tree (unique violation on
+ * the `userId` unique index), re-query and return the winner.
  *
  * @returns The tree with nested nodes (+ assignments) and edges.
  */
@@ -149,26 +221,22 @@ export const getMyTree = authMiddleware
   .output(SkillTreeSchema)
   .handler(async ({ context }) => {
     try {
-      let tree = await prisma.skillTree.findUnique({
-        where: { userId: context.user.id },
-        include: skillTreeInclude,
-      })
+      let tree = await findTreeWithRelations(
+        db,
+        eq(skillTreeTable.userId, context.user.id),
+      )
       if (!tree) {
         try {
           tree = await importDefaultTemplate(context.user.id)
         } catch (error) {
-          // P2002 = unique-constraint violation. A concurrent request already
-          // imported the template. Re-query for the winning tree and return
+          // Unique violation: a concurrent request already imported the
+          // template. Re-query for the winning tree and return
           // that — the user never sees the race.
-          if (
-            error instanceof Error &&
-            'code' in error &&
-            (error as { code?: string }).code === 'P2002'
-          ) {
-            const winner = await prisma.skillTree.findUnique({
-              where: { userId: context.user.id },
-              include: skillTreeInclude,
-            })
+          if (isPgError(error, PG_UNIQUE_VIOLATION)) {
+            const winner = await findTreeWithRelations(
+              db,
+              eq(skillTreeTable.userId, context.user.id),
+            )
             if (!winner) throw error
             tree = winner
           } else {
@@ -199,15 +267,24 @@ export const getUnassignedPool = authMiddleware
   .output(UnassignedPoolSchema)
   .handler(async ({ context }) => {
     try {
-      return await prisma.todo.findMany({
-        where: {
-          userId: context.user.id,
-          completed: true,
-          assignments: { none: {} },
-        },
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true, text: true },
-      })
+      return await db
+        .select({ id: todoTable.id, text: todoTable.text })
+        .from(todoTable)
+        .where(
+          and(
+            eq(todoTable.userId, context.user.id),
+            eq(todoTable.completed, true),
+            // No assignment row points at this todo yet.
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(nodeAssignmentTable)
+                .where(eq(nodeAssignmentTable.todoId, todoTable.id)),
+            ),
+          ),
+        )
+        // `id` breaks updatedAt ties so equal timestamps still list in a stable insertion order.
+        .orderBy(desc(todoTable.updatedAt), asc(todoTable.id))
     } catch (error) {
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in getUnassignedPool')
@@ -224,7 +301,7 @@ export const getUnassignedPool = authMiddleware
  * transaction). Enforces:
  *   - The todo is completed (prevents XP inflation via "complete → assign →
  *     uncomplete → recomplete" loop).
- *   - One assignment per todo globally (`@@unique([todoId])`).
+ *   - One assignment per todo globally (unique index on `todoId`).
  *
  * @param input.nodeId - Target skill node ID.
  * @param input.todoId - Completed Todo ID to assign.
@@ -242,38 +319,41 @@ export const assignTask = authMiddleware
     )
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await runTransaction(async (tx) => {
         // Delete any existing assignment for this todo (supports move between
-        // nodes). The @@unique([todoId]) constraint would otherwise reject
-        // the create.
-        await tx.nodeAssignment.deleteMany({
-          where: { todoId: input.todoId },
-        })
-        return tx.nodeAssignment.create({
-          data: {
-            nodeId: input.nodeId,
-            todoId: input.todoId,
-            todoText: todo.text,
-          },
-        })
+        // nodes). The unique index on todoId would otherwise reject the insert.
+        await tx
+          .delete(nodeAssignmentTable)
+          .where(eq(nodeAssignmentTable.todoId, input.todoId))
+        return requireRow(
+          await tx
+            .insert(nodeAssignmentTable)
+            .values({
+              nodeId: input.nodeId,
+              todoId: input.todoId,
+              todoText: todo.text,
+            })
+            .returning(),
+          'nodeAssignment.insert',
+        )
       })
     } catch (error) {
       if (error instanceof ORPCError) throw error
-      // P2003 = FK violation, P2025 = record not found. Both can happen if
-      // the todo is deleted between assertOwnership and the transaction
-      // create (TOCTOU). P2002 = unique violation on `@@unique([todoId])`,
-      // which can happen when two concurrent `assignTask` calls both pass
-      // `assertOwnership`, both run `deleteMany`, and then the loser races
-      // past the deleted row into `create`. Translate all three to NOT_FOUND
-      // so the client converges on a single consistent final assignment
-      // instead of surfacing a 500 for the loser of a harmless race.
-      if (error instanceof Error && 'code' in error) {
-        const code = (error as { code?: string }).code
-        if (code === 'P2002' || code === 'P2003' || code === 'P2025') {
-          throw new ORPCError('NOT_FOUND', {
-            message: 'Todo no longer exists',
-          })
-        }
+      // A foreign-key violation happens if the todo is deleted between
+      // assertOwnership and the transaction insert (TOCTOU). A unique
+      // violation on the todoId index happens when two concurrent
+      // `assignTask` calls both pass `assertOwnership`, both run the delete,
+      // and then the loser races past the deleted row into the insert.
+      // Translate both to NOT_FOUND so the client converges on a single
+      // consistent final assignment instead of surfacing a 500 for the loser
+      // of a harmless race.
+      if (
+        isPgError(error, PG_UNIQUE_VIOLATION) ||
+        isPgError(error, PG_FOREIGN_KEY_VIOLATION)
+      ) {
+        throw new ORPCError('NOT_FOUND', {
+          message: 'Todo no longer exists',
+        })
       }
       log.error({ error }, 'Error in assignTask')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -290,7 +370,7 @@ export const assignTask = authMiddleware
  * left behind when a completed todo is deleted) are intentionally frozen XP
  * receipts and are unreachable through this mutation by design — the
  * `AssignTaskInputSchema` requires a positive integer `todoId`, and the
- * schema's `@@unique([todoId])` means `todoId` identifies at most one row.
+ * unique index on `todoId` means `todoId` identifies at most one row.
  *
  * Verifies the found row's `nodeId` matches `input.nodeId` so the API is
  * honest about what it targets: a caller that passes a wrong `nodeId` gets
@@ -312,29 +392,34 @@ export const unassignTask = authMiddleware
     })
     try {
       // Verify the assignment actually belongs to the node the caller named.
-      // `todoId` is globally unique (`@@unique([todoId])`), so this is a
+      // `todoId` is globally unique (unique index), so this is a
       // single-row lookup. If the row exists but points at a different
       // node, return null — the caller's mental model is out of sync and
       // `onSettled` query invalidation will rebase their optimistic state.
-      const existing = await prisma.nodeAssignment.findUnique({
-        where: { todoId: input.todoId },
-      })
+      const [existing] = await db
+        .select()
+        .from(nodeAssignmentTable)
+        .where(eq(nodeAssignmentTable.todoId, input.todoId))
+        .limit(1)
       if (!existing || existing.nodeId !== input.nodeId) {
         return null
       }
-      return await prisma.nodeAssignment.delete({
-        where: { todoId: input.todoId },
-      })
+      // The node is part of the condition, not only of the read above: a concurrent assign may have
+      // moved the todo to another node since, and that new assignment must survive this call.
+      const [deleted] = await db
+        .delete(nodeAssignmentTable)
+        .where(
+          and(
+            eq(nodeAssignmentTable.todoId, input.todoId),
+            eq(nodeAssignmentTable.nodeId, input.nodeId),
+          ),
+        )
+        .returning()
+      // A concurrent call won the race between our read and this delete (it
+      // unassigned the todo or moved it to another node) — already-gone is OK,
+      // return null so the client can reconcile.
+      return deleted ?? null
     } catch (error) {
-      // P2025 = record not found. A concurrent unassign call won the race —
-      // already-gone is OK, return null so the client can reconcile.
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        (error as { code?: string }).code === 'P2025'
-      ) {
-        return null
-      }
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in unassignTask')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {

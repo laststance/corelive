@@ -9,7 +9,7 @@ import type { IPCResponse } from '@/electron/types/ipc'
 interface ElectronAuthUser {
   /**
    * Clerk user identifier. Required by the Electron main process to hydrate the
-   * Prisma-backed user session.
+   * database-backed user session.
    */
   clerkId: string
   /** Optional denormalised email address for UI-only display */

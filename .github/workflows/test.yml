@@ -37,7 +37,7 @@ jobs:
             printf 'NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=%s\n' "$NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL"
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
-            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive?schema=public'
+            printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive'
           } > .env
       # Provision Postgres for real-DB integration tests. They are gated behind
       # RUN_DB_INTEGRATION_TESTS; mocked and pure unit tests are unaffected.
@@ -52,10 +52,14 @@ jobs:
         run: |
           timeout 60 bash -c 'until docker compose -f compose.yml -p corelive exec postgres env PGPASSWORD=password psql -U postgres -lqt | cut -d \| -f 1 | grep -qw corelive; do sleep 2; done'
           echo "Database 'corelive' exists and is ready!"
-      - name: Run Prisma migrations 📦
-        run: pnpm prisma migrate deploy
-      - name: Generate Prisma Client 🗄️
-        run: pnpm prisma generate
+      - name: Run database migrations 📦
+        run: pnpm db:migrate
+      # `drizzle-kit check` (deploy workflow) validates the migration folder against itself, not against
+      # src/db/schema.ts. A schema edit without `pnpm db:generate` would leave the SQL stale and only show
+      # up after deploy, so regenerate here and fail on any difference (the script also catches a rename,
+      # which drizzle-kit cannot resolve without a terminal and would otherwise pass silently).
+      - name: Check schema.ts matches the committed migrations 🧬
+        run: bash scripts/check-schema-drift.sh
       - name: Generate Icons 🎨
         run: pnpm build:icons
       # Coverage lives in the dedicated `coverage.yml` workflow so this gate

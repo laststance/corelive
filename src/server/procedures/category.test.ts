@@ -2,9 +2,12 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
+import { eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import { categoryTable, todoTable, userTable } from '@/db/schema'
 
 import { deleteCategory, listCategories, updateCategory } from './category'
 import { getHeatmap } from './completed'
@@ -39,12 +42,16 @@ function freshClerkId(): string {
 
 afterEach(async () => {
   for (const clerkId of createdClerkIds) {
-    const user = await prisma.user.findUnique({ where: { clerkId } })
+    const [user] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+      .limit(1)
     if (!user) continue
     // Todo rows restrict their category's delete, so they go first.
-    await prisma.todo.deleteMany({ where: { userId: user.id } })
-    await prisma.category.deleteMany({ where: { userId: user.id } })
-    await prisma.user.delete({ where: { id: user.id } })
+    await db.delete(todoTable).where(eq(todoTable.userId, user.id))
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
+    await db.delete(userTable).where(eq(userTable.id, user.id))
   }
   createdClerkIds.clear()
 })
@@ -95,10 +102,18 @@ describeIfDb(
       await call(getHeatmap, { days: 1 }, authContext(clerkId))
 
       // Assert — read the rows directly; no list call has run to repair anything.
-      const user = await prisma.user.findUnique({ where: { clerkId } })
-      const seeded = await prisma.category.findMany({
-        where: { userId: user?.id },
-      })
+      const user = requireRow(
+        await db
+          .select()
+          .from(userTable)
+          .where(eq(userTable.clerkId, clerkId))
+          .limit(1),
+        'user.select',
+      )
+      const seeded = await db
+        .select()
+        .from(categoryTable)
+        .where(eq(categoryTable.userId, user.id))
       expect(seeded.map((category) => category.name)).toEqual(['General'])
     })
 
@@ -121,14 +136,15 @@ describeIfDb(
     test('leaves an account that already has categories alone (no surprise "General")', async () => {
       // Arrange — the user exists with one hand-made category and no default.
       const clerkId = freshClerkId()
-      const user = await prisma.user.create({ data: { clerkId } })
-      await prisma.category.create({
-        data: {
-          name: 'Work',
-          color: 'green',
-          isDefault: false,
-          userId: user.id,
-        },
+      const user = requireRow(
+        await db.insert(userTable).values({ clerkId }).returning(),
+        'user.insert',
+      )
+      await db.insert(categoryTable).values({
+        name: 'Work',
+        color: 'green',
+        isDefault: false,
+        userId: user.id,
       })
 
       // Act
@@ -159,14 +175,18 @@ describeIfDb(
         authContext(clerkId),
       )
       const general = categories[0]!
-      const work = await prisma.category.create({
-        data: {
-          name: 'Work',
-          color: 'green',
-          isDefault: false,
-          userId: general.userId,
-        },
-      })
+      const work = requireRow(
+        await db
+          .insert(categoryTable)
+          .values({
+            name: 'Work',
+            color: 'green',
+            isDefault: false,
+            userId: general.userId,
+          })
+          .returning(),
+        'category.insert',
+      )
       return { clerkId, general, work }
     }
 
@@ -187,7 +207,14 @@ describeIfDb(
         message: "The default category can't be renamed",
       })
       expect(
-        await prisma.category.findUniqueOrThrow({ where: { id: general.id } }),
+        requireRow(
+          await db
+            .select()
+            .from(categoryTable)
+            .where(eq(categoryTable.id, general.id))
+            .limit(1),
+          'category.select',
+        ),
       ).toMatchObject({ name: 'General', isDefault: true })
     })
 
@@ -239,16 +266,31 @@ describeIfDb(
     test('moves an ordinary category\'s tasks to "General" when it is deleted', async () => {
       // Arrange
       const { clerkId, general, work } = await seedAccount()
-      const task = await prisma.todo.create({
-        data: { text: 'Keep me', userId: general.userId, categoryId: work.id },
-      })
+      const task = requireRow(
+        await db
+          .insert(todoTable)
+          .values({
+            text: 'Keep me',
+            userId: general.userId,
+            categoryId: work.id,
+          })
+          .returning(),
+        'todo.insert',
+      )
 
       // Act
       await call(deleteCategory, { id: work.id }, authContext(clerkId))
 
       // Assert
       expect(
-        await prisma.todo.findUniqueOrThrow({ where: { id: task.id } }),
+        requireRow(
+          await db
+            .select()
+            .from(todoTable)
+            .where(eq(todoTable.id, task.id))
+            .limit(1),
+          'todo.select',
+        ),
       ).toMatchObject({ categoryId: general.id })
     })
   },

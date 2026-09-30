@@ -2,9 +2,18 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
+import { and, eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/db'
+import { requireRow } from '@/db/requireRow'
+import {
+  categoryTable,
+  completedTable,
+  importBatchTable,
+  todoTable,
+  userTable,
+} from '@/db/schema'
 
 import { listCategories } from './category'
 import { importLocalCompleted } from './completed'
@@ -43,19 +52,32 @@ function freshClerkId(): string {
 /** Materialises the DB user the way production does — any authed read triggers the middleware's lazy upsert. */
 async function ensureUser(clerkId: string): Promise<{ id: number }> {
   await call(listCategories, undefined, authContext(clerkId))
-  return prisma.user.findUniqueOrThrow({ where: { clerkId } })
+  return requireRow(
+    await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+      .limit(1),
+    'user.select',
+  )
 }
 
 afterEach(async () => {
   for (const clerkId of createdClerkIds) {
-    const user = await prisma.user.findUnique({ where: { clerkId } })
+    const [user] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.clerkId, clerkId))
+      .limit(1)
     if (!user) continue
     // FK-safe teardown: child rows before the user.
-    await prisma.completed.deleteMany({ where: { userId: user.id } })
-    await prisma.todo.deleteMany({ where: { userId: user.id } })
-    await prisma.importBatch.deleteMany({ where: { userId: user.id } })
-    await prisma.category.deleteMany({ where: { userId: user.id } })
-    await prisma.user.delete({ where: { id: user.id } })
+    await db.delete(completedTable).where(eq(completedTable.userId, user.id))
+    await db.delete(todoTable).where(eq(todoTable.userId, user.id))
+    await db
+      .delete(importBatchTable)
+      .where(eq(importBatchTable.userId, user.id))
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
+    await db.delete(userTable).where(eq(userTable.id, user.id))
   }
   createdClerkIds.clear()
 })
@@ -95,9 +117,15 @@ describeIfDb('completed.importLocal', () => {
     // Assert
     expect(result.imported).toBe(3)
     expect(result.alreadyImported).toBe(false)
-    const rows = await prisma.completed.findMany({
-      where: { userId: user.id, title: 'push-ups' },
-    })
+    const rows = await db
+      .select()
+      .from(completedTable)
+      .where(
+        and(
+          eq(completedTable.userId, user.id),
+          eq(completedTable.title, 'push-ups'),
+        ),
+      )
     expect(rows).toHaveLength(3)
   })
 
@@ -118,9 +146,19 @@ describeIfDb('completed.importLocal', () => {
     )
 
     // Assert
-    const row = await prisma.completed.findFirstOrThrow({
-      where: { userId: user.id, title: 'gym' },
-    })
+    const row = requireRow(
+      await db
+        .select()
+        .from(completedTable)
+        .where(
+          and(
+            eq(completedTable.userId, user.id),
+            eq(completedTable.title, 'gym'),
+          ),
+        )
+        .limit(1),
+      'completed.select',
+    )
     expect(row.completedAt?.toISOString()).toBe('2026-07-04T12:34:56.000Z')
   })
 
@@ -153,9 +191,15 @@ describeIfDb('completed.importLocal', () => {
     // Assert
     expect(retry.alreadyImported).toBe(true)
     expect(retry.imported).toBe(0)
-    const rows = await prisma.completed.findMany({
-      where: { userId: user.id, title: 'read' },
-    })
+    const rows = await db
+      .select()
+      .from(completedTable)
+      .where(
+        and(
+          eq(completedTable.userId, user.id),
+          eq(completedTable.title, 'read'),
+        ),
+      )
     expect(rows).toHaveLength(2)
   })
 
@@ -189,10 +233,10 @@ describeIfDb('completed.importLocal', () => {
     // Assert
     expect(second.alreadyImported).toBe(false)
     expect(
-      await prisma.completed.count({ where: { userId: firstUser.id } }),
+      await db.$count(completedTable, eq(completedTable.userId, firstUser.id)),
     ).toBe(1)
     expect(
-      await prisma.completed.count({ where: { userId: secondUser.id } }),
+      await db.$count(completedTable, eq(completedTable.userId, secondUser.id)),
     ).toBe(1)
   })
 
@@ -226,9 +270,15 @@ describeIfDb('completed.importLocal', () => {
     // Assert
     expect(resent.alreadyImported).toBe(false)
     expect(resent.imported).toBe(0)
-    const rows = await prisma.completed.findMany({
-      where: { userId: user.id, title: 'meditate' },
-    })
+    const rows = await db
+      .select()
+      .from(completedTable)
+      .where(
+        and(
+          eq(completedTable.userId, user.id),
+          eq(completedTable.title, 'meditate'),
+        ),
+      )
     expect(rows).toHaveLength(1)
   })
 
@@ -236,7 +286,7 @@ describeIfDb('completed.importLocal', () => {
     // Arrange
     const clerkId = freshClerkId()
     const user = await ensureUser(clerkId)
-    await prisma.category.deleteMany({ where: { userId: user.id } })
+    await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
 
     // Act
     const result = await call(
@@ -256,10 +306,23 @@ describeIfDb('completed.importLocal', () => {
 
     // Assert
     expect(result.imported).toBe(1)
-    const row = await prisma.completed.findFirstOrThrow({
-      where: { userId: user.id, title: 'stretch' },
-      include: { category: true },
-    })
+    const row = requireRow(
+      await db
+        .select({ category: categoryTable })
+        .from(completedTable)
+        .innerJoin(
+          categoryTable,
+          eq(completedTable.categoryId, categoryTable.id),
+        )
+        .where(
+          and(
+            eq(completedTable.userId, user.id),
+            eq(completedTable.title, 'stretch'),
+          ),
+        )
+        .limit(1),
+      'completed.select',
+    )
     expect(row.category.name).toBe('General')
   })
 })

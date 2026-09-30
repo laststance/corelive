@@ -1,4 +1,7 @@
-import { prisma } from '@/lib/prisma'
+import { and, asc, between, eq, isNull, or } from 'drizzle-orm'
+
+import { db } from '@/db'
+import { categoryTable, completedTable, todoTable } from '@/db/schema'
 
 /**
  * One row in the merged Todo+Completed completion stream consumed by the
@@ -9,14 +12,14 @@ import { prisma } from '@/lib/prisma'
  * @example
  * { source: 'todo', id: 12, title: 'draft digest', completedAt: Date, category: { id: 3, name: 'writing', color: 'blue' } }
  * @example
- * { source: 'completed', id: 42, title: 'buy milk', completedAt: Date, category: null }
+ * { source: 'completed', id: 42, title: 'buy milk', completedAt: Date, category: { id: 1, name: 'General', color: 'blue' } }
  */
 export type CompletedEntry = {
   source: 'todo' | 'completed'
   id: number
   title: string
   completedAt: Date
-  category: { id: number; name: string; color: string } | null
+  category: { id: number; name: string; color: string }
 }
 
 /**
@@ -30,10 +33,10 @@ export type CompletedEntry = {
  *
  * Both halves FILTER and BUCKET by `completedAt`, with a null-coalescing
  * fallback (Todo → updatedAt, Completed → createdAt) for any row whose
- * completedAt is null. Migration 20260603235155 added Todo.completedAt and
- * backfilled it from updatedAt; the now-removed toggleTodo wrote it on each false→true
- * completion. Migration 20260529164052 added Completed.completedAt and
- * backfilled it from createdAt. Because the filter and the bucket now use the
+ * completedAt is null. Earlier migrations (now folded into drizzle/0000_init.sql)
+ * added Todo.completedAt, backfilled from updatedAt, and Completed.completedAt,
+ * backfilled from createdAt; the now-removed toggleTodo wrote it on each false→true
+ * completion. Because the filter and the bucket now use the
  * SAME field, a completion always lands on its real day's range — this fixes
  * both the dated-import drop and the edit-drift noted below.
  *
@@ -67,59 +70,80 @@ export async function fetchCompletedEntries(
   // postgres planner uses the primary userId access path. No extra index
   // needed — see /plan-eng-review §4.
   const [todoRows, completedRows] = await Promise.all([
-    prisma.todo.findMany({
-      where: {
-        userId,
-        completed: true,
-        // Filter by the stable completion day. `completedAt` is the semantic
-        // completion timestamp (migration 20260603235155); fall back to
-        // `updatedAt` only for rows whose `completedAt` is still null (an
-        // unconverted write path or a pre-backfill row) so they never vanish
-        // from the heatmap.
-        OR: [
-          { completedAt: { gte: startDate, lte: endDate } },
-          { completedAt: null, updatedAt: { gte: startDate, lte: endDate } },
-        ],
-      },
-      select: {
-        id: true,
-        text: true,
-        completedAt: true,
-        updatedAt: true,
-        category: { select: { id: true, name: true, color: true } },
-      },
-      orderBy: { updatedAt: 'asc' },
-    }),
-    prisma.completed.findMany({
-      where: {
-        userId,
-        // archived rows are excluded from the heatmap surface. Nothing writes
-        // `archived` any more (the archive flow went with the Todo vertical),
-        // so every live row is archived:false — but the filter stays: an
-        // archived:true row would silently erase its whole day.
-        archived: false,
-        // Filter by the semantic completion day, falling back to `createdAt`
-        // (insert time) only for rows whose `completedAt` is null. This lands
-        // the dated-import case (a row with a past `completedAt` and a today
-        // `createdAt`) on its REAL day, and keeps Slice-1 paste-import correct
-        // (those rows have completedAt = now() = createdAt). The backfill set
-        // completedAt = createdAt, so nulls are not expected — the fallback is
-        // defensive.
-        OR: [
-          { completedAt: { gte: startDate, lte: endDate } },
-          { completedAt: null, createdAt: { gte: startDate, lte: endDate } },
-        ],
-      },
-      select: {
-        id: true,
-        title: true,
+    db
+      .select({
+        id: todoTable.id,
+        text: todoTable.text,
+        completedAt: todoTable.completedAt,
+        updatedAt: todoTable.updatedAt,
+        category: {
+          id: categoryTable.id,
+          name: categoryTable.name,
+          color: categoryTable.color,
+        },
+      })
+      .from(todoTable)
+      // categoryId is a required FK, so every todo joins exactly one category.
+      .innerJoin(categoryTable, eq(todoTable.categoryId, categoryTable.id))
+      .where(
+        and(
+          eq(todoTable.userId, userId),
+          eq(todoTable.completed, true),
+          // Filter by the stable completion day. `completedAt` is the semantic
+          // completion timestamp (added by an earlier migration); fall back to
+          // `updatedAt` only for rows whose `completedAt` is still null (an
+          // unconverted write path or a pre-backfill row) so they never vanish
+          // from the heatmap.
+          or(
+            between(todoTable.completedAt, startDate, endDate),
+            and(
+              isNull(todoTable.completedAt),
+              between(todoTable.updatedAt, startDate, endDate),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(todoTable.updatedAt)),
+    db
+      .select({
+        id: completedTable.id,
+        title: completedTable.title,
         // Bucket by `completedAt ?? createdAt` (coalesced in JS below).
-        completedAt: true,
-        createdAt: true,
-        category: { select: { id: true, name: true, color: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
+        completedAt: completedTable.completedAt,
+        createdAt: completedTable.createdAt,
+        category: {
+          id: categoryTable.id,
+          name: categoryTable.name,
+          color: categoryTable.color,
+        },
+      })
+      .from(completedTable)
+      .innerJoin(categoryTable, eq(completedTable.categoryId, categoryTable.id))
+      .where(
+        and(
+          eq(completedTable.userId, userId),
+          // archived rows are excluded from the heatmap surface. Nothing writes
+          // `archived` any more (the archive flow went with the Todo vertical),
+          // so every live row is archived:false — but the filter stays: an
+          // archived:true row would silently erase its whole day.
+          eq(completedTable.archived, false),
+          // Filter by the semantic completion day, falling back to `createdAt`
+          // (insert time) only for rows whose `completedAt` is null. This lands
+          // the dated-import case (a row with a past `completedAt` and a today
+          // `createdAt`) on its REAL day, and keeps Slice-1 paste-import correct
+          // (those rows have completedAt = now() = createdAt). The backfill set
+          // completedAt = createdAt, so nulls are not expected — the fallback is
+          // defensive.
+          or(
+            between(completedTable.completedAt, startDate, endDate),
+            and(
+              isNull(completedTable.completedAt),
+              between(completedTable.createdAt, startDate, endDate),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(completedTable.createdAt)),
   ])
 
   const todoEntries: CompletedEntry[] = todoRows.map((row) => ({
@@ -143,12 +167,28 @@ export async function fetchCompletedEntries(
     category: row.category,
   }))
 
-  // Stable merge: sort by completedAt ascending. Tie-break by source then id
-  // so test seeds with identical timestamps produce deterministic ordering.
-  return [...todoEntries, ...completedEntries].sort((a, b) => {
-    const timeDiff = a.completedAt.getTime() - b.completedAt.getTime()
-    if (timeDiff !== 0) return timeDiff
-    if (a.source !== b.source) return a.source === 'todo' ? -1 : 1
-    return a.id - b.id
-  })
+  // Stable merge of the two halves into one timeline.
+  return [...todoEntries, ...completedEntries].sort(compareCompletedEntries)
+}
+
+/**
+ * Orders completion entries by completion time ascending, breaking ties by source (todo first) and then id.
+ *
+ * The tie-break keeps rows that share an instant, such as a bulk import or a test seed, in one deterministic order instead of whatever order the two queries happened to return them.
+ * Called as the sort comparator of {@link fetchCompletedEntries}.
+ *
+ * @param a - First entry.
+ * @param b - Second entry.
+ * @returns Negative when `a` comes first, positive when `b` does, never zero for distinct entries.
+ * @example
+ * [entryAt10, entryAt09].sort(compareCompletedEntries) // => [entryAt09, entryAt10]
+ */
+export function compareCompletedEntries(
+  a: CompletedEntry,
+  b: CompletedEntry,
+): number {
+  const timeDiff = a.completedAt.getTime() - b.completedAt.getTime()
+  if (timeDiff !== 0) return timeDiff
+  if (a.source !== b.source) return a.source === 'todo' ? -1 : 1
+  return a.id - b.id
 }

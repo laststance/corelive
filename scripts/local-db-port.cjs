@@ -6,4 +6,11 @@
  */
 const LOCAL_POSTGRES_HOST_PORT = 5491
 
-module.exports = { LOCAL_POSTGRES_HOST_PORT }
+/**
+ * Connection string used when `POSTGRES_PRISMA_URL` is unset, shared by the gate and the reset script so
+ * the URL judged by `assert-local-db.cjs` is the URL `reset-local-db.cjs` connects to. `drizzle.config.ts`
+ * (TypeScript, loaded by drizzle-kit) spells the same DSN out; keep the two in sync.
+ */
+const LOCAL_FALLBACK_DATABASE_URL = `postgresql://user:pass@localhost:${LOCAL_POSTGRES_HOST_PORT}/db`
+
+module.exports = { LOCAL_POSTGRES_HOST_PORT, LOCAL_FALLBACK_DATABASE_URL }

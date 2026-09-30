@@ -1,8 +1,14 @@
 import { ORPCError } from '@orpc/server'
-import { Prisma } from '@prisma/client'
+import { and, asc, eq, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/db'
+import { PG_UNIQUE_VIOLATION } from '@/db/constants'
+import { isPgError } from '@/db/isPgError'
+import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
+import { requireRow } from '@/db/requireRow'
+import { categoryTable, completedTable, importBatchTable } from '@/db/schema'
+import { IMPORT_TRANSACTION_TIMEOUT_MS, runTransaction } from '@/db/transaction'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 import { toLocalDayKey } from '@/lib/toLocalDayKey'
 
@@ -19,12 +25,13 @@ import {
   DeleteCompletedSchema,
   HeatmapInputSchema,
   HeatmapResponseSchema,
-  IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS,
   ImportLocalResponseSchema,
   ImportLocalSchema,
 } from '../schemas/completed'
 import { calculateStreaks } from '../utils/calculateStreaks'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
+
+import { findOwnedCategory } from './category'
 
 /**
  * Window during which a Completed row may be hard-deleted via {@link deleteCompleted}.
@@ -116,18 +123,17 @@ export const getHeatmap = authMiddleware
         const day = dayMap.get(dateKey)!
         day.count++
 
-        if (entry.category) {
-          const categoryId = entry.category.id
-          if (!day.categories.has(categoryId)) {
-            day.categories.set(categoryId, {
-              id: categoryId,
-              name: entry.category.name,
-              color: entry.category.color,
-              count: 0,
-            })
-          }
-          day.categories.get(categoryId)!.count++
+        // Both aggregation queries inner-join the category (a required FK), so every entry has one.
+        const categoryId = entry.category.id
+        if (!day.categories.has(categoryId)) {
+          day.categories.set(categoryId, {
+            id: categoryId,
+            name: entry.category.name,
+            color: entry.category.color,
+            count: 0,
+          })
         }
+        day.categories.get(categoryId)!.count++
       }
 
       const data = Array.from(dayMap.entries()).map(([date, entry]) => ({
@@ -219,7 +225,6 @@ export const getDayDetail = authMiddleware
         { id: number; name: string; color: string; count: number }
       >()
       for (const entry of entries) {
-        if (!entry.category) continue
         const existing = categoryRollup.get(entry.category.id)
         if (existing) {
           existing.count++
@@ -272,14 +277,15 @@ export const getJournal = authMiddleware
         input
       const { user } = context
 
-      // Raw UNION row shape. Int4 columns (id, category_id) arrive as numbers
-      // and the timestamp as a Date; the COUNT is cast `::int` in SQL so it is a
-      // number, not the driver adapter's native bigint.
+      // Raw UNION row shape. Int4 columns (id, category_id) arrive as numbers;
+      // the timestamp arrives as the driver's raw text (drizzle does not convert
+      // timestamps in raw rows) and is turned into a UTC Date below. The COUNT is
+      // cast `::int` in SQL so it is a number, not a bigint string.
       type JournalRow = {
         source: 'todo' | 'completed'
         id: number
         title: string
-        completed_at: Date
+        completed_at: string
         category_id: number | null
         category_name: string | null
         category_color: string | null
@@ -287,7 +293,7 @@ export const getJournal = authMiddleware
 
       // Build the normalized feed once so list + count cannot drift on fallback
       // timestamps or filter semantics. Every interpolation is parameterized.
-      const mergedJournalRows = Prisma.sql`
+      const mergedJournalRows = sql`
         SELECT
           'todo'::text AS source,
           t.id,
@@ -308,20 +314,24 @@ export const getJournal = authMiddleware
       `
       const categoryFilter =
         categoryId === undefined
-          ? Prisma.empty
-          : Prisma.sql`AND m.category_id = ${categoryId}`
+          ? sql``
+          : sql`AND m.category_id = ${categoryId}`
+      // Bind the bounds as UTC ISO strings, never as Date objects: pg serializes a
+      // Date with the process's local offset, and Postgres drops the offset when it
+      // compares against `timestamp without time zone`, which would shift the
+      // filter by the server's UTC offset (9h on a JST machine, 0 on Vercel).
       const completedFromFilter =
         completedFrom === undefined
-          ? Prisma.empty
-          : Prisma.sql`AND m.completed_at >= ${completedFrom}`
+          ? sql``
+          : sql`AND m.completed_at >= ${completedFrom.toISOString()}`
       const completedBeforeFilter =
         completedBefore === undefined
-          ? Prisma.empty
-          : Prisma.sql`AND m.completed_at < ${completedBefore}`
+          ? sql``
+          : sql`AND m.completed_at < ${completedBefore.toISOString()}`
 
       // Two reads in parallel: the page and its total share every predicate.
-      const [rows, countRows] = await Promise.all([
-        prisma.$queryRaw<JournalRow[]>`
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        db.execute<JournalRow>(sql`
           SELECT
             m.source,
             m.id,
@@ -338,15 +348,15 @@ export const getJournal = authMiddleware
             ${completedBeforeFilter}
           ORDER BY m.completed_at DESC, m.source ASC, m.id ASC
           LIMIT ${limit} OFFSET ${offset}
-        `,
-        prisma.$queryRaw<{ total: number }[]>`
+        `),
+        db.execute<{ total: number }>(sql`
           SELECT COUNT(*)::int AS total
           FROM (${mergedJournalRows}) m
           WHERE TRUE
             ${categoryFilter}
             ${completedFromFilter}
             ${completedBeforeFilter}
-        `,
+        `),
       ])
 
       const total = countRows[0]?.total ?? 0
@@ -359,7 +369,7 @@ export const getJournal = authMiddleware
         source: row.source,
         id: row.id,
         title: row.title,
-        completedAt: row.completed_at,
+        completedAt: parseUtcTimestamp(row.completed_at),
         category:
           row.category_id !== null
             ? {
@@ -408,24 +418,23 @@ export const createCompleted = authMiddleware
       const { user } = context
       const { categoryId, title } = input
 
-      const category = await prisma.category.findFirst({
-        where: { id: categoryId, userId: user.id },
-      })
-      if (!category) {
+      if (!(await findOwnedCategory(user.id, categoryId))) {
         throw new ORPCError('NOT_FOUND', {
           message: 'Category not found',
         })
       }
 
-      const completed = await prisma.completed.create({
-        data: {
-          title,
-          categoryId,
-          userId: user.id,
-        },
-      })
-
-      return completed
+      return requireRow(
+        await db
+          .insert(completedTable)
+          .values({
+            title,
+            categoryId,
+            userId: user.id,
+          })
+          .returning(),
+        'completed.insert',
+      )
     } catch (error) {
       if (error instanceof ORPCError) throw error
       log.error('Error in createCompleted:', error)
@@ -460,27 +469,32 @@ export const deleteCompleted = authMiddleware
 
     // Atomic conditional delete: ownership + freshness checks happen inside a
     // single statement so two concurrent undo calls (or an undo racing the
-    // window expiry) cannot both observe the row as deletable. The
-    // deleteMany count is the authoritative result; we only do an extra
+    // window expiry) cannot both observe the row as deletable. The number of
+    // returned rows is the authoritative result; we only do an extra
     // existence read on failure to distinguish NOT_FOUND vs FORBIDDEN.
-    const result = await prisma.completed.deleteMany({
-      where: {
-        id,
-        userId: user.id,
-        createdAt: {
-          gte: new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
-        },
-      },
-    })
+    const deletedRows = await db
+      .delete(completedTable)
+      .where(
+        and(
+          eq(completedTable.id, id),
+          eq(completedTable.userId, user.id),
+          gte(
+            completedTable.createdAt,
+            new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
+          ),
+        ),
+      )
+      .returning({ id: completedTable.id })
 
-    if (result.count === 1) {
+    if (deletedRows.length === 1) {
       return { id }
     }
 
-    const stillExists = await prisma.completed.findFirst({
-      where: { id, userId: user.id },
-      select: { id: true },
-    })
+    const [stillExists] = await db
+      .select({ id: completedTable.id })
+      .from(completedTable)
+      .where(and(eq(completedTable.id, id), eq(completedTable.userId, user.id)))
+      .limit(1)
     if (stillExists) {
       throw new ORPCError('FORBIDDEN', {
         message: 'Undo window has expired for this completion',
@@ -497,41 +511,37 @@ export const deleteCompleted = authMiddleware
  * Exists because a `/write` visitor can sign up and merge before the Clerk
  * webhook's seed lands, and an import that 404s there would strand the device's
  * whole history. Called only by {@link importLocalCompleted}, outside its
- * transaction — a P2002 from the seed would abort the batch insert.
+ * transaction, so the seed cannot abort the batch insert.
  * @param userId - Owner whose default category is wanted.
  * @returns The category id to file every imported row under.
  * @example
  * await resolveImportCategoryId(user.id) // => 3
  */
 async function resolveImportCategoryId(userId: number): Promise<number> {
-  const existing = await prisma.category.findFirst({
-    where: { userId, isDefault: true },
-    select: { id: true },
-  })
+  const [existing] = await db
+    .select({ id: categoryTable.id })
+    .from(categoryTable)
+    .where(
+      and(eq(categoryTable.userId, userId), eq(categoryTable.isDefault, true)),
+    )
+    .limit(1)
   if (existing) return existing.id
 
-  try {
-    const created = await prisma.category.create({
-      data: { ...DEFAULT_CATEGORY_SEED, userId },
-      select: { id: true },
-    })
-    return created.id
-  } catch (error) {
-    // P2002 = @@unique([name, userId]); the webhook (or a non-default "General")
-    // already owns the name, so fall through to whatever the account does have.
-    if (
-      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-      error.code !== 'P2002'
-    ) {
-      throw error
-    }
-  }
+  // DO NOTHING returns no row when the webhook (or a non-default "General") already owns the
+  // name (unique index on name + userId); fall through to whatever the account does have.
+  const [created] = await db
+    .insert(categoryTable)
+    .values({ ...DEFAULT_CATEGORY_SEED, userId })
+    .onConflictDoNothing()
+    .returning({ id: categoryTable.id })
+  if (created) return created.id
 
-  const fallback = await prisma.category.findFirst({
-    where: { userId },
-    select: { id: true },
-    orderBy: { id: 'asc' },
-  })
+  const [fallback] = await db
+    .select({ id: categoryTable.id })
+    .from(categoryTable)
+    .where(eq(categoryTable.userId, userId))
+    .orderBy(asc(categoryTable.id))
+    .limit(1)
   if (!fallback) {
     throw new ORPCError('INTERNAL_SERVER_ERROR', {
       message: 'No category available to import into',
@@ -547,8 +557,8 @@ async function resolveImportCategoryId(userId: number): Promise<number> {
  *
  * Idempotency is the `ImportBatch` primary key, namespaced `"<userId>:<batchId>"`
  * so two accounts can never collide on one client-generated id. The insert and
- * the rows share a single transaction: a duplicate batch throws P2002 and rolls
- * the whole thing back before a row lands, which is why the catch sits outside
+ * the rows share a single transaction: a duplicate batch raises a unique
+ * violation and rolls the whole thing back before a row lands, which is why the catch sits outside
  * the callback — catching inside would run against an already-aborting
  * transaction. Repeated titles are never deduplicated; repeating a task is the
  * habit signal this app exists to count.
@@ -571,13 +581,15 @@ export const importLocalCompleted = authMiddleware
     try {
       const categoryId = await resolveImportCategoryId(user.id)
 
-      const imported = await prisma.$transaction(
-        async (tx) => {
-          await tx.importBatch.create({
-            data: { id: namespacedBatchId, userId: user.id },
-          })
-          const { count } = await tx.completed.createMany({
-            data: items.map((item) => ({
+      // Up to {@link IMPORT_LOCAL_MAX_ITEMS} rows in one transaction, so it gets the longer limit the previous ORM gave it.
+      const imported = await runTransaction(async (tx) => {
+        await tx
+          .insert(importBatchTable)
+          .values({ id: namespacedBatchId, userId: user.id })
+        const insertedRows = await tx
+          .insert(completedTable)
+          .values(
+            items.map((item) => ({
               title: item.title,
               completedAt: item.completedAt,
               categoryId,
@@ -585,24 +597,21 @@ export const importLocalCompleted = authMiddleware
               importBatchId: namespacedBatchId,
               localCompletionId: item.localId,
             })),
-            // A keep this account already holds (a second tab claimed the same
-            // batch, or a lost tag re-sent it under a fresh batch id) is skipped
-            // rather than duplicated — `(userId, localCompletionId)` is unique.
-            skipDuplicates: true,
-          })
-          return count
-        },
-        { timeout: IMPORT_LOCAL_TRANSACTION_TIMEOUT_MS },
-      )
+          )
+          // A keep this account already holds (a second tab claimed the same
+          // batch, or a lost tag re-sent it under a fresh batch id) is skipped
+          // rather than duplicated — `(userId, localCompletionId)` is unique.
+          // `.returning()` lists only the rows that actually landed.
+          .onConflictDoNothing()
+          .returning({ id: completedTable.id })
+        return insertedRows.length
+      }, IMPORT_TRANSACTION_TIMEOUT_MS)
 
       return { batchId, imported, alreadyImported: false }
     } catch (error) {
       // The batch id is already taken: an earlier attempt committed and only its
       // response was lost. Nothing to do, and the client tags its items either way.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (isPgError(error, PG_UNIQUE_VIOLATION)) {
         return { batchId, imported: 0, alreadyImported: true }
       }
       if (error instanceof ORPCError) throw error
