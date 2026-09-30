@@ -1,5 +1,7 @@
 // @vitest-environment node
-import { and, eq } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+
+import { and, eq, isNull } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { describeIfDb } from '@/server/procedures/describeIfDb'
@@ -26,6 +28,7 @@ import { SEED_USER_CLERK_ID } from './seedUser'
 vi.setConfig({ testTimeout: 30_000 })
 
 // Safe default: never delete a seed account this test did not create.
+const temporaryCategoryIds: number[] = []
 let seedUserExistedBeforeTest = true
 /** "General" of a pre-existing seed account as the test found it; `undefined` until the test has looked. */
 let generalBeforeTest:
@@ -42,6 +45,9 @@ afterEach(async () => {
     .from(userTable)
     .where(eq(userTable.clerkId, SEED_USER_CLERK_ID))
   if (!user) return
+  // Only owned temporary child/root rows are removed, in inverse reference order.
+  for (const id of temporaryCategoryIds.splice(0).reverse())
+    await db.delete(categoryTable).where(eq(categoryTable.id, id))
   if (createdByThisTest) {
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
     await db.delete(userTable).where(eq(userTable.id, user.id))
@@ -51,6 +57,7 @@ afterEach(async () => {
   const general = and(
     eq(categoryTable.userId, user.id),
     eq(categoryTable.name, 'General'),
+    isNull(categoryTable.parentId),
   )
   // The account had no "General": the one the test's seed run created must not outlive the test.
   if (!generalFound.present) {
@@ -79,6 +86,7 @@ describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
           and(
             eq(categoryTable.userId, existing[0].id),
             eq(categoryTable.name, 'General'),
+            isNull(categoryTable.parentId),
           ),
         )
       generalBeforeTest = generalBefore
@@ -90,6 +98,20 @@ describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
       .update(categoryTable)
       .set({ isDefault: false })
       .where(eq(categoryTable.id, first.generalCategory.id))
+
+    const [parent] = await db
+      .insert(categoryTable)
+      .values({
+        name: `Seed ${randomUUID().slice(0, 8)}`,
+        userId: first.user.id,
+      })
+      .returning()
+    temporaryCategoryIds.push(parent!.id)
+    const [childGeneral] = await db
+      .insert(categoryTable)
+      .values({ name: 'General', parentId: parent!.id, userId: first.user.id })
+      .returning()
+    temporaryCategoryIds.push(childGeneral!.id)
 
     // Act
     const second = await ensureSeedAccount()
@@ -106,6 +128,14 @@ describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
       .from(userTable)
       .where(eq(userTable.clerkId, SEED_USER_CLERK_ID))
     expect(seedUsers).toHaveLength(1)
+    const [retainedChild] = await db
+      .select()
+      .from(categoryTable)
+      .where(eq(categoryTable.id, childGeneral!.id))
+    expect(retainedChild).toMatchObject({
+      parentId: parent!.id,
+      isDefault: false,
+    })
     const generalRows = await db
       .select()
       .from(categoryTable)
@@ -113,6 +143,7 @@ describeIfDb('ensureSeedAccount (real PostgreSQL)', () => {
         and(
           eq(categoryTable.userId, first.user.id),
           eq(categoryTable.name, 'General'),
+          isNull(categoryTable.parentId),
         ),
       )
     expect(generalRows).toHaveLength(1)

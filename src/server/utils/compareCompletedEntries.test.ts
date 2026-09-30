@@ -6,7 +6,7 @@ import {
   type CompletedEntry,
 } from './completedAggregation'
 
-const GENERAL = { id: 1, name: 'General', color: 'blue' }
+const GENERAL = { id: 1, name: 'General', color: 'blue', parent: null }
 
 /**
  * Builds one completion entry for the ordering tests.

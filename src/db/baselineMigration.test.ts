@@ -1,7 +1,17 @@
 // @vitest-environment node
 import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import net from 'node:net'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { eq, sql } from 'drizzle-orm'
@@ -12,7 +22,7 @@ import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 
 import { describeIfDb } from '@/server/procedures/describeIfDb'
 import { fingerprintPublicSchema } from '@/test/schemaFingerprint'
-import { createScratchDatabase } from '@/test/scratchDatabase'
+import { createScratchDatabase as createBaseScratchDatabase } from '@/test/scratchDatabase'
 
 import { isPgError } from './isPgError'
 import { userTable } from './schema'
@@ -45,7 +55,8 @@ import type { db } from './index'
  */
 vi.setConfig({ testTimeout: 30_000 })
 
-const MIGRATIONS_FOLDER = path.resolve(process.cwd(), 'drizzle')
+let historicalRoot: string
+let MIGRATIONS_FOLDER: string
 
 /** SQLSTATE `duplicate_table`: what CREATE TABLE raises when the relation already exists. */
 const PG_DUPLICATE_TABLE = '42P07'
@@ -67,6 +78,50 @@ type BookkeepingRow = { hash: string; created_at: string }
 type SqlExecutor = Pick<typeof db, 'execute'>
 
 type ScratchDatabase = Awaited<ReturnType<typeof createScratchDatabase>>
+
+/** Builds the frozen first-migration database for cutover regressions even after newer feature migrations exist.
+ * @returns A scratch database whose only recorded migration is the historical baseline.
+ * @example const scratch = await createScratchDatabase()
+ */
+async function createScratchDatabase() {
+  const scratch = await createBaseScratchDatabase({ firstMigrationOnly: true })
+  await recordBaseline(scratch.db)
+  return scratch
+}
+
+/** Copies the current guard into a first-migration-only fixture so historical --apply evidence remains meaningful.
+ * @example prepareHistoricalMigrationFixture()
+ */
+function prepareHistoricalMigrationFixture() {
+  historicalRoot = mkdtempSync(path.join(tmpdir(), 'corelive-baseline-'))
+  MIGRATIONS_FOLDER = path.join(historicalRoot, 'drizzle')
+  for (const directory of ['scripts', 'drizzle/meta', 'src/db/__fixtures__'])
+    mkdirSync(path.join(historicalRoot, directory), { recursive: true })
+  symlinkSync(
+    path.join(process.cwd(), 'node_modules'),
+    path.join(historicalRoot, 'node_modules'),
+    'dir',
+  )
+  for (const file of [
+    'scripts/baseline-drizzle-migrations.mjs',
+    'scripts/schema-fingerprint.sql',
+    'src/db/__fixtures__/previousOrmSchemaFingerprint.txt',
+    'drizzle/0000_init.sql',
+    'drizzle/meta/0000_snapshot.json',
+  ])
+    copyFileSync(
+      path.join(process.cwd(), file),
+      path.join(historicalRoot, file),
+    )
+  const journal = JSON.parse(
+    readFileSync('drizzle/meta/_journal.json', 'utf8'),
+  ) as { entries: unknown[] }
+  journal.entries = journal.entries.slice(0, 1)
+  writeFileSync(
+    path.join(historicalRoot, 'drizzle/meta/_journal.json'),
+    JSON.stringify(journal),
+  )
+}
 
 /**
  * Removes the migrator's bookkeeping schema, leaving the application tables in place —
@@ -216,7 +271,10 @@ function runBaselineScript(
 } {
   const result = spawnSync(
     process.execPath,
-    ['scripts/baseline-drizzle-migrations.mjs', ...flags],
+    [
+      path.join(historicalRoot, 'scripts/baseline-drizzle-migrations.mjs'),
+      ...flags,
+    ],
     {
       env: {
         ...process.env,
@@ -238,11 +296,13 @@ describeIfDb(
     let scratch: ScratchDatabase
 
     beforeAll(async () => {
+      prepareHistoricalMigrationFixture()
       scratch = await createScratchDatabase()
     })
 
     afterAll(async () => {
       await scratch?.drop()
+      rmSync(historicalRoot, { recursive: true, force: true })
     })
 
     // Every test starts from the shape the previous ORM left in production: application tables,

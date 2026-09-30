@@ -1,20 +1,10 @@
 /**
- * Category Procedures
- *
- * oRPC procedures for managing user categories.
- * Provides list, create, update, and delete operations with authentication.
- *
+ * Authenticated category reads and serialized two-level hierarchy writes.
  * @module server/procedures/category
- *
- * @example
- * // Client usage
- * const { categories } = await orpcClient.category.list()
- * await orpcClient.category.create({ name: 'Work', color: 'blue' })
- * await orpcClient.category.update({ id: 1, data: { name: 'Personal' } })
- * await orpcClient.category.delete({ id: 1 })
+ * @example await orpcClient.category.create({ name: 'CoreLive', parentId: 1 })
  */
 import { ORPCError } from '@orpc/server'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '@/db'
@@ -42,13 +32,31 @@ import {
 } from '../schemas/category'
 
 const log = createModuleLogger('category')
+type CategoryTransaction = Parameters<Parameters<typeof runTransaction>[0]>[0]
+type CategoryDatabase = typeof db | CategoryTransaction
 
 /**
- * Reads one account's categories, oldest first, with their open-todo counts. Called by {@link listCategories} before and (when empty) after the default seed.
+ * Serializes hierarchy writes and Keeps before validation; category mutations and {@link createCompleted} call this inside their transaction.
+ * @param tx - Transaction that owns every following validation and write.
+ * @param userId - Owner whose category graph is being changed.
+ * @returns Once this transaction owns the account lock.
+ * @example await lockCategoryOwner(tx, user.id)
+ */
+export async function lockCategoryOwner(
+  tx: CategoryTransaction,
+  userId: number,
+): Promise<void> {
+  // NO KEY UPDATE serializes our writers without blocking unrelated User foreign-key checks.
+  await tx.execute(
+    sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+  )
+}
+
+/**
+ * Reads categories with independent record aggregates so Todo/Completed joins cannot multiply deletion previews; called by {@link listCategories}.
  * @param userId - Owner whose categories to read.
- * @returns The account's categories in creation order; `[]` for a brand-new account.
- * @example
- * await readCategoriesWithCounts(1) // => [{ id: 3, name: 'General', _count: { todos: 0 }, ... }]
+ * @returns Creation-ordered categories with direct open Todo and all-record counts.
+ * @example await readCategoriesWithCounts(1)
  */
 async function readCategoriesWithCounts(
   userId: User['id'],
@@ -56,42 +64,51 @@ async function readCategoriesWithCounts(
   const rows = await db
     .select({
       category: categoryTable,
-      // Correlated subquery: open (not completed) todos per category, for the sidebar badge.
       openTodoCount: db.$count(
         todoTable,
         and(
           eq(todoTable.categoryId, categoryTable.id),
+          eq(todoTable.userId, userId),
           eq(todoTable.completed, false),
+        ),
+      ),
+      todoCount: db.$count(
+        todoTable,
+        and(
+          eq(todoTable.categoryId, categoryTable.id),
+          eq(todoTable.userId, userId),
+        ),
+      ),
+      completedCount: db.$count(
+        completedTable,
+        and(
+          eq(completedTable.categoryId, categoryTable.id),
+          eq(completedTable.userId, userId),
         ),
       ),
     })
     .from(categoryTable)
     .where(eq(categoryTable.userId, userId))
-    // `id` breaks createdAt ties so the order is deterministic.
     .orderBy(asc(categoryTable.createdAt), asc(categoryTable.id))
-
-  const categories = rows.map(({ category, openTodoCount }) => ({
+  return rows.map(({ category, openTodoCount, todoCount, completedCount }) => ({
     ...category,
+    recordCount: todoCount + completedCount,
     _count: { todos: openTodoCount },
-  }))
-
-  // The column is plain text; cast to satisfy the enum-typed output schema
-  return categories as CategoryWithCount[]
+  })) as CategoryWithCount[]
 }
 
 /**
- * Loads a category by id, but only when the caller owns it — the permission check shared by update, delete and {@link createCompleted}.
- * @param userId - Authenticated owner.
- * @param categoryId - Category to load.
- * @returns The category row, or `undefined` when it does not exist or belongs to someone else.
- * @example
- * await findOwnedCategory(1, 3) // => { id: 3, name: 'Work', userId: 1, ... }
+ * Reads only an owned category; writes pass their locked transaction so validation cannot race deletion.
+ * @param database - Defaults to the shared client for nontransactional readers.
+ * @returns The owned row, or undefined without revealing foreign-owned rows.
+ * @example await findOwnedCategory(user.id, 3, tx)
  */
 export async function findOwnedCategory(
   userId: User['id'],
   categoryId: number,
+  database: CategoryDatabase = db,
 ) {
-  const [category] = await db
+  const [category] = await database
     .select()
     .from(categoryTable)
     .where(
@@ -102,33 +119,61 @@ export async function findOwnedCategory(
 }
 
 /**
- * List all categories for the authenticated user with todo counts. An account
- * with no categories yet gets its default "General" seeded on the way, so a
- * first sign-in from `/write` (or the Electron panel) always has somewhere to write.
- *
- * @returns Array of categories with _count.todos for sidebar badge display
- *
- * @example
- * // Returns categories with counts
- * { categories: [{ id: 1, name: 'Work', color: 'blue', _count: { todos: 3 } }, ...] }
+ * Validates an optional parent inside the account lock; create/update call this before writing the hierarchy.
+ * @returns Owned main category, or null for a root destination.
+ * @throws NOT_FOUND for missing/foreign parents and BAD_REQUEST for invalid depth or self-parenting.
+ * @example const parent = await validateCategoryParent(tx, user.id, parentId, categoryId)
+ */
+async function validateCategoryParent(
+  tx: CategoryTransaction,
+  userId: number,
+  parentId: number | null,
+  categoryId?: number,
+) {
+  if (parentId === null) return null
+  if (parentId === categoryId)
+    throw new ORPCError('BAD_REQUEST', {
+      message: 'A category cannot be its own parent',
+    })
+  const parent = await findOwnedCategory(userId, parentId, tx)
+  if (!parent)
+    throw new ORPCError('NOT_FOUND', { message: 'Parent category not found' })
+  if (parent.parentId !== null)
+    throw new ORPCError('BAD_REQUEST', {
+      message: 'Subcategories cannot have subcategories',
+    })
+  // Moving a root with children would make those children a forbidden third level.
+  if (categoryId !== undefined) {
+    const [child] = await tx
+      .select({ id: categoryTable.id })
+      .from(categoryTable)
+      .where(
+        and(
+          eq(categoryTable.userId, userId),
+          eq(categoryTable.parentId, categoryId),
+        ),
+      )
+      .limit(1)
+    if (child)
+      throw new ORPCError('BAD_REQUEST', {
+        message:
+          'Move or promote the subcategories before moving their main category',
+      })
+  }
+  return parent
+}
+
+/** Lists categories and repairs a genuinely empty account; the editor and Home bootstrap call it on load.
+ * @example const { categories } = await orpcClient.category.list()
  */
 export const listCategories = authMiddleware
   .output(CategoryListResponseSchema)
   .handler(async ({ context }) => {
     try {
       const { user } = context
-
       const categories = await readCategoriesWithCounts(user.id)
-      if (categories.length > 0) {
-        return { categories }
-      }
-
-      // Brand-new (or webhook-less) account: seed the default "General", then re-read so the
-      // response carries the real row id and count shape. New accounts get theirs from the auth
-      // middleware, so this is the repair path for accounts made before that (and for a category
-      // deleted down to zero); without it the editor opens locked on "No categories".
-      // DO NOTHING: the Clerk webhook may insert "General" between our read and this write
-      // (unique index on name + userId), and that row is exactly what we wanted.
+      if (categories.length > 0) return { categories }
+      // Root uniqueness makes overlapping middleware/webhook repairs idempotent.
       await db
         .insert(categoryTable)
         .values({ ...DEFAULT_CATEGORY_SEED, userId: user.id })
@@ -143,41 +188,41 @@ export const listCategories = authMiddleware
     }
   })
 
-/**
- * Create a new category for the authenticated user.
- *
- * @param input.name - Category display name (1-30 chars, unique per user)
- * @param input.color - One of 6 predefined colors (default: 'blue')
- * @returns The newly created category
+/** Creates a root or child for picker/manager requests; inherits the parent's color only when the caller omits color.
+ * @example await orpcClient.category.create({ name: 'CoreLive', parentId: 1 })
  */
 export const createCategory = authMiddleware
   .input(CreateCategorySchema)
   .output(CategorySchema)
   .handler(async ({ input, context }) => {
     try {
-      const { user } = context
-
-      const category = requireRow(
-        await db
-          .insert(categoryTable)
-          .values({
-            name: input.name,
-            color: input.color,
-            userId: user.id,
-          })
-          .returning(),
-        'category.insert',
-      )
-
-      // The column is plain text; cast to satisfy the enum-typed output schema
+      const category = await runTransaction(async (tx) => {
+        await lockCategoryOwner(tx, context.user.id)
+        const parentId = input.parentId ?? null
+        const parent = await validateCategoryParent(
+          tx,
+          context.user.id,
+          parentId,
+        )
+        return requireRow(
+          await tx
+            .insert(categoryTable)
+            .values({
+              name: input.name,
+              color: input.color ?? parent?.color ?? 'blue',
+              parentId,
+              userId: context.user.id,
+            })
+            .returning(),
+          'category.insert',
+        )
+      })
       return category as Category
     } catch (error) {
-      // Unique violation on (name, userId): the user already has this category name
-      if (isPgError(error, PG_UNIQUE_VIOLATION)) {
+      if (isPgError(error, PG_UNIQUE_VIOLATION))
         throw new ORPCError('CONFLICT', {
-          message: `Category "${input.name}" already exists`,
+          message: `Category "${input.name}" already exists in this main category`,
         })
-      }
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in createCategory')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -187,74 +232,63 @@ export const createCategory = authMiddleware
     }
   })
 
-/**
- * Update an existing category.
- * Only provided fields are updated; others retain their current values.
- *
- * @param input.id - Category ID to update
- * @param input.data - Partial category fields to update
- * @returns The updated category
+/** Updates metadata or moves a category from the manager while preserving IDs and all entry/draft identities.
+ * @example await orpcClient.category.update({ id: 3, data: { parentId: null } })
  */
 export const updateCategory = authMiddleware
   .input(
-    z.object({
-      id: z.number().int().positive(),
-      data: UpdateCategorySchema,
-    }),
+    z.object({ id: z.number().int().positive(), data: UpdateCategorySchema }),
   )
   .output(CategorySchema)
   .handler(async ({ input, context }) => {
     try {
-      const { user } = context
-      const { id, data } = input
-
-      // Permission check
-      const existing = await findOwnedCategory(user.id, id)
-
-      if (!existing) {
-        throw new ORPCError('NOT_FOUND', {
-          message: 'Category not found',
-        })
-      }
-
-      // The default is always "General"; recoloring and a same-name save stay allowed
-      if (
-        existing.isDefault &&
-        data.name !== undefined &&
-        data.name !== existing.name
-      ) {
-        throw new ORPCError('FORBIDDEN', {
-          message: "The default category can't be renamed",
-        })
-      }
-
-      // An empty `data` is a no-op: answer with the stored row and leave `updatedAt` alone, as the
-      // previous ORM did. Drizzle would reject an empty SET ("No values to set") before it stamps
-      // `$onUpdate`, so this cannot be left to the UPDATE.
-      if (Object.values(data).every((value) => value === undefined)) {
-        return existing as Category
-      }
-
-      // `requireRow` makes an update of a missing row fail loudly: a row deleted between the
-      // permission check and this update aborts into the generic 500 below.
-      const category = requireRow(
-        await db
-          .update(categoryTable)
-          .set(data)
-          .where(eq(categoryTable.id, id))
-          .returning(),
-        'category.update',
-      )
-
-      // The column is plain text; cast to satisfy the enum-typed output schema
+      const category = await runTransaction(async (tx) => {
+        const { id, data } = input
+        await lockCategoryOwner(tx, context.user.id)
+        const existing = await findOwnedCategory(context.user.id, id, tx)
+        if (!existing)
+          throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
+        if (
+          existing.isDefault &&
+          data.name !== undefined &&
+          data.name !== existing.name
+        )
+          throw new ORPCError('FORBIDDEN', {
+            message: "The default category can't be renamed",
+          })
+        if (
+          existing.isDefault &&
+          data.parentId !== undefined &&
+          data.parentId !== null
+        )
+          throw new ORPCError('FORBIDDEN', {
+            message: 'The default category must remain a main category',
+          })
+        if (data.parentId !== undefined)
+          await validateCategoryParent(tx, context.user.id, data.parentId, id)
+        // Empty edits preserve updatedAt and avoid Drizzle's empty SET error.
+        if (Object.values(data).every((value) => value === undefined))
+          return existing
+        return requireRow(
+          await tx
+            .update(categoryTable)
+            .set(data)
+            .where(
+              and(
+                eq(categoryTable.id, id),
+                eq(categoryTable.userId, context.user.id),
+              ),
+            )
+            .returning(),
+          'category.update',
+        )
+      })
       return category as Category
     } catch (error) {
-      // Unique violation on rename: another category already has this name
-      if (isPgError(error, PG_UNIQUE_VIOLATION)) {
+      if (isPgError(error, PG_UNIQUE_VIOLATION))
         throw new ORPCError('CONFLICT', {
-          message: `Category "${input.data.name ?? 'unknown'}" already exists`,
+          message: `Category "${input.data.name ?? 'with this name'}" already exists in this main category`,
         })
-      }
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in updateCategory')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
@@ -264,73 +298,140 @@ export const updateCategory = authMiddleware
     }
   })
 
-/**
- * Delete a category. Tasks in this category are reassigned to the user's default (General) category.
- * The default category itself cannot be deleted.
- *
- * @param input.id - Category ID to delete
- * @returns Success status
+/** Deletes only classification: manager requests atomically promote children and transfer direct records without changing their timestamps.
+ * @example await orpcClient.category.delete({ id: 3, targetCategoryId: 1 })
  */
 export const deleteCategory = authMiddleware
-  .input(z.object({ id: z.number().int().positive() }))
-  .output(z.object({ success: z.boolean() }))
+  .input(
+    z.object({
+      id: z.number().int().positive(),
+      targetCategoryId: z.number().int().positive().optional(),
+    }),
+  )
+  .output(
+    z.object({
+      success: z.literal(true),
+      movedToCategoryId: z.number().int().positive(),
+      promotedCategoryIds: z.array(z.number().int().positive()),
+    }),
+  )
   .handler(async ({ input, context }) => {
     try {
-      const { user } = context
-      const { id } = input
-
-      // Permission check
-      const existing = await findOwnedCategory(user.id, id)
-
-      if (!existing) {
-        throw new ORPCError('NOT_FOUND', {
-          message: 'Category not found',
-        })
-      }
-
-      // Block deletion of default category
-      if (existing.isDefault) {
-        throw new ORPCError('FORBIDDEN', {
-          message: 'Cannot delete the default category',
-        })
-      }
-
-      // Find user's default category to reassign todos
-      const [defaultCategory] = await db
-        .select()
-        .from(categoryTable)
-        .where(
-          and(
-            eq(categoryTable.userId, user.id),
-            eq(categoryTable.isDefault, true),
-          ),
-        )
-        .limit(1)
-
-      // Reassign todos to default category, then delete
-      await runTransaction(async (tx) => {
-        if (defaultCategory) {
+      return await runTransaction(async (tx) => {
+        const userId = context.user.id
+        const { id } = input
+        await lockCategoryOwner(tx, userId)
+        const existing = await findOwnedCategory(userId, id, tx)
+        if (!existing)
+          throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
+        if (existing.isDefault)
+          throw new ORPCError('FORBIDDEN', {
+            message: 'Cannot delete the default category',
+          })
+        const children = await tx
+          .select()
+          .from(categoryTable)
+          .where(
+            and(
+              eq(categoryTable.userId, userId),
+              eq(categoryTable.parentId, id),
+            ),
+          )
+          .orderBy(asc(categoryTable.id))
+        let targetId = input.targetCategoryId ?? existing.parentId
+        if (targetId === undefined || targetId === null) {
+          // Repair a missing default without mistaking a child named General for the root.
           await tx
-            .update(todoTable)
-            .set({ categoryId: defaultCategory.id })
-            .where(eq(todoTable.categoryId, id))
-          await tx
-            .update(completedTable)
-            .set({ categoryId: defaultCategory.id })
-            .where(eq(completedTable.categoryId, id))
+            .insert(categoryTable)
+            .values({ ...DEFAULT_CATEGORY_SEED, userId })
+            .onConflictDoNothing()
+          const [general] = await tx
+            .select()
+            .from(categoryTable)
+            .where(
+              and(
+                eq(categoryTable.userId, userId),
+                eq(categoryTable.name, 'General'),
+                isNull(categoryTable.parentId),
+              ),
+            )
+            .limit(1)
+          targetId = general?.id ?? null
         }
-        // `requireRow` makes a delete of a missing row fail loudly: a vanished row rolls the reassignment back.
+        if (targetId === id)
+          throw new ORPCError('BAD_REQUEST', {
+            message: 'Choose a different destination category',
+          })
+        if (!targetId || !(await findOwnedCategory(userId, targetId, tx)))
+          throw new ORPCError('NOT_FOUND', {
+            message: 'Destination category not found',
+          })
+        const roots = await tx
+          .select({ id: categoryTable.id, name: categoryTable.name })
+          .from(categoryTable)
+          .where(
+            and(
+              eq(categoryTable.userId, userId),
+              isNull(categoryTable.parentId),
+            ),
+          )
+        const conflicts = children.filter((child) =>
+          roots.some((root) => root.id !== id && root.name === child.name),
+        )
+        if (conflicts.length)
+          throw new ORPCError('CONFLICT', {
+            message: `Rename these subcategories before deleting their main category: ${conflicts.map((child) => child.name).join(', ')}`,
+          })
+        // Children retain their IDs; only the removed parent's direct records move.
+        if (children.length)
+          await tx
+            .update(categoryTable)
+            .set({ parentId: null })
+            .where(
+              and(
+                eq(categoryTable.userId, userId),
+                eq(categoryTable.parentId, id),
+              ),
+            )
+        await tx
+          .update(todoTable)
+          .set({ categoryId: targetId, updatedAt: sql`${todoTable.updatedAt}` })
+          .where(
+            and(eq(todoTable.userId, userId), eq(todoTable.categoryId, id)),
+          )
+        await tx
+          .update(completedTable)
+          .set({
+            categoryId: targetId,
+            updatedAt: sql`${completedTable.updatedAt}`,
+          })
+          .where(
+            and(
+              eq(completedTable.userId, userId),
+              eq(completedTable.categoryId, id),
+            ),
+          )
         requireRow(
           await tx
             .delete(categoryTable)
-            .where(eq(categoryTable.id, id))
+            .where(
+              and(eq(categoryTable.id, id), eq(categoryTable.userId, userId)),
+            )
             .returning({ id: categoryTable.id }),
           'category.delete',
         )
+        return {
+          success: true as const,
+          movedToCategoryId: targetId,
+          promotedCategoryIds: children.map((child) => child.id),
+        }
       })
-
-      return { success: true }
     } catch (error) {
+      if (isPgError(error, PG_UNIQUE_VIOLATION))
+        throw new ORPCError('CONFLICT', {
+          message:
+            'A promoted subcategory conflicts with an existing main category',
+        })
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in deleteCategory')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {

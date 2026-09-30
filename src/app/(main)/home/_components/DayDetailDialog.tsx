@@ -26,7 +26,15 @@ import {
 } from '@/lib/heatmap-intensity'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
+import {
+  getCompletionCategoryPath,
+  rollupCategoryTotals,
+  type RootCategoryTotal,
+} from '@/lib/rollupCategoryTotals'
 import { cn } from '@/lib/utils'
+import type { DayDetailTask } from '@/server/schemas/completed'
+
+import { CategoryTotals } from './CategoryTotals'
 
 interface DayDetailDialogProps {
   date: string | null
@@ -139,27 +147,28 @@ function formatDate(isoDate: string): string {
  * - Category name with the highest occurrence
  * - `null` when no task carries a category
  * @example
- * getTopCategoryName([
- *   { category: { name: 'writing' } },
- *   { category: { name: 'reading' } },
- *   { category: { name: 'writing' } },
- * ]) // => 'writing'
+ * getTopCategoryName(day.tasks) // 'Work' when its children have the largest combined count
  */
-function getTopCategoryName<T extends { category?: { name: string } | null }>(
-  tasks: ReadonlyArray<T>,
-): string | null {
-  const counts = new Map<string, number>()
-  for (const task of tasks) {
-    const name = task.category?.name
-    if (!name) continue
-    counts.set(name, (counts.get(name) ?? 0) + 1)
-  }
-  if (counts.size === 0) return null
-  return Array.from(counts.entries()).sort((a, b) => {
-    if (b[1] !== a[1]) return b[1] - a[1]
-    // Deterministic tie-break — locale-insensitive so CI/local agree.
-    return a[0].localeCompare(b[0], 'en')
-  })[0]![0]
+function getTopCategoryName(tasks: readonly DayDetailTask[]): string | null {
+  return getDayCategoryTotals(tasks)[0]?.name ?? null
+}
+
+/**
+ * Counts day-detail entries by their current root for {@link DayDetailDialog} and sharing.
+ *
+ * @param tasks - Entries in exactly the selected day's timezone bucket.
+ * @returns Ranked root totals including direct and child counts.
+ * @example
+ * const totals = getDayCategoryTotals(day.tasks)
+ */
+function getDayCategoryTotals(
+  tasks: readonly DayDetailTask[],
+): RootCategoryTotal[] {
+  return rollupCategoryTotals(
+    tasks.flatMap((task) =>
+      task.category ? [{ ...task.category, count: 1 }] : [],
+    ),
+  )
 }
 
 /**
@@ -255,7 +264,10 @@ export const DayDetailDialog = function DayDetailDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
-        className={cn('sm:max-w-md', state.isCathedralLit && 'cathedral-lit')}
+        className={cn(
+          'max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md',
+          state.isCathedralLit && 'cathedral-lit',
+        )}
       >
         {date && (
           <>
@@ -330,29 +342,43 @@ export const DayDetailDialog = function DayDetailDialog({
                   : 'no tasks landed on this day. rest is a choice, not a void.'}
               </p>
             ) : (
-              <ul className="space-y-1.5">
-                {data?.tasks.map((task) => (
-                  <li
-                    key={`${task.source}-${task.id}`}
-                    className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'inline-block size-2 shrink-0 rounded-full',
-                        getColorDotClass(task.category?.color),
-                      )}
-                    />
+              <div className="space-y-3">
+                <CategoryTotals
+                  key={date}
+                  categories={getDayCategoryTotals(data?.tasks ?? [])}
+                  label="Categories on this day"
+                />
+                <ul className="space-y-1.5">
+                  {data?.tasks.map((task) => (
+                    <li
+                      key={`${task.source}-${task.id}`}
+                      className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'inline-block size-2 shrink-0 rounded-full',
+                          getColorDotClass(task.category?.color),
+                        )}
+                      />
 
-                    <span className="text-sm text-foreground">
-                      {task.title}
-                    </span>
-                    <span className="ml-auto font-mono text-xs text-muted-foreground">
-                      {formatClockTime(task.completedAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <div className="min-w-0 flex-1">
+                        <span className="break-words text-sm text-foreground">
+                          {task.title}
+                        </span>
+                        {task.category ? (
+                          <p className="break-words text-xs text-muted-foreground">
+                            {getCompletionCategoryPath(task.category)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span className="ml-auto font-mono text-xs text-muted-foreground">
+                        {formatClockTime(task.completedAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {isToday && dayCount > 0 && (

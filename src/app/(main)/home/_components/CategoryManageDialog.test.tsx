@@ -6,6 +6,7 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -26,7 +27,9 @@ import {
   vi,
 } from 'vitest'
 
+import * as CategorySyncModule from '@/lib/category-sync-channel'
 import { getLocalNote, setLocalNote } from '@/lib/live-editor/localNoteStore'
+import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import {
   armNetworkFailure,
@@ -44,7 +47,8 @@ vi.mock('@/hooks/useClerkQueryReady', () => ({
   useClerkQueryReady: () => true,
 }))
 
-vi.mock('@/lib/category-sync-channel', () => ({
+vi.mock('@/lib/category-sync-channel', async (importOriginal) => ({
+  ...(await importOriginal<typeof CategorySyncModule>()),
   broadcastCategorySync: vi.fn(),
 }))
 
@@ -66,6 +70,8 @@ function buildCategory(
     color: 'blue',
     isDefault: false,
     userId: 1,
+    parentId: null,
+    recordCount: 0,
     _count: { todos: 0 },
     createdAt: new Date('2026-09-07T00:00:00.000Z'),
     updatedAt: new Date('2026-09-07T00:00:00.000Z'),
@@ -186,9 +192,21 @@ async function renderDialog(
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
 
-  render(<CategoryManageDialog open onOpenChange={vi.fn()} />, { wrapper })
-  const lastRowName = categories.at(-1)?.name
-  if (lastRowName) await screen.findByText(lastRowName)
+  const onOpenChange = vi.fn()
+  render(<CategoryManageDialog open onOpenChange={onOpenChange} />, { wrapper })
+  const lastCategory = categories.at(-1)
+  const parent = categories.find(
+    (category) => category.id === lastCategory?.parentId,
+  )
+  const lastRowName =
+    lastCategory && parent
+      ? `${parent.name} / ${lastCategory.name}`
+      : lastCategory?.name
+  if (lastRowName)
+    await screen.findByRole('button', {
+      name: `${categories.at(-1)?.isDefault ? 'Recolor' : 'Rename'} ${lastRowName}`,
+    })
+  return { queryClient, onOpenChange }
 }
 
 beforeAll(() => orpcServer.listen({ onUnhandledRequest: 'error' }))
@@ -246,7 +264,7 @@ describe('CategoryManageDialog create row', () => {
     })
   })
 
-  test('empties the field without waiting for the server', async () => {
+  test('retains the name until creation is confirmed', async () => {
     // Arrange — the add is optimistic, so a round trip must not gate the clear.
     const user = userEvent.setup()
     await renderDialog()
@@ -259,7 +277,8 @@ describe('CategoryManageDialog create row', () => {
     await user.type(field, 'Reading{Enter}')
 
     // Assert — still empty while the create is in flight.
-    expect(field.value).toBe('')
+    expect(field.value).toBe('Reading')
+    expect(field).toBeDisabled()
 
     // Drain the held write inside its own test, or it lands in the next one's table.
     release()
@@ -302,7 +321,13 @@ describe('CategoryManageDialog row actions', () => {
     )
 
     // Assert — the row is visible but inert; a settled row keeps both controls.
-    expect(await screen.findByText('Reading')).toBeVisible()
+    expect(
+      await screen.findByText(
+        (_content, element) =>
+          element?.tagName === 'SPAN' &&
+          element.textContent === 'Reading — Creating…',
+      ),
+    ).toBeVisible()
     expect(
       screen.queryByRole('button', { name: 'Rename Reading' }),
     ).not.toBeInTheDocument()
@@ -339,7 +364,13 @@ describe('CategoryManageDialog row actions', () => {
     // Act
     await user.click(screen.getByRole('button', { name: 'Recolor General' }))
     const renameBox = screen.queryByRole('textbox', { name: 'Rename category' })
-    await user.click(screen.getByRole('button', { name: 'Select violet' }))
+    const editor = screen.getByRole('button', { name: 'Save changes' })
+      .parentElement?.parentElement
+    if (!editor) throw new Error('Inline editor missing')
+    await user.click(
+      within(editor).getByRole('combobox', { name: 'Category color' }),
+    )
+    await user.click(screen.getByRole('option', { name: 'violet' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     // Assert — edit mode offered no rename box, and only the color changed.
@@ -388,8 +419,12 @@ describe('CategoryManageDialog row actions', () => {
     // Assert — the real default's name, not "the default category". Scoped to
     // the confirmation: "Today" is also a row in the list behind it.
     const confirmation = await screen.findByRole('alertdialog')
-    expect(within(confirmation).getByText(/its tasks move to/)).toBeVisible()
-    expect(within(confirmation).getByText('Today')).toBeVisible()
+    expect(
+      within(confirmation).getByText(/direct records will move to Today/),
+    ).toBeVisible()
+    expect(
+      within(confirmation).getByRole('combobox', { name: 'Move entries to' }),
+    ).toHaveTextContent('Today')
   })
 })
 
@@ -461,8 +496,9 @@ describe('CategoryManageDialog draft rescue', () => {
     // gone, the row is still listed, and `isPending` is still false.
     await user.click(screen.getByRole('button', { name: 'Delete Work' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(
+      screen.getByRole('button', { name: 'Moving writing…' }),
+    ).toBeDisabled()
 
     // Assert — the second confirmation started no second rescue. Counting reads
     // rather than diffing the merged text keeps this independent of how two
@@ -498,12 +534,10 @@ describe('CategoryManageDialog draft rescue', () => {
     // Assert — the confirmation is a Radix Close, so it is already gone by the
     // time the rescue rejects; the toast is the only channel left to say the
     // delete was abandoned. Asserted, because the source comment claims it.
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
-      )
-    })
+    expect(screen.getByRole('alertdialog')).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your original draft is retained',
+    )
     expect(readCategories().map((category) => category.name)).toEqual([
       'General',
       'Work',
@@ -523,11 +557,9 @@ describe('CategoryManageDialog draft rescue', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     // Assert — Work survives, still holding the only copy of its draft.
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
-      )
-    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your original draft is retained',
+    )
     expect(readCategories().map((category) => category.name)).toEqual([
       'General',
       'Work',
@@ -577,12 +609,11 @@ describe('CategoryManageDialog draft rescue', () => {
     armNetworkFailure()
     await user.click(screen.getByRole('button', { name: 'Delete Work' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Delete Work' })).toBeVisible()
-    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your original draft is retained',
+    )
 
-    // Act — retry, this time against a server that answers.
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    // Act — retry the retained confirmation against a server that answers.
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     // Assert — one copy of the draft in the default, not two.
@@ -645,4 +676,266 @@ describe('CategoryManageDialog draft rescue', () => {
     })
     expect(getLocalNote(1)).toBe('already here')
   })
+})
+
+describe('two-level category organization', () => {
+  test('creates a subcategory beneath the chosen parent with its inherited color', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    await renderDialog([defaultCategory, buildCategory({ color: 'amber' })])
+    // Act
+    await user.click(
+      screen.getByRole('button', { name: 'Add subcategory to Work' }),
+    )
+    await user.type(
+      screen.getByRole('textbox', { name: 'New category name' }),
+      'CoreLive',
+    )
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    // Assert
+    await waitFor(() =>
+      expect(
+        readCategories().find((category) => category.name === 'CoreLive'),
+      ).toMatchObject({ parentId: 12, color: 'amber' }),
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Rename Work / CoreLive' }),
+    ).toBeVisible()
+  })
+
+  test('retains failed creation input for an explicit retry', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    await renderDialog([defaultCategory, buildCategory()])
+    await user.type(
+      screen.getByRole('textbox', { name: 'New category name' }),
+      'Reading',
+    )
+    armNetworkFailure()
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not confirm',
+    )
+    expect(
+      screen.getByRole('textbox', { name: 'New category name' }),
+    ).toHaveValue('Reading')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(
+        readCategories().find((category) => category.name === 'Reading'),
+      ).toMatchObject({ parentId: null }),
+    )
+  })
+
+  test('previews and promotes children while rescuing only the deleted parent draft', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    setLocalNote(1, 'existing')
+    setLocalNote(12, 'parent writing')
+    setLocalNote(13, 'child writing')
+    await renderDialog([
+      defaultCategory,
+      buildCategory({ recordCount: 1 }),
+      buildCategory({ id: 13, name: 'CoreLive', parentId: 12, recordCount: 3 }),
+    ])
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    // Assert
+    const confirmation = screen.getByRole('alertdialog')
+    expect(
+      within(confirmation).getByText(/1 direct records will move to General/),
+    ).toBeVisible()
+    expect(
+      within(confirmation).getByText(/CoreLive will become main categories/),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(
+        readCategories().map((category) => [category.id, category.parentId]),
+      ).toEqual([
+        [1, null],
+        [13, null],
+      ]),
+    )
+    expect(getLocalNote(1)).toBe('existing\nparent writing')
+    expect(getLocalNote(13)).toBe('child writing')
+  })
+
+  test('deleting a child defaults its entries and writing to the parent', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    setLocalNote(12, 'work writing')
+    setLocalNote(13, 'child writing')
+    await renderDialog([
+      defaultCategory,
+      buildCategory(),
+      buildCategory({ id: 13, name: 'CoreLive', parentId: 12 }),
+    ])
+    // Act
+    await user.click(
+      screen.getByRole('button', { name: 'Delete Work / CoreLive' }),
+    )
+    // Assert
+    expect(
+      screen.getByRole('combobox', { name: 'Move entries to' }),
+    ).toHaveTextContent('Work')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(readCategories().map((category) => category.id)).toEqual([1, 12]),
+    )
+    expect(getLocalNote(12)).toBe('work writing\nchild writing')
+    expect(getLocalNote(1)).toBe('')
+  })
+
+  test('blocks parent deletion when promotion would create a duplicate main category', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    await renderDialog([
+      defaultCategory,
+      buildCategory(),
+      buildCategory({ id: 13, name: 'CoreLive', parentId: 12 }),
+      buildCategory({ id: 14, name: 'CoreLive' }),
+    ])
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    // Assert
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Rename these subcategories before deleting: CoreLive',
+    )
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+    expect(readCategories()).toHaveLength(4)
+  })
+
+  test('moves a child to a main category without changing its draft ID', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    setLocalNote(13, 'child writing')
+    await renderDialog([
+      defaultCategory,
+      buildCategory(),
+      buildCategory({ id: 13, name: 'CoreLive', parentId: 12 }),
+    ])
+    // Act
+    await user.click(
+      screen.getByRole('button', { name: 'Rename Work / CoreLive' }),
+    )
+    const editor = screen.getByRole('button', { name: 'Save changes' })
+      .parentElement?.parentElement
+    if (!editor) throw new Error('Missing inline editor')
+    await user.click(
+      within(editor).getByRole('combobox', { name: 'Parent category' }),
+    )
+    await user.click(
+      screen.getByRole('option', { name: 'None — main category' }),
+    )
+    // Assert
+    expect(
+      screen.getByText('Past entries will be grouped under the new parent.'),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(
+        readCategories().find((category) => category.id === 13),
+      ).toMatchObject({ parentId: null, name: 'CoreLive' }),
+    )
+    expect(getLocalNote(13)).toBe('child writing')
+  })
+})
+
+test('preserves independently written identical drafts instead of mistaking the first rescue for a retry', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  setLocalNote(1, 'same thought')
+  setLocalNote(12, 'same thought')
+  await renderDialog([defaultCategory, buildCategory()])
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  // Assert
+  await waitFor(() => expect(readCategories()).toHaveLength(1))
+  expect(getLocalNote(1)).toBe('same thought\nsame thought')
+})
+
+test('keyboard Enter chooses an edit color without submitting the category prematurely', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  await renderDialog([defaultCategory, buildCategory()])
+  await user.click(screen.getByRole('button', { name: 'Rename Work' }))
+  const editor = screen.getByRole('button', { name: 'Save changes' })
+    .parentElement?.parentElement
+  if (!editor) throw new Error('Missing inline editor')
+  const color = within(editor).getByRole('combobox', { name: 'Category color' })
+  color.focus()
+  // Act
+  await user.keyboard('{Enter}{ArrowDown}{Enter}')
+  // Assert
+  expect(screen.getByRole('textbox', { name: 'Rename category' })).toBeVisible()
+  expect(readCategories().find((category) => category.id === 12)?.color).toBe(
+    'blue',
+  )
+  expect(color).toHaveTextContent('green')
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
+  await waitFor(() =>
+    expect(readCategories().find((category) => category.id === 12)?.color).toBe(
+      'green',
+    ),
+  )
+})
+
+test('returns focus and allows Escape after the category being edited disappears', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { queryClient, onOpenChange } = await renderDialog([
+    defaultCategory,
+    buildCategory(),
+  ])
+  await user.click(screen.getByRole('button', { name: 'Rename Work' }))
+  // Act
+  resetOrpcServer([defaultCategory])
+  await act(async () => {
+    await queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+  })
+  // Assert
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'This category is no longer available.',
+  )
+  expect(
+    screen.getByRole('textbox', { name: 'New category name' }),
+  ).toHaveFocus()
+  await user.keyboard('{Escape}')
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+})
+
+test('restores the source once when a saved rescue copy was removed before retrying a failed delete', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  setLocalNote(1, 'existing')
+  setLocalNote(12, 'half a thought')
+  await renderDialog([defaultCategory, buildCategory()])
+  armNetworkFailure()
+  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Your original draft is retained',
+  )
+  expect(getLocalNote(1)).toBe('existing\nhalf a thought')
+  const firstNotification = vi
+    .mocked(CategorySyncModule.broadcastCategorySync)
+    .mock.calls.find((call) => call[0] === 1)?.[1]
+  // Act — destination writing is edited in another window while the server category remains.
+  setLocalNote(1, 'existing')
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  // Assert
+  await waitFor(() =>
+    expect(readCategories().map((category) => category.id)).toEqual([1]),
+  )
+  expect(getLocalNote(1)).toBe('existing\nhalf a thought')
+  const lastNotification = vi
+    .mocked(CategorySyncModule.broadcastCategorySync)
+    .mock.calls.filter((call) => call[0] === 1)
+    .at(-1)?.[1]
+  expect(firstNotification?.receipt).toBeTruthy()
+  expect(lastNotification?.receipt).not.toBe(firstNotification?.receipt)
 })

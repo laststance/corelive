@@ -151,3 +151,59 @@ describe('aggregateLastSevenDays', () => {
     expect(stats.trend).toEqual({ kind: 'percent', value: 133 })
   })
 })
+
+test('weekly totals group roots before selecting the top three and exclude prior-window children', () => {
+  // Arrange
+  const work = { id: 1, name: 'Work', color: 'blue' }
+  const data = new Map<string, HeatmapDay>([
+    [
+      '2026-05-11',
+      {
+        date: '2026-05-11',
+        count: 7,
+        categories: [
+          { ...work, count: 1, parent: null },
+          { id: 2, name: 'CoreLive', color: 'blue', count: 3, parent: work },
+          {
+            id: 3,
+            name: 'Client work',
+            color: 'green',
+            count: 2,
+            parent: work,
+          },
+          { id: 4, name: 'General', color: 'amber', count: 1, parent: null },
+        ],
+      },
+    ],
+    [
+      '2026-05-04',
+      {
+        date: '2026-05-04',
+        count: 9,
+        categories: [
+          { id: 2, name: 'CoreLive', color: 'blue', count: 9, parent: work },
+        ],
+      },
+    ],
+  ])
+  // Act
+  const stats = aggregateLastSevenDays(data, '2026-05-11')
+  // Assert
+  expect(stats.totalCompleted).toBe(7)
+  expect(stats.priorTotal).toBe(9)
+  expect(
+    stats.topCategories.map(({ name, count }) => ({ name, count })),
+  ).toEqual([
+    { name: 'Work', count: 6 },
+    { name: 'General', count: 1 },
+  ])
+  expect(
+    stats.topCategories[0]?.children?.map(({ name, count }) => ({
+      name,
+      count,
+    })),
+  ).toEqual([
+    { name: 'CoreLive', count: 3 },
+    { name: 'Client work', count: 2 },
+  ])
+})

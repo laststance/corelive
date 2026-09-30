@@ -1,5 +1,5 @@
 import { ORPCError } from '@orpc/server'
-import { and, asc, eq, gte, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '@/db'
@@ -15,6 +15,7 @@ import { toLocalDayKey } from '@/lib/toLocalDayKey'
 import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
 import { DEFAULT_CATEGORY_SEED } from '../schemas/category'
+import type { DayDetailTask } from '../schemas/completed'
 import {
   CompletedJournalInputSchema,
   CompletedJournalResponseSchema,
@@ -31,7 +32,7 @@ import {
 import { calculateStreaks } from '../utils/calculateStreaks'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
 
-import { findOwnedCategory } from './category'
+import { findOwnedCategory, lockCategoryOwner } from './category'
 
 /**
  * Window during which a Completed row may be hard-deleted via {@link deleteCompleted}.
@@ -104,7 +105,7 @@ export const getHeatmap = authMiddleware
           count: number
           categories: Map<
             number,
-            { id: number; name: string; color: string; count: number }
+            NonNullable<DayDetailTask['category']> & { count: number }
           >
         }
       >()
@@ -130,6 +131,7 @@ export const getHeatmap = authMiddleware
             id: categoryId,
             name: entry.category.name,
             color: entry.category.color,
+            parent: entry.category.parent,
             count: 0,
           })
         }
@@ -222,7 +224,7 @@ export const getDayDetail = authMiddleware
 
       const categoryRollup = new Map<
         number,
-        { id: number; name: string; color: string; count: number }
+        NonNullable<DayDetailTask['category']> & { count: number }
       >()
       for (const entry of entries) {
         const existing = categoryRollup.get(entry.category.id)
@@ -233,6 +235,7 @@ export const getDayDetail = authMiddleware
             id: entry.category.id,
             name: entry.category.name,
             color: entry.category.color,
+            parent: entry.category.parent,
             count: 1,
           })
         }
@@ -273,8 +276,14 @@ export const getJournal = authMiddleware
   .output(CompletedJournalResponseSchema)
   .handler(async ({ input, context }) => {
     try {
-      const { limit, offset, categoryId, completedFrom, completedBefore } =
-        input
+      const {
+        limit,
+        offset,
+        categoryId,
+        includeSubcategories,
+        completedFrom,
+        completedBefore,
+      } = input
       const { user } = context
 
       // Raw UNION row shape. Int4 columns (id, category_id) arrive as numbers;
@@ -282,13 +291,17 @@ export const getJournal = authMiddleware
       // timestamps in raw rows) and is turned into a UTC Date below. The COUNT is
       // cast `::int` in SQL so it is a number, not a bigint string.
       type JournalRow = {
-        source: 'todo' | 'completed'
+        source: 'todo' | 'completed' | null
         id: number
         title: string
         completed_at: string
         category_id: number | null
         category_name: string | null
         category_color: string | null
+        parent_id: number | null
+        parent_name: string | null
+        parent_color: string | null
+        total: number
       }
 
       // Build the normalized feed once so list + count cannot drift on fallback
@@ -315,7 +328,7 @@ export const getJournal = authMiddleware
       const categoryFilter =
         categoryId === undefined
           ? sql``
-          : sql`AND m.category_id = ${categoryId}`
+          : sql`AND (c.id = ${categoryId} ${includeSubcategories ? sql`OR c."parentId" = ${categoryId}` : sql``})`
       // Bind the bounds as UTC ISO strings, never as Date objects: pg serializes a
       // Date with the process's local offset, and Postgres drops the offset when it
       // compares against `timestamp without time zone`, which would shift the
@@ -329,56 +342,56 @@ export const getJournal = authMiddleware
           ? sql``
           : sql`AND m.completed_at < ${completedBefore.toISOString()}`
 
-      // Two reads in parallel: the page and its total share every predicate.
-      const [{ rows }, { rows: countRows }] = await Promise.all([
-        db.execute<JournalRow>(sql`
-          SELECT
-            m.source,
-            m.id,
-            m.title,
-            m.completed_at,
-            c.id AS category_id,
-            c.name AS category_name,
-            c.color AS category_color
+      // One statement gives page and count the same snapshot even when another window moves a category.
+      const { rows } = await db.execute<JournalRow>(sql`
+        WITH scoped AS (
+          SELECT m.source, m.id, m.title, m.completed_at, c.id AS category_id, c.name AS category_name,
+                 c.color AS category_color, p.id AS parent_id,
+                 p.name AS parent_name, p.color AS parent_color
           FROM (${mergedJournalRows}) m
-          LEFT JOIN "Category" c ON c.id = m.category_id
-          WHERE TRUE
-            ${categoryFilter}
-            ${completedFromFilter}
-            ${completedBeforeFilter}
-          ORDER BY m.completed_at DESC, m.source ASC, m.id ASC
+          INNER JOIN "Category" c ON c.id = m.category_id AND c."userId" = ${user.id}
+          LEFT JOIN "Category" p ON p.id = c."parentId" AND p."userId" = c."userId"
+          WHERE TRUE ${categoryFilter} ${completedFromFilter} ${completedBeforeFilter}
+        ), page AS (
+          SELECT * FROM scoped
+          ORDER BY completed_at DESC, source ASC, id ASC
           LIMIT ${limit} OFFSET ${offset}
-        `),
-        db.execute<{ total: number }>(sql`
-          SELECT COUNT(*)::int AS total
-          FROM (${mergedJournalRows}) m
-          WHERE TRUE
-            ${categoryFilter}
-            ${completedFromFilter}
-            ${completedBeforeFilter}
-        `),
-      ])
-
-      const total = countRows[0]?.total ?? 0
+        )
+        SELECT page.*, totals.total
+        FROM (SELECT COUNT(*)::int AS total FROM scoped) totals
+        LEFT JOIN page ON TRUE
+        ORDER BY page.completed_at DESC, page.source ASC, page.id ASC
+      `)
+      const total = rows[0]?.total ?? 0
 
       // Coalesce the joined category columns back into the nested shape the
       // entry schema (DayDetailTaskSchema) expects. categoryId is a required FK
       // on both tables, so a non-null category_id always joins a row — the null
       // branch is defensive (the schema permits a null category).
-      const entries = rows.map((row) => ({
-        source: row.source,
-        id: row.id,
-        title: row.title,
-        completedAt: parseUtcTimestamp(row.completed_at),
-        category:
-          row.category_id !== null
-            ? {
-                id: row.category_id,
-                name: row.category_name ?? '',
-                color: row.category_color ?? 'blue',
-              }
-            : null,
-      }))
+      const entries = rows
+        .filter((row) => row.source !== null)
+        .map((row) => ({
+          source: row.source as 'todo' | 'completed',
+          id: row.id,
+          title: row.title,
+          completedAt: parseUtcTimestamp(row.completed_at),
+          category:
+            row.category_id !== null
+              ? {
+                  id: row.category_id,
+                  name: row.category_name ?? '',
+                  color: row.category_color ?? 'blue',
+                  parent:
+                    row.parent_id === null
+                      ? null
+                      : {
+                          id: row.parent_id,
+                          name: row.parent_name ?? '',
+                          color: row.parent_color ?? 'blue',
+                        },
+                }
+              : null,
+        }))
 
       const hasMore = offset + entries.length < total
 
@@ -418,23 +431,20 @@ export const createCompleted = authMiddleware
       const { user } = context
       const { categoryId, title } = input
 
-      if (!(await findOwnedCategory(user.id, categoryId))) {
-        throw new ORPCError('NOT_FOUND', {
-          message: 'Category not found',
-        })
-      }
-
-      return requireRow(
-        await db
-          .insert(completedTable)
-          .values({
-            title,
-            categoryId,
-            userId: user.id,
-          })
-          .returning(),
-        'completed.insert',
-      )
+      return await runTransaction(async (tx) => {
+        await lockCategoryOwner(tx, user.id)
+        // The same account lock makes Keep/delete ordering deterministic.
+        if (!(await findOwnedCategory(user.id, categoryId, tx))) {
+          throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
+        }
+        return requireRow(
+          await tx
+            .insert(completedTable)
+            .values({ title, categoryId, userId: user.id })
+            .returning(),
+          'completed.insert',
+        )
+      })
     } catch (error) {
       if (error instanceof ORPCError) throw error
       log.error('Error in createCompleted:', error)
@@ -510,36 +520,45 @@ export const deleteCompleted = authMiddleware
  * falling back to any category, seeding "General" when the account has none.
  * Exists because a `/write` visitor can sign up and merge before the Clerk
  * webhook's seed lands, and an import that 404s there would strand the device's
- * whole history. Called only by {@link importLocalCompleted}, outside its
- * transaction, so the seed cannot abort the batch insert.
+ * whole history. Called only by {@link importLocalCompleted}, inside its
+ * account-locked transaction, so a fallback category cannot disappear before insertion.
  * @param userId - Owner whose default category is wanted.
  * @returns The category id to file every imported row under.
  * @example
  * await resolveImportCategoryId(user.id) // => 3
  */
-async function resolveImportCategoryId(userId: number): Promise<number> {
-  const [existing] = await db
+async function resolveImportCategoryId(
+  userId: number,
+  database: Parameters<Parameters<typeof runTransaction>[0]>[0],
+): Promise<number> {
+  const [existing] = await database
     .select({ id: categoryTable.id })
     .from(categoryTable)
     .where(
-      and(eq(categoryTable.userId, userId), eq(categoryTable.isDefault, true)),
+      and(
+        eq(categoryTable.userId, userId),
+        eq(categoryTable.isDefault, true),
+        isNull(categoryTable.parentId),
+      ),
     )
     .limit(1)
   if (existing) return existing.id
 
   // DO NOTHING returns no row when the webhook (or a non-default "General") already owns the
-  // name (unique index on name + userId); fall through to whatever the account does have.
-  const [created] = await db
+  // root name (partial unique index); fall through only to an existing root.
+  const [created] = await database
     .insert(categoryTable)
     .values({ ...DEFAULT_CATEGORY_SEED, userId })
     .onConflictDoNothing()
     .returning({ id: categoryTable.id })
   if (created) return created.id
 
-  const [fallback] = await db
+  const [fallback] = await database
     .select({ id: categoryTable.id })
     .from(categoryTable)
-    .where(eq(categoryTable.userId, userId))
+    .where(
+      and(eq(categoryTable.userId, userId), isNull(categoryTable.parentId)),
+    )
     .orderBy(asc(categoryTable.id))
     .limit(1)
   if (!fallback) {
@@ -579,10 +598,10 @@ export const importLocalCompleted = authMiddleware
     const namespacedBatchId = `${user.id}:${batchId}`
 
     try {
-      const categoryId = await resolveImportCategoryId(user.id)
-
       // Up to {@link IMPORT_LOCAL_MAX_ITEMS} rows in one transaction, so it gets the longer limit the previous ORM gave it.
       const imported = await runTransaction(async (tx) => {
+        await lockCategoryOwner(tx, user.id)
+        const categoryId = await resolveImportCategoryId(user.id, tx)
         await tx
           .insert(importBatchTable)
           .values({ id: namespacedBatchId, userId: user.id })

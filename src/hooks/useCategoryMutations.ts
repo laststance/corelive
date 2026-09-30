@@ -4,7 +4,10 @@ import { ORPCError } from '@orpc/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { broadcastCategorySync } from '@/lib/category-sync-channel'
+import {
+  broadcastCategorySync,
+  invalidateCategoryViews,
+} from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 
@@ -17,6 +20,8 @@ interface CategoryListResponse {
 }
 
 /** Shown when the failure never reached a handler, so no server sentence exists. */
+let nextOptimisticCategoryId = -Date.now()
+
 const CATEGORY_WRITE_FALLBACK_MESSAGE = "Couldn't save that change — try again."
 
 /**
@@ -39,17 +44,15 @@ const notifyCategoryWriteFailed = (error: unknown): void => {
 }
 
 /**
- * Custom hook providing category mutations with optimistic updates.
+ * Serializes category writes per QueryClient and keeps every retrospective in sync.
  *
  * Follows the same optimistic update pattern as useTodoMutations:
  * 1. onMutate: Cancel queries -> Snapshot -> Apply optimistic update
- * 2. onError: Rollback using snapshot, then say why via {@link notifyCategoryWriteFailed}
+ * 2. onError: Restore only the failed row, then explain it via {@link notifyCategoryWriteFailed}
  * 3. onSettled: Always invalidate to sync with server + broadcast
  *
- * @returns Object containing all category mutations
- * @returns createMutation - Add new category with instant UI feedback
- * @returns updateMutation - Rename/recolor category with instant update
- * @returns deleteMutation - Remove category with instant disappearance
+ * Delete remains pessimistic: parent removal and child promotion appear together after confirmation.
+ * @returns Create/update with guarded optimistic rows and delete with an atomic confirmed cache update.
  *
  * @example
  * const { createMutation, updateMutation, deleteMutation } = useCategoryMutations()
@@ -68,6 +71,7 @@ export function useCategoryMutations() {
   // ============================================
   const createMutation = useMutation({
     ...orpc.category.create.mutationOptions({}),
+    scope: { id: 'category-writes' },
     onMutate: async (newCategory) => {
       await queryClient.cancelQueries({ queryKey: categoryKey })
 
@@ -75,9 +79,16 @@ export function useCategoryMutations() {
         queryClient.getQueryData<CategoryListResponse>(categoryKey)
 
       const optimisticCategory: CategoryWithCount = {
-        id: -Date.now(),
+        id: nextOptimisticCategoryId--,
         name: newCategory.name,
-        color: newCategory.color ?? 'blue',
+        color:
+          newCategory.color ??
+          previousCategories?.categories.find(
+            (category) => category.id === newCategory.parentId,
+          )?.color ??
+          'blue',
+        parentId: newCategory.parentId ?? null,
+        recordCount: 0,
         isDefault: false,
         userId: 0,
         _count: { todos: 0 },
@@ -93,16 +104,39 @@ export function useCategoryMutations() {
         }
       })
 
-      return { previousCategories }
+      return { previousCategories, optimisticId: optimisticCategory.id }
+    },
+    onSuccess: (created, _input, context) => {
+      queryClient.setQueryData<CategoryListResponse>(categoryKey, (old) =>
+        old
+          ? {
+              ...old,
+              categories: old.categories.map((category) =>
+                category.id === context?.optimisticId
+                  ? { ...created, _count: { todos: 0 }, recordCount: 0 }
+                  : category,
+              ),
+            }
+          : old,
+      )
     },
     onError: (error, _newCategory, context) => {
       if (context?.previousCategories) {
-        queryClient.setQueryData(categoryKey, context.previousCategories)
+        queryClient.setQueryData<CategoryListResponse>(categoryKey, (old) =>
+          old
+            ? {
+                ...old,
+                categories: old.categories.filter(
+                  (category) => category.id !== context.optimisticId,
+                ),
+              }
+            : context.previousCategories,
+        )
       }
       notifyCategoryWriteFailed(error)
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: categoryKey })
+    onSettled: async () => {
+      await invalidateCategoryViews(queryClient)
       broadcastCategorySync()
     },
   })
@@ -112,6 +146,7 @@ export function useCategoryMutations() {
   // ============================================
   const updateMutation = useMutation({
     ...orpc.category.update.mutationOptions({}),
+    scope: { id: 'category-writes' },
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({ queryKey: categoryKey })
 
@@ -128,49 +163,57 @@ export function useCategoryMutations() {
         }
       })
 
-      return { previousCategories }
+      return { previousCategories, id }
     },
     onError: (error, _input, context) => {
       if (context?.previousCategories) {
-        queryClient.setQueryData(categoryKey, context.previousCategories)
+        const previous = context.previousCategories.categories.find(
+          (category) => category.id === context.id,
+        )
+        queryClient.setQueryData<CategoryListResponse>(categoryKey, (old) =>
+          old && previous
+            ? {
+                ...old,
+                categories: old.categories.map((category) =>
+                  category.id === context.id ? previous : category,
+                ),
+              }
+            : old,
+        )
       }
       notifyCategoryWriteFailed(error)
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: categoryKey })
+    onSettled: async () => {
+      await invalidateCategoryViews(queryClient)
       broadcastCategorySync()
     },
   })
 
   // ============================================
-  // DELETE MUTATION - Remove with optimistic update
+  // DELETE MUTATION - Apply confirmed parent removal and child promotion
   // ============================================
   const deleteMutation = useMutation({
     ...orpc.category.delete.mutationOptions({}),
-    onMutate: async ({ id }) => {
-      await queryClient.cancelQueries({ queryKey: categoryKey })
-
-      const previousCategories =
-        queryClient.getQueryData<CategoryListResponse>(categoryKey)
-
+    scope: { id: 'category-writes' },
+    // Keep parent and children together until the server confirms the entire transaction.
+    onSuccess: (response, { id }) => {
       queryClient.setQueryData<CategoryListResponse>(categoryKey, (old) => {
         if (!old) return old
         return {
           ...old,
-          categories: old.categories.filter((c) => c.id !== id),
+          categories: old.categories
+            .filter((category) => category.id !== id)
+            .map((category) =>
+              response.promotedCategoryIds.includes(category.id)
+                ? { ...category, parentId: null }
+                : category,
+            ),
         }
       })
-
-      return { previousCategories }
     },
-    onError: (error, _input, context) => {
-      if (context?.previousCategories) {
-        queryClient.setQueryData(categoryKey, context.previousCategories)
-      }
-      notifyCategoryWriteFailed(error)
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: categoryKey })
+    onError: (error) => notifyCategoryWriteFailed(error),
+    onSettled: async () => {
+      await invalidateCategoryViews(queryClient)
       // Other windows hold their own category list; the delete reassigns
       // rows to the default category, so their copy is stale until told.
       broadcastCategorySync()

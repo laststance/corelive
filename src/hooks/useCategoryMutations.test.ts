@@ -20,10 +20,12 @@ import {
 } from 'vitest'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
+import type * as CategorySyncModule from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import {
   armNetworkFailure,
+  holdRequests,
   orpcServer,
   readCategories,
   resetOrpcServer,
@@ -34,7 +36,8 @@ import { useCategoryMutations } from './useCategoryMutations'
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 // BroadcastChannel has no listener here; onSettled fires it on every write.
-vi.mock('@/lib/category-sync-channel', () => ({
+vi.mock('@/lib/category-sync-channel', async (importOriginal) => ({
+  ...(await importOriginal<typeof CategorySyncModule>()),
   broadcastCategorySync: vi.fn(),
 }))
 
@@ -57,6 +60,8 @@ function buildCategory(
     color: 'blue',
     isDefault: false,
     userId: 1,
+    parentId: null,
+    recordCount: 0,
     _count: { todos: 0 },
     createdAt: new Date('2026-09-07T00:00:00.000Z'),
     updatedAt: new Date('2026-09-07T00:00:00.000Z'),
@@ -329,4 +334,59 @@ describe('category writes the server accepts', () => {
       expect(broadcastCategorySync).toHaveBeenCalled()
     })
   })
+})
+
+test('invalidates cached retrospective and bootstrap views after a parent changes', async () => {
+  // Arrange
+  const { result, queryClient } = renderCategoryMutations()
+  const completedKey = orpc.completed.heatmap.key()
+  const bootstrapKey = orpc.home.bootstrap.key()
+  queryClient.setQueryData(completedKey, { fixture: 'old parent' })
+  queryClient.setQueryData(bootstrapKey, { fixture: 'old hierarchy' })
+  // Act
+  await result.current.updateMutation.mutateAsync({
+    id: 12,
+    data: { parentId: 1 },
+  })
+  // Assert
+  expect(queryClient.getQueryState(completedKey)?.isInvalidated).toBe(true)
+  expect(queryClient.getQueryState(bootstrapKey)?.isInvalidated).toBe(true)
+})
+
+test('keeps a deleting parent and its children visible until promotion is confirmed', async () => {
+  // Arrange
+  const child = buildCategory({ id: 13, name: 'CoreLive', parentId: 12 })
+  resetOrpcServer([defaultCategory, buildCategory(), child])
+  const { result, queryClient } = renderCategoryMutations()
+  queryClient.setQueryData(categoryListKey, {
+    categories: [defaultCategory, buildCategory(), child],
+  })
+  const release = holdRequests()
+  // Act
+  result.current.deleteMutation.mutate({ id: 12 })
+  // Assert
+  await waitFor(() =>
+    expect(result.current.deleteMutation.isPending).toBe(true),
+  )
+  expect(
+    queryClient
+      .getQueryData<{ categories: CategoryWithCount[] }>(categoryListKey)
+      ?.categories.map((category) => [category.id, category.parentId]),
+  ).toEqual([
+    [1, null],
+    [12, null],
+    [13, 12],
+  ])
+  release()
+  await waitFor(() =>
+    expect(result.current.deleteMutation.isSuccess).toBe(true),
+  )
+  expect(
+    queryClient
+      .getQueryData<{ categories: CategoryWithCount[] }>(categoryListKey)
+      ?.categories.map((category) => [category.id, category.parentId]),
+  ).toEqual([
+    [1, null],
+    [13, null],
+  ])
 })

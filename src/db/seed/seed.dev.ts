@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 
 // Relative imports (NOT the `@/` alias): tsx does not reliably honor tsconfig
 // `paths`. The template module is pure data with zero imports, and `../index`
@@ -454,6 +454,7 @@ async function seedDev(): Promise<void> {
       })
       .onConflictDoNothing({
         target: [categoryTable.name, categoryTable.userId],
+        where: isNull(categoryTable.parentId),
       })
     const [category] = await db
       .select({ id: categoryTable.id, name: categoryTable.name })
@@ -461,6 +462,7 @@ async function seedDev(): Promise<void> {
       .where(
         and(
           eq(categoryTable.name, seed.name),
+          isNull(categoryTable.parentId),
           eq(categoryTable.userId, user.id),
         ),
       )

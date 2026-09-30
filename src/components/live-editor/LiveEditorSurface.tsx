@@ -111,6 +111,8 @@ interface LiveEditorSurfaceProps {
   >
   categories: CategoryWithCount[]
   isCategoryListPending: boolean
+  isCategoryListError: boolean
+  onRetryCategories?: () => void
   isElectronPanel: boolean
   isMounted: boolean
   isSignedIn: boolean | undefined
@@ -134,6 +136,8 @@ export function LiveEditorSurface({
   textareaProps,
   categories,
   isCategoryListPending,
+  isCategoryListError,
+  onRetryCategories,
   isElectronPanel,
   isMounted,
   isSignedIn,
@@ -292,6 +296,9 @@ export function LiveEditorSurface({
             activeCategoryId={activeCategoryId}
             isSignedIn={isSignedIn}
             isElectronPanel={isElectronPanel}
+            isLoading={isCategoryListPending}
+            isError={isCategoryListError}
+            onRetry={onRetryCategories}
             onCategoryValueChange={handleCategoryValueChange}
           />
 

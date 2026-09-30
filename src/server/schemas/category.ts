@@ -32,7 +32,13 @@ export const DEFAULT_CATEGORY_SEED = {
   name: 'General',
   color: 'blue',
   isDefault: true,
-} as const satisfies { name: string; color: CategoryColor; isDefault: boolean }
+  parentId: null,
+} as const satisfies {
+  name: string
+  color: CategoryColor
+  isDefault: boolean
+  parentId: null
+}
 
 /**
  * Schema for Category database model.
@@ -43,6 +49,7 @@ export const CategorySchema = z.object({
   name: z.string().min(1).max(30),
   color: CategoryColorSchema,
   isDefault: z.boolean(),
+  parentId: z.number().int().positive().nullable(),
   userId: z.number().int().positive(),
   createdAt: z
     .union([z.date(), z.string()])
@@ -60,8 +67,9 @@ export type Category = z.infer<typeof CategorySchema>
  * @param color - One of the predefined color options (defaults to 'blue')
  */
 export const CreateCategorySchema = z.object({
-  name: z.string().min(1, 'Category name is required').max(30),
-  color: CategoryColorSchema.default('blue'),
+  name: z.string().trim().min(1, 'Category name is required').max(30),
+  color: CategoryColorSchema.optional(),
+  parentId: z.number().int().positive().nullable().optional(),
 })
 
 /**
@@ -69,7 +77,8 @@ export const CreateCategorySchema = z.object({
  * All fields are optional for partial updates.
  */
 export const UpdateCategorySchema = z.object({
-  name: z.string().min(1).max(30).optional(),
+  name: z.string().trim().min(1).max(30).optional(),
+  parentId: z.number().int().positive().nullable().optional(),
   color: CategoryColorSchema.optional(),
 })
 
@@ -77,6 +86,7 @@ export const UpdateCategorySchema = z.object({
  * Category with todo count, returned from the list endpoint.
  */
 const CategoryWithCountSchema = CategorySchema.extend({
+  recordCount: z.number().int().min(0),
   _count: z.object({
     todos: z.number().int().min(0),
   }),

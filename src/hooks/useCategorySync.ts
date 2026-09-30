@@ -1,9 +1,13 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
-import { subscribeToCategorySync } from '@/lib/category-sync-channel'
-import { orpc } from '@/lib/orpc/client-query'
+import {
+  subscribeToCategorySync,
+  invalidateCategoryViews,
+} from '@/lib/category-sync-channel'
+import { refreshCategoryDraft } from '@/lib/live-editor/appendCategoryDraft'
 
 import { useCycleEffect } from './use-cycle-effect'
 
@@ -20,8 +24,25 @@ export function useCategorySync(): void {
   const queryClient = useQueryClient()
 
   useCycleEffect(() => {
-    return subscribeToCategorySync(() => {
-      queryClient.invalidateQueries({ queryKey: orpc.category.list.key() })
+    return subscribeToCategorySync((draftCategoryId, draftRescue) => {
+      void invalidateCategoryViews(queryClient)
+      if (draftCategoryId !== undefined) {
+        const refresh = () => {
+          void refreshCategoryDraft(draftCategoryId, draftRescue)
+            .then(() => toast.dismiss(`category-rescue-${draftCategoryId}`))
+            .catch(() => {
+              toast.error(
+                'Could not refresh the moved writing. Retry before editing this category.',
+                {
+                  id: `category-rescue-${draftCategoryId}`,
+                  action: { label: 'Retry', onClick: refresh },
+                  duration: Infinity,
+                },
+              )
+            })
+        }
+        refresh()
+      }
     })
   }, [queryClient])
 }

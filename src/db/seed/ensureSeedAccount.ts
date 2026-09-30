@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
 
 import { db } from '../index'
 import { categoryTable, userTable } from '../schema'
@@ -45,6 +45,7 @@ export async function ensureSeedAccount() {
     })
     .onConflictDoUpdate({
       target: [categoryTable.name, categoryTable.userId],
+      targetWhere: isNull(categoryTable.parentId),
       set: { isDefault: true },
     })
     .returning()

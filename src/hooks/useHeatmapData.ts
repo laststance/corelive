@@ -16,6 +16,8 @@ export type HeatmapCategory = {
   name: string
   color: string
   count: number
+  /** Current hierarchy, also returned for historical completions. */
+  parent?: { id: number; name: string; color: string } | null
 }
 
 /**

@@ -11,7 +11,11 @@ import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
-import { appendCategoryDraft } from '@/lib/live-editor/appendCategoryDraft'
+import {
+  appendCategoryDraft,
+  flushCategoryDraft,
+  refreshCategoryDraft,
+} from '@/lib/live-editor/appendCategoryDraft'
 import {
   LOCAL_CATEGORY_ID,
   LOCAL_COMPLETIONS_STORAGE_KEY,
@@ -177,6 +181,8 @@ const categories: CategoryWithCount[] = [
     name: 'Today',
     color: 'amber',
     isDefault: true,
+    parentId: null,
+    recordCount: 0,
     userId: 1,
     createdAt: new Date('2026-06-12T00:00:00.000Z'),
     updatedAt: new Date('2026-06-12T00:00:00.000Z'),
@@ -191,6 +197,8 @@ const categoriesWithCorelive: CategoryWithCount[] = [
     name: 'Corelive',
     color: 'blue',
     isDefault: false,
+    parentId: null,
+    recordCount: 0,
     userId: 1,
     createdAt: new Date('2026-06-12T00:00:00.000Z'),
     updatedAt: new Date('2026-06-12T00:00:00.000Z'),
@@ -544,6 +552,115 @@ describe('LiveEditor web host (/write)', () => {
     })
   })
 
+  test('preserves recent typing when another window rescues a draft into the visible category', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    await user.type(noteField, 'my own line')
+    await waitFor(() => {
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'my own line' })
+    })
+    fireEvent.change(noteField, {
+      target: { value: 'my own line\nnew typing' },
+    })
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({
+        '0': 'my own line\nrescued from Work',
+      }),
+    )
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID)
+    })
+
+    // Assert
+    expect(noteField).toHaveValue('my own line\nnew typing\nrescued from Work')
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'my own line\nnew typing\nrescued from Work' })
+  })
+
+  test('recovers peer-rescued writing even when a queued save overwrites the store before notification', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    await user.type(noteField, 'base')
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'base' }),
+    )
+    fireEvent.change(noteField, { target: { value: 'base\nnew typing' } })
+    // Force the stale peer write after the manager saved the rescue.
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'base\nnew typing' }),
+    )
+    const rescue = {
+      receipt: 'overwrite-before-refresh-source-12',
+      baseText: 'base',
+      text: 'rescued from Work',
+    }
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, rescue)
+    })
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, rescue)
+    })
+
+    // Assert
+    expect(noteField).toHaveValue('base\nnew typing\nrescued from Work')
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'base\nnew typing\nrescued from Work' })
+  })
+
+  test('keeps independent matching peer input and rescued text as two distinct lines', async () => {
+    // Arrange
+    const user = userEvent.setup()
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    await user.type(noteField, 'base')
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'base' }),
+    )
+    fireEvent.change(noteField, { target: { value: 'base\nsame thought' } })
+    // Let the peer's own save settle before it learns about the independent matching rescue.
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': 'base\nsame thought' }),
+    )
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, {
+        receipt: 'independent-matching-peer-line',
+        baseText: 'base',
+        text: 'same thought',
+      })
+    })
+
+    // Assert
+    expect(noteField).toHaveValue('base\nsame thought\nsame thought')
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'base\nsame thought\nsame thought' })
+  })
+
   test('says so when the browser refuses storage: keeps stay for this session only', async () => {
     // Arrange
     storageAvailabilityRef.current = 'unavailable'
@@ -585,7 +702,7 @@ describe('LiveEditor web host (/write)', () => {
     // The signed-in setting (keep the [x]) is respected on the web.
     expect(noteField).toHaveValue('- [x] ship it')
     expect(
-      screen.getByRole('combobox', { name: 'Active category' }),
+      screen.getByRole('combobox', { name: /Writing category/ }),
     ).toBeEnabled()
     expect(screen.getByText('Keeps go to your account.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Your year →' })).toHaveAttribute(
@@ -700,7 +817,7 @@ describe('LiveEditor web host (/write)', () => {
     expect(screen.getByText('Follow Spaces')).toBeInTheDocument()
     // The panel's picker is live: it drives the one shared category selection.
     expect(
-      screen.getByRole('combobox', { name: 'Active category' }),
+      screen.getByRole('combobox', { name: /Writing category/ }),
     ).toBeEnabled()
     expect(screen.queryByText('CoreLive')).not.toBeInTheDocument()
     expect(
@@ -734,9 +851,9 @@ describe('LiveEditor category manager entry point', () => {
     renderEditor()
 
     // Act
-    await user.click(screen.getByRole('combobox', { name: 'Active category' }))
+    await user.click(screen.getByRole('combobox', { name: /Writing category/ }))
     await user.click(
-      await screen.findByRole('option', { name: 'Manage categories…' }),
+      await screen.findByRole('option', { name: /Manage categories/ }),
     )
 
     // Assert
@@ -751,9 +868,9 @@ describe('LiveEditor category manager entry point', () => {
     renderEditor()
 
     // Act
-    await user.click(screen.getByRole('combobox', { name: 'Active category' }))
+    await user.click(screen.getByRole('combobox', { name: /Writing category/ }))
     await user.click(
-      await screen.findByRole('option', { name: 'Manage categories…' }),
+      await screen.findByRole('option', { name: /Manage categories/ }),
     )
 
     // Assert
@@ -766,7 +883,7 @@ describe('LiveEditor category manager entry point', () => {
     // open the manager on a bare keypress.
     const user = userEvent.setup()
     renderEditor()
-    const picker = screen.getByRole('combobox', { name: 'Active category' })
+    const picker = screen.getByRole('combobox', { name: /Writing category/ })
 
     // Act
     picker.focus()
@@ -785,7 +902,7 @@ describe('LiveEditor category manager entry point', () => {
 
     // Assert
     const picker = await screen.findByRole('combobox', {
-      name: 'Active category',
+      name: /Writing category/,
     })
     expect(picker).toBeEnabled()
   })
@@ -797,12 +914,12 @@ describe('LiveEditor category manager entry point', () => {
     // the accepted cost of the conditional mount and the reason this guard exists.
     const user = userEvent.setup()
     renderEditor()
-    const picker = screen.getByRole('combobox', { name: 'Active category' })
+    const picker = screen.getByRole('combobox', { name: /Writing category/ })
 
     // Act
     await user.click(picker)
     await user.click(
-      await screen.findByRole('option', { name: 'Manage categories…' }),
+      await screen.findByRole('option', { name: /Manage categories/ }),
     )
     expect(await screen.findByText('Manage Categories')).toBeVisible()
     await user.keyboard('{Escape}')
@@ -1242,7 +1359,7 @@ describe('LiveEditor note persistence during reload', () => {
     const user = userEvent.setup()
     renderEditorWithCategories(categoriesWithCorelive)
     const picker = await screen.findByRole('combobox', {
-      name: 'Active category',
+      name: /Writing category/,
     })
     await waitFor(() => expect(picker).toBeEnabled())
 
@@ -1403,6 +1520,34 @@ describe('LiveEditor note persistence during reload', () => {
 
     // Assert
     expect(noteSet).not.toHaveBeenCalledWith(1, '')
+    expect(noteSet).not.toHaveBeenCalled()
+  })
+
+  test('refuses deletion flush after a failed note load without erasing saved writing', async () => {
+    // Arrange
+    installLiveEditorAPI({
+      getVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(false),
+      setVisibleOnAllWorkspaces: vi.fn().mockResolvedValue(true),
+    })
+    const api = window.liveEditorAPI
+    if (!api) throw new Error('liveEditorAPI was not installed')
+    api.note.get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('temporary read failure'))
+      .mockResolvedValue('saved writing that must survive')
+    const noteSet = vi.mocked(api.note.set)
+    renderEditor()
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to load note for this category',
+      ),
+    )
+
+    // Act
+    const deletionFlush = flushCategoryDraft(1)
+
+    // Assert
+    await expect(deletionFlush).rejects.toThrow('finish loading')
     expect(noteSet).not.toHaveBeenCalled()
   })
 

@@ -1,15 +1,9 @@
 'use client'
 
+import { ORPCError } from '@orpc/client'
 import { useQuery } from '@tanstack/react-query'
-import { Pencil, Trash2, Check, X } from 'lucide-react'
-import {
-  useRef,
-  useState,
-  type ChangeEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-} from 'react'
-import { toast } from 'sonner'
+import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 
 import {
   AlertDialog,
@@ -30,11 +24,35 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { useCategoryMutations } from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { getColorDotClass } from '@/lib/category-colors'
-import { appendCategoryDraft } from '@/lib/live-editor/appendCategoryDraft'
+import { broadcastCategorySync } from '@/lib/category-sync-channel'
+import {
+  createCategoryHierarchy,
+  getCategoryPath,
+} from '@/lib/categoryHierarchy'
+import {
+  appendCategoryDraft,
+  flushCategoryDraft,
+} from '@/lib/live-editor/appendCategoryDraft'
+import {
+  getCategoryDraftRescueReceipt,
+  prepareCategoryDraftRescueReceipt,
+  hasCategoryDraftRescueLanded,
+  recordCategoryDraftRescueReceipt,
+} from '@/lib/live-editor/categoryDraftRescueReceipts'
 import { getLiveEditorHost } from '@/lib/live-editor/liveEditorHost'
+import { getLocalStorageAvailability } from '@/lib/live-editor/localStorageSlot'
 import { orpc } from '@/lib/orpc/client-query'
 import {
   CATEGORY_COLORS,
@@ -48,452 +66,877 @@ interface CategoryManageDialogProps {
 }
 
 /**
- * Tells a settled category from one whose create is still in flight.
- * {@link useCategoryMutations} gives an optimistic row `id: -Date.now()`, and the
- * server only answers to real ids, so a pending row must stay inert.
- * @param category - Any row from the category list cache.
- * @returns true once the server has assigned a real id.
+ * Blocks composition control keys before forms or cmdk treat them as commands.
+ * @returns Whether the browser is composing, including Safari's 229 fallback.
  * @example
- * hasServerId({ id: -1788781333000, … }) // => false
+ * if (isCategoryComposing(event)) return
  */
-const hasServerId = (category: CategoryWithCount): boolean => category.id > 0
+export function isCategoryComposing(event: KeyboardEvent): boolean {
+  return event.nativeEvent.isComposing || event.keyCode === 229
+}
 
 /**
- * Dialog for managing categories: create, inline rename, color change, and
- * delete with confirmation. Deleting a category reassigns its tasks to the
- * default category and carries its unsaved draft over with them.
- *
- * @param open - Whether the dialog is visible
- * @param onOpenChange - Callback to toggle dialog visibility
+ * Offers root destinations for organization forms, preventing third-level nesting.
+ * @example
+ * <CategoryParentSelect categories={categories} value={null} onChange={setParent} />
  */
-export const CategoryManageDialog = function CategoryManageDialog({
+function CategoryParentSelect({
+  categories,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  categories: CategoryWithCount[]
+  value: number | null
+  onChange: (value: number | null) => void
+  disabled?: boolean
+}) {
+  return (
+    <Select
+      value={value === null ? 'root' : String(value)}
+      onValueChange={(selected) =>
+        onChange(selected === 'root' ? null : Number(selected))
+      }
+      disabled={disabled}
+    >
+      <SelectTrigger aria-label="Parent category" className="min-h-11 w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="root">None — main category</SelectItem>
+        {categories
+          .filter((category) => category.id > 0 && category.parentId === null)
+          .map((category) => (
+            <SelectItem key={category.id} value={String(category.id)}>
+              {category.name}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/**
+ * Exposes the existing color choices in a touch-sized select for create/edit forms.
+ * @example
+ * <CategoryColorSelect value="blue" onChange={setColor} />
+ */
+function CategoryColorSelect({
+  value,
+  onChange,
+}: {
+  value: CategoryColor
+  onChange: (color: CategoryColor) => void
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(selected) => {
+        const color = CATEGORY_COLORS.find(
+          (candidate) => candidate === selected,
+        )
+        if (color) onChange(color)
+      }}
+    >
+      <SelectTrigger aria-label="Category color" className="min-h-11 w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {CATEGORY_COLORS.map((color) => (
+          <SelectItem key={color} value={color}>
+            <span
+              className={`size-3 rounded-full ${getColorDotClass(color)}`}
+            />
+            {color}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/**
+ * Checks local form input before submitting, leaving spelling and case untouched.
+ * @returns A human-readable issue or null when the server can validate the write.
+ * @example
+ * categoryNameError('Work', null, categories) // 'A main category named "Work" already exists.'
+ */
+function categoryNameError(
+  name: string,
+  parentId: number | null,
+  categories: CategoryWithCount[],
+  excludingId?: number,
+): string | null {
+  const trimmed = name.trim()
+  if (!trimmed) return 'Enter a category name.'
+  if (trimmed.length > 30) return 'Use 30 characters or fewer.'
+  if (
+    categories.some(
+      (category) =>
+        category.id !== excludingId &&
+        category.name === trimmed &&
+        (category.parentId ?? null) === parentId,
+    )
+  )
+    return `A ${parentId === null ? 'main category' : 'subcategory'} named "${trimmed}" already exists.`
+  return null
+}
+
+/**
+ * Displays server conflict messages while keeping transport errors actionable.
+ * @returns User-facing explanation without implying an uncertain write rolled back.
+ * @example
+ * categoryFormError(new Error('fetch')) // 'Could not confirm the change. Check the refreshed list and retry.'
+ */
+function categoryFormError(error: unknown): string {
+  return error instanceof ORPCError
+    ? error.message
+    : 'Could not confirm the change. Check the refreshed list and retry.'
+}
+
+/**
+ * Shared create form preserves input on failure and only reports a confirmed server category.
+ * @param onCreated - Picker selects the result; management only clears its form.
+ * @example
+ * <CategoryCreationForm categories={categories} onCreated={(category) => select(category.id)} />
+ */
+function CategoryCreationForm({
+  categories,
+  initialName = '',
+  initialParentId = null,
+  onCreated,
+  onCancel,
+}: {
+  categories: CategoryWithCount[]
+  initialName?: string
+  initialParentId?: number | null
+  onCreated: (category: CategoryWithCount) => void
+  onCancel?: () => void
+}) {
+  const { createMutation } = useCategoryMutations()
+  const [form, setForm] = useState({
+    name: initialName,
+    parentId: initialParentId,
+    color:
+      categories.find((category) => category.id === initialParentId)?.color ??
+      'blue',
+    colorTouched: false,
+    error: '',
+  })
+  const error = createMutation.isPending
+    ? ''
+    : form.error ||
+      (form.name.trim()
+        ? categoryNameError(form.name, form.parentId, categories)
+        : null)
+  const submit = async () => {
+    const validation = categoryNameError(form.name, form.parentId, categories)
+    if (validation || createMutation.isPending) {
+      if (validation) setForm((current) => ({ ...current, error: validation }))
+      return
+    }
+    setForm((current) => ({ ...current, error: '' }))
+    try {
+      const category = await createMutation.mutateAsync({
+        name: form.name.trim(),
+        parentId: form.parentId,
+        color: form.colorTouched ? form.color : undefined,
+      })
+      // Server IDs alone can be used as writing destinations.
+      if (category.id > 0) {
+        onCreated({ ...category, _count: { todos: 0 }, recordCount: 0 })
+        setForm((current) => ({ ...current, name: '', error: '' }))
+      }
+    } catch (failure) {
+      setForm((current) => ({ ...current, error: categoryFormError(failure) }))
+    }
+  }
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void submit()
+      }}
+      onKeyDownCapture={(event) => {
+        if (
+          isCategoryComposing(event) &&
+          (event.key === 'Enter' ||
+            event.key === 'Escape' ||
+            event.keyCode === 229)
+        ) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }}
+    >
+      <div className="space-y-1">
+        <Label htmlFor="new-category-name">Name</Label>
+        <Input
+          id="new-category-name"
+          autoFocus={initialParentId !== null}
+          value={form.name}
+          aria-label="New category name"
+          placeholder="New category"
+          disabled={createMutation.isPending}
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              name: event.target.value,
+              error: '',
+            }))
+          }
+          className="min-h-11"
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label>Parent</Label>
+          <CategoryParentSelect
+            categories={categories}
+            value={form.parentId}
+            disabled={createMutation.isPending}
+            onChange={(parentId) =>
+              setForm((current) => ({
+                ...current,
+                parentId,
+                color: current.colorTouched
+                  ? current.color
+                  : (categories.find((category) => category.id === parentId)
+                      ?.color ?? 'blue'),
+                error: '',
+              }))
+            }
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Color</Label>
+          <CategoryColorSelect
+            value={form.color}
+            onChange={(color) =>
+              setForm((current) => ({ ...current, color, colorTouched: true }))
+            }
+          />
+        </div>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={createMutation.isPending}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        )}
+        <Button
+          className="min-h-11"
+          disabled={
+            !form.name.trim() ||
+            Boolean(categoryNameError(form.name, form.parentId, categories)) ||
+            createMutation.isPending
+          }
+        >
+          {createMutation.isPending ? 'Creating…' : 'Add'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * Gives the picker a focused creation dialog without changing the manager's writing selection.
+ * @example
+ * <CategoryCreateDialog open categories={categories} onOpenChange={setOpen} onCreated={selectCreated} />
+ */
+export function CategoryCreateDialog({
+  open,
+  onOpenChange,
+  categories,
+  initialName,
+  onCreated,
+}: CategoryManageDialogProps & {
+  categories: CategoryWithCount[]
+  initialName: string
+  onCreated: (category: CategoryWithCount) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        onEscapeKeyDown={(event) => {
+          if (event.isComposing || event.keyCode === 229) event.preventDefault()
+        }}
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>New category</DialogTitle>
+          <DialogDescription>
+            Create a main category or add a subcategory.
+          </DialogDescription>
+        </DialogHeader>
+        <CategoryCreationForm
+          categories={categories}
+          initialName={initialName}
+          onCancel={() => onOpenChange(false)}
+          onCreated={onCreated}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * Keeps rename, recolor and reparent changes in one retained inline editor.
+ * @example
+ * <CategoryEditor category={work} categories={categories} onClose={cancelEditing} />
+ */
+function CategoryEditor({
+  category,
+  categories,
+  onClose,
+}: {
+  category: CategoryWithCount
+  categories: CategoryWithCount[]
+  onClose: () => void
+}) {
+  const { updateMutation } = useCategoryMutations()
+  const [form, setForm] = useState({
+    name: category.name,
+    color: category.color,
+    parentId: category.parentId,
+    error: '',
+  })
+  const hasChildren = categories.some(
+    (candidate) => candidate.parentId === category.id,
+  )
+  const save = async () => {
+    const validation = categoryNameError(
+      form.name,
+      form.parentId,
+      categories,
+      category.id,
+    )
+    if (validation || updateMutation.isPending) {
+      if (validation) setForm((current) => ({ ...current, error: validation }))
+      return
+    }
+    try {
+      await updateMutation.mutateAsync({
+        id: category.id,
+        data: category.isDefault
+          ? { color: form.color }
+          : {
+              name: form.name.trim(),
+              color: form.color,
+              parentId: form.parentId,
+            },
+      })
+      onClose()
+    } catch (failure) {
+      setForm((current) => ({ ...current, error: categoryFormError(failure) }))
+    }
+  }
+  return (
+    <div className="w-full space-y-2">
+      {category.isDefault ? (
+        <p>{category.name}</p>
+      ) : (
+        <Input
+          onKeyDown={(event) => {
+            if (isCategoryComposing(event)) {
+              if (
+                event.key === 'Enter' ||
+                event.key === 'Escape' ||
+                event.keyCode === 229
+              ) {
+                event.preventDefault()
+                event.stopPropagation()
+              }
+              return
+            }
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void save()
+            }
+            if (event.key === 'Escape') {
+              event.stopPropagation()
+              onClose()
+            }
+          }}
+          aria-label="Rename category"
+          value={form.name}
+          autoFocus
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              name: event.target.value,
+              error: '',
+            }))
+          }
+        />
+      )}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <CategoryColorSelect
+          value={form.color}
+          onChange={(color) => setForm((current) => ({ ...current, color }))}
+        />
+        <CategoryParentSelect
+          categories={categories.filter(
+            (candidate) => candidate.id !== category.id,
+          )}
+          value={form.parentId}
+          disabled={
+            category.isDefault || hasChildren || updateMutation.isPending
+          }
+          onChange={(parentId) =>
+            setForm((current) => ({ ...current, parentId, error: '' }))
+          }
+        />
+      </div>
+      {hasChildren && (
+        <p className="text-xs text-muted-foreground">
+          Move or promote the subcategories before changing this main category’s
+          parent.
+        </p>
+      )}
+      {form.parentId !== category.parentId && (
+        <p className="text-xs text-muted-foreground">
+          Past entries will be grouped under the new parent.
+        </p>
+      )}
+      {form.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {form.error}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-11"
+          onClick={onClose}
+          disabled={updateMutation.isPending}
+          aria-label="Cancel editing"
+        >
+          <X className="size-4" />
+        </Button>
+        <Button
+          size="icon"
+          className="size-11"
+          onClick={() => void save()}
+          disabled={!form.name.trim() || updateMutation.isPending}
+          aria-label="Save changes"
+        >
+          <Check className="size-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Holds destructive confirmation until the current-device draft and server transaction succeed.
+ * @example
+ * <CategoryDeletion category={work} categories={categories} onClose={closeConfirmation} />
+ */
+function CategoryDeletion({
+  category,
+  categories,
+  onClose,
+}: {
+  category: CategoryWithCount
+  categories: CategoryWithCount[]
+  onClose: () => void
+}) {
+  const { deleteMutation } = useCategoryMutations()
+  const defaultId =
+    category.parentId ??
+    categories.find((candidate) => candidate.isDefault)?.id ??
+    null
+  const [state, setState] = useState({
+    destinationId: defaultId,
+    error: '',
+    rescuing: false,
+  })
+  const isSubmitting = useRef(false)
+  const children = categories.filter(
+    (candidate) => candidate.parentId === category.id,
+  )
+  const conflicts = children.filter((child) =>
+    categories.some(
+      (candidate) =>
+        candidate.id !== category.id &&
+        candidate.id !== child.id &&
+        candidate.parentId === null &&
+        candidate.name === child.name,
+    ),
+  )
+  const busy = state.rescuing || deleteMutation.isPending
+  const destination = categories.find(
+    (candidate) =>
+      candidate.id === state.destinationId &&
+      candidate.id !== category.id &&
+      candidate.id > 0,
+  )
+  const confirm = async () => {
+    if (isSubmitting.current || !destination || conflicts.length) return
+    isSubmitting.current = true
+    let didRequestDelete = false
+    setState((current) => ({ ...current, rescuing: true, error: '' }))
+    try {
+      // Flush React's current note before reading the device store, then persist rescue before deleting.
+      await flushCategoryDraft(category.id)
+      await flushCategoryDraft(destination.id)
+      const source = (await getLiveEditorHost().note.get(category.id)).trim()
+      if (source) {
+        // Destructive deletion requires durable writing and receipt storage, never memory fallback alone.
+        if (getLocalStorageAvailability() !== 'ok')
+          throw new Error('Device storage is unavailable')
+        let rescue = getCategoryDraftRescueReceipt(
+          category.id,
+          destination.id,
+          source,
+        )
+        const destinationText = await getLiveEditorHost().note.get(
+          destination.id,
+        )
+        const hasExistingCopy =
+          rescue !== undefined &&
+          hasCategoryDraftRescueLanded(rescue, destinationText)
+        // An earlier saved marker alone cannot justify deleting writing removed from the destination.
+        if (!hasExistingCopy) {
+          const renewReceipt =
+            rescue !== undefined &&
+            (rescue.state === 'saved' || rescue.baseText !== destinationText)
+          rescue = prepareCategoryDraftRescueReceipt(
+            category.id,
+            destination.id,
+            destinationText,
+            source,
+            renewReceipt,
+          )
+          if (getLocalStorageAvailability() !== 'ok')
+            throw new Error('The rescue intent was not durably persisted')
+          // Every missing/first copy is appended; text equality without existing evidence never skips one.
+          await appendCategoryDraft(destination.id, source)
+        }
+        if (rescue === undefined)
+          throw new Error('The rescue evidence was not prepared')
+        if (rescue.state === 'prepared') {
+          rescue = recordCategoryDraftRescueReceipt(
+            category.id,
+            destination.id,
+            rescue.baseText,
+            source,
+          )
+        }
+        // Quota can expire during either destination or receipt persistence after the initial probe.
+        if (getLocalStorageAvailability() !== 'ok')
+          throw new Error('The moved writing was not durably persisted')
+        // A retried delete re-notifies peers with the original base without appending again.
+        broadcastCategorySync(destination.id, rescue)
+      }
+      setState((current) => ({ ...current, rescuing: false }))
+      didRequestDelete = true
+      await deleteMutation.mutateAsync({
+        id: category.id,
+        targetCategoryId: destination.id,
+      })
+      onClose()
+    } catch (failure) {
+      setState((current) => ({
+        ...current,
+        error: didRequestDelete
+          ? categoryFormError(failure)
+          : 'Could not move your writing on this device. Nothing was deleted. Retry.',
+      }))
+    } finally {
+      isSubmitting.current = false
+      setState((current) => ({ ...current, rescuing: false }))
+    }
+  }
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose()
+      }}
+    >
+      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{category.name}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {category.recordCount} direct records will move to{' '}
+            {destination?.name ?? 'your selected category'}. Your entries will
+            be kept. Writing on this device will move too; drafts on other
+            devices are not moved.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {children.length > 0 && (
+          <p className="text-sm">
+            {children.map((child) => child.name).join(', ')} will become main
+            categories. Their entries and writing stay where they are.
+          </p>
+        )}
+        {conflicts.length > 0 && (
+          <p role="alert" className="text-sm text-destructive">
+            Rename these subcategories before deleting:{' '}
+            {conflicts.map((child) => child.name).join(', ')}. Their names
+            conflict with existing main categories.
+          </p>
+        )}
+        <Label>Move direct entries to</Label>
+        <Select
+          value={
+            state.destinationId === null ? '' : String(state.destinationId)
+          }
+          onValueChange={(value) =>
+            setState((current) => ({
+              ...current,
+              destinationId: Number(value),
+              error: '',
+            }))
+          }
+          disabled={busy}
+        >
+          <SelectTrigger
+            aria-label="Move entries to"
+            className="min-h-11 w-full"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {createCategoryHierarchy(categories)
+              .ordered.filter(
+                (candidate) => candidate.id > 0 && candidate.id !== category.id,
+              )
+              .map((candidate) => (
+                <SelectItem key={candidate.id} value={String(candidate.id)}>
+                  {getCategoryPath(candidate, categories)}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        {state.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {state.error} Your original draft is retained.
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault()
+              void confirm()
+            }}
+            disabled={busy || !destination || conflicts.length > 0}
+            className="text-destructive-foreground bg-destructive" // eslint-disable-line dslint/token-only -- inherited shadcn destructive token
+          >
+            {state.rescuing
+              ? 'Moving writing…'
+              : deleteMutation.isPending
+                ? 'Deleting…'
+                : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/**
+ * Shared hierarchy manager organizes categories without changing the active writing destination.
+ * @example
+ * <CategoryManageDialog open onOpenChange={setOpen} />
+ */
+export function CategoryManageDialog({
   open,
   onOpenChange,
 }: CategoryManageDialogProps) {
-  const { createMutation, updateMutation, deleteMutation } =
-    useCategoryMutations()
-  const isClerkQueryReady = useClerkQueryReady()
-
-  // Create row state
-  const [newName, setNewName] = useState('')
-
-  // Editing state
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editColor, setEditColor] = useState<CategoryColor>('blue')
-
-  // Delete confirmation state
-  const [deleteTarget, setDeleteTarget] = useState<CategoryWithCount | null>(
-    null,
-  )
-  // Categories whose draft has already been handed to the default one. A
-  // rejected delete deliberately leaves the doomed copy in place, so a retry
-  // would otherwise append the same text a second time.
-  // ponytail: dialog-scoped, so a remount forgets it; the content check in
-  // rescueDraft is the backstop for that. What neither covers is text the user
-  // adds to the doomed category AFTER a failed rescue — the whole draft is
-  // appended, so the earlier part shows up twice. Upgrade when the rescue moves
-  // out of the UI.
-  const rescuedCategoryIdsRef = useRef<Set<number>>(new Set())
-  // Categories whose rescue is still in flight. Distinct from the set above on
-  // purpose: "already rescued" must still issue the delete (that is the retry
-  // path), while "still rescuing" must issue nothing at all.
-  const rescuingCategoryIdsRef = useRef<Set<number>>(new Set())
-
-  // Fetch categories
-  const { data } = useQuery({
+  const ready = useClerkQueryReady()
+  const { data, isPending, isError, refetch } = useQuery({
     ...orpc.category.list.queryOptions({}),
-    enabled: open && isClerkQueryReady,
+    enabled: open && ready,
   })
-  const categories: CategoryWithCount[] = data?.categories ?? []
-  const defaultCategory = categories.find((category) => category.isDefault)
-  const defaultCategoryName = defaultCategory?.name ?? 'the default category'
-
-  /**
-   * Wraps onOpenChange to reset editing state when the dialog closes.
-   * Prevents stale inline-edit UI from reappearing on reopen.
-   */
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setEditingId(null)
-      setEditName('')
-      setEditColor('blue')
-      setNewName('')
+  const categories = data?.categories ?? []
+  const hierarchy = createCategoryHierarchy(categories)
+  const [state, setState] = useState<{
+    editingId: number | null
+    deletingId: number | null
+    createParentId: number | null
+    notice?: string
+  }>({ editingId: null, deletingId: null, createParentId: null })
+  const deleteTarget = categories.find(
+    (category) => category.id === state.deletingId,
+  )
+  useUpdateEffect(() => {
+    const editingRemoved =
+      state.editingId !== null &&
+      !categories.some((category) => category.id === state.editingId)
+    const deletingRemoved =
+      state.deletingId !== null &&
+      !categories.some((category) => category.id === state.deletingId)
+    if (editingRemoved || deletingRemoved) {
+      setState((current) => ({
+        ...current,
+        editingId: editingRemoved ? null : current.editingId,
+        deletingId: deletingRemoved ? null : current.deletingId,
+        notice: 'This category is no longer available.',
+      }))
+      document.getElementById('new-category-name')?.focus()
     }
-    onOpenChange(nextOpen)
-  }
-
-  /**
-   * Adds the typed category. Colour is omitted on purpose — the schema defaults
-   * it to blue and the pencil row recolours afterwards.
-   */
-  const createCategory = () => {
-    const name = newName.trim()
-    if (!name) return
-
-    createMutation.mutate({ name })
-    // Cleared here, not in onSuccess: the add is optimistic, so an onSuccess
-    // clear lands a round trip later and would wipe a second name mid-typing.
-    setNewName('')
-  }
-
-  const handleNewNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setNewName(event.target.value)
-  }
-
-  const handleNewNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') createCategory()
-  }
-
-  /**
-   * Enters inline edit mode for a category.
-   */
-  const startEditing = (category: CategoryWithCount) => {
-    setEditingId(category.id)
-    setEditName(category.name)
-    setEditColor(category.color)
-  }
-
-  /**
-   * Saves the edited category name/color.
-   */
-  const saveEdit = () => {
-    if (editingId === null || !editName.trim()) return
-    const isEditingDefault = editingId === defaultCategory?.id
-
-    updateMutation.mutate(
-      {
-        id: editingId,
-        // The server refuses any rename of the default, so it only gets a color
-        data: isEditingDefault
-          ? { color: editColor }
-          : { name: editName.trim(), color: editColor },
-      },
-      { onSuccess: () => setEditingId(null) },
-    )
-  }
-
-  /**
-   * Cancels inline editing.
-   */
-  const cancelEdit = () => {
-    setEditingId(null)
-    setEditName('')
-    setEditColor('blue')
-  }
-
-  /**
-   * Hands the doomed category's unsaved draft to the default one, before the
-   * delete is issued. The server reassigns Todo and Completed rows, but the
-   * in-progress text lives per-category on the device (localStorage on the web,
-   * config.json in the panel) and nothing would ever reach it again.
-   * @param doomedCategoryId - The category about to be deleted.
-   * @returns Nothing; resolves once the draft is safe in the default category.
-   * @example
-   * await rescueDraft(12) // appends category 12's draft to the default's
-   */
-  const rescueDraft = async (doomedCategoryId: number) => {
-    if (!defaultCategory || defaultCategory.id === doomedCategoryId) return
-    if (rescuedCategoryIdsRef.current.has(doomedCategoryId)) return
-
-    // Reads the store, not whichever editor is on screen. Three known ceilings,
-    // all pre-existing, none of them a loss:
-    // ponytail: (1) per-host — a browser tab carries the browser's draft, not
-    // the Electron panel's copy in config.json; (2) a second browser tab
-    // showing the default holds its own React copy and overwrites this merge on
-    // its next keystroke; (3) a note.set that failed earlier leaves the store
-    // behind the editor, so stale text is carried. Upgrade when the two note
-    // stores are unified and note changes broadcast between tabs.
-    const doomedDraft = (
-      await getLiveEditorHost().note.get(doomedCategoryId)
-    ).trim()
-    if (!doomedDraft) return
-
-    // Remount backstop: `rescuedCategoryIdsRef` dies with the dialog, so a
-    // rejected delete, a close, and a retry would otherwise append the same
-    // draft a second time. The default's own copy is the only record of the
-    // first attempt that survives a remount. A same-mount retry is faster than
-    // the editor's debounced save and is covered by the ref, not by this.
-    // Matched line by line, never as a substring: a note reading "milk" is not
-    // already rescued just because the default says "buy milk today", and
-    // skipping it there would orphan the only copy — the loss this whole path
-    // exists to prevent. Appends always land as whole lines, so anchoring on
-    // newlines still recognises the text it did move.
-    // ponytail: editing the rescued line itself stops it matching, so a retry
-    // appends again. `trimEnd` covers trailing whitespace while that line is
-    // still the last one. A visible duplicate, which is the direction this
-    // file errs in on purpose.
-    const rescuedDraft = await getLiveEditorHost().note.get(defaultCategory.id)
-    if (`\n${rescuedDraft.trimEnd()}\n`.includes(`\n${doomedDraft}\n`)) return
-
-    // Before the delete, never after: the delete is optimistic, so `onMutate`
-    // drops the row at once and useAutoSelectDefaultCategory flips the editor
-    // to the default. An append issued after that races the default category's
-    // in-flight note load, which would resolve with the pre-merge text.
-    await appendCategoryDraft(defaultCategory.id, doomedDraft)
-    rescuedCategoryIdsRef.current.add(doomedCategoryId)
-  }
-
-  /**
-   * Confirms deletion, but only once the doomed category's draft is safe.
-   * Radix's action button is a Close, so this confirmation is already gone by
-   * the time the rescue resolves — a toast is the only channel left to report on.
-   */
-  const confirmDelete = () => {
-    if (!deleteTarget || deleteMutation.isPending) return
-
-    const doomedCategoryId = deleteTarget.id
-    // Claimed synchronously, because `isPending` cannot cover this window: the
-    // action button is a Close, so the confirmation is gone while the rescue is
-    // still reading, and `mutate` has not run yet. Re-confirming in that gap
-    // would read the same draft again and append it to the default twice.
-    if (rescuingCategoryIdsRef.current.has(doomedCategoryId)) return
-    rescuingCategoryIdsRef.current.add(doomedCategoryId)
-
-    // The delete waits on the draft landing, and is abandoned if it does not.
-    // The Electron bridge re-throws a failed note read/write by design
-    // (electron/preload-live-editor.ts), precisely so this can decline to
-    // delete; going ahead would strand the text under an unreachable id.
-    void rescueDraft(doomedCategoryId).then(
-      () => {
-        // The doomed copy stays where it is, on purpose. Wiping it was the one
-        // path here that could destroy text: a rejected delete restores the
-        // category with its draft, and a retry skips the re-append, so a clear
-        // on the next success would take away the last reachable copy.
-        // ponytail: the orphan is unreachable but harmless — Postgres identity
-        // ids never repeat, so nothing can surface it. Sweep it if dead drafts
-        // ever cost anything.
-        deleteMutation.mutate({ id: doomedCategoryId })
-        // Released only now. Re-arming the confirmation costs a click and a
-        // render — by then `isPending` is the guard, and after a rejected
-        // delete the retry needs to get back in here.
-        rescuingCategoryIdsRef.current.delete(doomedCategoryId)
-      },
-      () => {
-        // Nothing landed, so the retry has to be able to read the draft again.
-        rescuingCategoryIdsRef.current.delete(doomedCategoryId)
-        toast.error(
-          "Couldn't move your note out of that category — nothing was deleted, so your writing is safe.",
-        )
-      },
-    )
-  }
-
-  const handleEditNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setEditName(event.target.value)
-  }
-
-  const handleEditNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') saveEdit()
-    if (event.key === 'Escape') cancelEdit()
-  }
-
-  const handleEditCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
-    const categoryId = Number(event.currentTarget.dataset.categoryId)
-    const category = categories.find((candidate) => candidate.id === categoryId)
-    if (category) startEditing(category)
-  }
-
-  const handleDeleteCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
-    const categoryId = Number(event.currentTarget.dataset.categoryId)
-    const category = categories.find((candidate) => candidate.id === categoryId)
-    if (category) setDeleteTarget(category)
-  }
-
-  const handleDeleteDialogOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setDeleteTarget(null)
-  }
+  }, [categories, state.editingId, state.deletingId])
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        {/* The panel floor is 320px tall (WindowManager minHeight) and
-            DialogContent sets no height cap, so the title clips off the top and
-            the list runs past the bottom. Cap the dialog, not the list: the
-            three rows are header / create row / list, and giving the last one
-            `minmax(0,1fr)` lets it absorb whatever is left and scroll. A
-            viewport-relative cap is the point — no spacing token can express
-            "as tall as whatever window this dialog happens to be in". */}
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_auto_minmax(0,1fr)] sm:max-w-md" // eslint-disable-line dslint/token-only -- viewport-relative by necessity
+          onEscapeKeyDown={(event) => {
+            if (
+              event.isComposing ||
+              event.keyCode === 229 ||
+              (state.editingId !== null &&
+                categories.some((category) => category.id === state.editingId))
+            )
+              event.preventDefault()
+          }}
+          className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-md" // eslint-disable-line dslint/token-only -- viewport header and scroll body
         >
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>
             <DialogDescription>
-              Add, rename, recolor, or delete categories. Nothing you wrote is
-              lost — deleting a category moves its tasks to{' '}
-              {defaultCategoryName}.
+              Create main categories and subcategories, rename, recolor, move,
+              or delete. Your entries stay.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="flex items-center gap-2">
-            <Input
-              value={newName}
-              onChange={handleNewNameChange}
-              onKeyDown={handleNewNameKeyDown}
-              className="h-8 flex-1"
-              maxLength={30}
-              placeholder="New category"
-              aria-label="New category name"
+          <div className="space-y-4 overflow-y-auto">
+            <CategoryCreationForm
+              key={state.createParentId ?? 'main'}
+              categories={categories}
+              initialParentId={state.createParentId}
+              onCreated={() =>
+                setState((current) => ({ ...current, createParentId: null }))
+              }
             />
-            <Button
-              size="sm"
-              className="h-8"
-              onClick={createCategory}
-              disabled={!newName.trim() || createMutation.isPending}
-            >
-              Add
-            </Button>
-          </div>
-
-          <div className="space-y-2 overflow-y-auto py-4">
-            {categories.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No categories yet. Add your first one above.
+            {isPending && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Loading categories…
               </p>
-            ) : (
-              categories.map((category) => (
-                <div
+            )}
+            {isError && (
+              <div role="alert">
+                Could not load categories.
+                <Button variant="outline" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            )}
+            <ul className="space-y-2">
+              {hierarchy.ordered.map((category) => (
+                <li
                   key={category.id}
-                  className="hover:bg-accent/50 flex items-center gap-2 rounded-md p-2"
+                  className={`rounded-md p-2 ${category.parentId ? 'ml-4 border-l' : ''}`}
                 >
-                  {editingId === category.id ? (
-                    /* Inline edit mode */
-                    <>
-                      {/* Color picker */}
-                      <div className="flex gap-1">
-                        {CATEGORY_COLORS.map((color) => (
-                          <button
-                            key={color}
-                            type="button"
-                            onClick={() => setEditColor(color)}
-                            className={`h-4 w-4 rounded-full ${getColorDotClass(color)} ${
-                              editColor === color
-                                ? 'ring-2 ring-ring ring-offset-1 ring-offset-background'
-                                : ''
-                            }`}
-                            aria-label={`Select ${color}`}
-                          />
-                        ))}
-                      </div>
-                      {/* The default is always "General": recolor only, no rename */}
-                      {category.isDefault ? (
-                        <span className="flex-1 text-sm">{category.name}</span>
-                      ) : (
-                        <Input
-                          value={editName}
-                          onChange={handleEditNameChange}
-                          onKeyDown={handleEditNameKeyDown}
-                          className="h-8 flex-1"
-                          maxLength={30}
-                          // Not "Category name": that is a substring of the create
-                          // row's "New category name", and Playwright's role-name
-                          // matching is substring-based, so the two would be
-                          // ambiguous to every browser-driven test.
-                          aria-label="Rename category"
-                          autoFocus
-                        />
-                      )}
-
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={saveEdit}
-                        disabled={!editName.trim()}
-                        aria-label="Save changes"
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={cancelEdit}
-                        aria-label="Cancel editing"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </>
+                  {state.editingId === category.id ? (
+                    <CategoryEditor
+                      category={category}
+                      categories={categories}
+                      onClose={() =>
+                        setState((current) => ({ ...current, editingId: null }))
+                      }
+                    />
                   ) : (
-                    /* Display mode */
-                    <>
+                    <div className="flex items-center gap-2">
                       <span
-                        className={`h-3 w-3 rounded-full ${getColorDotClass(category.color)}`}
+                        className={`size-3 shrink-0 rounded-full ${getColorDotClass(category.color)}`}
                       />
-
-                      <span className="flex-1 text-sm">{category.name}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {category._count.todos} tasks
+                      <span className="min-w-0 flex-1 break-words text-sm">
+                        {category.name}
+                        {category.id < 0 && (
+                          <span className="text-muted-foreground">
+                            {' — Creating…'}
+                          </span>
+                        )}
                       </span>
-                      {/* A row still waiting on its real id has nothing the
-                          server would answer to — rename and delete would come
-                          back "Category not found" on a row just created. */}
-                      {hasServerId(category) && (
+                      {category.id > 0 && (
                         <>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-muted-foreground"
-                            data-category-id={category.id}
-                            onClick={handleEditCategoryClick}
-                            aria-label={`${category.isDefault ? 'Recolor' : 'Rename'} ${category.name}`}
+                            className="size-11 shrink-0"
+                            onClick={() =>
+                              setState((current) => ({
+                                ...current,
+                                editingId: category.id,
+                              }))
+                            }
+                            aria-label={`${category.isDefault ? 'Recolor' : 'Rename'} ${getCategoryPath(category, categories)}`}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Pencil className="size-4" />
                           </Button>
                           {!category.isDefault && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              data-category-id={category.id}
-                              onClick={handleDeleteCategoryClick}
-                              aria-label={`Delete ${category.name}`}
+                              className="size-11 shrink-0 text-destructive"
+                              onClick={() =>
+                                setState((current) => ({
+                                  ...current,
+                                  deletingId: category.id,
+                                }))
+                              }
+                              aria-label={`Delete ${getCategoryPath(category, categories)}`}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="size-4" />
                             </Button>
                           )}
                         </>
                       )}
-                    </>
+                    </div>
                   )}
-                </div>
-              ))
+                  {category.id > 0 && category.parentId === null && (
+                    <Button
+                      variant="ghost"
+                      className="min-h-11 text-xs text-muted-foreground"
+                      onClick={() => {
+                        setState((current) => ({
+                          ...current,
+                          createParentId: category.id,
+                        }))
+                      }}
+                    >
+                      <Plus className="size-3" />
+                      Add subcategory to {category.name}
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {!isPending && !isError && categories.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No categories yet. Add your first one above.
+              </p>
             )}
+            {state.notice && <p role="status">{state.notice}</p>}
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Delete confirmation */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={handleDeleteDialogOpenChange}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this category?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget && (
-                <>
-                  <strong>{deleteTarget.name}</strong> will be removed. Your
-                  record stays — its tasks move to{' '}
-                  <strong>{defaultCategoryName}</strong>.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              disabled={deleteMutation.isPending}
-              className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- shadcn destructive tokens
-            >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {deleteTarget && (
+        <CategoryDeletion
+          category={deleteTarget}
+          categories={categories}
+          onClose={() =>
+            setState((current) => ({ ...current, deletingId: null }))
+          }
+        />
+      )}
     </>
   )
 }

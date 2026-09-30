@@ -16,7 +16,12 @@ import {
   useAutoSelectDefaultCategory,
   useSelectedCategory,
 } from '@/hooks/useSelectedCategory'
-import { registerLiveDraftAppender } from '@/lib/live-editor/appendCategoryDraft'
+import {
+  mergeRescuedCategoryDraft,
+  refreshCategoryDraft,
+  registerLiveDraftAppender,
+  type CategoryDraftRescue,
+} from '@/lib/live-editor/appendCategoryDraft'
 import { LOCAL_CATEGORY_ID } from '@/lib/live-editor/constants'
 import {
   getLiveEditorHost,
@@ -454,9 +459,9 @@ function showCompletionToast({
  * @param noteWritableCategoryRef - Category whose `note.get` has settled; before
  *   that the pending load would replace anything merged in now.
  * @param noteTextRef - The visible draft to append to.
- * @param applyDraft - {@link LiveEditor}'s own `setNoteDraft`; the merge is
- *   marked dirty because it lives only in React state until the debounce saves it.
- * @returns The handler: true once it absorbed the text, false for any other category.
+ * @param applyDraft - Updates the visible note while preserving its completion memory.
+ * @returns The handler: resolves true after the merged note is persisted, false for another category.
+ * @throws When the host cannot save the merged note; category deletion must stop.
  * @example
  * createLiveDraftAppender(activeIdRef, writableRef, textRef, setNoteDraft)(1, 'rescued')
  */
@@ -465,18 +470,194 @@ function createLiveDraftAppender(
   noteWritableCategoryRef: React.RefObject<Category['id'] | null>,
   noteTextRef: React.RefObject<string>,
   applyDraft: (text: string, options: NoteDraftUpdateOptions) => void,
-): (categoryId: Category['id'], text: string) => boolean {
-  return (categoryId, text) => {
+): (categoryId: Category['id'], text: string) => Promise<boolean> {
+  return async (categoryId, text) => {
     if (categoryId !== activeCategoryIdRef.current) return false
-    if (noteWritableCategoryRef.current !== categoryId) return false
+    // Writing behind an active pending load would let its stale result erase this merge.
+    if (noteWritableCategoryRef.current !== categoryId) {
+      throw new Error("Wait for this category's writing to finish loading")
+    }
 
     const keptDraft = noteTextRef.current
-    applyDraft(keptDraft ? `${keptDraft.trimEnd()}\n${text}` : text, {
+    const mergedDraft = keptDraft ? `${keptDraft.trimEnd()}\n${text}` : text
+    applyDraft(mergedDraft, {
       categoryId,
       dirty: true,
     })
+    // Await the actual device write, rather than the editor's debounced update.
+    try {
+      await getLiveEditorHost().note.set(categoryId, mergedDraft)
+    } catch (error) {
+      // A failed append must not become an unreceipted visible copy that retry appends twice.
+      if (
+        activeCategoryIdRef.current === categoryId &&
+        noteTextRef.current === mergedDraft
+      ) {
+        applyDraft(keptDraft, { categoryId, dirty: true })
+      }
+      throw error
+    }
     return true
   }
+}
+
+/**
+ * Builds the source flush used by {@link registerLiveDraftAppender} before a category is deleted.
+ *
+ * Management can run before the normal debounce. Only a loaded, matching draft
+ * may be flushed; an empty pending load must never overwrite stored writing.
+ *
+ * @param activeCategoryIdRef - Category currently selected by the editor.
+ * @param noteWritableCategoryRef - Category whose note has finished loading.
+ * @param noteTextRef - Latest visible writing, including changes before debounce.
+ * @returns A handler that resolves true after the matching draft is persisted.
+ * @throws When the device store rejects the write; deletion must not proceed.
+ * @example
+ * const flush = createLiveDraftFlusher(activeIdRef, writableRef, textRef)
+ * await flush(12)
+ */
+function createLiveDraftFlusher(
+  activeCategoryIdRef: React.RefObject<Category['id'] | null>,
+  noteWritableCategoryRef: React.RefObject<Category['id'] | null>,
+  noteTextRef: React.RefObject<string>,
+): (categoryId: Category['id']) => Promise<boolean> {
+  return async (categoryId) => {
+    // Other categories are already stored; a pending active load must block rescue.
+    if (activeCategoryIdRef.current !== categoryId) return false
+    if (noteWritableCategoryRef.current !== categoryId) {
+      throw new Error("Wait for this category's writing to finish loading")
+    }
+    await getLiveEditorHost().note.set(categoryId, noteTextRef.current)
+    return true
+  }
+}
+
+/**
+ * Reconciles a draft rescue announced by {@link useCategorySync} from another window.
+ *
+ * Reads the latest typing after the asynchronous host read so a notification
+ * cannot replace characters entered while the device store was being read.
+ * @param activeCategoryIdRef - Currently selected writing destination.
+ * @param noteWritableCategoryRef - Destination whose initial load has settled.
+ * @param noteTextRef - Latest visible writing.
+ * @param lastPersistedRef - Common saved baseline for reconciliation.
+ * @param applyDraft - Updates writing while retaining completion memory.
+ * @returns A handler resolving true after an active destination is reconciled.
+ * @throws When the destination host read or write fails.
+ * @example
+ * const refresh = createLiveDraftRefresher(activeIdRef, writableRef, textRef, savedRef, setNoteDraft)
+ * await refresh(1)
+ */
+function createLiveDraftRefresher(
+  activeCategoryIdRef: React.RefObject<Category['id'] | null>,
+  noteWritableCategoryRef: React.RefObject<Category['id'] | null>,
+  noteTextRef: React.RefObject<string>,
+  lastPersistedRef: React.RefObject<{
+    categoryId: Category['id'] | null
+    text: string
+    loadedFromHost?: boolean
+  }>,
+  applyDraft: (text: string, options: NoteDraftUpdateOptions) => void,
+): (
+  categoryId: Category['id'],
+  rescue?: CategoryDraftRescue,
+) => Promise<boolean | 'pending'> {
+  return async (categoryId, rescue) => {
+    if (activeCategoryIdRef.current !== categoryId) return false
+    if (noteWritableCategoryRef.current !== categoryId) return 'pending'
+    const host = getLiveEditorHost()
+    // Carry the rescue itself: a queued peer save may already have overwritten the store.
+    const incoming = rescue
+      ? rescue.baseText
+        ? `${rescue.baseText.trimEnd()}\n${rescue.text}`
+        : rescue.text
+      : await host.note.get(categoryId)
+    // A route change during the read must not repaint the newly selected category.
+    if (activeCategoryIdRef.current !== categoryId) return false
+    if (noteWritableCategoryRef.current !== categoryId) return false
+    const saved = lastPersistedRef.current
+    const baseline =
+      rescue?.baseText ?? (saved.categoryId === categoryId ? saved.text : '')
+    const keptDraft = noteTextRef.current
+    const merged = mergeRescuedCategoryDraft(
+      keptDraft,
+      baseline,
+      incoming,
+      Boolean(rescue) && (!saved.loadedFromHost || saved.text !== keptDraft),
+    )
+    applyDraft(merged, {
+      categoryId,
+      dirty: Boolean(rescue) || merged !== incoming,
+    })
+    try {
+      if (rescue || merged !== incoming) await host.note.set(categoryId, merged)
+    } catch (error) {
+      // Preserve newer typing; otherwise restore the pre-rescue draft for a single-copy retry.
+      if (
+        activeCategoryIdRef.current === categoryId &&
+        noteTextRef.current === merged
+      ) {
+        applyDraft(keptDraft, { categoryId, dirty: true })
+      }
+      throw error
+    }
+    // Typing during persistence remains dirty and is saved by the normal debounce.
+    lastPersistedRef.current = { categoryId, text: merged }
+    return true
+  }
+}
+
+/**
+ * Focuses ready writing after mount without interrupting a category picker or dialog.
+ *
+ * Called by {@link LiveEditor}'s deferred focus callback after a note load or
+ * window reveal. Category controls may have opened while that load was pending.
+ * @param textarea - Current writing field, read again when the deferred callback fires.
+ * @returns Nothing; preserves an open overlay's keyboard focus.
+ * @example
+ * focusUncoveredNoteEditor(textareaRef.current)
+ */
+function focusUncoveredNoteEditor(textarea: HTMLTextAreaElement | null): void {
+  if (!textarea || textarea.disabled) return
+  // Dialog FocusScope must retain focus even when a pending note becomes ready.
+  if (
+    document.querySelector(
+      '[role="dialog"], [role="alertdialog"], [role="combobox"][aria-expanded="true"]',
+    )
+  )
+    return
+  textarea.focus()
+}
+
+/**
+ * Keeps deferred rescue failures visible until the destination can be saved.
+ * @param categoryId - Destination awaiting a confirmed local save.
+ * @param rescue - Immutable evidence retained across category switches.
+ * @param error - Host failure reported by the pending rescue drain.
+ * @returns Nothing; exposes Retry without requiring the original notification to remain in flight.
+ * @example reportRescueRefreshFailure(1, rescue, new Error('disk full'))
+ */
+function reportRescueRefreshFailure(
+  categoryId: number,
+  rescue: CategoryDraftRescue,
+  error: unknown,
+): void {
+  log.error('LiveEditor moved-writing refresh failed', error)
+  const retry = () => {
+    void refreshCategoryDraft(categoryId, rescue)
+      .then(() => toast.dismiss(`category-rescue-${categoryId}`))
+      .catch((failure: unknown) => {
+        reportRescueRefreshFailure(categoryId, rescue, failure)
+      })
+  }
+  toast.error(
+    'Could not save the moved writing. Retry before editing this category.',
+    {
+      id: `category-rescue-${categoryId}`,
+      action: { label: 'Retry', onClick: retry },
+      duration: Infinity,
+    },
+  )
 }
 
 /**
@@ -503,6 +684,8 @@ function createLiveDraftAppender(
 export const LiveEditor = function LiveEditor({
   categories,
   isCategoryListPending = false,
+  isCategoryListError = false,
+  onRetryCategories,
 }: {
   categories: CategoryWithCount[]
   /**
@@ -511,6 +694,8 @@ export const LiveEditor = function LiveEditor({
    * look identical from here, and the field is disabled either way.
    */
   isCategoryListPending?: boolean
+  isCategoryListError?: boolean
+  onRetryCategories?: () => void
 }) {
   const queryClient = useQueryClient()
   const isMounted = useMounted()
@@ -609,6 +794,7 @@ export const LiveEditor = function LiveEditor({
   const lastPersistedRef = useRef<{
     categoryId: Category['id'] | null
     text: string
+    loadedFromHost?: boolean
   }>({ categoryId: null, text: '' })
   // Category whose textarea value may be written back to disk. It flips on only
   // after the load attempt settles or direct user input; dirty guard blocks a
@@ -869,8 +1055,21 @@ export const LiveEditor = function LiveEditor({
         noteTextRef,
         setNoteDraft,
       ),
+      createLiveDraftFlusher(
+        activeCategoryIdRef,
+        noteWritableCategoryRef,
+        noteTextRef,
+      ),
+      createLiveDraftRefresher(
+        activeCategoryIdRef,
+        noteWritableCategoryRef,
+        noteTextRef,
+        lastPersistedRef,
+        setNoteDraft,
+      ),
+      reportRescueRefreshFailure,
     )
-  }, [noteText])
+  }, [noteText, noteReadyCategoryId])
 
   // Keep the category ref in step so async create handlers compare against the
   // live category, not the one captured when the completion fired.
@@ -939,9 +1138,7 @@ export const LiveEditor = function LiveEditor({
       // Defer past child mount/update effects (Radix Slider thumb auto-focus) so
       // quick-capture keyboard input lands in the note field, not header controls.
       window.setTimeout(() => {
-        const el = textareaRef.current
-        if (!el || el.disabled) return
-        el.focus()
+        focusUncoveredNoteEditor(textareaRef.current)
       }, 0)
     }
     // First open: show() already fired before this effect subscribed, so the
@@ -978,7 +1175,11 @@ export const LiveEditor = function LiveEditor({
         setNoteDraft(text, { categoryId: activeCategoryId, dirty: false })
         // Mark as already-persisted so the debounce effect doesn't immediately
         // echo this text back to disk.
-        lastPersistedRef.current = { categoryId: activeCategoryId, text }
+        lastPersistedRef.current = {
+          categoryId: activeCategoryId,
+          text,
+          loadedFromHost: true,
+        }
         noteWritableCategoryRef.current = activeCategoryId
         setNoteReadyCategoryId(activeCategoryId)
       })
@@ -991,7 +1192,8 @@ export const LiveEditor = function LiveEditor({
         // while we render category B's failure.
         setNoteDraft('', { categoryId: activeCategoryId, dirty: false })
         lastPersistedRef.current = { categoryId: null, text: '' }
-        noteWritableCategoryRef.current = activeCategoryId
+        // A failed read is not an empty stored draft; deletion must not flush this placeholder.
+        noteWritableCategoryRef.current = null
         setNoteReadyCategoryId(activeCategoryId)
       })
       .finally(() => {
@@ -2021,6 +2223,8 @@ export const LiveEditor = function LiveEditor({
       textareaProps={textareaProps}
       categories={categories}
       isCategoryListPending={isCategoryListPending}
+      isCategoryListError={isCategoryListError}
+      onRetryCategories={onRetryCategories}
       isElectronPanel={isElectronPanel}
       isMounted={isMounted}
       isSignedIn={isSignedIn}

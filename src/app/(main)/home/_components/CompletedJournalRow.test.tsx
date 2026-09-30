@@ -26,3 +26,20 @@ test('shows completed journal titles without strikethrough while retaining their
   expect(title).not.toHaveClass('line-through')
   expect(title).toHaveClass('text-muted-foreground')
 })
+
+test('completed wins show the full parent path to distinguish same-named children', () => {
+  // Arrange
+  const entry: DayDetailTask = {
+    ...COMPLETED_ENTRY,
+    category: {
+      id: 2,
+      name: 'Design',
+      color: 'blue',
+      parent: { id: 1, name: 'Work', color: 'blue' },
+    },
+  }
+  // Act
+  render(<CompletedJournalRow entry={entry} />)
+  // Assert
+  expect(screen.getByText('Work / Design')).toBeVisible()
+})

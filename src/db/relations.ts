@@ -10,6 +10,7 @@
 import { relations } from 'drizzle-orm'
 
 import {
+  categoryTable,
   nodeAssignmentTable,
   nodeEdgeTable,
   skillNodeTable,
@@ -48,3 +49,15 @@ export const nodeAssignmentRelations = relations(
     }),
   }),
 )
+
+/** Category self-relations expose the same two-level graph to relational readers.
+ * @example db.query.categoryTable.findMany({ with: { children: true } })
+ */
+export const categoryRelations = relations(categoryTable, ({ one, many }) => ({
+  parent: one(categoryTable, {
+    fields: [categoryTable.parentId, categoryTable.userId],
+    references: [categoryTable.id, categoryTable.userId],
+    relationName: 'categoryHierarchy',
+  }),
+  children: many(categoryTable, { relationName: 'categoryHierarchy' }),
+}))

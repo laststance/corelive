@@ -21,10 +21,11 @@ import {
   shouldAutoOpenYir,
   type YearInReview,
 } from '@/lib/aggregate-year-in-review'
-import { getColorDotClass } from '@/lib/category-colors'
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { log } from '@/lib/logger'
 import { cn } from '@/lib/utils'
+
+import { CategoryTotals } from './CategoryTotals'
 
 /**
  * localStorage key *prefix* recording the year for which we have already
@@ -202,7 +203,7 @@ export const YearInReviewModal = function YearInReviewModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-2xl">A year of showing up.</DialogTitle>
           <DialogDescription className="italic text-muted-foreground">
@@ -236,29 +237,10 @@ export const YearInReviewModal = function YearInReviewModal({
               <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                 where the year went
               </p>
-              <ul className="space-y-1.5">
-                {summary.topCategories.map((category) => (
-                  <li
-                    key={category.id}
-                    className="flex items-center justify-between gap-3 text-sm"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'inline-block size-2 rounded-full',
-                          getColorDotClass(category.color),
-                        )}
-                      />
-
-                      <span className="text-foreground">{category.name}</span>
-                    </span>
-                    <span className="font-mono tabular-nums text-muted-foreground">
-                      {category.count}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <CategoryTotals
+                categories={summary.topCategories}
+                label="Top categories this year"
+              />
             </div>
           )}
 

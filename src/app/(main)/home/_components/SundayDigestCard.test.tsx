@@ -208,3 +208,37 @@ describe('SundayDigestCard', () => {
     expect(screen.getByLabelText(/quiet sunday recap/i)).toBeInTheDocument()
   })
 })
+
+test('Sunday recap rolls Work children into six entries and keeps the whole week at seven', () => {
+  // Arrange
+  const work = { id: 1, name: 'Work', color: 'blue' }
+  const data = new Map<string, HeatmapDay>([
+    [
+      LOCAL_SUNDAY_ISO,
+      {
+        date: LOCAL_SUNDAY_ISO,
+        count: 7,
+        categories: [
+          { ...work, count: 1, parent: null },
+          { id: 2, name: 'CoreLive', color: 'blue', count: 3, parent: work },
+          {
+            id: 3,
+            name: 'Client work',
+            color: 'green',
+            count: 2,
+            parent: work,
+          },
+          { id: 4, name: 'General', color: 'amber', count: 1, parent: null },
+        ],
+      },
+    ],
+  ])
+  // Act
+  render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+  // Assert
+  expect(screen.getByText('7 things made it onto the wall.')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Work: 6 entries, show breakdown' }),
+  ).toBeVisible()
+  expect(screen.getByText('General')).toBeVisible()
+})

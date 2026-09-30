@@ -1,7 +1,10 @@
-import type { HeatmapDay } from '@/hooks/useHeatmapData'
+import type { HeatmapCategory, HeatmapDay } from '@/hooks/useHeatmapData'
 
 import { calcStreak } from './calc-streak'
-import { compareCategoryTotals } from './compareCategoryTotals'
+import {
+  rollupCategoryTotals,
+  type RootCategoryTotal,
+} from './rollupCategoryTotals'
 
 /**
  * Minimum distinct active UTC days a user must have within the trailing
@@ -36,12 +39,7 @@ export type YearInReview = {
   totalCompleted: number
   activeDays: number
   longestStreak: number
-  topCategories: Array<{
-    id: number
-    name: string
-    color: string
-    count: number
-  }>
+  topCategories: RootCategoryTotal[]
   /** Calendar year the review is anchored on (year of the local `todayIso`). */
   year: number
   /**
@@ -88,10 +86,7 @@ export function aggregateYearInReview(
 
   let totalCompleted = 0
   let activeDays = 0
-  const categoryTotals = new Map<
-    number,
-    { id: number; name: string; color: string; count: number }
-  >()
+  const categoryTotals: HeatmapCategory[] = []
 
   for (const [isoDate, day] of dataByDate) {
     if (!isoDate.startsWith(yearPrefix)) continue
@@ -99,24 +94,13 @@ export function aggregateYearInReview(
       activeDays++
       totalCompleted += day.count
     }
-    for (const category of day.categories) {
-      const existing = categoryTotals.get(category.id)
-      if (existing) {
-        existing.count += category.count
-      } else {
-        categoryTotals.set(category.id, {
-          id: category.id,
-          name: category.name,
-          color: category.color,
-          count: category.count,
-        })
-      }
-    }
+    categoryTotals.push(...day.categories)
   }
 
-  const topCategories = Array.from(categoryTotals.values())
-    .sort(compareCategoryTotals)
-    .slice(0, TOP_CATEGORIES_COUNT)
+  const topCategories = rollupCategoryTotals(categoryTotals).slice(
+    0,
+    TOP_CATEGORIES_COUNT,
+  )
 
   // Year-scoped streak: filter dataByDate to the review year before passing
   // to calcStreak so a streak spanning Dec→Jan doesn't inflate the YIR

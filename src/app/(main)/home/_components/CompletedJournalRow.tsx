@@ -3,6 +3,7 @@ import React from 'react'
 
 import { getColorDotClass } from '@/lib/category-colors'
 import { formatClockTime } from '@/lib/formatClockTime'
+import { getCompletionCategoryPath } from '@/lib/rollupCategoryTotals'
 import { cn } from '@/lib/utils'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
@@ -50,7 +51,7 @@ export const CompletedJournalRow = function CompletedJournalRow({
                 )}
               />
 
-              {entry.category.name}
+              {getCompletionCategoryPath(entry.category)}
             </span>
           </div>
         )}
