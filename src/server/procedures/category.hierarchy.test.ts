@@ -133,8 +133,47 @@ describeIfDb(
       const root = call(createCategory, { name: 'Work' }, options)
       // Assert
       expect(other.parentId).toBe(personal.id)
-      await expect(sibling).rejects.toMatchObject({ code: 'CONFLICT' })
-      await expect(root).rejects.toMatchObject({ code: 'CONFLICT' })
+      await expect(sibling).rejects.toMatchObject({
+        code: 'CONFLICT',
+        message:
+          'A subcategory named "Design" already exists under this parent.',
+      })
+      await expect(root).rejects.toMatchObject({
+        code: 'CONFLICT',
+        message: 'A main category named "Work" already exists.',
+      })
+    })
+
+    test('names an existing child when a parent-only move collides with a sibling and keeps its original parent', async () => {
+      // Arrange
+      const { options, work } = await arrangeHierarchy()
+      const personal = await call(createCategory, { name: 'Personal' }, options)
+      const design = await call(
+        createCategory,
+        { name: 'Design', parentId: work.id },
+        options,
+      )
+      await call(
+        createCategory,
+        { name: 'Design', parentId: personal.id },
+        options,
+      )
+      // Act — no name is supplied; the conflict must report the stored name.
+      const move = call(
+        updateCategory,
+        { id: design.id, data: { parentId: personal.id } },
+        options,
+      )
+      // Assert
+      await expect(move).rejects.toMatchObject({
+        code: 'CONFLICT',
+        message:
+          'A subcategory named "Design" already exists under this parent.',
+      })
+      const { categories } = await call(listCategories, undefined, options)
+      expect(
+        categories.find((category) => category.id === design.id),
+      ).toMatchObject({ name: 'Design', parentId: work.id })
     })
 
     test('blocks third levels, self-parenting, cycles and foreign-owned parents without changing the hierarchy', async () => {

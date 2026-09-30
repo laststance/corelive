@@ -28,6 +28,11 @@ import {
 } from 'vitest'
 
 import * as CategorySyncModule from '@/lib/category-sync-channel'
+import {
+  getCategoryDraftRescueReceipt,
+  prepareCategoryDraftRescueReceipt,
+} from '@/lib/live-editor/categoryDraftRescueReceipts'
+import { CATEGORY_DRAFT_RESCUE_STORAGE_KEY } from '@/lib/live-editor/constants'
 import { getLocalNote, setLocalNote } from '@/lib/live-editor/localNoteStore'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -938,4 +943,62 @@ test('restores the source once when a saved rescue copy was removed before retry
     .at(-1)?.[1]
   expect(firstNotification?.receipt).toBeTruthy()
   expect(lastNotification?.receipt).not.toBe(firstNotification?.receipt)
+})
+
+test('retires a confirmed deleted source receipt while preserving another pending source', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  setLocalNote(1, 'existing')
+  setLocalNote(12, 'half a thought')
+  const pending = prepareCategoryDraftRescueReceipt(
+    13,
+    1,
+    'existing',
+    'other pending writing',
+  )
+  await renderDialog([
+    defaultCategory,
+    buildCategory(),
+    buildCategory({ id: 13, name: 'Reading' }),
+  ])
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  // Assert
+  await waitFor(() =>
+    expect(readCategories().map((category) => category.id)).toEqual([1, 13]),
+  )
+  await waitFor(() =>
+    expect(
+      getCategoryDraftRescueReceipt(12, 1, 'half a thought'),
+    ).toBeUndefined(),
+  )
+  expect(getCategoryDraftRescueReceipt(13, 1, 'other pending writing')).toEqual(
+    pending,
+  )
+  expect(
+    JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
+  ).toHaveLength(1)
+  expect(getLocalNote(12)).toBe('half a thought')
+})
+
+test('retains receipt evidence after a failed server delete for a later retry', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  setLocalNote(1, 'existing')
+  setLocalNote(12, 'half a thought')
+  await renderDialog([defaultCategory, buildCategory()])
+  armNetworkFailure()
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  // Assert
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Your original draft is retained',
+  )
+  expect(readCategories().map((category) => category.id)).toEqual([1, 12])
+  expect(getCategoryDraftRescueReceipt(12, 1, 'half a thought')).toMatchObject({
+    state: 'saved',
+    text: 'half a thought',
+  })
 })

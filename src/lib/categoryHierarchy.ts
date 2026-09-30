@@ -18,10 +18,16 @@ export function createCategoryHierarchy<T extends HierarchyCategory>(
   categories: readonly T[],
 ) {
   const byId = new Map(categories.map((category) => [category.id, category]))
+  const originalPositions = new Map<T, number>()
+  // Preserve first-occurrence ordering without rescanning the list inside each comparison.
+  categories.forEach((category, index) => {
+    if (!originalPositions.has(category)) originalPositions.set(category, index)
+  })
   const sorted = [...categories].sort(
     (left, right) =>
       (left.createdAt === undefined || right.createdAt === undefined
-        ? categories.indexOf(left) - categories.indexOf(right)
+        ? (originalPositions.get(left) ?? 0) -
+          (originalPositions.get(right) ?? 0)
         : new Date(left.createdAt).getTime() -
           new Date(right.createdAt).getTime()) || left.id - right.id,
   )

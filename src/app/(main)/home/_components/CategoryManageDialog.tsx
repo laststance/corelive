@@ -50,6 +50,7 @@ import {
   prepareCategoryDraftRescueReceipt,
   hasCategoryDraftRescueLanded,
   recordCategoryDraftRescueReceipt,
+  retireCategoryDraftRescueReceipts,
 } from '@/lib/live-editor/categoryDraftRescueReceipts'
 import { getLiveEditorHost } from '@/lib/live-editor/liveEditorHost'
 import { getLocalStorageAvailability } from '@/lib/live-editor/localStorageSlot'
@@ -649,6 +650,8 @@ function CategoryDeletion({
         id: category.id,
         targetCategoryId: destination.id,
       })
+      // Successful server deletion ends only this source's retry lifecycle; source writing backups stay.
+      retireCategoryDraftRescueReceipts(category.id)
       onClose()
     } catch (failure) {
       setState((current) => ({

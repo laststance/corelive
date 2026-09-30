@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import {
   getCategoryDraftRescueReceipt,
   recordCategoryDraftRescueReceipt,
+  retireCategoryDraftRescueReceipts,
   prepareCategoryDraftRescueReceipt,
   hasCategoryDraftRescueLanded,
 } from './categoryDraftRescueReceipts'
@@ -180,4 +181,85 @@ test('renews a missing copy with a new notification receipt while retaining its 
   expect(
     JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
   ).toHaveLength(1)
+})
+
+test('keeps receipt storage flat across 150 confirmed operations while retaining unresolved writing', () => {
+  // Arrange
+  const pending = prepareCategoryDraftRescueReceipt(
+    12,
+    1,
+    'base',
+    'pending writing',
+  )
+  // Act
+  for (let sourceId = 101; sourceId <= 250; sourceId += 1) {
+    prepareCategoryDraftRescueReceipt(sourceId, 1, 'base', 'confirmed writing')
+    recordCategoryDraftRescueReceipt(sourceId, 1, 'base', 'confirmed writing')
+    retireCategoryDraftRescueReceipts(sourceId)
+  }
+  // Assert
+  expect(
+    JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
+  ).toEqual([pending])
+})
+
+test('retires every receipt of the confirmed source without touching another source or unparseable identity', () => {
+  // Arrange
+  recordCategoryDraftRescueReceipt(12, 1, 'base', 'first thought')
+  prepareCategoryDraftRescueReceipt(12, 2, 'base', 'second thought')
+  const pending = prepareCategoryDraftRescueReceipt(
+    13,
+    1,
+    'base',
+    'pending writing',
+  )
+  const foreign = {
+    receipt: 'foreign',
+    identity: 'unknown-format',
+    baseText: 'base',
+    text: 'unknown source',
+    state: 'prepared',
+  }
+  const saved = JSON.parse(
+    localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]',
+  )
+  localStorage.setItem(
+    CATEGORY_DRAFT_RESCUE_STORAGE_KEY,
+    JSON.stringify([...saved, foreign]),
+  )
+  // Act
+  retireCategoryDraftRescueReceipts(12)
+  // Assert
+  expect(getCategoryDraftRescueReceipt(12, 1, 'first thought')).toBeUndefined()
+  expect(getCategoryDraftRescueReceipt(12, 2, 'second thought')).toBeUndefined()
+  expect(
+    JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
+  ).toEqual([pending, foreign])
+})
+
+test('retires a known legacy source identity while retaining other pending sources', () => {
+  // Arrange
+  const legacy = {
+    receipt: '[12,1,"legacy thought"]',
+    baseText: 'base',
+    text: 'legacy thought',
+    state: 'saved',
+  }
+  const pending = {
+    receipt: '[13,1,"pending thought"]',
+    baseText: 'base',
+    text: 'pending thought',
+    state: 'prepared',
+  }
+  localStorage.setItem(
+    CATEGORY_DRAFT_RESCUE_STORAGE_KEY,
+    JSON.stringify([legacy, pending]),
+  )
+  // Act
+  retireCategoryDraftRescueReceipts(12)
+  // Assert
+  expect(getCategoryDraftRescueReceipt(12, 1, 'legacy thought')).toBeUndefined()
+  expect(getCategoryDraftRescueReceipt(13, 1, 'pending thought')).toMatchObject(
+    { text: 'pending thought', state: 'prepared' },
+  )
 })

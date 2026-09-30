@@ -5,6 +5,11 @@ import { CATEGORY_DRAFT_RESCUE_STORAGE_KEY } from './constants'
 import { createLocalStorageSlot } from './localStorageSlot'
 
 const receiptSlot = createLocalStorageSlot(CATEGORY_DRAFT_RESCUE_STORAGE_KEY)
+const rescueIdentitySchema = z.tuple([
+  z.number().int().positive(),
+  z.number().int().positive(),
+  z.string(),
+])
 const receiptsSchema = z.array(
   z.object({
     receipt: z.string(),
@@ -138,4 +143,36 @@ export function hasCategoryDraftRescueLanded(
     (destinationText === expected ||
       destinationText.startsWith(`${expected}\n`))
   )
+}
+
+/**
+ * Retires retry evidence only after the server confirms its source category was deleted.
+ *
+ * Prepared and saved evidence for every other source remains available. This bounds
+ * completed-operation growth without an arbitrary cap that would break unresolved retries.
+ * @param sourceId - Exact source category whose deletion succeeded.
+ * @returns Nothing; metadata maintenance failures never invalidate a confirmed deletion.
+ * @example
+ * await deleteCategory({ id: 12 })
+ * retireCategoryDraftRescueReceipts(12)
+ */
+export function retireCategoryDraftRescueReceipts(sourceId: number): void {
+  try {
+    const receipts = readRescueReceipts()
+    const remaining = receipts.filter((receipt) => {
+      try {
+        const identity = rescueIdentitySchema.safeParse(
+          JSON.parse(receipt.identity),
+        )
+        // Unknown identity formats cannot establish ownership and retain their evidence.
+        return !identity.success || identity.data[0] !== sourceId
+      } catch {
+        return true
+      }
+    })
+    if (remaining.length !== receipts.length)
+      receiptSlot.write(JSON.stringify(remaining))
+  } catch {
+    // Deletion is already committed; failed local cleanup must not present it as a failed operation.
+  }
 }

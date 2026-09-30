@@ -254,3 +254,36 @@ test('rescues the whole source after a prepared append failed and a longer indep
   const { getLocalNote } = await import('@/lib/live-editor/localNoteStore')
   expect(getLocalNote(1)).toBe('existing\nhalf a thought today\nhalf a thought')
 })
+
+test('keeps a confirmed deletion successful when quota prevents receipt retirement', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  await renderStorageGuardManager()
+  vi.spyOn(window.localStorage, 'setItem').mockImplementation((key, value) => {
+    if (key === CATEGORY_DRAFT_RESCUE_STORAGE_KEY && value === '[]') {
+      throw new DOMException(
+        'Quota exceeded during cleanup',
+        'QuotaExceededError',
+      )
+    }
+    actualStorageSetItem(key, value)
+  })
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  // Assert
+  await waitFor(() =>
+    expect(readCategories().map((category) => category.id)).toEqual([1]),
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  // The durable saved receipt remains because cleanup failed, but writing and confirmed server state survive.
+  expect(
+    JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
+  ).toHaveLength(1)
+  expect(
+    JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+  ).toEqual({ '1': 'existing\nhalf a thought', '12': 'half a thought' })
+})

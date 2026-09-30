@@ -188,6 +188,21 @@ export const listCategories = authMiddleware
     }
   })
 
+/** Explains sibling uniqueness failures for category creation and editing after the transaction rejects a duplicate.
+ * @param parentId - Effective destination; null means main-category uniqueness.
+ * @returns The conflicting name and organization level without a database reread.
+ * @example categoryNameConflictMessage('Design', 1)
+ */
+function categoryNameConflictMessage(
+  name: string,
+  parentId: number | null,
+): string {
+  // Root and child constraints describe different places where a duplicate can exist.
+  return parentId === null
+    ? `A main category named "${name}" already exists.`
+    : `A subcategory named "${name}" already exists under this parent.`
+}
+
 /** Creates a root or child for picker/manager requests; inherits the parent's color only when the caller omits color.
  * @example await orpcClient.category.create({ name: 'CoreLive', parentId: 1 })
  */
@@ -221,7 +236,10 @@ export const createCategory = authMiddleware
     } catch (error) {
       if (isPgError(error, PG_UNIQUE_VIOLATION))
         throw new ORPCError('CONFLICT', {
-          message: `Category "${input.name}" already exists in this main category`,
+          message: categoryNameConflictMessage(
+            input.name,
+            input.parentId ?? null,
+          ),
         })
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in createCategory')
@@ -241,6 +259,7 @@ export const updateCategory = authMiddleware
   )
   .output(CategorySchema)
   .handler(async ({ input, context }) => {
+    let conflictCategory: { name: string; parentId: number | null } | undefined
     try {
       const category = await runTransaction(async (tx) => {
         const { id, data } = input
@@ -248,6 +267,12 @@ export const updateCategory = authMiddleware
         const existing = await findOwnedCategory(context.user.id, id, tx)
         if (!existing)
           throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
+        // Preserve the effective name and parent from this locked ownership read for accurate conflict copy.
+        conflictCategory = {
+          name: data.name ?? existing.name,
+          parentId:
+            data.parentId === undefined ? existing.parentId : data.parentId,
+        }
         if (
           existing.isDefault &&
           data.name !== undefined &&
@@ -285,9 +310,12 @@ export const updateCategory = authMiddleware
       })
       return category as Category
     } catch (error) {
-      if (isPgError(error, PG_UNIQUE_VIOLATION))
+      if (isPgError(error, PG_UNIQUE_VIOLATION) && conflictCategory)
         throw new ORPCError('CONFLICT', {
-          message: `Category "${input.data.name ?? 'with this name'}" already exists in this main category`,
+          message: categoryNameConflictMessage(
+            conflictCategory.name,
+            conflictCategory.parentId,
+          ),
         })
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in updateCategory')

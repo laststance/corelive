@@ -180,7 +180,7 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
     // Assert
     await expect(duplicate).rejects.toMatchObject({
       code: 'CONFLICT',
-      message: 'Category "Focus" already exists in this main category',
+      message: 'A main category named "Focus" already exists.',
     })
   })
 
@@ -208,7 +208,7 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
     // Assert
     await expect(rename).rejects.toMatchObject({
       code: 'CONFLICT',
-      message: 'Category "Focus" already exists in this main category',
+      message: 'A main category named "Focus" already exists.',
     })
   })
 
